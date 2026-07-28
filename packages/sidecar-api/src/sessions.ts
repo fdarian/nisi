@@ -21,7 +21,10 @@ export type Session = Schema.Schema.Type<typeof Session>;
 
 export const sessionsContract = {
 	/** Idempotent per repo+PR — the CLI calls this on every run; opening an already-open repo+PR reuses its session id. */
-	open: oc.input(Schema.Struct({ cwd: Schema.String })).output(Session),
+	open: oc
+		.input(Schema.Struct({ cwd: Schema.String }))
+		.output(Session)
+		.errors({ BAD_REQUEST: {} }),
 	list: oc.output(Schema.Array(Session)),
 	close: oc
 		.input(Schema.Struct({ sessionId: Schema.String }))
