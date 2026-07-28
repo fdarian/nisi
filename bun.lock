@@ -22,6 +22,7 @@
         "@orpc/experimental-effect": "2.0.0-beta.21",
         "@orpc/server": "2.0.0-beta.21",
         "@orpc/tanstack-query": "2.0.0-beta.21",
+        "@pierre/trees": "1.0.0-beta.6",
         "@repo/sidecar-api": "workspace:*",
         "@tanstack/react-query": "^5.101.4",
         "@tanstack/react-router": "^1.170.18",
@@ -51,6 +52,19 @@
         "tw-animate-css": "^1.4.0",
         "typescript": "7.0.2",
         "vite": "^7.0.4",
+      },
+    },
+    "packages/git": {
+      "name": "@repo/git",
+      "version": "0.1.0",
+      "dependencies": {
+        "effect": "4.0.0-beta.102",
+      },
+      "devDependencies": {
+        "@effect/platform-bun": "4.0.0-beta.102",
+        "@total-typescript/tsconfig": "1.0.4",
+        "@types/bun": "1.3.14",
+        "typescript": "7.0.2",
       },
     },
     "packages/sidecar-api": {
@@ -246,7 +260,13 @@
 
     "@orpc/tanstack-query": ["@orpc/tanstack-query@2.0.0-beta.21", "", { "dependencies": { "@orpc/client": "2.0.0-beta.21", "@orpc/contract": "2.0.0-beta.21", "@orpc/openapi": "2.0.0-beta.21", "@orpc/shared": "2.0.0-beta.21" }, "peerDependencies": { "@tanstack/query-core": ">=5.80.2" } }, "sha512-HGJGggTxWVAEjtGyDUW11ZravBab0qBlb4w8IB7Wxj7gh15nyXh1M86Di0AQgy5YWw0wGv9Lq7uTA3RlaFWhFw=="],
 
+    "@pierre/theming": ["@pierre/theming@1.0.0", "", { "peerDependencies": { "@pierre/theme": "^1.1.0", "@shikijs/themes": "^3.0.0 || ^4.0.0", "react": "^18.3.1 || ^19.0.0", "react-dom": "^18.3.1 || ^19.0.0", "shiki": "^3.0.0 || ^4.0.0" }, "optionalPeers": ["@pierre/theme", "@shikijs/themes", "react", "react-dom", "shiki"] }, "sha512-WsdrnhKfjeyXGDikZmN9pkpeZ5S/cl6EE72feiSc0tlynT1tMYqXqouhuv/foK+PY9OEnebOAVRQn3+rAstR8g=="],
+
+    "@pierre/trees": ["@pierre/trees@1.0.0-beta.6", "", { "dependencies": { "@pierre/theming": "1.0.0", "preact": "11.0.0-beta.0", "preact-render-to-string": "6.6.5" }, "peerDependencies": { "react": "^18.3.1 || ^19.0.0", "react-dom": "^18.3.1 || ^19.0.0" } }, "sha512-zxeuSFM9TveM7b5XofweJALCtm/tGYV9HZzdbf7Uf+kBxIlUyz24/EHaGRjB0dsmmfDQl2ETz7AWwJ15lhSnpw=="],
+
     "@repo/desktop": ["@repo/desktop@workspace:apps/desktop"],
+
+    "@repo/git": ["@repo/git@workspace:packages/git"],
 
     "@repo/sidecar-api": ["@repo/sidecar-api@workspace:packages/sidecar-api"],
 
@@ -597,6 +617,10 @@
     "picomatch": ["picomatch@4.0.5", "", {}, "sha512-RvwwcruNjI1ncT5xRakeyS9Lf8lcItv34KD+aif+VH9kduAyfYBipGh12274xtenIPZ119/R9BdTBa8gAwSh0A=="],
 
     "postcss": ["postcss@8.5.23", "", { "dependencies": { "nanoid": "^3.3.16", "picocolors": "^1.1.1", "source-map-js": "^1.2.1" } }, "sha512-g50586zr4bZmwFiTlflMu8E0bDTb5I5gertgwAKmsdUlTQIhZtunzUlD1WSzwcVWPoAVpsrA6vlfCD7oXvRwgg=="],
+
+    "preact": ["preact@11.0.0-beta.0", "", {}, "sha512-IcODoASASYwJ9kxz7+MJeiJhvLriwSb4y4mHIyxdgaRZp6kPUud7xytrk/6GZw8U3y6EFJaRb5wi9SrEK+8+lg=="],
+
+    "preact-render-to-string": ["preact-render-to-string@6.6.5", "", { "peerDependencies": { "preact": ">=10 || >= 11.0.0-0" } }, "sha512-O6MHzYNIKYaiSX3bOw0gGZfEbOmlIDtDfWwN1JJdc/T3ihzRT6tGGSEWE088dWrEDGa1u7101q+6fzQnO9XCPA=="],
 
     "prettier": ["prettier@3.9.6", "", { "bin": { "prettier": "bin/prettier.cjs" } }, "sha512-OpN0zzVdiaiAhxpuuj5efpIS4sY9j7bY6uR5mnj5yPzGkdkjNKSJeUThPb60Jw29QuAZgA4o+/iB49kFiaBX6g=="],
 
