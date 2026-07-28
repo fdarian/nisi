@@ -11,3 +11,6 @@ routeTree.gen.ts
 
 # macOS
 .DS_Store
+
+# Local tool state (e.g. browser-preview launch configs), not project config
+.claude/
