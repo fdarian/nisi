@@ -1,0 +1,28 @@
+{
+	"name": "@repo/cli",
+	"version": "0.1.0",
+	"private": true,
+	"type": "module",
+	"exports": {
+		".": "./src/index.ts"
+	},
+	"bin": {
+		"nisi": "./src/index.ts"
+	},
+	"scripts": {
+		"check:type": "tsc --noEmit",
+		"check:lint": "biome lint ."
+	},
+	"dependencies": {
+		"@effect/platform-bun": "4.0.0-beta.102",
+		"@orpc/client": "2.0.0-beta.21",
+		"@repo/git": "workspace:*",
+		"@repo/sidecar-api": "workspace:*",
+		"effect": "4.0.0-beta.102"
+	},
+	"devDependencies": {
+		"@total-typescript/tsconfig": "1.0.4",
+		"@types/bun": "1.3.14",
+		"typescript": "7.0.2"
+	}
+}
