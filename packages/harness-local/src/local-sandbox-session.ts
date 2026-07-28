@@ -24,6 +24,28 @@ type WriteTextFileOptions = Parameters<
 >[0];
 
 /**
+ * pnpm ≥10 gates dependency build scripts (postinstall, etc.) behind an
+ * interactive `pnpm approve-builds` unless this is set — which every harness
+ * adapter's pinned-CLI bootstrap install trips on its very first run,
+ * since there's no TTY here to approve through and the bootstrap
+ * directory's path isn't ours to choose (see AGENTS.md, "The claude-code
+ * adapter's bootstrap directory is hardcoded"). Setting it via env instead
+ * of writing a config file works regardless of what path a given adapter
+ * happens to bootstrap into.
+ *
+ * All three spellings are set because pnpm's env-var config prefix changed
+ * across versions (`npm_config_*` pre-v11, `pnpm_config_*`/`PNPM_CONFIG_*`
+ * from v11) — verified against pnpm 11.17 on 2026-07-28; harmless on
+ * versions that don't recognize the key (pnpm ignores unknown config) and a
+ * no-op on pnpm <10, which never gated builds at all.
+ */
+const PNPM_BUILD_APPROVAL_ENV = {
+	npm_config_dangerously_allow_all_builds: "true",
+	pnpm_config_dangerously_allow_all_builds: "true",
+	PNPM_CONFIG_DANGEROUSLY_ALLOW_ALL_BUILDS: "true",
+};
+
+/**
  * `Experimental_SandboxSession` over the real filesystem and a real shell —
  * `run`/`spawn` shell out via `node:child_process`, file I/O goes through
  * `node:fs/promises`. This is the tool-safe surface returned by
@@ -59,7 +81,7 @@ export class LocalSandboxSession implements Experimental_SandboxSession {
 
 		const child = spawn("/bin/bash", ["-c", command], {
 			cwd: workingDirectory ?? this.cwd,
-			env: { ...process.env, ...env },
+			env: { ...PNPM_BUILD_APPROVAL_ENV, ...process.env, ...env },
 			stdio: ["ignore", "pipe", "pipe"],
 			signal: abortSignal,
 		});
@@ -95,7 +117,7 @@ export class LocalSandboxSession implements Experimental_SandboxSession {
 
 		const child = spawn("/bin/bash", ["-c", command], {
 			cwd: workingDirectory ?? this.cwd,
-			env: { ...process.env, ...env },
+			env: { ...PNPM_BUILD_APPROVAL_ENV, ...process.env, ...env },
 			stdio: ["ignore", "pipe", "pipe"],
 			signal: abortSignal,
 		});

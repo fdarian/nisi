@@ -50,6 +50,23 @@ internal boundary to put Effect at; contorting it in would just add ceremony aro
 - **`getPortUrl` ignores whether the port is actually bound to anything.** It always resolves to
   `${protocol}://127.0.0.1:<port>` — this package only reserves the *number*; the bridge adapter's
   own spawned process (via `spawn()`) is what binds it.
+- **`run`/`spawn` unconditionally inject pnpm's `dangerouslyAllowAllBuilds` env override** (all
+  three spellings — see `PNPM_BUILD_APPROVAL_ENV` in `local-sandbox-session.ts`). pnpm ≥10 blocks
+  a fresh dependency's postinstall/build scripts behind an interactive `pnpm approve-builds`
+  unless this is set, and every adapter's pinned-CLI bootstrap install (`@anthropic-ai/claude-code`
+  for claude-code) trips it on the very first run — there's no TTY here to approve through, and
+  the install happens at a path this package doesn't choose (see the bootstrap-dir gotcha below),
+  so a file-based allowlist would have to guess the path. An env var applies regardless of it.
+  Considered and rejected: writing a `pnpm-workspace.yaml`/`.npmrc` allowlist into the bootstrap
+  dir (would require hardcoding or parsing out that path, and pnpm ≥11 dropped the older
+  `onlyBuiltDependencies` config keys in favor of `allowBuilds`, so a file with the old shape
+  would silently stop working); running `pnpm approve-builds` by hand (what this package's own
+  live-verification hit before this fix — a manual, per-machine step every nisi user would
+  otherwise be stuck on). The env-var injection is safe to apply on every `run`/`spawn` call, not
+  just pnpm ones, because in practice only the framework's own bootstrap + the one `node
+  bridge.mjs` spawn ever go through this session's `run`/`spawn` — everything the coding agent
+  itself does once its session is live happens inside the already-spawned bridge/CLI process
+  tree, never routed back through here.
 
 ## Gotchas
 
@@ -68,6 +85,17 @@ internal boundary to put Effect at; contorting it in would just add ceremony aro
   own — the bootstrap marker (`/tmp/harness/claude-code/.bootstrap-<hash>.ok`) survives without
   this package needing to relocate anything under `NISI_DATA_DIR`. If a future adapter *does*
   expose a configurable bootstrap dir, revisit this note.
+  - **Cold vs. warm `createSession()`**: measured (live-verification against real `claude`, this
+    machine, 2026-07-28) at **~13–28s cold** (fresh clone + `pnpm install` of
+    `@anthropic-ai/claude-code` and its deps, plus the CLI's own install step) vs. **~0.3–0.8s
+    warm** (marker present, bootstrap is a single file read). The frontend must surface progress
+    for the cold path specifically — a bare spinner reads as hung at 13–28s — and should be able
+    to say *why* it's slow (first-time CLI install) rather than just that it is.
+  - **"Once ever" is really "once per few days of active use."** macOS periodically reclaims
+    `/tmp` entries untouched for about three days (`/private/tmp`'s periodic cleanup, not a
+    per-reboot wipe). A nisi user who goes a few days without running a harness session will hit
+    the cold path again through no fault of the marker logic — this is expected, not a bug in the
+    bootstrap-skip check.
 - **`sandboxSession.ports` must be non-empty before the claude-code adapter starts** — it reads
   `ports[0]` as the bridge port (`resolveBridgePort` in `claude-code-harness.ts`) and throws
   `HarnessCapabilityUnsupportedError` if empty. `LocalSandboxProvider.createSession` allocates one
