@@ -2,7 +2,7 @@ import { and, desc, eq, isNull } from "drizzle-orm";
 import { Context, Effect, Layer } from "effect";
 import { FileSystem } from "effect/FileSystem";
 import { v7 as uuidv7 } from "uuid";
-import { writeBlob } from "./blob-store.ts";
+import { readBlob, writeBlob } from "./blob-store.ts";
 import {
 	dbUse,
 	initDrizzle,
@@ -278,6 +278,41 @@ export class ReviewStore extends Context.Service<ReviewStore>()("ReviewStore", {
 					: { viewed: row.viewed, snapshotHash: row.snapshotHash };
 			});
 
+		/**
+		 * Every reviewed-file row for a session, keyed by path, in one query —
+		 * `diff.files` needs review state for every file in the diff at once,
+		 * so this avoids an N-query round trip (one `getFileReviewState` per
+		 * file) for what's otherwise the same data.
+		 */
+		const listReviewStates = (
+			sessionId: string,
+		): Effect.Effect<
+			ReadonlyMap<string, FileReviewState>,
+			SessionNotFound | ReviewStoreError
+		> =>
+			Effect.gen(function* () {
+				const session = yield* readSessionRow(sessionId);
+				const rows = yield* dbUse(db, (client) =>
+					client
+						.select()
+						.from(reviewedFiles)
+						.where(eq(reviewedFiles.sessionId, session.id))
+						.all(),
+				);
+				return new Map(
+					rows.map((row) => [
+						row.path,
+						{ viewed: row.viewed, snapshotHash: row.snapshotHash },
+					]),
+				);
+			});
+
+		/** Reads a review snapshot's content back out of the blob store, for reconciliation's `diff(reviewed, head)`. */
+		const readSnapshot = (
+			hash: string,
+		): Effect.Effect<Uint8Array, ReviewStoreError, FileSystem> =>
+			readBlob(blobsDir, hash);
+
 		return {
 			openSession,
 			listOpenSessions,
@@ -286,6 +321,8 @@ export class ReviewStore extends Context.Service<ReviewStore>()("ReviewStore", {
 			markFileViewed,
 			markFileUnviewed,
 			getFileReviewState,
+			listReviewStates,
+			readSnapshot,
 		};
 	}),
 }) {
