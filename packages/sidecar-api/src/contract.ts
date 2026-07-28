@@ -10,13 +10,25 @@ import "@orpc/experimental-effect/extensions/effect";
 import "@orpc/experimental-effect/extensions/input-output";
 
 import { oc } from "@orpc/contract";
+import { diffContract } from "./diff.ts";
+import { eventsContract } from "./events.ts";
 import { healthContract } from "./health.ts";
+import { reviewContract } from "./review.ts";
+import { sessionsContract } from "./sessions.ts";
 
+export * from "./diff.ts";
+export * from "./events.ts";
 export * from "./health.ts";
+export * from "./review.ts";
+export * from "./sessions.ts";
 
 // `.errors()` here augments *every* procedure in the router below with UNAUTHORIZED,
 // so the bearer-auth middleware (applied once, router-wide, in the sidecar's
 // implementation) has a typed error to throw regardless of which procedure it guards.
 export const contract = oc.errors({ UNAUTHORIZED: {} }).router({
 	health: healthContract,
+	sessions: sessionsContract,
+	diff: diffContract,
+	review: reviewContract,
+	events: eventsContract,
 });
