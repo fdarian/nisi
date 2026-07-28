@@ -91,7 +91,12 @@ export function startServer(
 			file: authed.diff.file.effect(function* ({ input, errors }) {
 				const store = yield* Store;
 				return yield* store
-					.readFileContent(input.sessionId, input.path, input.force ?? false)
+					.readFileContent(
+						input.sessionId,
+						input.path,
+						input.force ?? false,
+						input.oldPath,
+					)
 					.pipe(
 						Effect.catchTag("SessionNotFound", () =>
 							Effect.fail(
