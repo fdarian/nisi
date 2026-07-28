@@ -1,0 +1,11 @@
+{
+	"version": "0.0.1",
+	"configurations": [
+		{
+			"name": "desktop-vite",
+			"runtimeExecutable": "bash",
+			"runtimeArgs": ["-c", "cd apps/desktop && bun run dev:vite"],
+			"port": 1420
+		}
+	]
+}
