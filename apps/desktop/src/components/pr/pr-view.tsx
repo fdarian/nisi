@@ -1,31 +1,36 @@
 "use client";
 
-import { SparklesIcon } from "lucide-react";
+import { AlertTriangleIcon } from "lucide-react";
 import { useMemo } from "react";
 import { FilesChangedView } from "#/components/pr/files-changed-view";
 import { PrHeader } from "#/components/pr/pr-header";
+import { WalkthroughEmptyState } from "#/components/pr/walkthrough-empty-state";
 import {
 	Empty,
 	EmptyDescription,
 	EmptyMedia,
 	EmptyTitle,
 } from "#/components/ui/empty";
+import { Spinner } from "#/components/ui/spinner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "#/components/ui/tabs";
+import type { SidecarQueryUtils } from "#/lib/backend-context";
 import type { Session } from "#/lib/pr-data";
-import { useFileChanges, useReviewState } from "#/lib/pr-data";
+import { useFileChanges, useReviewedFiles } from "#/lib/pr-data";
 
 type PrViewProps = {
 	session: Session;
+	orpc: SidecarQueryUtils;
 	onCloseTab: () => void;
 };
 
 /** Renders one open PR's content: header + Files Changed / Walkthrough / Commits tabs. */
 export function PrView({
 	session,
+	orpc,
 	onCloseTab,
 }: PrViewProps): React.ReactElement {
-	const files = useFileChanges(session.id);
-	const reviewState = useReviewState(session.id);
+	const { files, isLoading, error } = useFileChanges(orpc, session.id);
+	const { reviewState } = useReviewedFiles(orpc, session.id);
 
 	const stat = useMemo(
 		() =>
@@ -39,18 +44,14 @@ export function PrView({
 		[files],
 	);
 
-	if (session.pr == null) {
-		return (
-			<div className="flex min-h-0 flex-1 items-center justify-center text-muted-foreground text-sm">
-				No pull request for this session — diffing against the default branch
-				isn't wired into the UI yet.
-			</div>
-		);
-	}
-
 	return (
 		<div className="flex min-h-0 flex-1 flex-col">
-			<PrHeader onCloseTab={onCloseTab} pr={session.pr} stat={stat} />
+			<PrHeader
+				onCloseTab={onCloseTab}
+				pr={session.pr}
+				repoRoot={session.repoRoot}
+				stat={stat}
+			/>
 			<Tabs className="flex min-h-0 flex-1 flex-col gap-0" defaultValue="files">
 				<TabsList className="mx-4 mt-2 self-start" variant="underline">
 					<TabsTrigger value="files">Files Changed</TabsTrigger>
@@ -60,7 +61,13 @@ export function PrView({
 					</TabsTrigger>
 				</TabsList>
 				<TabsContent className="flex min-h-0 flex-1 flex-col" value="files">
-					<FilesChangedView files={files} reviewState={reviewState} />
+					{error != null ? (
+						<FilesChangedError error={error} />
+					) : isLoading ? (
+						<FilesChangedLoading />
+					) : (
+						<FilesChangedView files={files} reviewState={reviewState} />
+					)}
 				</TabsContent>
 				<TabsContent className="flex min-h-0 flex-1" value="walkthrough">
 					<WalkthroughEmptyState />
@@ -70,16 +77,26 @@ export function PrView({
 	);
 }
 
-function WalkthroughEmptyState(): React.ReactElement {
+function FilesChangedLoading(): React.ReactElement {
 	return (
 		<Empty className="flex-1">
 			<EmptyMedia variant="icon">
-				<SparklesIcon />
+				<Spinner className="size-5" />
 			</EmptyMedia>
-			<EmptyTitle>Walkthrough</EmptyTitle>
-			<EmptyDescription>
-				The agent-narrated walkthrough arrives in a later phase.
-			</EmptyDescription>
+			<EmptyTitle>Loading changed files…</EmptyTitle>
+		</Empty>
+	);
+}
+
+function FilesChangedError({ error }: { error: unknown }): React.ReactElement {
+	const message = error instanceof Error ? error.message : String(error);
+	return (
+		<Empty className="flex-1">
+			<EmptyMedia variant="icon">
+				<AlertTriangleIcon />
+			</EmptyMedia>
+			<EmptyTitle>Couldn't load changed files</EmptyTitle>
+			<EmptyDescription>{message}</EmptyDescription>
 		</Empty>
 	);
 }

@@ -20,7 +20,9 @@ import type { PullRequestInfo } from "#/lib/pr-data";
 import { cn } from "#/lib/utils";
 
 type PrHeaderProps = {
-	pr: PullRequestInfo;
+	/** `null` is the no-PR case — a repo with no open PR for its current branch, diffed against the default branch instead. */
+	pr: PullRequestInfo | null;
+	repoRoot: string;
 	stat: { additions: number; deletions: number };
 	onCloseTab: () => void;
 };
@@ -28,10 +30,13 @@ type PrHeaderProps = {
 /** Keep it quiet — the diff is the subject. */
 export function PrHeader({
 	pr,
+	repoRoot,
 	stat,
 	onCloseTab,
 }: PrHeaderProps): React.ReactElement {
 	const [starred, setStarred] = useState(false);
+	const repoNameSegments = repoRoot.split("/");
+	const repoName = repoNameSegments[repoNameSegments.length - 1] || repoRoot;
 
 	return (
 		<div className="flex items-center gap-3 border-b px-4 py-2.5">
@@ -39,19 +44,25 @@ export function PrHeader({
 				<Breadcrumb>
 					<BreadcrumbList className="text-xs">
 						<BreadcrumbItem>
-							{pr.owner}/{pr.repo}
+							{pr ? `${pr.owner}/${pr.repo}` : repoName}
 						</BreadcrumbItem>
-						<BreadcrumbSeparator />
-						<BreadcrumbItem>
-							<BreadcrumbPage className="text-muted-foreground">
-								#{pr.number}
-							</BreadcrumbPage>
-						</BreadcrumbItem>
+						{pr && (
+							<>
+								<BreadcrumbSeparator />
+								<BreadcrumbItem>
+									<BreadcrumbPage className="text-muted-foreground">
+										#{pr.number}
+									</BreadcrumbPage>
+								</BreadcrumbItem>
+							</>
+						)}
 					</BreadcrumbList>
 				</Breadcrumb>
 				<div className="flex min-w-0 items-baseline gap-2">
 					<h1 className="truncate font-heading font-semibold text-base">
-						{pr.title}
+						{pr
+							? pr.title
+							: "No open pull request — diffing against default branch"}
 					</h1>
 					<span className="shrink-0 font-mono text-xs tabular-nums">
 						<span className="text-success-foreground">+{stat.additions}</span>{" "}
