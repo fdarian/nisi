@@ -1,13 +1,9 @@
 import { createHash } from "node:crypto";
 import type { BaseSQLiteDatabase } from "drizzle-orm/sqlite-core";
-import { Effect, Schema } from "effect";
+import { Effect } from "effect";
+import { MigrationApplyError } from "./errors.ts";
 
-export class MigrationApplyError extends Schema.TaggedErrorClass<MigrationApplyError>()(
-	"MigrationApplyError",
-	{ cause: Schema.Defect() },
-) {}
-
-/** Shape produced by `gen-migrations.ts` — a drizzle journal plus its raw SQL, embedded at build time via import attributes. */
+/** Shape produced by a package's `gen-migrations.ts` — a drizzle journal plus its raw SQL, embedded at build time via import attributes. */
 export type MigrationBundle = {
 	journal: {
 		entries: ReadonlyArray<{
@@ -49,7 +45,7 @@ type DrizzleInternals = {
 };
 
 /**
- * Applies an embedded migration bundle to a `bun:sqlite` drizzle client.
+ * Applies one embedded migration bundle to a `bun:sqlite` drizzle client.
  * Unlike drizzle's folder-based `migrate()` helpers, this never touches the
  * filesystem — the bundle is passed in fully formed — so it keeps working
  * inside a `bun build --compile` binary, where the source `drizzle/` folder
@@ -57,7 +53,10 @@ type DrizzleInternals = {
  *
  * Ports drizzle's internal `dialect.migrate()` call (same one the public
  * `migrate()` helpers delegate to), since that's the only entry point that
- * accepts already-read migration objects instead of a folder path.
+ * accepts already-read migration objects instead of a folder path. Domain
+ * packages own their own bundle (generated from their own `drizzle/` folder)
+ * and call this once per bundle against the app's one shared connection —
+ * see `SqliteDb`.
  */
 export const applyEmbeddedMigrations = (
 	db: MigratableDb,

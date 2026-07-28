@@ -2,6 +2,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { BunServices } from "@effect/platform-bun";
+import { SqliteDb } from "@repo/db";
 import { ConfigProvider, Layer } from "effect";
 import { ReviewStore } from "../src/store.ts";
 
@@ -11,13 +12,14 @@ import { ReviewStore } from "../src/store.ts";
  * test doesn't strictly serialize independent `test()` bodies, so a shared
  * global would let concurrently-running tests read each other's data dir.
  *
- * `provideMerge`, not `provide`, for `BunServices` — `markFileViewed` shells
- * out to `writeBlob`'s own `yield* FileSystem`, so `FileSystem` needs to stay
- * available to the caller's effect, not just be consumed while constructing
- * the `ReviewStore` service itself.
+ * `provideMerge`, not `provide`, throughout — `markFileViewed` shells out to
+ * `writeBlob`'s own `yield* FileSystem`, and `ReviewStore.make` reads
+ * `SqliteDb` directly, so both need to stay available to the caller's
+ * effect, not just be consumed while constructing `ReviewStore` itself.
  */
 export const makeTestLayer = (dataDir: string) =>
 	ReviewStore.layer.pipe(
+		Layer.provideMerge(SqliteDb.layer),
 		Layer.provideMerge(BunServices.layer),
 		Layer.provide(
 			ConfigProvider.layer(

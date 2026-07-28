@@ -1,0 +1,59 @@
+import { Database } from "bun:sqlite";
+import { drizzle } from "drizzle-orm/bun-sqlite";
+import { Context, Effect, Layer } from "effect";
+import { FileSystem } from "effect/FileSystem";
+import { DbError } from "./errors.ts";
+import { getAppDbPath, getDataDirConfig } from "./paths.ts";
+
+export type DrizzleClient = ReturnType<typeof drizzle>;
+
+const openConnection = (dbPath: string) =>
+	Effect.acquireRelease(
+		Effect.try({
+			try: () => {
+				const connection = new Database(dbPath, { create: true });
+				connection.exec("PRAGMA foreign_keys = ON");
+				return connection;
+			},
+			catch: (cause) => new DbError({ cause }),
+		}),
+		(connection) => Effect.sync(() => connection.close()),
+	);
+
+const buildDrizzle = (sqlite: Database) =>
+	Effect.try({
+		try: () => drizzle(sqlite),
+		catch: (cause) => new DbError({ cause }),
+	});
+
+/**
+ * The app's one SQLite connection + Drizzle client, shared by every domain
+ * package's store (`@repo/review`'s `ReviewStore`, the sidecar's
+ * `WalkthroughStore`, …). One instance for the whole sidecar process — each
+ * domain still owns its own tables and its own generated migration bundle,
+ * but they're applied against this same connection rather than each domain
+ * opening its own file. See this package's AGENTS.md for the reasoning.
+ */
+export class SqliteDb extends Context.Service<SqliteDb>()("SqliteDb", {
+	make: Effect.gen(function* () {
+		const fs = yield* FileSystem;
+		const dataDir = yield* getDataDirConfig().pipe(Effect.orDie);
+		yield* fs
+			.makeDirectory(dataDir, { recursive: true })
+			.pipe(Effect.mapError((cause) => new DbError({ cause })));
+
+		const dbPath = getAppDbPath(dataDir);
+		const sqlite = yield* openConnection(dbPath);
+		const db = yield* buildDrizzle(sqlite);
+		return { sqlite, db };
+	}),
+}) {
+	static layer = Layer.effect(SqliteDb, SqliteDb.make);
+}
+
+/** Runs a Drizzle query, wrapping a thrown error as `DbError` instead of letting it escape untyped. */
+export const dbUse = <T>(
+	db: DrizzleClient,
+	fn: (client: DrizzleClient) => T,
+): Effect.Effect<T, DbError> =>
+	Effect.try({ try: () => fn(db), catch: (cause) => new DbError({ cause }) });

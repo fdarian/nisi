@@ -1,17 +1,13 @@
+import { SqliteDb } from "@repo/db";
 import { and, desc, eq, isNull } from "drizzle-orm";
 import { Context, Effect, Layer } from "effect";
 import { FileSystem } from "effect/FileSystem";
 import { v7 as uuidv7 } from "uuid";
 import { readBlob, writeBlob } from "./blob-store.ts";
-import {
-	dbUse,
-	initDrizzle,
-	openReviewDb,
-	runMigrations,
-} from "./db/client.ts";
+import { dbUse, runMigrations } from "./db/client.ts";
 import { reviewedFiles, type SessionRow, sessions } from "./db/schema.ts";
 import { ReviewStoreError, SessionNotFound } from "./errors.ts";
-import { getBlobsDir, getDataDirConfig, getReviewDbPath } from "./paths.ts";
+import { getBlobsDir, getDataDirConfig } from "./paths.ts";
 
 export type Session = {
 	readonly id: string;
@@ -78,14 +74,11 @@ export class ReviewStore extends Context.Service<ReviewStore>()("ReviewStore", {
 	make: Effect.gen(function* () {
 		const fs = yield* FileSystem;
 		const dataDir = yield* getDataDirConfig().pipe(Effect.orDie);
-		const dbPath = getReviewDbPath(dataDir);
 		const blobsDir = getBlobsDir(dataDir);
 
-		yield* ensureDir(fs, dataDir);
 		yield* ensureDir(fs, blobsDir);
 
-		const sqlite = yield* openReviewDb(dbPath);
-		const db = yield* initDrizzle(sqlite);
+		const { db } = yield* SqliteDb;
 		yield* runMigrations(db);
 
 		const readSessionRow = (sessionId: string) =>
