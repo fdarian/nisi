@@ -1,8 +1,9 @@
 import { join } from "node:path";
 import { BunRuntime, BunServices } from "@effect/platform-bun";
-import { Config, Effect } from "effect";
+import { Config, Effect, Layer } from "effect";
 import { FileSystem } from "effect/FileSystem";
 import { startServer } from "./http.ts";
+import { Store } from "./store.ts";
 
 /** `NISI_DATA_DIR`, or `~/Library/Application Support/com.nisi.desktop` by default. */
 const dataDirConfig = Config.string("NISI_DATA_DIR").pipe(
@@ -30,13 +31,19 @@ const program = Effect.scoped(
 		yield* fs.remove(sidecarJsonPath, { force: true });
 
 		const token = crypto.randomUUID();
+		// Captures the ambient context (Store + Bun platform services) so oRPC
+		// handlers — which run as their own detached Effect per request rather
+		// than as part of this program's fiber — can still reach them.
+		const mainContext = yield* Effect.context<
+			Store | BunServices.BunServices
+		>();
 
 		// Tied to the program's scope: interrupting the fiber (SIGINT/SIGTERM, via
 		// BunRuntime.runMain below) runs this release and stops the server — the
 		// sidecar's "dispose on shutdown" behavior falls out of Effect's own
 		// resource safety instead of a manual process.on() handler.
 		const server = yield* Effect.acquireRelease(
-			Effect.sync(() => startServer(token)),
+			Effect.sync(() => startServer(token, mainContext)),
 			(server) =>
 				Effect.sync(() => {
 					console.error("[sidecar] shutting down");
@@ -62,4 +69,11 @@ const program = Effect.scoped(
 	}),
 );
 
-BunRuntime.runMain(program.pipe(Effect.provide(BunServices.layer)));
+// `Store.layer` needs `FileSystem`/`ChildProcessSpawner` to construct itself
+// (via `@repo/review`'s `ReviewStore` and, per-call, `@repo/git`'s functions);
+// `provideMerge` — not `provide` — keeps `BunServices` in the final output too,
+// since oRPC handlers call `@repo/git` functions directly, not just through
+// `Store`.
+const MainLayer = Store.layer.pipe(Layer.provideMerge(BunServices.layer));
+
+BunRuntime.runMain(program.pipe(Effect.provide(MainLayer)));

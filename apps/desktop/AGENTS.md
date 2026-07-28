@@ -1,15 +1,16 @@
 # @repo/desktop
 
-Tauri 2 desktop app. Phase 0: the port/token handshake between Rust and the Bun/Effect sidecar, plus
-one oRPC health check the frontend renders. No git/review/walkthrough domain logic yet — see `PLAN.md`
-at the repo root for what's coming.
+Tauri 2 desktop app. Phase 1: the port/token handshake between Rust and the Bun/Effect sidecar, the
+sidecar's git/review domain (`sessions`, `diff`, `review`, `events`), and a frontend still built
+against fixtures rather than the live contract — see `PLAN.md` at the repo root for the phase
+breakdown and `apps/desktop/sidecar/AGENTS.md` for how the sidecar's own pieces fit together.
 
 Three parts, one seam:
 - `src-tauri/` — **Rust, intentionally thin.** Spawns/discovers the sidecar, hands `{ port, token }` to
   the frontend via the `get_backend` command. No business logic.
-- `sidecar/` — the real backend, a long-running Bun process (Effect). Currently just the handshake plus
-  one `health.check` procedure — no DB/services yet, so `sidecar/http.ts`'s oRPC context type is
-  `WithEffectContext<never>`. Swap in a real service union there once there's a Store.
+- `sidecar/` — the real backend, a long-running Bun process (Effect). Implements `packages/sidecar-api`'s
+  contract by composing `@repo/git` (pure PR/diff detection) and `@repo/review` (SQLite persistence)
+  behind one `Store` service — see `sidecar/AGENTS.md`.
 - `src/` — React frontend (TanStack Router file-based routes, shadcn on the `@coss` (coss ui / Base UI)
   registry). One route: `AppShell` (multi-PR tab strip + Files Changed sidebar). Built against
   `src/fixtures/` and the `src/lib/pr-data.ts` seam, not the real sidecar contract yet — see
