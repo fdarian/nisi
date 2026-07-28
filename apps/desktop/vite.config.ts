@@ -23,6 +23,15 @@ export default defineConfig(async () => ({
 		},
 	},
 
+	// `@pierre/diffs`' worker (src/components/diff-pane/diff-pane.tsx) is a real ES
+	// module with its own imports (shiki, @pierre/theming, diff) — Vite's default
+	// worker output format is `iife`, which rollup refuses for a bundle that needs
+	// code-splitting. `es` matches the `{ type: "module" }` the Worker is already
+	// constructed with.
+	worker: {
+		format: "es",
+	},
+
 	// Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`
 	//
 	// 1. prevent Vite from obscuring rust errors
