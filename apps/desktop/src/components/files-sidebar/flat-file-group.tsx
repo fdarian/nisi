@@ -1,6 +1,7 @@
 import { FileIcon } from "lucide-react";
 import { GroupHeader } from "#/components/files-sidebar/group-header";
 import type { FileChange, ReviewState } from "#/lib/pr-data";
+import { splitPath } from "#/lib/tree-paths";
 import { cn } from "#/lib/utils";
 
 type FlatFileGroupProps = {
@@ -35,15 +36,6 @@ export function FlatFileGroup({
 			</ul>
 		</div>
 	);
-}
-
-function splitPath(path: string): { dirname: string | null; basename: string } {
-	const lastSlash = path.lastIndexOf("/");
-	if (lastSlash === -1) return { dirname: null, basename: path };
-	return {
-		dirname: path.slice(0, lastSlash),
-		basename: path.slice(lastSlash + 1),
-	};
 }
 
 function FlatFileRow({

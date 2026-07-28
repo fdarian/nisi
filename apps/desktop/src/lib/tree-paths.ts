@@ -58,6 +58,19 @@ export function collectAncestorDirectoryPaths(
 	return Array.from(directoryPaths);
 }
 
+/** Splits a repo-relative path into its muted directory prefix and basename. */
+export function splitPath(path: string): {
+	dirname: string | null;
+	basename: string;
+} {
+	const lastSlash = path.lastIndexOf("/");
+	if (lastSlash === -1) return { dirname: null, basename: path };
+	return {
+		dirname: path.slice(0, lastSlash),
+		basename: path.slice(lastSlash + 1),
+	};
+}
+
 /** Groups files by `category`, in `CATEGORY_ORDER`, each sorted by path. */
 export function groupFilesByCategory(
 	files: readonly FileChange[],
