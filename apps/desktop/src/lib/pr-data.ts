@@ -236,3 +236,33 @@ export function useSetFileViewed(
 		[mutation, queryClient, orpc, sessionId],
 	);
 }
+
+/**
+ * Keeps `diff.files`/`diff.file` live: on the sidecar's `session-files-changed`
+ * event (the 2s worktree poller noticing a change — see
+ * `packages/sidecar-api/src/events.ts`) for *this* session, invalidates both
+ * queries so the sidebar and pane refetch. Deliberately just an invalidate,
+ * not a manual cache write — `diff-pane.tsx`'s `hashItemVersion` +
+ * `FileChange.fingerprint` already make sure only files whose content
+ * actually changed get a new `CodeViewItem.version`, so the virtualizer
+ * leaves everything else's scroll position and highlight cache alone.
+ */
+export function useLiveFileChanges(
+	orpc: SidecarQueryUtils,
+	sessionId: string,
+): void {
+	const queryClient = useQueryClient();
+	const eventsQuery = useQuery(orpc.events.subscribe.liveOptions());
+
+	useEffect(() => {
+		const event = eventsQuery.data;
+		if (event === undefined || event.type !== "session-files-changed") return;
+		if (event.sessionId !== sessionId) return;
+		queryClient.invalidateQueries({
+			queryKey: orpc.diff.files.key({ input: { sessionId } }),
+		});
+		queryClient.invalidateQueries({
+			queryKey: orpc.diff.file.key({ input: { sessionId } }),
+		});
+	}, [eventsQuery.data, queryClient, orpc, sessionId]);
+}

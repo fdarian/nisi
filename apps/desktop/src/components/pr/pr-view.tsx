@@ -17,6 +17,7 @@ import type { SidecarQueryUtils } from "#/lib/backend-context";
 import type { Session } from "#/lib/pr-data";
 import {
 	useFileChanges,
+	useLiveFileChanges,
 	useReviewState,
 	useSetFileViewed,
 } from "#/lib/pr-data";
@@ -36,6 +37,7 @@ export function PrView({
 	const { files, isLoading, error } = useFileChanges(orpc, session.id);
 	const reviewState = useReviewState(files);
 	const setViewed = useSetFileViewed(orpc, session.id);
+	useLiveFileChanges(orpc, session.id);
 
 	const stat = useMemo(
 		() =>
