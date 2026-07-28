@@ -15,7 +15,11 @@ import { Spinner } from "#/components/ui/spinner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "#/components/ui/tabs";
 import type { SidecarQueryUtils } from "#/lib/backend-context";
 import type { Session } from "#/lib/pr-data";
-import { useFileChanges, useReviewedFiles } from "#/lib/pr-data";
+import {
+	useFileChanges,
+	useReviewState,
+	useSetFileViewed,
+} from "#/lib/pr-data";
 
 type PrViewProps = {
 	session: Session;
@@ -30,7 +34,8 @@ export function PrView({
 	onCloseTab,
 }: PrViewProps): React.ReactElement {
 	const { files, isLoading, error } = useFileChanges(orpc, session.id);
-	const { reviewState, setViewed } = useReviewedFiles(orpc, session.id);
+	const reviewState = useReviewState(files);
+	const setViewed = useSetFileViewed(orpc, session.id);
 
 	const stat = useMemo(
 		() =>

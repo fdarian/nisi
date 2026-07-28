@@ -6,11 +6,10 @@
  * `"ready"`) explicitly rather than reaching for context itself, so callers
  * can't accidentally invoke them before a sidecar connection exists.
  *
- * `ReviewState` stays a three-value type for Phase 2 forward-compatibility
- * (the sidebar/pane already render `"changed-after-review"`'s orange dot),
- * but `useReviewedFiles` below can only ever produce `"unreviewed"` /
- * `"viewed"` — see its doc comment for why, and `AGENTS.md` for the
- * contract-gap note this stands in for.
+ * Phase 2 made `FileChange.review`/`FileContent.review` real (see
+ * `packages/sidecar-api/src/diff.ts`), closing the read-path gap Phase 1 left
+ * open — `useReviewState` below derives the sidebar/pane's `ReviewState` map
+ * straight from `FileChange.review` instead of tracking ticks client-side.
  */
 import {
 	useMutation,
@@ -18,7 +17,7 @@ import {
 	useQuery,
 	useQueryClient,
 } from "@tanstack/react-query";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo } from "react";
 import type { SidecarQueryUtils } from "#/lib/backend-context";
 
 export type PullRequestInfo = {
@@ -39,6 +38,13 @@ export type Session = {
 export type FileStatus = "added" | "modified" | "deleted" | "renamed";
 export type FileCategory = "implementation" | "test" | "generated";
 
+/** Mirrors `FileReview` (`packages/sidecar-api/src/diff.ts`) — `null` until a file is ticked Reviewed. */
+export type FileReview = {
+	viewed: boolean;
+	reviewedHash: string | null;
+	changedSinceReview: boolean;
+};
+
 export type FileChange = {
 	path: string;
 	oldPath?: string;
@@ -48,6 +54,24 @@ export type FileChange = {
 	deletions: number;
 	fingerprint: string;
 	binary: boolean;
+	review: FileReview | null;
+};
+
+/**
+ * One contiguous run of a file's `base → head` diff — mirrors `ReviewRange`
+ * (`packages/sidecar-api/src/diff.ts`). 1-based inclusive, in head-file line
+ * numbers, the same coordinate space the diff renderer's per-line hooks use.
+ */
+export type ReviewRange = {
+	startLine: number;
+	endLine: number;
+	status: "reviewed" | "new";
+};
+
+/** Mirrors `FileContentReview` — present only once the file's been ticked Reviewed. */
+export type FileContentReview = {
+	changedSinceReview: boolean;
+	ranges: readonly ReviewRange[];
 };
 
 export type FileContent = {
@@ -55,6 +79,7 @@ export type FileContent = {
 	oldContent?: string;
 	newContent?: string;
 	truncated: boolean;
+	review: FileContentReview | null;
 };
 
 export type ReviewState = "unreviewed" | "viewed" | "changed-after-review";
@@ -155,62 +180,59 @@ export function useFileContents(
 }
 
 /**
- * Per-file Reviewed state, backed by the real `review.setViewed` write path.
- *
- * **Contract gap**: the wire contract has no read counterpart —
- * `review.setViewed` is write-only, and neither `diff.files` nor any
- * `review.*` query returns which files are already viewed for a session
- * (`ReviewStore.getFileReviewState` exists in `@repo/review` but isn't
- * exposed through `packages/sidecar-api/src/review.ts`). So this hook can
- * only track viewed state for the lifetime of this component tree —
- * ticks are optimistic and call the real mutation (so Phase 2's snapshot
- * write path is exercised correctly), but a reload has no way to rehydrate
- * which files were already reviewed. Reported instead of worked around
- * silently, per this task's instructions — see the final report.
+ * Derives the sidebar/pane's three-value `ReviewState` map straight from
+ * `FileChange.review` — a file with no row is `"unreviewed"`, one whose
+ * snapshot still matches head is `"viewed"` (mutes the row), and one that's
+ * moved since is `"changed-after-review"` (the orange dot). No client-side
+ * tracking: a reload sees exactly what the sidecar persisted.
  */
-export function useReviewedFiles(
+export function useReviewState(
+	files: readonly FileChange[],
+): ReadonlyMap<string, ReviewState> {
+	return useMemo(() => {
+		const map = new Map<string, ReviewState>();
+		for (const file of files) {
+			if (file.review === null) continue;
+			map.set(
+				file.path,
+				file.review.changedSinceReview ? "changed-after-review" : "viewed",
+			);
+		}
+		return map;
+	}, [files]);
+}
+
+/**
+ * `review.setViewed`, refetching the two queries its snapshot write
+ * invalidates on success: `diff.files` (the sidebar's mute + orange dot) and
+ * this file's `diff.file` (the pane's collapse ranges). No optimistic flip —
+ * `changedSinceReview` and the reconciliation ranges are server-computed from
+ * the snapshot this write just took, so there's nothing honest to predict
+ * client-side before the round trip resolves.
+ */
+export function useSetFileViewed(
 	orpc: SidecarQueryUtils,
 	sessionId: string,
-): {
-	reviewState: ReadonlyMap<string, ReviewState>;
-	setViewed: (path: string, viewed: boolean) => void;
-} {
-	const [viewedPaths, setViewedPaths] = useState<ReadonlySet<string>>(
-		() => new Set(),
-	);
+): (path: string, viewed: boolean) => void {
+	const queryClient = useQueryClient();
 	const mutation = useMutation(orpc.review.setViewed.mutationOptions());
 
-	const setViewed = useCallback(
+	return useCallback(
 		(path: string, viewed: boolean) => {
-			setViewedPaths((current) => {
-				const next = new Set(current);
-				if (viewed) next.add(path);
-				else next.delete(path);
-				return next;
-			});
 			mutation.mutate(
 				{ sessionId, path, viewed },
 				{
-					onError: () => {
-						// Roll back the optimistic flip on a failed write.
-						setViewedPaths((current) => {
-							const next = new Set(current);
-							if (viewed) next.delete(path);
-							else next.add(path);
-							return next;
+					onSuccess: () => {
+						queryClient.invalidateQueries({
+							queryKey: orpc.diff.files.key({ input: { sessionId } }),
+						});
+						queryClient.invalidateQueries({
+							queryKey: orpc.diff.file.key({ input: { sessionId, path } }),
 						});
 					},
 				},
 			);
 		},
-		[mutation, sessionId],
+		[mutation, queryClient, orpc, sessionId],
 	);
-
-	const reviewState = useMemo(() => {
-		const map = new Map<string, ReviewState>();
-		for (const path of viewedPaths) map.set(path, "viewed");
-		return map;
-	}, [viewedPaths]);
-
-	return { reviewState, setViewed };
 }
