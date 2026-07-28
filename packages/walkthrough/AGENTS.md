@@ -31,6 +31,12 @@ See `PLAN.md` (root), Phase 3, for the contract this feeds; consumed by the side
   char budget (a total cap decremented as files consume it, plus a per-file cap), and
   `renderDigest` to render them as text.
 - `prompt.ts` — `buildSystemPrompt`, generated instructions plus the embedded JSON Schema.
+- `db/schema.ts` — the `walkthroughs` table (Drizzle), exported via the package's `./db`
+  subpath so the sidecar can import it without pulling in this package's agent/validation
+  surface. Schema-only, no I/O — the actual store (open connection, read/write rows) lives in
+  `apps/desktop/sidecar`, not here, per this package's no-I/O rule; `db:generate` (mirroring
+  `@repo/review`'s) still lives in this package because the *migrations* are this domain's,
+  even though the runtime connection (`@repo/db`'s `SqliteDb`) is shared.
 
 ## Non-obvious decisions
 
