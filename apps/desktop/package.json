@@ -1,0 +1,24 @@
+{
+	"name": "@repo/desktop",
+	"private": true,
+	"version": "0.1.0",
+	"type": "module",
+	"scripts": {
+		"sidecar": "bun run sidecar/index.ts",
+		"check:type": "tsc --noEmit -p tsconfig.sidecar.json",
+		"check:lint": "biome lint .",
+		"build:sidecar": "bun build --compile --target=bun-darwin-arm64 sidecar/index.ts --outfile src-tauri/binaries/sidecar-aarch64-apple-darwin"
+	},
+	"dependencies": {
+		"@effect/platform-bun": "4.0.0-beta.102",
+		"@orpc/experimental-effect": "2.0.0-beta.21",
+		"@orpc/server": "2.0.0-beta.21",
+		"@repo/sidecar-api": "workspace:*",
+		"effect": "4.0.0-beta.102"
+	},
+	"devDependencies": {
+		"@total-typescript/tsconfig": "1.0.4",
+		"@types/bun": "1.3.14",
+		"typescript": "7.0.2"
+	}
+}

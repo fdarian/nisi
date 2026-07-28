@@ -1,0 +1,10 @@
+{
+	"extends": "@total-typescript/tsconfig/bundler/no-dom/library-monorepo",
+	"compilerOptions": {
+		"allowImportingTsExtensions": true,
+		"noErrorTruncation": true,
+		"types": ["bun"],
+		"skipLibCheck": true
+	},
+	"include": ["sidecar"]
+}
