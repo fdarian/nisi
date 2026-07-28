@@ -11,7 +11,9 @@ Three parts, one seam:
   one `health.check` procedure — no DB/services yet, so `sidecar/http.ts`'s oRPC context type is
   `WithEffectContext<never>`. Swap in a real service union there once there's a Store.
 - `src/` — React frontend (TanStack Router file-based routes, shadcn on the `@coss` (coss ui / Base UI)
-  registry). One route today: renders the sidecar connection state.
+  registry). One route: `AppShell` (multi-PR tab strip + Files Changed sidebar). Built against
+  `src/fixtures/` and the `src/lib/pr-data.ts` seam, not the real sidecar contract yet — see
+  `src/lib/pr-data.ts`'s doc comment before wiring in `diff.files`/`sessions.list`.
 
 ## The seam
 The sidecar binds an ephemeral port, generates a token, deletes any stale `sidecar.json` *before*
