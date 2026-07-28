@@ -19,6 +19,12 @@ oRPC error codes. See root `AGENTS.md` → "The seam" for the port/token handsha
   `.effect()` can't return a live async iterator (it resolves the generator via `runPromise`), so
   `events.subscribe` uses the lower-level `.handler(async function* ...)` instead, bridging this
   module's callback-style `subscribe` into a pull loop woken by a `wake` closure.
+- `live-poll.ts` — `startLivePolling`, forked as a background fiber from `index.ts`'s boot program.
+  Every `POLL_INTERVAL`, diffs each open session's `@repo/git` change signature against the previous
+  tick (module-level `Map`, same in-memory-state shape as `events.ts`'s subscriber `Set`) and emits
+  `session-files-changed` when it moved. Never reads file content itself — that's what makes it cheap
+  enough to run on every open session on every tick; a stale-data refetch is the frontend's job once
+  the event lands.
 
 ## Gotchas
 

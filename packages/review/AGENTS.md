@@ -1,13 +1,19 @@
 # @repo/review
 
-Persistence only — sessions, per-file reviewed state, and the content-addressed blob store.
-Reconciliation (`diff(reviewed, head)`) is Phase 2; this package just makes sure the data survives.
-`bun:sqlite` + Drizzle, data dir shared with the sidecar's own handshake file (`NISI_DATA_DIR`, same
-default as `apps/desktop/sidecar`). See `PLAN.md` (root) for the Phase 1 contract this feeds.
+Persistence (sessions, per-file reviewed state, content-addressed blob store) plus Phase 2's
+tracked-changes reconciliation engine. `bun:sqlite` + Drizzle, data dir shared with the sidecar's own
+handshake file (`NISI_DATA_DIR`, same default as `apps/desktop/sidecar`). See `PLAN.md` (root) for the
+contract this feeds, and its Phase 2 section for the `base`/`reviewed`/`head` three-way model.
 
 - `src/store.ts` — `ReviewStore`, the public service. Sessions (open/list/close/get) and per-file
-  review state (mark viewed/unviewed, read state).
+  review state (mark viewed/unviewed, read one or all, read a snapshot's content back out).
 - `src/blob-store.ts` — sha256-addressed content storage on disk (`<dataDir>/blobs/<hash>`).
+- `src/reconcile.ts` — `reconcile()`: three-way reconciliation (`base`/`reviewed`/`head`), splitting
+  each `base → head` hunk into `reviewed`/`new` sub-ranges by overlaying `diff(reviewed, head)` on top.
+  Depends on `@repo/git`'s `diffContents` for the actual diffing — this package owns the reconciliation
+  *algorithm* (per `PLAN.md`'s Layout section), git owns diffing as a primitive.
+- `src/resolve-review.ts` — `resolveReviewState`: looks up a file's review row by current path, falling
+  back to its pre-rename path — a rename changes `reviewed_files`' key, not what a snapshot applies to.
 - `src/db/schema.ts` — `sessions` + `reviewed_files` tables.
 - `src/db/client.ts`, `src/db/apply-migrations.ts`, `src/db/gen-migrations.ts` — the embedded-migrations
   technique ported from rheya's `packages/db-migrations` (read there for the full rationale), but

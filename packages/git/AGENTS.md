@@ -17,7 +17,14 @@ Phase 1 contract this feeds.
   content at a ref without one subprocess per file.
 - `patch.ts` — combined `git diff` fetch, split client-side on `^diff --git`, with a per-file
   fallback when the split doesn't match the request.
-- `hunk.ts` — hunk model + parser, for Phase 2's reconciliation.
+- `hunk.ts` — hunk model + parser.
+- `content-diff.ts` — `diffContents`: diffs two arbitrary strings (never real git refs) via
+  `git hash-object -w --stdin` + `git diff` on the resulting blobs. What `@repo/review`'s
+  reconciliation is built on — a review snapshot isn't a ref, so a ref-based `git diff` can't compare
+  it against head.
+- `change-signal.ts` — `readRepoChangeSignature`: a cheap mtime+size (never content) signature per path
+  from `git status --porcelain`, plus HEAD's sha. What the sidecar's live-update poller diffs
+  tick-to-tick to detect a session's files changed without hashing content on every tick.
 - `diff.ts` — orchestrates the above into `getChangedFiles` (cheap, all files, metadata only) and
   `getFileContent` (one file, patch + gated content).
 
@@ -40,3 +47,7 @@ Phase 1 contract this feeds.
 - Binary detection unions two signals: a NUL byte in decoded content, and the patch matching
   `Binary files ... differ` anchored to line start — either can be the only one available
   depending on which path (bulk metadata vs. single-file fetch) computed it.
+- `diffContents` writes loose objects into the *caller's* repo (`hash-object -w`) — `git diff` on a
+  bare object id can only read content that actually exists in the odb. Content-addressed, so
+  re-diffing the same pair (the common case) never grows the odb past one object per distinct
+  content seen, but it does mean this can't run against a repo you don't want written to.
