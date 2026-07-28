@@ -1,9 +1,9 @@
 "use client";
 
-import { SlidersHorizontalIcon } from "lucide-react";
+import { Columns2Icon, RowsIcon, SlidersHorizontalIcon } from "lucide-react";
 import { useMemo, useState } from "react";
+import { DiffPane } from "#/components/diff-pane/diff-pane";
 import { FilesSidebar } from "#/components/files-sidebar/files-sidebar";
-import { DiffPanePlaceholder } from "#/components/pr/diff-pane-placeholder";
 import { buttonVariants } from "#/components/ui/button";
 import {
 	DropdownMenu,
@@ -12,21 +12,31 @@ import {
 	DropdownMenuRadioItem,
 	DropdownMenuTrigger,
 } from "#/components/ui/menu";
+import { ToggleGroup, ToggleGroupItem } from "#/components/ui/toggle-group";
+import { useDiffStyleMode } from "#/hooks/use-diff-style-mode";
 import { useSidebarViewMode } from "#/hooks/use-sidebar-view-mode";
-import type { FileChange, ReviewState } from "#/lib/pr-data";
+import type { SidecarQueryUtils } from "#/lib/backend-context";
+import type { FileChange, ReviewState, Session } from "#/lib/pr-data";
 import { cn } from "#/lib/utils";
 
 type FilesChangedViewProps = {
+	session: Session;
+	orpc: SidecarQueryUtils;
 	files: readonly FileChange[];
 	reviewState: ReadonlyMap<string, ReviewState>;
+	setViewed: (path: string, viewed: boolean) => void;
 };
 
 export function FilesChangedView({
+	session,
+	orpc,
 	files,
 	reviewState,
+	setViewed,
 }: FilesChangedViewProps): React.ReactElement {
 	const [selectedPath, setSelectedPath] = useState<string | null>(null);
 	const [viewMode, setViewMode] = useSidebarViewMode();
+	const [diffStyle, setDiffStyle] = useDiffStyleMode();
 
 	const viewedCount = useMemo(
 		() =>
@@ -48,29 +58,47 @@ export function FilesChangedView({
 					</span>{" "}
 					files
 				</span>
-				<DropdownMenu>
-					<DropdownMenuTrigger
-						aria-label="Files sidebar display options"
-						className={cn(
-							buttonVariants({ variant: "ghost", size: "icon-sm" }),
-						)}
+				<div className="flex items-center gap-2">
+					<ToggleGroup
+						onValueChange={(value) => {
+							const next = value[0];
+							if (next === "unified" || next === "split") setDiffStyle(next);
+						}}
+						size="sm"
+						value={[diffStyle]}
+						variant="outline"
 					>
-						<SlidersHorizontalIcon />
-					</DropdownMenuTrigger>
-					<DropdownMenuContent align="end">
-						<DropdownMenuRadioGroup
-							onValueChange={(value) => setViewMode(value as "tree" | "flat")}
-							value={viewMode}
+						<ToggleGroupItem aria-label="Unified diff" value="unified">
+							<RowsIcon />
+						</ToggleGroupItem>
+						<ToggleGroupItem aria-label="Split diff" value="split">
+							<Columns2Icon />
+						</ToggleGroupItem>
+					</ToggleGroup>
+					<DropdownMenu>
+						<DropdownMenuTrigger
+							aria-label="Files sidebar display options"
+							className={cn(
+								buttonVariants({ variant: "ghost", size: "icon-sm" }),
+							)}
 						>
-							<DropdownMenuRadioItem closeOnClick value="tree">
-								Tree
-							</DropdownMenuRadioItem>
-							<DropdownMenuRadioItem closeOnClick value="flat">
-								Flat
-							</DropdownMenuRadioItem>
-						</DropdownMenuRadioGroup>
-					</DropdownMenuContent>
-				</DropdownMenu>
+							<SlidersHorizontalIcon />
+						</DropdownMenuTrigger>
+						<DropdownMenuContent align="end">
+							<DropdownMenuRadioGroup
+								onValueChange={(value) => setViewMode(value as "tree" | "flat")}
+								value={viewMode}
+							>
+								<DropdownMenuRadioItem closeOnClick value="tree">
+									Tree
+								</DropdownMenuRadioItem>
+								<DropdownMenuRadioItem closeOnClick value="flat">
+									Flat
+								</DropdownMenuRadioItem>
+							</DropdownMenuRadioGroup>
+						</DropdownMenuContent>
+					</DropdownMenu>
+				</div>
 			</div>
 			<div className="flex min-h-0 flex-1">
 				<FilesSidebar
@@ -80,7 +108,15 @@ export function FilesChangedView({
 					selectedPath={selectedPath}
 					viewMode={viewMode}
 				/>
-				<DiffPanePlaceholder selectedPath={selectedPath} />
+				<DiffPane
+					diffStyle={diffStyle}
+					files={files}
+					orpc={orpc}
+					reviewState={reviewState}
+					selectedPath={selectedPath}
+					sessionId={session.id}
+					setViewed={setViewed}
+				/>
 			</div>
 		</div>
 	);

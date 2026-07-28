@@ -30,7 +30,7 @@ export function PrView({
 	onCloseTab,
 }: PrViewProps): React.ReactElement {
 	const { files, isLoading, error } = useFileChanges(orpc, session.id);
-	const { reviewState } = useReviewedFiles(orpc, session.id);
+	const { reviewState, setViewed } = useReviewedFiles(orpc, session.id);
 
 	const stat = useMemo(
 		() =>
@@ -66,7 +66,13 @@ export function PrView({
 					) : isLoading ? (
 						<FilesChangedLoading />
 					) : (
-						<FilesChangedView files={files} reviewState={reviewState} />
+						<FilesChangedView
+							files={files}
+							orpc={orpc}
+							reviewState={reviewState}
+							session={session}
+							setViewed={setViewed}
+						/>
 					)}
 				</TabsContent>
 				<TabsContent className="flex min-h-0 flex-1" value="walkthrough">
