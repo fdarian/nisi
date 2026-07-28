@@ -2,6 +2,7 @@
 .turbo
 *.local*
 dist
+routeTree.gen.ts
 
 # Rust
 **/src-tauri/target
