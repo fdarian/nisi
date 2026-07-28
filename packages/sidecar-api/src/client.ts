@@ -1,0 +1,30 @@
+import { createORPCClient } from "@orpc/client";
+import { RPCLink } from "@orpc/client/fetch";
+import type { RouterContractClient } from "@orpc/contract";
+import type { contract } from "./contract.ts";
+
+/** Typed contract client — every procedure in `contract`, fully typed end to end. */
+export type SidecarClient = RouterContractClient<typeof contract>;
+
+/** Build a typed oRPC client against a running sidecar's `{ port, token }`. */
+export function makeSidecarClient(options: {
+	readonly port: number;
+	readonly token: string;
+}): SidecarClient {
+	const link = new RPCLink({
+		origin: `http://127.0.0.1:${options.port}`,
+		url: "/api",
+		fetch: (url, init) => {
+			// `init.headers` can be a `Headers` instance, a plain object, or a tuple
+			// array — spreading a `Headers` instance directly (`{...init.headers}`)
+			// silently yields `{}` (its entries aren't enumerable own properties),
+			// dropping every header RPCLink set, including `Content-Type`. Route
+			// through the `Headers` constructor so all three shapes merge correctly.
+			const headers = new Headers(init?.headers);
+			headers.set("authorization", `Bearer ${options.token}`);
+			return globalThis.fetch(url, { ...init, headers });
+		},
+	});
+
+	return createORPCClient(link);
+}
