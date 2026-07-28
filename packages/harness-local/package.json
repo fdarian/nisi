@@ -1,0 +1,28 @@
+{
+	"name": "@repo/harness-local",
+	"version": "0.1.0",
+	"private": true,
+	"type": "module",
+	"exports": {
+		".": "./src/index.ts"
+	},
+	"scripts": {
+		"check:type": "tsc --noEmit",
+		"check:lint": "biome lint .",
+		"test": "bun test"
+	},
+	"dependencies": {
+		"@ai-sdk/harness": "1.0.46",
+		"@ai-sdk/provider-utils": "5.0.14"
+	},
+	"devDependencies": {
+		"@ai-sdk/harness-claude-code": "1.0.47",
+		"@total-typescript/tsconfig": "1.0.4",
+		"@types/bun": "1.3.14",
+		"@types/ws": "^8.5.13",
+		"ai": "7.0.40",
+		"typescript": "7.0.2",
+		"ws": "^8.21.0",
+		"zod": "^4.1.8"
+	}
+}
