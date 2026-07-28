@@ -37,9 +37,14 @@ What makes it different from every other diff viewer:
 
 Three constraints these impose, each with the workaround already chosen:
 
-1. **Both Pierre libs render into Shadow DOM.** Tailwind classes do not reach inside. Theming
-   is Shiki theme + CSS custom properties on the host, and any style that must change *after*
-   construction has to be patched in as a `<style>` element rather than via `unsafeCSS`.
+1. **Both Pierre libs render into Shadow DOM.** Tailwind classes do not reach inside. Two
+   escape hatches, and picking the right one matters: **theming** works cleanly through
+   `--trees-*-override` CSS custom properties set inline on the light-DOM host — custom
+   properties pierce the shadow boundary natively, so no `unsafeCSS` is needed. But
+   **per-row styling** does not, because `renderRowDecoration` only ever paints its own
+   separate lane and can never touch the row's name or icon. Muting a viewed file therefore
+   requires patching a `<style>` element into the shadow root, scoped by `[data-item-path]`.
+   Clicks need `event.composedPath()` to find the row.
 2. **`@pierre/trees` has no grouping.** The model is strictly the real folder hierarchy. So
    Implementation / Tests / Generated are **three separate tree instances** stacked, each with
    its own `composition.header` — not one tree with synthetic path prefixes, which would
@@ -131,6 +136,55 @@ Phabricator both hand-rolled this too. So:
 Sidebar (tree ↔ flat, configurable via a menu-icon dropdown). Diff pane with a per-file
 Reviewed checkbox. Browser-style tabs, one per PR — nothing in the shadcn ecosystem ships a
 closable/draggable tab strip, so that's hand-built on coss ui's `Tabs` primitives.
+
+#### The contract
+
+This is the seam, so it's specified here rather than discovered. Names are indicative; shapes
+are not.
+
+```
+sessions.open({ cwd })            → Session          // CLI calls this; idempotent per repo+PR
+sessions.list()                   → Session[]
+sessions.close({ sessionId })     → void
+
+diff.files({ sessionId })         → FileChange[]     // metadata only, every file
+diff.file({ sessionId, path })    → FileContent      // one file's patch + contents, lazy
+
+review.setViewed({ sessionId, path, viewed }) → void
+
+events.subscribe()                → stream of SessionEvent
+```
+
+```
+Session     { id, repoRoot, pr: { number, title, baseRef, headRef, owner, repo } | null }
+FileChange  { path, oldPath?, status, category, additions, deletions, fingerprint, binary }
+            category: 'implementation' | 'test' | 'generated'
+FileContent { patch, oldContent?, newContent?, truncated }
+```
+
+**`diff.files` and `diff.file` are deliberately separate.** The sidebar needs metadata for
+every file at once; the diff pane needs contents for the handful actually on screen. Codiff
+carries a three-tier size gate for the same reason (1MB auto-render, 2MB load-on-demand, above
+that patch-only) — worth copying, and it only works if content fetch is its own call.
+
+`sessions.open` returning `pr: null` is the no-PR case (detached HEAD, or a branch with no PR).
+Fall back to diffing against the repo's default branch rather than erroring — the tool is still
+useful, and the CLI is the right place to *tell* the user which mode they got.
+
+**Review state is written with its snapshot from day one.** `setViewed` stores the file's
+content hash and blob at tick time even though Phase 1 does nothing with it. Phase 2 is then
+purely additive — reconciliation and display — instead of a migration.
+
+**Review state rides on `FileChange`, not its own procedure.** Phase 1 shipped `setViewed` as
+write-only, with no read path — so the checkbox didn't survive a reload. The fix is a `review`
+field on `FileChange` rather than a `review.list` call, because every consumer of review state
+is already rendering a file row: the sidebar needs it for muting and the orange dot, the diff
+pane for the checkbox and collapsing. One round trip, no client-side join, and Phase 2's
+`changedSinceReview` extends the same field instead of adding a third source of truth.
+
+```
+FileChange.review: { viewed, reviewedHash, changedSinceReview } | null
+```
 
 ### Phase 2 — tracked changes
 
