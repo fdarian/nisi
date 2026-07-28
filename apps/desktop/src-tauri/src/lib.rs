@@ -122,7 +122,7 @@ pub fn run() {
 
                 let spawn_result = app
                     .shell()
-                    .sidecar("binaries/sidecar")
+                    .sidecar("sidecar")
                     .map_err(|e| format!("failed to create sidecar command: {e}"))?
                     .env("NISI_DATA_DIR", &data_dir_str)
                     .spawn()
