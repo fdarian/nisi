@@ -1,0 +1,21 @@
+{
+	"root": false,
+	"extends": ["../../biome.jsonc"],
+	"overrides": [
+		{
+			// Vendored from the coss ui registry (`shadcn add @coss/...`) — not
+			// hand-authored, so a11y nitpicks here just add lint noise on every
+			// registry sync.
+			"includes": ["src/components/ui/**"],
+			"linter": {
+				"rules": {
+					"a11y": {
+						"noSvgWithoutTitle": "off",
+						"noStaticElementInteractions": "off",
+						"useSemanticElements": "off"
+					}
+				}
+			}
+		}
+	]
+}
