@@ -2,7 +2,8 @@ import type { Session } from "./store.ts";
 
 export type SidecarEvent =
 	| { readonly type: "session-opened"; readonly session: Session }
-	| { readonly type: "session-closed"; readonly sessionId: string };
+	| { readonly type: "session-closed"; readonly sessionId: string }
+	| { readonly type: "session-files-changed"; readonly sessionId: string };
 
 type Subscriber = (event: SidecarEvent) => void;
 

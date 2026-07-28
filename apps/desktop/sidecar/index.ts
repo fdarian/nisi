@@ -3,6 +3,7 @@ import { BunRuntime, BunServices } from "@effect/platform-bun";
 import { Config, Effect, Layer } from "effect";
 import { FileSystem } from "effect/FileSystem";
 import { startServer } from "./http.ts";
+import { startLivePolling } from "./live-poll.ts";
 import { Store } from "./store.ts";
 
 /** `NISI_DATA_DIR`, or `~/Library/Application Support/com.nisi.desktop` by default. */
@@ -64,6 +65,11 @@ const program = Effect.scoped(
 		console.error(
 			`[sidecar] running on port ${server.port}, data dir: ${dataDir}`,
 		);
+
+		// Backgrounded, tied to this program's scope — same shutdown path as
+		// the HTTP server above, just via the fiber getting interrupted instead
+		// of an acquireRelease finalizer.
+		yield* startLivePolling();
 
 		yield* Effect.never;
 	}),
