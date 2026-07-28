@@ -1,9 +1,9 @@
 # @repo/desktop
 
 Tauri 2 desktop app. Phase 1: the port/token handshake between Rust and the Bun/Effect sidecar, the
-sidecar's git/review domain (`sessions`, `diff`, `review`, `events`), and a frontend still built
-against fixtures rather than the live contract — see `PLAN.md` at the repo root for the phase
-breakdown and `apps/desktop/sidecar/AGENTS.md` for how the sidecar's own pieces fit together.
+sidecar's git/review domain (`sessions`, `diff`, `review`, `events`), and a frontend wired to that
+live contract — see `PLAN.md` at the repo root for the phase breakdown and
+`apps/desktop/sidecar/AGENTS.md` for how the sidecar's own pieces fit together.
 
 Three parts, one seam:
 - `src-tauri/` — **Rust, intentionally thin.** Spawns/discovers the sidecar, hands `{ port, token }` to
@@ -12,9 +12,11 @@ Three parts, one seam:
   contract by composing `@repo/git` (pure PR/diff detection) and `@repo/review` (SQLite persistence)
   behind one `Store` service — see `sidecar/AGENTS.md`.
 - `src/` — React frontend (TanStack Router file-based routes, shadcn on the `@coss` (coss ui / Base UI)
-  registry). One route: `AppShell` (multi-PR tab strip + Files Changed sidebar). Built against
-  `src/fixtures/` and the `src/lib/pr-data.ts` seam, not the real sidecar contract yet — see
-  `src/lib/pr-data.ts`'s doc comment before wiring in `diff.files`/`sessions.list`.
+  registry). One route: `AppShell` (multi-PR tab strip + Files Changed sidebar + diff pane), wired to
+  the live sidecar contract through `src/lib/pr-data.ts` (oRPC + TanStack Query via
+  `backend-context.tsx`). The diff pane (`src/components/diff-pane/`) renders with `@pierre/diffs`,
+  same shadow-DOM/Worker-pool shape as the `@pierre/trees` sidebar — see `src/lib/pr-data.ts`'s doc
+  comment for the one open contract gap (no review-state read endpoint).
 
 ## The seam
 The sidecar binds an ephemeral port, generates a token, deletes any stale `sidecar.json` *before*
@@ -51,3 +53,6 @@ or the frontend's one-shot `invoke('get_backend')` wedges on a cold start. Regre
 - The compiled `src-tauri/binaries/sidecar-*` is gitignored; `beforeBuildCommand` regenerates it via
   `build:sidecar` (host triple `aarch64-apple-darwin` only — cross-compile is future work).
 - `#/*` → `src/*`, not `@/*`.
+- `useReviewedFiles` (`src/lib/pr-data.ts`) tracks Reviewed state client-side only — `review.setViewed`
+  is write-only in the contract, so a reload can't rehydrate which files were already viewed. Don't
+  "fix" this in the frontend; it needs a read procedure on the sidecar side first.
