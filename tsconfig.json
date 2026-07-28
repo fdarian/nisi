@@ -1,0 +1,5 @@
+{
+	// Exists only to satisfy editor tooling; not a solution-style root. Per-package
+	// type checking runs via each workspace's own `check:type` script through turbo.
+	"files": []
+}

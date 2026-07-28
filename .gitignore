@@ -1,0 +1,12 @@
+**/node_modules
+.turbo
+*.local*
+dist
+
+# Rust
+**/src-tauri/target
+**/src-tauri/gen
+**/src-tauri/binaries
+
+# macOS
+.DS_Store
