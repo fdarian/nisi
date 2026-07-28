@@ -5,7 +5,8 @@
 	"type": "module",
 	"exports": {
 		".": "./src/index.ts",
-		"./db": "./src/db/schema.ts"
+		"./db": "./src/db/schema.ts",
+		"./db-migrations": "./.gen/migrations.gen.ts"
 	},
 	"scripts": {
 		"check:type": "tsc --noEmit",

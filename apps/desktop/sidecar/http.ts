@@ -1,4 +1,3 @@
-import type { BunServices } from "@effect/platform-bun";
 import type { WithEffectContext } from "@orpc/experimental-effect";
 import { implement } from "@orpc/server";
 import { RPCHandler } from "@orpc/server/fetch";
@@ -7,6 +6,7 @@ import {
 	RequestHeadersHandlerPlugin,
 	type RequestHeadersHandlerPluginContext,
 } from "@orpc/server/plugins";
+import { ReviewStore } from "@repo/review";
 import { contract } from "@repo/sidecar-api";
 import type { Context } from "effect";
 import { Effect } from "effect";
@@ -15,15 +15,23 @@ import {
 	type SidecarEvent,
 	subscribe as subscribeToSidecarEvents,
 } from "./events.ts";
+import type { AppServices } from "./services.ts";
 import { Store } from "./store.ts";
+import {
+	GenerateSessionNotFound,
+	generateWalkthrough,
+} from "./walkthrough/generate.ts";
+import { listHarnesses } from "./walkthrough/harnesses.ts";
+import { stopLiveSession } from "./walkthrough/live-sessions.ts";
+import { WalkthroughStore } from "./walkthrough/store.ts";
 
-type ServerContext = WithEffectContext<Store | BunServices.BunServices> &
+type ServerContext = WithEffectContext<AppServices> &
 	RequestHeadersHandlerPluginContext;
 
 /** Start the HTTP server on an ephemeral port, guarded by the bearer token. */
 export function startServer(
 	token: string,
-	mainContext: Context.Context<Store | BunServices.BunServices>,
+	mainContext: Context.Context<AppServices>,
 ) {
 	const implementer = implement(contract).$context<ServerContext>();
 
@@ -72,6 +80,10 @@ export function startServer(
 						),
 					),
 				);
+				// A closed tab's sandbox session (spawned processes, leased port)
+				// has no other owner — release it here rather than leaking it for
+				// the sidecar's lifetime.
+				yield* Effect.promise(() => stopLiveSession(input.sessionId));
 				emit({ type: "session-closed", sessionId: input.sessionId });
 			}),
 		},
@@ -162,6 +174,51 @@ export function startServer(
 				} finally {
 					signal?.removeEventListener("abort", onAbort);
 					unsubscribe();
+				}
+			}),
+		},
+		walkthrough: {
+			// Static + Pi's live discovery — never fails, see `listHarnesses`.
+			harnesses: authed.walkthrough.harnesses.effect(function* () {
+				return yield* listHarnesses();
+			}),
+			get: authed.walkthrough.get.effect(function* ({ input, errors }) {
+				const reviewStore = yield* ReviewStore;
+				yield* reviewStore.getSession(input.sessionId).pipe(
+					Effect.catchTag("SessionNotFound", () =>
+						Effect.fail(
+							errors.NOT_FOUND({
+								message: `session not found: ${input.sessionId}`,
+							}),
+						),
+					),
+				);
+				const walkthroughStore = yield* WalkthroughStore;
+				const record = yield* walkthroughStore.get(input.sessionId);
+				if (record === null) return null;
+				return {
+					sessionId: record.sessionId,
+					harness: record.harness,
+					model: record.model,
+					walkthrough: JSON.parse(record.content),
+					fingerprints: record.fingerprints,
+					generatedAt: record.generatedAt,
+				};
+			}),
+			// Plain async-generator handler, same reason as `events.subscribe`
+			// above — the multi-turn generation loop needs to push progress
+			// events live, which `.effect()`'s single-resolved-value model can't.
+			generate: authed.walkthrough.generate.handler(async function* ({
+				input,
+				errors,
+			}) {
+				try {
+					yield* generateWalkthrough(input, mainContext);
+				} catch (error) {
+					if (error instanceof GenerateSessionNotFound) {
+						throw errors.NOT_FOUND({ message: error.message });
+					}
+					throw error;
 				}
 			}),
 		},

@@ -1,21 +1,16 @@
 import { join } from "node:path";
 import { BunRuntime, BunServices } from "@effect/platform-bun";
-import { Config, Effect, Layer } from "effect";
+import { getDataDirConfig, SqliteDb } from "@repo/db";
+import { Effect, Layer } from "effect";
 import { FileSystem } from "effect/FileSystem";
 import { startServer } from "./http.ts";
 import { startLivePolling } from "./live-poll.ts";
+import type { AppServices } from "./services.ts";
 import { Store } from "./store.ts";
+import { WalkthroughStore } from "./walkthrough/store.ts";
 
-/** `NISI_DATA_DIR`, or `~/Library/Application Support/com.nisi.desktop` by default. */
-const dataDirConfig = Config.string("NISI_DATA_DIR").pipe(
-	Config.orElse(() =>
-		Config.string("HOME").pipe(
-			Config.map((home) =>
-				join(home, "Library", "Application Support", "com.nisi.desktop"),
-			),
-		),
-	),
-);
+/** Same `NISI_DATA_DIR` default `@repo/db`'s `SqliteDb` resolves — shared so the handshake file and `app.db` always land in the same directory. */
+const dataDirConfig = getDataDirConfig();
 
 const program = Effect.scoped(
 	Effect.gen(function* () {
@@ -32,12 +27,13 @@ const program = Effect.scoped(
 		yield* fs.remove(sidecarJsonPath, { force: true });
 
 		const token = crypto.randomUUID();
-		// Captures the ambient context (Store + Bun platform services) so oRPC
+		// Captures the ambient context (every service in `AppServices`) so oRPC
 		// handlers — which run as their own detached Effect per request rather
-		// than as part of this program's fiber — can still reach them.
-		const mainContext = yield* Effect.context<
-			Store | BunServices.BunServices
-		>();
+		// than as part of this program's fiber — can still reach them. The
+		// walkthrough generation loop also bridges Effect from its own plain
+		// `async function*` via this same captured context — see
+		// `walkthrough/generate.ts`'s `runEffect`.
+		const mainContext = yield* Effect.context<AppServices>();
 
 		// Tied to the program's scope: interrupting the fiber (SIGINT/SIGTERM, via
 		// BunRuntime.runMain below) runs this release and stops the server — the
@@ -75,11 +71,17 @@ const program = Effect.scoped(
 	}),
 );
 
-// `Store.layer` needs `FileSystem`/`ChildProcessSpawner` to construct itself
-// (via `@repo/review`'s `ReviewStore` and, per-call, `@repo/git`'s functions);
-// `provideMerge` — not `provide` — keeps `BunServices` in the final output too,
-// since oRPC handlers call `@repo/git` functions directly, not just through
-// `Store`.
-const MainLayer = Store.layer.pipe(Layer.provideMerge(BunServices.layer));
+// `Store.layer` and `WalkthroughStore.layer` both need `SqliteDb` (the
+// app's one shared connection — see `@repo/db`'s AGENTS.md) and
+// `FileSystem`/`ChildProcessSpawner` (via `@repo/review`'s `ReviewStore`
+// and, per-call, `@repo/git`'s functions). `provideMerge`, not `provide`,
+// at every step — `SqliteDb`/`ReviewStore`/`BunServices` all need to stay
+// available in the final context too, not just be consumed while
+// constructing `Store`/`WalkthroughStore` themselves, since oRPC handlers
+// (and the walkthrough generation loop) reach some of them directly.
+const MainLayer = Layer.mergeAll(Store.layer, WalkthroughStore.layer).pipe(
+	Layer.provideMerge(SqliteDb.layer),
+	Layer.provideMerge(BunServices.layer),
+);
 
 BunRuntime.runMain(program.pipe(Effect.provide(MainLayer)));

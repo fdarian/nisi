@@ -36,7 +36,10 @@ See `PLAN.md` (root), Phase 3, for the contract this feeds; consumed by the side
   surface. Schema-only, no I/O — the actual store (open connection, read/write rows) lives in
   `apps/desktop/sidecar`, not here, per this package's no-I/O rule; `db:generate` (mirroring
   `@repo/review`'s) still lives in this package because the *migrations* are this domain's,
-  even though the runtime connection (`@repo/db`'s `SqliteDb`) is shared.
+  even though the runtime connection (`@repo/db`'s `SqliteDb`) is shared. The generated bundle
+  is exported too, as inert data, via `./db-migrations` (`.gen/migrations.gen.ts`) — the sidecar
+  passes it to `@repo/db`'s `applyEmbeddedMigrations` itself, since even calling that is I/O this
+  package doesn't do.
 
 ## Non-obvious decisions
 

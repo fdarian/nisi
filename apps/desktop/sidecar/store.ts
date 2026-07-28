@@ -272,8 +272,12 @@ export class Store extends Context.Service<Store>()("Store", {
 		};
 	}),
 }) {
+	// `provideMerge`, not `provide` — the walkthrough generation loop needs
+	// `ReviewStore` directly (to resolve a session's `repoRoot`/`baseRef`
+	// without going through `Store`), not just as `Store.make`'s own
+	// construction-time dependency. Same gotcha as `FileSystem` below it.
 	static layer = Layer.effect(Store, Store.make).pipe(
-		Layer.provide(ReviewStore.layer),
+		Layer.provideMerge(ReviewStore.layer),
 	);
 }
 
