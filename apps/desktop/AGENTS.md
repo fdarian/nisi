@@ -15,8 +15,9 @@ Three parts, one seam:
   registry). One route: `AppShell` (multi-PR tab strip + Files Changed sidebar + diff pane), wired to
   the live sidecar contract through `src/lib/pr-data.ts` (oRPC + TanStack Query via
   `backend-context.tsx`). The diff pane (`src/components/diff-pane/`) renders with `@pierre/diffs`,
-  same shadow-DOM/Worker-pool shape as the `@pierre/trees` sidebar — see `src/lib/pr-data.ts`'s doc
-  comment for the one open contract gap (no review-state read endpoint).
+  same shadow-DOM/Worker-pool shape as the `@pierre/trees` sidebar — `src/lib/build-collapsed-diff.ts`
+  slices a file's patch down to `FileContentReview.ranges`' `"new"` spans for Phase 2's collapsed
+  reviewed regions.
 
 ## The seam
 The sidecar binds an ephemeral port, generates a token, deletes any stale `sidecar.json` *before*
@@ -53,6 +54,3 @@ or the frontend's one-shot `invoke('get_backend')` wedges on a cold start. Regre
 - The compiled `src-tauri/binaries/sidecar-*` is gitignored; `beforeBuildCommand` regenerates it via
   `build:sidecar` (host triple `aarch64-apple-darwin` only — cross-compile is future work).
 - `#/*` → `src/*`, not `@/*`.
-- `useReviewedFiles` (`src/lib/pr-data.ts`) tracks Reviewed state client-side only — `review.setViewed`
-  is write-only in the contract, so a reload can't rehydrate which files were already viewed. Don't
-  "fix" this in the frontend; it needs a read procedure on the sidecar side first.
