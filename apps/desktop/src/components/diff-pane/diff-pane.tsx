@@ -23,13 +23,13 @@ import {
 	EmptyMedia,
 	EmptyTitle,
 } from "#/components/ui/empty";
-import type { DiffStyleMode } from "#/hooks/use-diff-style-mode";
 import type { SidecarQueryUtils } from "#/lib/backend-context";
 import { buildCollapsedFileDiff } from "#/lib/build-collapsed-diff";
 import { buildFileDiff } from "#/lib/build-file-diff";
 import { hashItemVersion } from "#/lib/item-version";
 import type { FileChange, ReviewState } from "#/lib/pr-data";
 import { useFileContents } from "#/lib/pr-data";
+import type { DiffStyleMode } from "#/lib/settings-data";
 import { cn } from "#/lib/utils";
 
 type DiffAnnotationMetadata =

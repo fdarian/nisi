@@ -13,10 +13,9 @@ import {
 	DropdownMenuTrigger,
 } from "#/components/ui/menu";
 import { ToggleGroup, ToggleGroupItem } from "#/components/ui/toggle-group";
-import { useDiffStyleMode } from "#/hooks/use-diff-style-mode";
-import { useSidebarViewMode } from "#/hooks/use-sidebar-view-mode";
 import type { SidecarQueryUtils } from "#/lib/backend-context";
 import type { FileChange, ReviewState, Session } from "#/lib/pr-data";
+import { useDiffStyleMode, useSidebarViewMode } from "#/lib/settings-data";
 import { cn } from "#/lib/utils";
 
 type FilesChangedViewProps = {
@@ -35,8 +34,8 @@ export function FilesChangedView({
 	setViewed,
 }: FilesChangedViewProps): React.ReactElement {
 	const [selectedPath, setSelectedPath] = useState<string | null>(null);
-	const [viewMode, setViewMode] = useSidebarViewMode();
-	const [diffStyle, setDiffStyle] = useDiffStyleMode();
+	const [viewMode, setViewMode] = useSidebarViewMode(orpc);
+	const [diffStyle, setDiffStyle] = useDiffStyleMode(orpc);
 
 	const viewedCount = useMemo(
 		() =>

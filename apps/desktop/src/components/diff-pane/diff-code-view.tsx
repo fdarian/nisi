@@ -29,7 +29,7 @@ import {
 	diffItemMetrics,
 	diffViewUnsafeCSS,
 } from "#/components/diff-pane/diff-view-theme";
-import type { DiffStyleMode } from "#/hooks/use-diff-style-mode";
+import type { DiffStyleMode } from "#/lib/settings-data";
 
 function useDiffWorkerPoolOptions() {
 	return useMemo(
