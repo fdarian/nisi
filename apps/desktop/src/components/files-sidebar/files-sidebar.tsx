@@ -2,7 +2,7 @@
 
 import { SearchIcon } from "lucide-react";
 import { useMemo, useState } from "react";
-import { FileTreeGroup } from "#/components/files-sidebar/file-tree-group";
+import { FileTreeView } from "#/components/files-sidebar/file-tree-view";
 import { FlatFileGroup } from "#/components/files-sidebar/flat-file-group";
 import { Empty, EmptyDescription, EmptyTitle } from "#/components/ui/empty";
 import {
@@ -43,8 +43,6 @@ export function FilesSidebar({
 		[filteredFiles],
 	);
 
-	const GroupComponent = viewMode === "tree" ? FileTreeGroup : FlatFileGroup;
-
 	return (
 		<div className="flex h-full w-72 shrink-0 flex-col border-sidebar-border border-r bg-sidebar">
 			<div className="p-2">
@@ -61,16 +59,27 @@ export function FilesSidebar({
 					/>
 				</InputGroup>
 			</div>
-			<ScrollArea className="min-h-0 flex-1">
-				<div className="flex flex-col gap-1 pb-3">
-					{groups.length === 0 ? (
-						<Empty className="px-4 py-8">
-							<EmptyTitle className="text-sm">No matching files</EmptyTitle>
-							<EmptyDescription>Try a different filter query.</EmptyDescription>
-						</Empty>
-					) : (
-						groups.map((group) => (
-							<GroupComponent
+			{groups.length === 0 ? (
+				<Empty className="px-4 py-8">
+					<EmptyTitle className="text-sm">No matching files</EmptyTitle>
+					<EmptyDescription>Try a different filter query.</EmptyDescription>
+				</Empty>
+			) : viewMode === "tree" ? (
+				// The tree scrolls itself — that internal scroller *is* the sidebar's
+				// one scroll region, and wrapping it in another one would take its
+				// height away and stop it windowing rows. Flat mode has no scroller
+				// of its own, so it keeps the `ScrollArea`.
+				<FileTreeView
+					files={filteredFiles}
+					onSelectPath={onSelectPath}
+					reviewState={reviewState}
+					selectedPath={selectedPath}
+				/>
+			) : (
+				<ScrollArea className="min-h-0 flex-1">
+					<div className="flex flex-col gap-1 pb-3">
+						{groups.map((group) => (
+							<FlatFileGroup
 								key={group.category}
 								files={group.files}
 								onSelectPath={onSelectPath}
@@ -78,10 +87,10 @@ export function FilesSidebar({
 								selectedPath={selectedPath}
 								title={CATEGORY_LABELS[group.category]}
 							/>
-						))
-					)}
-				</div>
-			</ScrollArea>
+						))}
+					</div>
+				</ScrollArea>
+			)}
 		</div>
 	);
 }
