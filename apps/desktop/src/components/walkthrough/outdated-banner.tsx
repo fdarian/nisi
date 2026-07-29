@@ -6,12 +6,23 @@ import {
 	FilePenIcon,
 	FilePlusIcon,
 } from "lucide-react";
+import { useState } from "react";
 import { Button } from "#/components/ui/button";
-import type { FileDrift } from "#/lib/walkthrough-data";
+import {
+	HarnessModelCombobox,
+	type ModelSelection,
+} from "#/components/walkthrough/harness-model-combobox";
+import type { SidecarQueryUtils } from "#/lib/backend-context";
+import type { FileDrift, HarnessId } from "#/lib/walkthrough-data";
+import { useHarnesses } from "#/lib/walkthrough-data";
 
 type OutdatedBannerProps = {
 	changedPaths: ReadonlyMap<string, FileDrift>;
-	onRegenerate: () => void;
+	orpc: SidecarQueryUtils;
+	/** The harness/model the *current* stored walkthrough was generated with — the picker's default, so Regenerate reads as "do it again" rather than forcing a fresh choice every time. */
+	defaultHarness: HarnessId;
+	defaultModel: string | null;
+	onRegenerate: (harness: HarnessId, model: string | undefined) => void;
 };
 
 const DRIFT_LABEL: Record<FileDrift, string> = {
@@ -26,11 +37,28 @@ const DRIFT_ICON: Record<FileDrift, typeof FilePlusIcon> = {
 	new: FilePlusIcon,
 };
 
-/** What's changed in the worktree since this walkthrough was generated — driven by comparing `StoredWalkthrough.fingerprints` against the session's current `diff.files` (`useWalkthroughDrift`). Hidden entirely when nothing has drifted. */
+/**
+ * What's changed in the worktree since this walkthrough was generated —
+ * driven by comparing `StoredWalkthrough.fingerprints` against the session's
+ * current `diff.files` (`useWalkthroughDrift`). Hidden entirely when nothing
+ * has drifted. Regenerate carries the same harness/model picker
+ * (`HarnessModelCombobox`) the empty-state Generate flow uses — reused
+ * as-is rather than duplicated — defaulting to whatever produced the
+ * walkthrough currently on screen.
+ */
 export function OutdatedBanner({
 	changedPaths,
+	orpc,
+	defaultHarness,
+	defaultModel,
 	onRegenerate,
 }: OutdatedBannerProps): React.ReactElement | null {
+	const { harnesses } = useHarnesses(orpc);
+	const [selection, setSelection] = useState<ModelSelection>({
+		harness: defaultHarness,
+		modelId: defaultModel ?? undefined,
+	});
+
 	if (changedPaths.size === 0) return null;
 	const entries = Array.from(changedPaths.entries());
 
@@ -44,9 +72,22 @@ export function OutdatedBanner({
 						changed since this walkthrough was generated
 					</span>
 				</div>
-				<Button onClick={onRegenerate} size="sm" variant="outline">
-					Regenerate
-				</Button>
+				<div className="flex shrink-0 items-center gap-2">
+					<div className="w-56">
+						<HarnessModelCombobox
+							harnesses={harnesses}
+							onChange={setSelection}
+							value={selection}
+						/>
+					</div>
+					<Button
+						onClick={() => onRegenerate(selection.harness, selection.modelId)}
+						size="sm"
+						variant="outline"
+					>
+						Regenerate
+					</Button>
+				</div>
 			</div>
 			<ul className="flex flex-col gap-1">
 				{entries.map(([path, drift]) => {

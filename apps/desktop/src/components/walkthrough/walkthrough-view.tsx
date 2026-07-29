@@ -91,12 +91,10 @@ export function WalkthroughView({
 			)}
 			<OutdatedBanner
 				changedPaths={drift.changedPaths}
-				onRegenerate={() =>
-					generation.generate(
-						walkthrough.harness,
-						walkthrough.model ?? undefined,
-					)
-				}
+				defaultHarness={walkthrough.harness}
+				defaultModel={walkthrough.model}
+				onRegenerate={generation.generate}
+				orpc={orpc}
 			/>
 			<div className="flex min-h-0 flex-1">
 				<div className="flex min-h-0 flex-1 flex-col border-r">
