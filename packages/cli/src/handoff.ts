@@ -46,6 +46,16 @@ const dataDirConfig = Config.string("NISI_DATA_DIR").pipe(
 	),
 );
 
+/**
+ * Same `<dataDir>/logs/sidecar.log` the sidecar itself writes to (see
+ * `apps/desktop/sidecar/logging.ts`) — the CLI never writes this file
+ * itself, it only needs the path to point the user at it when a handoff
+ * doesn't go the way they expected.
+ */
+export const logFilePathConfig = dataDirConfig.pipe(
+	Effect.map((dataDir) => join(dataDir, "logs", "sidecar.log")),
+);
+
 export type HandoffOutcome =
 	| { readonly _tag: "opened"; readonly session: Session }
 	| { readonly _tag: "rejected"; readonly message: string }
@@ -68,13 +78,29 @@ const readHandshake = (sidecarJsonPath: string) =>
 	Effect.gen(function* () {
 		const fs = yield* FileSystem;
 		const exists = yield* fs.exists(sidecarJsonPath);
-		if (!exists) return undefined;
+		if (!exists) {
+			yield* Effect.logDebug("sidecar.json not found", { sidecarJsonPath });
+			return undefined;
+		}
 		const raw = yield* fs.readFileString(sidecarJsonPath);
-		return yield* Effect.try({
+		const handshake = yield* Effect.try({
 			try: () => Schema.decodeUnknownSync(SidecarHandshake)(JSON.parse(raw)),
 			catch: () => undefined,
 		});
-	}).pipe(Effect.orElseSucceed(() => undefined));
+		yield* Effect.logDebug("read sidecar.json", {
+			sidecarJsonPath,
+			port: handshake?.port,
+		});
+		return handshake;
+	}).pipe(
+		Effect.tapError((cause) =>
+			Effect.logDebug("sidecar.json unreadable/malformed", {
+				sidecarJsonPath,
+				cause,
+			}),
+		),
+		Effect.orElseSucceed(() => undefined),
+	);
 
 /**
  * One attempt against whatever's on disk right now. `safe()` tells a real
@@ -95,6 +121,11 @@ const attempt = (
 			return { _tag: "unreachable" } as const;
 		}
 
+		yield* Effect.logDebug("POSTing sessions.open", {
+			port: handshake.port,
+			cwd,
+		});
+
 		const client = makeSidecarClient(handshake);
 		const result = yield* Effect.promise(() =>
 			safe(
@@ -106,14 +137,29 @@ const attempt = (
 		);
 
 		if (result.isSuccess) {
+			yield* Effect.logDebug("sessions.open succeeded", {
+				port: handshake.port,
+				sessionId: result.data.id,
+			});
 			return { _tag: "opened", session: result.data } as const;
 		}
 		if (isDefinedError(result.error)) {
+			yield* Effect.logDebug("sessions.open rejected", {
+				port: handshake.port,
+				message: result.error.message,
+			});
 			return { _tag: "rejected", message: result.error.message } as const;
 		}
 		if (isOwnTimeout(result.error)) {
+			yield* Effect.logDebug("sessions.open classified as unresponsive", {
+				port: handshake.port,
+			});
 			return { _tag: "unresponsive" } as const;
 		}
+		yield* Effect.logDebug("sessions.open classified as unreachable", {
+			port: handshake.port,
+			error: String(result.error),
+		});
 		return { _tag: "unreachable" } as const;
 	});
 
@@ -150,6 +196,11 @@ export const handoff = (
 	Effect.gen(function* () {
 		const dataDir = yield* dataDirConfig.pipe(Effect.orDie);
 		const sidecarJsonPath = join(dataDir, "sidecar.json");
+		yield* Effect.logDebug("resolved data dir", {
+			dataDir,
+			sidecarJsonPath,
+			logFile: join(dataDir, "logs", "sidecar.log"),
+		});
 
 		const first = yield* attempt(sidecarJsonPath, cwd);
 		if (first._tag === "opened" || first._tag === "rejected") {

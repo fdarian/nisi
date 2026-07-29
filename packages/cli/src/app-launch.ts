@@ -48,8 +48,10 @@ const candidateAppPaths = (): ReadonlyArray<string> => {
 const resolveAppPath = Effect.gen(function* () {
 	const fs = yield* FileSystem;
 	const candidates = candidateAppPaths();
+	yield* Effect.logDebug("resolving app path", { candidates });
 	for (const candidate of candidates) {
 		if (yield* fs.exists(candidate)) {
+			yield* Effect.logDebug("resolved app path", { appPath: candidate });
 			return candidate;
 		}
 	}
@@ -66,6 +68,11 @@ const resolveAppPath = Effect.gen(function* () {
  */
 export const launchApp = Effect.gen(function* () {
 	const appPath = yield* resolveAppPath;
+	yield* Effect.logDebug("spawning app", {
+		command: "open",
+		args: ["-a", appPath],
+	});
+	const startedAt = Date.now();
 	const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
 	const exitCode = yield* Effect.scoped(
 		Effect.gen(function* () {
@@ -75,6 +82,11 @@ export const launchApp = Effect.gen(function* () {
 			return yield* handle.exitCode;
 		}),
 	);
+	yield* Effect.logDebug("app spawn finished", {
+		appPath,
+		exitCode,
+		durationMs: Date.now() - startedAt,
+	});
 	if (exitCode !== 0) {
 		return yield* new AppLaunchError({
 			reason: `"open -a ${appPath}" exited with code ${exitCode}`,

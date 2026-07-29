@@ -17,6 +17,7 @@
 		"@effect/platform-bun": "4.0.0-beta.102",
 		"@orpc/client": "2.0.0-beta.21",
 		"@repo/git": "workspace:*",
+		"@repo/logging": "workspace:*",
 		"@repo/sidecar-api": "workspace:*",
 		"effect": "4.0.0-beta.102"
 	},

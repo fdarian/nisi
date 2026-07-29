@@ -6,7 +6,11 @@ this implements.
 
 - `src/index.ts` — the `Command` (Effect CLI, `effect/unstable/cli`), argument parsing, and
   terminal reporting. Fails fast via `@repo/git`'s `resolveRepoRoot` before touching the sidecar
-  at all, so a non-repo directory doesn't pay for an app-spawn round trip.
+  at all, so a non-repo directory doesn't pay for an app-spawn round trip. Logging
+  (`@repo/logging`'s `MinimumLogLevelLayer`, gated by `LOG_LEVEL`) always routes to stderr
+  (`Logger.withConsoleError`) regardless of level, so `LOG_LEVEL=debug nisi` never changes what a
+  script piping the CLI's stdout would see — stdout stays exactly the one human-facing result line
+  each outcome already prints via `Console.log`/`Console.error`.
 - `src/handoff.ts` — the seam itself: read `sidecar.json`, POST `sessions.open` with a short
   per-attempt timeout, and only spawn the app (`app-launch.ts`) when that POST can't reach
   anything — never on a declared app-level error, which means the sidecar is alive and answered.
