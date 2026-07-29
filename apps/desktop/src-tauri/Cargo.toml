@@ -24,6 +24,10 @@ tauri-plugin-dialog = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tokio = { version = "1", features = ["fs", "time", "sync"] }
+# Health-checks a sidecar.json's recorded port over plain HTTP (loopback
+# only, never TLS) before trusting it — `default-features = false` drops the
+# TLS backend (native-tls/rustls) neither this nor any http:// call needs.
+reqwest = { version = "0.12", default-features = false, features = ["json"] }
 
 [dev-dependencies]
 # Test-only runtime bits for `#[tokio::test]` — kept out of the production
