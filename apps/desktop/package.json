@@ -36,6 +36,7 @@
 		"@repo/git": "workspace:*",
 		"@repo/harness-local": "workspace:*",
 		"@repo/review": "workspace:*",
+		"@repo/settings": "workspace:*",
 		"@repo/sidecar-api": "workspace:*",
 		"@repo/walkthrough": "workspace:*",
 		"@tanstack/react-query": "^5.101.4",

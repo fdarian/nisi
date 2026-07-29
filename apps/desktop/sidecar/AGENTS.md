@@ -5,8 +5,9 @@ lives in `@repo/git`, `@repo/review`, `@repo/walkthrough`, and `@repo/harness-lo
 composes them and translates between domain errors and oRPC error codes. See root `AGENTS.md` → "The
 seam" for the port/token handshake this boots into.
 
-- `index.ts` — boot: handshake file, builds `MainLayer` (`Store` + `WalkthroughStore` + `SqliteDb` +
-  Bun platform services), runs one `Effect` program via `BunRuntime.runMain`.
+- `index.ts` — boot: handshake file, builds `MainLayer` (`Store` + `WalkthroughStore` +
+  `SettingsStore` + `SqliteDb` + Bun platform services), runs one `Effect` program via
+  `BunRuntime.runMain`.
 - `services.ts` — `AppServices`, the service union `mainContext` carries. One alias so `http.ts` and
   the walkthrough generation loop (which bridges Effect from a plain `async function*`, not `.effect()`)
   agree on what's available without each hand-rolling the union.
@@ -19,6 +20,12 @@ seam" for the port/token handshake this boots into.
   declared contract error via `Effect.catchTag` + `errors.XXX(...)`; anything else (gh auth failures,
   decode errors, etc.) is an uncaught defect → oRPC's generic 500. Deliberately not exhaustive for
   Phase 1 — see `packages/sidecar-api/AGENTS.md` for which shapes got extra errors and why.
+  `settings.get`/`settings.update` are the one pair of handlers backed directly by a domain
+  package's own store (`@repo/settings`'s `SettingsStore`) rather than a sidecar-local wrapper —
+  see that package's AGENTS.md for why it didn't need the `WalkthroughStore` split.
+  `walkthrough.harnesses` reads `SettingsStore` first and passes its `enabledHarnesses` into
+  `listHarnesses`, so the registry reflects the user's declared harnesses instead of always
+  reporting all four.
 - `events.ts` — in-memory pub/sub for `events.subscribe`, ported from rheya's sidecar verbatim. oRPC's
   `.effect()` can't return a live async iterator (it resolves the generator via `runPromise`), so
   `events.subscribe` uses the lower-level `.handler(async function* ...)` instead, bridging this

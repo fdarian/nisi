@@ -7,6 +7,8 @@ import {
 	type RequestHeadersHandlerPluginContext,
 } from "@orpc/server/plugins";
 import { ReviewStore } from "@repo/review";
+import { SettingsStore } from "@repo/settings";
+import type { HarnessId, Settings as WireSettings } from "@repo/sidecar-api";
 import { contract } from "@repo/sidecar-api";
 import type { Context } from "effect";
 import { Effect } from "effect";
@@ -24,6 +26,22 @@ import {
 import { listHarnesses } from "./walkthrough/harnesses.ts";
 import { stopLiveSession } from "./walkthrough/live-sessions.ts";
 import { WalkthroughStore } from "./walkthrough/store.ts";
+
+/**
+ * `@repo/settings`'s `Settings` keeps `enabledHarnesses` as a loose
+ * `string[]` (it stays dependency-free from this contract) — this is the
+ * one place that casts it back to `HarnessId[]`, same as `WalkthroughStore`
+ * casts its own `harness` text column at its own wire boundary.
+ */
+const toWireSettings = (settings: {
+	readonly enabledHarnesses: ReadonlyArray<string>;
+	readonly sidebarViewMode: WireSettings["sidebarViewMode"];
+	readonly diffStyleMode: WireSettings["diffStyleMode"];
+}): WireSettings => ({
+	enabledHarnesses: settings.enabledHarnesses as ReadonlyArray<HarnessId>,
+	sidebarViewMode: settings.sidebarViewMode,
+	diffStyleMode: settings.diffStyleMode,
+});
 
 type ServerContext = WithEffectContext<AppServices> &
 	RequestHeadersHandlerPluginContext;
@@ -178,9 +196,14 @@ export function startServer(
 			}),
 		},
 		walkthrough: {
-			// Static + Pi's live discovery — never fails, see `listHarnesses`.
+			// Static + Pi's live discovery, filtered to `SettingsStore`'s
+			// `enabledHarnesses` — never fails, see `listHarnesses`.
 			harnesses: authed.walkthrough.harnesses.effect(function* () {
-				return yield* listHarnesses();
+				const settingsStore = yield* SettingsStore;
+				const settings = yield* settingsStore.get();
+				return yield* listHarnesses(
+					new Set(settings.enabledHarnesses as ReadonlyArray<HarnessId>),
+				);
 			}),
 			get: authed.walkthrough.get.effect(function* ({ input, errors }) {
 				const reviewStore = yield* ReviewStore;
@@ -220,6 +243,16 @@ export function startServer(
 					}
 					throw error;
 				}
+			}),
+		},
+		settings: {
+			get: authed.settings.get.effect(function* () {
+				const store = yield* SettingsStore;
+				return toWireSettings(yield* store.get());
+			}),
+			update: authed.settings.update.effect(function* ({ input }) {
+				const store = yield* SettingsStore;
+				return toWireSettings(yield* store.update(input));
 			}),
 		},
 	});

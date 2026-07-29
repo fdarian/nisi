@@ -1,6 +1,7 @@
 import { join } from "node:path";
 import { BunRuntime, BunServices } from "@effect/platform-bun";
 import { getDataDirConfig, SqliteDb } from "@repo/db";
+import { SettingsStore } from "@repo/settings";
 import { Effect, Layer } from "effect";
 import { FileSystem } from "effect/FileSystem";
 import { startServer } from "./http.ts";
@@ -71,15 +72,20 @@ const program = Effect.scoped(
 	}),
 );
 
-// `Store.layer` and `WalkthroughStore.layer` both need `SqliteDb` (the
-// app's one shared connection — see `@repo/db`'s AGENTS.md) and
-// `FileSystem`/`ChildProcessSpawner` (via `@repo/review`'s `ReviewStore`
+// `Store.layer`, `WalkthroughStore.layer`, and `SettingsStore.layer` all need
+// `SqliteDb` (the app's one shared connection — see `@repo/db`'s AGENTS.md)
+// and `FileSystem`/`ChildProcessSpawner` (via `@repo/review`'s `ReviewStore`
 // and, per-call, `@repo/git`'s functions). `provideMerge`, not `provide`,
 // at every step — `SqliteDb`/`ReviewStore`/`BunServices` all need to stay
 // available in the final context too, not just be consumed while
-// constructing `Store`/`WalkthroughStore` themselves, since oRPC handlers
-// (and the walkthrough generation loop) reach some of them directly.
-const MainLayer = Layer.mergeAll(Store.layer, WalkthroughStore.layer).pipe(
+// constructing `Store`/`WalkthroughStore`/`SettingsStore` themselves, since
+// oRPC handlers (and the walkthrough generation loop) reach some of them
+// directly.
+const MainLayer = Layer.mergeAll(
+	Store.layer,
+	WalkthroughStore.layer,
+	SettingsStore.layer,
+).pipe(
 	Layer.provideMerge(SqliteDb.layer),
 	Layer.provideMerge(BunServices.layer),
 );

@@ -9,7 +9,9 @@ knows about the other — this directory is where they actually meet.
   regenerating overwrites). Lives here rather than in `@repo/walkthrough` because that package is
   deliberately I/O-free — see its AGENTS.md.
 - `harnesses.ts` — `listHarnesses` (the static+Pi-discovered registry `walkthrough.harnesses`
-  returns) and `createHarnessAdapter` (harness/model choice → a real `HarnessV1` adapter instance).
+  returns, filtered to the caller-supplied `enabledHarnesses` set — `http.ts` reads that from
+  `@repo/settings`'s `SettingsStore` before calling in) and `createHarnessAdapter` (harness/model
+  choice → a real `HarnessV1` adapter instance).
 - `context.ts` — `gatherGenerationContext`: resolves a session's `repoRoot`/`baseRef` via
   `@repo/review`'s `ReviewStore` directly (not through `Store`, which has no raw "get one session"
   method) and fetches every changed file's patch + head content via `@repo/git`, producing exactly

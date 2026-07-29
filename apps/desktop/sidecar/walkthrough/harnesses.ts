@@ -78,15 +78,25 @@ const discoverPiModels = (): Effect.Effect<ReadonlyArray<HarnessModel>> =>
 	}).pipe(Effect.orElseSucceed(() => PI_FALLBACK_MODELS));
 
 /**
- * The four adapters with their model lists — `walkthrough.harnesses`'s
- * implementation. Never fails: availability isn't knowable up front (no
- * `isAvailable` API on any adapter), so every harness is always reported and
- * a real unavailability surfaces as a `generate` failure instead.
+ * The four adapters with their model lists, filtered down to
+ * `enabledHarnesses` — `walkthrough.harnesses`'s implementation. Availability
+ * still isn't knowable up front (no `isAvailable` API on any adapter), so
+ * this never fails and a real unavailability surfaces as a `generate`
+ * failure instead; `enabledHarnesses` is a user declaration (`@repo/settings`),
+ * not a probe. Pi's model discovery only runs when Pi is actually enabled —
+ * no point paying for it (or risking its `~/.config` read) for a harness the
+ * user hasn't turned on.
  */
-export const listHarnesses = (): Effect.Effect<ReadonlyArray<HarnessInfo>> =>
-	discoverPiModels().pipe(
-		Effect.map(
-			(piModels): ReadonlyArray<HarnessInfo> => [
+export const listHarnesses = (
+	enabledHarnesses: ReadonlySet<HarnessId>,
+): Effect.Effect<ReadonlyArray<HarnessInfo>> => {
+	const discoverPi = enabledHarnesses.has("pi")
+		? discoverPiModels()
+		: Effect.succeed<ReadonlyArray<HarnessModel>>([]);
+
+	return discoverPi.pipe(
+		Effect.map((piModels): ReadonlyArray<HarnessInfo> => {
+			const all: ReadonlyArray<HarnessInfo> = [
 				{
 					id: "claude-code",
 					label: HARNESS_LABELS["claude-code"],
@@ -103,9 +113,11 @@ export const listHarnesses = (): Effect.Effect<ReadonlyArray<HarnessInfo>> =>
 					models: STATIC_MODELS.opencode,
 				},
 				{ id: "pi", label: HARNESS_LABELS.pi, models: piModels },
-			],
-		),
+			];
+			return all.filter((harness) => enabledHarnesses.has(harness.id));
+		}),
 	);
+};
 
 /** Splits opencode's `provider/model` combo id back into its two settings fields — see `STATIC_MODELS.opencode`/`discoverPiModels`, which both mint ids in that shape. */
 const splitProviderModel = (

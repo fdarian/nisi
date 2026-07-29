@@ -1,5 +1,6 @@
 import type { BunServices } from "@effect/platform-bun";
 import type { ReviewStore } from "@repo/review";
+import type { SettingsStore } from "@repo/settings";
 import type { Store } from "./store.ts";
 import type { WalkthroughStore } from "./walkthrough/store.ts";
 
@@ -14,4 +15,5 @@ export type AppServices =
 	| Store
 	| ReviewStore
 	| WalkthroughStore
+	| SettingsStore
 	| BunServices.BunServices;
