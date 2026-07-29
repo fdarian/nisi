@@ -32,6 +32,10 @@ const STATIC_MODELS: Record<
 			id: "anthropic/claude-sonnet-4-5",
 			label: "Claude Sonnet 4.5 (Anthropic)",
 		},
+		{
+			id: "opencode/deepseek-v4-flash-free",
+			label: "DeepSeek V4 Flash Free (OpenCode)",
+		},
 		{ id: "openai/gpt-5.1", label: "GPT-5.1 (OpenAI)" },
 		{ id: "google/gemini-3-pro", label: "Gemini 3 Pro (Google)" },
 	],
