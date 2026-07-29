@@ -197,3 +197,165 @@ describe("ReviewStore file review state", () => {
 		});
 	});
 });
+
+describe("ReviewStore range claims", () => {
+	test("markRangeViewed snapshots content and is reflected by listRangeClaims", async () => {
+		await withTempDataDir(async (dataDir) => {
+			const claims = await run(
+				dataDir,
+				Effect.gen(function* () {
+					const store = yield* ReviewStore;
+					const session = yield* store.openSession(prInput);
+					yield* store.markRangeViewed(
+						session.id,
+						"src/a.ts",
+						"block-1",
+						"Session refresh",
+						[{ startLine: 5, endLine: 9 }],
+						new TextEncoder().encode("content\n"),
+					);
+					return yield* store.listRangeClaims(session.id, "src/a.ts");
+				}),
+			);
+
+			expect(claims).toHaveLength(1);
+			expect(claims[0]?.blockId).toBe("block-1");
+			expect(claims[0]?.blockLabel).toBe("Session refresh");
+			expect(claims[0]?.ranges).toEqual([{ startLine: 5, endLine: 9 }]);
+			expect(claims[0]?.snapshotHash).toBeTruthy();
+		});
+	});
+
+	test("two blocks claiming the same file coexist as separate claims", async () => {
+		await withTempDataDir(async (dataDir) => {
+			const claims = await run(
+				dataDir,
+				Effect.gen(function* () {
+					const store = yield* ReviewStore;
+					const session = yield* store.openSession(prInput);
+					yield* store.markRangeViewed(
+						session.id,
+						"src/a.ts",
+						"block-1",
+						"First",
+						[{ startLine: 1, endLine: 3 }],
+						new TextEncoder().encode("content\n"),
+					);
+					yield* store.markRangeViewed(
+						session.id,
+						"src/a.ts",
+						"block-2",
+						"Second",
+						[{ startLine: 10, endLine: 12 }],
+						new TextEncoder().encode("content\n"),
+					);
+					return yield* store.listRangeClaims(session.id, "src/a.ts");
+				}),
+			);
+
+			expect(claims).toHaveLength(2);
+			expect(new Set(claims.map((c) => c.blockId))).toEqual(
+				new Set(["block-1", "block-2"]),
+			);
+		});
+	});
+
+	test("re-ticking the same block+path updates ranges and snapshot in place, not accumulating rows", async () => {
+		await withTempDataDir(async (dataDir) => {
+			const claims = await run(
+				dataDir,
+				Effect.gen(function* () {
+					const store = yield* ReviewStore;
+					const session = yield* store.openSession(prInput);
+					yield* store.markRangeViewed(
+						session.id,
+						"src/a.ts",
+						"block-1",
+						"First",
+						[{ startLine: 1, endLine: 3 }],
+						new TextEncoder().encode("v1\n"),
+					);
+					yield* store.markRangeViewed(
+						session.id,
+						"src/a.ts",
+						"block-1",
+						"First (renamed)",
+						[{ startLine: 1, endLine: 5 }],
+						new TextEncoder().encode("v2\n"),
+					);
+					return yield* store.listRangeClaims(session.id, "src/a.ts");
+				}),
+			);
+
+			expect(claims).toHaveLength(1);
+			expect(claims[0]?.blockLabel).toBe("First (renamed)");
+			expect(claims[0]?.ranges).toEqual([{ startLine: 1, endLine: 5 }]);
+		});
+	});
+
+	test("unmarkRangeViewed removes exactly the claim for its own block, leaving others", async () => {
+		await withTempDataDir(async (dataDir) => {
+			const claims = await run(
+				dataDir,
+				Effect.gen(function* () {
+					const store = yield* ReviewStore;
+					const session = yield* store.openSession(prInput);
+					yield* store.markRangeViewed(
+						session.id,
+						"src/a.ts",
+						"block-1",
+						"First",
+						[{ startLine: 1, endLine: 3 }],
+						new TextEncoder().encode("content\n"),
+					);
+					yield* store.markRangeViewed(
+						session.id,
+						"src/a.ts",
+						"block-2",
+						"Second",
+						[{ startLine: 10, endLine: 12 }],
+						new TextEncoder().encode("content\n"),
+					);
+					yield* store.unmarkRangeViewed(session.id, "src/a.ts", "block-1");
+					return yield* store.listRangeClaims(session.id, "src/a.ts");
+				}),
+			);
+
+			expect(claims).toHaveLength(1);
+			expect(claims[0]?.blockId).toBe("block-2");
+		});
+	});
+
+	test("listRangeClaims is empty for a file never claimed", async () => {
+		await withTempDataDir(async (dataDir) => {
+			const claims = await run(
+				dataDir,
+				Effect.gen(function* () {
+					const store = yield* ReviewStore;
+					const session = yield* store.openSession(prInput);
+					return yield* store.listRangeClaims(session.id, "src/untouched.ts");
+				}),
+			);
+			expect(claims).toHaveLength(0);
+		});
+	});
+
+	test("markRangeViewed fails with SessionNotFound for an unknown session", async () => {
+		await withTempDataDir(async (dataDir) => {
+			const exit = await Effect.runPromiseExit(
+				Effect.gen(function* () {
+					const store = yield* ReviewStore;
+					return yield* store.markRangeViewed(
+						"does-not-exist",
+						"src/a.ts",
+						"block-1",
+						"First",
+						[{ startLine: 1, endLine: 3 }],
+						new TextEncoder().encode("x"),
+					);
+				}).pipe(Effect.provide(makeTestLayer(dataDir))),
+			);
+			expect(exit._tag).toBe("Failure");
+		});
+	});
+});

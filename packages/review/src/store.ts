@@ -5,7 +5,12 @@ import { FileSystem } from "effect/FileSystem";
 import { v7 as uuidv7 } from "uuid";
 import { readBlob, writeBlob } from "./blob-store.ts";
 import { dbUse, runMigrations } from "./db/client.ts";
-import { reviewedFiles, type SessionRow, sessions } from "./db/schema.ts";
+import {
+	reviewedFiles,
+	reviewRangeClaims,
+	type SessionRow,
+	sessions,
+} from "./db/schema.ts";
 import { ReviewStoreError, SessionNotFound } from "./errors.ts";
 import { getBlobsDir, getDataDirConfig } from "./paths.ts";
 
@@ -33,6 +38,23 @@ export type OpenSessionInput = {
 export type FileReviewState = {
 	readonly viewed: boolean;
 	readonly snapshotHash: string | null;
+	/** Epoch ms this row was last written — lets a caller reconciling this claim alongside range claims (see `RangeReviewClaim`) tie-break attribution by recency. */
+	readonly viewedAt: number;
+};
+
+export type LineRange = {
+	readonly startLine: number;
+	readonly endLine: number;
+};
+
+/** One walkthrough reference block's claim on a set of ranges within one file — see `db/schema.ts`'s `reviewRangeClaims`. */
+export type RangeReviewClaim = {
+	readonly path: string;
+	readonly blockId: string;
+	readonly blockLabel: string;
+	readonly ranges: ReadonlyArray<LineRange>;
+	readonly snapshotHash: string;
+	readonly viewedAt: number;
 };
 
 /**
@@ -268,7 +290,11 @@ export class ReviewStore extends Context.Service<ReviewStore>()("ReviewStore", {
 				const row = rows.at(0);
 				return row === undefined
 					? null
-					: { viewed: row.viewed, snapshotHash: row.snapshotHash };
+					: {
+							viewed: row.viewed,
+							snapshotHash: row.snapshotHash,
+							viewedAt: row.viewedAt.getTime(),
+						};
 			});
 
 		/**
@@ -295,7 +321,11 @@ export class ReviewStore extends Context.Service<ReviewStore>()("ReviewStore", {
 				return new Map(
 					rows.map((row) => [
 						row.path,
-						{ viewed: row.viewed, snapshotHash: row.snapshotHash },
+						{
+							viewed: row.viewed,
+							snapshotHash: row.snapshotHash,
+							viewedAt: row.viewedAt.getTime(),
+						},
 					]),
 				);
 			});
@@ -305,6 +335,116 @@ export class ReviewStore extends Context.Service<ReviewStore>()("ReviewStore", {
 			hash: string,
 		): Effect.Effect<Uint8Array, ReviewStoreError, FileSystem> =>
 			readBlob(blobsDir, hash);
+
+		/**
+		 * Ticks one walkthrough reference block's claim on a set of ranges
+		 * within one file, snapshotting the *whole file's* current content —
+		 * same "snapshot immediately" discipline as `markFileViewed`, so
+		 * reconciliation always has real content to diff against. Re-ticking the
+		 * same block+path updates the existing claim in place (new ranges, new
+		 * snapshot, new `viewedAt`) rather than accumulating history.
+		 */
+		const markRangeViewed = (
+			sessionId: string,
+			path: string,
+			blockId: string,
+			blockLabel: string,
+			ranges: ReadonlyArray<LineRange>,
+			content: Uint8Array,
+		): Effect.Effect<void, SessionNotFound | ReviewStoreError, FileSystem> =>
+			Effect.gen(function* () {
+				const session = yield* readSessionRow(sessionId);
+				const hash = yield* writeBlob(blobsDir, content);
+				const now = new Date();
+				yield* dbUse(db, (client) =>
+					client
+						.insert(reviewRangeClaims)
+						.values({
+							sessionId: session.id,
+							path,
+							blockId,
+							blockLabel,
+							ranges: JSON.stringify(ranges),
+							snapshotHash: hash,
+							viewedAt: now,
+						})
+						.onConflictDoUpdate({
+							target: [
+								reviewRangeClaims.sessionId,
+								reviewRangeClaims.path,
+								reviewRangeClaims.blockId,
+							],
+							set: {
+								blockLabel,
+								ranges: JSON.stringify(ranges),
+								snapshotHash: hash,
+								viewedAt: now,
+							},
+						})
+						.run(),
+				);
+			});
+
+		/**
+		 * Unticks one block's claim. Unlike `markFileUnviewed`, this deletes the
+		 * row outright rather than flipping a `viewed` flag — a range claim's
+		 * only reason to exist is being an active claim, so there's no
+		 * "unviewed but remembered" state to preserve.
+		 */
+		const unmarkRangeViewed = (
+			sessionId: string,
+			path: string,
+			blockId: string,
+		): Effect.Effect<void, SessionNotFound | ReviewStoreError> =>
+			Effect.gen(function* () {
+				const session = yield* readSessionRow(sessionId);
+				yield* dbUse(db, (client) =>
+					client
+						.delete(reviewRangeClaims)
+						.where(
+							and(
+								eq(reviewRangeClaims.sessionId, session.id),
+								eq(reviewRangeClaims.path, path),
+								eq(reviewRangeClaims.blockId, blockId),
+							),
+						)
+						.run(),
+				);
+			});
+
+		/** Every active range claim on one file, for reconciliation — mirrors `listReviewStates`' per-session bulk read, scoped to a path since (unlike the whole-file toggle) nothing else needs every path's claims at once. */
+		const listRangeClaims = (
+			sessionId: string,
+			path: string,
+		): Effect.Effect<
+			ReadonlyArray<RangeReviewClaim>,
+			SessionNotFound | ReviewStoreError
+		> =>
+			Effect.gen(function* () {
+				const session = yield* readSessionRow(sessionId);
+				const rows = yield* dbUse(db, (client) =>
+					client
+						.select()
+						.from(reviewRangeClaims)
+						.where(
+							and(
+								eq(reviewRangeClaims.sessionId, session.id),
+								eq(reviewRangeClaims.path, path),
+							),
+						)
+						.all(),
+				);
+				return rows.map(
+					(row): RangeReviewClaim => ({
+						path: row.path,
+						blockId: row.blockId,
+						blockLabel: row.blockLabel,
+						ranges: JSON.parse(row.ranges) as ReadonlyArray<LineRange>,
+						snapshotHash: row.snapshotHash,
+						viewedAt: row.viewedAt.getTime(),
+					}),
+				);
+			});
 
 		return {
 			openSession,
@@ -316,6 +456,9 @@ export class ReviewStore extends Context.Service<ReviewStore>()("ReviewStore", {
 			getFileReviewState,
 			listReviewStates,
 			readSnapshot,
+			markRangeViewed,
+			unmarkRangeViewed,
+			listRangeClaims,
 		};
 	}),
 }) {
