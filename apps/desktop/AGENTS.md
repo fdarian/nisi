@@ -93,7 +93,10 @@ Full recipe, run from `apps/desktop` against a **scratch** data dir (never the d
 prod's, or whatever `bun dev` session you already have running):
 
 ```sh
-export NISI_DATA_DIR=/tmp/nisi-scratch   # anything outside the real app-data dir
+# Pick a path nobody else is using — a fixed name here gets copy-pasted, and two
+# agents sharing one scratch dir fight over its sidecar.json and app.db exactly
+# the way dev and prod used to (see Dev/prod isolation above).
+export NISI_DATA_DIR=/tmp/nisi-scratch-$(date +%s)$$
 bun run sidecar/index.ts &               # boots the sidecar, writes $NISI_DATA_DIR/sidecar.json
 
 cat $NISI_DATA_DIR/sidecar.json          # => { "port": ..., "token": "..." }
@@ -111,6 +114,12 @@ VITE_DEV_BACKEND_PORT=<port> VITE_DEV_BACKEND_TOKEN=<token> bun run dev:vite
 way (default: the real app-data dir) and need to agree on which `sidecar.json` to read/write. Kill
 the backgrounded sidecar when done; nothing here touches the real `sidecar.json` or app.db as long
 as `NISI_DATA_DIR` points somewhere scratch.
+
+Two rules if anything else might be working in this checkout at the same time:
+- **Kill by port or PID, never `pkill -f bun`/`vite`/`sidecar`** — those patterns match the other
+  session's processes (and your editor's) just as well as your own.
+- **Don't create branches or worktrees** to isolate the work. There's one checkout; a branch
+  switch moves it out from under everyone. Isolate through `NISI_DATA_DIR` and scratch repos.
 
 ## Non-obvious decisions
 - `tsconfig.json` (the frontend one) is hand-rolled, not `extends: "@total-typescript/tsconfig/..."`
