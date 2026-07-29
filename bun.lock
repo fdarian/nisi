@@ -35,6 +35,7 @@
         "@repo/db": "workspace:*",
         "@repo/git": "workspace:*",
         "@repo/harness-local": "workspace:*",
+        "@repo/logging": "workspace:*",
         "@repo/review": "workspace:*",
         "@repo/settings": "workspace:*",
         "@repo/sidecar-api": "workspace:*",
@@ -93,6 +94,7 @@
         "@effect/platform-bun": "4.0.0-beta.102",
         "@orpc/client": "2.0.0-beta.21",
         "@repo/git": "workspace:*",
+        "@repo/logging": "workspace:*",
         "@repo/sidecar-api": "workspace:*",
         "effect": "4.0.0-beta.102",
       },
@@ -146,6 +148,19 @@
         "typescript": "7.0.2",
         "ws": "^8.21.0",
         "zod": "^4.1.8",
+      },
+    },
+    "packages/logging": {
+      "name": "@repo/logging",
+      "version": "0.1.0",
+      "dependencies": {
+        "effect": "4.0.0-beta.102",
+      },
+      "devDependencies": {
+        "@effect/platform-bun": "4.0.0-beta.102",
+        "@total-typescript/tsconfig": "1.0.4",
+        "@types/bun": "1.3.14",
+        "typescript": "7.0.2",
       },
     },
     "packages/review": {
@@ -565,6 +580,8 @@
     "@repo/git": ["@repo/git@workspace:packages/git"],
 
     "@repo/harness-local": ["@repo/harness-local@workspace:packages/harness-local"],
+
+    "@repo/logging": ["@repo/logging@workspace:packages/logging"],
 
     "@repo/nisi": ["@repo/nisi@workspace:apps/desktop"],
 
