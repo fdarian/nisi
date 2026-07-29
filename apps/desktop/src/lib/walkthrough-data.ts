@@ -15,20 +15,34 @@ export type HarnessId = "claude-code" | "codex" | "opencode" | "pi";
 export type HarnessModel = { id: string; label: string };
 
 /**
+ * Mirrors `ModelsStatus` (`packages/sidecar-api/src/walkthrough.ts`):
+ * `"fresh"` — discovered (or cache-hit) this call; `"stale"` — the live
+ * attempt failed but a previous successful discovery is being reused;
+ * `"unavailable"` — discovery has never once succeeded, so `models` is
+ * empty. Surfaced in the UI (`GeneratePanel`) so an empty model list reads
+ * as "couldn't reach the CLI" rather than the generic "no search results"
+ * a bare empty `models` array would otherwise look like.
+ */
+export type ModelsStatus = "fresh" | "stale" | "unavailable";
+
+/**
  * Mirrors `HarnessInfo` (`packages/sidecar-api/src/walkthrough.ts`).
  * `walkthrough.harnesses()` always reports all four adapters — availability
  * can't be detected up front, so the onboarding picker and the settings
  * page's checkboxes both render every entry `useHarnesses` returns rather
  * than a separate static list. `enabled` reflects `@repo/settings`'s
  * `enabledHarnesses` (unset counts as every harness enabled); `models` is
- * only populated live for a disabled harness's Pi entry once it's enabled,
- * since discovery costs a real read nobody will use yet otherwise.
+ * discovered live for every *enabled* harness (each independently
+ * timeout-bounded and cached server-side) — `modelsStatus` is what actually
+ * distinguishes "discovery succeeded with zero models" from "discovery
+ * failed," since both otherwise look like the same empty array here.
  */
 export type HarnessInfo = {
 	id: HarnessId;
 	label: string;
 	models: readonly HarnessModel[];
 	enabled: boolean;
+	modelsStatus: ModelsStatus;
 };
 
 /** Mirrors `Location` (`packages/walkthrough/src/schema.ts`) — 1-based inclusive, in the file's head content. */

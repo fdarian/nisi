@@ -36,6 +36,14 @@ type HarnessModelComboboxProps = {
 	harnesses: readonly HarnessInfo[];
 	value: ModelSelection | null;
 	onChange: (value: ModelSelection) => void;
+	/**
+	 * Shown in place of the popup's default "No matching models." when every
+	 * group is empty. Lets `GeneratePanel` distinguish "discovery failed for
+	 * every enabled harness" (an actionable, specific message) from a genuine
+	 * no-search-results state, which `HarnessInfo.modelsStatus` alone
+	 * determines but this component has no other reason to know about.
+	 */
+	emptyMessage?: string;
 };
 
 /** Only enabled harnesses get a model group — `HarnessInfo.enabled` already reflects `@repo/settings`'s `enabledHarnesses` server-side, so there's no separate id set to thread through. */
@@ -43,6 +51,7 @@ export function HarnessModelCombobox({
 	harnesses,
 	value,
 	onChange,
+	emptyMessage = "No matching models.",
 }: HarnessModelComboboxProps): React.ReactElement {
 	const groups = useMemo<readonly ModelOptionGroup[]>(
 		() =>
@@ -86,7 +95,7 @@ export function HarnessModelCombobox({
 		>
 			<ComboboxInput placeholder="Choose a model…" />
 			<ComboboxPopup>
-				<ComboboxEmpty>No matching models.</ComboboxEmpty>
+				<ComboboxEmpty>{emptyMessage}</ComboboxEmpty>
 				<ComboboxList>
 					{(group: ModelOptionGroup) => (
 						<ComboboxGroup items={group.items} key={group.label}>

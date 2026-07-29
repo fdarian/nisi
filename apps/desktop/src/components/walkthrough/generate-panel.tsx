@@ -23,6 +23,7 @@ import {
 	type GenerationLogEntry,
 	type GenerationProgress,
 	type HarnessId,
+	type HarnessInfo,
 	useHarnesses,
 } from "#/lib/walkthrough-data";
 
@@ -32,6 +33,24 @@ type GeneratePanelProps = {
 	history: readonly GenerationLogEntry[];
 	onGenerate: (harness: HarnessId, model: string | undefined) => void;
 };
+
+/** Enabled harnesses whose live discovery has never once succeeded — see `HarnessInfo.modelsStatus`'s doc comment. These are the ones worth naming to the user; `"stale"` is quietly using a cached list and isn't worth alarming over. */
+function unavailableHarnessLabels(
+	harnesses: readonly HarnessInfo[],
+): readonly string[] {
+	return harnesses
+		.filter(
+			(harness) => harness.enabled && harness.modelsStatus === "unavailable",
+		)
+		.map((harness) => harness.label);
+}
+
+/** "X", "X and Y", or "X, Y, and Z" — for naming the harnesses discovery couldn't reach without an awkward comma-joined list for the common one/two-item case. */
+function formatList(items: readonly string[]): string {
+	if (items.length <= 1) return items[0] ?? "";
+	if (items.length === 2) return `${items[0]} and ${items[1]}`;
+	return `${items.slice(0, -1).join(", ")}, and ${items[items.length - 1]}`;
+}
 
 /**
  * The walkthrough tab's content whenever there's no walkthrough to read yet
@@ -99,6 +118,15 @@ export function GeneratePanel({
 		);
 	}
 
+	const unavailable = unavailableHarnessLabels(harnesses);
+	const hasAnySelectableModel = harnesses.some(
+		(harness) => harness.enabled && harness.models.length > 0,
+	);
+	const unavailableSummary =
+		unavailable.length > 0
+			? `Couldn't reach ${formatList(unavailable)} — check ${unavailable.length === 1 ? "it's" : "they're"} installed and on your PATH, then reopen this tab.`
+			: null;
+
 	return (
 		<Empty className="flex-1">
 			<EmptyMedia variant="icon">
@@ -114,8 +142,18 @@ export function GeneratePanel({
 					{progress.message}
 				</p>
 			)}
+			{unavailableSummary !== null && (
+				<p className="max-w-sm text-center text-muted-foreground text-xs">
+					{unavailableSummary}
+				</p>
+			)}
 			<div className="flex items-center gap-2">
 				<HarnessModelCombobox
+					emptyMessage={
+						hasAnySelectableModel
+							? undefined
+							: (unavailableSummary ?? undefined)
+					}
 					harnesses={harnesses}
 					onChange={setSelection}
 					value={selection}
