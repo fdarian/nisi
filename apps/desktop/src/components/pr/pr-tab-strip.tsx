@@ -26,7 +26,7 @@ export function PrTabStrip({
 }: PrTabStripProps): React.ReactElement {
 	return (
 		<div
-			className="flex h-10 shrink-0 items-stretch border-b bg-muted/40 pr-2 pl-[78px]"
+			className="flex h-10 shrink-0 items-stretch pr-2 pl-[78px]"
 			data-tauri-drag-region
 		>
 			<TabsPrimitive.List className="flex min-w-0 flex-1 items-stretch gap-1 overflow-x-auto">
