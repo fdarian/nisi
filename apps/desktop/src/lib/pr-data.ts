@@ -58,17 +58,29 @@ export type FileChange = {
 };
 
 /**
+ * What currently vouches for a reviewed range — mirrors `ReviewSource`
+ * (`packages/sidecar-api/src/diff.ts`). `{kind: "file"}` is the whole-file
+ * Reviewed checkbox; `{kind: "range", blockId, blockLabel}` is a walkthrough
+ * reference block's claim on this specific location.
+ */
+export type ReviewSource =
+	| { kind: "file" }
+	| { kind: "range"; blockId: string; blockLabel: string };
+
+/**
  * One contiguous run of a file's `base → head` diff — mirrors `ReviewRange`
  * (`packages/sidecar-api/src/diff.ts`). 1-based inclusive, in head-file line
  * numbers, the same coordinate space the diff renderer's per-line hooks use.
+ * `reviewedVia` is `null` iff `status` is `"new"`.
  */
 export type ReviewRange = {
 	startLine: number;
 	endLine: number;
 	status: "reviewed" | "new";
+	reviewedVia: ReviewSource | null;
 };
 
-/** Mirrors `FileContentReview` — present only once the file's been ticked Reviewed. */
+/** Mirrors `FileContentReview` — present whenever the file has any active review claim, whole-file or block-scoped. */
 export type FileContentReview = {
 	changedSinceReview: boolean;
 	ranges: readonly ReviewRange[];
@@ -228,6 +240,51 @@ export function useSetFileViewed(
 						});
 						queryClient.invalidateQueries({
 							queryKey: orpc.diff.file.key({ input: { sessionId, path } }),
+						});
+					},
+				},
+			);
+		},
+		[mutation, queryClient, orpc, sessionId],
+	);
+}
+
+export type SetRangeViewedParams = {
+	path: string;
+	blockId: string;
+	blockLabel: string;
+	ranges: readonly { startLine: number; endLine: number }[];
+	viewed: boolean;
+};
+
+/**
+ * `review.setRangeViewed` — one walkthrough reference block's claim on a set
+ * of ranges within one file. Same invalidation shape as `useSetFileViewed`:
+ * the reference pane's own `diff.file` query and the Files Changed diff
+ * pane's are the same cache entry (same `sessionId`+`path` key), so
+ * invalidating it here is what keeps a tick in one view visible in the other
+ * without a manual reload.
+ */
+export function useSetRangeViewed(
+	orpc: SidecarQueryUtils,
+	sessionId: string,
+): (params: SetRangeViewedParams) => void {
+	const queryClient = useQueryClient();
+	const mutation = useMutation(orpc.review.setRangeViewed.mutationOptions());
+
+	return useCallback(
+		(params: SetRangeViewedParams) => {
+			mutation.mutate(
+				{ sessionId, ...params },
+				{
+					onSuccess: () => {
+						queryClient.invalidateQueries({
+							queryKey: orpc.diff.files.key({ input: { sessionId } }),
+						});
+						queryClient.invalidateQueries({
+							queryKey: orpc.diff.file.key({
+								input: { sessionId, path: params.path },
+							}),
 						});
 					},
 				},
