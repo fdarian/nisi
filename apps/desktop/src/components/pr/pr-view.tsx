@@ -4,7 +4,6 @@ import { AlertTriangleIcon } from "lucide-react";
 import { useMemo } from "react";
 import { FilesChangedView } from "#/components/pr/files-changed-view";
 import { PrHeader } from "#/components/pr/pr-header";
-import { WalkthroughEmptyState } from "#/components/pr/walkthrough-empty-state";
 import {
 	Empty,
 	EmptyDescription,
@@ -13,6 +12,7 @@ import {
 } from "#/components/ui/empty";
 import { Spinner } from "#/components/ui/spinner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "#/components/ui/tabs";
+import { WalkthroughView } from "#/components/walkthrough/walkthrough-view";
 import type { SidecarQueryUtils } from "#/lib/backend-context";
 import type { Session } from "#/lib/pr-data";
 import {
@@ -83,7 +83,7 @@ export function PrView({
 					)}
 				</TabsContent>
 				<TabsContent className="flex min-h-0 flex-1" value="walkthrough">
-					<WalkthroughEmptyState />
+					<WalkthroughView files={files} orpc={orpc} session={session} />
 				</TabsContent>
 			</Tabs>
 		</div>
