@@ -20,10 +20,12 @@ this implements.
 - `@effect/cli` is dead on the `effect@beta` line — this is `effect/unstable/cli`
   (`Command`/`Flag`/`Argument`), run via `Command.run(cmd, { version })` +
   `Effect.provide(BunServices.layer)` + `BunRuntime.runMain`.
-- A stale `sidecar.json` (app was killed) must never hang the CLI: `handoff.ts` tells "the
-  sidecar answered" apart from "nothing's there" via `@orpc/client`'s `safe()` +
-  `isDefinedError` — only a transport-level failure (not a declared contract error) triggers the
-  app-spawn path.
+- A stale `sidecar.json` (app was killed) must never hang the CLI, and a live-but-slow sidecar
+  must never be spawned a second time: `handoff.ts` splits a non-response three ways — a declared
+  app-level error (`safe()` + `isDefinedError`) means the sidecar answered; a connection failure
+  means nothing's listening (`unreachable`, spawns the app); `AbortSignal.timeout`'s own
+  `TimeoutError` means a live sidecar just hasn't answered yet (`unresponsive`, keeps polling the
+  same one instead of spawning).
 - `BunRuntime.runMain(..., { disableErrorReporting: true })` — the CLI prints its own clean
   message per outcome and fails with an empty `ReportedFailure` sentinel just to get a non-zero
   exit code; letting the default reporter run too would double-print a stack trace under it.

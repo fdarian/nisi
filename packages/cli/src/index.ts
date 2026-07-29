@@ -57,6 +57,12 @@ const nisi = Command.make(
 					);
 					return yield* fail;
 				}
+				case "unresponsive": {
+					yield* Console.error(
+						"Nisi is running but didn't respond in time. Try again in a moment.",
+					);
+					return yield* fail;
+				}
 			}
 		}),
 ).pipe(

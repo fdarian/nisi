@@ -13,13 +13,12 @@ import { launchApp } from "./app-launch.ts";
  * (connection refused doesn't wait for the abort timer), so raising it only costs time in
  * the genuinely-broken case.
  *
- * `sessions.open` shells out to `gh repo view` and `gh pr view` sequentially — two real
- * network round trips to GitHub's API, measured at ~1.2-2.5s combined even under normal
- * conditions. A 2s budget made that a coin flip: a live sidecar mid-`gh` call reads as
- * "unreachable" just as often as a genuinely dead one, sending the CLI down the
- * spawn-and-poll fallback for an app that was never down — and if every poll attempt hits
- * the same marginal latency, it can exhaust the whole poll budget and report a misleading
- * "timed out waiting to start" for an app that was up and answering the whole time.
+ * `sessions.open` shells out to `gh repo view` and `gh pr view` concurrently (see
+ * `resolveReviewTarget`) — two real network round trips to GitHub's API, measured at
+ * ~1.2-2.5s combined when run sequentially, so comfortably under this budget even run one
+ * at a time. This value doesn't need to be exact, though: crossing it no longer misreads a
+ * live sidecar as dead — see `isOwnTimeout` — it only decides how long a single poll
+ * iteration waits before trying again.
  */
 const POST_TIMEOUT_MS = 8_000;
 const POLL_INTERVAL_MS = 300;
@@ -51,7 +50,18 @@ export type HandoffOutcome =
 	| { readonly _tag: "opened"; readonly session: Session }
 	| { readonly _tag: "rejected"; readonly message: string }
 	| { readonly _tag: "unreachable" }
+	| { readonly _tag: "unresponsive" }
 	| { readonly _tag: "launchFailed"; readonly reason: string };
+
+/**
+ * `AbortSignal.timeout()` rejects `fetch` with a `TimeoutError` `DOMException` — distinct from
+ * every other network failure (connection refused, DNS, etc.), which surface as a plain `Error`.
+ * That's the one signal available for telling "our own deadline elapsed" apart from "nothing's
+ * listening": the former means a socket accepted the connection and the sidecar just hasn't
+ * answered yet, the latter means there's no sidecar to answer at all.
+ */
+const isOwnTimeout = (error: unknown): boolean =>
+	error instanceof DOMException && error.name === "TimeoutError";
 
 /** A missing or mid-write `sidecar.json` is worth one more poll, not a hard failure — mirrors Rust's `wait_for_sidecar_json`. */
 const readHandshake = (sidecarJsonPath: string) =>
@@ -69,9 +79,11 @@ const readHandshake = (sidecarJsonPath: string) =>
 /**
  * One attempt against whatever's on disk right now. `safe()` tells a real
  * response from the sidecar (a declared contract error or success — either
- * way the sidecar is alive) apart from a transport-level failure (connection
- * refused, or our own timeout) — only the latter should trigger spawning the
- * app, so a stale `sidecar.json` from a killed app can never hang the CLI.
+ * way the sidecar is alive) apart from a transport-level failure. The latter
+ * splits two ways: a connection failure (`unreachable`) means no sidecar to
+ * answer at all, so it's the only case that should trigger spawning the app;
+ * our own abort (`unresponsive`) means a live sidecar just hasn't answered
+ * yet, which a second app instance would do nothing to fix.
  */
 const attempt = (
 	sidecarJsonPath: string,
@@ -99,9 +111,13 @@ const attempt = (
 		if (isDefinedError(result.error)) {
 			return { _tag: "rejected", message: result.error.message } as const;
 		}
+		if (isOwnTimeout(result.error)) {
+			return { _tag: "unresponsive" } as const;
+		}
 		return { _tag: "unreachable" } as const;
 	});
 
+/** Keeps retrying through either flavor of "no answer yet" — only a conclusive outcome ends the poll early. */
 const pollUntilReachable = (
 	sidecarJsonPath: string,
 	cwd: string,
@@ -109,7 +125,8 @@ const pollUntilReachable = (
 ): Effect.Effect<HandoffOutcome, never, FileSystem> =>
 	Effect.gen(function* () {
 		const outcome = yield* attempt(sidecarJsonPath, cwd);
-		if (outcome._tag !== "unreachable" || Date.now() >= deadline) {
+		const conclusive = outcome._tag === "opened" || outcome._tag === "rejected";
+		if (conclusive || Date.now() >= deadline) {
 			return outcome;
 		}
 		yield* Effect.sleep(`${POLL_INTERVAL_MS} millis`);
@@ -135,8 +152,21 @@ export const handoff = (
 		const sidecarJsonPath = join(dataDir, "sidecar.json");
 
 		const first = yield* attempt(sidecarJsonPath, cwd);
-		if (first._tag !== "unreachable") {
+		if (first._tag === "opened" || first._tag === "rejected") {
 			return first;
+		}
+
+		const pollTimeoutMs = yield* pollTimeoutConfig.pipe(Effect.orDie);
+
+		// A live sidecar that just hasn't answered yet is not a dead app —
+		// spawning a second instance wouldn't fix a slow answer, so skip
+		// straight to polling the same one instead of `launchApp`.
+		if (first._tag === "unresponsive") {
+			return yield* pollUntilReachable(
+				sidecarJsonPath,
+				cwd,
+				Date.now() + pollTimeoutMs,
+			);
 		}
 
 		const launched = yield* Effect.match(launchApp, {
@@ -148,7 +178,6 @@ export const handoff = (
 			return launched;
 		}
 
-		const pollTimeoutMs = yield* pollTimeoutConfig.pipe(Effect.orDie);
 		return yield* pollUntilReachable(
 			sidecarJsonPath,
 			cwd,
