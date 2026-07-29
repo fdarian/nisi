@@ -1,0 +1,47 @@
+/**
+ * Synthesizes a unified diff containing only the hunks (or hunk slices)
+ * overlapping a reference block's target locations in one file — the same
+ * technique `build-collapsed-diff.ts` uses for Phase 2's reviewed-region
+ * collapsing, but with the opposite keep/drop policy: that one drops matched
+ * "reviewed" spans and keeps everything else, this one keeps only what's
+ * inside a given location and drops everything unmatched. PLAN.md's "Neither
+ * lib can render an arbitrary line-range subset" note is exactly why —
+ * slicing file contents directly would restart line numbers at 1, useless in
+ * review, so this stays at the unified-diff level where the `@@` header
+ * carries the real numbering.
+ */
+import {
+	groupIntoRuns,
+	parsePatchHunks,
+	resolveLineDispositions,
+	serializeSubHunk,
+} from "#/lib/diff-hunk-slicing";
+
+export type LineRange = { startLine: number; endLine: number };
+
+/** `undefined` when none of `ranges` overlap any head line the patch actually touches — nothing to show for this file (e.g. it's changed enough since generation that the referenced lines no longer exist). */
+export function buildLocationFileDiff(
+	patch: string,
+	ranges: readonly LineRange[],
+): string | undefined {
+	const { preamble, hunks } = parsePatchHunks(patch);
+
+	const keptSubHunks = hunks.flatMap((hunk) => {
+		const dispositions = resolveLineDispositions(
+			hunk.lines,
+			(headLine) =>
+				ranges.some(
+					(range) => headLine >= range.startLine && headLine <= range.endLine,
+				)
+					? "keep"
+					: "drop",
+			"drop", // a hunk with no head line at all can't belong to any location
+		);
+		return groupIntoRuns(hunk.lines, dispositions)
+			.filter((segment) => segment.disposition === "keep")
+			.map(serializeSubHunk);
+	});
+
+	if (keptSubHunks.length === 0) return undefined;
+	return [preamble, ...keptSubHunks].join("\n");
+}
