@@ -5,13 +5,17 @@ by the sidecar (implementer, [`@repo/desktop`](../../apps/desktop/AGENTS.md)) an
 Phase 1 adds git/review procedures on top of Phase 0's `health.check`; see `PLAN.md` (root), "The
 contract", for the shapes these were specified against.
 
-- `health.ts`, `sessions.ts`, `diff.ts`, `review.ts`, `events.ts`, `walkthrough.ts` — schema +
-  procedure contract per domain (`packages/sidecar-api/src/<domain>.ts`), each just types — no
-  git/SQLite/agent logic lives here, that's `@repo/git`/`@repo/review`/`@repo/walkthrough`/
-  `@repo/harness-local`, consumed only by the sidecar's implementation. `walkthrough.ts`
-  redeclares `@repo/walkthrough`'s `Location`/`ReferenceBlock`/`Section`/`Walkthrough` rather than
-  importing them, same as `diff.ts` mirrors `@repo/git`'s `FileChange` — this package stays
-  dependency-free from every domain package.
+- `health.ts`, `sessions.ts`, `diff.ts`, `review.ts`, `events.ts`, `walkthrough.ts`, `settings.ts`
+  — schema + procedure contract per domain (`packages/sidecar-api/src/<domain>.ts`), each just
+  types — no git/SQLite/agent logic lives here, that's
+  `@repo/git`/`@repo/review`/`@repo/walkthrough`/`@repo/harness-local`/`@repo/settings`, consumed
+  only by the sidecar's implementation. `walkthrough.ts` redeclares `@repo/walkthrough`'s
+  `Location`/`ReferenceBlock`/`Section`/`Walkthrough` rather than importing them, same as
+  `diff.ts` mirrors `@repo/git`'s `FileChange` — this package stays dependency-free from every
+  domain package. `settings.ts` is the exception to "mirrors a domain package's type": there's no
+  `HarnessId` in any domain package to mirror (`@repo/settings` deliberately stores it as a loose
+  `string[]`, per its own AGENTS.md), so `HarnessId` here is sidecar-api's own invention, imported
+  from `walkthrough.ts` rather than redeclared a third time.
 - `contract.ts` — composes domain contracts into the router; owns the two
   `@orpc/experimental-effect/extensions/*` side-effect imports. These **must** run before any domain
   module calls `oc.input()`/`oc.output()` — every domain module is imported only from here, never
