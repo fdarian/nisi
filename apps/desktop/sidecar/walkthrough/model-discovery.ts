@@ -1,3 +1,4 @@
+import { resolveBin } from "@repo/bin-resolver";
 import type { HarnessId, HarnessModel, ModelsStatus } from "@repo/sidecar-api";
 import { Effect, Result } from "effect";
 
@@ -99,14 +100,18 @@ const runCli = (
 /**
  * OpenCode's own CLI lists its resolvable models one per line, no flags or
  * JSON — same command oagent's `services/engine/src/opencode.ts` shells out
- * to. Overridable via `NISI_OPENCODE_BIN` for tests/CI, mirroring oagent's
- * `OAGENT_OPENCODE_BIN`.
+ * to. Resolved via `@repo/bin-resolver` (checks `PATH`, then well-known
+ * install dirs) rather than trusting the bare name to resolve on its own —
+ * a macOS `.app` launched from Finder/`open` doesn't inherit an interactive
+ * shell's `PATH`, so `opencode` installed via Homebrew or similar would
+ * otherwise silently fail to spawn in the built app. Overridable via
+ * `NISI_OPENCODE_BIN` for tests/CI, mirroring oagent's `OAGENT_OPENCODE_BIN`.
  */
 export const discoverOpenCodeModels = (): Effect.Effect<
 	ReadonlyArray<HarnessModel>,
 	Error
 > =>
-	runCli(process.env.NISI_OPENCODE_BIN ?? "opencode", ["models"]).pipe(
+	runCli(resolveBin("opencode", "NISI_OPENCODE_BIN"), ["models"]).pipe(
 		Effect.map((stdout) =>
 			stdout
 				.split("\n")
@@ -127,13 +132,14 @@ type CodexModelCatalogEntry = {
  * `codex debug models` renders the CLI's full model catalog as JSON.
  * `visibility: "hide"` entries are internal/deprecated variants the CLI's
  * own picker also excludes — filtered out here for the same reason.
- * Overridable via `NISI_CODEX_BIN`.
+ * Resolved via `@repo/bin-resolver` for the same GUI-`PATH` reason as
+ * `discoverOpenCodeModels` above. Overridable via `NISI_CODEX_BIN`.
  */
 export const discoverCodexModels = (): Effect.Effect<
 	ReadonlyArray<HarnessModel>,
 	Error
 > =>
-	runCli(process.env.NISI_CODEX_BIN ?? "codex", ["debug", "models"]).pipe(
+	runCli(resolveBin("codex", "NISI_CODEX_BIN"), ["debug", "models"]).pipe(
 		Effect.map((stdout) => {
 			const parsed = JSON.parse(stdout) as {
 				models: ReadonlyArray<CodexModelCatalogEntry>;
@@ -157,6 +163,21 @@ export const discoverCodexModels = (): Effect.Effect<
  * never yields, so the session opens without ever sending a turn — mirrors
  * oagent's `AcpAgent.listModels()`, which spins up a throwaway connection
  * scoped only to the list call rather than reusing a persistent session.
+ *
+ * `pathToClaudeCodeExecutable` is always set explicitly, to a
+ * `@repo/bin-resolver`-resolved path — left unset, the SDK falls back to its
+ * own bundled per-platform native binary, resolved via a `require.resolve`
+ * relative to its own `import.meta.url`. That resolution reads real files
+ * from a real `node_modules` on disk, which doesn't exist once this file is
+ * bundled into the sidecar's `bun build --compile` single-file executable
+ * (same class of problem as the `readBridgeAsset` fix in
+ * `patches/@ai-sdk%2Fharness-claude-code@1.0.47.patch`, just for a native
+ * binary rather than a text asset that can be statically imported) — it
+ * throws "Native CLI binary for darwin-arm64 not found" every time in the
+ * built app, confirmed via a standalone `bun build --compile` repro.
+ * Resolving to the user's own installed `claude` CLI sidesteps the bundled
+ * binary entirely, so it works the same way in dev and in the compiled
+ * binary. Overridable via `NISI_CLAUDE_BIN`.
  */
 export const discoverClaudeCodeModels = (): Effect.Effect<
 	ReadonlyArray<HarnessModel>,
@@ -170,7 +191,12 @@ export const discoverClaudeCodeModels = (): Effect.Effect<
 				await new Promise<never>(() => {});
 			}
 
-			const session = query({ prompt: idlePrompt(), options: {} });
+			const session = query({
+				prompt: idlePrompt(),
+				options: {
+					pathToClaudeCodeExecutable: resolveBin("claude", "NISI_CLAUDE_BIN"),
+				},
+			});
 			// Drains the session's own message stream so its internal buffers
 			// don't back up while we wait on `supportedModels()` below — this
 			// discovery call never sends a prompt, so nothing meaningful is
