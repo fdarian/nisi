@@ -23,6 +23,8 @@ export type Settings = {
 	readonly enabledHarnesses: ReadonlyArray<string> | null;
 	readonly sidebarViewMode: SidebarViewMode;
 	readonly diffStyleMode: DiffStyleMode;
+	/** When true, files already marked reviewed are hidden from the files sidebar and the Files Changed list. */
+	readonly hideReviewed: boolean;
 };
 
 export type SettingsUpdate = Partial<Settings>;
@@ -39,6 +41,7 @@ export const DEFAULT_SETTINGS: Settings = {
 	enabledHarnesses: null,
 	sidebarViewMode: "tree",
 	diffStyleMode: "unified",
+	hideReviewed: false,
 };
 
 const toSettings = (row: SettingsRow): Settings => ({
@@ -48,6 +51,7 @@ const toSettings = (row: SettingsRow): Settings => ({
 			: (JSON.parse(row.enabledHarnesses) as ReadonlyArray<string>),
 	sidebarViewMode: row.sidebarViewMode as SidebarViewMode,
 	diffStyleMode: row.diffStyleMode as DiffStyleMode,
+	hideReviewed: row.hideReviewed,
 });
 
 /**
@@ -93,6 +97,7 @@ export class SettingsStore extends Context.Service<SettingsStore>()(
 								: JSON.stringify(next.enabledHarnesses),
 						sidebarViewMode: next.sidebarViewMode,
 						diffStyleMode: next.diffStyleMode,
+						hideReviewed: next.hideReviewed,
 						updatedAt: new Date(),
 					};
 

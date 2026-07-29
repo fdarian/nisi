@@ -24,6 +24,8 @@ export type Settings = {
 	enabledHarnesses: readonly HarnessId[] | null;
 	sidebarViewMode: SidebarViewMode;
 	diffStyleMode: DiffStyleMode;
+	/** When true, files already marked reviewed are hidden from the files sidebar and the Files Changed list. */
+	hideReviewed: boolean;
 };
 
 /**
@@ -37,6 +39,7 @@ const DEFAULT_SETTINGS: Settings = {
 	enabledHarnesses: null,
 	sidebarViewMode: "tree",
 	diffStyleMode: "unified",
+	hideReviewed: false,
 };
 
 /** `settings.get`, defaulting to the sidecar's own defaults while the first fetch is in flight. */
@@ -113,4 +116,19 @@ export function useDiffStyleMode(
 	);
 
 	return [settings.diffStyleMode, setMode];
+}
+
+/** "Hide reviewed" preference for the files sidebar/Files Changed list — see `@repo/settings`'s `hideReviewed`. */
+export function useHideReviewed(
+	orpc: SidecarQueryUtils,
+): [boolean, (hideReviewed: boolean) => void] {
+	const { settings } = useSettings(orpc);
+	const update = useUpdateSettings(orpc);
+
+	const setHideReviewed = useCallback(
+		(hideReviewed: boolean) => update({ hideReviewed }),
+		[update],
+	);
+
+	return [settings.hideReviewed, setHideReviewed];
 }

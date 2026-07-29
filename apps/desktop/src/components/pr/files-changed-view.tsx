@@ -7,15 +7,21 @@ import { FilesSidebar } from "#/components/files-sidebar/files-sidebar";
 import { buttonVariants } from "#/components/ui/button";
 import {
 	DropdownMenu,
+	DropdownMenuCheckboxItem,
 	DropdownMenuContent,
 	DropdownMenuRadioGroup,
 	DropdownMenuRadioItem,
+	DropdownMenuSeparator,
 	DropdownMenuTrigger,
 } from "#/components/ui/menu";
 import { ToggleGroup, ToggleGroupItem } from "#/components/ui/toggle-group";
 import type { SidecarQueryUtils } from "#/lib/backend-context";
 import type { FileChange, ReviewState, Session } from "#/lib/pr-data";
-import { useDiffStyleMode, useSidebarViewMode } from "#/lib/settings-data";
+import {
+	useDiffStyleMode,
+	useHideReviewed,
+	useSidebarViewMode,
+} from "#/lib/settings-data";
 import { cn } from "#/lib/utils";
 
 type FilesChangedViewProps = {
@@ -38,11 +44,25 @@ export function FilesChangedView({
 	const [selectedPath, setSelectedPath] = useState<string | null>(null);
 	const [viewMode, setViewMode] = useSidebarViewMode(orpc);
 	const [diffStyle, setDiffStyle] = useDiffStyleMode(orpc);
+	const [hideReviewed, setHideReviewed] = useHideReviewed(orpc);
 
 	const viewedCount = useMemo(
 		() =>
 			files.filter((file) => reviewState.get(file.path) === "viewed").length,
 		[files, reviewState],
+	);
+
+	// Filters out already-reviewed files for both the sidebar and the diff
+	// pane's list when "Hide reviewed" is on — the header counter below stays
+	// keyed off the unfiltered `files`/`viewedCount` so "N of M" keeps
+	// reporting real progress instead of collapsing toward "0 of M" as
+	// reviewed files disappear from view.
+	const visibleFiles = useMemo(
+		() =>
+			hideReviewed
+				? files.filter((file) => reviewState.get(file.path) !== "viewed")
+				: files,
+		[files, reviewState, hideReviewed],
 	);
 
 	return (
@@ -97,13 +117,20 @@ export function FilesChangedView({
 									Flat
 								</DropdownMenuRadioItem>
 							</DropdownMenuRadioGroup>
+							<DropdownMenuSeparator />
+							<DropdownMenuCheckboxItem
+								checked={hideReviewed}
+								onCheckedChange={setHideReviewed}
+							>
+								Hide reviewed
+							</DropdownMenuCheckboxItem>
 						</DropdownMenuContent>
 					</DropdownMenu>
 				</div>
 			</div>
 			<div className="flex min-h-0 flex-1">
 				<FilesSidebar
-					files={files}
+					files={visibleFiles}
 					onSelectPath={setSelectedPath}
 					reviewState={reviewState}
 					selectedPath={selectedPath}
@@ -111,7 +138,7 @@ export function FilesChangedView({
 				/>
 				<DiffPane
 					diffStyle={diffStyle}
-					files={files}
+					files={visibleFiles}
 					onNavigateToBlock={onNavigateToBlock}
 					orpc={orpc}
 					reviewState={reviewState}

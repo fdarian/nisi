@@ -41,6 +41,7 @@ export const Settings = Schema.Struct({
 	enabledHarnesses: Schema.NullOr(Schema.Array(HarnessId)),
 	sidebarViewMode: SidebarViewMode,
 	diffStyleMode: DiffStyleMode,
+	hideReviewed: Schema.Boolean,
 });
 export type Settings = Schema.Schema.Type<typeof Settings>;
 
@@ -54,6 +55,7 @@ export const SettingsUpdate = Schema.Struct({
 	enabledHarnesses: Schema.optional(Schema.NullOr(Schema.Array(HarnessId))),
 	sidebarViewMode: Schema.optional(SidebarViewMode),
 	diffStyleMode: Schema.optional(DiffStyleMode),
+	hideReviewed: Schema.optional(Schema.Boolean),
 });
 export type SettingsUpdate = Schema.Schema.Type<typeof SettingsUpdate>;
 

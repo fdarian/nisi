@@ -21,6 +21,15 @@ export const settings = sqliteTable("settings", {
 	enabledHarnesses: text(),
 	sidebarViewMode: text().notNull(),
 	diffStyleMode: text().notNull(),
+	/**
+	 * Defaults to `false` at the column level (unlike `sidebarViewMode`/
+	 * `diffStyleMode`, which are `NOT NULL` with no column default) — this
+	 * field was added after those via `ALTER TABLE ADD COLUMN`, and SQLite
+	 * rejects a `NOT NULL` column added that way with no default the moment
+	 * the table already has a row, which any existing install's singleton
+	 * `settings` row already does.
+	 */
+	hideReviewed: integer({ mode: "boolean" }).notNull().default(false),
 	updatedAt: integer({ mode: "timestamp_ms" })
 		.notNull()
 		.$defaultFn(() => new Date()),

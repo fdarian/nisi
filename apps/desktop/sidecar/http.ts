@@ -47,6 +47,7 @@ const toWireSettings = (settings: {
 	readonly enabledHarnesses: ReadonlyArray<string> | null;
 	readonly sidebarViewMode: WireSettings["sidebarViewMode"];
 	readonly diffStyleMode: WireSettings["diffStyleMode"];
+	readonly hideReviewed: WireSettings["hideReviewed"];
 }): WireSettings => ({
 	enabledHarnesses:
 		settings.enabledHarnesses === null
@@ -54,6 +55,7 @@ const toWireSettings = (settings: {
 			: (settings.enabledHarnesses as ReadonlyArray<HarnessId>),
 	sidebarViewMode: settings.sidebarViewMode,
 	diffStyleMode: settings.diffStyleMode,
+	hideReviewed: settings.hideReviewed,
 });
 
 /**

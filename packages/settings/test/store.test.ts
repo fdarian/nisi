@@ -126,4 +126,20 @@ describe("SettingsStore", () => {
 			expect(result.sidebarViewMode).toBe("tree");
 		});
 	});
+
+	test("update() round-trips hideReviewed through get() without clobbering other fields", async () => {
+		await withTempDataDir(async (dataDir) => {
+			const result = await run(
+				dataDir,
+				Effect.gen(function* () {
+					const store = yield* SettingsStore;
+					yield* store.update({ sidebarViewMode: "flat" });
+					yield* store.update({ hideReviewed: true });
+					return yield* store.get();
+				}),
+			);
+			expect(result.hideReviewed).toBe(true);
+			expect(result.sidebarViewMode).toBe("flat");
+		});
+	});
 });
