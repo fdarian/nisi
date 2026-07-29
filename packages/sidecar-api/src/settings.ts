@@ -27,17 +27,31 @@ export type DiffStyleMode = Schema.Schema.Type<typeof DiffStyleMode>;
  * data-dir move, and the mechanism costs nothing extra once it exists for
  * `enabledHarnesses`. Theme stays in `localStorage` (`next-themes`) since
  * nothing server-side ever needs to read it. See PLAN.md, Phase 4.
+ *
+ * `enabledHarnesses` is `null` until the user has ever declared a choice —
+ * distinct from `[]`, which means "deliberately disabled every harness".
+ * `null` is what lets the walkthrough onboarding picker's first-use gate
+ * fire (see `apps/desktop/AGENTS.md`'s former "two disagreeing sources"
+ * gotcha, now resolved): a fresh install reports unset, not "all four
+ * chosen". Everything that spawns off `enabledHarnesses` treats `null` as
+ * "every harness allowed" rather than "none" — see
+ * `apps/desktop/sidecar/walkthrough/harnesses.ts`'s `listHarnesses`.
  */
 export const Settings = Schema.Struct({
-	enabledHarnesses: Schema.Array(HarnessId),
+	enabledHarnesses: Schema.NullOr(Schema.Array(HarnessId)),
 	sidebarViewMode: SidebarViewMode,
 	diffStyleMode: DiffStyleMode,
 });
 export type Settings = Schema.Schema.Type<typeof Settings>;
 
-/** Every field optional — `update` merges a patch over the current settings, so omitted fields survive untouched. */
+/**
+ * Every field optional — `update` merges a patch over the current settings,
+ * so omitted fields survive untouched. `enabledHarnesses` can additionally be
+ * set back to `null` (an included key whose value is `null`, as opposed to an
+ * omitted key) to revert to "unset", not just to a chosen array.
+ */
 export const SettingsUpdate = Schema.Struct({
-	enabledHarnesses: Schema.optional(Schema.Array(HarnessId)),
+	enabledHarnesses: Schema.optional(Schema.NullOr(Schema.Array(HarnessId))),
 	sidebarViewMode: Schema.optional(SidebarViewMode),
 	diffStyleMode: Schema.optional(DiffStyleMode),
 });

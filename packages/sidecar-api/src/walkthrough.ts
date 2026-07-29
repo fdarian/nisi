@@ -22,10 +22,20 @@ export const HarnessModel = Schema.Struct({
 });
 export type HarnessModel = Schema.Schema.Type<typeof HarnessModel>;
 
+/**
+ * `enabled` reflects `@repo/settings`'s `enabledHarnesses` (unset counts as
+ * every harness enabled — see that package's `Settings.enabledHarnesses`
+ * comment), not availability. All four entries are always present — the
+ * onboarding picker needs to render all four as checkboxes — but `models` is
+ * only populated live for Pi when it's enabled, since discovery costs a real
+ * `~/.config` read; a disabled Pi gets an empty `models` list rather than
+ * paying for discovery nobody will use yet.
+ */
 export const HarnessInfo = Schema.Struct({
 	id: HarnessId,
 	label: Schema.String,
 	models: Schema.Array(HarnessModel),
+	enabled: Schema.Boolean,
 });
 export type HarnessInfo = Schema.Schema.Type<typeof HarnessInfo>;
 
@@ -110,7 +120,7 @@ export const GenerateEvent = Schema.Union([
 export type GenerateEvent = Schema.Schema.Type<typeof GenerateEvent>;
 
 export const walkthroughContract = {
-	/** The static harness/model registry — never errors, since availability isn't knowable up front. */
+	/** All four adapters, each flagged `enabled` — never errors, since availability isn't knowable up front. */
 	harnesses: oc.output(Schema.Array(HarnessInfo)),
 	/** `null` when the session has no generated walkthrough yet — not an error. */
 	get: oc
