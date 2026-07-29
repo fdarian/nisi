@@ -1,122 +1,30 @@
-import { join } from "node:path";
 import { BunRuntime, BunServices } from "@effect/platform-bun";
-import { safe } from "@orpc/client";
 import { getDataDirConfig, SqliteDb } from "@repo/db";
 import { SettingsStore } from "@repo/settings";
-import { makeSidecarClient } from "@repo/sidecar-api";
-import { Effect, Layer, Schema } from "effect";
+import { Effect, Layer } from "effect";
 import { FileSystem } from "effect/FileSystem";
 import { startServer } from "./http.ts";
 import { startLivePolling } from "./live-poll.ts";
 import { LoggingLive } from "./logging.ts";
 import type { AppServices } from "./services.ts";
+import {
+	acquireSidecarLock,
+	publishSidecarJson,
+	releaseSidecarLock,
+} from "./sidecar-lock.ts";
 import { Store } from "./store.ts";
 import { WalkthroughStore } from "./walkthrough/store.ts";
 
 /** Same `NISI_DATA_DIR` default `@repo/db`'s `SqliteDb` resolves — shared so the handshake file and `app.db` always land in the same directory. */
 const dataDirConfig = getDataDirConfig();
 
-/** How long to wait for a live-sidecar check against a pre-existing `sidecar.json` before treating it as stale. Local loopback, so failure/success both resolve fast — this only needs to be long enough that a live sidecar under momentary load isn't misread as dead. */
-const LIVENESS_CHECK_TIMEOUT_MS = 1_000;
-
-const SidecarHandshake = Schema.Struct({
-	port: Schema.Number,
-	token: Schema.String,
-});
-
-/**
- * Refused to boot because another sidecar is already live for this data dir
- * — see `refuseIfAlreadyRunning` below.
- */
-class SidecarAlreadyRunning extends Schema.TaggedErrorClass<SidecarAlreadyRunning>()(
-	"SidecarAlreadyRunning",
-	{ port: Schema.Number },
-) {}
-
-/**
- * Two sidecars sharing one `NISI_DATA_DIR` is a real split-brain, not a
- * theoretical one: it's exactly what let the CLI's `sessions.open` land on
- * one live sidecar while the app window the user was looking at stayed
- * bound to a *different* one, each correctly reporting its own (different)
- * session list — "Opened PR #14" in the terminal, "No open pull requests"
- * in the window. `index.ts` used to unconditionally delete whatever
- * `sidecar.json` it found before binding (comment: "a file left over from a
- * previous boot ... could otherwise be read as if it were live" — true, but
- * it never checked whether that file's sidecar was *actually* dead first).
- *
- * This asks the file's own sidecar directly, over the same authed oRPC
- * channel the frontend and CLI use, rather than guessing from the file's
- * age or the port's reachability alone — a real answer from `health.check`
- * is the only way to tell "stale leftover" apart from "another instance is
- * genuinely running right now."
- */
-const refuseIfAlreadyRunning = (sidecarJsonPath: string) =>
-	Effect.gen(function* () {
-		const fs = yield* FileSystem;
-		const exists = yield* fs.exists(sidecarJsonPath);
-		if (!exists) {
-			yield* Effect.logDebug("no existing sidecar.json found at boot");
-			return;
-		}
-
-		const raw = yield* fs.readFileString(sidecarJsonPath);
-		const parsed = yield* Effect.try({
-			try: () => Schema.decodeUnknownSync(SidecarHandshake)(JSON.parse(raw)),
-			catch: () => undefined,
-		}).pipe(Effect.orElseSucceed(() => undefined));
-
-		if (parsed === undefined) {
-			yield* Effect.logDebug(
-				"existing sidecar.json didn't parse — treating it as a stale leftover",
-			);
-			return;
-		}
-
-		const client = makeSidecarClient(parsed);
-		const result = yield* Effect.promise(() =>
-			safe(
-				client.health.check(undefined, {
-					signal: AbortSignal.timeout(LIVENESS_CHECK_TIMEOUT_MS),
-				}),
-			),
-		);
-
-		if (!result.isSuccess) {
-			yield* Effect.logDebug(
-				`existing sidecar.json (port ${parsed.port}) didn't answer — treating it as a stale leftover`,
-			);
-			return;
-		}
-
-		yield* Effect.logFatal(
-			`refusing to start: another sidecar is already live on port ${parsed.port} for this data dir — two sidecars sharing one NISI_DATA_DIR would race over sidecar.json and the SQLite database`,
-		);
-		return yield* new SidecarAlreadyRunning({ port: parsed.port });
-	});
-
 const program = Effect.scoped(
 	Effect.gen(function* () {
 		const fs = yield* FileSystem;
 		const dataDir = yield* dataDirConfig;
-		const sidecarJsonPath = join(dataDir, "sidecar.json");
 
 		yield* Effect.logInfo("starting up", { dataDir });
 		yield* fs.makeDirectory(dataDir, { recursive: true });
-
-		yield* refuseIfAlreadyRunning(sidecarJsonPath);
-
-		// Rust's wait_for_sidecar_json accepts whatever sidecar.json it finds first,
-		// with no freshness check — so a file left over from a previous boot (this
-		// process's port is ephemeral, a new one every run) could otherwise be read
-		// as if it were live. Clearing it before binding means there's never a
-		// stale file on disk for that race to latch onto. `refuseIfAlreadyRunning`
-		// above already proved (or the file didn't exist / didn't parse) that
-		// whatever's here isn't a live sidecar, so removing it is safe.
-		const hadStaleFile = yield* fs.exists(sidecarJsonPath);
-		yield* fs.remove(sidecarJsonPath, { force: true });
-		if (hadStaleFile) {
-			yield* Effect.logInfo("cleared stale sidecar.json");
-		}
 
 		const token = crypto.randomUUID();
 		// Captures the ambient context (every service in `AppServices`) so oRPC
@@ -138,18 +46,45 @@ const program = Effect.scoped(
 					Effect.andThen(Effect.sync(() => server.stop())),
 				),
 		);
+		// Bun's type only allows `undefined` for a unix-socket server — this one
+		// always binds a TCP port (`Bun.serve({ port: 0, ... })` in http.ts), so
+		// an undefined port here would mean Bun itself is broken, not something
+		// safe to paper over with a fallback value.
+		const port = server.port;
+		if (port === undefined) {
+			return yield* Effect.die(
+				new Error("sidecar HTTP server has no port after Bun.serve"),
+			);
+		}
 
-		yield* fs.writeFileString(
-			sidecarJsonPath,
-			JSON.stringify({ port: server.port, token }),
-			{ mode: 0o600 },
+		// Atomic ownership before this process is allowed to touch
+		// sidecar.json — see sidecar-lock.ts for why the old file-based
+		// check-then-act (asking a pre-existing sidecar.json's own sidecar
+		// whether it was alive, then unconditionally overwriting) wasn't
+		// enough on its own: two sidecars booting at the same instant could
+		// both find nothing live, both proceed, and both write — whichever
+		// wrote last "won." The lock closes that window; its release (below)
+		// runs on the same SIGINT/SIGTERM path as the server's above, and a
+		// `SIGKILL`'d owner's stale lock is recovered by the liveness check
+		// inside `acquireSidecarLock` itself on the next boot, not by this
+		// release ever running.
+		yield* Effect.acquireRelease(
+			acquireSidecarLock(dataDir, { port, token }),
+			() =>
+				Effect.logInfo("releasing sidecar lock").pipe(
+					Effect.andThen(releaseSidecarLock(dataDir)),
+				),
 		);
-		// Belt-and-suspenders: writeFileString's `mode` only applies when the file
-		// is created, so a leftover file from a previous run (different
-		// permissions) wouldn't otherwise get tightened back to 0600.
-		yield* fs.chmod(sidecarJsonPath, 0o600);
 
-		yield* Effect.logInfo("ready", { port: server.port, dataDir });
+		// Safe to publish unconditionally: the lock above already proved this
+		// process is the data dir's sole legitimate sidecar, so there's
+		// nothing to check before overwriting whatever sidecar.json currently
+		// holds. Written via temp file + rename (see publishSidecarJson) so
+		// Rust's wait_for_sidecar_json and the CLI's readHandshake never
+		// observe a partial file.
+		yield* publishSidecarJson(dataDir, { port, token });
+
+		yield* Effect.logInfo("ready", { port, dataDir });
 
 		// Backgrounded, tied to this program's scope — same shutdown path as
 		// the HTTP server above, just via the fiber getting interrupted instead
