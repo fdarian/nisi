@@ -70,6 +70,30 @@ const buildFreshPrompt = (
 const buildContinuationPrompt = (digestText: string): string =>
 	`The PR has changed since your last turn. Updated diff digest:\n\n${digestText}`;
 
+/**
+ * `fullStream`'s `error` parts carry whatever the adapter's own transport
+ * failed with — an unconfigured provider ("No API key found for the selected
+ * model. Use /login…"), a revoked token, a model the CLI rejects. The stream
+ * still ends *normally* after one, so nothing throws and the turn simply
+ * produces no tool calls; before this was read, that surfaced as an empty
+ * buffer, four identical "you haven't written the walkthrough yet" retries,
+ * and a final message blaming coverage validation for what was really an auth
+ * failure the harness had already described precisely.
+ */
+const describeStreamError = (error: unknown): string => {
+	if (error instanceof Error) return error.message;
+	if (typeof error === "string") return error;
+	if (
+		typeof error === "object" &&
+		error !== null &&
+		"message" in error &&
+		typeof error.message === "string"
+	) {
+		return error.message;
+	}
+	return JSON.stringify(error);
+};
+
 const startFreshSession = async (
 	input: GenerateInput,
 	repoRoot: string,
@@ -202,18 +226,27 @@ export async function* generateWalkthrough(
 	for (let turn = 1; turn <= MAX_TURNS; turn++) {
 		yield { type: "turn-started", turn };
 
+		const streamErrors: Array<string> = [];
 		try {
 			const result = await agent.stream({ session, prompt: turnPrompt });
 			for await (const part of result.fullStream) {
 				if (part.type === "tool-call") {
 					yield { type: "tool-call", turn, toolName: part.toolName };
 				}
+				if (part.type === "error") {
+					streamErrors.push(describeStreamError(part.error));
+				}
 			}
 		} catch (error) {
-			yield {
-				type: "failed",
-				message: error instanceof Error ? error.message : String(error),
-			};
+			streamErrors.push(describeStreamError(error));
+		}
+
+		// Fails the whole generation rather than spending another turn: the
+		// harness reported its own transport failure, and nothing about a retry
+		// with the same session, model, and credentials would change the answer
+		// — unlike a validation miss, which the next turn genuinely can fix.
+		if (streamErrors.length > 0) {
+			yield { type: "failed", message: streamErrors.join("\n") };
 			await stopLiveSession(input.sessionId);
 			return;
 		}
@@ -262,9 +295,16 @@ export async function* generateWalkthrough(
 		yield { type: "validation-failed", turn, feedback: evaluation.feedback };
 
 		if (turn === MAX_TURNS) {
+			// Carries the last turn's feedback verbatim rather than naming
+			// "coverage/reference validation" — the loop rejects a walkthrough for
+			// several unrelated reasons (nothing written at all, malformed JSON, a
+			// reference pointing nowhere, genuinely uncovered lines), and naming
+			// one category told users the thing that often hadn't happened. The
+			// feedback already lists the exact files and line ranges left
+			// unclaimed when coverage really is what failed.
 			yield {
 				type: "failed",
-				message: `Coverage/reference validation still failing after ${MAX_TURNS} turns.`,
+				message: `The agent couldn't produce a valid walkthrough in ${MAX_TURNS} turns. Last problem:\n\n${evaluation.feedback}`,
 			};
 			await stopLiveSession(input.sessionId);
 			return;
