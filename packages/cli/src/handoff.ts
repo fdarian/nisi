@@ -7,8 +7,21 @@ import { FileSystem } from "effect/FileSystem";
 import type { ChildProcessSpawner } from "effect/unstable/process";
 import { launchApp } from "./app-launch.ts";
 
-/** Per-POST-attempt timeout — long enough for a live sidecar, short enough that a dead one never hangs the CLI. */
-const POST_TIMEOUT_MS = 2_000;
+/**
+ * Per-POST-attempt timeout — long enough for a live sidecar, short enough that a dead one
+ * never hangs the CLI. A dead sidecar still fails near-instantly regardless of this value
+ * (connection refused doesn't wait for the abort timer), so raising it only costs time in
+ * the genuinely-broken case.
+ *
+ * `sessions.open` shells out to `gh repo view` and `gh pr view` sequentially — two real
+ * network round trips to GitHub's API, measured at ~1.2-2.5s combined even under normal
+ * conditions. A 2s budget made that a coin flip: a live sidecar mid-`gh` call reads as
+ * "unreachable" just as often as a genuinely dead one, sending the CLI down the
+ * spawn-and-poll fallback for an app that was never down — and if every poll attempt hits
+ * the same marginal latency, it can exhaust the whole poll budget and report a misleading
+ * "timed out waiting to start" for an app that was up and answering the whole time.
+ */
+const POST_TIMEOUT_MS = 8_000;
 const POLL_INTERVAL_MS = 300;
 
 /**
