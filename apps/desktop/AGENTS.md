@@ -77,6 +77,39 @@ you set it yourself: devsess sets `NISI_DATA_DIR` only for the subprocesses `dev
 you happen to have open. There's no direnv-style magic where opening a terminal "inside" a session
 picks it up automatically.
 
+## Browser dev harness
+`invoke("get_backend")` (see [The seam](#the-seam)) only resolves inside the Tauri webview — a
+plain `vite dev` tab has no IPC bridge, so it throws immediately and the app can't render.
+`src/lib/backend.ts`'s `getBackend()` has a **dev-only** escape hatch for this: when
+`import.meta.env.DEV` is true and both `VITE_DEV_BACKEND_PORT`/`VITE_DEV_BACKEND_TOKEN` are set, it
+uses those instead of calling into Rust — letting a real browser tab (devtools, screen recording,
+browser-automation tools) drive the app against a live sidecar. `import.meta.env.DEV` makes the
+whole branch dead code in a packaged build (Vite inlines it to `false` and strips the branch), so
+there's no path to it in production regardless of env vars, and the token is never logged.
+
+Full recipe, run from `apps/desktop` against a **scratch** data dir (never the default — that's
+prod's, or whatever `bun dev` session you already have running):
+
+```sh
+export NISI_DATA_DIR=/tmp/nisi-scratch   # anything outside the real app-data dir
+bun run sidecar/index.ts &               # boots the sidecar, writes $NISI_DATA_DIR/sidecar.json
+
+cat $NISI_DATA_DIR/sidecar.json          # => { "port": ..., "token": "..." }
+
+# Open a session so there's a PR/diff to look at — same handoff `nisi` itself does,
+# reusing the still-running sidecar instead of spawning the desktop app (see
+# packages/cli/AGENTS.md).
+bun ../../packages/cli/src/index.ts /path/to/some/git/repo
+
+VITE_DEV_BACKEND_PORT=<port> VITE_DEV_BACKEND_TOKEN=<token> bun run dev:vite
+# open the printed http://localhost:<port> URL in a browser
+```
+
+`NISI_DATA_DIR` must stay exported for both the sidecar and the CLI call — they resolve it the same
+way (default: the real app-data dir) and need to agree on which `sidecar.json` to read/write. Kill
+the backgrounded sidecar when done; nothing here touches the real `sidecar.json` or app.db as long
+as `NISI_DATA_DIR` points somewhere scratch.
+
 ## Non-obvious decisions
 - `tsconfig.json` (the frontend one) is hand-rolled, not `extends: "@total-typescript/tsconfig/..."`
   like `tsconfig.sidecar.json`/`tsconfig.scripts.json` are. The shared preset doesn't set `jsx` or path
