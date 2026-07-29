@@ -17,25 +17,36 @@ import {
 } from "#/components/diff-pane/diff-code-view";
 import { DiffFileHeader } from "#/components/diff-pane/diff-file-header";
 import { DIFF_VIEWED_HOST_CLASS } from "#/components/diff-pane/diff-view-theme";
+import { Button } from "#/components/ui/button";
 import {
 	Empty,
 	EmptyDescription,
 	EmptyMedia,
 	EmptyTitle,
 } from "#/components/ui/empty";
+import { Skeleton } from "#/components/ui/skeleton";
 import type { SidecarQueryUtils } from "#/lib/backend-context";
 import { buildCollapsedFileDiff } from "#/lib/build-collapsed-diff";
 import { buildFileDiff } from "#/lib/build-file-diff";
 import { hashItemVersion } from "#/lib/item-version";
-import type { FileChange, ReviewSource, ReviewState } from "#/lib/pr-data";
+import type {
+	FileChange,
+	FileContent,
+	ReviewSource,
+	ReviewState,
+} from "#/lib/pr-data";
 import { useFileContents } from "#/lib/pr-data";
 import type { DiffStyleMode } from "#/lib/settings-data";
 import { cn } from "#/lib/utils";
+
+/** Why a file's whole body is hidden behind a "Show diff" placeholder by default — see `resolveHiddenFileReason`. */
+type HiddenFileReason = "generated" | "large";
 
 type DiffAnnotationMetadata =
 	| { type: "binary" }
 	| { type: "error"; message: string }
 	| { type: "load-file"; path: string; stillTooLarge: boolean }
+	| { type: "hidden-file"; path: string; reason: HiddenFileReason }
 	| {
 			type: "reviewed-collapsed";
 			path: string;
@@ -48,6 +59,30 @@ type DiffAnnotationMetadata =
 			lineCount: number;
 			source: ReviewSource | "mixed";
 	  };
+
+/**
+ * Noise reduction, not review tracking — distinct from `expandedPaths`
+ * below (which un-collapses hunks the user already reviewed).
+ * A `"generated"` file's body is always noise regardless of size (lock
+ * files land here via `FileChange.category`); a `"large"` one is hidden
+ * because `@repo/git`'s size gate already refused to auto-render its full
+ * contents (`content.truncated`) — same signal `content.truncated`'s
+ * existing "Load full file" affordance uses, just gating the whole body
+ * instead of one banner.
+ */
+function resolveHiddenFileReason(
+	file: FileChange,
+	content: FileContent,
+): HiddenFileReason | undefined {
+	if (file.category === "generated") return "generated";
+	if (content.truncated) return "large";
+	return undefined;
+}
+
+const HIDDEN_FILE_REASON_TEXT: Record<HiddenFileReason, string> = {
+	generated: "Generated files aren't shown by default.",
+	large: "This file is too large to show by default (over 1MB).",
+};
 
 type DiffPaneProps = {
 	orpc: SidecarQueryUtils;
@@ -82,6 +117,12 @@ export function DiffPane({
 	const [expandedPaths, setExpandedPaths] = useState<ReadonlySet<string>>(
 		() => new Set(),
 	);
+	// Separately: files the user clicked "Show diff" on to reveal a body
+	// hidden by default for being generated/large — unrelated to review
+	// state, so its own set rather than folded into `expandedPaths`.
+	const [expandedHiddenPaths, setExpandedHiddenPaths] = useState<
+		ReadonlySet<string>
+	>(() => new Set());
 
 	const contentPaths = useMemo(
 		() => files.filter((file) => !file.binary).map((file) => file.path),
@@ -105,6 +146,15 @@ export function DiffPane({
 
 	const handleExpandCollapsed = useCallback((path: string) => {
 		setExpandedPaths((current) => {
+			if (current.has(path)) return current;
+			const next = new Set(current);
+			next.add(path);
+			return next;
+		});
+	}, []);
+
+	const handleShowHiddenFile = useCallback((path: string) => {
+		setExpandedHiddenPaths((current) => {
 			if (current.has(path)) return current;
 			const next = new Set(current);
 			next.add(path);
@@ -170,6 +220,38 @@ export function DiffPane({
 
 			const content = entry?.content;
 			if (content === undefined) continue; // still loading — appears once resolved
+
+			// Whole-body noise collapse — generated/large files render nothing
+			// but the header until the user opts in, independent of review state.
+			const hiddenReason = expandedHiddenPaths.has(file.path)
+				? undefined
+				: resolveHiddenFileReason(file, content);
+			if (hiddenReason !== undefined) {
+				nextItems.push({
+					id: file.path,
+					type: "file",
+					file: {
+						name: file.path,
+						contents: " ",
+						lang: "text",
+						cacheKey: `hidden:${hiddenReason}:${file.fingerprint}`,
+					},
+					annotations: [
+						{
+							lineNumber: 1,
+							metadata: {
+								type: "hidden-file",
+								path: file.path,
+								reason: hiddenReason,
+							},
+						},
+					] satisfies LineAnnotation<DiffAnnotationMetadata>[],
+					version: hashItemVersion(
+						`${baseVersionInput}:hidden:${hiddenReason}`,
+					),
+				});
+				continue;
+			}
 
 			// Collapsing is the default whenever this file has reviewed ranges to
 			// hide — until the user clicks a marker to expand it back, which wins
@@ -265,6 +347,7 @@ export function DiffPane({
 		selectedPath,
 		forcedPaths,
 		expandedPaths,
+		expandedHiddenPaths,
 	]);
 
 	const renderCustomHeader = useCallback(
@@ -301,6 +384,14 @@ export function DiffPane({
 					<div className="px-3 py-6 text-center text-destructive-foreground text-xs">
 						{metadata.message}
 					</div>
+				);
+			}
+			if (metadata.type === "hidden-file") {
+				return (
+					<HiddenFileBody
+						onShow={() => handleShowHiddenFile(metadata.path)}
+						reason={metadata.reason}
+					/>
 				);
 			}
 			if (metadata.type === "fully-reviewed") {
@@ -360,7 +451,12 @@ export function DiffPane({
 				</div>
 			);
 		},
-		[handleForceLoad, handleExpandCollapsed, onNavigateToBlock],
+		[
+			handleForceLoad,
+			handleExpandCollapsed,
+			handleShowHiddenFile,
+			onNavigateToBlock,
+		],
 	);
 
 	const codeViewOptions: CodeViewOptions<DiffAnnotationMetadata> = useMemo(
@@ -441,6 +537,48 @@ export function DiffPane({
 
 function pluralizeLines(count: number): string {
 	return `${count} ${count === 1 ? "line" : "lines"}`;
+}
+
+/**
+ * The placeholder standing in for a whole file body hidden by default
+ * (`resolveHiddenFileReason`) — header and its Reviewed checkbox render as
+ * normal above this, since `renderCustomHeader` is keyed by `itemMetadata`
+ * independent of what this component renders. Skeleton bars are purely
+ * decorative filler suggesting hidden content, not a loading state.
+ */
+function HiddenFileBody({
+	onShow,
+	reason,
+}: {
+	onShow: () => void;
+	reason: HiddenFileReason;
+}): React.ReactElement {
+	return (
+		<div className="flex flex-col items-center gap-4 px-3 py-8">
+			<div
+				aria-hidden
+				className="flex w-40 flex-col items-center gap-2 opacity-40"
+			>
+				<Skeleton className="h-2 w-full" />
+				<Skeleton className="h-2 w-2/3" />
+			</div>
+			<div className="flex flex-col items-center gap-3">
+				<p className="text-center text-muted-foreground text-xs">
+					{HIDDEN_FILE_REASON_TEXT[reason]}
+				</p>
+				<Button onClick={onShow} size="sm" type="button" variant="outline">
+					Show diff
+				</Button>
+			</div>
+			<div
+				aria-hidden
+				className="flex w-40 flex-col items-center gap-2 opacity-40"
+			>
+				<Skeleton className="h-2 w-3/4" />
+				<Skeleton className="h-2 w-1/2" />
+			</div>
+		</div>
+	);
 }
 
 /** Serializes a `ReviewRange.reviewedVia` for use in a cache-invalidation-style version signature — same idea as `hashItemVersion`'s inputs, just scoped to one range's attribution. */
