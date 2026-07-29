@@ -5,41 +5,13 @@ import { createOpenCode } from "@ai-sdk/harness-opencode";
 import { createPi } from "@ai-sdk/harness-pi";
 import type { HarnessId, HarnessInfo, HarnessModel } from "@repo/sidecar-api";
 import { Effect } from "effect";
-
-/**
- * Curated, best-effort model ids for the three harnesses with no discovery
- * API — see PLAN.md, Phase 3: "only Pi has real model discovery." Revisit
- * these as the underlying CLIs' supported model ids change; nothing here
- * validates them against the CLI, so a stale id just fails at `generate`
- * time (the same place an unavailable harness fails).
- */
-const STATIC_MODELS: Record<
-	Exclude<HarnessId, "pi">,
-	ReadonlyArray<HarnessModel>
-> = {
-	"claude-code": [
-		{ id: "opus", label: "Claude Opus" },
-		{ id: "sonnet", label: "Claude Sonnet" },
-		{ id: "haiku", label: "Claude Haiku" },
-	],
-	codex: [
-		{ id: "gpt-5.1-codex", label: "GPT-5.1 Codex" },
-		{ id: "gpt-5.1-codex-mini", label: "GPT-5.1 Codex Mini" },
-		{ id: "o4-mini", label: "o4-mini" },
-	],
-	opencode: [
-		{
-			id: "anthropic/claude-sonnet-4-5",
-			label: "Claude Sonnet 4.5 (Anthropic)",
-		},
-		{
-			id: "opencode/deepseek-v4-flash-free",
-			label: "DeepSeek V4 Flash Free (OpenCode)",
-		},
-		{ id: "openai/gpt-5.1", label: "GPT-5.1 (OpenAI)" },
-		{ id: "google/gemini-3-pro", label: "Gemini 3 Pro (Google)" },
-	],
-};
+import {
+	createModelDiscoveryCache,
+	discoverClaudeCodeModels,
+	discoverCodexModels,
+	discoverOpenCodeModels,
+	discoverPiModels,
+} from "./model-discovery.ts";
 
 const HARNESS_LABELS: Record<HarnessId, string> = {
 	"claude-code": "Claude Code",
@@ -48,38 +20,18 @@ const HARNESS_LABELS: Record<HarnessId, string> = {
 	pi: "Pi",
 };
 
-/** Fallback when Pi's own model registry can't be read (no auth configured yet, config dir unreadable, …) — mirrors the other three harnesses' static lists rather than leaving Pi's dropdown empty. */
-const PI_FALLBACK_MODELS: ReadonlyArray<HarnessModel> = [
-	{ id: "anthropic/claude-sonnet-4-5", label: "Claude Sonnet 4.5" },
-	{ id: "openai/gpt-5.1", label: "GPT-5.1" },
-];
+/** One cache for the sidecar's lifetime, shared across every `listHarnesses` call — see `model-discovery.ts`'s `createModelDiscoveryCache`. */
+const modelDiscoveryCache = createModelDiscoveryCache();
 
-/**
- * Pi is the one harness with a real model-discovery API
- * (`@earendil-works/pi-coding-agent`'s `ModelRuntime`/`ModelRegistry`) — read
- * live instead of hand-curating. Prefers models Pi considers *available*
- * (configured auth); falls back to every model Pi knows about if none are
- * configured yet, so the dropdown isn't empty before the user has logged in
- * anywhere. Never throws — a broken/absent Pi config degrades to the static
- * fallback, same as the other three harnesses' un-verified lists.
- */
-const discoverPiModels = (): Effect.Effect<ReadonlyArray<HarnessModel>> =>
-	Effect.tryPromise(async () => {
-		const { ModelRegistry, ModelRuntime } = await import(
-			"@earendil-works/pi-coding-agent"
-		);
-		const runtime = await ModelRuntime.create();
-		const registry = new ModelRegistry(runtime);
-		await registry.refresh();
-		const available = registry.getAvailable();
-		const models = available.length > 0 ? available : registry.getAll();
-		return models.map(
-			(model): HarnessModel => ({
-				id: `${model.provider}/${model.id}`,
-				label: model.name,
-			}),
-		);
-	}).pipe(Effect.orElseSucceed(() => PI_FALLBACK_MODELS));
+const DISCOVER_MODELS: Record<
+	HarnessId,
+	Effect.Effect<ReadonlyArray<HarnessModel>, unknown>
+> = {
+	"claude-code": discoverClaudeCodeModels(),
+	codex: discoverCodexModels(),
+	opencode: discoverOpenCodeModels(),
+	pi: discoverPiModels(),
+};
 
 /**
  * The four adapters with their model lists, each flagged `enabled` against
@@ -90,11 +42,15 @@ const discoverPiModels = (): Effect.Effect<ReadonlyArray<HarnessModel>> =>
  * `@repo/settings`'s `DEFAULT_SETTINGS`. Availability still isn't knowable up
  * front (no `isAvailable` API on any adapter), so this never fails and a real
  * unavailability surfaces as a `generate` failure instead; `enabledHarnesses`
- * is a user declaration, not a probe. Pi's model discovery only runs when Pi
- * is actually enabled — no point paying for it (or risking its `~/.config`
- * read) for a harness the user hasn't turned on; a disabled Pi just gets an
- * empty `models` list, which is fine since the picker isn't showing its
- * models anyway.
+ * is a user declaration, not a probe.
+ *
+ * Model discovery — real for all four now, see `model-discovery.ts` — only
+ * runs for harnesses that are actually enabled, each independently
+ * timeout-bounded and cached, in parallel: no point paying for a subprocess
+ * (or risking a slow one) for a harness the user hasn't turned on, and no
+ * point serializing four discoveries behind each other when the UI is
+ * waiting on all of them. A disabled harness gets an empty `models` list and
+ * `modelsStatus: "unavailable"`.
  */
 export const listHarnesses = (
 	enabledHarnesses: ReadonlySet<HarnessId> | null,
@@ -102,43 +58,37 @@ export const listHarnesses = (
 	const isEnabled = (id: HarnessId): boolean =>
 		enabledHarnesses === null || enabledHarnesses.has(id);
 
-	const discoverPi = isEnabled("pi")
-		? discoverPiModels()
-		: Effect.succeed<ReadonlyArray<HarnessModel>>([]);
+	const discover = (id: HarnessId) =>
+		isEnabled(id)
+			? modelDiscoveryCache.get(id, DISCOVER_MODELS[id])
+			: Effect.succeed({
+					models: [] as ReadonlyArray<HarnessModel>,
+					status: "unavailable" as const,
+				});
 
-	return discoverPi.pipe(
+	return Effect.all(
+		{
+			"claude-code": discover("claude-code"),
+			codex: discover("codex"),
+			opencode: discover("opencode"),
+			pi: discover("pi"),
+		},
+		{ concurrency: "unbounded" },
+	).pipe(
 		Effect.map(
-			(piModels): ReadonlyArray<HarnessInfo> => [
-				{
-					id: "claude-code",
-					label: HARNESS_LABELS["claude-code"],
-					models: STATIC_MODELS["claude-code"],
-					enabled: isEnabled("claude-code"),
-				},
-				{
-					id: "codex",
-					label: HARNESS_LABELS.codex,
-					models: STATIC_MODELS.codex,
-					enabled: isEnabled("codex"),
-				},
-				{
-					id: "opencode",
-					label: HARNESS_LABELS.opencode,
-					models: STATIC_MODELS.opencode,
-					enabled: isEnabled("opencode"),
-				},
-				{
-					id: "pi",
-					label: HARNESS_LABELS.pi,
-					models: piModels,
-					enabled: isEnabled("pi"),
-				},
-			],
+			(discoveries): ReadonlyArray<HarnessInfo> =>
+				(["claude-code", "codex", "opencode", "pi"] as const).map((id) => ({
+					id,
+					label: HARNESS_LABELS[id],
+					models: discoveries[id].models,
+					enabled: isEnabled(id),
+					modelsStatus: discoveries[id].status,
+				})),
 		),
 	);
 };
 
-/** Splits opencode's `provider/model` combo id back into its two settings fields — see `STATIC_MODELS.opencode`/`discoverPiModels`, which both mint ids in that shape. */
+/** Splits opencode's `provider/model` combo id back into its two settings fields — see `model-discovery.ts`'s `discoverOpenCodeModels`/`discoverPiModels`, which both mint ids in that shape. */
 const splitProviderModel = (
 	id: string,
 ): { readonly provider: string | undefined; readonly model: string } => {

@@ -15,7 +15,7 @@ export const HarnessId = Schema.Literals([
 ]);
 export type HarnessId = Schema.Schema.Type<typeof HarnessId>;
 
-/** One selectable model for a harness. Only Pi discovers these live; the other three are this package's own curated static list — see `apps/desktop/sidecar/harnesses.ts`. */
+/** One selectable model for a harness. All four harnesses discover these live — see `apps/desktop/sidecar/walkthrough/model-discovery.ts`. */
 export const HarnessModel = Schema.Struct({
 	id: Schema.String,
 	label: Schema.String,
@@ -23,19 +23,33 @@ export const HarnessModel = Schema.Struct({
 export type HarnessModel = Schema.Schema.Type<typeof HarnessModel>;
 
 /**
+ * Provenance of `HarnessInfo.models` relative to `model-discovery.ts`'s
+ * cache: `"fresh"` — discovered (or cache-hit within the TTL) this call;
+ * `"stale"` — the live attempt failed but a previous successful discovery is
+ * being reused; `"unavailable"` — discovery has never once succeeded, so
+ * `models` is empty. The harness itself stays selectable and `enabled`
+ * regardless of this value — it only ever describes `models`, never gates
+ * the checkbox.
+ */
+export const ModelsStatus = Schema.Literals(["fresh", "stale", "unavailable"]);
+export type ModelsStatus = Schema.Schema.Type<typeof ModelsStatus>;
+
+/**
  * `enabled` reflects `@repo/settings`'s `enabledHarnesses` (unset counts as
  * every harness enabled — see that package's `Settings.enabledHarnesses`
  * comment), not availability. All four entries are always present — the
  * onboarding picker needs to render all four as checkboxes — but `models` is
- * only populated live for Pi when it's enabled, since discovery costs a real
- * `~/.config` read; a disabled Pi gets an empty `models` list rather than
- * paying for discovery nobody will use yet.
+ * only discovered live when a harness is enabled, since discovery is real
+ * I/O (a subprocess per harness); a disabled harness gets an empty `models`
+ * list and `modelsStatus: "unavailable"` rather than paying for discovery
+ * nobody will use yet.
  */
 export const HarnessInfo = Schema.Struct({
 	id: HarnessId,
 	label: Schema.String,
 	models: Schema.Array(HarnessModel),
 	enabled: Schema.Boolean,
+	modelsStatus: ModelsStatus,
 });
 export type HarnessInfo = Schema.Schema.Type<typeof HarnessInfo>;
 
