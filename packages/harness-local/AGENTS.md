@@ -36,6 +36,13 @@ internal boundary to put Effect at; contorting it in would just add ceremony aro
 
 ## Non-obvious decisions
 
+- **`run`/`spawn` widen `PATH`** (`RESOLVED_PATH` in `local-sandbox-session.ts`, via
+  `@repo/bin-resolver#resolvedPath`) before merging in the caller's `env`. A macOS `.app` launched
+  from Finder/`open` never runs login shell startup files, so the sidecar process's own `PATH`
+  (inherited by every `run`/`spawn` call here) is missing wherever the user's shell-installed
+  tools actually live — this bootstrap's own `pnpm` dependency included. See the comment at
+  `RESOLVED_PATH`'s definition for the full reasoning; `sidecar/walkthrough/model-discovery.ts`
+  (apps/desktop) hits the identical exposure for the harness CLIs' model-discovery spawns.
 - **`resumeSession` is intentionally omitted**, same as `just-bash`. A resumed session would need
   to reattach to a *live* bridge process (the WebSocket the adapter dials still has to be
   answered by something), but this package's spawned processes are ordinary children of the host

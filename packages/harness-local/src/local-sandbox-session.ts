@@ -6,6 +6,7 @@ import {
 	type Experimental_SandboxSession,
 	extractLines,
 } from "@ai-sdk/provider-utils";
+import { resolvedPath } from "@repo/bin-resolver";
 import { toSandboxProcess } from "./sandbox-process.ts";
 import { bytesToStream, collectStream } from "./stream-utils.ts";
 
@@ -46,6 +47,22 @@ const PNPM_BUILD_APPROVAL_ENV = {
 };
 
 /**
+ * `run`/`spawn`'s `command` is an arbitrary shell string composed by the
+ * harness adapter (`pnpm --dir ... install`, `node .../bridge.mjs`, the
+ * bootstrapped CLI itself, ...) — there's no single binary to resolve up
+ * front the way `sidecar/walkthrough/model-discovery.ts` resolves one for
+ * each harness CLI, so the fix here is widening `PATH` itself rather than
+ * one `@repo/bin-resolver#resolveBin` call. Computed once per process for
+ * the same reason `packages/git/src/exec.ts` resolves `git`/`gh` once: it
+ * only reads `PATH`/the filesystem, neither of which changes over the
+ * sidecar's lifetime. Same underlying GUI-`PATH` exposure as the harness
+ * CLIs — a macOS `.app` launched from Finder/`open` never runs login shell
+ * startup files, so e.g. a Bun-installed `pnpm` at `~/.bun/bin` (this
+ * bootstrap's own dependency) wouldn't otherwise resolve.
+ */
+const RESOLVED_PATH = resolvedPath();
+
+/**
  * `Experimental_SandboxSession` over the real filesystem and a real shell —
  * `run`/`spawn` shell out via `node:child_process`, file I/O goes through
  * `node:fs/promises`. This is the tool-safe surface returned by
@@ -81,7 +98,12 @@ export class LocalSandboxSession implements Experimental_SandboxSession {
 
 		const child = spawn("/bin/bash", ["-c", command], {
 			cwd: workingDirectory ?? this.cwd,
-			env: { ...PNPM_BUILD_APPROVAL_ENV, ...process.env, ...env },
+			env: {
+				...PNPM_BUILD_APPROVAL_ENV,
+				...process.env,
+				PATH: RESOLVED_PATH,
+				...env,
+			},
 			stdio: ["ignore", "pipe", "pipe"],
 			signal: abortSignal,
 		});
@@ -117,7 +139,12 @@ export class LocalSandboxSession implements Experimental_SandboxSession {
 
 		const child = spawn("/bin/bash", ["-c", command], {
 			cwd: workingDirectory ?? this.cwd,
-			env: { ...PNPM_BUILD_APPROVAL_ENV, ...process.env, ...env },
+			env: {
+				...PNPM_BUILD_APPROVAL_ENV,
+				...process.env,
+				PATH: RESOLVED_PATH,
+				...env,
+			},
 			stdio: ["ignore", "pipe", "pipe"],
 			signal: abortSignal,
 		});
