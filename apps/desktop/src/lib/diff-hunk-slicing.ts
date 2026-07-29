@@ -97,12 +97,18 @@ export type LineDisposition = "keep" | "drop";
  * the rare hunk with no head-side line at all — callers pick its direction
  * (Phase 2 never collapses such a hunk; Phase 3 never keeps one, since it
  * can't belong to any head-line range).
+ *
+ * `D` is generic, not just `LineDisposition` — Phase 3's collapsed-region
+ * grouping (`build-collapsed-diff.ts`) needs more than two dispositions (one
+ * "drop" variant per claim, so adjacent reviewed runs from different claims
+ * don't merge into one collapsed marker), and this primitive doesn't care
+ * about the disposition alphabet's shape, only that it's comparable by `===`.
  */
-export function resolveLineDispositions(
+export function resolveLineDispositions<D extends string>(
 	hunkLines: readonly AnnotatedLine[],
-	classify: (headLine: number) => LineDisposition,
-	fallbackWhenNoHeadLineAnywhere: LineDisposition,
-): readonly LineDisposition[] {
+	classify: (headLine: number) => D,
+	fallbackWhenNoHeadLineAnywhere: D,
+): readonly D[] {
 	const direct = hunkLines.map((line) =>
 		line.headLine === null ? undefined : classify(line.headLine),
 	);
@@ -124,19 +130,31 @@ export function resolveLineDispositions(
 	});
 }
 
-export type RunSegment = {
-	disposition: LineDisposition;
+export type RunSegment<D extends string = LineDisposition> = {
+	disposition: D;
 	lines: AnnotatedLine[];
 };
 
-/** Groups one hunk's lines into consecutive same-disposition runs — never spanning across hunks, since two hunks' old/new counters aren't contiguous. */
-export function groupIntoRuns(
+/**
+ * Groups one hunk's lines into consecutive same-disposition runs — never
+ * spanning across hunks, since two hunks' old/new counters aren't
+ * contiguous. `dispositions` always has exactly one entry per line of
+ * `hunkLines` (it's `resolveLineDispositions`' output, computed from the same
+ * `hunkLines`) — an index miss would mean that invariant broke, so this
+ * throws rather than papering over it with a fabricated disposition.
+ */
+export function groupIntoRuns<D extends string>(
 	hunkLines: readonly AnnotatedLine[],
-	dispositions: readonly LineDisposition[],
-): readonly RunSegment[] {
-	const runs: RunSegment[] = [];
+	dispositions: readonly D[],
+): readonly RunSegment<D>[] {
+	const runs: RunSegment<D>[] = [];
 	hunkLines.forEach((line, index) => {
-		const disposition = dispositions[index] ?? "drop";
+		const disposition = dispositions[index];
+		if (disposition === undefined) {
+			throw new Error(
+				"groupIntoRuns: dispositions must have exactly one entry per hunk line",
+			);
+		}
 		const currentRun = runs[runs.length - 1];
 		if (currentRun?.disposition === disposition) {
 			currentRun.lines.push(line);
@@ -148,7 +166,7 @@ export function groupIntoRuns(
 }
 
 /** Re-serializes one run as a standalone sub-hunk — its first line's old/new position already encodes the correct `@@` offset, so no recalculation is needed. */
-export function serializeSubHunk(run: RunSegment): string {
+export function serializeSubHunk(run: RunSegment<string>): string {
 	const first = run.lines[0];
 	if (first === undefined) return "";
 	const oldCount = run.lines.filter((line) => line.prefix !== "+").length;
