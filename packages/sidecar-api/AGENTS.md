@@ -32,3 +32,9 @@ contract", for the shapes these were specified against.
 - `diff.file`'s `force` input field isn't in PLAN.md's contract sketch — added so the load-on-demand
   size tier (see `@repo/git`) has any way to actually be loaded. Optional, additive, flagged here so
   it isn't mistaken for scope creep.
+- Phase 3's range-scoped review added `review.setRangeViewed` (mirrors `setViewed`'s tick/untick
+  shape, scoped to one block's claim on a set of ranges within one file) and `diff.ts`'s `ReviewRange`
+  gained `reviewedVia: ReviewSource | null` — `{kind: "file"}` or `{kind: "range", blockId,
+  blockLabel}`, attributing each surviving range to the claim currently covering it so Files Changed
+  can render a "reviewed in `<block>`" marker instead of a bare "reviewed" one. `FileContentReview` is
+  now populated whenever a file has *any* active claim, not only once it's been whole-file-ticked.

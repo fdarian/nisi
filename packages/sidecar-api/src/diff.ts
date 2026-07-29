@@ -51,26 +51,49 @@ export const FileChange = Schema.Struct({
 export type FileChange = Schema.Schema.Type<typeof FileChange>;
 
 /**
+ * What currently vouches for a reviewed range — mirrors `@repo/review`'s
+ * `ReviewSource`. `{kind: "file"}` is the whole-file Reviewed checkbox;
+ * `{kind: "range", blockId, blockLabel}` is a walkthrough reference block's
+ * claim on this specific location, which Files Changed renders as a
+ * "reviewed in `<blockLabel>`" marker linking back to the block.
+ */
+export const ReviewSource = Schema.Union([
+	Schema.Struct({ kind: Schema.Literal("file") }),
+	Schema.Struct({
+		kind: Schema.Literal("range"),
+		blockId: Schema.String,
+		blockLabel: Schema.String,
+	}),
+]);
+export type ReviewSource = Schema.Schema.Type<typeof ReviewSource>;
+
+/**
  * One contiguous run of the `base → head` diff, tagged by whether it's still
- * exactly what was reviewed (`reviewed` — the diff pane collapses it behind
- * a marker) or has moved since (`new` — it surfaces). 1-based inclusive,
- * in **head** (current file content) line numbers — the same numbering the
- * `base → head` diff itself renders under, so these can be handed straight
- * to the diff renderer's per-line annotation hook with no re-derivation.
+ * exactly what some claim reviewed (`reviewed` — the diff pane collapses it
+ * behind a marker) or has moved since (`new` — it surfaces). 1-based
+ * inclusive, in **head** (current file content) line numbers — the same
+ * numbering the `base → head` diff itself renders under, so these can be
+ * handed straight to the diff renderer's per-line annotation hook with no
+ * re-derivation.
  */
 export const ReviewRange = Schema.Struct({
 	startLine: Schema.Number,
 	endLine: Schema.Number,
 	status: Schema.Literals(["reviewed", "new"]),
+	/** Which claim currently vouches for this range. `null` iff `status` is `"new"`. */
+	reviewedVia: Schema.NullOr(ReviewSource),
 });
 export type ReviewRange = Schema.Schema.Type<typeof ReviewRange>;
 
 /**
- * The reconciliation payload for one file — present only when the file has
- * been ticked Reviewed. `ranges` covers every line the `base → head` diff
- * touches; when absent (e.g. content past the size gate, so there's nothing
- * to reconcile against) it's an empty array, not a missing field, so the
- * frontend never needs to branch on "was this even computed."
+ * The reconciliation payload for one file — present whenever the file has
+ * *any* active review claim, whole-file or block-scoped range (a file with
+ * only range claims and no whole-file tick still gets one, so Files Changed
+ * can render "reviewed in `<block>`" markers on it). `ranges` covers every
+ * line the `base → head` diff touches; when absent (e.g. content past the
+ * size gate, so there's nothing to reconcile against) it's an empty array,
+ * not a missing field, so the frontend never needs to branch on "was this
+ * even computed."
  */
 export const FileContentReview = Schema.Struct({
 	changedSinceReview: Schema.Boolean,
