@@ -13,7 +13,14 @@ not what any bundle contains.
   the whole sidecar process (`getAppDbPath`'s `app.db`, at `NISI_DATA_DIR`).
   Every domain store depends on `SqliteDb` instead of opening its own
   `bun:sqlite` handle; `dbUse` wraps a query, turning a thrown error into
-  `DbError` instead of letting it escape untyped.
+  `DbError` instead of letting it escape untyped. Every connection sets
+  `busy_timeout` (so a second opener waits out the first's transaction
+  instead of failing immediately with `SQLITE_BUSY`) and `journal_mode =
+  WAL` (readers don't block on a writer, or vice versa, at all) — this is
+  the belt-and-suspenders for *any* concurrent opener of `app.db` a future
+  reader or stray script might be, distinct from `apps/desktop/sidecar/sidecar-lock.ts`'s
+  boot-time lock, which only ever governed `sidecar.json` and one sidecar
+  process racing another.
 - `src/migrations.ts` — `applyEmbeddedMigrations`: ports drizzle's internal
   `dialect.migrate()` call so a migration bundle (journal + raw SQL, already
   read into memory) can be applied without touching the filesystem — the

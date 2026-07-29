@@ -5,14 +5,23 @@ lives in `@repo/git`, `@repo/review`, `@repo/walkthrough`, and `@repo/harness-lo
 composes them and translates between domain errors and oRPC error codes. See root `AGENTS.md` → "The
 seam" for the port/token handshake this boots into.
 
-- `index.ts` — boot: handshake file, builds `MainLayer` (`Store` + `WalkthroughStore` +
-  `SettingsStore` + `SqliteDb` + `LoggingLive` + Bun platform services), runs one `Effect` program
-  via `BunRuntime.runMain`. After binding its port, it claims `sidecar-lock.ts`'s `sidecar.lock`
-  before touching `sidecar.json` at all — see that file for why an atomic `O_EXCL` create, not a
-  check-then-act health check, is what closes the split-brain two sidecars sharing one
-  `NISI_DATA_DIR` used to be able to fall into (see `apps/desktop/AGENTS.md`'s "Dev/prod isolation"
-  for the main way that used to happen; the lock is the belt-and-suspenders for every other way,
-  e.g. a manual `bun run sidecar` against the production data dir while the app's already running).
+- `index.ts` — boot, in two layers with different lifetimes. `EarlyLayer` (`LoggingLive` + Bun
+  platform services) wraps the *whole* program, so even the first "starting up" log line reaches
+  the rotating file logger. `MainLayer` (`Store` + `WalkthroughStore` + `SettingsStore` +
+  `SqliteDb`) wraps only the program's *tail* — deliberately provided at that nested point instead
+  of around the whole program, so `SqliteDb`'s connection (and Drizzle's migrations) can't open
+  until after the prefix has already run: bind the port (`http.ts`'s `bindHealthCheckServer`,
+  health-check-only — no `AppServices` needed yet), claim `sidecar-lock.ts`'s `sidecar.lock`, and
+  publish `sidecar.json`. See that file for why an atomic `O_EXCL` create, not a check-then-act
+  health check, is what closes the split-brain two sidecars sharing one `NISI_DATA_DIR` used to be
+  able to fall into (see `apps/desktop/AGENTS.md`'s "Dev/prod isolation" for the main way that
+  used to happen; the lock is the belt-and-suspenders for every other way, e.g. a manual `bun run
+  sidecar` against the production data dir while the app's already running) — and why gating
+  `MainLayer` behind it is what makes that guarantee extend to `app.db` too: two cold boots
+  racing on Drizzle's `CREATE TABLE IF NOT EXISTS` migration step is the same class of bug one
+  layer down, not a separate one. `@repo/db`'s `busy_timeout`/WAL pragmas (`client.ts`) are the
+  belt-and-suspenders for every *other* concurrent opener of `app.db` (a stray script, a future
+  reader) that this lock doesn't cover, since it only ever governed `sidecar.json`.
 - `sidecar-lock.ts` — `acquireSidecarLock`/`releaseSidecarLock`/`publishSidecarJson`. The lock file
   (`sidecar.lock`, holding `{ port, token }`) is created via `wx` (`O_EXCL`) — the create either
   succeeds or fails atomically, so two sidecars booting at the same instant can't both proceed the
@@ -43,10 +52,15 @@ seam" for the port/token handshake this boots into.
   `ReviewStore.listRangeClaims` is path-scoped, not a whole-session map like `listReviewStates`), reads
   every active claim's snapshot back out of the blob store via `buildReviewClaims`, and hands the whole
   list to `@repo/review`'s `reconcile()` — one call covers both review types.
-- `http.ts` — the oRPC router. Each handler maps one or two domain packages' tagged errors to a
-  declared contract error via `Effect.catchTag` + `errors.XXX(...)`; anything else (gh auth failures,
-  decode errors, etc.) is an uncaught defect → oRPC's generic 500. Deliberately not exhaustive for
-  Phase 1 — see `packages/sidecar-api/AGENTS.md` for which shapes got extra errors and why.
+- `http.ts` — `bindHealthCheckServer` binds the real port immediately with a hand-rolled
+  `health.check`-only handler (no `AppServices` needed), which `index.ts` records in the lock
+  before `AppServices` exists at all; `attachRouter` swaps in the full oRPC router afterward via
+  `server.reload` — same port, no restart, so a concurrent liveness check never observes a gap
+  where nothing's listening. The router itself: each handler maps one or two domain packages'
+  tagged errors to a declared contract error via `Effect.catchTag` + `errors.XXX(...)`; anything
+  else (gh auth failures, decode errors, etc.) is an uncaught defect → oRPC's generic 500.
+  Deliberately not exhaustive for Phase 1 — see `packages/sidecar-api/AGENTS.md` for which shapes
+  got extra errors and why.
   `settings.get`/`settings.update` are the one pair of handlers backed directly by a domain
   package's own store (`@repo/settings`'s `SettingsStore`) rather than a sidecar-local wrapper —
   see that package's AGENTS.md for why it didn't need the `WalkthroughStore` split.
@@ -79,8 +93,10 @@ seam" for the port/token handshake this boots into.
   re-exposing the service for those per-call requirements. Same gotcha documented in
   `packages/review/AGENTS.md`, one layer up, now applied one more time for `ReviewStore` itself
   (`store.ts`'s `Store.layer`) and for `SqliteDb` (shared by both `Store` and `WalkthroughStore`).
-- **`mainContext` is captured once, in `index.ts`'s boot program**, via `Effect.context<AppServices>()`,
-  then passed into `startServer` and set as the `effect/context` for every oRPC request. Each request's
-  handler effect isn't part of the boot program's fiber, so it can't `yield*` a service unless that
-  service is in the context this way. The walkthrough generation loop (`walkthrough/generate.ts`)
+- **`mainContext` is captured once, inside `index.ts`'s `MainLayer`-provided tail**, via
+  `Effect.context<AppServices>()` — only once the lock is held and `AppServices` is built, not at
+  the very start of boot — then passed into `attachRouter` and set as the `effect/context` for
+  every oRPC request from that point on. Each request's handler effect isn't part of the boot
+  program's fiber, so it can't `yield*` a service unless that service is in the context this way.
+  The walkthrough generation loop (`walkthrough/generate.ts`)
   receives the same `mainContext` and bridges Effect from its own plain `async function*` with it.
