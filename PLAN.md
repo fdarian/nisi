@@ -107,11 +107,14 @@ native addon can't be embedded), and embed migrations as text imports rather tha
 `@ai-sdk/harness-claude-code` read its bridge assets via `new URL(`./bridge/${name}`,
 import.meta.url)` + `node:fs` — a *dynamic* specifier, which `bun build --compile` doesn't detect
 as embeddable, while still rewriting `import.meta.url` to a virtual `/$bunfs/...` path that has
-nothing at it. Fixed with a `bun patch` (`patches/@ai-sdk%2Fharness-claude-code@1.0.47.patch`)
-converting the three reads to static `import ... with { type: "text" }`, which `bun build
---compile` does inline as string literals. Only `claude-code` was exercised and patched; `codex`,
-`opencode`, and `pi` likely share the same bridge-loading pattern and would need the same fix the
-first time their bridge actually gets exercised through the compiled sidecar.
+nothing at it. Fixed with `bun patch` on all three affected packages — see `patchedDependencies` in the root
+`package.json` — converting the reads to static `import ... with { type: "text" }`, which
+`bun build --compile` does inline as string literals. `claude-code` was verified end to end
+through a full walkthrough generation; `codex` and `opencode` were confirmed to bootstrap past
+the fix and reach real turns. `pi` doesn't use this pattern and needs no patch.
+
+These patches are pinned to exact versions, so a harness upgrade will silently drop them —
+re-verify a compiled build whenever one is bumped.
 
 ## Phases
 
