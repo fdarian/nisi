@@ -13,7 +13,8 @@
 	},
 	"dependencies": {
 		"@ai-sdk/harness": "1.0.46",
-		"@ai-sdk/provider-utils": "5.0.14"
+		"@ai-sdk/provider-utils": "5.0.14",
+		"@repo/bin-resolver": "workspace:*"
 	},
 	"devDependencies": {
 		"@ai-sdk/harness-claude-code": "1.0.47",

@@ -31,6 +31,7 @@
         "@orpc/tanstack-query": "2.0.0-beta.21",
         "@pierre/diffs": "1.2.12",
         "@pierre/trees": "1.0.0-beta.6",
+        "@repo/bin-resolver": "workspace:*",
         "@repo/db": "workspace:*",
         "@repo/git": "workspace:*",
         "@repo/harness-local": "workspace:*",
@@ -72,6 +73,15 @@
         "vite": "^7.0.4",
       },
     },
+    "packages/bin-resolver": {
+      "name": "@repo/bin-resolver",
+      "version": "0.1.0",
+      "devDependencies": {
+        "@total-typescript/tsconfig": "1.0.4",
+        "@types/bun": "1.3.14",
+        "typescript": "7.0.2",
+      },
+    },
     "packages/cli": {
       "name": "@repo/cli",
       "version": "0.1.0",
@@ -108,6 +118,7 @@
       "name": "@repo/git",
       "version": "0.1.0",
       "dependencies": {
+        "@repo/bin-resolver": "workspace:*",
         "effect": "4.0.0-beta.102",
       },
       "devDependencies": {
@@ -123,6 +134,7 @@
       "dependencies": {
         "@ai-sdk/harness": "1.0.46",
         "@ai-sdk/provider-utils": "5.0.14",
+        "@repo/bin-resolver": "workspace:*",
       },
       "devDependencies": {
         "@ai-sdk/harness-claude-code": "1.0.47",
@@ -542,6 +554,8 @@
     "@protobufjs/pool": ["@protobufjs/pool@1.1.0", "", {}, "sha512-0kELaGSIDBKvcgS4zkjz1PeddatrjYcmMWOlAuAPwAeccUrPHdUqo/J6LiymHHEiJT5NrF1UVwxY14f+fy4WQw=="],
 
     "@protobufjs/utf8": ["@protobufjs/utf8@1.1.2", "", {}, "sha512-b1UQwcEZ4yCnMCD8DAL1VlbvBJE9/IX4FTIp7BG1xYpf29SLazLSrqUkj4w7Y5y7cCVP6E5tcqqcI0xemPkHug=="],
+
+    "@repo/bin-resolver": ["@repo/bin-resolver@workspace:packages/bin-resolver"],
 
     "@repo/cli": ["@repo/cli@workspace:packages/cli"],
 

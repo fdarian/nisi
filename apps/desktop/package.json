@@ -34,6 +34,7 @@
 		"@orpc/tanstack-query": "2.0.0-beta.21",
 		"@pierre/diffs": "1.2.12",
 		"@pierre/trees": "1.0.0-beta.6",
+		"@repo/bin-resolver": "workspace:*",
 		"@repo/db": "workspace:*",
 		"@repo/git": "workspace:*",
 		"@repo/harness-local": "workspace:*",
