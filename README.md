@@ -87,6 +87,33 @@ Point it at a different repo without `cd`-ing there first.
 If your branch has no open PR, nisi still opens — diffing against the repo's default branch instead
 of erroring, since it's still useful without one.
 
+### Logs
+
+The app's window is a GUI process with nowhere for `console.log` to go, so the sidecar (the real
+backend behind that window) keeps its own rotating log file:
+
+```
+<data dir>/logs/sidecar.log
+```
+
+`<data dir>` is `~/Library/Application Support/com.nisi.desktop/` by default (or `NISI_DATA_DIR`,
+if you've set it — see [Running the app while developing the CLI](#running-the-app-while-developing-the-cli)).
+The file rotates once it passes 10MB, keeping one backup (`sidecar.log.1`), so it never grows
+without bound.
+
+Both the sidecar and the `nisi` CLI honor `LOG_LEVEL` (`trace`/`debug`/`info`/`warn`/`error`/`fatal`,
+case-insensitive, defaulting to `info`):
+
+```bash
+LOG_LEVEL=debug nisi
+```
+
+traces the CLI's own decisions — which `sidecar.json` it read, the parsed port, each POST attempt
+and how the outcome was classified, which app path it resolved — to your terminal (stderr, so it
+never mixes into the one line of output a script piping `nisi`'s stdout would see). The sidecar's
+own `LOG_LEVEL` has to be set before it starts (a GUI-launched `.app` doesn't inherit your shell's
+env — see `bun run sidecar` below for setting it against a standalone run).
+
 ## Harness requirement for the walkthrough
 
 The walkthrough runs a real coding agent CLI against your actual worktree on your own machine —
