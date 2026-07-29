@@ -10,6 +10,7 @@ import {
 	EmptyMedia,
 	EmptyTitle,
 } from "#/components/ui/empty";
+import { FramePanel } from "#/components/ui/frame";
 import { Spinner } from "#/components/ui/spinner";
 import { TabsPrimitive } from "#/components/ui/tabs";
 import type { SidecarQueryUtils } from "#/lib/backend-context";
@@ -23,9 +24,13 @@ import { useSessions } from "#/lib/pr-data";
  * machinery, which assumes a collapsible left rail `AppShell` doesn't have
  * (its own `FilesSidebar` is a plain flex child, not that system). The outer
  * `bg-sidebar` on both call sites is what makes the gap read as a gap.
+ *
+ * Layered onto `FramePanel` (`ui/frame.tsx`, the vendored coss ui recipe)
+ * rather than a plain `div` so the pane also picks up its hairline `border`
+ * and refined `shadow-xs/5` edge — `p-0` overrides `FramePanel`'s own `p-5`
+ * via `cn`'s `twMerge`, since this pane manages its own children's padding.
  */
-const INSET_PANE_CLASS =
-	"m-2 flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl bg-background shadow-sm/5";
+const INSET_PANE_CLASS = "m-2 flex min-h-0 flex-1 flex-col overflow-hidden p-0";
 
 /** Top-level shell: gates on the sidecar connection, then renders the multi-PR tab strip. */
 export function AppShell(): React.ReactElement {
@@ -69,7 +74,7 @@ function ShellFrame({
 	return (
 		<div className="flex h-screen flex-col bg-sidebar">
 			<div className="h-10 shrink-0" data-tauri-drag-region />
-			<div className={INSET_PANE_CLASS}>{children}</div>
+			<FramePanel className={INSET_PANE_CLASS}>{children}</FramePanel>
 		</div>
 	);
 }
@@ -142,7 +147,7 @@ function AppShellReady({
 			value={activeSessionId}
 		>
 			<PrTabStrip onCloseSession={handleCloseSession} sessions={sessions} />
-			<div className={INSET_PANE_CLASS}>
+			<FramePanel className={INSET_PANE_CLASS}>
 				{sessions.map((session) => (
 					<TabsPrimitive.Panel
 						className="flex min-h-0 flex-1 flex-col outline-none"
@@ -157,7 +162,7 @@ function AppShellReady({
 						/>
 					</TabsPrimitive.Panel>
 				))}
-			</div>
+			</FramePanel>
 		</TabsPrimitive.Root>
 	);
 }
