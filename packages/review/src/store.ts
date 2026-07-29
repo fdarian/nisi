@@ -14,25 +14,34 @@ import {
 import { ReviewStoreError, SessionNotFound } from "./errors.ts";
 import { getBlobsDir, getDataDirConfig } from "./paths.ts";
 
+/**
+ * The GitHub side of a session, present only when there's an open PR — its
+ * `owner`/`repo` live here rather than at the top level because a repo with
+ * no GitHub origin has no such identity to record, and a nullable pair of
+ * columns shouldn't be readable as anything but "no PR".
+ */
+export type SessionPullRequest = {
+	readonly number: number;
+	readonly title: string;
+	readonly owner: string;
+	readonly repo: string;
+};
+
 export type Session = {
 	readonly id: string;
 	readonly repoRoot: string;
-	readonly owner: string;
-	readonly repo: string;
 	readonly baseRef: string;
 	readonly headRef: string;
-	readonly pr: { readonly number: number; readonly title: string } | null;
+	readonly pr: SessionPullRequest | null;
 };
 
 export type OpenSessionInput = {
 	readonly repoRoot: string;
-	readonly owner: string;
-	readonly repo: string;
 	/** The PR's base branch, or the repo's default branch when there's no PR. */
 	readonly baseRef: string;
 	/** The PR's head branch, or the current branch when there's no PR. */
 	readonly headRef: string;
-	readonly pr: { readonly number: number; readonly title: string } | null;
+	readonly pr: SessionPullRequest | null;
 };
 
 export type FileReviewState = {
@@ -58,33 +67,42 @@ export type RangeReviewClaim = {
 };
 
 /**
- * `sessions.open`'s idempotency key. Keyed by PR number when there is one;
- * by branch when there isn't, since a no-PR session has no PR number to key
- * on. Deliberately a single derived column rather than a composite unique
- * index — SQLite treats `NULL` as distinct within a unique index, so a
- * `(owner, repo, prNumber)` index would let every no-PR open insert a new row.
+ * `sessions.open`'s idempotency key: the working tree, narrowed by the PR
+ * open on it, or by the branch when there is no PR. Rooted at `repoRoot`
+ * rather than the GitHub repo because review state is a set of snapshots of
+ * *these* files — two clones or worktrees of the same upstream hold different
+ * bytes, so reviewing one must not repoint the other's session. Deliberately
+ * a single derived column rather than a composite unique index: SQLite treats
+ * `NULL` as distinct within a unique index, so anything involving a nullable
+ * `prNumber` would let every no-PR open insert a new row.
  */
 const computeSessionKey = (
-	owner: string,
-	repo: string,
+	repoRoot: string,
 	pr: OpenSessionInput["pr"],
 	headRef: string,
 ): string =>
-	pr === null
-		? `${owner}/${repo}#branch${headRef}`
-		: `${owner}/${repo}#pr${pr.number}`;
+	pr === null ? `${repoRoot}#branch${headRef}` : `${repoRoot}#pr${pr.number}`;
+
+/** A PR is all four columns or none — a partially-filled row is a row we can't describe, not a PR with blanks. */
+const toPullRequest = (row: SessionRow): SessionPullRequest | null =>
+	row.prNumber === null ||
+	row.prTitle === null ||
+	row.owner === null ||
+	row.repo === null
+		? null
+		: {
+				number: row.prNumber,
+				title: row.prTitle,
+				owner: row.owner,
+				repo: row.repo,
+			};
 
 const toSession = (row: SessionRow): Session => ({
 	id: row.publicId,
 	repoRoot: row.repoRoot,
-	owner: row.owner,
-	repo: row.repo,
 	baseRef: row.baseRef,
 	headRef: row.headRef,
-	pr:
-		row.prNumber === null
-			? null
-			: { number: row.prNumber, title: row.prTitle ?? "" },
+	pr: toPullRequest(row),
 });
 
 const ensureDir = (fs: FileSystem, dir: string) =>
@@ -125,8 +143,7 @@ export class ReviewStore extends Context.Service<ReviewStore>()("ReviewStore", {
 		): Effect.Effect<Session, ReviewStoreError> =>
 			Effect.gen(function* () {
 				const sessionKey = computeSessionKey(
-					input.owner,
-					input.repo,
+					input.repoRoot,
 					input.pr,
 					input.headRef,
 				);
@@ -145,8 +162,8 @@ export class ReviewStore extends Context.Service<ReviewStore>()("ReviewStore", {
 				const sharedValues = {
 					sessionKey,
 					repoRoot: input.repoRoot,
-					owner: input.owner,
-					repo: input.repo,
+					owner: input.pr?.owner ?? null,
+					repo: input.pr?.repo ?? null,
 					prNumber: input.pr?.number ?? null,
 					prTitle: input.pr?.title ?? null,
 					baseRef: input.baseRef,

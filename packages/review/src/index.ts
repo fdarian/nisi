@@ -14,5 +14,6 @@ export type {
 	OpenSessionInput,
 	RangeReviewClaim,
 	Session,
+	SessionPullRequest,
 } from "./store.ts";
 export { ReviewStore } from "./store.ts";

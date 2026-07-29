@@ -41,10 +41,22 @@ for why review's tables and the walkthrough store's tables share one `app.db` fi
 ## Non-obvious decisions
 
 - **`sessionKey` is one derived text column, not a composite unique index.** `sessions.open` is
-  idempotent per repo+PR, keyed by PR number when there is one, by branch when there isn't. SQLite
-  treats `NULL` as distinct within a unique index, so `UNIQUE(owner, repo, prNumber)` would let
-  every no-PR open insert a fresh row instead of reusing one — `sessionKey` sidesteps that by never
-  being `NULL`.
+  idempotent per *working tree* + PR — `${repoRoot}#pr${n}`, or `${repoRoot}#branch${headRef}` when
+  there's no PR. Rooted at `repoRoot`, not the GitHub repo, because review state is snapshots of
+  those exact files: two clones or worktrees of one upstream are two reviews, and keying on repo
+  identity made the second open silently repoint the first's `repoRoot`. SQLite treats `NULL` as
+  distinct within a unique index, so anything composite involving `prNumber` would let every no-PR
+  open insert a fresh row instead of reusing one — `sessionKey` sidesteps that by never being `NULL`.
+- **A session's `owner`/`repo` are PR-scoped and nullable.** A repo with no GitHub origin (or one
+  `gh` can't resolve) still opens a session and reviews against its default branch, so there's no
+  GitHub identity to record — `Session.pr` carries `owner`/`repo` and is `null` as a unit rather
+  than leaving blank strings at the top level.
+- **`drizzle/0002_*.sql` is hand-written, and any future migration touching `sessions` must be too.**
+  drizzle-kit's SQLite recreate drops and rebuilds the table under `PRAGMA foreign_keys=OFF` — a
+  no-op inside the transaction `applyEmbeddedMigrations` runs in, so `DROP TABLE sessions` cascades
+  through `reviewed_files`/`review_range_claims` and empties both. Reach the same shape with
+  `ALTER TABLE` and keep drizzle-kit's generated `meta/*_snapshot.json` as-is; that's what the next
+  `db:generate` diffs against.
 - **`closeSession` never deletes a row.** Review state (`reviewed_files`) is keyed by a session's
   internal id and is the entire point of this package — deleting the session on close would orphan
   it, defeating "tracked changes" the moment you close a tab. `closeSession` sets `closedAt`;

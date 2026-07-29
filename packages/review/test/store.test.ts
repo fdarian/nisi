@@ -11,11 +11,9 @@ const run = <A, E>(
 
 const prInput = {
 	repoRoot: "/repo",
-	owner: "acme",
-	repo: "widgets",
 	baseRef: "main",
 	headRef: "feature",
-	pr: { number: 42, title: "Add widgets" },
+	pr: { number: 42, title: "Add widgets", owner: "acme", repo: "widgets" },
 };
 
 describe("ReviewStore sessions", () => {
@@ -30,7 +28,12 @@ describe("ReviewStore sessions", () => {
 			);
 
 			expect(session.repoRoot).toBe("/repo");
-			expect(session.pr).toEqual({ number: 42, title: "Add widgets" });
+			expect(session.pr).toEqual({
+				number: 42,
+				title: "Add widgets",
+				owner: "acme",
+				repo: "widgets",
+			});
 			expect(session.id).toBeTruthy();
 		});
 	});
@@ -62,7 +65,7 @@ describe("ReviewStore sessions", () => {
 					yield* store.openSession(prInput);
 					return yield* store.openSession({
 						...prInput,
-						pr: { number: 42, title: "Add widgets (renamed)" },
+						pr: { ...prInput.pr, title: "Add widgets (renamed)" },
 					});
 				}),
 			);
@@ -83,6 +86,49 @@ describe("ReviewStore sessions", () => {
 			);
 			expect(sessions[0].id).not.toBe(sessions[1].id);
 			expect(sessions[1].pr).toBeNull();
+		});
+	});
+
+	test("two working copies of the same PR are two sessions, each keeping its own repoRoot", async () => {
+		await withTempDataDir(async (dataDir) => {
+			const [first, second, open] = await run(
+				dataDir,
+				Effect.gen(function* () {
+					const store = yield* ReviewStore;
+					const a = yield* store.openSession(prInput);
+					const b = yield* store.openSession({
+						...prInput,
+						repoRoot: "/other-clone",
+					});
+					const listed = yield* store.listOpenSessions();
+					return [a, b, listed] as const;
+				}),
+			);
+
+			expect(second.id).not.toBe(first.id);
+			expect(open).toHaveLength(2);
+			expect([...open].map((session) => session.repoRoot).sort()).toEqual([
+				"/other-clone",
+				"/repo",
+			]);
+		});
+	});
+
+	test("a session with no PR at all opens and reuses its branch-keyed row", async () => {
+		await withTempDataDir(async (dataDir) => {
+			const [first, second] = await run(
+				dataDir,
+				Effect.gen(function* () {
+					const store = yield* ReviewStore;
+					const localOnly = { ...prInput, pr: null };
+					const a = yield* store.openSession(localOnly);
+					const b = yield* store.openSession(localOnly);
+					return [a, b] as const;
+				}),
+			);
+
+			expect(first.pr).toBeNull();
+			expect(second.id).toBe(first.id);
 		});
 	});
 

@@ -9,16 +9,19 @@ export const sessions = sqliteTable("sessions", {
 	id: integer({ mode: "number" }).primaryKey({ autoIncrement: true }),
 	publicId: text().notNull().unique(),
 	/**
-	 * Dedup key `sessions.open` upserts on: `${owner}/${repo}#pr${number}`, or
-	 * `${owner}/${repo}#branch${headRef}` for the no-PR fallback. A plain
-	 * composite unique index on `(owner, repo, prNumber)` doesn't work here —
-	 * SQLite treats `NULL` as distinct in unique indexes, so every no-PR open
-	 * would insert a fresh row instead of reusing one.
+	 * Dedup key `sessions.open` upserts on: `${repoRoot}#pr${number}`, or
+	 * `${repoRoot}#branch${headRef}` for the no-PR fallback. Rooted at the
+	 * working tree, not the GitHub repo — review state is snapshots of *these*
+	 * files, so two clones or worktrees of one upstream are two reviews. A
+	 * plain composite unique index doesn't work here anyway: SQLite treats
+	 * `NULL` as distinct in unique indexes, so every no-PR open would insert a
+	 * fresh row instead of reusing one.
 	 */
 	sessionKey: text().notNull().unique(),
 	repoRoot: text().notNull(),
-	owner: text().notNull(),
-	repo: text().notNull(),
+	/** PR-scoped, all four together or none: a repo with no GitHub origin (or none `gh` can resolve) still opens a session. */
+	owner: text(),
+	repo: text(),
 	prNumber: integer({ mode: "number" }),
 	prTitle: text(),
 	baseRef: text().notNull(),
