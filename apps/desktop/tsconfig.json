@@ -22,5 +22,12 @@
 		}
 	},
 	"include": ["src"],
+	// `*.test.ts` files use `bun:test`, a Bun-runtime module absent from this
+	// config's browser-facing `lib`/`types` (no `@types/bun` here, unlike
+	// `tsconfig.sidecar.json`'s explicit `types: ["bun"]`) — `bun test` itself
+	// transpiles and runs them without needing `tsc` to type-check first, so
+	// excluding them here just keeps this pass scoped to app code, same as
+	// sidecar/scripts already get their own tsconfig instead of sharing this one.
+	"exclude": ["src/**/*.test.ts"],
 	"references": [{ "path": "./tsconfig.node.json" }]
 }

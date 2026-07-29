@@ -295,10 +295,29 @@ export function DiffPane({
 				continue;
 			}
 
+			// The collapse-signature suffix is load-bearing, not cosmetic: @pierre/diffs'
+			// worker pool and its `areDiffTargetsEqual`/`areFilesEqual` memoization
+			// (VirtualizedFileDiff.js, WorkerPoolManager.js) treat two `FileDiffMetadata`
+			// as identical whenever their `cacheKey`s match, full stop — it never
+			// compares the actual hunks. `file.fingerprint` alone identifies the
+			// *content* this patch was collapsed from, but not *which* ranges got
+			// collapsed — reviewing a file (or a walkthrough block finishing) changes
+			// `collapsed.patch`'s hunks without changing `file.fingerprint`. A cache key
+			// that only mirrors `buildFileDiff`'s content-only key
+			// (`${file.fingerprint}:collapsed`) would collide across two different
+			// collapse states of the same file, so pierre serves the *previous* render's
+			// stale hunk layout — rows measured/positioned for the old collapse state,
+			// under `renderAnnotation`/line-number data for the new one. That mismatch is
+			// what made a file's content "jump out of alignment" right after marking it
+			// Reviewed. `collapseSignature` already captures exactly the ranges that
+			// decided this patch's shape, so folding it in (hashed, to keep the key short)
+			// makes every distinct collapse state get its own cache key.
 			const fileDiff: FileDiffMetadata | undefined =
 				collapsed?.kind === "partial"
-					? parsePatchFiles(collapsed.patch, `${file.fingerprint}:collapsed`)[0]
-							?.files[0]
+					? parsePatchFiles(
+							collapsed.patch,
+							`${file.fingerprint}:collapsed:${hashItemVersion(collapseSignature)}`,
+						)[0]?.files[0]
 					: buildFileDiff(file, content);
 			if (fileDiff === undefined) continue;
 
