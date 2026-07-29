@@ -87,6 +87,44 @@ export const diffViewUnsafeCSS = `
 		background: transparent !important;
 	}
 
+	/**
+	 * Split (side-by-side) layout renders FOUR separator elements per gap, not
+	 * one: @pierre/diffs' DiffHunksRenderer calls \`pushSeparator\` once for
+	 * "deletions" and once for "additions" (DiffHunksRenderer.js), and each of
+	 * those pushes into *both* the line-number gutter's AST and the code
+	 * content's AST — confirmed by inspecting the rendered shadow DOM (4
+	 * \`[data-separator="line-info-basic"]\` nodes per gap: one under
+	 * \`[data-gutter]\` and one under \`[data-content]\`, in each of the
+	 * \`[data-deletions]\`/\`[data-additions]\` columns). @pierre/diffs' own
+	 * stylesheet hides the content-side pair by default
+	 * (\`[data-content] [data-separator-wrapper] { display: none }\`) and the
+	 * additions-side gutter pair too, leaving only the deletions-side gutter
+	 * one visible — but the wrapper override two rules up sets
+	 * \`display: inline-flex !important\`, which (being !important) wins over
+	 * those non-important native rules regardless of selector specificity and
+	 * un-hides all four. That's the duplicate-pill bug: with nothing else
+	 * scoping it, both the gutter and content instances end up visible in
+	 * every column.
+	 *
+	 * A single element can't visually span both columns here — each column's
+	 * code area (\`[data-code]\`) clips overflow (\`overflow: scroll clip\`,
+	 * needed for horizontal scrolling of long lines), so nothing painted
+	 * inside one column's DOM subtree can bleed into the other's, even via
+	 * \`position: absolute\`/cqi-width tricks (verified against @pierre/diffs'
+	 * own \`hunkSeparators: "line-info"\` split output, which fakes a
+	 * "continuous" band by tiling two independently-sized same-color pieces
+	 * across the column boundary, not by truly spanning one element across
+	 * it — not reproducible for a rounded pill without visible seams). So
+	 * instead of trying to span both columns, exactly one instance is kept —
+	 * the deletions (left) column's content-side pill, since content is the
+	 * meaningful width to center against, not the narrow number gutter — and
+	 * the other three are hidden outright.
+	 */
+	[data-gutter] [data-separator="line-info-basic"] [data-separator-wrapper],
+	[data-additions] [data-content] [data-separator="line-info-basic"] [data-separator-wrapper] {
+		display: none !important;
+	}
+
 	[data-separator="line-info-basic"] [data-separator-wrapper] {
 		position: static !important;
 		inset-inline: auto !important;
