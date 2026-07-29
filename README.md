@@ -109,3 +109,19 @@ cd packages/<name> && bun test
 ```
 
 See `PLAN.md` for the architecture and `AGENTS.md` for stack conventions — every workspace has one.
+
+### Running the app while developing the CLI
+
+`cd apps/desktop && bun dev` starts a dev build in its own sandbox, isolated from the production
+app: separate `sidecar.json`, separate SQLite database, keyed off `NISI_DATA_DIR` (`bun dev`
+prints the path it picked). A plain `nisi` doesn't know about that sandbox — it targets the
+default data dir, i.e. whatever the production app (built and installed per [Install](#install))
+is using. If you have both open at once and `nisi` seems to land in the wrong window, that's why.
+To point it at the dev instance instead, pass the printed path explicitly:
+
+```bash
+NISI_DATA_DIR=<path bun dev printed> nisi
+```
+
+There's no flag for this and no auto-detection — it's a plain env var override, so it only applies
+to that one invocation's shell.

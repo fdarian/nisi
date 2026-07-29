@@ -30,15 +30,43 @@ binding, then writes `{ port, token }` to `sidecar.json` (mode 0600) in the app-
 or the frontend's one-shot `invoke('get_backend')` wedges on a cold start. Regression-tested by the
 `#[tokio::test]`s in `lib.rs` — keep them if you touch that file.
 
-- **Dev**: `bun dev` runs `scripts/dev.ts`, which races the sidecar against `tauri dev`
-  (`Effect.raceAll` — either exiting kills the other, via each process's Effect `Scope`).
-  `beforeDevCommand` only runs `vite`; the sidecar is started by `dev.ts`, not by Tauri.
+- **Dev**: `bun dev` runs `scripts/dev.ts`, a [devsess](https://devsess.fdarian.com/) orchestrator
+  (see below) that races the sidecar against `tauri dev` (`Effect.raceAll` — either exiting kills
+  the other, via each process's Effect `Scope`). `beforeDevCommand` only runs `vite`; the sidecar
+  is started by `dev.ts`, not by Tauri.
 - **Prod**: Rust spawns the compiled `binaries/sidecar` (`externalBin`, `shell:allow-spawn`) from
   `.setup()` — fire-and-forget.
 - Sidecar boot (`sidecar/index.ts`) is one Effect program run via `BunRuntime.runMain`: the HTTP server
   is acquired/released with `Effect.acquireRelease` inside `Effect.scoped`, so SIGINT/SIGTERM (which
   `runMain` already listens for) interrupts the fiber and the release closes the server — no manual
   `process.on()` needed.
+
+## Dev/prod isolation
+Dev and prod both resolve their data dir (`sidecar.json` + `app.db`, see [The seam](#the-seam))
+from `NISI_DATA_DIR`, defaulting to the same path — `~/Library/Application Support/com.nisi.desktop/`
+— when it's unset. Left alone, that means a `bun dev` sidecar and the production app's sidecar
+fight over the same `sidecar.json` and the same SQLite file, and whichever wrote `sidecar.json`
+last is the one `nisi` (or the window you're looking at) actually talks to — this is what caused
+production to show a stale PR list while a dev server had the fresh one.
+
+`scripts/dev.ts` fixes this with [devsess](https://devsess.fdarian.com/): each `bun dev` run resolves
+(or creates) a **session** — a directory under `apps/desktop/.data/sessions/<slug>/` (gitignored,
+`<slug>` a generated word like `walrus`, not something you choose) — and sets `NISI_DATA_DIR` to
+that session's own `data/` subdirectory before starting the sidecar and `tauri dev`. Each git
+worktree resolves its own `apps/desktop/.data/sessions/` tree, so two worktrees' dev sessions never
+share one either. `dev.ts` also reads a sticky vite port from the session (`getStickyPort`) and
+passes it to `tauri dev` via `-c '{"build":{"devUrl":...}}'`, so the frontend port stays stable
+across restarts of the same session too.
+
+`dev.ts` prints `NISI_DATA_DIR=<path>` on startup — that line is deliberately copy-pasteable.
+Since prod keeps the untouched default, a plain `nisi` from a terminal always reaches the
+**production** app; pointing it at a dev session instead is `NISI_DATA_DIR=<path from that line> nisi`.
+There's no flag or auto-detection for this by design (see root `PLAN.md`'s "The seam" for why
+`packages/cli` doesn't get special-cased here) — and note the override only works this way because
+you set it yourself: devsess sets `NISI_DATA_DIR` only for the subprocesses `dev.ts` itself spawns
+(`runManagedSubprocess` merges `env` into *that child's* environment), never for a separate shell
+you happen to have open. There's no direnv-style magic where opening a terminal "inside" a session
+picks it up automatically.
 
 ## Non-obvious decisions
 - `tsconfig.json` (the frontend one) is hand-rolled, not `extends: "@total-typescript/tsconfig/..."`
