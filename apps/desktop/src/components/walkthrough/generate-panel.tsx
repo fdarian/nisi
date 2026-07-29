@@ -1,7 +1,7 @@
 "use client";
 
 import { Link } from "@tanstack/react-router";
-import { SparklesIcon } from "lucide-react";
+import { RefreshCwIcon, SparklesIcon } from "lucide-react";
 import { useState } from "react";
 import { Button, buttonVariants } from "#/components/ui/button";
 import {
@@ -34,7 +34,7 @@ type GeneratePanelProps = {
 	onGenerate: (harness: HarnessId, model: string | undefined) => void;
 };
 
-/** Enabled harnesses whose live discovery has never once succeeded — see `HarnessInfo.modelsStatus`'s doc comment. These are the ones worth naming to the user; `"stale"` is quietly using a cached list and isn't worth alarming over. */
+/** Enabled harnesses whose `modelsStatus` is `"unavailable"` — either the CLI isn't installed (`!harness.available`) or its live discovery has never once succeeded, see `HarnessInfo`'s doc comment. These are the ones worth naming to the user; `"stale"` is quietly using a cached list and isn't worth alarming over. */
 function unavailableHarnessLabels(
 	harnesses: readonly HarnessInfo[],
 ): readonly string[] {
@@ -68,7 +68,7 @@ export function GeneratePanel({
 	history,
 	onGenerate,
 }: GeneratePanelProps): React.ReactElement {
-	const { harnesses } = useHarnesses(orpc);
+	const { harnesses, refresh, isRefreshing } = useHarnesses(orpc);
 	const { settings } = useSettings(orpc);
 	const updateSettings = useUpdateSettings(orpc);
 	const [selection, setSelection] = useState<ModelSelection | null>(null);
@@ -124,7 +124,7 @@ export function GeneratePanel({
 	);
 	const unavailableSummary =
 		unavailable.length > 0
-			? `Couldn't reach ${formatList(unavailable)} — check ${unavailable.length === 1 ? "it's" : "they're"} installed and on your PATH, then reopen this tab.`
+			? `Couldn't reach ${formatList(unavailable)} — check ${unavailable.length === 1 ? "it's" : "they're"} installed and on your PATH, then hit refresh.`
 			: null;
 
 	return (
@@ -158,6 +158,16 @@ export function GeneratePanel({
 					onChange={setSelection}
 					value={selection}
 				/>
+				<Button
+					aria-label="Refresh harnesses and models"
+					loading={isRefreshing}
+					onClick={refresh}
+					size="icon"
+					title="Re-check installed harnesses and re-fetch their models"
+					variant="outline"
+				>
+					<RefreshCwIcon />
+				</Button>
 				<Button
 					disabled={selection === null}
 					onClick={() => {

@@ -5,7 +5,7 @@
  * same way `@repo/walkthrough` is its own package: different lifecycle,
  * different consumers, and `pr-data.ts` is already sizeable.
  */
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { SidecarQueryUtils } from "#/lib/backend-context";
 import type { FileChange } from "#/lib/pr-data";
@@ -27,15 +27,21 @@ export type ModelsStatus = "fresh" | "stale" | "unavailable";
 
 /**
  * Mirrors `HarnessInfo` (`packages/sidecar-api/src/walkthrough.ts`).
- * `walkthrough.harnesses()` always reports all four adapters — availability
- * can't be detected up front, so the onboarding picker and the settings
- * page's checkboxes both render every entry `useHarnesses` returns rather
- * than a separate static list. `enabled` reflects `@repo/settings`'s
- * `enabledHarnesses` (unset counts as every harness enabled); `models` is
- * discovered live for every *enabled* harness (each independently
- * timeout-bounded and cached server-side) — `modelsStatus` is what actually
- * distinguishes "discovery succeeded with zero models" from "discovery
- * failed," since both otherwise look like the same empty array here.
+ * `walkthrough.harnesses()` always reports all four adapters — the
+ * onboarding picker and the settings page's checkboxes both render every
+ * entry `useHarnesses` returns rather than a separate static list.
+ *
+ * `available` and `enabled` are independent: `available` is a live
+ * `@repo/bin-resolver` presence check (is the CLI actually on disk right
+ * now — Pi has none, and is always available), `enabled` reflects
+ * `@repo/settings`'s `enabledHarnesses` (unset counts as every harness
+ * enabled) — a user declaration, not a probe. `binaryPath` is the resolved
+ * path when `available`, for showing *which* binary was picked; `null`
+ * otherwise. `models` is discovered live only for a harness that's both
+ * enabled and available (each independently timeout-bounded and cached
+ * server-side) — `modelsStatus` distinguishes "discovery succeeded with
+ * zero models" from "discovery failed" from "not installed," since all
+ * three otherwise look like the same empty array here.
  */
 export type HarnessInfo = {
 	id: HarnessId;
@@ -43,6 +49,8 @@ export type HarnessInfo = {
 	models: readonly HarnessModel[];
 	enabled: boolean;
 	modelsStatus: ModelsStatus;
+	available: boolean;
+	binaryPath: string | null;
 };
 
 /** Mirrors `Location` (`packages/walkthrough/src/schema.ts`) — 1-based inclusive, in the file's head content. */
@@ -85,13 +93,46 @@ export type GenerateEvent =
 	| { type: "done"; walkthrough: StoredWalkthrough }
 	| { type: "failed"; message: string };
 
-/** Mirrors `walkthrough.harnesses()` — the static harness/model registry, Pi's populated live server-side. Never errors: availability isn't knowable up front, so every harness is always reported. */
+/**
+ * Mirrors `walkthrough.harnesses()` — the harness/model registry, live
+ * `available` and cached `models` server-side. Never errors: every harness
+ * is always reported, `available`/`enabled` decide what's selectable.
+ *
+ * `refresh()` calls `walkthrough.refreshHarnesses` directly (bypassing
+ * `useQuery`'s own cache-then-fetch, same pattern as
+ * `useWalkthroughGeneration`'s `orpc.walkthrough.generate.call(...)` below)
+ * and writes the result straight into `harnesses`' query cache — so every
+ * consumer of `useHarnesses` (the settings page, the onboarding panel, the
+ * generate panel's combobox) updates from the same round trip regardless of
+ * which one triggered it, without a second component-local cache to keep in
+ * sync. `isRefreshing` is local to this hook instance, not shared across
+ * mounts — fine in practice since the settings page and the walkthrough tab
+ * are never both visible at once.
+ */
 export function useHarnesses(orpc: SidecarQueryUtils): {
 	harnesses: readonly HarnessInfo[];
 	isLoading: boolean;
+	refresh: () => void;
+	isRefreshing: boolean;
 } {
+	const queryClient = useQueryClient();
 	const query = useQuery(orpc.walkthrough.harnesses.queryOptions());
-	return { harnesses: query.data ?? [], isLoading: query.isLoading };
+	const mutation = useMutation({
+		mutationFn: () => orpc.walkthrough.refreshHarnesses.call(),
+		onSuccess: (harnesses) => {
+			queryClient.setQueryData(
+				orpc.walkthrough.harnesses.queryKey(),
+				harnesses,
+			);
+		},
+	});
+
+	return {
+		harnesses: query.data ?? [],
+		isLoading: query.isLoading,
+		refresh: mutation.mutate,
+		isRefreshing: mutation.isPending,
+	};
 }
 
 /** Mirrors `walkthrough.get({ sessionId })` — `undefined` while loading, `null` when the session has no generated walkthrough yet. */

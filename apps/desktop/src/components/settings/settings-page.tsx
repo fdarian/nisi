@@ -6,12 +6,20 @@ import {
 	ChevronLeftIcon,
 	MonitorIcon,
 	MoonIcon,
+	RefreshCwIcon,
 	SettingsIcon,
 	SunIcon,
 } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useCallback } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "#/components/ui/card";
+import { Button } from "#/components/ui/button";
+import {
+	Card,
+	CardAction,
+	CardContent,
+	CardHeader,
+	CardTitle,
+} from "#/components/ui/card";
 import { Checkbox } from "#/components/ui/checkbox";
 import {
 	Empty,
@@ -145,15 +153,18 @@ function SettingsContent({
 
 function SettingsSection({
 	title,
+	action,
 	children,
 }: {
 	title: string;
+	action?: React.ReactNode;
 	children: React.ReactNode;
 }): React.ReactElement {
 	return (
 		<Card>
 			<CardHeader>
 				<CardTitle>{title}</CardTitle>
+				{action !== undefined && <CardAction>{action}</CardAction>}
 			</CardHeader>
 			<CardContent className="flex flex-col divide-y divide-border">
 				{children}
@@ -221,6 +232,9 @@ function AppearanceSection(): React.ReactElement {
 	);
 }
 
+/** Why a harness's checkbox is disabled here — mirrors `EnableHarnessesPanel`'s onboarding-gate reason. */
+const UNAVAILABLE_REASON = "Not found on PATH or common install locations.";
+
 /**
  * Checkboxes for the four harnesses, written straight through
  * `settings.update` — `walkthrough.harnesses()` already reflects this same
@@ -230,13 +244,27 @@ function AppearanceSection(): React.ReactElement {
  * list — `walkthrough.harnesses()` always reports all four regardless of
  * which are currently enabled, so there's no risk of a disabled harness being
  * impossible to re-enable from here.
+ *
+ * A harness's checkbox is disabled when `!harness.available` (its CLI isn't
+ * on disk right now — a live check, see `HarnessInfo`'s doc), with a reason
+ * so the row still reads as "install this to use it" rather than "broken."
+ * An already-*enabled* harness that's since gone unavailable isn't silently
+ * dropped from `enabledHarnesses` — its checkbox stays checked (and
+ * disabled, so it can't be re-toggled without becoming available again) and
+ * an inline warning explains why, so re-plugging in the same CLI later needs
+ * no reconfiguration.
+ *
+ * The refresh button re-runs both the availability check and (for
+ * enabled+available harnesses) model discovery, bypassing
+ * `model-discovery.ts`'s cache — for a harness installed while nisi was
+ * already open.
  */
 function HarnessesSection({
 	orpc,
 }: {
 	orpc: SidecarQueryUtils;
 }): React.ReactElement {
-	const { harnesses } = useHarnesses(orpc);
+	const { harnesses, refresh, isRefreshing } = useHarnesses(orpc);
 	const update = useUpdateSettings(orpc);
 
 	const toggleHarness = useCallback(
@@ -253,19 +281,48 @@ function HarnessesSection({
 	);
 
 	return (
-		<SettingsSection title="Harnesses">
+		<SettingsSection
+			action={
+				<Button
+					aria-label="Refresh harnesses"
+					loading={isRefreshing}
+					onClick={refresh}
+					size="icon-sm"
+					variant="ghost"
+				>
+					<RefreshCwIcon />
+				</Button>
+			}
+			title="Harnesses"
+		>
 			{harnesses.map((harness) => (
 				<SettingsRow
-					description="Drive this harness's local CLI when generating a walkthrough."
+					description={
+						!harness.available
+							? UNAVAILABLE_REASON
+							: "Drive this harness's local CLI when generating a walkthrough."
+					}
 					key={harness.id}
 					title={harness.label}
 				>
-					<Checkbox
-						checked={harness.enabled}
-						onCheckedChange={(checked) =>
-							toggleHarness(harness.id, checked === true)
-						}
-					/>
+					<div className="flex items-center gap-2">
+						{harness.enabled && !harness.available && (
+							<span
+								className="flex items-center gap-1 text-warning-foreground text-xs"
+								title="Enabled, but its CLI isn't currently found — reconnect it or refresh."
+							>
+								<AlertTriangleIcon className="size-3.5" />
+								Missing
+							</span>
+						)}
+						<Checkbox
+							checked={harness.enabled}
+							disabled={!harness.available}
+							onCheckedChange={(checked) =>
+								toggleHarness(harness.id, checked === true)
+							}
+						/>
+					</div>
 				</SettingsRow>
 			))}
 		</SettingsSection>

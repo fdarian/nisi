@@ -84,11 +84,13 @@ picks it up automatically.
   contract) — writes to the real app-data dir since `NISI_DATA_DIR` is unset outside a manual override.
 - The compiled `src-tauri/binaries/sidecar-*` is gitignored; `beforeBuildCommand` regenerates it via
   `build:sidecar` (host triple `aarch64-apple-darwin` only — cross-compile is future work).
-- **`enabledHarnesses` still has two disagreeing sources.** `src/hooks/use-enabled-harnesses.ts`
-  (the walkthrough tab's first-use onboarding gate) is `localStorage`, `null`-until-configured;
-  `settings-data.ts` (the settings page's checkboxes) is `@repo/settings`. The backend blocker is
-  gone — `Settings.enabledHarnesses` is now `string[] | null` (`null` = never configured) and
-  `sidecar/walkthrough/harnesses.ts`'s `listHarnesses` returns all four harnesses with an `enabled`
-  flag instead of filtering, so it can serve the onboarding picker directly. Unifying the frontend
-  onto that one store is what's left; don't delete `use-enabled-harnesses.ts` until that lands.
+- **`HarnessInfo.available` and `.enabled` are independent, both always present.** `available` is a
+  live `@repo/bin-resolver` binary-presence check (`sidecar/walkthrough/availability.ts`), never
+  cached; `enabled` is `@repo/settings`'s `enabledHarnesses`, a user declaration. A harness can be
+  enabled but currently unavailable (its checkbox in `EnableHarnessesPanel`/`SettingsPage` stays
+  checked but disabled, with an inline reason — it isn't dropped from `enabledHarnesses`) or
+  available but not yet enabled. `useHarnesses` (`src/lib/walkthrough-data.ts`) also exposes
+  `refresh`/`isRefreshing`, wired to `walkthrough.refreshHarnesses` — the refresh icon next to the
+  harness list (Settings) and the model combobox (walkthrough tab) both call it, writing straight
+  into the shared `walkthrough.harnesses` query cache so both places update from one round trip.
 - `#/*` → `src/*`, not `@/*`.

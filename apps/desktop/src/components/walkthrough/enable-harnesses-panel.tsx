@@ -12,12 +12,20 @@ type EnableHarnessesPanelProps = {
 	onConfirm: (selected: readonly HarnessId[]) => void;
 };
 
+/** Why a harness's checkbox is disabled here — Pi has no CLI of its own, so this only ever applies to the other three. */
+const UNAVAILABLE_REASON =
+	"Not found on your PATH or common install locations.";
+
 /**
  * First-use onboarding: which harnesses the user actually has CLIs
- * installed/authenticated for. Can't be detected (no `isAvailable` API on any
- * adapter — see PLAN.md's Phase 3 note), so it's asked and written straight
- * through `settings.update`'s `enabledHarnesses` — the sidecar is what spawns
- * the agents, so it's the authoritative store, not a client-side shadow copy.
+ * installed/authenticated for. `harness.available` (a live
+ * `@repo/bin-resolver` check — see `HarnessInfo`'s doc) disables the ones
+ * that aren't actually on disk, with a reason so an unavailable harness
+ * still reads as "an option you could install" rather than "broken" — the
+ * choice itself is asked and written straight through `settings.update`'s
+ * `enabledHarnesses` for whichever remain selectable, since the sidecar is
+ * what spawns the agents, so it's the authoritative store, not a
+ * client-side shadow copy.
  */
 export function EnableHarnessesPanel({
 	harnesses,
@@ -39,14 +47,25 @@ export function EnableHarnessesPanel({
 			</div>
 			<CheckboxGroup onValueChange={setSelected} value={selected}>
 				{harnesses.map((harness) => (
-					<label
-						className="flex cursor-pointer items-center gap-2 text-sm"
-						htmlFor={`harness-${harness.id}`}
-						key={harness.id}
-					>
-						<Checkbox id={`harness-${harness.id}`} name={harness.id} />
-						{harness.label}
-					</label>
+					<div className="flex flex-col gap-0.5" key={harness.id}>
+						<label
+							className="flex items-center gap-2 text-sm not-data-disabled:cursor-pointer data-disabled:opacity-64"
+							data-disabled={!harness.available || undefined}
+							htmlFor={`harness-${harness.id}`}
+						>
+							<Checkbox
+								disabled={!harness.available}
+								id={`harness-${harness.id}`}
+								name={harness.id}
+							/>
+							{harness.label}
+						</label>
+						{!harness.available && (
+							<p className="pl-6.5 text-muted-foreground text-xs">
+								{UNAVAILABLE_REASON}
+							</p>
+						)}
+					</div>
 				))}
 			</CheckboxGroup>
 			<Button
