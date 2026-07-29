@@ -3,7 +3,8 @@ use std::sync::Mutex;
 use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
-use tauri::Manager;
+use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, Submenu, WINDOW_SUBMENU_ID};
+use tauri::{Emitter, Manager, Runtime};
 use tauri_plugin_shell::process::CommandChild;
 #[cfg(not(debug_assertions))]
 use tauri_plugin_shell::ShellExt;
@@ -125,9 +126,76 @@ async fn get_backend(
         .map(|state| state.clone())
 }
 
+/** Id of the Window menu's ⌘W item, and the event it emits to the frontend. */
+const CLOSE_TAB_MENU_ID: &str = "close-tab";
+const CLOSE_TAB_EVENT: &str = "menu://close-tab";
+
+/**
+ * Tauri's default macOS menu (`Menu::default`) puts a predefined "Close"
+ * item on ⌘W, and AppKit offers a keystroke to the main menu's key
+ * equivalents *before* the key window's responder chain — so the webview
+ * never sees ⌘W and a frontend listener for it can never fire. This swaps
+ * the whole Window submenu for one whose ⌘W is a plain "Close Tab" item that
+ * does nothing but emit `CLOSE_TAB_EVENT`, leaving the actual decision —
+ * close the active tab, or close the window when it's the last one — to
+ * `src/hooks/use-tab-shortcuts.ts`, alongside the rest of the tab
+ * keybindings.
+ *
+ * Rebuilding the submenu wholesale rather than deleting just the predefined
+ * item is deliberate: the top-level submenu has a public, stable id
+ * (`WINDOW_SUBMENU_ID`) to find it by, while a predefined item's id is
+ * generated at construction and could only be matched by its label.
+ */
+fn menu_with_close_tab<R: Runtime>(handle: &tauri::AppHandle<R>) -> tauri::Result<Menu<R>> {
+    let menu = Menu::default(handle)?;
+    let position = menu
+        .items()?
+        .iter()
+        .position(|item| item.id() == WINDOW_SUBMENU_ID)
+        .ok_or_else(|| {
+            tauri::Error::Setup(
+                Box::<dyn std::error::Error>::from(
+                    "Tauri's default menu no longer has a Window submenu to put Close Tab in",
+                )
+                .into(),
+            )
+        })?;
+
+    let window_menu = Submenu::with_id_and_items(
+        handle,
+        WINDOW_SUBMENU_ID,
+        "Window",
+        true,
+        &[
+            &PredefinedMenuItem::minimize(handle, None)?,
+            &PredefinedMenuItem::maximize(handle, None)?,
+            &PredefinedMenuItem::separator(handle)?,
+            &MenuItem::with_id(
+                handle,
+                CLOSE_TAB_MENU_ID,
+                "Close Tab",
+                true,
+                Some("CmdOrCtrl+W"),
+            )?,
+        ],
+    )?;
+
+    menu.remove_at(position)?;
+    menu.insert(&window_menu, position)?;
+    Ok(menu)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let builder = tauri::Builder::default()
+        .menu(menu_with_close_tab)
+        .on_menu_event(|app, event| {
+            if event.id() == CLOSE_TAB_MENU_ID {
+                if let Err(e) = app.emit(CLOSE_TAB_EVENT, ()) {
+                    eprintln!("failed to forward the Close Tab menu event: {e}");
+                }
+            }
+        })
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
