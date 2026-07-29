@@ -12,6 +12,21 @@ import type { FileChange } from "#/lib/pr-data";
 
 export type HarnessId = "claude-code" | "codex" | "opencode" | "pi";
 
+/**
+ * Every known harness id + display label, mirroring the sidecar's own
+ * `HARNESS_LABELS` (`sidecar/walkthrough/harnesses.ts`) — redeclared here
+ * since that map is sidecar-only code the frontend has no access to. The
+ * settings page's Harnesses section needs all four regardless of which are
+ * currently enabled, unlike `useHarnesses` below, whose `walkthrough.harnesses`
+ * query is pre-filtered server-side to only the enabled subset.
+ */
+export const ALL_HARNESSES: readonly { id: HarnessId; label: string }[] = [
+	{ id: "claude-code", label: "Claude Code" },
+	{ id: "codex", label: "Codex" },
+	{ id: "opencode", label: "OpenCode" },
+	{ id: "pi", label: "Pi" },
+];
+
 export type HarnessModel = { id: string; label: string };
 
 export type HarnessInfo = {

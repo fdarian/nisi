@@ -12,12 +12,15 @@ Three parts, one seam:
   contract by composing `@repo/git` (pure PR/diff detection) and `@repo/review` (SQLite persistence)
   behind one `Store` service — see `sidecar/AGENTS.md`.
 - `src/` — React frontend (TanStack Router file-based routes, shadcn on the `@coss` (coss ui / Base UI)
-  registry). One route: `AppShell` (multi-PR tab strip + Files Changed sidebar + diff pane), wired to
-  the live sidecar contract through `src/lib/pr-data.ts` (oRPC + TanStack Query via
-  `backend-context.tsx`). The diff pane (`src/components/diff-pane/`) renders with `@pierre/diffs`,
-  same shadow-DOM/Worker-pool shape as the `@pierre/trees` sidebar — `src/lib/build-collapsed-diff.ts`
-  slices a file's patch down to `FileContentReview.ranges`' `"new"` spans for Phase 2's collapsed
-  reviewed regions.
+  registry). Two routes: `/` (`AppShell` — multi-PR tab strip + Files Changed sidebar + diff pane) and
+  `/settings` (Phase 4, `Cmd/Ctrl+,`), each wired to the live sidecar contract through `src/lib/pr-data.ts`
+  / `src/lib/settings-data.ts` (oRPC + TanStack Query via `backend-context.tsx`). `settings-data.ts` is
+  the one place that reads/writes `@repo/settings`-backed prefs (`sidebarViewMode`, `diffStyleMode`,
+  `enabledHarnesses` for the settings page's checkboxes) — theme is the one exception, staying in
+  `localStorage` via `next-themes` (wired in `routes/__root.tsx`) since nothing server-side reads it.
+  The diff pane (`src/components/diff-pane/`) renders with `@pierre/diffs`, same shadow-DOM/Worker-pool
+  shape as the `@pierre/trees` sidebar — `src/lib/build-collapsed-diff.ts` slices a file's patch down to
+  `FileContentReview.ranges`' `"new"` spans for Phase 2's collapsed reviewed regions.
 
 ## The seam
 The sidecar binds an ephemeral port, generates a token, deletes any stale `sidecar.json` *before*
@@ -53,4 +56,14 @@ or the frontend's one-shot `invoke('get_backend')` wedges on a cold start. Regre
   contract) — writes to the real app-data dir since `NISI_DATA_DIR` is unset outside a manual override.
 - The compiled `src-tauri/binaries/sidecar-*` is gitignored; `beforeBuildCommand` regenerates it via
   `build:sidecar` (host triple `aarch64-apple-darwin` only — cross-compile is future work).
+- **`enabledHarnesses` still has two disagreeing sources.** `src/hooks/use-enabled-harnesses.ts`
+  (the walkthrough tab's first-use onboarding gate) is `localStorage`, `null`-until-configured;
+  `settings-data.ts` (the settings page's checkboxes) is `@repo/settings`, defaulting to all four
+  enabled. They weren't unified because `@repo/settings`'s default can't distinguish "never
+  configured" from "configured, all four" without a schema change (nullable/empty-default
+  `enabledHarnesses`) in `packages/settings` + `packages/sidecar-api`, plus reworking
+  `sidecar/walkthrough/harnesses.ts`'s `listHarnesses` (currently filters to *enabled* harnesses,
+  so it can't also serve as "all four, for the onboarding picker" once the default stops being
+  all-four). Until that lands, don't delete `use-enabled-harnesses.ts` — the settings page and the
+  onboarding gate are deliberately still two separate stores.
 - `#/*` → `src/*`, not `@/*`.
