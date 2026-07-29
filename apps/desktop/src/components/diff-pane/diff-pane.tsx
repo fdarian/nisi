@@ -33,6 +33,7 @@ import {
 } from "#/components/ui/empty";
 import { Skeleton } from "#/components/ui/skeleton";
 import type { SidecarQueryUtils } from "#/lib/backend-context";
+import type { CollapsedFileDiff } from "#/lib/build-collapsed-diff";
 import { buildCollapsedFileDiff } from "#/lib/build-collapsed-diff";
 import { buildFileDiff } from "#/lib/build-file-diff";
 import { hashItemVersion } from "#/lib/item-version";
@@ -119,6 +120,65 @@ type DiffPaneProps = {
 
 const SCROLL_RETRY_FRAME_LIMIT = 60;
 
+/** One file's last parsed `FileDiffMetadata`, alongside the key that produced it. */
+type CachedFileDiff = {
+	key: string;
+	fileDiff: FileDiffMetadata | undefined;
+};
+
+/**
+ * Parsing a file into `FileDiffMetadata` is the single most expensive thing
+ * the pane does — `buildFileDiff`'s non-truncated path runs a full Myers diff
+ * (`@pierre/diffs` → `createTwoFilesPatch`) over the file's before/after
+ * contents, and neither it nor `parsePatchFiles` caches anything. Called
+ * straight from the `items` memo that produces *every* file's item, that meant
+ * one file's review state (or any query refetch behind `fileContents`) re-parsed
+ * all of them: ticking Reviewed on a single file in a 221-file session measured
+ * ~3300 full-file parses across the memo recomputes that one toggle triggered.
+ *
+ * The key is exactly what decides the parse's output — `file.fingerprint`
+ * (a content hash of status/paths/patch, see `@repo/git`'s `computeFingerprint`)
+ * plus which parser tier the content lands in, or the collapse signature for a
+ * partially-collapsed patch. It's the same string handed to `@pierre/diffs` as
+ * the `cacheKey`, so this cache can't disagree with pierre's own memoization
+ * about when two renders are the same diff.
+ *
+ * That collapse-signature suffix is load-bearing, not cosmetic: pierre's worker
+ * pool and its `areDiffTargetsEqual`/`areFilesEqual` memoization
+ * (VirtualizedFileDiff.js, WorkerPoolManager.js) treat two `FileDiffMetadata`
+ * as identical whenever their `cacheKey`s match, full stop — it never compares
+ * the actual hunks. `file.fingerprint` alone identifies the *content* this patch
+ * was collapsed from, but not *which* ranges got collapsed — reviewing a file
+ * (or a walkthrough block finishing) changes `collapsed.patch`'s hunks without
+ * changing `file.fingerprint`. A key that only mirrored the content-only one
+ * would collide across two different collapse states of the same file, so pierre
+ * would serve the *previous* render's stale hunk layout — rows measured and
+ * positioned for the old collapse state, under `renderAnnotation`/line-number
+ * data for the new one. That mismatch is what made a file's content "jump out of
+ * alignment" right after marking it Reviewed.
+ */
+function resolveFileDiff(
+	cache: Map<string, CachedFileDiff>,
+	file: FileChange,
+	content: FileContent,
+	collapsed: CollapsedFileDiff | undefined,
+	collapseSignature: string,
+): FileDiffMetadata | undefined {
+	const key =
+		collapsed?.kind === "partial"
+			? `${file.fingerprint}:collapsed:${hashItemVersion(collapseSignature)}`
+			: `${file.fingerprint}:${content.truncated ? "patch" : "full"}`;
+	const cached = cache.get(file.path);
+	if (cached !== undefined && cached.key === key) return cached.fileDiff;
+
+	const fileDiff =
+		collapsed?.kind === "partial"
+			? parsePatchFiles(collapsed.patch, key)[0]?.files[0]
+			: buildFileDiff(file, content);
+	cache.set(file.path, { key, fileDiff });
+	return fileDiff;
+}
+
 export function DiffPane({
 	orpc,
 	sessionId,
@@ -131,6 +191,7 @@ export function DiffPane({
 	ref,
 }: DiffPaneProps): React.ReactElement {
 	const codeViewRef = useRef<CodeViewHandle<DiffAnnotationMetadata>>(null);
+	const fileDiffCache = useRef(new Map<string, CachedFileDiff>());
 	const [forcedPaths, setForcedPaths] = useState<ReadonlySet<string>>(
 		() => new Set(),
 	);
@@ -195,7 +256,13 @@ export function DiffPane({
 			const reviewStatus = reviewState.get(file.path) ?? "unreviewed";
 			const viewed = reviewStatus === "viewed";
 			nextMetadata.set(file.path, { file, viewed, reviewStatus });
-			const baseVersionInput = `${file.fingerprint}:${diffStyle}:${reviewStatus}:${selectedPath === file.path ? "selected" : "idle"}`;
+			// Deliberately not keyed on selection: nothing an item renders — its
+			// diff, its `renderCustomHeader`, its annotations, `onPostRender`'s
+			// one class — differs for the selected file, so folding `selectedPath`
+			// in here only invalidated two items per click and dragged the whole
+			// memo (and every file's parse below) along with it. Selection reaches
+			// the pane through `scrollToPath`, not through rendering.
+			const baseVersionInput = `${file.fingerprint}:${diffStyle}:${reviewStatus}`;
 
 			if (file.binary) {
 				nextItems.push({
@@ -317,30 +384,13 @@ export function DiffPane({
 				continue;
 			}
 
-			// The collapse-signature suffix is load-bearing, not cosmetic: @pierre/diffs'
-			// worker pool and its `areDiffTargetsEqual`/`areFilesEqual` memoization
-			// (VirtualizedFileDiff.js, WorkerPoolManager.js) treat two `FileDiffMetadata`
-			// as identical whenever their `cacheKey`s match, full stop — it never
-			// compares the actual hunks. `file.fingerprint` alone identifies the
-			// *content* this patch was collapsed from, but not *which* ranges got
-			// collapsed — reviewing a file (or a walkthrough block finishing) changes
-			// `collapsed.patch`'s hunks without changing `file.fingerprint`. A cache key
-			// that only mirrors `buildFileDiff`'s content-only key
-			// (`${file.fingerprint}:collapsed`) would collide across two different
-			// collapse states of the same file, so pierre serves the *previous* render's
-			// stale hunk layout — rows measured/positioned for the old collapse state,
-			// under `renderAnnotation`/line-number data for the new one. That mismatch is
-			// what made a file's content "jump out of alignment" right after marking it
-			// Reviewed. `collapseSignature` already captures exactly the ranges that
-			// decided this patch's shape, so folding it in (hashed, to keep the key short)
-			// makes every distinct collapse state get its own cache key.
-			const fileDiff: FileDiffMetadata | undefined =
-				collapsed?.kind === "partial"
-					? parsePatchFiles(
-							collapsed.patch,
-							`${file.fingerprint}:collapsed:${hashItemVersion(collapseSignature)}`,
-						)[0]?.files[0]
-					: buildFileDiff(file, content);
+			const fileDiff = resolveFileDiff(
+				fileDiffCache.current,
+				file,
+				content,
+				collapsed,
+				collapseSignature,
+			);
 			if (fileDiff === undefined) continue;
 
 			const annotations: DiffLineAnnotation<DiffAnnotationMetadata>[] = [];
@@ -379,13 +429,19 @@ export function DiffPane({
 			});
 		}
 
+		// Files that left the list (a new `diff.files` result, or "Hide reviewed")
+		// keep no parse alive — `nextMetadata` has an entry for every file this
+		// pass saw, so anything else is gone.
+		for (const path of fileDiffCache.current.keys()) {
+			if (!nextMetadata.has(path)) fileDiffCache.current.delete(path);
+		}
+
 		return { items: nextItems, itemMetadata: nextMetadata };
 	}, [
 		files,
 		fileContents,
 		reviewState,
 		diffStyle,
-		selectedPath,
 		forcedPaths,
 		expandedPaths,
 		expandedHiddenPaths,
