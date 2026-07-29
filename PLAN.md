@@ -103,7 +103,15 @@ The sidecar binds an **ephemeral port**, generates a **token**, deletes any stal
 
 Compiled-binary constraints that bite: use `bun:sqlite` + `drizzle-orm/bun-sqlite` (libsql's
 native addon can't be embedded), and embed migrations as text imports rather than reading a
-`drizzle/` folder at runtime.
+`drizzle/` folder at runtime. The same failure mode showed up a second time in a dependency:
+`@ai-sdk/harness-claude-code` read its bridge assets via `new URL(`./bridge/${name}`,
+import.meta.url)` + `node:fs` — a *dynamic* specifier, which `bun build --compile` doesn't detect
+as embeddable, while still rewriting `import.meta.url` to a virtual `/$bunfs/...` path that has
+nothing at it. Fixed with a `bun patch` (`patches/@ai-sdk%2Fharness-claude-code@1.0.47.patch`)
+converting the three reads to static `import ... with { type: "text" }`, which `bun build
+--compile` does inline as string literals. Only `claude-code` was exercised and patched; `codex`,
+`opencode`, and `pi` likely share the same bridge-loading pattern and would need the same fix the
+first time their bridge actually gets exercised through the compiled sidecar.
 
 ## Phases
 

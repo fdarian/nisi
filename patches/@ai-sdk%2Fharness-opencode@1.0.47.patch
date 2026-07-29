@@ -1,0 +1,55 @@
+diff --git a/dist/index.js b/dist/index.js
+index 6d1a2c48fbbb32cc2ca48b1862cee63105347418..bced9feb2e0a2ea673a9ba803562961476355288 100644
+--- a/dist/index.js
++++ b/dist/index.js
+@@ -3,6 +3,15 @@ import { randomBytes } from "crypto";
+ import { readFile } from "fs/promises";
+ import path from "path";
+ import { fileURLToPath } from "url";
++// nisi patch: same fix as @ai-sdk/harness-claude-code's patch — see
++// patches/@ai-sdk%2Fharness-claude-code@1.0.47.patch and PLAN.md's
++// "Compiled-binary constraints" note for why `readBridgeAsset`'s dynamic
++// `new URL(`./bridge/${name}`, import.meta.url)` reads break under
++// `bun build --compile`, and why static `with { type: "text" }` imports fix it.
++import bridgePackageJsonText from "./bridge/package.json" with { type: "text" };
++import bridgePnpmLockText from "./bridge/pnpm-lock.yaml" with { type: "text" };
++import bridgeIndexMjsText from "./bridge/index.mjs" with { type: "text" };
++import bridgeHostToolMcpMjsText from "./bridge/host-tool-mcp.mjs" with { type: "text" };
+ import {
+   commonTool,
+   HarnessCapabilityUnsupportedError,
+@@ -519,21 +528,20 @@ function resolveBridgePort(sandboxSession, override) {
+   });
+ }
+ async function readBridgeAsset(name) {
+-  const candidates = [
+-    new URL(`./bridge/${name}`, import.meta.url),
+-    new URL(`../bridge/${name}`, import.meta.url)
+-  ];
+-  let lastErr;
+-  for (const url of candidates) {
+-    try {
+-      return await readFile(fileURLToPath(url), "utf8");
+-    } catch (err) {
+-      const code = err.code;
+-      if (code !== "ENOENT") throw err;
+-      lastErr = err;
+-    }
++  // nisi patch: statically embedded (see the top-of-file imports) instead of
++  // read from disk at runtime — see the comment there for why.
++  switch (name) {
++    case "package.json":
++      return bridgePackageJsonText;
++    case "pnpm-lock.yaml":
++      return bridgePnpmLockText;
++    case "index.mjs":
++      return bridgeIndexMjsText;
++    case "host-tool-mcp.mjs":
++      return bridgeHostToolMcpMjsText;
++    default:
++      throw new Error(`bridge asset not found: ${name}`);
+   }
+-  throw lastErr ?? new Error(`bridge asset not found: ${name}`);
+ }
+ async function writeOpenCodeSkills({
+   sandbox,

@@ -1,0 +1,57 @@
+diff --git a/dist/index.js b/dist/index.js
+index 3f5b674744c1dec2b2d02b1ca60e8469644cbb91..7b8c38a5b94584a95aa56a739003fe0063a58c9f 100644
+--- a/dist/index.js
++++ b/dist/index.js
+@@ -2,6 +2,19 @@
+ import { randomBytes } from "crypto";
+ import { readFile } from "fs/promises";
+ import { fileURLToPath } from "url";
++// nisi patch: `readBridgeAsset` originally resolved these three files at
++// runtime via `new URL(`./bridge/${name}`, import.meta.url)`. Bun's compiler
++// only embeds assets referenced through a *static* specifier — a dynamic
++// template literal like that one is invisible to it, yet `import.meta.url`
++// still gets rewritten to a virtual `/$bunfs/...` path inside a
++// `bun build --compile` binary, so the computed path resolves to nothing on
++// real disk (`ENOENT: /$bunfs/bridge/package.json`). Static `with { type:
++// "text" }` imports, by contrast, Bun inlines as string literals at compile
++// time, so they survive being embedded in nisi's compiled sidecar. See
++// apps/desktop/AGENTS.md's "Gotchas" for the nisi-side note on this.
++import bridgePackageJsonText from "./bridge/package.json" with { type: "text" };
++import bridgePnpmLockText from "./bridge/pnpm-lock.yaml" with { type: "text" };
++import bridgeIndexMjsText from "./bridge/index.mjs" with { type: "text" };
+ import {
+   commonTool,
+   harnessV1DiagnosticFromBridgeFrame,
+@@ -691,21 +704,18 @@ async function writeClaudeCodeSkills({
+   });
+ }
+ async function readBridgeAsset(name) {
+-  const candidates = [
+-    new URL(`./bridge/${name}`, import.meta.url),
+-    new URL(`../bridge/${name}`, import.meta.url)
+-  ];
+-  let lastErr;
+-  for (const url of candidates) {
+-    try {
+-      return await readFile(fileURLToPath(url), "utf8");
+-    } catch (err) {
+-      const code = err.code;
+-      if (code !== "ENOENT") throw err;
+-      lastErr = err;
+-    }
++  // nisi patch: statically embedded (see the top-of-file imports) instead of
++  // read from disk at runtime — see the comment there for why.
++  switch (name) {
++    case "package.json":
++      return bridgePackageJsonText;
++    case "pnpm-lock.yaml":
++      return bridgePnpmLockText;
++    case "index.mjs":
++      return bridgeIndexMjsText;
++    default:
++      throw new Error(`bridge asset not found: ${name}`);
+   }
+-  throw lastErr ?? new Error(`bridge asset not found: ${name}`);
+ }
+ async function waitForBridgeHello({
+   ws,

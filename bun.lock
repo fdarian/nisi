@@ -202,6 +202,11 @@
       },
     },
   },
+  "patchedDependencies": {
+    "@ai-sdk/harness-claude-code@1.0.47": "patches/@ai-sdk%2Fharness-claude-code@1.0.47.patch",
+    "@ai-sdk/harness-codex@1.0.48": "patches/@ai-sdk%2Fharness-codex@1.0.48.patch",
+    "@ai-sdk/harness-opencode@1.0.47": "patches/@ai-sdk%2Fharness-opencode@1.0.47.patch",
+  },
   "packages": {
     "@ai-sdk/gateway": ["@ai-sdk/gateway@4.0.30", "", { "dependencies": { "@ai-sdk/provider": "4.0.4", "@ai-sdk/provider-utils": "5.0.14", "@vercel/oidc": "3.2.0" }, "peerDependencies": { "zod": "^3.25.76 || ^4.1.8" } }, "sha512-nhgR5U6N0wRg+32Mnd8YrOknWQhWfn3ZAKhEOEf6u3dWzhNxTAAPIB7nnz5gRf8Us8K45yIsTrk0OtH897z7Mw=="],
 
