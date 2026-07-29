@@ -1,0 +1,20 @@
+packages:
+  - "packages/*"
+  - "apps/*"
+allowBuilds:
+  '@google/genai': true
+  esbuild: true
+  msgpackr-extract: true
+  protobufjs: true
+enableGlobalVirtualStore: true
+packageExtensions:
+  bun-types:
+    dependencies:
+      undici-types: "*"
+  next-themes:
+    dependencies:
+      "@types/react": "*"
+patchedDependencies:
+  "@ai-sdk/harness-claude-code@1.0.47": patches/@ai-sdk%2Fharness-claude-code@1.0.47.patch
+  "@ai-sdk/harness-codex@1.0.48": patches/@ai-sdk%2Fharness-codex@1.0.48.patch
+  "@ai-sdk/harness-opencode@1.0.47": patches/@ai-sdk%2Fharness-opencode@1.0.47.patch
