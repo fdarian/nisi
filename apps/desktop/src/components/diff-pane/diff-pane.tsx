@@ -8,22 +8,15 @@ import type {
 	LineAnnotation,
 } from "@pierre/diffs";
 import { parsePatchFiles } from "@pierre/diffs";
-import {
-	CodeView,
-	type CodeViewHandle,
-	WorkerPoolContextProvider,
-} from "@pierre/diffs/react";
+import type { CodeViewHandle } from "@pierre/diffs/react";
 import { ChevronsUpDownIcon, FileIcon } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { DiffFileHeader } from "#/components/diff-pane/diff-file-header";
 import {
-	DIFF_VIEW_THEME,
-	DIFF_VIEWED_HOST_CLASS,
-	diffCodeViewLayout,
-	diffHighlighterOptions,
-	diffItemMetrics,
-	diffViewUnsafeCSS,
-} from "#/components/diff-pane/diff-view-theme";
+	buildDiffCodeViewOptions,
+	DiffCodeView,
+} from "#/components/diff-pane/diff-code-view";
+import { DiffFileHeader } from "#/components/diff-pane/diff-file-header";
+import { DIFF_VIEWED_HOST_CLASS } from "#/components/diff-pane/diff-view-theme";
 import {
 	Empty,
 	EmptyDescription,
@@ -337,35 +330,15 @@ export function DiffPane({
 		[handleForceLoad, handleExpandCollapsed],
 	);
 
-	const workerPoolOptions = useMemo(
-		() => ({
-			poolSize: Math.min(3, Math.max(1, navigator.hardwareConcurrency || 3)),
-			workerFactory: () =>
-				new Worker(new URL("@pierre/diffs/worker/worker.js", import.meta.url), {
-					type: "module",
-				}),
-		}),
-		[],
-	);
-
 	const codeViewOptions: CodeViewOptions<DiffAnnotationMetadata> = useMemo(
-		() => ({
-			diffIndicators: "bars",
-			diffStyle,
-			enableGutterUtility: false,
-			hunkSeparators: "line-info-basic",
-			itemMetrics: diffItemMetrics,
-			layout: diffCodeViewLayout,
-			onPostRender: (node, _instance, _phase, context) => {
-				const meta = itemMetadata.get(context.item.id);
-				node.classList.toggle(DIFF_VIEWED_HOST_CLASS, meta?.viewed === true);
-			},
-			stickyHeaders: true,
-			theme: DIFF_VIEW_THEME,
-			themeType: "system",
-			tokenizeMaxLength: 100_000,
-			unsafeCSS: diffViewUnsafeCSS,
-		}),
+		() =>
+			buildDiffCodeViewOptions({
+				diffStyle,
+				onPostRender: (node, _instance, _phase, context) => {
+					const meta = itemMetadata.get(context.item.id);
+					node.classList.toggle(DIFF_VIEWED_HOST_CLASS, meta?.viewed === true);
+				},
+			}),
 		[diffStyle, itemMetadata],
 	);
 
@@ -422,19 +395,14 @@ export function DiffPane({
 	}
 
 	return (
-		<WorkerPoolContextProvider
-			highlighterOptions={diffHighlighterOptions}
-			poolOptions={workerPoolOptions}
-		>
-			<CodeView
-				className="min-h-0 w-full flex-1 overflow-auto overscroll-contain px-3 py-3 [contain:strict]"
-				items={items}
-				options={codeViewOptions}
-				ref={codeViewRef}
-				renderAnnotation={renderAnnotation}
-				renderCustomHeader={renderCustomHeader}
-			/>
-		</WorkerPoolContextProvider>
+		<DiffCodeView
+			className="min-h-0 w-full flex-1 overflow-auto overscroll-contain px-3 py-3 [contain:strict]"
+			items={items}
+			options={codeViewOptions}
+			ref={codeViewRef}
+			renderAnnotation={renderAnnotation}
+			renderCustomHeader={renderCustomHeader}
+		/>
 	);
 }
 
