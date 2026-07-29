@@ -24,6 +24,7 @@ type FilesChangedViewProps = {
 	files: readonly FileChange[];
 	reviewState: ReadonlyMap<string, ReviewState>;
 	setViewed: (path: string, viewed: boolean) => void;
+	onNavigateToBlock: (blockId: string) => void;
 };
 
 export function FilesChangedView({
@@ -32,6 +33,7 @@ export function FilesChangedView({
 	files,
 	reviewState,
 	setViewed,
+	onNavigateToBlock,
 }: FilesChangedViewProps): React.ReactElement {
 	const [selectedPath, setSelectedPath] = useState<string | null>(null);
 	const [viewMode, setViewMode] = useSidebarViewMode(orpc);
@@ -110,6 +112,7 @@ export function FilesChangedView({
 				<DiffPane
 					diffStyle={diffStyle}
 					files={files}
+					onNavigateToBlock={onNavigateToBlock}
 					orpc={orpc}
 					reviewState={reviewState}
 					selectedPath={selectedPath}

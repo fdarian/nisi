@@ -9,7 +9,7 @@ import type {
 } from "@pierre/diffs";
 import { parsePatchFiles } from "@pierre/diffs";
 import type { CodeViewHandle } from "@pierre/diffs/react";
-import { ChevronsUpDownIcon, FileIcon } from "lucide-react";
+import { BookOpenIcon, ChevronsUpDownIcon, FileIcon } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
 	buildDiffCodeViewOptions,
@@ -27,7 +27,7 @@ import type { SidecarQueryUtils } from "#/lib/backend-context";
 import { buildCollapsedFileDiff } from "#/lib/build-collapsed-diff";
 import { buildFileDiff } from "#/lib/build-file-diff";
 import { hashItemVersion } from "#/lib/item-version";
-import type { FileChange, ReviewState } from "#/lib/pr-data";
+import type { FileChange, ReviewSource, ReviewState } from "#/lib/pr-data";
 import { useFileContents } from "#/lib/pr-data";
 import type { DiffStyleMode } from "#/lib/settings-data";
 import { cn } from "#/lib/utils";
@@ -36,8 +36,18 @@ type DiffAnnotationMetadata =
 	| { type: "binary" }
 	| { type: "error"; message: string }
 	| { type: "load-file"; path: string; stillTooLarge: boolean }
-	| { type: "reviewed-collapsed"; path: string; lineCount: number }
-	| { type: "fully-reviewed"; path: string; lineCount: number };
+	| {
+			type: "reviewed-collapsed";
+			path: string;
+			lineCount: number;
+			source: ReviewSource;
+	  }
+	| {
+			type: "fully-reviewed";
+			path: string;
+			lineCount: number;
+			source: ReviewSource | "mixed";
+	  };
 
 type DiffPaneProps = {
 	orpc: SidecarQueryUtils;
@@ -47,6 +57,8 @@ type DiffPaneProps = {
 	reviewState: ReadonlyMap<string, ReviewState>;
 	setViewed: (path: string, viewed: boolean) => void;
 	diffStyle: DiffStyleMode;
+	/** A "reviewed in `<block>`" marker's click target — switches to the Walkthrough tab with this block selected. */
+	onNavigateToBlock: (blockId: string) => void;
 };
 
 const SCROLL_RETRY_FRAME_LIMIT = 60;
@@ -59,6 +71,7 @@ export function DiffPane({
 	reviewState,
 	setViewed,
 	diffStyle,
+	onNavigateToBlock,
 }: DiffPaneProps): React.ReactElement {
 	const codeViewRef = useRef<CodeViewHandle<DiffAnnotationMetadata>>(null);
 	const [forcedPaths, setForcedPaths] = useState<ReadonlySet<string>>(
@@ -169,7 +182,7 @@ export function DiffPane({
 			const collapseSignature =
 				content.review === null
 					? "no-review"
-					: `${content.review.ranges.map((range) => `${range.startLine}-${range.endLine}-${range.status}`).join(",")}:${isExpanded ? "expanded" : "collapsed"}`;
+					: `${content.review.ranges.map((range) => `${range.startLine}-${range.endLine}-${range.status}-${reviewSourceKey(range.reviewedVia)}`).join(",")}:${isExpanded ? "expanded" : "collapsed"}`;
 			const version = hashItemVersion(
 				`${baseVersionInput}:${collapseSignature}`,
 			);
@@ -191,6 +204,7 @@ export function DiffPane({
 								type: "fully-reviewed",
 								path: file.path,
 								lineCount: collapsed.lineCount,
+								source: collapsed.source,
 							},
 						},
 					] satisfies LineAnnotation<DiffAnnotationMetadata>[],
@@ -227,6 +241,7 @@ export function DiffPane({
 							type: "reviewed-collapsed",
 							path: file.path,
 							lineCount: gap.lineCount,
+							source: gap.source,
 						},
 					});
 				}
@@ -289,19 +304,37 @@ export function DiffPane({
 				);
 			}
 			if (metadata.type === "fully-reviewed") {
+				const source = metadata.source === "mixed" ? null : metadata.source;
 				return (
 					<CollapsedMarker
-						description={`Fully reviewed — ${pluralizeLines(metadata.lineCount)} unchanged since your last review.`}
+						description={
+							source?.kind === "range"
+								? `${pluralizeLines(metadata.lineCount)} reviewed in "${source.blockLabel}".`
+								: `Fully reviewed — ${pluralizeLines(metadata.lineCount)} unchanged since your last review.`
+						}
+						navigateTo={
+							source?.kind === "range" ? { blockId: source.blockId } : undefined
+						}
 						onExpand={() => handleExpandCollapsed(metadata.path)}
+						onNavigate={onNavigateToBlock}
 						variant="file"
 					/>
 				);
 			}
 			if (metadata.type === "reviewed-collapsed") {
+				const source = metadata.source;
 				return (
 					<CollapsedMarker
-						description={`${pluralizeLines(metadata.lineCount)} already reviewed, unchanged since your last pass.`}
+						description={
+							source.kind === "range"
+								? `${pluralizeLines(metadata.lineCount)} reviewed in "${source.blockLabel}".`
+								: `${pluralizeLines(metadata.lineCount)} already reviewed, unchanged since your last pass.`
+						}
+						navigateTo={
+							source.kind === "range" ? { blockId: source.blockId } : undefined
+						}
 						onExpand={() => handleExpandCollapsed(metadata.path)}
+						onNavigate={onNavigateToBlock}
 						variant="inline"
 					/>
 				);
@@ -327,7 +360,7 @@ export function DiffPane({
 				</div>
 			);
 		},
-		[handleForceLoad, handleExpandCollapsed],
+		[handleForceLoad, handleExpandCollapsed, onNavigateToBlock],
 	);
 
 	const codeViewOptions: CodeViewOptions<DiffAnnotationMetadata> = useMemo(
@@ -410,27 +443,72 @@ function pluralizeLines(count: number): string {
 	return `${count} ${count === 1 ? "line" : "lines"}`;
 }
 
+/** Serializes a `ReviewRange.reviewedVia` for use in a cache-invalidation-style version signature — same idea as `hashItemVersion`'s inputs, just scoped to one range's attribution. */
+function reviewSourceKey(source: ReviewSource | null): string {
+	if (source === null) return "none";
+	return source.kind === "file" ? "file" : `range:${source.blockId}`;
+}
+
 /**
  * The clickable "reviewed, collapsed" marker `renderAnnotation` swaps in for
  * a run of lines untouched since the file's last review snapshot — this is
  * the whole feature: reviewing a hunk should mean not seeing it again unless
  * it actually changes. `variant="file"` is the whole-file collapse (no diff
  * left to render at all); `variant="inline"` sits between surfaced hunks.
+ *
+ * A run attributed to a walkthrough block (`navigateTo` set) makes the
+ * marker's primary click jump to that block in the Walkthrough tab instead
+ * of expanding in place — the code is already visible in the reference pane
+ * there, so "go see it" is the more useful default. A small trailing button
+ * still offers the plain expand-in-place action.
  */
 function CollapsedMarker({
 	description,
+	navigateTo,
 	onExpand,
+	onNavigate,
 	variant,
 }: {
 	description: string;
+	navigateTo: { blockId: string } | undefined;
 	onExpand: () => void;
+	onNavigate: (blockId: string) => void;
 	variant: "file" | "inline";
 }): React.ReactElement {
+	const rowClassName = cn(
+		"flex w-full items-center gap-2 text-muted-foreground text-xs",
+		variant === "file" ? "justify-center px-3 py-6" : "px-3 py-1.5",
+	);
+
+	if (navigateTo !== undefined) {
+		return (
+			<div className={rowClassName}>
+				<button
+					className="flex min-w-0 flex-1 items-center gap-2 text-left hover:text-foreground"
+					onClick={() => onNavigate(navigateTo.blockId)}
+					type="button"
+				>
+					<BookOpenIcon className="size-3.5 shrink-0" />
+					<span className="truncate">{description}</span>
+				</button>
+				<button
+					aria-label="Show inline instead"
+					className="shrink-0 rounded p-1 hover:bg-accent hover:text-foreground"
+					onClick={onExpand}
+					title="Show inline instead"
+					type="button"
+				>
+					<ChevronsUpDownIcon className="size-3.5" />
+				</button>
+			</div>
+		);
+	}
+
 	return (
 		<button
 			className={cn(
-				"flex w-full items-center gap-2 text-left text-muted-foreground text-xs hover:bg-accent hover:text-foreground",
-				variant === "file" ? "justify-center px-3 py-6" : "px-3 py-1.5",
+				rowClassName,
+				"text-left hover:bg-accent hover:text-foreground",
 			)}
 			onClick={onExpand}
 			type="button"

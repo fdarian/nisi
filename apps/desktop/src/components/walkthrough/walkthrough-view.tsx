@@ -1,6 +1,5 @@
 "use client";
 
-import { useState } from "react";
 import { Empty, EmptyMedia, EmptyTitle } from "#/components/ui/empty";
 import { Spinner } from "#/components/ui/spinner";
 import { GeneratePanel } from "#/components/walkthrough/generate-panel";
@@ -19,6 +18,13 @@ type WalkthroughViewProps = {
 	orpc: SidecarQueryUtils;
 	session: Session;
 	files: readonly FileChange[];
+	/**
+	 * Lifted to `PrView` rather than local state — a "reviewed in `<block>`"
+	 * marker clicked from the Files Changed tab needs to select a block here
+	 * *and* switch tabs, and `PrView` owns the tab.
+	 */
+	selectedBlockId: string | null;
+	onSelectBlock: (blockId: string) => void;
 };
 
 /**
@@ -33,11 +39,12 @@ export function WalkthroughView({
 	orpc,
 	session,
 	files,
+	selectedBlockId,
+	onSelectBlock,
 }: WalkthroughViewProps): React.ReactElement {
 	const { walkthrough, isLoading } = useWalkthrough(orpc, session.id);
 	const generation = useWalkthroughGeneration(orpc, session.id);
 	const drift = useWalkthroughDrift(walkthrough, files);
-	const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);
 
 	if (isLoading) {
 		return (
@@ -89,7 +96,7 @@ export function WalkthroughView({
 				<div className="flex min-h-0 flex-1 flex-col border-r">
 					<NarrativePane
 						knownBlockIds={knownBlockIds}
-						onSelectBlock={setSelectedBlockId}
+						onSelectBlock={onSelectBlock}
 						outdatedBlockIds={drift.outdatedBlockIds}
 						sections={walkthrough.walkthrough.sections}
 						selectedBlockId={selectedBlockId}

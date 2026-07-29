@@ -1,7 +1,7 @@
 "use client";
 
 import { AlertTriangleIcon } from "lucide-react";
-import { useMemo } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { FilesChangedView } from "#/components/pr/files-changed-view";
 import { PrHeader } from "#/components/pr/pr-header";
 import {
@@ -39,6 +39,17 @@ export function PrView({
 	const setViewed = useSetFileViewed(orpc, session.id);
 	useLiveFileChanges(orpc, session.id);
 
+	// Lifted above both tabs' content — a "reviewed in `<block>`" marker
+	// clicked from Files Changed needs to both select a block in the
+	// Walkthrough tab and switch to it, and `Tabs` here is the one thing both
+	// live under.
+	const [activeTab, setActiveTab] = useState("files");
+	const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);
+	const handleNavigateToBlock = useCallback((blockId: string) => {
+		setSelectedBlockId(blockId);
+		setActiveTab("walkthrough");
+	}, []);
+
 	const stat = useMemo(
 		() =>
 			files.reduce(
@@ -59,7 +70,11 @@ export function PrView({
 				repoRoot={session.repoRoot}
 				stat={stat}
 			/>
-			<Tabs className="flex min-h-0 flex-1 flex-col gap-0" defaultValue="files">
+			<Tabs
+				className="flex min-h-0 flex-1 flex-col gap-0"
+				onValueChange={(value) => setActiveTab(value as string)}
+				value={activeTab}
+			>
 				<TabsList className="mx-4 mt-2 self-start" variant="underline">
 					<TabsTrigger value="files">Files Changed</TabsTrigger>
 					<TabsTrigger value="walkthrough">Walkthrough</TabsTrigger>
@@ -75,6 +90,7 @@ export function PrView({
 					) : (
 						<FilesChangedView
 							files={files}
+							onNavigateToBlock={handleNavigateToBlock}
 							orpc={orpc}
 							reviewState={reviewState}
 							session={session}
@@ -83,7 +99,13 @@ export function PrView({
 					)}
 				</TabsContent>
 				<TabsContent className="flex min-h-0 flex-1" value="walkthrough">
-					<WalkthroughView files={files} orpc={orpc} session={session} />
+					<WalkthroughView
+						files={files}
+						onSelectBlock={setSelectedBlockId}
+						orpc={orpc}
+						selectedBlockId={selectedBlockId}
+						session={session}
+					/>
 				</TabsContent>
 			</Tabs>
 		</div>
