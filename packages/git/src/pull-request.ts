@@ -47,15 +47,27 @@ export type ReviewTarget = {
  * branch (when there is one). `gh pr view` exiting non-zero is the expected
  * "no PR for this branch" case — detached HEAD included — so it degrades to
  * `pr: null` rather than failing the whole resolution.
+ *
+ * The two `gh` calls are independent network round trips to GitHub's API —
+ * `pr view` resolves its PR from the checked-out branch itself, not from
+ * `repo view`'s output — so they run concurrently rather than paying their
+ * latency twice sequentially.
  */
 export const resolveReviewTarget = (repoRoot: string) =>
 	Effect.gen(function* () {
-		const repoRaw = yield* gh(repoRoot, [
-			"repo",
-			"view",
-			"--json",
-			"owner,name,defaultBranchRef",
-		]);
+		const [repoRaw, prResult] = yield* Effect.all(
+			[
+				gh(repoRoot, ["repo", "view", "--json", "owner,name,defaultBranchRef"]),
+				ghResult(repoRoot, [
+					"pr",
+					"view",
+					"--json",
+					"number,title,baseRefName,headRefName",
+				]),
+			],
+			{ concurrency: "unbounded" },
+		);
+
 		const repoInfo = yield* decodeRepoView("gh repo view", repoRaw);
 		const owner = repoInfo.owner.login;
 		const repo = repoInfo.name;
@@ -65,12 +77,6 @@ export const resolveReviewTarget = (repoRoot: string) =>
 		}
 		const defaultBranch = repoInfo.defaultBranchRef.name;
 
-		const prResult = yield* ghResult(repoRoot, [
-			"pr",
-			"view",
-			"--json",
-			"number,title,baseRefName,headRefName",
-		]);
 		const pr: PullRequestRef | null =
 			prResult.exitCode === 0
 				? yield* decodePrView("gh pr view", prResult.stdout).pipe(
