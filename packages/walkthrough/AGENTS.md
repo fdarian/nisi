@@ -75,5 +75,16 @@ See `PLAN.md` (root), Phase 3, for the contract this feeds; consumed by the side
 - `Schema.decodeUnknownResult` returns an `effect/Result`, not an `Either` or a thrown value —
   match it with `Result.isSuccess`/`Result.match`, and read the message off
   `SchemaError.message` (already formatted, multi-line, human-readable).
-- AI SDK's `tool()` wants a Standard Schema; `Schema.toStandardSchemaV1(EffectSchema)` is the
-  bridge, same as `@repo/sidecar-api`'s `events.ts` already does for `eventIterator`.
+- **`tool()`'s `inputSchema` is `jsonSchema(...)` from `ai`, not a bare `Schema.toStandardSchemaV1(EffectSchema)`.**
+  `Schema.toStandardSchemaV1`'s output has no `~standard.jsonSchema` extension, and AI SDK's
+  `asSchema()` only derives a JSON Schema from a bare Standard Schema for the `zod` vendor — every
+  other vendor needs that extension or gets treated as schema-less. Adapters that must advertise a
+  tool's shape to an *external* process (Claude Code, OpenCode — both drive the model through MCP)
+  silently got an empty schema this way; confirmed live, the model called `write` with no arguments
+  at all, having never seen `content` was a parameter. Codex's adapter doesn't register tools over
+  MCP, so it worked either way — don't let that fool you into thinking the bare bridge is sufficient.
+  `tools.ts`'s `toToolInputSchema` builds the real JSON Schema via the same
+  `Schema.toJsonSchemaDocument` technique `schema.ts` uses for the system prompt, and wires the
+  Standard Schema's own decoder in as `jsonSchema()`'s `validate`. `@repo/sidecar-api`'s `events.ts`
+  still uses the bare `Schema.toStandardSchemaV1` bridge correctly — `eventIterator` only needs
+  runtime validation, never a JSON Schema to hand to an external process.

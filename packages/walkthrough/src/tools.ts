@@ -1,5 +1,6 @@
-import { tool } from "ai";
-import { Schema } from "effect";
+import type { JSONSchema7 } from "@ai-sdk/provider";
+import { jsonSchema, tool } from "ai";
+import { Result, Schema } from "effect";
 import {
 	applyEdit,
 	describeEditFailure,
@@ -28,6 +29,45 @@ const EditInput = Schema.Struct({
 });
 
 /**
+ * Bridges an Effect `Schema` to the AI SDK's own `Schema` wrapper (a real
+ * JSON Schema document plus a validate function) instead of going through
+ * `Schema.toStandardSchemaV1` alone. AI SDK's `asSchema()` only derives a
+ * JSON Schema from a bare Standard Schema V1 for the `zod` vendor; every
+ * other vendor (Effect's included) needs the schema's own optional
+ * `~standard.jsonSchema` extension, which Effect doesn't implement. Bridge
+ * adapters that must advertise a tool's shape to an external process over
+ * MCP (Claude Code, OpenCode) fell back to an empty schema without this —
+ * confirmed live: the model called `write` with no arguments at all,
+ * because it never saw `content` was a thing to pass. Codex's adapter
+ * doesn't hit this path (no external MCP registration), which is why it
+ * worked with the bare standard schema alone.
+ */
+const toToolInputSchema = <S extends Schema.ConstraintDecoder<unknown>>(
+	effectSchema: S,
+) => {
+	const document = Schema.toJsonSchemaDocument(effectSchema);
+	const flattened: JSONSchema7 = (
+		Object.keys(document.definitions).length === 0
+			? document.schema
+			: { ...document.schema, $defs: document.definitions }
+	) as JSONSchema7;
+	const decode = Schema.decodeUnknownResult(effectSchema);
+	return jsonSchema<Schema.Schema.Type<S>>(flattened, {
+		validate: (value) =>
+			Result.match(decode(value), {
+				onSuccess: (decoded) => ({
+					success: true as const,
+					value: decoded as Schema.Schema.Type<S>,
+				}),
+				onFailure: (error) => ({
+					success: false as const,
+					error: new Error(error.message),
+				}),
+			}),
+	});
+};
+
+/**
  * The agent's output tools, bound to one buffer. Deliberately shaped like
  * Claude Code's own Write/Edit tools minus the file path — there's exactly
  * one walkthrough per turn, so there's nothing to path into, and the model
@@ -37,7 +77,7 @@ export const createWalkthroughTools = (buffer: WalkthroughBuffer) => ({
 	write: tool({
 		description:
 			"Write the complete walkthrough document, replacing any existing content. Prefer `edit` for small revisions once a draft exists.",
-		inputSchema: Schema.toStandardSchemaV1(WriteInput),
+		inputSchema: toToolInputSchema(WriteInput),
 		execute: async (input: Schema.Schema.Type<typeof WriteInput>) => {
 			buffer.content = input.content;
 			return "Wrote the walkthrough buffer.";
@@ -46,7 +86,7 @@ export const createWalkthroughTools = (buffer: WalkthroughBuffer) => ({
 	edit: tool({
 		description:
 			"Replace one exact string with another in the walkthrough buffer — the same semantics as your own file-editing tool, applied to this one document instead of a file. Use this for targeted revisions instead of rewriting the whole document with `write`.",
-		inputSchema: Schema.toStandardSchemaV1(EditInput),
+		inputSchema: toToolInputSchema(EditInput),
 		execute: async (input: Schema.Schema.Type<typeof EditInput>) => {
 			const outcome = applyEdit(
 				buffer.content,

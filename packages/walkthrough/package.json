@@ -16,6 +16,8 @@
 		"db:studio": "bun -b drizzle-kit studio"
 	},
 	"dependencies": {
+		"@ai-sdk/provider": "4.0.4",
+		"@ai-sdk/provider-utils": "5.0.14",
 		"@repo/git": "workspace:*",
 		"ai": "7.0.40",
 		"drizzle-orm": "^0.45.2",
