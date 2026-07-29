@@ -39,9 +39,27 @@ type DiffFileHeaderProps = {
  * React, slotted into the `<diffs-container>` custom element that
  * `diff-pane.tsx` styles as a card (see its `[&_diffs-container]` classes).
  * This is that card's header row, so it carries its own `bg-card`/`border-b`
- * rather than staying transparent — the diff body below shares `--code`,
- * which resolves to the same tone as `--card` in both themes (see
- * `index.css`), so the two read as one continuous surface split by the rule.
+ * rather than staying transparent — the diff body below intentionally uses a
+ * *different* tone (`--background`, matching the surrounding panel rather
+ * than `--card` — see `diff-view-theme.ts`'s `--diffs-light-bg`/
+ * `--diffs-dark-bg`), so the border here is the header's visible seam
+ * against the body, not a continuation of the same surface.
+ *
+ * `h-11` (44px) is load-bearing, not a style preference — it must equal
+ * `diffItemMetrics.diffHeaderHeight` (`diff-view-theme.ts`). `stickyHeaders`
+ * never measures this header's real DOM height; it trusts that config number
+ * for the sticky container's own CSS offset and for sizing its virtualized
+ * render buffer (`@pierre/diffs`' `CodeView.js` — the sticky wrapper's own
+ * `bottom` offset is `itemMetrics.diffHeaderHeight`, literally, not a
+ * measurement). Letting this row's real height drift from 44px — e.g. content
+ * wrapping, or the "Modified after review" badge making some files' headers
+ * taller than others' — feeds pierre a wrong offset: the sticky header stops
+ * covering content a few pixels early or late (rows visible through/behind
+ * it), and the buffer window sizes itself off the same wrong number (a
+ * scroll stutter that stalls a frame then jumps, worse the more scrolling
+ * this file needs). `items-center` plus `truncate` on the path spans below
+ * keep this a fixed one-line row regardless of path length, so 44px is safe
+ * to hard-code rather than measure.
  */
 export function DiffFileHeader({
 	file,
@@ -52,7 +70,7 @@ export function DiffFileHeader({
 	const { dirname, basename } = splitPath(file.path);
 
 	return (
-		<div className="flex min-w-0 flex-1 items-center gap-3 border-b bg-card px-3 py-2">
+		<div className="flex h-11 min-w-0 flex-1 items-center gap-3 border-b bg-card px-3">
 			<FileIcon className="size-3.5 shrink-0 text-muted-foreground" />
 			<span className="flex min-w-0 flex-1 items-baseline gap-1.5 truncate font-mono text-xs">
 				{dirname && (

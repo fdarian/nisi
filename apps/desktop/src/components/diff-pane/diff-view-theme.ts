@@ -59,6 +59,26 @@ export const diffViewUnsafeCSS = `
 	}
 
 	/**
+	 * The sticky file header (\`stickyHeaders: true\`, see diff-code-view.tsx)
+	 * ships an opaque background already (\`[data-diffs-header][data-sticky] {
+	 * z-index: 1; background-color: var(--diffs-bg); position: sticky; top: 0
+	 * }\` — verified in @pierre/diffs' style.js), but its z-index (1) is lower
+	 * than several row-level elements that scroll underneath it — notably
+	 * \`[data-gutter] { z-index: 3 }\`, the line-number column. Since z-index
+	 * only orders paint within the *same* stacking context and both live
+	 * directly under the shadow root, that inversion lets a scrolled row's
+	 * gutter paint on top of the sticky header instead of being covered by
+	 * it: the header goes translucent-looking and the first covered line's
+	 * number/content pokes through. Bumped past every z-index @pierre/diffs'
+	 * own stylesheet uses (checked style.js — the highest is 4, a merge
+	 * -conflict resolution handle irrelevant to this pane) so the header
+	 * reliably paints above any row content, not just the gutter.
+	 */
+	[data-diffs-header][data-sticky] {
+		z-index: 5;
+	}
+
+	/**
 	 * Hunk-separator pill override — @pierre/diffs has no layout option for
 	 * this (checked: hunkSeparators, collapsedContextThreshold,
 	 * expansionLineCount, the render* props — none of them touch the
