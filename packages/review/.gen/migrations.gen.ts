@@ -3,6 +3,7 @@
 
 import m0000 from "../drizzle/0000_strange_thor_girl.sql" with { type: "text" };
 import m0001 from "../drizzle/0001_square_nova.sql" with { type: "text" };
+import m0002 from "../drizzle/0002_sloppy_warbound.sql" with { type: "text" };
 import journal from "../drizzle/meta/_journal.json" with { type: "json" };
 
 export default {
@@ -12,5 +13,6 @@ export default {
 	files: {
 		"0000_strange_thor_girl": m0000,
 		"0001_square_nova": m0001,
+		"0002_sloppy_warbound": m0002,
 	} as Record<string, string>,
 };
