@@ -3,9 +3,10 @@ import { Schema } from "effect";
 
 /**
  * The four adapters `@repo/harness-local` can drive — see PLAN.md, Phase 3,
- * "Running the harness locally." Availability can't be detected (no
- * `isAvailable` API on any adapter), so `harnesses` always reports all four
- * and lets a real failure surface at `generate` time instead.
+ * "Running the harness locally." `harnesses` always reports all four
+ * regardless of whether each is currently `available` (see `HarnessInfo`) —
+ * the onboarding picker and the settings page both need every harness as a
+ * row, not a filtered list.
  */
 export const HarnessId = Schema.Literals([
 	"claude-code",
@@ -26,23 +27,44 @@ export type HarnessModel = Schema.Schema.Type<typeof HarnessModel>;
  * Provenance of `HarnessInfo.models` relative to `model-discovery.ts`'s
  * cache: `"fresh"` — discovered (or cache-hit within the TTL) this call;
  * `"stale"` — the live attempt failed but a previous successful discovery is
- * being reused; `"unavailable"` — discovery has never once succeeded, so
- * `models` is empty. The harness itself stays selectable and `enabled`
- * regardless of this value — it only ever describes `models`, never gates
- * the checkbox.
+ * being reused; `"unavailable"` — either discovery has never once succeeded,
+ * or the harness's `available` is `false` (its CLI isn't present, so
+ * discovery isn't even attempted — see `HarnessInfo`'s doc for why a missing
+ * binary is never reported `"stale"`). The harness itself stays selectable
+ * and `enabled` regardless of this value — it only ever describes `models`,
+ * never gates the checkbox on its own (`available` does that — see below).
  */
 export const ModelsStatus = Schema.Literals(["fresh", "stale", "unavailable"]);
 export type ModelsStatus = Schema.Schema.Type<typeof ModelsStatus>;
 
 /**
- * `enabled` reflects `@repo/settings`'s `enabledHarnesses` (unset counts as
- * every harness enabled — see that package's `Settings.enabledHarnesses`
- * comment), not availability. All four entries are always present — the
- * onboarding picker needs to render all four as checkboxes — but `models` is
- * only discovered live when a harness is enabled, since discovery is real
- * I/O (a subprocess per harness); a disabled harness gets an empty `models`
- * list and `modelsStatus: "unavailable"` rather than paying for discovery
- * nobody will use yet.
+ * `available` and `enabled` are independent and both always present, one per
+ * harness:
+ * - **`available`** — is the harness's CLI actually present on this machine
+ *   right now? A live, cheap filesystem check via `@repo/bin-resolver`
+ *   (`apps/desktop/sidecar/walkthrough/availability.ts`), never cached
+ *   itself (unlike `models`, which is real subprocess I/O) — so every
+ *   `harnesses()` call reflects the current install state with no
+ *   staleness of its own. Pi has no CLI (a bundled library dependency, not
+ *   a subprocess) and is always `available: true`. `binaryPath` is the
+ *   resolved absolute path when found, so the UI can show *which* binary
+ *   was picked; `null` when unavailable (or for Pi, where there's no single
+ *   binary to name).
+ * - **`enabled`** — has the user chosen to use it? Reflects `@repo/settings`'s
+ *   `enabledHarnesses` (unset counts as every harness enabled — see that
+ *   package's `Settings.enabledHarnesses` comment). A user declaration, not
+ *   a probe — independent of `available`, so a harness can be enabled from a
+ *   previous machine state but currently unavailable, or available but not
+ *   yet enabled.
+ *
+ * All four entries are always present — the onboarding picker and the
+ * settings page both need every harness as a row, checkbox included, even
+ * an unavailable one (so the user can see it's an option they could
+ * install). `models` is only discovered live when a harness is both
+ * `enabled` *and* `available` — no point paying for discovery's subprocess
+ * on a harness nobody's turned on, or one whose CLI isn't even there to ask.
+ * Anything short of that gets an empty `models` list and
+ * `modelsStatus: "unavailable"`.
  */
 export const HarnessInfo = Schema.Struct({
 	id: HarnessId,
@@ -50,6 +72,8 @@ export const HarnessInfo = Schema.Struct({
 	models: Schema.Array(HarnessModel),
 	enabled: Schema.Boolean,
 	modelsStatus: ModelsStatus,
+	available: Schema.Boolean,
+	binaryPath: Schema.NullOr(Schema.String),
 });
 export type HarnessInfo = Schema.Schema.Type<typeof HarnessInfo>;
 
@@ -154,8 +178,21 @@ export const ActiveGeneration = Schema.Struct({
 export type ActiveGeneration = Schema.Schema.Type<typeof ActiveGeneration>;
 
 export const walkthroughContract = {
-	/** All four adapters, each flagged `enabled` — never errors, since availability isn't knowable up front. */
+	/**
+	 * All four adapters, each flagged `enabled` and `available` — never
+	 * errors. Serves cached model discovery (see `HarnessInfo`'s doc) and a
+	 * live `available` check on every call.
+	 */
 	harnesses: oc.output(Schema.Array(HarnessInfo)),
+	/**
+	 * Same shape and behavior as `harnesses`, except it bypasses
+	 * `model-discovery.ts`'s cache — every enabled+available harness's model
+	 * list is re-fetched live rather than served from the TTL cache. For an
+	 * explicit user-initiated refresh (a refresh icon in the UI), not for
+	 * routine reads: `available` is already live on every `harnesses()` call
+	 * on its own, so this only buys anything for `models`/`modelsStatus`.
+	 */
+	refreshHarnesses: oc.output(Schema.Array(HarnessInfo)),
 	/** `null` when the session has no generated walkthrough yet — not an error. */
 	get: oc
 		.input(Schema.Struct({ sessionId: Schema.String }))

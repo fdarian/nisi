@@ -38,3 +38,10 @@ contract", for the shapes these were specified against.
   blockLabel}`, attributing each surviving range to the claim currently covering it so Files Changed
   can render a "reviewed in `<block>`" marker instead of a bare "reviewed" one. `FileContentReview` is
   now populated whenever a file has *any* active claim, not only once it's been whole-file-ticked.
+- `HarnessInfo` gained `available`/`binaryPath` (a live `@repo/bin-resolver` check — see the type's own
+  doc for why this is independent of `enabled`), and `walkthrough.harnesses` gained a sibling
+  `walkthrough.refreshHarnesses` — same output shape, but bypasses `model-discovery.ts`'s cache. A
+  separate procedure rather than a `force` input field (unlike `diff.file`'s, above) so the UI can
+  keep one stable, shared query-cache entry for `harnesses` while `refreshHarnesses` is called
+  imperatively and its result written back into that same cache — see `apps/desktop/src/lib/walkthrough-data.ts`'s
+  `useHarnesses`.
