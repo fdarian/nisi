@@ -1,7 +1,7 @@
 import type { BadgeProps } from "#/components/ui/badge";
 import { Badge } from "#/components/ui/badge";
 import { Checkbox } from "#/components/ui/checkbox";
-import type { FileChange, FileStatus } from "#/lib/pr-data";
+import type { FileChange, FileStatus, ReviewState } from "#/lib/pr-data";
 import { splitPath } from "#/lib/tree-paths";
 
 const STATUS_LABEL: Record<FileStatus, string> = {
@@ -20,6 +20,7 @@ const STATUS_VARIANT: Record<FileStatus, BadgeProps["variant"]> = {
 
 type DiffFileHeaderProps = {
 	file: FileChange;
+	reviewStatus: ReviewState;
 	viewed: boolean;
 	onToggleViewed: () => void;
 };
@@ -27,6 +28,7 @@ type DiffFileHeaderProps = {
 /** The `renderCustomHeader` content for one file's diff card — plain light-DOM React, not shadow DOM. */
 export function DiffFileHeader({
 	file,
+	reviewStatus,
 	viewed,
 	onToggleViewed,
 }: DiffFileHeaderProps): React.ReactElement {
@@ -48,6 +50,11 @@ export function DiffFileHeader({
 			<Badge size="sm" variant={STATUS_VARIANT[file.status]}>
 				{STATUS_LABEL[file.status]}
 			</Badge>
+			{reviewStatus === "changed-after-review" && (
+				<Badge size="sm" variant="warning">
+					Modified after review
+				</Badge>
+			)}
 			<span className="shrink-0 font-mono text-xs tabular-nums">
 				<span className="text-success-foreground">+{file.additions}</span>{" "}
 				<span className="text-destructive-foreground">-{file.deletions}</span>

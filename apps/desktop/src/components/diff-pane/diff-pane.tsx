@@ -166,13 +166,13 @@ export function DiffPane({
 		const nextItems: Array<CodeViewItem<DiffAnnotationMetadata>> = [];
 		const nextMetadata = new Map<
 			string,
-			{ file: FileChange; viewed: boolean }
+			{ file: FileChange; viewed: boolean; reviewStatus: ReviewState }
 		>();
 
 		for (const file of files) {
 			const reviewStatus = reviewState.get(file.path) ?? "unreviewed";
 			const viewed = reviewStatus === "viewed";
-			nextMetadata.set(file.path, { file, viewed });
+			nextMetadata.set(file.path, { file, viewed, reviewStatus });
 			const baseVersionInput = `${file.fingerprint}:${diffStyle}:${reviewStatus}:${selectedPath === file.path ? "selected" : "idle"}`;
 
 			if (file.binary) {
@@ -358,6 +358,7 @@ export function DiffPane({
 				<DiffFileHeader
 					file={meta.file}
 					onToggleViewed={() => setViewed(meta.file.path, !meta.viewed)}
+					reviewStatus={meta.reviewStatus}
 					viewed={meta.viewed}
 				/>
 			);
