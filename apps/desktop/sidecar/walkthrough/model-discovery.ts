@@ -252,22 +252,28 @@ export const discoverClaudeCodeModels = (): Effect.Effect<
 			cause instanceof Error ? cause : new Error(String(cause)),
 	}).pipe(Effect.timeout(DISCOVERY_TIMEOUT));
 
-/** Fallback when Pi's own model registry can't be read (no auth configured yet, config dir unreadable, …) — mirrors the other three harnesses' static lists rather than leaving Pi's dropdown empty. */
-const PI_FALLBACK_MODELS: ReadonlyArray<HarnessModel> = [
-	{ id: "anthropic/claude-sonnet-4-5", label: "Claude Sonnet 4.5" },
-	{ id: "openai/gpt-5.1", label: "GPT-5.1" },
-];
-
 /**
  * Pi is the one harness with a real model-discovery API
  * (`@earendil-works/pi-coding-agent`'s `ModelRuntime`/`ModelRegistry`) — read
  * live instead of hand-curating. Prefers models Pi considers *available*
  * (configured auth); falls back to every model Pi knows about if none are
- * configured yet, and to `PI_FALLBACK_MODELS` if the registry itself comes
- * back empty (fresh install, no `models.json` yet) — a genuine I/O failure
- * (unreadable config, broken install) is left to fail so the cache above can
- * apply its own stale/unavailable fallback, same as the other three
- * harnesses.
+ * configured yet. An empty registry, like a genuine I/O failure (unreadable
+ * config, broken install), is left to fail so the cache above can apply its
+ * own stale/unavailable fallback, same as the other three harnesses — a
+ * hardcoded "just in case" list can't be honest here, since whether a model
+ * works depends entirely on which providers *this* user has logged into.
+ *
+ * `ModelRuntime.create()` takes Pi's own default paths, which resolve under
+ * `getAgentDir()` — the same directory `harnesses.ts` hands the harness
+ * adapter, so a model listed here is one the adapter can actually
+ * authenticate. Don't let the two drift apart.
+ *
+ * `label` carries the provider too, not just `model.name`: Pi's names collide
+ * across providers (several "GPT-5.4"s, several "DeepSeek V4 Flash"es), so
+ * the bare name left the picker showing indistinguishable duplicates. The
+ * `provider/…` shape matches what OpenCode's ids already look like in the
+ * same list, with Pi's human-readable name kept as the second half since it
+ * has one and OpenCode doesn't.
  */
 export const discoverPiModels = (): Effect.Effect<
 	ReadonlyArray<HarnessModel>,
@@ -283,11 +289,15 @@ export const discoverPiModels = (): Effect.Effect<
 			await registry.refresh();
 			const available = registry.getAvailable();
 			const models = available.length > 0 ? available : registry.getAll();
-			if (models.length === 0) return PI_FALLBACK_MODELS;
+			if (models.length === 0) {
+				throw new Error(
+					"Pi's model registry is empty — run `pi` and log into a provider first.",
+				);
+			}
 			return models.map(
 				(model): HarnessModel => ({
 					id: `${model.provider}/${model.id}`,
-					label: model.name,
+					label: `${model.provider}/${model.name}`,
 				}),
 			);
 		},
