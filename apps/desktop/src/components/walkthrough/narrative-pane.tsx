@@ -46,7 +46,18 @@ export function NarrativePane({
 							{section.title}
 						</h2>
 						<div className="flex flex-col gap-3 text-foreground text-sm leading-relaxed">
-							<ReactMarkdown components={components}>
+							<ReactMarkdown
+								components={components}
+								// react-markdown's default `urlTransform` sanitizes any URI
+								// scheme outside its http(s)/mailto/etc. allowlist down to an
+								// empty string — `ref:<id>` isn't a real scheme, so without
+								// this override every reference link would render as
+								// `href=""` (a self-link, no less: clicking it navigates and
+								// reloads the whole app). This content is our own sidecar's
+								// output, not arbitrary user HTML, so passing URLs through
+								// unchanged is safe here.
+								urlTransform={(url) => url}
+							>
 								{section.body}
 							</ReactMarkdown>
 						</div>
