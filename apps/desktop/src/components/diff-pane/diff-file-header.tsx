@@ -1,8 +1,17 @@
+import { FileIcon, MoreHorizontalIcon } from "lucide-react";
 import type { BadgeProps } from "#/components/ui/badge";
 import { Badge } from "#/components/ui/badge";
+import { buttonVariants } from "#/components/ui/button";
 import { Checkbox } from "#/components/ui/checkbox";
+import {
+	DropdownMenu,
+	DropdownMenuContent,
+	DropdownMenuItem,
+	DropdownMenuTrigger,
+} from "#/components/ui/menu";
 import type { FileChange, FileStatus, ReviewState } from "#/lib/pr-data";
 import { splitPath } from "#/lib/tree-paths";
+import { cn } from "#/lib/utils";
 
 const STATUS_LABEL: Record<FileStatus, string> = {
 	added: "Added",
@@ -25,7 +34,15 @@ type DiffFileHeaderProps = {
 	onToggleViewed: () => void;
 };
 
-/** The `renderCustomHeader` content for one file's diff card — plain light-DOM React, not shadow DOM. */
+/**
+ * The `renderCustomHeader` content for one file's diff card — plain light-DOM
+ * React, slotted into the `<diffs-container>` custom element that
+ * `diff-pane.tsx` styles as a card (see its `[&_diffs-container]` classes).
+ * This is that card's header row, so it carries its own `bg-card`/`border-b`
+ * rather than staying transparent — the diff body below shares `--code`,
+ * which resolves to the same tone as `--card` in both themes (see
+ * `index.css`), so the two read as one continuous surface split by the rule.
+ */
 export function DiffFileHeader({
 	file,
 	reviewStatus,
@@ -35,7 +52,8 @@ export function DiffFileHeader({
 	const { dirname, basename } = splitPath(file.path);
 
 	return (
-		<div className="flex min-w-0 flex-1 items-center gap-3 px-3 py-2">
+		<div className="flex min-w-0 flex-1 items-center gap-3 border-b bg-card px-3 py-2">
+			<FileIcon className="size-3.5 shrink-0 text-muted-foreground" />
 			<span className="flex min-w-0 flex-1 items-baseline gap-1.5 truncate font-mono text-xs">
 				{dirname && (
 					<span className="truncate text-muted-foreground">{dirname}/</span>
@@ -71,6 +89,27 @@ export function DiffFileHeader({
 				/>
 				Reviewed
 			</label>
+			<DropdownMenu>
+				<DropdownMenuTrigger
+					aria-label="File actions"
+					className={cn(
+						buttonVariants({ variant: "ghost", size: "icon-sm" }),
+						"shrink-0",
+					)}
+					onClick={(event: React.MouseEvent<HTMLButtonElement>) =>
+						event.stopPropagation()
+					}
+				>
+					<MoreHorizontalIcon />
+				</DropdownMenuTrigger>
+				<DropdownMenuContent align="end">
+					<DropdownMenuItem
+						onClick={() => navigator.clipboard.writeText(file.path)}
+					>
+						Copy path
+					</DropdownMenuItem>
+				</DropdownMenuContent>
+			</DropdownMenu>
 		</div>
 	);
 }

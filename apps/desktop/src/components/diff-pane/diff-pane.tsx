@@ -526,7 +526,21 @@ export function DiffPane({
 
 	return (
 		<DiffCodeView
-			className="min-h-0 w-full flex-1 overflow-auto overscroll-contain px-3 py-3 [contain:strict]"
+			// Each file's `<diffs-container>` (the custom element `@pierre/diffs`
+			// creates per virtualized item, see its own `constants.js` —
+			// `DIFFS_TAG_NAME`) is styled here as its own card: rounded, bordered,
+			// clipped so the diff body's square shadow-DOM background respects
+			// the rounded corners. The header (`DiffFileHeader`) and diff body
+			// share one continuous `--card`/`--code` tone (see its doc comment),
+			// so the border-b there is the only seam. Clipping uses `clip-path`,
+			// not `overflow-hidden` — `overflow` (any value but `visible`) makes
+			// an element a scroll container, which becomes the containing block
+			// for any `position: sticky` descendant; `stickyHeaders: true`
+			// relies on the header sticking to the *outer* scrollable pane
+			// (this className's own `overflow-auto`), and `overflow-hidden` here
+			// would have quietly confined it to sticking within its own file
+			// instead. `clip-path` clips paint only, so it doesn't affect that.
+			className="min-h-0 w-full flex-1 overflow-auto overscroll-contain px-3 py-3 [contain:strict] [&_diffs-container]:rounded-xl [&_diffs-container]:border [&_diffs-container]:bg-card [&_diffs-container]:shadow-xs/5 [&_diffs-container]:[clip-path:inset(0_round_var(--radius-xl))]"
 			items={items}
 			options={codeViewOptions}
 			ref={codeViewRef}
