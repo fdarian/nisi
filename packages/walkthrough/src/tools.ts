@@ -68,15 +68,61 @@ const toToolInputSchema = <S extends Schema.ConstraintDecoder<unknown>>(
 };
 
 /**
- * The agent's output tools, bound to one buffer. Deliberately shaped like
- * Claude Code's own Write/Edit tools minus the file path — there's exactly
- * one walkthrough per turn, so there's nothing to path into, and the model
- * already knows these mechanics.
+ * What the two output tools are called. Separate from the tools themselves
+ * because one adapter can't accept the default names — see
+ * `WALKTHROUGH_TOOL_NAMES` below — and whatever names are used have to reach
+ * the system prompt too, so the model is told the same ones the harness
+ * registers.
  */
-export const createWalkthroughTools = (buffer: WalkthroughBuffer) => ({
+export type WalkthroughToolNames = {
+	readonly write: string;
+	readonly edit: string;
+};
+
+/**
+ * Shaped like Claude Code's own Write/Edit tools minus the file path — there's
+ * exactly one walkthrough per turn, so there's nothing to path into, and the
+ * model already knows these mechanics. Colliding with each adapter's builtin
+ * file tools is deliberate: user tools win on key collision, so the model's
+ * editing muscle memory gets redirected at the buffer instead of the real
+ * worktree.
+ */
+export const WALKTHROUGH_TOOL_NAMES: WalkthroughToolNames = {
+	write: "write",
+	edit: "edit",
+};
+
+/**
+ * Pi is the exception. `@ai-sdk/harness-pi` registers its seven native
+ * builtins (`read`/`write`/`edit`/`bash`/`grep`/`find`/`ls`) *and* the user
+ * tools into one Pi tool set, so a user tool sharing a builtin's name doesn't
+ * override it — the call dispatches, but the user tool's pending-result
+ * promise is never resolved and the turn hangs forever with no timeout.
+ * Confirmed live: with `write`, the stream stops after `tool-call write` and
+ * never produces a `tool-result`; renaming to a non-builtin name completes
+ * the same turn in ~12s. Pi therefore keeps its own file tools active, which
+ * costs nothing here — that was already true, since the collision never
+ * actually replaced them.
+ */
+export const PI_WALKTHROUGH_TOOL_NAMES: WalkthroughToolNames = {
+	write: "write_walkthrough",
+	edit: "edit_walkthrough",
+};
+
+/**
+ * The agent's output tools, bound to one buffer. Always keyed `write`/`edit`
+ * here regardless of `names` — the caller re-keys when handing them to a
+ * harness (see `generate.ts`), which keeps this return type statically
+ * checkable instead of collapsing to an index signature. `names` only feeds
+ * the descriptions, so each tool refers to the other by the name the model
+ * was actually given.
+ */
+export const createWalkthroughTools = (
+	buffer: WalkthroughBuffer,
+	names: WalkthroughToolNames = WALKTHROUGH_TOOL_NAMES,
+) => ({
 	write: tool({
-		description:
-			"Write the complete walkthrough document, replacing any existing content. Prefer `edit` for small revisions once a draft exists.",
+		description: `Write the complete walkthrough document, replacing any existing content. Prefer \`${names.edit}\` for small revisions once a draft exists.`,
 		inputSchema: toToolInputSchema(WriteInput),
 		execute: async (input: Schema.Schema.Type<typeof WriteInput>) => {
 			buffer.content = input.content;
@@ -84,8 +130,7 @@ export const createWalkthroughTools = (buffer: WalkthroughBuffer) => ({
 		},
 	}),
 	edit: tool({
-		description:
-			"Replace one exact string with another in the walkthrough buffer — the same semantics as your own file-editing tool, applied to this one document instead of a file. Use this for targeted revisions instead of rewriting the whole document with `write`.",
+		description: `Replace one exact string with another in the walkthrough buffer — the same semantics as your own file-editing tool, applied to this one document instead of a file. Use this for targeted revisions instead of rewriting the whole document with \`${names.write}\`.`,
 		inputSchema: toToolInputSchema(EditInput),
 		execute: async (input: Schema.Schema.Type<typeof EditInput>) => {
 			const outcome = applyEdit(

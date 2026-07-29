@@ -13,7 +13,9 @@ import {
 	createWalkthroughTools,
 	defaultDigestBudget,
 	evaluateWalkthrough,
+	PI_WALKTHROUGH_TOOL_NAMES,
 	renderDigest,
+	WALKTHROUGH_TOOL_NAMES,
 } from "@repo/walkthrough";
 import type { Context } from "effect";
 import { Effect, Result } from "effect";
@@ -106,16 +108,23 @@ const startFreshSession = async (
 	const sandbox = createLocalSandbox({
 		defaultWorkingDirectory: dirname(repoRoot),
 	});
+	// The same pair feeds both the harness (which registers these keys) and the
+	// prompt (which tells the model what to call) — they must never diverge.
+	// For three of the four adapters these are `write`/`edit`, deliberately
+	// colliding with their builtin file tools so user tools override them; Pi
+	// is the exception, see `PI_WALKTHROUGH_TOOL_NAMES`.
+	const toolNames =
+		input.harness === "pi" ? PI_WALKTHROUGH_TOOL_NAMES : WALKTHROUGH_TOOL_NAMES;
+	const walkthroughTools = createWalkthroughTools(buffer, toolNames);
 	const agent = new HarnessAgent({
 		harness: createHarnessAdapter(input.harness, input.model),
 		sandbox,
 		sandboxConfig: { workDir: basename(repoRoot) },
-		// Same key names (`write`/`edit`) as every adapter's own file-editing
-		// builtins — user tools win on key collision, so this redirects the
-		// model's usual editing tools at the walkthrough buffer instead of the
-		// real worktree without needing per-adapter tool filtering.
-		tools: createWalkthroughTools(buffer),
-		instructions: buildSystemPrompt(),
+		tools: {
+			[toolNames.write]: walkthroughTools.write,
+			[toolNames.edit]: walkthroughTools.edit,
+		},
+		instructions: buildSystemPrompt(toolNames),
 	});
 	const session = await agent.createSession();
 	return { agent, session, buffer };

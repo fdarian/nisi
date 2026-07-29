@@ -57,11 +57,15 @@ those two packages does I/O or knows about the other — this directory is where
 ## Non-obvious decisions
 
 - **Custom `write`/`edit` tools override the harness's own file-editing builtins by name collision**,
-  not by disabling anything. `createWalkthroughTools`'s tools are literally named `write`/`edit` —
+  not by disabling anything. `createWalkthroughTools`'s tools are registered as `write`/`edit` —
   the same keys every adapter's builtin file tools use — and `HarnessAgentSettings.tools` documents
   user tools as taking precedence on key collision. So the model's usual editing muscle memory gets
   redirected at the walkthrough buffer with no per-adapter tool filtering needed; `read`/`bash`/`grep`
   etc. still work normally, so the agent can explore the real repo beyond what the digest includes.
+  **Pi is the exception** (`PI_WALKTHROUGH_TOOL_NAMES`) — it doesn't honor that precedence and hangs
+  forever on the collision; see `@repo/walkthrough`'s `tools.ts`. `generate.ts` picks the pair and
+  feeds it to *both* `createWalkthroughTools` and `buildSystemPrompt`; registering one set of names
+  while telling the model another is the failure mode to watch for.
 - **Regenerate is the same `generate` call, not a separate procedure.** The sidecar decides what
   "regenerate" means by what it finds: a matching live session (continue the conversation), else a
   stored walkthrough (fresh session, seeded with the prior result as context), else nothing (cold

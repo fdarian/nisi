@@ -32,7 +32,12 @@ export {
 	walkthroughJsonSchemaDocument,
 } from "./schema.ts";
 
-export { createWalkthroughTools } from "./tools.ts";
+export {
+	createWalkthroughTools,
+	PI_WALKTHROUGH_TOOL_NAMES,
+	WALKTHROUGH_TOOL_NAMES,
+	type WalkthroughToolNames,
+} from "./tools.ts";
 
 export type { ChangedFileFacts, WalkthroughEvaluation } from "./validate.ts";
 export { decodeBuffer, evaluateWalkthrough } from "./validate.ts";

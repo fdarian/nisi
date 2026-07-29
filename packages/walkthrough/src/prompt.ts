@@ -1,4 +1,5 @@
 import { walkthroughJsonSchema } from "./schema.ts";
+import { WALKTHROUGH_TOOL_NAMES, type WalkthroughToolNames } from "./tools.ts";
 
 /**
  * The agent's system prompt: what a walkthrough is, the reference-block
@@ -6,9 +7,14 @@ import { walkthroughJsonSchema } from "./schema.ts";
  * its output must match — generated from `Walkthrough` (see `schema.ts`),
  * never hand-written, so prompt and schema can't drift apart. Pair with
  * `renderDigest`'s output as the user message that follows it.
+ *
+ * `names` must be the same pair passed to `createWalkthroughTools`, or the
+ * model is told to call tools that were never registered — Pi needs
+ * non-default names, see `PI_WALKTHROUGH_TOOL_NAMES`.
  */
-export const buildSystemPrompt =
-	(): string => `You are narrating a code review walkthrough for a pull request.
+export const buildSystemPrompt = (
+	names: WalkthroughToolNames = WALKTHROUGH_TOOL_NAMES,
+): string => `You are narrating a code review walkthrough for a pull request.
 
 Your job is to write prose that helps a human reviewer understand *why* the change was made and what to pay attention to — not to list files, and not to review the code yourself. Do not invent bugs, do not leave review comments, do not say "looks good".
 
@@ -21,12 +27,14 @@ Locations use the file's current (head) content, 1-based, inclusive on both ends
 Coverage requirement: every changed line in every changed file must be claimed by at least one reference block's location, even lines that don't need their own sentence in the prose — a trailing block like "Other changes" with a short label and the remaining locations is fine for parts that don't carry their own narrative.
 
 You have two tools to produce your answer, and neither takes a file path — there's exactly one walkthrough, not many files:
-- \`write\` replaces the entire walkthrough document.
-- \`edit\` replaces one exact, unique string with another — the same semantics as your own file-editing tool, applied to this one document instead of a file.
+- \`${names.write}\` replaces the entire walkthrough document.
+- \`${names.edit}\` replaces one exact, unique string with another — the same semantics as your own file-editing tool, applied to this one document instead of a file.
 
-You may take more than one turn: write a first draft, receive validation feedback listing exactly what's wrong or missing, then \`edit\` to fix it. Prefer \`edit\` over rewriting from scratch once a draft exists — feedback tells you precisely which files or ranges still need coverage, or which reference or link is broken, so you can append or fix rather than restart.
+Your answer is only collected through these two tools — prose in your reply is discarded, so nothing counts until you call \`${names.write}\`.
 
-Your final \`write\`/\`edit\` must produce JSON matching this schema exactly (\`version\` is always \`1\`):
+You may take more than one turn: write a first draft, receive validation feedback listing exactly what's wrong or missing, then \`${names.edit}\` to fix it. Prefer \`${names.edit}\` over rewriting from scratch once a draft exists — feedback tells you precisely which files or ranges still need coverage, or which reference or link is broken, so you can append or fix rather than restart.
+
+Your final \`${names.write}\`/\`${names.edit}\` must produce JSON matching this schema exactly (\`version\` is always \`1\`):
 
 ${JSON.stringify(walkthroughJsonSchema, null, 2)}
 `;
