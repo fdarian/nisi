@@ -10,13 +10,15 @@ export const settings = sqliteTable("settings", {
 	id: integer({ mode: "number" }).primaryKey({ autoIncrement: true }),
 	/**
 	 * JSON-encoded string[] of harness ids the user has declared configured
-	 * locally. Stored as plain text, not a typed column — this package stays
-	 * independent of `@repo/sidecar-api`'s `HarnessId`, same as
-	 * `@repo/walkthrough`'s `harness` column in `apps/desktop/sidecar`'s
-	 * `WalkthroughStore`. The wire boundary is where "must be one of the four
-	 * known ids" is actually enforced.
+	 * locally, or `NULL` when never configured — distinct from an empty JSON
+	 * array (`"[]"`), a deliberate choice to disable every harness. Stored as
+	 * plain text, not a typed column — this package stays independent of
+	 * `@repo/sidecar-api`'s `HarnessId`, same as `@repo/walkthrough`'s
+	 * `harness` column in `apps/desktop/sidecar`'s `WalkthroughStore`. The
+	 * wire boundary is where "must be one of the four known ids" is actually
+	 * enforced.
 	 */
-	enabledHarnesses: text().notNull(),
+	enabledHarnesses: text(),
 	sidebarViewMode: text().notNull(),
 	diffStyleMode: text().notNull(),
 	updatedAt: integer({ mode: "timestamp_ms" })

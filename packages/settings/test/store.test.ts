@@ -22,6 +22,49 @@ describe("SettingsStore", () => {
 		});
 	});
 
+	test("get() reports enabledHarnesses as null (never configured), not an empty array", async () => {
+		await withTempDataDir(async (dataDir) => {
+			const result = await run(
+				dataDir,
+				Effect.gen(function* () {
+					const store = yield* SettingsStore;
+					return yield* store.get();
+				}),
+			);
+			expect(result.enabledHarnesses).toBeNull();
+		});
+	});
+
+	test("update() distinguishes an empty deliberate choice from unset", async () => {
+		await withTempDataDir(async (dataDir) => {
+			const result = await run(
+				dataDir,
+				Effect.gen(function* () {
+					const store = yield* SettingsStore;
+					yield* store.update({ enabledHarnesses: [] });
+					return yield* store.get();
+				}),
+			);
+			expect(result.enabledHarnesses).toEqual([]);
+			expect(result.enabledHarnesses).not.toBeNull();
+		});
+	});
+
+	test("update() can revert enabledHarnesses back to unset with an explicit null", async () => {
+		await withTempDataDir(async (dataDir) => {
+			const result = await run(
+				dataDir,
+				Effect.gen(function* () {
+					const store = yield* SettingsStore;
+					yield* store.update({ enabledHarnesses: ["pi"] });
+					yield* store.update({ enabledHarnesses: null });
+					return yield* store.get();
+				}),
+			);
+			expect(result.enabledHarnesses).toBeNull();
+		});
+	});
+
 	test("update() round-trips through get()", async () => {
 		await withTempDataDir(async (dataDir) => {
 			const result = await run(

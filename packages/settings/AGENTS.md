@@ -12,10 +12,11 @@ domain package's tables (`NISI_DATA_DIR`, same default as `@repo/review`/`@repo/
   write or updates it thereafter — the same read-then-insert-or-update shape as `@repo/review`'s
   `sessions.open`.
 - `src/db/schema.ts` — the `settings` table. `enabledHarnesses` is a JSON-encoded `string[]`
-  column, not a typed one — this package stays independent of `@repo/sidecar-api`'s `HarnessId`,
-  same as `@repo/walkthrough`'s `harness` column does for the same reason. The sidecar's wiring
-  layer (`apps/desktop/sidecar/http.ts`) is where "must be one of the four known ids" is actually
-  enforced, at the wire boundary.
+  column (nullable — `NULL` means never configured, distinct from `"[]"`'s deliberate
+  disable-everything), not a typed one — this package stays independent of `@repo/sidecar-api`'s
+  `HarnessId`, same as `@repo/walkthrough`'s `harness` column does for the same reason. The
+  sidecar's wiring layer (`apps/desktop/sidecar/http.ts`) is where "must be one of the four known
+  ids" is actually enforced, at the wire boundary.
 - `src/db/client.ts` — `runMigrations`/`dbUse`, thin wrappers around `@repo/db`'s
   `applyEmbeddedMigrations`/`dbUse` that re-map its generic `DbError` to this package's own
   `SettingsStoreError`. `src/db/gen-migrations.ts` regenerates `.gen/migrations.gen.ts`

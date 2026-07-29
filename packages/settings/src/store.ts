@@ -13,8 +13,14 @@ export type Settings = {
 	 * `string[]`, not `@repo/sidecar-api`'s `HarnessId[]`, since this package
 	 * stays dependency-free from the wire contract. The sidecar's wiring
 	 * layer is where membership in the known four ids is validated.
+	 *
+	 * `null` means "never configured" — distinct from `[]`, which is a
+	 * deliberate choice to disable every harness. Callers that spawn off this
+	 * value (see `apps/desktop/sidecar/walkthrough/harnesses.ts`) treat `null`
+	 * as "every harness allowed," since the user hasn't restricted anything
+	 * yet.
 	 */
-	readonly enabledHarnesses: ReadonlyArray<string>;
+	readonly enabledHarnesses: ReadonlyArray<string> | null;
 	readonly sidebarViewMode: SidebarViewMode;
 	readonly diffStyleMode: DiffStyleMode;
 };
@@ -22,19 +28,24 @@ export type Settings = {
 export type SettingsUpdate = Partial<Settings>;
 
 /**
- * What `get()` returns before any `update()` has ever been written —
- * matches the sidecar's pre-Phase-4 behavior (`walkthrough.harnesses()`
- * reporting all four adapters unconditionally, tree sidebar, unified diff)
- * so shipping this store doesn't silently change existing installs' defaults.
+ * What `get()` returns before any `update()` has ever been written.
+ * `enabledHarnesses: null` keeps "never configured" distinguishable from
+ * "configured, all four" — the walkthrough onboarding picker's first-use
+ * gate depends on telling those apart. `sidebarViewMode`/`diffStyleMode`
+ * still default to the sidecar's pre-Phase-4 behavior (tree sidebar, unified
+ * diff) so shipping this store doesn't silently change those.
  */
 export const DEFAULT_SETTINGS: Settings = {
-	enabledHarnesses: ["claude-code", "codex", "opencode", "pi"],
+	enabledHarnesses: null,
 	sidebarViewMode: "tree",
 	diffStyleMode: "unified",
 };
 
 const toSettings = (row: SettingsRow): Settings => ({
-	enabledHarnesses: JSON.parse(row.enabledHarnesses) as ReadonlyArray<string>,
+	enabledHarnesses:
+		row.enabledHarnesses === null
+			? null
+			: (JSON.parse(row.enabledHarnesses) as ReadonlyArray<string>),
 	sidebarViewMode: row.sidebarViewMode as SidebarViewMode,
 	diffStyleMode: row.diffStyleMode as DiffStyleMode,
 });
@@ -76,7 +87,10 @@ export class SettingsStore extends Context.Service<SettingsStore>()(
 					const next: Settings = { ...current, ...patch };
 
 					const values = {
-						enabledHarnesses: JSON.stringify(next.enabledHarnesses),
+						enabledHarnesses:
+							next.enabledHarnesses === null
+								? null
+								: JSON.stringify(next.enabledHarnesses),
 						sidebarViewMode: next.sidebarViewMode,
 						diffStyleMode: next.diffStyleMode,
 						updatedAt: new Date(),
