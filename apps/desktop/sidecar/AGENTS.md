@@ -12,10 +12,15 @@ seam" for the port/token handshake this boots into.
   the walkthrough generation loop (which bridges Effect from a plain `async function*`, not `.effect()`)
   agree on what's available without each hand-rolling the union.
 - `store.ts` — `Store`, the service `http.ts`'s git/review handlers depend on. One method per contract
-  procedure (`openSession`, `listChangedFiles`, `setFileViewed`, ...), each composing `@repo/review`'s
-  `ReviewStore` with `@repo/git`'s functions. `Session` here is the wire shape (`pr.baseRef`/`headRef`
-  hoisted into the `pr` sub-object); `@repo/review`'s own `Session` keeps them at the top level since
-  they apply whether or not there's a PR — `toWireSession` bridges the two.
+  procedure (`openSession`, `listChangedFiles`, `setFileViewed`, `setRangeViewed`, ...), each composing
+  `@repo/review`'s `ReviewStore` with `@repo/git`'s functions. `Session` here is the wire shape
+  (`pr.baseRef`/`headRef` hoisted into the `pr` sub-object); `@repo/review`'s own `Session` keeps them
+  at the top level since they apply whether or not there's a PR — `toWireSession` bridges the two.
+  `readFileContent` is where Phase 3's range claims and Phase 2's whole-file toggle meet: it resolves
+  both (with `oldPath` rename fallback for each — `resolveRangeClaims` re-queries on `oldPath` since
+  `ReviewStore.listRangeClaims` is path-scoped, not a whole-session map like `listReviewStates`), reads
+  every active claim's snapshot back out of the blob store via `buildReviewClaims`, and hands the whole
+  list to `@repo/review`'s `reconcile()` — one call covers both review types.
 - `http.ts` — the oRPC router. Each handler maps one or two domain packages' tagged errors to a
   declared contract error via `Effect.catchTag` + `errors.XXX(...)`; anything else (gh auth failures,
   decode errors, etc.) is an uncaught defect → oRPC's generic 500. Deliberately not exhaustive for

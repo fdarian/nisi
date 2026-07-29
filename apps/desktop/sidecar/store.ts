@@ -13,8 +13,11 @@ import {
 	resolveReviewTarget,
 } from "@repo/git";
 import {
+	type FileReviewState,
 	hashContent,
+	type RangeReviewClaim,
 	type Reconciliation,
+	type ReviewClaim,
 	type Session as ReviewSession,
 	ReviewStore,
 	type ReviewStoreError,
@@ -58,6 +61,15 @@ export type FileChange = GitFileChange & { readonly review: FileReview | null };
 /** `@repo/git`'s `FileContent` plus Phase 2's reconciliation — see `readFileContent`. */
 export type FileContent = GitFileContent & {
 	readonly review: Reconciliation | null;
+};
+
+/** Narrows a whole-file review row down to the shape `readFileContent` actually needs — `null` unless it's a real, snapshotted "viewed" tick. */
+const toActiveFileClaim = (
+	state: FileReviewState | null,
+): { readonly snapshotHash: string; readonly viewedAt: number } | null => {
+	if (state === null || !state.viewed || state.snapshotHash === null)
+		return null;
+	return { snapshotHash: state.snapshotHash, viewedAt: state.viewedAt };
 };
 
 const toWireSession = (session: ReviewSession): Session => ({
@@ -190,16 +202,94 @@ export class Store extends Context.Service<Store>()("Store", {
 			});
 
 		/**
+		 * Range claims looked up by the file's current path, falling back to
+		 * `oldPath` when the current path has none — same rename-survival
+		 * reasoning as `resolveReviewState`, just for a list rather than a
+		 * single row (`ReviewStore.listRangeClaims` is path-scoped, so a rename
+		 * needs a second query rather than a map lookup).
+		 */
+		const resolveRangeClaims = (
+			sessionId: string,
+			path: string,
+			oldPath: string | undefined,
+		): Effect.Effect<
+			ReadonlyArray<RangeReviewClaim>,
+			SessionNotFound | ReviewStoreError
+		> =>
+			Effect.gen(function* () {
+				const claims = yield* reviewStore.listRangeClaims(sessionId, path);
+				if (claims.length > 0 || oldPath === undefined) return claims;
+				return yield* reviewStore.listRangeClaims(sessionId, oldPath);
+			});
+
+		/**
+		 * Builds `reconcile`'s claim list for one file: the whole-file claim
+		 * (when ticked) plus every block-scoped range claim, each carrying its
+		 * own snapshot content read back out of the blob store.
+		 */
+		const buildReviewClaims = (
+			fileState: {
+				readonly snapshotHash: string;
+				readonly viewedAt: number;
+			} | null,
+			rangeClaims: ReadonlyArray<RangeReviewClaim>,
+		): Effect.Effect<
+			ReadonlyArray<ReviewClaim>,
+			ReviewStoreError,
+			FileSystem
+		> =>
+			Effect.gen(function* () {
+				const fileClaim: ReviewClaim | null =
+					fileState === null
+						? null
+						: {
+								source: { kind: "file" },
+								snapshotContent: new TextDecoder().decode(
+									yield* reviewStore.readSnapshot(fileState.snapshotHash),
+								),
+								ranges: null,
+								viewedAt: fileState.viewedAt,
+							};
+
+				const rangeClaimEffects = yield* Effect.forEach(
+					rangeClaims,
+					(claim) =>
+						Effect.gen(function* () {
+							const snapshotContent = new TextDecoder().decode(
+								yield* reviewStore.readSnapshot(claim.snapshotHash),
+							);
+							const reviewClaim: ReviewClaim = {
+								source: {
+									kind: "range",
+									blockId: claim.blockId,
+									blockLabel: claim.blockLabel,
+								},
+								snapshotContent,
+								ranges: claim.ranges,
+								viewedAt: claim.viewedAt,
+							};
+							return reviewClaim;
+						}),
+					{ concurrency: "unbounded" },
+				);
+
+				return fileClaim === null
+					? rangeClaimEffects
+					: [fileClaim, ...rangeClaimEffects];
+			});
+
+		/**
 		 * `oldPath` — the file's pre-rename path, when it's a rename — mirrors
 		 * `FileChange.oldPath` so a rename's review state resolves the same way
 		 * here as it does in `listChangedFiles`'s `attachReviewState`.
 		 *
 		 * Reconciliation ranges are only computed when the patch content isn't
 		 * size-gated (`!content.truncated`) — gated content can't be trusted
-		 * for line-accurate ranges. `changedSinceReview` doesn't have that
-		 * restriction: it's a hash compare against a direct worktree read, not
-		 * derived from the (possibly gated) patch content, so it's always
-		 * accurate even when `ranges` has to come back empty.
+		 * for line-accurate ranges. The whole-file `changedSinceReview` hash
+		 * compare doesn't have that restriction (it's a direct worktree read),
+		 * but it only covers the whole-file claim — a size-gated file with only
+		 * range claims falls back to reporting no review at all, since there's
+		 * no gated equivalent for a range claim's drift.
 		 */
 		const readFileContent = (
 			sessionId: string,
@@ -217,25 +307,26 @@ export class Store extends Context.Service<Store>()("Store", {
 				);
 
 				const states = yield* reviewStore.listReviewStates(sessionId);
-				const state = resolveReviewState(states, path, oldPath);
-				if (state === null || !state.viewed || state.snapshotHash === null) {
+				const fileState = resolveReviewState(states, path, oldPath);
+				const rangeClaims = yield* resolveRangeClaims(sessionId, path, oldPath);
+
+				const activeFileClaim = toActiveFileClaim(fileState);
+				if (activeFileClaim === null && rangeClaims.length === 0) {
 					return { ...content, review: null };
 				}
 
-				const headHash = yield* readHeadHash(session.repoRoot, path);
-				const changedSinceReview = headHash !== state.snapshotHash;
-
 				if (content.truncated) {
+					if (activeFileClaim === null) return { ...content, review: null };
+					const headHash = yield* readHeadHash(session.repoRoot, path);
+					const changedSinceReview = headHash !== activeFileClaim.snapshotHash;
 					return { ...content, review: { changedSinceReview, ranges: [] } };
 				}
 
-				const reviewedBytes = yield* reviewStore.readSnapshot(
-					state.snapshotHash,
-				);
+				const claims = yield* buildReviewClaims(activeFileClaim, rangeClaims);
 				const review = yield* reconcile(session.repoRoot, {
 					baseContent: content.oldContent ?? "",
-					reviewedContent: new TextDecoder().decode(reviewedBytes),
 					headContent: content.newContent ?? "",
+					claims,
 				});
 
 				return { ...content, review };
@@ -262,6 +353,42 @@ export class Store extends Context.Service<Store>()("Store", {
 				yield* reviewStore.markFileViewed(sessionId, path, content);
 			});
 
+		/**
+		 * Ticks (or unticks) one walkthrough reference block's claim — same
+		 * "snapshot the whole file at tick time" discipline as `setFileViewed`,
+		 * just additive (a block's claim coexists with every other block's claim
+		 * and the whole-file toggle) rather than a single per-file slot.
+		 */
+		const setRangeViewed = (
+			sessionId: string,
+			path: string,
+			blockId: string,
+			blockLabel: string,
+			ranges: ReadonlyArray<{
+				readonly startLine: number;
+				readonly endLine: number;
+			}>,
+			viewed: boolean,
+		) =>
+			Effect.gen(function* () {
+				const session = yield* reviewStore.getSession(sessionId);
+				if (!viewed) {
+					yield* reviewStore.unmarkRangeViewed(sessionId, path, blockId);
+					return;
+				}
+				const content = yield* fs
+					.readFile(join(session.repoRoot, path))
+					.pipe(Effect.orElseSucceed(() => new Uint8Array()));
+				yield* reviewStore.markRangeViewed(
+					sessionId,
+					path,
+					blockId,
+					blockLabel,
+					ranges,
+					content,
+				);
+			});
+
 		return {
 			openSession,
 			listSessions,
@@ -269,6 +396,7 @@ export class Store extends Context.Service<Store>()("Store", {
 			listChangedFiles,
 			readFileContent,
 			setFileViewed,
+			setRangeViewed,
 		};
 	}),
 }) {

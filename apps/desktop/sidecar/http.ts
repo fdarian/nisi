@@ -160,6 +160,30 @@ export function startServer(
 						),
 					);
 			}),
+			setRangeViewed: authed.review.setRangeViewed.effect(function* ({
+				input,
+				errors,
+			}) {
+				const store = yield* Store;
+				yield* store
+					.setRangeViewed(
+						input.sessionId,
+						input.path,
+						input.blockId,
+						input.blockLabel,
+						input.ranges,
+						input.viewed,
+					)
+					.pipe(
+						Effect.catchTag("SessionNotFound", () =>
+							Effect.fail(
+								errors.NOT_FOUND({
+									message: `session not found: ${input.sessionId}`,
+								}),
+							),
+						),
+					);
+			}),
 		},
 		events: {
 			// Plain async-generator handler — `.effect` resolves its generator to a
