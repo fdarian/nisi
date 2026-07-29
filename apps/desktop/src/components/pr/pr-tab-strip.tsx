@@ -19,6 +19,16 @@ type PrTabStripProps = {
  * native title bar remains to drag by, and the traffic lights float over the
  * top-left corner — so the strip reserves space for them and marks its own
  * background (not the tabs themselves) as a Tauri drag region.
+ *
+ * That region is `"deep"`, not bare: Tauri's drag script (`drag.js` in the
+ * `tauri` crate) treats a bare `data-tauri-drag-region` as *this element
+ * only* — `el === composedPath[0]` — and the `Tabs.List` below stretches
+ * (`flex-1`) across all the empty space right of the last tab, so every click
+ * out there lands on the list, not on this div, and used to do nothing.
+ * `"deep"` makes the whole subtree draggable instead. Interactive descendants
+ * still opt out on their own: that same script bails on anything with a
+ * clickable tag or role, which covers both the tabs (`role="tab"`) and their
+ * close `<button>`s — nothing here needs an explicit `="false"`.
  */
 export function PrTabStrip({
 	sessions,
@@ -27,7 +37,7 @@ export function PrTabStrip({
 	return (
 		<div
 			className="flex h-10 shrink-0 items-stretch pr-2 pl-[78px]"
-			data-tauri-drag-region
+			data-tauri-drag-region="deep"
 		>
 			<TabsPrimitive.List className="flex min-w-0 flex-1 items-stretch gap-1 overflow-x-auto">
 				{sessions.map((session) => (
