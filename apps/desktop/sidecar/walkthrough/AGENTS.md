@@ -101,3 +101,12 @@ those two packages does I/O or knows about the other — this directory is where
   runs (a CLI update between the cache's TTL window and the call) — `available` only means the CLI
   binary is present, and discovery only validates that a model id exists, neither checks that
   auth/access for it is configured. A stale id still only ever fails at `generate` time.
+- **Pi discovery and Pi execution must read the same agent directory.** `discoverPiModels` uses
+  `ModelRuntime.create()`'s defaults (which resolve under Pi's own `getAgentDir()`), and
+  `createHarnessAdapter` passes that same `getAgentDir()` to `createPi`. Omit it and
+  `@ai-sdk/harness-pi` mints a private agent dir with an empty `auth.json`, so every model
+  discovery just listed as available fails at generate time with "No API key found for the
+  selected model."
+- **A harness's transport failure arrives as a `fullStream` `error` part, not a thrown error** —
+  the stream still ends normally afterwards. `generate.ts` reads those parts explicitly; a loop
+  that only watches `tool-call` sees a silent no-op turn and misattributes it to validation.
