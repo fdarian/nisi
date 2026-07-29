@@ -38,12 +38,15 @@ type DiffFileHeaderProps = {
  * The `renderCustomHeader` content for one file's diff card — plain light-DOM
  * React, slotted into the `<diffs-container>` custom element that
  * `diff-pane.tsx` styles as a card (see its `[&_diffs-container]` classes).
- * This is that card's header row, so it carries its own `bg-card`/`border-b`
- * rather than staying transparent — the diff body below intentionally uses a
- * *different* tone (`--background`, matching the surrounding panel rather
- * than `--card` — see `diff-view-theme.ts`'s `--diffs-light-bg`/
- * `--diffs-dark-bg`), so the border here is the header's visible seam
- * against the body, not a continuation of the same surface.
+ * This is that card's header row, so it carries its own opaque background
+ * (`stickyHeaders` scrolls content underneath it) plus the `border-b` that
+ * separates it from the diff body. `bg-background`, not `bg-card`: the whole
+ * card tracks the surrounding panel's tone — `--card` is measurably lighter
+ * than `--background` in dark mode (index.css) — so the header, the
+ * `<diffs-container>` behind it (`diff-pane.tsx`) and the diff body
+ * (`diff-view-theme.ts`'s `--diffs-light-bg`/`--diffs-dark-bg`) all resolve
+ * to the same surface, and the border here is a seam drawn on it rather than
+ * a change of tone.
  *
  * `h-11` (44px) is load-bearing, not a style preference — it must equal
  * `diffItemMetrics.diffHeaderHeight` (`diff-view-theme.ts`). `stickyHeaders`
@@ -70,7 +73,7 @@ export function DiffFileHeader({
 	const { dirname, basename } = splitPath(file.path);
 
 	return (
-		<div className="flex h-11 min-w-0 flex-1 items-center gap-3 border-b bg-card px-3">
+		<div className="flex h-11 min-w-0 flex-1 items-center gap-3 border-b bg-background px-3">
 			<FileIcon className="size-3.5 shrink-0 text-muted-foreground" />
 			<span className="flex min-w-0 flex-1 items-baseline gap-1.5 truncate font-mono text-xs">
 				{dirname && (

@@ -50,10 +50,11 @@ export const diffViewUnsafeCSS = `
 		 * theme background var is *named* for, but using it here made every
 		 * file's diff body render on a visibly different surface than the
 		 * Files Changed pane around it (\`--card\` vs \`--background\` diverge in
-		 * dark mode — \`--card\` is a touch lighter). The card still reads as a
-		 * card via its border (\`diff-pane.tsx\`'s \`[&_diffs-container]\`
-		 * classes) and its header staying \`bg-card\` (\`diff-file-header.tsx\`)
-		 * — only the code body itself needed to match the panel.
+		 * dark mode — \`--card\` is a touch lighter). The \`<diffs-container>\`
+		 * itself (\`diff-pane.tsx\`'s \`[&_diffs-container]\` classes) and the
+		 * header (\`diff-file-header.tsx\`) track \`--background\` for the same
+		 * reason; the card reads as a card through its border and shadow, not
+		 * through a distinct surface tone.
 		 */
 		--diffs-light-bg: var(--background);
 		--diffs-dark-bg: var(--background);

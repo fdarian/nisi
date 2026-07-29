@@ -549,9 +549,16 @@ export function DiffPane({
 			// creates per virtualized item, see its own `constants.js` —
 			// `DIFFS_TAG_NAME`) is styled here as its own card: rounded, bordered,
 			// clipped so the diff body's square shadow-DOM background respects
-			// the rounded corners. The header (`DiffFileHeader`) and diff body
-			// share one continuous `--card`/`--code` tone (see its doc comment),
-			// so the border-b there is the only seam. Clipping uses `clip-path`,
+			// the rounded corners. Deliberately `bg-background`, not `bg-card`:
+			// the two are the same white in light mode but `--card` is a
+			// measurably lighter tone than `--background` in dark mode
+			// (index.css), which made every card read as a raised slab against
+			// the Files Changed panel. The header (`DiffFileHeader`) and the
+			// diff body (`diff-view-theme.ts`'s `--diffs-*-bg`) both track
+			// `--background` for the same reason, so the card is one continuous
+			// surface with the panel and reads as a card purely through its
+			// border and shadow — the header's border-b being the only inner
+			// seam. Clipping uses `clip-path`,
 			// not `overflow-hidden` — `overflow` (any value but `visible`) makes
 			// an element a scroll container, which becomes the containing block
 			// for any `position: sticky` descendant; `stickyHeaders: true`
@@ -559,7 +566,7 @@ export function DiffPane({
 			// (this className's own `overflow-auto`), and `overflow-hidden` here
 			// would have quietly confined it to sticking within its own file
 			// instead. `clip-path` clips paint only, so it doesn't affect that.
-			className="min-h-0 w-full flex-1 overflow-auto overscroll-contain px-3 py-3 [contain:strict] [&_diffs-container]:rounded-xl [&_diffs-container]:border [&_diffs-container]:bg-card [&_diffs-container]:shadow-xs/5 [&_diffs-container]:[clip-path:inset(0_round_var(--radius-xl))]"
+			className="min-h-0 w-full flex-1 overflow-auto overscroll-contain px-3 py-3 [contain:strict] [&_diffs-container]:rounded-xl [&_diffs-container]:border [&_diffs-container]:bg-background [&_diffs-container]:shadow-xs/5 [&_diffs-container]:[clip-path:inset(0_round_var(--radius-xl))]"
 			items={items}
 			options={codeViewOptions}
 			ref={codeViewRef}
