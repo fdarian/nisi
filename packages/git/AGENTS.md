@@ -7,9 +7,13 @@ Phase 1 contract this feeds.
 
 - `exec.ts` — the only place that spawns processes. `git`/`gh` helpers plus a strict (fails on
   non-zero exit) and lenient (reports exit code, for "ran and said no" cases like no PR) variant.
-- `repo.ts` — repo root / current branch / merge-base, pure `git`.
-- `pull-request.ts` — `gh`-based PR + repo-identity resolution. `gh pr view` exiting non-zero is
-  the expected no-PR case, not an error.
+- `repo.ts` — repo root / current branch / merge-base / local default branch, pure `git`.
+- `pull-request.ts` — `resolveReviewTarget`: what a review is *against*. The GitHub half is
+  optional — no remote, a host `gh` doesn't know, or an origin GitHub can't resolve all degrade to
+  `github: null` and `repo.ts`'s `resolveLocalDefaultBranch`, since nisi reviews working trees, not
+  only PRs. Only *not being able to ask* (no `gh`, no auth, no network) fails, as
+  `GitHubUnreachable`; see the module for why that split is matched on `gh`'s message rather than
+  its exit code.
 - `classify.ts` — implementation/test/generated. Test globs are Jest's `testMatch` / Vitest's
   `include` hand-expanded out of extglob syntax into brace alternation, since `Bun.Glob` (used
   here instead of a dependency) doesn't support `?(...)`.

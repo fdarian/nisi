@@ -34,10 +34,25 @@ export class GhOutputDecodeError extends Schema.TaggedErrorClass<GhOutputDecodeE
 	},
 ) {}
 
-/** `gh repo view` reported no default branch — an empty repository with no commits. */
+/**
+ * Nothing in the repo names a branch to review against — neither GitHub nor
+ * the repo's own refs (`origin/HEAD`, `init.defaultBranch`, `main`,
+ * `master`). An empty repository with no commits is the usual cause.
+ */
 export class NoDefaultBranch extends Schema.TaggedErrorClass<NoDefaultBranch>()(
 	"NoDefaultBranch",
-	{ owner: Schema.String, repo: Schema.String },
+	{ repoRoot: Schema.String },
+) {}
+
+/**
+ * `gh` couldn't *ask* GitHub — the binary is missing, the user isn't
+ * authenticated, or the API is unreachable. Deliberately distinct from
+ * GitHub answering "no such repository", which is a normal local-only
+ * review target (see `resolveReviewTarget`) rather than a failure.
+ */
+export class GitHubUnreachable extends Schema.TaggedErrorClass<GitHubUnreachable>()(
+	"GitHubUnreachable",
+	{ repoRoot: Schema.String, reason: Schema.String },
 ) {}
 
 /** `diff.file` was asked for a path that isn't part of the current diff. */
@@ -50,4 +65,5 @@ export type GitError =
 	| GitCommandError
 	| NotAGitRepository
 	| GhOutputDecodeError
-	| NoDefaultBranch;
+	| NoDefaultBranch
+	| GitHubUnreachable;

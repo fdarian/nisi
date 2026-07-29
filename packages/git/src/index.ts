@@ -15,15 +15,21 @@ export {
 	GhOutputDecodeError,
 	GitCommandError,
 	type GitError,
+	GitHubUnreachable,
 	NoDefaultBranch,
 	NotAGitRepository,
 } from "./errors.ts";
 export type { Hunk } from "./hunk.ts";
 export { parseHunks } from "./hunk.ts";
-export type { PullRequestRef, ReviewTarget } from "./pull-request.ts";
+export type {
+	GitHubTarget,
+	PullRequestRef,
+	ReviewTarget,
+} from "./pull-request.ts";
 export { resolveReviewTarget } from "./pull-request.ts";
 export {
 	resolveCurrentBranch,
+	resolveLocalDefaultBranch,
 	resolveMergeBase,
 	resolveRepoRoot,
 } from "./repo.ts";
