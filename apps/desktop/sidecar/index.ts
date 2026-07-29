@@ -3,7 +3,7 @@ import { getDataDirConfig, SqliteDb } from "@repo/db";
 import { SettingsStore } from "@repo/settings";
 import { Effect, Layer } from "effect";
 import { FileSystem } from "effect/FileSystem";
-import { startServer } from "./http.ts";
+import { attachRouter, bindHealthCheckServer } from "./http.ts";
 import { startLivePolling } from "./live-poll.ts";
 import { LoggingLive } from "./logging.ts";
 import type { AppServices } from "./services.ts";
@@ -27,20 +27,19 @@ const program = Effect.scoped(
 		yield* fs.makeDirectory(dataDir, { recursive: true });
 
 		const token = crypto.randomUUID();
-		// Captures the ambient context (every service in `AppServices`) so oRPC
-		// handlers — which run as their own detached Effect per request rather
-		// than as part of this program's fiber — can still reach them. The
-		// walkthrough generation loop also bridges Effect from its own plain
-		// `async function*` via this same captured context — see
-		// `walkthrough/generate.ts`'s `runEffect`.
-		const mainContext = yield* Effect.context<AppServices>();
 
-		// Tied to the program's scope: interrupting the fiber (SIGINT/SIGTERM, via
-		// BunRuntime.runMain below) runs this release and stops the server — the
-		// sidecar's "dispose on shutdown" behavior falls out of Effect's own
-		// resource safety instead of a manual process.on() handler.
+		// Bound immediately, answering only health.check — deliberately
+		// before AppServices/SqliteDb exist at all. Two concerns force this
+		// order: the lock below needs a real, already-listening port to
+		// record (a liveness check against a port nothing answers on yet
+		// would make a concurrent sidecar wrongly think this one is dead),
+		// and SqliteDb's connection must not open until this process has
+		// already won that lock — otherwise two cold boots against a fresh,
+		// unmigrated data dir race on Drizzle's `CREATE TABLE IF NOT EXISTS`
+		// step the same way they used to race on sidecar.json. See
+		// http.ts's `bindHealthCheckServer`/`attachRouter`.
 		const server = yield* Effect.acquireRelease(
-			Effect.sync(() => startServer(token, mainContext)),
+			Effect.sync(() => bindHealthCheckServer(token)),
 			(server) =>
 				Effect.logInfo("shutting down").pipe(
 					Effect.andThen(Effect.sync(() => server.stop())),
@@ -84,35 +83,64 @@ const program = Effect.scoped(
 		// observe a partial file.
 		yield* publishSidecarJson(dataDir, { port, token });
 
-		yield* Effect.logInfo("ready", { port, dataDir });
+		// Only now — lock held, sidecar.json published — does AppServices
+		// get built, which is what actually opens SqliteDb's connection and
+		// runs Drizzle's migrations. Scoping MainLayer to just this
+		// remaining tail of the program (rather than the whole program, the
+		// way it used to be provided) is what keeps a second process from
+		// ever reaching this point concurrently: it's refused, or made to
+		// wait out acquireSidecarLock's dead-owner recovery, before it can.
+		yield* Effect.provide(
+			Effect.gen(function* () {
+				// Captures the ambient context (every service in `AppServices`) so
+				// oRPC handlers — which run as their own detached Effect per
+				// request rather than as part of this program's fiber — can still
+				// reach them. The walkthrough generation loop also bridges Effect
+				// from its own plain `async function*` via this same captured
+				// context — see `walkthrough/generate.ts`'s `runEffect`.
+				const mainContext = yield* Effect.context<AppServices>();
+				yield* Effect.sync(() => attachRouter(server, token, mainContext));
 
-		// Backgrounded, tied to this program's scope — same shutdown path as
-		// the HTTP server above, just via the fiber getting interrupted instead
-		// of an acquireRelease finalizer.
-		yield* startLivePolling();
+				yield* Effect.logInfo("ready", { port, dataDir });
 
-		yield* Effect.never;
+				// Backgrounded, tied to this program's scope — same shutdown path
+				// as the HTTP server above, just via the fiber getting
+				// interrupted instead of an acquireRelease finalizer.
+				yield* startLivePolling();
+
+				yield* Effect.never;
+			}),
+			MainLayer,
+		);
 	}),
 );
 
 // `Store.layer`, `WalkthroughStore.layer`, and `SettingsStore.layer` all need
 // `SqliteDb` (the app's one shared connection — see `@repo/db`'s AGENTS.md)
 // and `FileSystem`/`ChildProcessSpawner` (via `@repo/review`'s `ReviewStore`
-// and, per-call, `@repo/git`'s functions). `provideMerge`, not `provide`,
-// at every step — `SqliteDb`/`ReviewStore`/`BunServices` all need to stay
+// and, per-call, `@repo/git`'s functions). `provideMerge`, not `provide`, at
+// every step — `SqliteDb`/`ReviewStore`/`BunServices` all need to stay
 // available in the final context too, not just be consumed while
 // constructing `Store`/`WalkthroughStore`/`SettingsStore` themselves, since
 // oRPC handlers (and the walkthrough generation loop) reach some of them
-// directly. `LoggingLive` joins the same merge — it also only needs
-// `FileSystem` (for the rotating file logger) to construct.
+// directly. Provided around only the program's tail above — deliberately
+// *not* around the whole program the way `EarlyLayer` below is — so
+// `SqliteDb`'s connection (and its migrations) never opens until this
+// process is the data dir's confirmed sole owner.
 const MainLayer = Layer.mergeAll(
 	Store.layer,
 	WalkthroughStore.layer,
 	SettingsStore.layer,
-	LoggingLive,
 ).pipe(
 	Layer.provideMerge(SqliteDb.layer),
 	Layer.provideMerge(BunServices.layer),
 );
 
-BunRuntime.runMain(program.pipe(Effect.provide(MainLayer)));
+// Everything the program's prefix needs before `AppServices` exists:
+// `FileSystem` (`fs.makeDirectory`, the lock, `sidecar.json`) and
+// `LoggingLive` — so even the earliest "starting up" log line reaches the
+// rotating file logger, not just the console, the same as before this file
+// split `MainLayer` in two. Wraps the whole program, unlike `MainLayer`.
+const EarlyLayer = LoggingLive.pipe(Layer.provideMerge(BunServices.layer));
+
+BunRuntime.runMain(program.pipe(Effect.provide(EarlyLayer)));

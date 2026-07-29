@@ -72,8 +72,44 @@ const toEnabledHarnessSet = (
 type ServerContext = WithEffectContext<AppServices> &
 	RequestHeadersHandlerPluginContext;
 
-/** Start the HTTP server on an ephemeral port, guarded by the bearer token. */
-export function startServer(
+/**
+ * Binds the real port immediately, answering only `health.check` — hand-rolled
+ * to the exact wire shape `attachRouter`'s oRPC router below produces
+ * (verified against `makeSidecarClient` and Rust's `is_backend_alive`),
+ * deliberately *before* `AppServices` exists at all. `index.ts` needs this
+ * port already listening to record it in `sidecar-lock.ts`'s lock — a
+ * liveness check against a port nothing answers on yet would make a
+ * concurrent sidecar wrongly think this one is dead — and `SqliteDb`'s
+ * connection must not open until this process has already won that lock,
+ * otherwise two cold boots race on Drizzle's migration step the same way
+ * they used to race on `sidecar.json`. `attachRouter` swaps in the full
+ * router once `AppServices` is ready, on this same already-bound port.
+ */
+export function bindHealthCheckServer(token: string) {
+	return Bun.serve({
+		port: 0,
+		idleTimeout: 0,
+		fetch(req) {
+			if (new URL(req.url).pathname !== "/api/health/check") {
+				return new Response("not found", { status: 404 });
+			}
+			if (req.headers.get("authorization") !== `Bearer ${token}`) {
+				return new Response("unauthorized", { status: 401 });
+			}
+			return Response.json({ json: { status: "ok" } });
+		},
+	});
+}
+
+/**
+ * Swaps `server`'s handler for the full oRPC router via `server.reload` —
+ * same port, no restart, so a concurrent liveness check never observes a gap
+ * where nothing's listening. Called once `AppServices` is ready, after
+ * `index.ts` has already won `sidecar-lock.ts`'s lock and published
+ * `sidecar.json`.
+ */
+export function attachRouter(
+	server: ReturnType<typeof Bun.serve>,
 	token: string,
 	mainContext: Context.Context<AppServices>,
 ) {
@@ -400,8 +436,7 @@ export function startServer(
 		plugins: [new CORSHandlerPlugin(), new RequestHeadersHandlerPlugin()],
 	});
 
-	return Bun.serve({
-		port: 0,
+	server.reload({
 		// Disable idle timeout — matches the rest of the sidecar's HTTP posture
 		// (long-lived connections, e.g. the event stream, shouldn't be cut by
 		// Bun's default 10s timeout).
