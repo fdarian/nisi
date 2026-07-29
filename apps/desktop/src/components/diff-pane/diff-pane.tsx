@@ -606,7 +606,21 @@ export function DiffPane({
 			// (this className's own `overflow-auto`), and `overflow-hidden` here
 			// would have quietly confined it to sticking within its own file
 			// instead. `clip-path` clips paint only, so it doesn't affect that.
-			className="min-h-0 w-full flex-1 overflow-auto overscroll-contain px-3 py-3 [contain:strict] [&_diffs-container]:rounded-xl [&_diffs-container]:border [&_diffs-container]:bg-background [&_diffs-container]:shadow-xs/5 [&_diffs-container]:[clip-path:inset(0_round_var(--radius-xl))]"
+			//
+			// The vertical inset is `diffCodeViewLayout`'s `paddingTop`/
+			// `paddingBottom` (`diff-view-theme.ts`), never `py-*` here, and that
+			// is load-bearing. A scroll container's own padding still belongs to
+			// the scrollport — content scrolls through it and `contain: strict`
+			// clips at the padding box, so it paints there — but Chrome pins a
+			// `position: sticky` descendant to the container's *content* box. Top
+			// padding therefore carves out a strip the sticky file header can
+			// never cover while the diff body scrolls through it in plain sight:
+			// with `py-3` the header stuck 12px below the pane's top edge and the
+			// first rows of the file (or a "N unmodified lines" separator) stayed
+			// visible above it. `@pierre/diffs` applies its own layout padding as
+			// margins on the inner scrolled container instead, which scrolls away
+			// like any other content and leaves the header flush with the top.
+			className="min-h-0 w-full flex-1 overflow-auto overscroll-contain px-3 [contain:strict] [&_diffs-container]:rounded-xl [&_diffs-container]:border [&_diffs-container]:bg-background [&_diffs-container]:shadow-xs/5 [&_diffs-container]:[clip-path:inset(0_round_var(--radius-xl))]"
 			items={items}
 			options={codeViewOptions}
 			ref={codeViewRef}
