@@ -74,7 +74,10 @@ export function GeneratePanel({
 	const [selection, setSelection] = useState<ModelSelection | null>(null);
 	const [reconfiguring, setReconfiguring] = useState(false);
 
-	if (progress.phase === "running") {
+	// The pending window (`"starting"`, no event yet) renders the *same*
+	// timeline the stream drives, so the first event just fills in its log
+	// rather than swapping one spinner for another.
+	if (progress.phase === "starting" || progress.phase === "running") {
 		return (
 			<div className="flex flex-1 items-center justify-center px-6">
 				<GenerationTimeline history={history} />

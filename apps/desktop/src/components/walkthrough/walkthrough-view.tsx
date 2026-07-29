@@ -63,7 +63,15 @@ export function WalkthroughView({
 		);
 	}
 
-	if (generation.progress.phase === "running" || walkthrough == null) {
+	// `"starting"` hands over to `GeneratePanel` on the same commit as the
+	// click, so a Generate/Regenerate shows its pending timeline immediately
+	// instead of sitting on this reader (or the untouched empty state) until
+	// the sidecar's first event lands seconds later.
+	if (
+		generation.progress.phase === "starting" ||
+		generation.progress.phase === "running" ||
+		walkthrough == null
+	) {
 		return (
 			<GeneratePanel
 				history={generation.history}

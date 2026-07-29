@@ -20,6 +20,13 @@ type GenerationTimelineProps = {
  * that whole stretch. This renders every event the stream has emitted so far
  * as a small log, so bootstrapping/working/validation-failed/retrying are all
  * distinguishable, not just "loading".
+ *
+ * An empty `history` is the pending window right after the click
+ * (`GenerationProgress`'s `"starting"`): the sidecar doesn't resolve
+ * `generate` until it has an event, so there's genuinely nothing to log yet.
+ * It renders as the same headline row with the same spinner, so the first
+ * event that lands only adds the log beneath it — no second spinner, no
+ * remount.
  */
 export function GenerationTimeline({
 	history,
@@ -38,25 +45,32 @@ export function GenerationTimeline({
 				)}
 				<span className="font-medium">{headline(last?.event)}</span>
 			</div>
-			<ul className="flex flex-col gap-1.5 border-l pl-3">
-				{history.map((entry) => (
-					<li
-						className="flex items-start gap-2 text-muted-foreground text-xs"
-						key={entry.id}
-					>
-						<EventIcon event={entry.event} />
-						<span className="leading-relaxed">
-							{describeEvent(entry.event)}
-						</span>
-					</li>
-				))}
-			</ul>
+			{history.length === 0 ? (
+				<p className="pl-6 text-muted-foreground text-xs leading-relaxed">
+					Reading this PR's diff and booting the harness CLI — the first step
+					shows up here once the agent answers.
+				</p>
+			) : (
+				<ul className="flex flex-col gap-1.5 border-l pl-3">
+					{history.map((entry) => (
+						<li
+							className="flex items-start gap-2 text-muted-foreground text-xs"
+							key={entry.id}
+						>
+							<EventIcon event={entry.event} />
+							<span className="leading-relaxed">
+								{describeEvent(entry.event)}
+							</span>
+						</li>
+					))}
+				</ul>
+			)}
 		</div>
 	);
 }
 
 function headline(event: GenerateEvent | undefined): string {
-	if (event === undefined) return "Starting…";
+	if (event === undefined) return "Starting the agent…";
 	switch (event.type) {
 		case "bootstrapping":
 			return "Setting up the harness…";

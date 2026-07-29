@@ -152,8 +152,17 @@ type RunningStep =
 	| { kind: "validation-failed"; turn: number; feedback: string }
 	| { kind: "retrying"; turn: number };
 
+/**
+ * `"starting"` is the client-side gap between clicking Generate and the
+ * stream's first event — the sidecar awaits that first event before its
+ * `generate` call even resolves (`beginTrackedGeneration`), and gathering the
+ * session's diff plus booting the harness CLI in front of it takes seconds.
+ * Without a phase of its own that window is indistinguishable from `"idle"`,
+ * which is what made the click look like a hang.
+ */
 export type GenerationProgress =
 	| { phase: "idle" }
+	| { phase: "starting" }
 	| { phase: "running"; step: RunningStep }
 	| { phase: "failed"; message: string };
 
@@ -353,7 +362,15 @@ export function useWalkthroughGeneration(
 	const generate = useCallback(
 		(harness: HarnessId, model: string | undefined) => {
 			setHistory([]);
-			setProgress({ phase: "idle" });
+			// `"starting"` immediately, not `"idle"` — the streaming effect below
+			// can't report anything until `generate.call(...)` resolves, and that
+			// only happens once the sidecar has produced the first event. Leaving
+			// this `"idle"` is what left the UI looking frozen for that whole
+			// stretch. It resolves either way: the first event moves it to
+			// `"running"`, and a harness that never boots (an immediately-exiting
+			// CLI) lands on `"failed"` via the in-band `failed` event or the
+			// effect's `catch`.
+			setProgress({ phase: "starting" });
 			// A manually-triggered Generate/Regenerate always supersedes a
 			// mount-time reattach attempt still in flight.
 			setIsReattaching(false);
