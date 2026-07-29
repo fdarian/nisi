@@ -1,7 +1,7 @@
 "use client";
 
 import { AlertTriangleIcon, InboxIcon } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { PrTabStrip } from "#/components/pr/pr-tab-strip";
 import { PrView } from "#/components/pr/pr-view";
 import {
@@ -13,6 +13,7 @@ import {
 import { FramePanel } from "#/components/ui/frame";
 import { Spinner } from "#/components/ui/spinner";
 import { TabsPrimitive } from "#/components/ui/tabs";
+import { useTabShortcuts } from "#/hooks/use-tab-shortcuts";
 import type { SidecarQueryUtils } from "#/lib/backend-context";
 import { useBackendContext } from "#/lib/backend-context";
 import { useSessions } from "#/lib/pr-data";
@@ -123,6 +124,17 @@ function AppShellReady({
 		},
 		[closeSession, sessions],
 	);
+
+	const sessionIds = useMemo(
+		() => sessions.map((session) => session.id),
+		[sessions],
+	);
+	useTabShortcuts({
+		activeTabId: activeSessionId,
+		onActivateTab: setActiveSessionId,
+		onCloseTab: handleCloseSession,
+		tabIds: sessionIds,
+	});
 
 	if (sessions.length === 0) {
 		return (

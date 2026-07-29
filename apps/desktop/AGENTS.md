@@ -7,7 +7,9 @@ see `PLAN.md` at the repo root for the phase breakdown (all four phases are buil
 
 Three parts, one seam:
 - `src-tauri/` — **Rust, intentionally thin.** Spawns/discovers the sidecar, hands `{ port, token }` to
-  the frontend via the `get_backend` command. No business logic.
+  the frontend via the `get_backend` command, and owns the macOS app menu. No business logic: the
+  Window menu's ⌘W item only emits `menu://close-tab` and lets the frontend decide what it means
+  (see `menu_with_close_tab` in `src/lib.rs`).
 - `sidecar/` — the real backend, a long-running Bun process (Effect). Implements `packages/sidecar-api`'s
   contract by composing `@repo/git` (pure PR/diff detection) and `@repo/review` (SQLite persistence)
   behind one `Store` service — see `sidecar/AGENTS.md`.
@@ -135,4 +137,8 @@ as `NISI_DATA_DIR` points somewhere scratch.
   `refresh`/`isRefreshing`, wired to `walkthrough.refreshHarnesses` — the refresh icon next to the
   harness list (Settings) and the model combobox (walkthrough tab) both call it, writing straight
   into the shared `walkthrough.harnesses` query cache so both places update from one round trip.
+- A keyboard shortcut that collides with a macOS menu accelerator can't be handled in the frontend
+  at all — AppKit gives the main menu first refusal, so the webview never sees the key. Give the
+  shortcut a real menu item that emits an event instead (⌘W does this); the rest live in
+  `src/hooks/use-tab-shortcuts.ts` / `use-settings-shortcut.ts`.
 - `#/*` → `src/*`, not `@/*`.
