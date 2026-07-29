@@ -5,7 +5,7 @@
  * same way `@repo/walkthrough` is its own package: different lifecycle,
  * different consumers, and `pr-data.ts` is already sizeable.
  */
-import { skipToken, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { SidecarQueryUtils } from "#/lib/backend-context";
 import type { FileChange } from "#/lib/pr-data";
@@ -137,19 +137,31 @@ type GenerateRequest = { harness: HarnessId; model: string | undefined };
 /**
  * Drives `walkthrough.generate`'s event stream. `.liveOptions()` replaces
  * `data` with each new chunk rather than accumulating (see
- * `@orpc/tanstack-query`'s `liveQuery`) — `history` accumulates the chunks
- * itself for the progress timeline, and `progress` folds the latest chunk
- * into a small state machine for the headline status. On `done`, the
- * resulting `StoredWalkthrough` is written straight into `walkthrough.get`'s
- * cache — no refetch needed, and the reader takes over the instant `phase`
- * goes back to `"idle"`.
+ * `@orpc/tanstack-query`'s `liveQuery`) — which isn't enough on its own for
+ * a *complete* turn-by-turn log: `.liveOptions()` exposes only the latest
+ * chunk as `query.data`, a single external value, not a queue. When two
+ * events land in the same React commit (validation-failed immediately
+ * followed by retrying, both yielded with no real `await` between them —
+ * see `generate.ts`'s loop), a `useEffect` keyed on `query.data` only ever
+ * observes the *last* of the two, silently dropping the other from the
+ * timeline. So this consumes `orpc.walkthrough.generate.call(...)` directly
+ * — the plain oRPC client call underneath the TanStack Query wrapper,
+ * returning the raw async iterator — and pushes every event into `history`
+ * from inside the `for await` loop itself. A functional `setHistory` update
+ * queues correctly no matter how React batches the resulting renders, so
+ * nothing yielded is ever missed. `progress` is folded in lockstep with the
+ * same loop rather than derived from `history` afterward.
  *
- * Regenerating with the *same* harness/model doesn't change `generate`'s
- * input, so its query key wouldn't change either — `generate()` calls
- * `refetch()` explicitly in that case rather than relying on a key change to
- * trigger a re-run. The sidecar itself decides whether to resume the prior
- * agent session or start fresh (`apps/desktop/sidecar/walkthrough/generate.ts`'s
- * `reuseLive` — same harness/model as the live session resumes it).
+ * On `done`, the resulting `StoredWalkthrough` is written straight into
+ * `walkthrough.get`'s cache — no refetch needed, and the reader takes over
+ * the instant `phase` goes back to `"idle"`.
+ *
+ * Regenerating with the *same* harness/model wouldn't otherwise re-trigger
+ * the effect (its dependencies are unchanged) — `generate()` bumps `attempt`
+ * in that case to force a fresh call. The sidecar itself decides whether to
+ * resume the prior agent session or start fresh
+ * (`apps/desktop/sidecar/walkthrough/generate.ts`'s `reuseLive` — same
+ * harness/model as the live session resumes it).
  */
 export function useWalkthroughGeneration(
 	orpc: SidecarQueryUtils,
@@ -161,52 +173,72 @@ export function useWalkthroughGeneration(
 } {
 	const queryClient = useQueryClient();
 	const [request, setRequest] = useState<GenerateRequest | null>(null);
+	const [attempt, setAttempt] = useState(0);
 	const [history, setHistory] = useState<readonly GenerationLogEntry[]>([]);
+	const [progress, setProgress] = useState<GenerationProgress>({
+		phase: "idle",
+	});
 	const requestRef = useRef(request);
 	requestRef.current = request;
 	const nextLogIdRef = useRef(0);
 
-	const query = useQuery(
-		orpc.walkthrough.generate.liveOptions({
-			input:
-				request === null
-					? skipToken
-					: { sessionId, harness: request.harness, model: request.model },
-		}),
-	);
-
+	// `attempt` isn't read in the body — it exists purely to force this effect
+	// to re-run when `generate()` is called again with an unchanged `request`
+	// (a same-harness/model Regenerate).
+	// biome-ignore lint/correctness/useExhaustiveDependencies: see above
 	useEffect(() => {
-		const event = query.data;
-		if (event === undefined) return;
-		const id = nextLogIdRef.current;
-		nextLogIdRef.current += 1;
-		setHistory((current) => [...current, { id, event }]);
-		if (event.type === "done") {
-			queryClient.setQueryData(
-				orpc.walkthrough.get.queryKey({ input: { sessionId } }),
-				event.walkthrough,
-			);
-		}
-	}, [query.data, queryClient, orpc, sessionId]);
+		if (request === null) return;
+
+		let canceled = false;
+		const controller = new AbortController();
+
+		void (async () => {
+			try {
+				const stream = await orpc.walkthrough.generate.call(
+					{ sessionId, harness: request.harness, model: request.model },
+					{ signal: controller.signal },
+				);
+				for await (const event of stream) {
+					if (canceled) return;
+					const id = nextLogIdRef.current;
+					nextLogIdRef.current += 1;
+					setHistory((current) => [...current, { id, event }]);
+					setProgress(reduceGenerateEvent(event));
+					if (event.type === "done") {
+						queryClient.setQueryData(
+							orpc.walkthrough.get.queryKey({ input: { sessionId } }),
+							event.walkthrough,
+						);
+					}
+				}
+			} catch (error) {
+				if (canceled) return;
+				setProgress({
+					phase: "failed",
+					message: error instanceof Error ? error.message : String(error),
+				});
+			}
+		})();
+
+		return () => {
+			canceled = true;
+			controller.abort();
+		};
+	}, [request, attempt, orpc, sessionId, queryClient]);
 
 	const generate = useCallback(
 		(harness: HarnessId, model: string | undefined) => {
 			setHistory([]);
+			setProgress({ phase: "idle" });
 			const isSameRequest =
 				requestRef.current?.harness === harness &&
 				requestRef.current?.model === model;
+			requestRef.current = { harness, model };
 			setRequest({ harness, model });
-			if (isSameRequest) void query.refetch();
+			if (isSameRequest) setAttempt((current) => current + 1);
 		},
-		[query],
+		[],
 	);
-
-	const progress = useMemo<GenerationProgress>(() => {
-		const last = history[history.length - 1];
-		return last === undefined
-			? { phase: "idle" }
-			: reduceGenerateEvent(last.event);
-	}, [history]);
 
 	return { progress, history, generate };
 }
