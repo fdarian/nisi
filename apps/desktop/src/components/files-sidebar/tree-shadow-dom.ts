@@ -42,11 +42,11 @@ function escapeCSSAttributeValue(value: string): string {
 	return value.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
 }
 
-/** CSS text muting the name+icon of every row in `viewedPaths`. */
+/** CSS text muting the name+icon+git-status-letter of every row in `viewedPaths`. */
 export function buildViewedMuteCSS(viewedPaths: ReadonlySet<string>): string {
 	return Array.from(viewedPaths, (path) => {
 		const selector = `[data-item-path="${escapeCSSAttributeValue(path)}"]`;
-		return `${selector} > [data-item-section="content"], ${selector} > [data-item-section="icon"] { color: var(--trees-fg-muted); }`;
+		return `${selector} > [data-item-section="content"], ${selector} > [data-item-section="icon"], ${selector} > [data-item-section="git"] { color: var(--trees-fg-muted); }`;
 	}).join("\n");
 }
 
