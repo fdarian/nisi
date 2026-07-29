@@ -9,6 +9,37 @@ type ProcessResult = {
 	readonly exitCode: number;
 };
 
+/**
+ * Every `git`/`gh` invocation goes through this — the one place that's
+ * bitten us before (a bare `"gh"` silently failing to spawn under a GUI
+ * app's minimal `PATH`, see `resolveBin` above) and the one place worth
+ * logging every spawn from, rather than scattering `Effect.log` across each
+ * caller. Debug level: a single `sessions.open` alone shells out several of
+ * these, so this would flood `Info` output.
+ */
+const logSpawnStart = (command: string, args: ReadonlyArray<string>) =>
+	Effect.logDebug("spawning process", { command, args });
+
+const logSpawnFailure = (
+	command: string,
+	args: ReadonlyArray<string>,
+	durationMs: number,
+	cause: unknown,
+) =>
+	Effect.logWarning("process failed to spawn", {
+		command,
+		args,
+		durationMs,
+		cause,
+	});
+
+const logSpawnDone = (
+	command: string,
+	args: ReadonlyArray<string>,
+	durationMs: number,
+	exitCode: number,
+) => Effect.logDebug("process exited", { command, args, durationMs, exitCode });
+
 const spawnFailure = (
 	command: string,
 	args: ReadonlyArray<string>,
@@ -41,6 +72,9 @@ const runResult = (
 > =>
 	Effect.scoped(
 		Effect.gen(function* () {
+			const startedAt = Date.now();
+			yield* logSpawnStart(command, args);
+
 			const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
 			const command_ = ChildProcess.make(command, args, {
 				cwd,
@@ -48,11 +82,12 @@ const runResult = (
 					? {}
 					: { stdin: Stream.succeed(new TextEncoder().encode(input)) }),
 			});
-			const handle = yield* spawner
-				.spawn(command_)
-				.pipe(
-					Effect.mapError((cause) => spawnFailure(command, args, cwd, cause)),
-				);
+			const handle = yield* spawner.spawn(command_).pipe(
+				Effect.mapError((cause) => spawnFailure(command, args, cwd, cause)),
+				Effect.tapError((error) =>
+					logSpawnFailure(command, args, Date.now() - startedAt, error.cause),
+				),
+			);
 
 			const [stdout, stderr, exitCode] = yield* Effect.all(
 				[
@@ -65,6 +100,7 @@ const runResult = (
 				Effect.mapError((cause) => spawnFailure(command, args, cwd, cause)),
 			);
 
+			yield* logSpawnDone(command, args, Date.now() - startedAt, exitCode);
 			return { stdout, stderr, exitCode };
 		}),
 	);
@@ -112,6 +148,9 @@ export const runBytes = (
 > =>
 	Effect.scoped(
 		Effect.gen(function* () {
+			const startedAt = Date.now();
+			yield* logSpawnStart(command, args);
+
 			const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
 			const command_ = ChildProcess.make(command, args, {
 				cwd,
@@ -119,11 +158,12 @@ export const runBytes = (
 					? {}
 					: { stdin: Stream.succeed(new TextEncoder().encode(input)) }),
 			});
-			const handle = yield* spawner
-				.spawn(command_)
-				.pipe(
-					Effect.mapError((cause) => spawnFailure(command, args, cwd, cause)),
-				);
+			const handle = yield* spawner.spawn(command_).pipe(
+				Effect.mapError((cause) => spawnFailure(command, args, cwd, cause)),
+				Effect.tapError((error) =>
+					logSpawnFailure(command, args, Date.now() - startedAt, error.cause),
+				),
+			);
 
 			const [chunks, stderr, exitCode] = yield* Effect.all(
 				[
@@ -135,6 +175,8 @@ export const runBytes = (
 			).pipe(
 				Effect.mapError((cause) => spawnFailure(command, args, cwd, cause)),
 			);
+
+			yield* logSpawnDone(command, args, Date.now() - startedAt, exitCode);
 
 			if (exitCode !== 0) {
 				return yield* new GitCommandError({
