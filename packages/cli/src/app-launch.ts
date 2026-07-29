@@ -11,7 +11,7 @@ export class AppLaunchError extends Schema.TaggedErrorClass<AppLaunchError>()(
 ) {}
 
 /** `tauri.conf.json`'s `productName` — the compiled app bundle's file name. */
-const PRODUCT_NAME = "desktop";
+const PRODUCT_NAME = "nisi";
 
 /** `src/app-launch.ts` -> `src` -> `cli` -> `packages` -> repo root. */
 const repoRoot = () =>
