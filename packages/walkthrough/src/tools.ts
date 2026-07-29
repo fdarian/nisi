@@ -80,31 +80,27 @@ export type WalkthroughToolNames = {
 };
 
 /**
- * Shaped like Claude Code's own Write/Edit tools minus the file path — there's
- * exactly one walkthrough per turn, so there's nothing to path into, and the
- * model already knows these mechanics. Colliding with each adapter's builtin
- * file tools is deliberate: user tools win on key collision, so the model's
- * editing muscle memory gets redirected at the buffer instead of the real
- * worktree.
+ * Deliberately distinct from every adapter's builtin file tools rather than
+ * colliding with them. Overriding `write`/`edit` by key collision used to be
+ * the design — `HarnessAgentSettings.tools` documents user tools as winning a
+ * collision — but it failed two different ways in practice:
+ *
+ *   - Pi doesn't honor the precedence at all. It registers its seven native
+ *     builtins *and* the user tools into one set, so the call dispatches but
+ *     the user tool's pending-result promise is never resolved and the turn
+ *     hangs forever with no timeout. Confirmed live: renaming completes the
+ *     same turn in ~12s.
+ *   - Claude Code honored it on a small prompt and then, on a 222-file digest,
+ *     ran its *builtin* `Write` instead — leaving a stray `walkthrough.json`
+ *     in the user's repo root while our buffer stayed empty for all four
+ *     turns. A name that means two different things is exactly what drifts
+ *     under load.
+ *
+ * A name nothing else claims can't be shadowed or mistaken either way. The
+ * builtins are separately switched off (`sidecar/walkthrough/generate.ts`'s
+ * `inactiveTools`), so nothing the model can call writes to the worktree.
  */
 export const WALKTHROUGH_TOOL_NAMES: WalkthroughToolNames = {
-	write: "write",
-	edit: "edit",
-};
-
-/**
- * Pi is the exception. `@ai-sdk/harness-pi` registers its seven native
- * builtins (`read`/`write`/`edit`/`bash`/`grep`/`find`/`ls`) *and* the user
- * tools into one Pi tool set, so a user tool sharing a builtin's name doesn't
- * override it — the call dispatches, but the user tool's pending-result
- * promise is never resolved and the turn hangs forever with no timeout.
- * Confirmed live: with `write`, the stream stops after `tool-call write` and
- * never produces a `tool-result`; renaming to a non-builtin name completes
- * the same turn in ~12s. Pi therefore keeps its own file tools active, which
- * costs nothing here — that was already true, since the collision never
- * actually replaced them.
- */
-export const PI_WALKTHROUGH_TOOL_NAMES: WalkthroughToolNames = {
 	write: "write_walkthrough",
 	edit: "edit_walkthrough",
 };

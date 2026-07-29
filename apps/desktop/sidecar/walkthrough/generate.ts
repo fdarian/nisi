@@ -13,7 +13,6 @@ import {
 	createWalkthroughTools,
 	defaultDigestBudget,
 	evaluateWalkthrough,
-	PI_WALKTHROUGH_TOOL_NAMES,
 	renderDigest,
 	WALKTHROUGH_TOOL_NAMES,
 } from "@repo/walkthrough";
@@ -37,6 +36,30 @@ import { type StoredWalkthroughRecord, WalkthroughStore } from "./store.ts";
 
 /** Bounded write → validate → feedback → edit loop — PLAN.md, Phase 3. Never infinite: an agent that can't converge fails loudly instead of burning turns forever. */
 const MAX_TURNS = 4;
+
+/**
+ * Each adapter's builtin tools that write to the filesystem, switched off for
+ * the whole generation. A walkthrough is prose *about* a diff — nothing here
+ * ever needs to modify the worktree, and the worktree is the user's real repo,
+ * not a disposable sandbox. Claude Code proved the risk concrete: on a large
+ * digest it called its builtin `Write` rather than the walkthrough tool and
+ * left a stray `walkthrough.json` in the repo root.
+ *
+ * Renaming our own tools out of the way (`WALKTHROUGH_TOOL_NAMES`) stops the
+ * model from *confusing* the two; this stops it from reaching a file writer at
+ * all, whichever one it reaches for. Codex exposes no file-writing builtin
+ * (only `bash`/`webSearch`), hence the empty list.
+ *
+ * `bash` is deliberately left active — the agent needs it to explore beyond
+ * the digest, and it's the one remaining way to touch disk. That's a narrower
+ * hole than an editing tool the model reaches for by habit, but it is a hole.
+ */
+const FILE_MUTATING_BUILTINS: Record<HarnessId, ReadonlyArray<string>> = {
+	"claude-code": ["write", "edit", "NotebookEdit"],
+	codex: [],
+	opencode: ["write", "edit"],
+	pi: ["write", "edit"],
+};
 
 /** Thrown (not yielded) so `http.ts`'s handler can map it to the contract's declared `NOT_FOUND`, the same treatment `diff.files`/`diff.file` give an unknown session — everything else that can go wrong mid-generation yields an in-band `failed` event instead of tearing down the stream. */
 export class GenerateSessionNotFound extends Error {
@@ -81,13 +104,20 @@ const buildContinuationPrompt = (digestText: string): string =>
  * buffer, four identical "you haven't written the walkthrough yet" retries,
  * and a final message blaming coverage validation for what was really an auth
  * failure the harness had already described precisely.
+ *
+ * Returns `undefined` for a part carrying no payload at all. OpenCode's bridge
+ * emits a bare `{ type: "error" }` partway through a busy session (see
+ * `patches/@ai-sdk%2Fharness@1.0.46.patch`, which is what lets it decode
+ * rather than tear the stream down); it says nothing, arrives on runs that are
+ * otherwise fine, and must not abort a generation that is about to succeed.
+ * Anything with real content still fails the turn.
  */
-const describeStreamError = (error: unknown): string => {
+const describeStreamError = (error: unknown): string | undefined => {
+	if (error === undefined || error === null) return undefined;
 	if (error instanceof Error) return error.message;
-	if (typeof error === "string") return error;
+	if (typeof error === "string") return error.length === 0 ? undefined : error;
 	if (
 		typeof error === "object" &&
-		error !== null &&
 		"message" in error &&
 		typeof error.message === "string"
 	) {
@@ -110,11 +140,7 @@ const startFreshSession = async (
 	});
 	// The same pair feeds both the harness (which registers these keys) and the
 	// prompt (which tells the model what to call) — they must never diverge.
-	// For three of the four adapters these are `write`/`edit`, deliberately
-	// colliding with their builtin file tools so user tools override them; Pi
-	// is the exception, see `PI_WALKTHROUGH_TOOL_NAMES`.
-	const toolNames =
-		input.harness === "pi" ? PI_WALKTHROUGH_TOOL_NAMES : WALKTHROUGH_TOOL_NAMES;
+	const toolNames = WALKTHROUGH_TOOL_NAMES;
 	const walkthroughTools = createWalkthroughTools(buffer, toolNames);
 	const agent = new HarnessAgent({
 		harness: createHarnessAdapter(input.harness, input.model),
@@ -124,6 +150,7 @@ const startFreshSession = async (
 			[toolNames.write]: walkthroughTools.write,
 			[toolNames.edit]: walkthroughTools.edit,
 		},
+		inactiveTools: FILE_MUTATING_BUILTINS[input.harness],
 		instructions: buildSystemPrompt(toolNames),
 	});
 	const session = await agent.createSession();
@@ -243,11 +270,17 @@ export async function* generateWalkthrough(
 					yield { type: "tool-call", turn, toolName: part.toolName };
 				}
 				if (part.type === "error") {
-					streamErrors.push(describeStreamError(part.error));
+					const described = describeStreamError(part.error);
+					if (described !== undefined) streamErrors.push(described);
 				}
 			}
 		} catch (error) {
-			streamErrors.push(describeStreamError(error));
+			// A thrown failure always fails the turn, even if it describes
+			// itself poorly — unlike an in-band `error` part, it already tore
+			// the stream down, so there's nothing left to salvage.
+			streamErrors.push(
+				describeStreamError(error) ?? "The harness stream failed.",
+			);
 		}
 
 		// Fails the whole generation rather than spending another turn: the

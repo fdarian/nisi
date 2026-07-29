@@ -34,7 +34,6 @@ export {
 
 export {
 	createWalkthroughTools,
-	PI_WALKTHROUGH_TOOL_NAMES,
 	WALKTHROUGH_TOOL_NAMES,
 	type WalkthroughToolNames,
 } from "./tools.ts";
