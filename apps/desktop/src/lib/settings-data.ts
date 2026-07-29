@@ -1,7 +1,7 @@
 /**
  * `@repo/settings`-backed preferences — the sidecar is the single source of
  * truth for anything it needs to read back (`enabledHarnesses`, since
- * `walkthrough.harnesses()` filters by it server-side), and the sidebar/diff
+ * `walkthrough.harnesses()` reflects it server-side), and the sidebar/diff
  * view modes ride along on the same store rather than `localStorage` since
  * the mechanism costs nothing extra once it exists. Theme stays in
  * `localStorage` via `next-themes` — nothing server-side ever reads it. See
@@ -16,7 +16,12 @@ export type SidebarViewMode = "tree" | "flat";
 export type DiffStyleMode = "unified" | "split";
 
 export type Settings = {
-	enabledHarnesses: readonly HarnessId[];
+	/**
+	 * `null` means "never configured" — the walkthrough tab's onboarding gate
+	 * fires on exactly this, distinct from `[]` ("configured, chose none").
+	 * See `@repo/settings`'s `Settings.enabledHarnesses` doc for the full story.
+	 */
+	enabledHarnesses: readonly HarnessId[] | null;
 	sidebarViewMode: SidebarViewMode;
 	diffStyleMode: DiffStyleMode;
 };
@@ -29,7 +34,7 @@ export type Settings = {
  * return.
  */
 const DEFAULT_SETTINGS: Settings = {
-	enabledHarnesses: ["claude-code", "codex", "opencode", "pi"],
+	enabledHarnesses: null,
 	sidebarViewMode: "tree",
 	diffStyleMode: "unified",
 };
@@ -50,6 +55,12 @@ export function useSettings(orpc: SidecarQueryUtils): {
  * `settings.update`, writing the mutation's response straight into the
  * `settings.get` cache instead of invalidating — the response *is* the new
  * authoritative row (merged server-side), so there's nothing to refetch.
+ *
+ * A patch touching `enabledHarnesses` additionally invalidates
+ * `walkthrough.harnesses` — its `HarnessInfo.enabled`/`models` are computed
+ * server-side off this same setting (see `packages/sidecar-api/src/walkthrough.ts`),
+ * so the combobox and the settings page's checkboxes would otherwise show a
+ * stale `enabled` flag until something else happened to refetch it.
  */
 export function useUpdateSettings(
 	orpc: SidecarQueryUtils,
@@ -62,6 +73,11 @@ export function useUpdateSettings(
 			mutation.mutate(patch, {
 				onSuccess: (settings) => {
 					queryClient.setQueryData(orpc.settings.get.queryKey(), settings);
+					if ("enabledHarnesses" in patch) {
+						queryClient.invalidateQueries({
+							queryKey: orpc.walkthrough.harnesses.key(),
+						});
+					}
 				},
 			});
 		},
