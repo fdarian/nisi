@@ -1,4 +1,6 @@
 export {
+	type BinaryAvailability,
+	checkBinAvailability,
 	findExecutable,
 	resolveBin,
 	resolvedPath,

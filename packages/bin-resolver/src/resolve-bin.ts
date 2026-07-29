@@ -57,6 +57,45 @@ export function resolveBin(name: string, envOverrideVar?: string): string {
 	);
 }
 
+export type BinaryAvailability = {
+	readonly available: boolean;
+	/** The resolved absolute path when found — lets a caller show *which* binary it picked, e.g. to disambiguate a Homebrew install from a `.bun/bin` one. `null` when unavailable. */
+	readonly path: string | null;
+};
+
+/**
+ * Same resolution order as `resolveBin` (env override, then `PATH`, then
+ * `WELL_KNOWN_BIN_DIRS`), but reports whether `name` genuinely exists on disk
+ * instead of falling back to a bare name that would only fail later at spawn
+ * time. This is what "available" means — is the binary actually present —
+ * as distinct from `resolveBin`'s "best path to try spawning": an env
+ * override pointing at a missing file is unavailable here, whereas
+ * `resolveBin` still hands that override to the spawner verbatim and lets
+ * the OS report the failure.
+ */
+export function checkBinAvailability(
+	name: string,
+	envOverrideVar?: string,
+	exists: (path: string) => boolean = existsSync,
+): BinaryAvailability {
+	const override =
+		envOverrideVar === undefined ? undefined : process.env[envOverrideVar];
+	if (override !== undefined && override.length > 0) {
+		return exists(override)
+			? { available: true, path: override }
+			: { available: false, path: null };
+	}
+
+	const found = findExecutable(
+		name,
+		[...pathDirs(process.env.PATH), ...WELL_KNOWN_BIN_DIRS],
+		exists,
+	);
+	return found === undefined
+		? { available: false, path: null }
+		: { available: true, path: found };
+}
+
 /**
  * `PATH` extended with whichever `WELL_KNOWN_BIN_DIRS` exist on disk and
  * aren't already present. For handing to a spawned process's own `env.PATH`
