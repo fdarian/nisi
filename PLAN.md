@@ -249,18 +249,24 @@ Accept two consequences. First, adapters install their own **pinned** copy of ea
 than exec'ing the user's global binary — there's no config to redirect it. This is idempotent
 via a recipe-hash marker file, and because our filesystem is real persistent disk (not an
 ephemeral VM), it installs once ever, not per session. The user's *credentials* are still
-theirs, since the process runs as them with their `~/.claude`, `~/.codex`, etc. Second,
-"enabled harnesses" can't be detected — no `isAvailable` API exists — so the settings toggle
-is a user declaration, and readiness is discovered by catching `createSession()` failures.
+theirs, since the process runs as them with their `~/.claude`, `~/.codex`, etc. Second, no
+`HarnessAgent` adapter exposes an `isAvailable` API of its own — but `packages/bin-resolver`
+(added for the GUI-`PATH` problem below) makes the underlying CLI's *presence on disk*
+detectable independently: `HarnessInfo.available` is a live binary-presence check, kept sharply
+distinct from `enabled` (the settings toggle, a user declaration) — a harness can be enabled but
+currently unavailable, or available but not yet enabled. Neither one predicts whether a session
+will actually authenticate; that's still only discovered by catching `createSession()` failures.
 
 The alternative — driving the four CLIs directly via their own SDKs — is worse despite being
 more obvious. Three of four are clean, but Codex's exec/json mode doesn't expose MCP tools to
 the model at all (an open upstream bug), and custom tools are exactly what our output mechanism
 depends on. Vercel already wrote that workaround. Going direct means reimplementing it.
 
-**Model lists are static.** Only Pi has a real discovery API; the other three take a free-form
-`model?: string`. So the grouped combobox is a curated per-harness list, with Pi's populated
-dynamically.
+**Model lists are discovered live for all four harnesses** (`apps/desktop/sidecar/walkthrough/model-discovery.ts`)
+— a CLI subprocess for codex/opencode, the Claude Agent SDK's `query()` for claude-code, and Pi's
+own `ModelRegistry`, the one harness with a real discovery API of its own. Each is independently
+timeout-bounded and TTL-cached, with a manual refresh (`walkthrough.refreshHarnesses`) to bypass
+that cache on demand.
 
 The agent is spawned in the repo directory and writes its output through `Write`/`Edit`-shaped
 tools that take no file path — the same ergonomics Claude Code's editing tools have, so the
