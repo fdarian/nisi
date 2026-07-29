@@ -36,8 +36,8 @@ import { Spinner } from "#/components/ui/spinner";
 import { ToggleGroup, ToggleGroupItem } from "#/components/ui/toggle-group";
 import type { SidecarQueryUtils } from "#/lib/backend-context";
 import { useBackendContext } from "#/lib/backend-context";
-import { useSettings, useUpdateSettings } from "#/lib/settings-data";
-import { ALL_HARNESSES, type HarnessId } from "#/lib/walkthrough-data";
+import { useUpdateSettings } from "#/lib/settings-data";
+import { type HarnessId, useHarnesses } from "#/lib/walkthrough-data";
 
 /**
  * Top-level `/settings` route content — a sibling of the main `AppShell`, not
@@ -223,41 +223,45 @@ function AppearanceSection(): React.ReactElement {
 
 /**
  * Checkboxes for the four harnesses, written straight through
- * `settings.update` — `walkthrough.harnesses()` already filters by this same
- * field server-side, so toggling here immediately changes which harnesses
- * show up in the walkthrough tab's model combobox. Uses `ALL_HARNESSES`
- * rather than `useHarnesses` deliberately: the latter is pre-filtered to
- * already-enabled harnesses, which would make a disabled one impossible to
- * re-enable from this list.
+ * `settings.update` — `walkthrough.harnesses()` already reflects this same
+ * field server-side (its `HarnessInfo.enabled`), so toggling here immediately
+ * changes which harnesses show up in the walkthrough tab's model combobox.
+ * Renders `useHarnesses`' own result directly rather than a separate static
+ * list — `walkthrough.harnesses()` always reports all four regardless of
+ * which are currently enabled, so there's no risk of a disabled harness being
+ * impossible to re-enable from here.
  */
 function HarnessesSection({
 	orpc,
 }: {
 	orpc: SidecarQueryUtils;
 }): React.ReactElement {
-	const { settings } = useSettings(orpc);
+	const { harnesses } = useHarnesses(orpc);
 	const update = useUpdateSettings(orpc);
 
 	const toggleHarness = useCallback(
 		(id: HarnessId, checked: boolean) => {
+			const currentlyEnabled = harnesses
+				.filter((harness) => harness.enabled)
+				.map((harness) => harness.id);
 			const next = checked
-				? [...settings.enabledHarnesses, id]
-				: settings.enabledHarnesses.filter((enabled) => enabled !== id);
+				? Array.from(new Set([...currentlyEnabled, id]))
+				: currentlyEnabled.filter((enabled) => enabled !== id);
 			update({ enabledHarnesses: next });
 		},
-		[settings.enabledHarnesses, update],
+		[harnesses, update],
 	);
 
 	return (
 		<SettingsSection title="Harnesses">
-			{ALL_HARNESSES.map((harness) => (
+			{harnesses.map((harness) => (
 				<SettingsRow
 					description="Drive this harness's local CLI when generating a walkthrough."
 					key={harness.id}
 					title={harness.label}
 				>
 					<Checkbox
-						checked={settings.enabledHarnesses.includes(harness.id)}
+						checked={harness.enabled}
 						onCheckedChange={(checked) =>
 							toggleHarness(harness.id, checked === true)
 						}

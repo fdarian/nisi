@@ -1,8 +1,9 @@
 "use client";
 
+import { Link } from "@tanstack/react-router";
 import { SparklesIcon } from "lucide-react";
 import { useState } from "react";
-import { Button } from "#/components/ui/button";
+import { Button, buttonVariants } from "#/components/ui/button";
 import {
 	Empty,
 	EmptyDescription,
@@ -15,8 +16,9 @@ import {
 	HarnessModelCombobox,
 	type ModelSelection,
 } from "#/components/walkthrough/harness-model-combobox";
-import { useEnabledHarnesses } from "#/hooks/use-enabled-harnesses";
 import type { SidecarQueryUtils } from "#/lib/backend-context";
+import { useSettings, useUpdateSettings } from "#/lib/settings-data";
+import { cn } from "#/lib/utils";
 import {
 	type GenerationLogEntry,
 	type GenerationProgress,
@@ -34,8 +36,12 @@ type GeneratePanelProps = {
 /**
  * The walkthrough tab's content whenever there's no walkthrough to read yet
  * — either nothing's been generated, or a generation is currently running.
- * First use asks which harnesses are set up (checkboxes); once chosen, the
- * combobox lists their models grouped by harness.
+ * First use (`settings.enabledHarnesses === null`) asks which harnesses are
+ * set up (checkboxes), writing the choice through `settings.update`; once
+ * configured, the combobox lists enabled harnesses' models grouped by
+ * harness. `[]` (deliberately disabled everything) is a distinct, legitimate
+ * configured state — it doesn't re-trigger onboarding, it just has nothing to
+ * generate with.
  */
 export function GeneratePanel({
 	orpc,
@@ -44,9 +50,10 @@ export function GeneratePanel({
 	onGenerate,
 }: GeneratePanelProps): React.ReactElement {
 	const { harnesses } = useHarnesses(orpc);
-	const [enabledHarnessIds, setEnabledHarnessIds] = useEnabledHarnesses();
+	const { settings } = useSettings(orpc);
+	const updateSettings = useUpdateSettings(orpc);
 	const [selection, setSelection] = useState<ModelSelection | null>(null);
-	const [configuring, setConfiguring] = useState(false);
+	const [reconfiguring, setReconfiguring] = useState(false);
 
 	if (progress.phase === "running") {
 		return (
@@ -56,18 +63,39 @@ export function GeneratePanel({
 		);
 	}
 
-	if (enabledHarnessIds === null || configuring) {
+	if (settings.enabledHarnesses === null || reconfiguring) {
 		return (
 			<div className="flex flex-1 flex-col items-center justify-center gap-4 px-6">
 				<EnableHarnessesPanel
 					harnesses={harnesses}
-					initialSelected={enabledHarnessIds ?? []}
+					initialSelected={settings.enabledHarnesses ?? []}
 					onConfirm={(selected) => {
-						setEnabledHarnessIds(selected);
-						setConfiguring(false);
+						updateSettings({ enabledHarnesses: selected });
+						setReconfiguring(false);
 					}}
 				/>
 			</div>
+		);
+	}
+
+	if (!harnesses.some((harness) => harness.enabled)) {
+		return (
+			<Empty className="flex-1">
+				<EmptyMedia variant="icon">
+					<SparklesIcon />
+				</EmptyMedia>
+				<EmptyTitle>No harnesses enabled</EmptyTitle>
+				<EmptyDescription>
+					Every harness is currently disabled, so there's nothing to generate a
+					walkthrough with. Enable at least one in Settings.
+				</EmptyDescription>
+				<Link
+					className={cn(buttonVariants({ variant: "outline", size: "sm" }))}
+					to="/settings"
+				>
+					Open settings
+				</Link>
+			</Empty>
 		);
 	}
 
@@ -88,7 +116,6 @@ export function GeneratePanel({
 			)}
 			<div className="flex items-center gap-2">
 				<HarnessModelCombobox
-					enabledHarnessIds={enabledHarnessIds}
 					harnesses={harnesses}
 					onChange={setSelection}
 					value={selection}
@@ -103,7 +130,7 @@ export function GeneratePanel({
 					Generate
 				</Button>
 			</div>
-			<Button onClick={() => setConfiguring(true)} size="sm" variant="ghost">
+			<Button onClick={() => setReconfiguring(true)} size="sm" variant="ghost">
 				Configure harnesses
 			</Button>
 		</Empty>

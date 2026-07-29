@@ -34,26 +34,20 @@ function optionValue(harness: HarnessId, modelId: string | undefined): string {
 
 type HarnessModelComboboxProps = {
 	harnesses: readonly HarnessInfo[];
-	enabledHarnessIds: readonly HarnessId[];
 	value: ModelSelection | null;
 	onChange: (value: ModelSelection) => void;
 };
 
+/** Only enabled harnesses get a model group — `HarnessInfo.enabled` already reflects `@repo/settings`'s `enabledHarnesses` server-side, so there's no separate id set to thread through. */
 export function HarnessModelCombobox({
 	harnesses,
-	enabledHarnessIds,
 	value,
 	onChange,
 }: HarnessModelComboboxProps): React.ReactElement {
-	const enabledSet = useMemo(
-		() => new Set(enabledHarnessIds),
-		[enabledHarnessIds],
-	);
-
 	const groups = useMemo<readonly ModelOptionGroup[]>(
 		() =>
 			harnesses
-				.filter((harness) => enabledSet.has(harness.id))
+				.filter((harness) => harness.enabled)
 				.map((harness) => ({
 					label: harness.label,
 					items: harness.models.map(
@@ -66,7 +60,7 @@ export function HarnessModelCombobox({
 					),
 				}))
 				.filter((group) => group.items.length > 0),
-		[harnesses, enabledSet],
+		[harnesses],
 	);
 
 	const selectedOption = useMemo(() => {

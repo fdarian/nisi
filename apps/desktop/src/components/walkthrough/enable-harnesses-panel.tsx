@@ -12,7 +12,13 @@ type EnableHarnessesPanelProps = {
 	onConfirm: (selected: readonly HarnessId[]) => void;
 };
 
-/** First-use onboarding: which harnesses the user actually has CLIs installed/authenticated for — see `use-enabled-harnesses.ts` on why this can't be detected and has to be asked. */
+/**
+ * First-use onboarding: which harnesses the user actually has CLIs
+ * installed/authenticated for. Can't be detected (no `isAvailable` API on any
+ * adapter — see PLAN.md's Phase 3 note), so it's asked and written straight
+ * through `settings.update`'s `enabledHarnesses` — the sidecar is what spawns
+ * the agents, so it's the authoritative store, not a client-side shadow copy.
+ */
 export function EnableHarnessesPanel({
 	harnesses,
 	initialSelected,
