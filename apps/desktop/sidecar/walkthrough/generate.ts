@@ -19,6 +19,11 @@ import type { Context } from "effect";
 import { Effect, Result } from "effect";
 import type { AppServices } from "../services.ts";
 import { type GenerationContext, gatherGenerationContext } from "./context.ts";
+import {
+	beginGeneration,
+	clearGeneration,
+	recordGenerationEvent,
+} from "./generation-log.ts";
 import { createHarnessAdapter } from "./harnesses.ts";
 import {
 	getLiveSession,
@@ -268,4 +273,65 @@ export async function* generateWalkthrough(
 		yield { type: "retrying", turn: turn + 1 };
 		turnPrompt = evaluation.feedback;
 	}
+}
+
+/**
+ * Starts a generation and records every event it produces into
+ * `generation-log.ts`'s retained log, so a `generate` request that reattaches
+ * later (a tab switch, a dropped connection) sees the full history instead
+ * of nothing — PLAN.md's "the sidecar is the source of truth for an
+ * in-flight generation."
+ *
+ * Only the *first* event is awaited here — long enough to let
+ * `GenerateSessionNotFound` (thrown from `generateWalkthrough`'s very first
+ * step, before any yield) propagate to `http.ts`'s caller exactly as before,
+ * so the NOT_FOUND contract is unchanged. Everything after that first event
+ * runs detached, in the background, independent of whether this specific
+ * caller stays connected — which is what lets the generation survive a tab
+ * switch at all: `@ai-sdk/harness`'s "session already has a turn in
+ * progress" guard only makes sense if the loop really does keep running
+ * server-side once nobody's pulling it, and empirically it does (that's the
+ * reported bug this fixes — pressing Generate again during a still-running
+ * turn hits that exact guard).
+ *
+ * `beginGeneration` runs as the very first statement, before any `await`, so
+ * two `generate` calls racing for the same session can't both start one:
+ * whichever runs second always finds the record the first just created.
+ */
+export async function beginTrackedGeneration(
+	input: GenerateInput,
+	mainContext: Context.Context<AppServices>,
+): Promise<void> {
+	beginGeneration(input.sessionId, input.harness, input.model);
+	const iterator = generateWalkthrough(input, mainContext);
+
+	let first: IteratorResult<GenerateEvent>;
+	try {
+		first = await iterator.next();
+	} catch (error) {
+		clearGeneration(input.sessionId);
+		throw error;
+	}
+	if (first.done !== true) {
+		recordGenerationEvent(input.sessionId, first.value);
+	}
+
+	void (async () => {
+		try {
+			while (true) {
+				const next = await iterator.next();
+				if (next.done === true) return;
+				recordGenerationEvent(input.sessionId, next.value);
+			}
+		} catch (error) {
+			// `generateWalkthrough` only ever throws `GenerateSessionNotFound`,
+			// and only as its very first step — already handled above, before
+			// this detached loop starts. Anything reaching here is unexpected;
+			// record it rather than let it vanish as an unhandled rejection.
+			recordGenerationEvent(input.sessionId, {
+				type: "failed",
+				message: error instanceof Error ? error.message : String(error),
+			});
+		}
+	})();
 }

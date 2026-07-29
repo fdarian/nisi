@@ -8,7 +8,11 @@ import {
 } from "@orpc/server/plugins";
 import { ReviewStore } from "@repo/review";
 import { SettingsStore } from "@repo/settings";
-import type { HarnessId, Settings as WireSettings } from "@repo/sidecar-api";
+import type {
+	GenerateEvent,
+	HarnessId,
+	Settings as WireSettings,
+} from "@repo/sidecar-api";
 import { contract } from "@repo/sidecar-api";
 import type { Context } from "effect";
 import { Effect } from "effect";
@@ -20,9 +24,14 @@ import {
 import type { AppServices } from "./services.ts";
 import { Store } from "./store.ts";
 import {
+	beginTrackedGeneration,
 	GenerateSessionNotFound,
-	generateWalkthrough,
 } from "./walkthrough/generate.ts";
+import {
+	attachToGeneration,
+	clearGeneration,
+	getGeneration,
+} from "./walkthrough/generation-log.ts";
 import { listHarnesses } from "./walkthrough/harnesses.ts";
 import { stopLiveSession } from "./walkthrough/live-sessions.ts";
 import { WalkthroughStore } from "./walkthrough/store.ts";
@@ -117,8 +126,10 @@ export function startServer(
 				);
 				// A closed tab's sandbox session (spawned processes, leased port)
 				// has no other owner — release it here rather than leaking it for
-				// the sidecar's lifetime.
+				// the sidecar's lifetime. Its retained generation log goes with
+				// it — nothing left to reattach to once the session itself is gone.
 				yield* Effect.promise(() => stopLiveSession(input.sessionId));
+				clearGeneration(input.sessionId);
 				emit({ type: "session-closed", sessionId: input.sessionId });
 			}),
 		},
@@ -269,20 +280,71 @@ export function startServer(
 					generatedAt: record.generatedAt,
 				};
 			}),
+			// A pure read over `generation-log.ts`'s in-memory state — no Store
+			// call needed beyond the same session-existence check every other
+			// handler here does, so a bogus sessionId gets the same NOT_FOUND
+			// instead of a misleading `null`.
+			activeGeneration: authed.walkthrough.activeGeneration.effect(function* ({
+				input,
+				errors,
+			}) {
+				const reviewStore = yield* ReviewStore;
+				yield* reviewStore.getSession(input.sessionId).pipe(
+					Effect.catchTag("SessionNotFound", () =>
+						Effect.fail(
+							errors.NOT_FOUND({
+								message: `session not found: ${input.sessionId}`,
+							}),
+						),
+					),
+				);
+				return getGeneration(input.sessionId) ?? null;
+			}),
 			// Plain async-generator handler, same reason as `events.subscribe`
 			// above — the multi-turn generation loop needs to push progress
 			// events live, which `.effect()`'s single-resolved-value model can't.
+			// Starts a generation, or reattaches to one already retained for this
+			// session — see `generation-log.ts` and `generate.ts`'s
+			// `beginTrackedGeneration` for how the two cases are told apart and
+			// why the generation survives this specific request disconnecting.
 			generate: authed.walkthrough.generate.handler(async function* ({
 				input,
 				errors,
 			}) {
-				try {
-					yield* generateWalkthrough(input, mainContext);
-				} catch (error) {
-					if (error instanceof GenerateSessionNotFound) {
-						throw errors.NOT_FOUND({ message: error.message });
+				const pending: Array<GenerateEvent> = [];
+				let wake: (() => void) | undefined;
+				const onEvent = (event: GenerateEvent): void => {
+					pending.push(event);
+					wake?.();
+				};
+
+				let unsubscribe = attachToGeneration(input.sessionId, onEvent);
+				if (unsubscribe === undefined) {
+					try {
+						await beginTrackedGeneration(input, mainContext);
+					} catch (error) {
+						if (error instanceof GenerateSessionNotFound) {
+							throw errors.NOT_FOUND({ message: error.message });
+						}
+						throw error;
 					}
-					throw error;
+					unsubscribe = attachToGeneration(input.sessionId, onEvent);
+				}
+
+				try {
+					while (true) {
+						const event = pending.shift();
+						if (event !== undefined) {
+							yield event;
+							if (event.type === "done" || event.type === "failed") return;
+							continue;
+						}
+						await new Promise<void>((resolve) => {
+							wake = resolve;
+						});
+					}
+				} finally {
+					unsubscribe?.();
 				}
 			}),
 		},

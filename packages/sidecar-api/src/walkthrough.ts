@@ -133,6 +133,26 @@ export const GenerateEvent = Schema.Union([
 ]);
 export type GenerateEvent = Schema.Schema.Type<typeof GenerateEvent>;
 
+/**
+ * A snapshot of the generation the sidecar is currently retaining for one
+ * session — whatever `generate`'s stream has produced so far, kept in memory
+ * so a subscriber that reattaches (tab switch, reload) can catch up instead
+ * of finding nothing. `events` is the *entire* backlog from `bootstrapping`
+ * onward, including the terminal `done`/`failed` entry once the generation
+ * has finished — so this doubles as "what happened to my last generate call"
+ * even after the fact, e.g. a failure nobody was around to see. `status`
+ * mirrors the last event's type (`"running"` until a terminal one lands).
+ * Gone on sidecar restart, same as `live-sessions.ts`'s in-process map — see
+ * `apps/desktop/sidecar/walkthrough/generation-log.ts`.
+ */
+export const ActiveGeneration = Schema.Struct({
+	harness: HarnessId,
+	model: Schema.NullOr(Schema.String),
+	events: Schema.Array(GenerateEvent),
+	status: Schema.Literals(["running", "done", "failed"]),
+});
+export type ActiveGeneration = Schema.Schema.Type<typeof ActiveGeneration>;
+
 export const walkthroughContract = {
 	/** All four adapters, each flagged `enabled` — never errors, since availability isn't knowable up front. */
 	harnesses: oc.output(Schema.Array(HarnessInfo)),
@@ -141,9 +161,31 @@ export const walkthroughContract = {
 		.input(Schema.Struct({ sessionId: Schema.String }))
 		.output(Schema.NullOr(StoredWalkthrough))
 		.errors({ NOT_FOUND: {} }),
+	/**
+	 * `null` when nothing is retained for this session — no generation has
+	 * run since the sidecar last started, or its retained log was overwritten
+	 * by a newer `generate` call. A pure read, no side effects: safe to call
+	 * on every mount/tab-focus to decide whether to render a resumed progress
+	 * timeline, unlike `generate` itself (see below), which is safe to call
+	 * repeatedly too but only because it *reattaches* rather than because
+	 * it's side-effect-free — call this one first if the goal is just to look.
+	 */
+	activeGeneration: oc
+		.input(Schema.Struct({ sessionId: Schema.String }))
+		.output(Schema.NullOr(ActiveGeneration))
+		.errors({ NOT_FOUND: {} }),
 	// `eventIterator` wants a Standard Schema, same as `events.subscribe` —
 	// see `events.ts`'s comment on why `oc.output()`'s Effect-Schema patch
 	// doesn't cover it.
+	/**
+	 * Starts a generation, *or* reattaches to one already running for
+	 * `sessionId` — the sidecar decides which by what it finds retained (see
+	 * `generation-log.ts`). Reattaching replays every event produced so far
+	 * before continuing live, so a caller that missed the start (a fresh
+	 * subscribe after a tab switch, e.g.) still sees the full timeline. When
+	 * reattaching, `harness`/`model` are ignored — whatever's already running
+	 * wins, since a session only ever has one generation in flight.
+	 */
 	generate: oc
 		.input(
 			Schema.Struct({
