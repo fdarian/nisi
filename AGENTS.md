@@ -5,8 +5,9 @@ full architecture and phase breakdown — all four phases (skeleton, git domain 
 changes, walkthrough, settings) are built.
 
 ## Stack
-- **Bun** for package management *and* runtime (`bun install`, `bun add <pkg>` from inside the target
-  package) — never hand-edit `package.json` dependency fields.
+- **pnpm** for package management (`pnpm install`, `pnpm add <pkg>` from inside the target package,
+  `enableGlobalVirtualStore: true` in `pnpm-workspace.yaml`) — never hand-edit `package.json`
+  dependency fields. **Bun** is the runtime (`bun run ...`, `bun test`, `bun build --compile`).
 - **Effect v4** (`effect@beta`, currently `4.0.0-beta.x`) end-to-end. This is a beta line with real API
   differences from v3 — e.g. services are `Context.Service<Self, Shape>()("id")`, not `Effect.Service`;
   `Schema.TaggedError` is `Schema.TaggedErrorClass`; `@effect/platform-bun` exports `BunServices.layer`,
@@ -18,7 +19,7 @@ changes, walkthrough, settings) are built.
   tasks; those are run per-app directly).
 
 ## Layout
-Workspaces declared in root `package.json` (`packages/*`, `apps/*`).
+Workspaces declared in `pnpm-workspace.yaml` (`packages/*`, `apps/*`).
 - `packages/sidecar-api` — oRPC contract shared by the sidecar and the desktop frontend.
 - `apps/desktop` — Tauri shell + Bun/Effect sidecar + React frontend.
 
@@ -26,9 +27,13 @@ Workspaces declared in root `package.json` (`packages/*`, `apps/*`).
 extends `@total-typescript/tsconfig` directly; add the shared package once duplication actually hurts.
 
 ## Gotchas
-- Add deps with `bun add <pkg>` (run from inside the package directory) — never hand-edit
+- Add deps with `pnpm add <pkg>` (run from inside the package directory) — never hand-edit
   `package.json`.
 - Beta packages (`effect`, `@effect/platform-bun`, `@orpc/*`) are pinned to exact versions, not `^`
   ranges — bump them deliberately.
+- The three `@ai-sdk/harness-*` patches (compiled-binary asset fix, see `PLAN.md`'s
+  "Compiled-binary constraints") live in `patches/` but are registered under `patchedDependencies`
+  in `pnpm-workspace.yaml`, not `package.json` — pnpm 10+ silently ignores that key in
+  `package.json` with no warning.
 - Path alias is `#/*` → `src/*` in every package, not `@/*`.
 - `AGENTS.md` is the source of truth in every workspace; `CLAUDE.md` is always a symlink to it.

@@ -36,7 +36,7 @@ nisi has no packaged release yet — build it from source.
 ```bash
 git clone https://github.com/fdarian/nisi.git
 cd nisi
-bun install
+pnpm install
 ```
 
 Build the desktop app:
@@ -126,7 +126,7 @@ into a bootstrap directory; every run after that is warm.
 ## Development
 
 ```bash
-bun turbo run check:type check:lint
+pnpm turbo run check:type check:lint
 ```
 
 Per-package tests (there's no repo-wide `test` task):
