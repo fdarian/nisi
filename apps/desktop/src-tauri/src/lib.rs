@@ -159,7 +159,7 @@ mod tests {
 
     fn temp_dir(label: &str) -> PathBuf {
         let dir = std::env::temp_dir().join(format!(
-            "desktop-lib-test-{label}-{}-{:?}",
+            "nisi-lib-test-{label}-{}-{:?}",
             std::process::id(),
             std::thread::current().id()
         ));
