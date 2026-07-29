@@ -1,4 +1,4 @@
-# @repo/desktop
+# @repo/nisi
 
 Tauri 2 desktop app: the port/token handshake between Rust and the Bun/Effect sidecar, the
 sidecar's git/review/walkthrough/settings domains, and a frontend wired to that live contract —

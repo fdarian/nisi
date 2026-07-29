@@ -10,7 +10,7 @@
       },
     },
     "apps/desktop": {
-      "name": "@repo/desktop",
+      "name": "@repo/nisi",
       "version": "0.1.0",
       "dependencies": {
         "@ai-sdk/harness": "1.0.46",
@@ -547,11 +547,11 @@
 
     "@repo/db": ["@repo/db@workspace:packages/db"],
 
-    "@repo/desktop": ["@repo/desktop@workspace:apps/desktop"],
-
     "@repo/git": ["@repo/git@workspace:packages/git"],
 
     "@repo/harness-local": ["@repo/harness-local@workspace:packages/harness-local"],
+
+    "@repo/nisi": ["@repo/nisi@workspace:apps/desktop"],
 
     "@repo/review": ["@repo/review@workspace:packages/review"],
 

@@ -1,7 +1,7 @@
 # @repo/sidecar-api
 
 Contract-first oRPC v2 contract for the desktop sidecar's wire API — the single source of truth shared
-by the sidecar (implementer, [`@repo/desktop`](../../apps/desktop/AGENTS.md)) and its frontend client.
+by the sidecar (implementer, [`@repo/nisi`](../../apps/desktop/AGENTS.md)) and its frontend client.
 Phase 1 adds git/review procedures on top of Phase 0's `health.check`; see `PLAN.md` (root), "The
 contract", for the shapes these were specified against.
 
