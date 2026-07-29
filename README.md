@@ -46,8 +46,8 @@ cd apps/desktop
 bunx tauri build
 ```
 
-This produces `apps/desktop/src-tauri/target/release/bundle/macos/desktop.app`. Move it to
-`/Applications/desktop.app` (the `nisi` CLI checks there first), or leave it where it is — `nisi`
+This produces `apps/desktop/src-tauri/target/release/bundle/macos/nisi.app`. Move it to
+`/Applications/nisi.app` (the `nisi` CLI checks there first), or leave it where it is — `nisi`
 also finds a locally-built bundle in place.
 
 Put the CLI on your `PATH`:
