@@ -29,19 +29,36 @@ import { WalkthroughStore } from "./walkthrough/store.ts";
 
 /**
  * `@repo/settings`'s `Settings` keeps `enabledHarnesses` as a loose
- * `string[]` (it stays dependency-free from this contract) — this is the
- * one place that casts it back to `HarnessId[]`, same as `WalkthroughStore`
- * casts its own `harness` text column at its own wire boundary.
+ * `string[] | null` (it stays dependency-free from this contract) — this is
+ * the one place that casts it back to `HarnessId[] | null`, same as
+ * `WalkthroughStore` casts its own `harness` text column at its own wire
+ * boundary.
  */
 const toWireSettings = (settings: {
-	readonly enabledHarnesses: ReadonlyArray<string>;
+	readonly enabledHarnesses: ReadonlyArray<string> | null;
 	readonly sidebarViewMode: WireSettings["sidebarViewMode"];
 	readonly diffStyleMode: WireSettings["diffStyleMode"];
 }): WireSettings => ({
-	enabledHarnesses: settings.enabledHarnesses as ReadonlyArray<HarnessId>,
+	enabledHarnesses:
+		settings.enabledHarnesses === null
+			? null
+			: (settings.enabledHarnesses as ReadonlyArray<HarnessId>),
 	sidebarViewMode: settings.sidebarViewMode,
 	diffStyleMode: settings.diffStyleMode,
 });
+
+/**
+ * `enabledHarnesses === null` means "never configured" (see
+ * `@repo/settings`'s `Settings.enabledHarnesses`) — resolved here to "every
+ * harness allowed" for `listHarnesses`, rather than an empty set, since an
+ * unconfigured install shouldn't look like a deliberate "disable everything."
+ */
+const toEnabledHarnessSet = (
+	enabledHarnesses: ReadonlyArray<string> | null,
+): ReadonlySet<HarnessId> | null =>
+	enabledHarnesses === null
+		? null
+		: new Set(enabledHarnesses as ReadonlyArray<HarnessId>);
 
 type ServerContext = WithEffectContext<AppServices> &
 	RequestHeadersHandlerPluginContext;
@@ -220,13 +237,13 @@ export function startServer(
 			}),
 		},
 		walkthrough: {
-			// Static + Pi's live discovery, filtered to `SettingsStore`'s
+			// All four adapters, each flagged `enabled` against `SettingsStore`'s
 			// `enabledHarnesses` — never fails, see `listHarnesses`.
 			harnesses: authed.walkthrough.harnesses.effect(function* () {
 				const settingsStore = yield* SettingsStore;
 				const settings = yield* settingsStore.get();
 				return yield* listHarnesses(
-					new Set(settings.enabledHarnesses as ReadonlyArray<HarnessId>),
+					toEnabledHarnessSet(settings.enabledHarnesses),
 				);
 			}),
 			get: authed.walkthrough.get.effect(function* ({ input, errors }) {

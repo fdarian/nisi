@@ -58,12 +58,9 @@ or the frontend's one-shot `invoke('get_backend')` wedges on a cold start. Regre
   `build:sidecar` (host triple `aarch64-apple-darwin` only — cross-compile is future work).
 - **`enabledHarnesses` still has two disagreeing sources.** `src/hooks/use-enabled-harnesses.ts`
   (the walkthrough tab's first-use onboarding gate) is `localStorage`, `null`-until-configured;
-  `settings-data.ts` (the settings page's checkboxes) is `@repo/settings`, defaulting to all four
-  enabled. They weren't unified because `@repo/settings`'s default can't distinguish "never
-  configured" from "configured, all four" without a schema change (nullable/empty-default
-  `enabledHarnesses`) in `packages/settings` + `packages/sidecar-api`, plus reworking
-  `sidecar/walkthrough/harnesses.ts`'s `listHarnesses` (currently filters to *enabled* harnesses,
-  so it can't also serve as "all four, for the onboarding picker" once the default stops being
-  all-four). Until that lands, don't delete `use-enabled-harnesses.ts` — the settings page and the
-  onboarding gate are deliberately still two separate stores.
+  `settings-data.ts` (the settings page's checkboxes) is `@repo/settings`. The backend blocker is
+  gone — `Settings.enabledHarnesses` is now `string[] | null` (`null` = never configured) and
+  `sidecar/walkthrough/harnesses.ts`'s `listHarnesses` returns all four harnesses with an `enabled`
+  flag instead of filtering, so it can serve the onboarding picker directly. Unifying the frontend
+  onto that one store is what's left; don't delete `use-enabled-harnesses.ts` until that lands.
 - `#/*` → `src/*`, not `@/*`.

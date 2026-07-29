@@ -78,44 +78,59 @@ const discoverPiModels = (): Effect.Effect<ReadonlyArray<HarnessModel>> =>
 	}).pipe(Effect.orElseSucceed(() => PI_FALLBACK_MODELS));
 
 /**
- * The four adapters with their model lists, filtered down to
- * `enabledHarnesses` — `walkthrough.harnesses`'s implementation. Availability
- * still isn't knowable up front (no `isAvailable` API on any adapter), so
- * this never fails and a real unavailability surfaces as a `generate`
- * failure instead; `enabledHarnesses` is a user declaration (`@repo/settings`),
- * not a probe. Pi's model discovery only runs when Pi is actually enabled —
- * no point paying for it (or risking its `~/.config` read) for a harness the
- * user hasn't turned on.
+ * The four adapters with their model lists, each flagged `enabled` against
+ * `enabledHarnesses` — `walkthrough.harnesses`'s implementation. All four are
+ * always returned (unfiltered): the onboarding picker needs every harness as
+ * a checkbox, enabled or not. `enabledHarnesses === null` means "never
+ * configured," treated as every harness enabled, same as
+ * `@repo/settings`'s `DEFAULT_SETTINGS`. Availability still isn't knowable up
+ * front (no `isAvailable` API on any adapter), so this never fails and a real
+ * unavailability surfaces as a `generate` failure instead; `enabledHarnesses`
+ * is a user declaration, not a probe. Pi's model discovery only runs when Pi
+ * is actually enabled — no point paying for it (or risking its `~/.config`
+ * read) for a harness the user hasn't turned on; a disabled Pi just gets an
+ * empty `models` list, which is fine since the picker isn't showing its
+ * models anyway.
  */
 export const listHarnesses = (
-	enabledHarnesses: ReadonlySet<HarnessId>,
+	enabledHarnesses: ReadonlySet<HarnessId> | null,
 ): Effect.Effect<ReadonlyArray<HarnessInfo>> => {
-	const discoverPi = enabledHarnesses.has("pi")
+	const isEnabled = (id: HarnessId): boolean =>
+		enabledHarnesses === null || enabledHarnesses.has(id);
+
+	const discoverPi = isEnabled("pi")
 		? discoverPiModels()
 		: Effect.succeed<ReadonlyArray<HarnessModel>>([]);
 
 	return discoverPi.pipe(
-		Effect.map((piModels): ReadonlyArray<HarnessInfo> => {
-			const all: ReadonlyArray<HarnessInfo> = [
+		Effect.map(
+			(piModels): ReadonlyArray<HarnessInfo> => [
 				{
 					id: "claude-code",
 					label: HARNESS_LABELS["claude-code"],
 					models: STATIC_MODELS["claude-code"],
+					enabled: isEnabled("claude-code"),
 				},
 				{
 					id: "codex",
 					label: HARNESS_LABELS.codex,
 					models: STATIC_MODELS.codex,
+					enabled: isEnabled("codex"),
 				},
 				{
 					id: "opencode",
 					label: HARNESS_LABELS.opencode,
 					models: STATIC_MODELS.opencode,
+					enabled: isEnabled("opencode"),
 				},
-				{ id: "pi", label: HARNESS_LABELS.pi, models: piModels },
-			];
-			return all.filter((harness) => enabledHarnesses.has(harness.id));
-		}),
+				{
+					id: "pi",
+					label: HARNESS_LABELS.pi,
+					models: piModels,
+					enabled: isEnabled("pi"),
+				},
+			],
+		),
 	);
 };
 
