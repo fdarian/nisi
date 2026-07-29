@@ -7,15 +7,24 @@ seam" for the port/token handshake this boots into.
 
 - `index.ts` — boot: handshake file, builds `MainLayer` (`Store` + `WalkthroughStore` +
   `SettingsStore` + `SqliteDb` + `LoggingLive` + Bun platform services), runs one `Effect` program
-  via `BunRuntime.runMain`. Before touching a pre-existing `sidecar.json`, `refuseIfAlreadyRunning`
-  asks *that file's own sidecar* (over the same authed oRPC channel everything else uses) whether
-  it's actually still alive — a real answer means another sidecar is already running for this data
-  dir, and this process logs `Fatal` and exits rather than stealing the file out from under it. Two
-  sidecars racing over one `sidecar.json` (whichever wrote last "wins," and the window you're
-  looking at might be bound to the other one) is exactly what made `sessions.open` succeed while a
-  stale session list stayed on screen — see `apps/desktop/AGENTS.md`'s "Dev/prod isolation" for the
-  main way that used to happen; this is the belt-and-suspenders for every other way (e.g. a manual
-  `bun run sidecar` against the production data dir while the app's already running).
+  via `BunRuntime.runMain`. After binding its port, it claims `sidecar-lock.ts`'s `sidecar.lock`
+  before touching `sidecar.json` at all — see that file for why an atomic `O_EXCL` create, not a
+  check-then-act health check, is what closes the split-brain two sidecars sharing one
+  `NISI_DATA_DIR` used to be able to fall into (see `apps/desktop/AGENTS.md`'s "Dev/prod isolation"
+  for the main way that used to happen; the lock is the belt-and-suspenders for every other way,
+  e.g. a manual `bun run sidecar` against the production data dir while the app's already running).
+- `sidecar-lock.ts` — `acquireSidecarLock`/`releaseSidecarLock`/`publishSidecarJson`. The lock file
+  (`sidecar.lock`, holding `{ port, token }`) is created via `wx` (`O_EXCL`) — the create either
+  succeeds or fails atomically, so two sidecars booting at the same instant can't both proceed the
+  way the old file-based check-then-act could. A losing process health-checks the lock's recorded
+  owner over the same authed `health.check` channel the frontend and CLI use — never a staleness
+  heuristic (file age, a reused PID) — and clears+retries once confirmed dead, bounded so a
+  persistently-dead lock fails loudly instead of spinning forever. A `SIGKILL`'d owner skips the
+  release effect entirely, but that's exactly the case the liveness check exists for: the next
+  boot finds the lock, gets no answer from the dead port, and recovers the same way. `sidecar.json`
+  itself is published via a temp file + `rename()` in the same directory — atomic on one
+  filesystem, so Rust's `wait_for_sidecar_json` and the CLI's `readHandshake` never observe a
+  partial write.
 - `logging.ts` — `LoggingLive`: console (`Logger.consolePretty`, stderr) plus a
   `@repo/logging`-backed rotating file logger at `<dataDir>/logs/sidecar.log`, both gated by the
   same `LOG_LEVEL`-derived minimum level. This is the only place stdout-in-production's "goes

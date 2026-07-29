@@ -23,12 +23,19 @@ Three parts, one seam:
   `FileContentReview.ranges`' `"new"` spans for Phase 2's collapsed reviewed regions.
 
 ## The seam
-The sidecar binds an ephemeral port, generates a token, deletes any stale `sidecar.json` *before*
-binding, then writes `{ port, token }` to `sidecar.json` (mode 0600) in the app-data dir — macOS
-`~/Library/Application Support/com.nisi.desktop/` (override with `NISI_DATA_DIR`). Rust's `get_backend`
-(`src-tauri/src/lib.rs`) polls for that file **asynchronously** — it must never block the main thread,
-or the frontend's one-shot `invoke('get_backend')` wedges on a cold start. Regression-tested by the
-`#[tokio::test]`s in `lib.rs` — keep them if you touch that file.
+The sidecar binds an ephemeral port, generates a token, then claims a `sidecar.lock` (`O_EXCL`,
+see `sidecar/sidecar-lock.ts`) before it's allowed to publish `{ port, token }` to `sidecar.json`
+(mode 0600, temp file + `rename()` — atomic on one filesystem) in the app-data dir — macOS
+`~/Library/Application Support/com.nisi.desktop/` (override with `NISI_DATA_DIR`). The lock is
+what makes two sidecars booting at the same instant against the same data dir resolve to exactly
+one owner instead of a split brain — see `sidecar/AGENTS.md`'s `sidecar-lock.ts` entry for the
+full mechanism (atomic create, liveness-checked recovery from a dead owner, bounded retries).
+Rust's `get_backend` (`src-tauri/src/lib.rs`) polls for that file **asynchronously** — it must
+never block the main thread, or the frontend's one-shot `invoke('get_backend')` wedges on a cold
+start — and health-checks the port it finds before trusting it, since a stale `sidecar.json` left
+behind by a `SIGKILL`'d sidecar would otherwise wedge `get_backend`'s `OnceCell` cache on a dead
+port for the app's whole lifetime. Regression-tested by the `#[tokio::test]`s in `lib.rs` — keep
+them if you touch that file.
 
 - **Dev**: `bun dev` runs `scripts/dev.ts`, a [devsess](https://devsess.fdarian.com/) orchestrator
   (see below) that races the sidecar against `tauri dev` (`Effect.raceAll` — either exiting kills
@@ -36,10 +43,12 @@ or the frontend's one-shot `invoke('get_backend')` wedges on a cold start. Regre
   is started by `dev.ts`, not by Tauri.
 - **Prod**: Rust spawns the compiled `binaries/sidecar` (`externalBin`, `shell:allow-spawn`) from
   `.setup()` — fire-and-forget.
-- Sidecar boot (`sidecar/index.ts`) is one Effect program run via `BunRuntime.runMain`: the HTTP server
-  is acquired/released with `Effect.acquireRelease` inside `Effect.scoped`, so SIGINT/SIGTERM (which
-  `runMain` already listens for) interrupts the fiber and the release closes the server — no manual
-  `process.on()` needed.
+- Sidecar boot (`sidecar/index.ts`) is one Effect program run via `BunRuntime.runMain`: the HTTP
+  server and the `sidecar.lock` are each acquired/released with `Effect.acquireRelease` inside
+  `Effect.scoped`, so SIGINT/SIGTERM (which `runMain` already listens for) interrupts the fiber
+  and the releases run — no manual `process.on()` needed. A `SIGKILL`'d process skips both
+  releases; the lock's own liveness check (not this scope) is what recovers from that on the next
+  boot.
 
 ## Dev/prod isolation
 Dev and prod both resolve their data dir (`sidecar.json` + `app.db`, see [The seam](#the-seam))

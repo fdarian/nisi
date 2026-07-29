@@ -81,13 +81,17 @@ without booting Tauri. They are consumed only by the sidecar.
 
 ## The seam (copied from rheya, which has already debugged it)
 
-The sidecar binds an **ephemeral port**, generates a **token**, deletes any stale
-`sidecar.json` *before* binding, then writes `{ port, token }` to `sidecar.json` at mode
-0600 in the data dir.
+The sidecar binds an **ephemeral port**, generates a **token**, atomically claims a
+`sidecar.lock` (`O_EXCL`) before it's allowed to touch `sidecar.json` at all — closing a
+two-sidecars-boot-at-once split brain a plain check-then-act health check couldn't — then
+publishes `{ port, token }` to `sidecar.json` (mode 0600, temp file + `rename()`, atomic) in the
+data dir. See `apps/desktop/sidecar/AGENTS.md`'s `sidecar-lock.ts` entry for the full mechanism.
 
-- **Rust** polls for that file and caches the result in a `OnceCell`. `get_backend` is
-  `async` — it must never block the main thread, or the frontend's one-shot `invoke` wedges
-  forever on a cold start. Rheya has a regression test for exactly this; port it.
+- **Rust** polls for that file, health-checks the port it finds, and caches the result in a
+  `OnceCell` — only once confirmed alive, since a stale `sidecar.json` believed on faith would
+  wedge the cache on a dead port for the app's whole lifetime. `get_backend` is `async` — it must
+  never block the main thread, or the frontend's one-shot `invoke` wedges forever on a cold start.
+  Rheya has a regression test for exactly this; port it.
 - **Prod**: Rust spawns `binaries/sidecar` (`externalBin` + scoped `shell:allow-spawn`).
 - **Dev**: a `scripts/dev.ts` orchestrator starts the sidecar; `beforeDevCommand` runs only
   `vite`.
