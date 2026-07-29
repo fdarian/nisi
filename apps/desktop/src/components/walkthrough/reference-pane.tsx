@@ -276,8 +276,20 @@ export function ReferencePane({
 					· {itemGroups.size} {itemGroups.size === 1 ? "file" : "files"}
 				</span>
 			</div>
+			{/*
+			 * The vertical inset is `diffCodeViewLayout`'s `paddingTop`/
+			 * `paddingBottom` (`diff-view-theme.ts`), never `py-*` here. A scroll
+			 * container's own padding belongs to its scrollport — content scrolls
+			 * through it and `contain: strict` clips at the padding box, so it
+			 * paints there — but Chrome pins a `position: sticky` descendant to the
+			 * container's *content* box, so top padding carves out a strip the
+			 * sticky file header can never cover while the diff body scrolls
+			 * through it in plain sight. `@pierre/diffs` applies its layout padding
+			 * as margins on the inner scrolled container, which scrolls away like
+			 * any other content. Same mechanism (and fix) as `diff-pane.tsx`.
+			 */}
 			<DiffCodeView
-				className="min-h-0 w-full flex-1 overflow-auto overscroll-contain px-3 py-3 [contain:strict]"
+				className="min-h-0 w-full flex-1 overflow-auto overscroll-contain px-3 [contain:strict]"
 				items={items}
 				options={codeViewOptions}
 				renderAnnotation={renderAnnotation}
