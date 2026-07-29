@@ -47,7 +47,23 @@ const decodeWalkthrough = Schema.decodeUnknownResult(Walkthrough);
  * `evaluateWalkthrough` turns them into feedback text for the agent's next
  * turn instead of crashing the caller.
  */
+/**
+ * An untouched buffer means the agent never called `write` at all — a
+ * different failure from writing malformed JSON, and the far more common one
+ * (a harness whose tool schema didn't reach the model, an agent that replied
+ * in prose instead). Reporting it as "the buffer isn't valid JSON: Unexpected
+ * EOF" describes a parse of nothing and gives the next turn no idea what to
+ * do, so it retries identically until the turn budget runs out. Name the
+ * actual missing step instead.
+ */
+const NOTHING_WRITTEN_FEEDBACK =
+	"You haven't written the walkthrough yet — the output buffer is still empty. Call the `write` tool with the complete walkthrough as a single JSON document matching the schema in your instructions. Everything you produce must go through `write` (or `edit`); text in your reply is not collected.";
+
 export const decodeBuffer = (bufferContent: string): DecodeResult => {
+	if (bufferContent.trim().length === 0) {
+		return { ok: false, message: NOTHING_WRITTEN_FEEDBACK };
+	}
+
 	const parsed = parseJson(bufferContent);
 	if (!parsed.ok) {
 		return {

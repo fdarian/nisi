@@ -32,6 +32,20 @@ describe("decodeBuffer", () => {
 		if (!result.ok) expect(result.message).toContain("isn't valid JSON");
 	});
 
+	// An agent that never called `write` used to be told the buffer "isn't
+	// valid JSON: Unexpected EOF", which describes parsing nothing and names
+	// no next step — so every retry repeated the same non-move.
+	test("tells an agent that wrote nothing to call `write`, not that JSON is malformed", () => {
+		for (const empty of ["", "   \n\t "]) {
+			const result = decodeBuffer(empty);
+			expect(result.ok).toBe(false);
+			if (!result.ok) {
+				expect(result.message).toContain("`write`");
+				expect(result.message).not.toContain("isn't valid JSON");
+			}
+		}
+	});
+
 	test("reports a schema mismatch as feedback", () => {
 		const result = decodeBuffer(JSON.stringify({ version: 2 }));
 		expect(result.ok).toBe(false);
