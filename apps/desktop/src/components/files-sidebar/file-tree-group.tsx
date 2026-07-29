@@ -144,6 +144,13 @@ export function FileTreeGroup({
 		model.scrollToPath(pathInGroup, { offset: "center" });
 	}, [model, selectedPath, filePathSet]);
 
+	// The effect above already scrolls when `selectedPath` changes to a new
+	// path in this group (covers cross-group selection and tree/flat mode
+	// switches), but re-clicking the *already*-selected file leaves that state
+	// unchanged, so the effect never re-fires and the row silently doesn't
+	// re-scroll into view. Scrolling imperatively here, on every click, covers
+	// that case too — redundant with the effect on a genuine selection change,
+	// but `scrollToPath` is idempotent, so there's no harm in both firing.
 	const handleClick = useCallback(
 		(event: ReactMouseEvent<HTMLElement>) => {
 			for (const target of event.nativeEvent.composedPath()) {
@@ -151,11 +158,12 @@ export function FileTreeGroup({
 				const path = target.getAttribute("data-item-path");
 				if (path && filePathSet.has(path)) {
 					onSelectPath(path);
+					model.scrollToPath(path, { offset: "center" });
 					return;
 				}
 			}
 		},
-		[filePathSet, onSelectPath],
+		[filePathSet, onSelectPath, model],
 	);
 
 	return (
