@@ -52,15 +52,31 @@ const PNPM_BUILD_APPROVAL_ENV = {
  * bootstrapped CLI itself, ...) — there's no single binary to resolve up
  * front the way `sidecar/walkthrough/model-discovery.ts` resolves one for
  * each harness CLI, so the fix here is widening `PATH` itself rather than
- * one `@repo/bin-resolver#resolveBin` call. Computed once per process for
- * the same reason `packages/git/src/exec.ts` resolves `git`/`gh` once: it
- * only reads `PATH`/the filesystem, neither of which changes over the
- * sidecar's lifetime. Same underlying GUI-`PATH` exposure as the harness
- * CLIs — a macOS `.app` launched from Finder/`open` never runs login shell
- * startup files, so e.g. a Bun-installed `pnpm` at `~/.bun/bin` (this
- * bootstrap's own dependency) wouldn't otherwise resolve.
+ * one `@repo/bin-resolver#resolveBin` call. Same underlying GUI-`PATH`
+ * exposure as the harness CLIs — a macOS `.app` launched from Finder/`open`
+ * never runs login shell startup files, so e.g. a Bun-installed `pnpm` at
+ * `~/.bun/bin` (this bootstrap's own dependency), or a version-manager's
+ * `node` (which `@ai-sdk/harness-opencode` spawns its bridge with),
+ * wouldn't otherwise resolve.
+ *
+ * `resolvedPath()` is called per invocation rather than captured in a
+ * module-level constant: it memoizes the only expensive part (its
+ * login-shell probe) behind a cache with an explicit refresh, so calling it
+ * each time costs a few `existsSync`es while letting a refresh actually take
+ * effect — a constant captured at import would pin the pre-refresh answer
+ * for the process's whole lifetime.
+ *
+ * The caller's own `env` is merged last so an adapter can still override
+ * anything here deliberately, `PATH` included.
  */
-const RESOLVED_PATH = resolvedPath();
+const spawnEnv = (
+	callerEnv: Readonly<Record<string, string>> | undefined,
+): Record<string, string | undefined> => ({
+	...PNPM_BUILD_APPROVAL_ENV,
+	...process.env,
+	PATH: resolvedPath(),
+	...callerEnv,
+});
 
 /**
  * `Experimental_SandboxSession` over the real filesystem and a real shell —
@@ -98,12 +114,7 @@ export class LocalSandboxSession implements Experimental_SandboxSession {
 
 		const child = spawn("/bin/bash", ["-c", command], {
 			cwd: workingDirectory ?? this.cwd,
-			env: {
-				...PNPM_BUILD_APPROVAL_ENV,
-				...process.env,
-				PATH: RESOLVED_PATH,
-				...env,
-			},
+			env: spawnEnv(env),
 			stdio: ["ignore", "pipe", "pipe"],
 			signal: abortSignal,
 		});
@@ -139,12 +150,7 @@ export class LocalSandboxSession implements Experimental_SandboxSession {
 
 		const child = spawn("/bin/bash", ["-c", command], {
 			cwd: workingDirectory ?? this.cwd,
-			env: {
-				...PNPM_BUILD_APPROVAL_ENV,
-				...process.env,
-				PATH: RESOLVED_PATH,
-				...env,
-			},
+			env: spawnEnv(env),
 			stdio: ["ignore", "pipe", "pipe"],
 			signal: abortSignal,
 		});

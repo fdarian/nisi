@@ -6,6 +6,7 @@ import {
 	RequestHeadersHandlerPlugin,
 	type RequestHeadersHandlerPluginContext,
 } from "@orpc/server/plugins";
+import { refreshLoginShellPath } from "@repo/bin-resolver";
 import { ReviewStore } from "@repo/review";
 import { SettingsStore } from "@repo/settings";
 import type {
@@ -320,11 +321,17 @@ export function attachRouter(
 			// Same as `harnesses`, but forces a fresh model-discovery attempt for
 			// every enabled+available harness rather than serving the cache — the
 			// UI's manual refresh action, for when a harness was just installed
-			// (or removed) while the sidecar's been running.
+			// (or removed) while the sidecar's been running. Drops
+			// `@repo/bin-resolver`'s login-shell `PATH` memo in the same breath and
+			// for the same reason: a CLI — or the `node` a harness bridge runs on —
+			// installed through a version manager since boot stays invisible until
+			// that probe re-runs, so refreshing discovery without refreshing the
+			// search path would still report the harness missing.
 			refreshHarnesses: authed.walkthrough.refreshHarnesses.effect(
 				function* () {
 					const settingsStore = yield* SettingsStore;
 					const settings = yield* settingsStore.get();
+					refreshLoginShellPath();
 					return yield* listHarnesses(
 						toEnabledHarnessSet(settings.enabledHarnesses),
 						{ force: true },

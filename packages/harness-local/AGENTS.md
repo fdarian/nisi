@@ -36,13 +36,21 @@ internal boundary to put Effect at; contorting it in would just add ceremony aro
 
 ## Non-obvious decisions
 
-- **`run`/`spawn` widen `PATH`** (`RESOLVED_PATH` in `local-sandbox-session.ts`, via
+- **`run`/`spawn` widen `PATH`** (`spawnEnv` in `local-sandbox-session.ts`, via
   `@repo/bin-resolver#resolvedPath`) before merging in the caller's `env`. A macOS `.app` launched
   from Finder/`open` never runs login shell startup files, so the sidecar process's own `PATH`
   (inherited by every `run`/`spawn` call here) is missing wherever the user's shell-installed
-  tools actually live — this bootstrap's own `pnpm` dependency included. See the comment at
-  `RESOLVED_PATH`'s definition for the full reasoning; `sidecar/walkthrough/model-discovery.ts`
-  (apps/desktop) hits the identical exposure for the harness CLIs' model-discovery spawns.
+  tools actually live — this bootstrap's own `pnpm` dependency, and the `node` the opencode and
+  claude-code adapters spawn their bridges with, included. `resolvedPath()` must stay a per-call
+  lookup rather than a module-level constant, or `walkthrough.refreshHarnesses`' path refresh can
+  never take effect for the life of the process. See the comment at `spawnEnv`'s definition for
+  the full reasoning; `sidecar/walkthrough/model-discovery.ts` (apps/desktop) hits the identical
+  exposure for the harness CLIs' model-discovery spawns.
+- **Dev hides this whole class of bug**: `bun run` prepends its own `node`-shim directory to a
+  child's `PATH`, so a terminal-launched sidecar resolves `node` even with an otherwise bare
+  `PATH`. The `bun build --compile` binary the `.app` ships does not. Verify `PATH`-sensitive
+  changes against the compiled sidecar under a bare
+  `PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin`, never against `bun dev`.
 - **`resumeSession` is intentionally omitted**, same as `just-bash`. A resumed session would need
   to reattach to a *live* bridge process (the WebSocket the adapter dials still has to be
   answered by something), but this package's spawned processes are ordinary children of the host
