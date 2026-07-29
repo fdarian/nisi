@@ -228,6 +228,25 @@ type GenerateRequest = { harness: HarnessId; model: string | undefined };
  * resume the prior agent session or start fresh
  * (`apps/desktop/sidecar/walkthrough/generate.ts`'s `reuseLive` — same
  * harness/model as the live session resumes it).
+ *
+ * On mount, a separate effect calls `walkthrough.activeGeneration` to check
+ * whether the sidecar is already retaining a *running* generation for this
+ * session — the case that matters is a remount (switching away from the
+ * Walkthrough tab and back, which unmounts this hook's component entirely,
+ * per `TabsPanel`'s default `keepMounted={false}`) while either an initial
+ * Generate or a Regenerate is still streaming server-side. Without this
+ * check, `request` simply resets to `null` on remount and nothing ever
+ * re-fires the effect above, so the running generation becomes invisible
+ * even though `walkthrough.generate` would happily reattach to it (see that
+ * procedure's doc). Only `status === "running"` triggers a reattach — calling
+ * `generate` for a `"done"`/`"failed"` snapshot would start a brand-new
+ * generation instead (`attachToGeneration` only returns a subscription for a
+ * still-running one), which a mere tab switch must never do on its own.
+ * `isReattaching` stays `true` until either nothing turned out to need
+ * resuming, or the reattached stream produces its first event (or fails) —
+ * gating the reader so it doesn't flash the *previous* stored walkthrough in
+ * the gap between "found something to resume" and "the resumed stream
+ * actually said something."
  */
 export function useWalkthroughGeneration(
 	orpc: SidecarQueryUtils,
@@ -235,6 +254,7 @@ export function useWalkthroughGeneration(
 ): {
 	progress: GenerationProgress;
 	history: readonly GenerationLogEntry[];
+	isReattaching: boolean;
 	generate: (harness: HarnessId, model: string | undefined) => void;
 } {
 	const queryClient = useQueryClient();
@@ -244,9 +264,45 @@ export function useWalkthroughGeneration(
 	const [progress, setProgress] = useState<GenerationProgress>({
 		phase: "idle",
 	});
+	const [isReattaching, setIsReattaching] = useState(true);
 	const requestRef = useRef(request);
 	requestRef.current = request;
 	const nextLogIdRef = useRef(0);
+
+	useEffect(() => {
+		let canceled = false;
+
+		void (async () => {
+			try {
+				const active = await orpc.walkthrough.activeGeneration.call({
+					sessionId,
+				});
+				if (canceled) return;
+				if (active !== null && active.status === "running") {
+					const resumed = {
+						harness: active.harness,
+						model: active.model ?? undefined,
+					};
+					requestRef.current = resumed;
+					setRequest(resumed);
+					// `isReattaching` is cleared by the streaming effect below once
+					// the reattached stream produces its first event (or fails) —
+					// not here, or the reader would flash the stale stored
+					// walkthrough while that stream is still starting up.
+					return;
+				}
+			} catch {
+				// Treat an unreachable/erroring check the same as "nothing to
+				// resume" — the empty state or stored walkthrough still renders
+				// normally, it just doesn't get a resumed progress timeline.
+			}
+			if (!canceled) setIsReattaching(false);
+		})();
+
+		return () => {
+			canceled = true;
+		};
+	}, [orpc, sessionId]);
 
 	// `attempt` isn't read in the body — it exists purely to force this effect
 	// to re-run when `generate()` is called again with an unchanged `request`
@@ -270,6 +326,7 @@ export function useWalkthroughGeneration(
 					nextLogIdRef.current += 1;
 					setHistory((current) => [...current, { id, event }]);
 					setProgress(reduceGenerateEvent(event));
+					setIsReattaching(false);
 					if (event.type === "done") {
 						queryClient.setQueryData(
 							orpc.walkthrough.get.queryKey({ input: { sessionId } }),
@@ -283,6 +340,7 @@ export function useWalkthroughGeneration(
 					phase: "failed",
 					message: error instanceof Error ? error.message : String(error),
 				});
+				setIsReattaching(false);
 			}
 		})();
 
@@ -296,6 +354,9 @@ export function useWalkthroughGeneration(
 		(harness: HarnessId, model: string | undefined) => {
 			setHistory([]);
 			setProgress({ phase: "idle" });
+			// A manually-triggered Generate/Regenerate always supersedes a
+			// mount-time reattach attempt still in flight.
+			setIsReattaching(false);
 			const isSameRequest =
 				requestRef.current?.harness === harness &&
 				requestRef.current?.model === model;
@@ -306,7 +367,7 @@ export function useWalkthroughGeneration(
 		[],
 	);
 
-	return { progress, history, generate };
+	return { progress, history, isReattaching, generate };
 }
 
 export type FileDrift = "new" | "edited" | "deleted";

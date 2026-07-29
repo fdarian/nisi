@@ -46,7 +46,13 @@ export function WalkthroughView({
 	const generation = useWalkthroughGeneration(orpc, session.id);
 	const drift = useWalkthroughDrift(walkthrough, files);
 
-	if (isLoading) {
+	// `generation.isReattaching` covers the gap between mounting (a tab
+	// switch back to Walkthrough, e.g.) and finding out whether a generation
+	// is already streaming server-side for this session — without this, a
+	// remount during a still-running Generate/Regenerate would render the
+	// stale stored walkthrough for a beat before flipping over to the resumed
+	// progress timeline. See `useWalkthroughGeneration`'s doc comment.
+	if (isLoading || generation.isReattaching) {
 		return (
 			<Empty className="flex-1">
 				<EmptyMedia variant="icon">
