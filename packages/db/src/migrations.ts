@@ -39,6 +39,7 @@ type DrizzleInternals = {
 				hash: string;
 			}>,
 			session: unknown,
+			config: { migrationsTable: string },
 		) => Promise<void> | void;
 	};
 	session: unknown;
@@ -57,10 +58,21 @@ type DrizzleInternals = {
  * packages own their own bundle (generated from their own `drizzle/` folder)
  * and call this once per bundle against the app's one shared connection —
  * see `SqliteDb`.
+ *
+ * `migrationsTable` is required, not defaulted, because drizzle's own
+ * bookkeeping table (`__drizzle_migrations` by default) tracks "already
+ * applied" by comparing each migration's *generation-time* timestamp against
+ * the single most recent row in that table — sound for one continuous
+ * migration history, not for two independently-timestamped bundles sharing
+ * one table. Two domains sharing the default name means whichever bundle
+ * happens to have the later-generated migration, if applied first, makes the
+ * *other* domain's genuinely-new migration look "older than the last applied
+ * one" and silently skips it. Give every domain its own table name.
  */
 export const applyEmbeddedMigrations = (
 	db: MigratableDb,
 	bundle: MigrationBundle,
+	migrationsTable: string,
 ) =>
 	Effect.tryPromise({
 		try: async () => {
@@ -77,7 +89,9 @@ export const applyEmbeddedMigrations = (
 				};
 			});
 			const internal = db as unknown as DrizzleInternals;
-			await internal.dialect.migrate(migrations, internal.session);
+			await internal.dialect.migrate(migrations, internal.session, {
+				migrationsTable,
+			});
 		},
 		catch: (cause) => new MigrationApplyError({ cause }),
 	});

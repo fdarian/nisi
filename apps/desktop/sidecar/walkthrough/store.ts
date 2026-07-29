@@ -54,9 +54,14 @@ export class WalkthroughStore extends Context.Service<WalkthroughStore>()(
 	{
 		make: Effect.gen(function* () {
 			const { db } = yield* SqliteDb;
-			yield* applyEmbeddedMigrations(db, migrationBundle).pipe(
-				Effect.mapError((cause) => new WalkthroughStoreError({ cause })),
-			);
+			// Own `migrationsTable`, distinct from `@repo/review`'s — see
+			// `@repo/db`'s `applyEmbeddedMigrations` for why sharing the default
+			// name across two domains silently drops one domain's migration.
+			yield* applyEmbeddedMigrations(
+				db,
+				migrationBundle,
+				"__drizzle_migrations_walkthrough",
+			).pipe(Effect.mapError((cause) => new WalkthroughStoreError({ cause })));
 
 			const query = <T>(fn: (client: DrizzleClient) => T) =>
 				dbUse(db, fn).pipe(

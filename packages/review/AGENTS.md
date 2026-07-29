@@ -15,12 +15,15 @@ contract this feeds, and its Phase 2 section for the `base`/`reviewed`/`head` th
 - `src/resolve-review.ts` — `resolveReviewState`: looks up a file's review row by current path, falling
   back to its pre-rename path — a rename changes `reviewed_files`' key, not what a snapshot applies to.
 - `src/db/schema.ts` — `sessions` + `reviewed_files` tables.
-- `src/db/client.ts`, `src/db/apply-migrations.ts`, `src/db/gen-migrations.ts` — the embedded-migrations
-  technique ported from rheya's `packages/db-migrations` (read there for the full rationale), but
-  inlined here rather than split into its own package: this is the only SQLite consumer in nisi so
-  far, and duplicating this ~100 lines a second time is the trigger to extract it, not a guess that
-  it'll be needed. `bun run db:generate` after any schema change; `.gen/migrations.gen.ts` and
-  `drizzle/**` are committed (needed at `bun build --compile` time, not just `drizzle-kit`'s).
+- `src/db/client.ts` — `runMigrations`/`dbUse`, thin wrappers around `@repo/db`'s
+  `applyEmbeddedMigrations`/`dbUse` that re-map its generic `DbError` to this package's own
+  `ReviewStoreError`. The connection itself (`SqliteDb`) and the embedded-migrations technique live in
+  `@repo/db` now — this package only owns its own schema and its own generated migration bundle
+  (`src/db/gen-migrations.ts`, `bun run db:generate` after any schema change; `.gen/migrations.gen.ts`
+  and `drizzle/**` are committed, needed at `bun build --compile` time, not just `drizzle-kit`'s).
+
+`ReviewStore.make` depends on `@repo/db`'s `SqliteDb` for the connection — see that package's AGENTS.md
+for why review's tables and the walkthrough store's tables share one `app.db` file.
 
 ## Non-obvious decisions
 

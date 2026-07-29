@@ -9,11 +9,18 @@ import { ReviewStoreError } from "../errors.ts";
 
 export type { DrizzleClient };
 
-/** Applies this package's own embedded migration bundle to the shared `SqliteDb` connection. */
+/**
+ * Applies this package's own embedded migration bundle to the shared
+ * `SqliteDb` connection, tracked in its own `migrationsTable` — see
+ * `@repo/db`'s `applyEmbeddedMigrations` for why that can't be the default
+ * shared table name once a second domain's migrations exist.
+ */
 export const runMigrations = (db: DrizzleClient) =>
-	applyEmbeddedMigrations(db, migrationBundle).pipe(
-		Effect.mapError((cause) => new ReviewStoreError({ cause })),
-	);
+	applyEmbeddedMigrations(
+		db,
+		migrationBundle,
+		"__drizzle_migrations_review",
+	).pipe(Effect.mapError((cause) => new ReviewStoreError({ cause })));
 
 /** `@repo/db`'s `dbUse`, re-mapped to this package's own error type. */
 export const dbUse = <T>(db: DrizzleClient, fn: (client: DrizzleClient) => T) =>

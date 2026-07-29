@@ -54,6 +54,16 @@ not what any bundle contains.
 
 ## Gotchas
 
+- **`applyEmbeddedMigrations`'s `migrationsTable` argument is required, never default it back to
+  drizzle's own `__drizzle_migrations`.** Drizzle's migration runner decides "already applied" by
+  comparing each migration's *generation-time* timestamp against the single most recent row in that
+  one table (`ORDER BY created_at DESC LIMIT 1`) — sound for one continuous history, not for two
+  domains sharing it. Caught live: with both domains defaulting to the same table, whichever bundle
+  happened to be generated *later* (by wall-clock `drizzle-kit generate` time), if applied first,
+  made the *other* domain's genuinely-new migration look older than "already applied" and silently
+  skipped it — its tables never got created, first surfacing as `no such table: sessions` at runtime,
+  not at migration time. Every domain passes its own distinct table name
+  (`__drizzle_migrations_review`, `__drizzle_migrations_walkthrough`, …).
 - `dbUse`'s `DrizzleClient` type carries no `schema` type parameter (`drizzle(sqlite)`,
   not `drizzle(sqlite, { schema })`) — nothing in this codebase uses Drizzle's
   relational query API (`db.query.*`), only the plain query builder
