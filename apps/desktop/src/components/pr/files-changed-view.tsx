@@ -1,7 +1,8 @@
 "use client";
 
 import { Columns2Icon, RowsIcon, SlidersHorizontalIcon } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
+import type { DiffPaneHandle } from "#/components/diff-pane/diff-pane";
 import { DiffPane } from "#/components/diff-pane/diff-pane";
 import { FilesSidebar } from "#/components/files-sidebar/files-sidebar";
 import { buttonVariants } from "#/components/ui/button";
@@ -42,6 +43,18 @@ export function FilesChangedView({
 	onNavigateToBlock,
 }: FilesChangedViewProps): React.ReactElement {
 	const [selectedPath, setSelectedPath] = useState<string | null>(null);
+	const diffPaneRef = useRef<DiffPaneHandle>(null);
+
+	// Every file click scrolls the diff pane, not just the ones that change
+	// the selection: re-clicking the already-selected file leaves
+	// `selectedPath` identical, so nothing downstream of this state can tell
+	// the click happened at all (see `DiffPaneHandle`). `FileTreeGroup` /
+	// `FlatFileGroup` already scroll their own row into view on that same
+	// click for the same reason.
+	const selectPath = useCallback((path: string) => {
+		setSelectedPath(path);
+		diffPaneRef.current?.scrollToPath(path);
+	}, []);
 	const [viewMode, setViewMode] = useSidebarViewMode(orpc);
 	const [diffStyle, setDiffStyle] = useDiffStyleMode(orpc);
 	const [hideReviewed, setHideReviewed] = useHideReviewed(orpc);
@@ -131,7 +144,7 @@ export function FilesChangedView({
 			<div className="flex min-h-0 flex-1">
 				<FilesSidebar
 					files={visibleFiles}
-					onSelectPath={setSelectedPath}
+					onSelectPath={selectPath}
 					reviewState={reviewState}
 					selectedPath={selectedPath}
 					viewMode={viewMode}
@@ -141,6 +154,7 @@ export function FilesChangedView({
 					files={visibleFiles}
 					onNavigateToBlock={onNavigateToBlock}
 					orpc={orpc}
+					ref={diffPaneRef}
 					reviewState={reviewState}
 					selectedPath={selectedPath}
 					sessionId={session.id}

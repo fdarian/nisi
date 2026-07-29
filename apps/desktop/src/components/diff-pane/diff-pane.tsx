@@ -10,7 +10,14 @@ import type {
 import { parsePatchFiles } from "@pierre/diffs";
 import type { CodeViewHandle } from "@pierre/diffs/react";
 import { BookOpenIcon, ChevronsUpDownIcon, FileIcon } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+	useCallback,
+	useEffect,
+	useImperativeHandle,
+	useMemo,
+	useRef,
+	useState,
+} from "react";
 import {
 	buildDiffCodeViewOptions,
 	DiffCodeView,
@@ -84,6 +91,19 @@ const HIDDEN_FILE_REASON_TEXT: Record<HiddenFileReason, string> = {
 	large: "This file is too large to show by default (over 1MB).",
 };
 
+/**
+ * The pane's imperative seam, for the one thing its props can't express:
+ * re-selecting the file that's *already* selected. `selectedPath` doesn't
+ * change on that click, so nothing keyed on it can react — the caller has to
+ * say "scroll there" directly. Whoever owns the selection state should call
+ * this on every file click, not only on a change; it's idempotent, and the
+ * `selectedPath` effect below still covers selections that come from
+ * elsewhere.
+ */
+export type DiffPaneHandle = {
+	scrollToPath: (path: string) => void;
+};
+
 type DiffPaneProps = {
 	orpc: SidecarQueryUtils;
 	sessionId: string;
@@ -94,6 +114,7 @@ type DiffPaneProps = {
 	diffStyle: DiffStyleMode;
 	/** A "reviewed in `<block>`" marker's click target — switches to the Walkthrough tab with this block selected. */
 	onNavigateToBlock: (blockId: string) => void;
+	ref?: React.Ref<DiffPaneHandle>;
 };
 
 const SCROLL_RETRY_FRAME_LIMIT = 60;
@@ -107,6 +128,7 @@ export function DiffPane({
 	setViewed,
 	diffStyle,
 	onNavigateToBlock,
+	ref,
 }: DiffPaneProps): React.ReactElement {
 	const codeViewRef = useRef<CodeViewHandle<DiffAnnotationMetadata>>(null);
 	const [forcedPaths, setForcedPaths] = useState<ReadonlySet<string>>(
@@ -491,28 +513,28 @@ export function DiffPane({
 		[diffStyle, itemMetadata],
 	);
 
-	// Sidebar selection scrolls the pane to that file's card. Item ids are the
-	// file path directly (one item per file in Phase 1), so no id lookup is
-	// needed — just retry a few frames until the item is measured, since it
-	// may not be rendered yet right after `selectedPath` changes (e.g. its
-	// content is still loading).
-	useEffect(() => {
-		if (selectedPath == null) return;
-		let canceled = false;
+	// Scrolls the pane to one file's card. Item ids are the file path directly
+	// (one item per file in Phase 1), so no id lookup is needed — just retry a
+	// few frames until the item is measured, since it may not be rendered yet
+	// when the request arrives (e.g. its content is still loading). A new
+	// request cancels the previous one's retry loop so a quick sequence of
+	// clicks doesn't leave an earlier target still chasing the viewport.
+	const pendingScrollFrame = useRef<number | null>(null);
+	const scrollToPath = useCallback((path: string) => {
+		if (pendingScrollFrame.current !== null) {
+			cancelAnimationFrame(pendingScrollFrame.current);
+			pendingScrollFrame.current = null;
+		}
 		let attempts = 0;
 
 		const tryScroll = () => {
-			if (canceled) return;
+			pendingScrollFrame.current = null;
 			const handle = codeViewRef.current;
 			const viewer = handle?.getInstance();
-			if (
-				handle &&
-				viewer &&
-				viewer.getTopForItem(selectedPath) !== undefined
-			) {
+			if (handle && viewer && viewer.getTopForItem(path) !== undefined) {
 				handle.scrollTo({
 					type: "item",
-					id: selectedPath,
+					id: path,
 					align: "start",
 					offset: 12,
 					behavior: "smooth",
@@ -521,15 +543,33 @@ export function DiffPane({
 			}
 			if (attempts < SCROLL_RETRY_FRAME_LIMIT) {
 				attempts += 1;
-				requestAnimationFrame(tryScroll);
+				pendingScrollFrame.current = requestAnimationFrame(tryScroll);
 			}
 		};
 
 		tryScroll();
-		return () => {
-			canceled = true;
-		};
-	}, [selectedPath]);
+	}, []);
+
+	useImperativeHandle(ref, () => ({ scrollToPath }), [scrollToPath]);
+
+	useEffect(
+		() => () => {
+			if (pendingScrollFrame.current !== null) {
+				cancelAnimationFrame(pendingScrollFrame.current);
+			}
+		},
+		[],
+	);
+
+	// Covers selections this pane can actually see change — the initial one,
+	// and anything that moves `selectedPath` without a click on an
+	// already-selected row. Re-clicking the current selection is the case this
+	// can't reach: `selectedPath` stays identical, so the effect never
+	// re-fires. That's what `DiffPaneHandle.scrollToPath` is for.
+	useEffect(() => {
+		if (selectedPath == null) return;
+		scrollToPath(selectedPath);
+	}, [selectedPath, scrollToPath]);
 
 	if (files.length === 0) {
 		return (
