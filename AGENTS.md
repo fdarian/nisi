@@ -31,9 +31,11 @@ extends `@total-typescript/tsconfig` directly; add the shared package once dupli
   `package.json`.
 - Beta packages (`effect`, `@effect/platform-bun`, `@orpc/*`) are pinned to exact versions, not `^`
   ranges — bump them deliberately.
-- The three `@ai-sdk/harness-*` patches (compiled-binary asset fix, see `PLAN.md`'s
-  "Compiled-binary constraints") live in `patches/` but are registered under `patchedDependencies`
+- The `@ai-sdk/harness*` patches live in `patches/` but are registered under `patchedDependencies`
   in `pnpm-workspace.yaml`, not `package.json` — pnpm 10+ silently ignores that key in
-  `package.json` with no warning.
+  `package.json` with no warning. Three are the compiled-binary asset fix on the adapters (see
+  `PLAN.md`'s "Compiled-binary constraints"); the fourth, on `@ai-sdk/harness` itself, widens the
+  stream's `error` part so a payload-less `{"type":"error"}` frame decodes instead of tearing the
+  whole stream down — OpenCode's bridge emits one partway through any busy session.
 - Path alias is `#/*` → `src/*` in every package, not `@/*`.
 - `AGENTS.md` is the source of truth in every workspace; `CLAUDE.md` is always a symlink to it.

@@ -15,6 +15,7 @@ packageExtensions:
     dependencies:
       "@types/react": "*"
 patchedDependencies:
+  "@ai-sdk/harness@1.0.46": patches/@ai-sdk%2Fharness@1.0.46.patch
   "@ai-sdk/harness-claude-code@1.0.47": patches/@ai-sdk%2Fharness-claude-code@1.0.47.patch
   "@ai-sdk/harness-codex@1.0.48": patches/@ai-sdk%2Fharness-codex@1.0.48.patch
   "@ai-sdk/harness-opencode@1.0.47": patches/@ai-sdk%2Fharness-opencode@1.0.47.patch
