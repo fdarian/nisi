@@ -1,0 +1,27 @@
+import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
+
+/**
+ * Singleton row — at most one ever exists. `SettingsStore.get()` returns
+ * `DEFAULT_SETTINGS` when no row exists yet rather than requiring a seed
+ * migration; `update()` inserts the first row on first write, same
+ * read-then-insert-or-update shape as `@repo/review`'s `sessions.open`.
+ */
+export const settings = sqliteTable("settings", {
+	id: integer({ mode: "number" }).primaryKey({ autoIncrement: true }),
+	/**
+	 * JSON-encoded string[] of harness ids the user has declared configured
+	 * locally. Stored as plain text, not a typed column — this package stays
+	 * independent of `@repo/sidecar-api`'s `HarnessId`, same as
+	 * `@repo/walkthrough`'s `harness` column in `apps/desktop/sidecar`'s
+	 * `WalkthroughStore`. The wire boundary is where "must be one of the four
+	 * known ids" is actually enforced.
+	 */
+	enabledHarnesses: text().notNull(),
+	sidebarViewMode: text().notNull(),
+	diffStyleMode: text().notNull(),
+	updatedAt: integer({ mode: "timestamp_ms" })
+		.notNull()
+		.$defaultFn(() => new Date()),
+});
+
+export type SettingsRow = typeof settings.$inferSelect;
