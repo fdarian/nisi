@@ -3,6 +3,10 @@ import { createClaudeCode } from "@ai-sdk/harness-claude-code";
 import { createCodex } from "@ai-sdk/harness-codex";
 import { createOpenCode } from "@ai-sdk/harness-opencode";
 import { createPi } from "@ai-sdk/harness-pi";
+// Static import, unlike `model-discovery.ts`'s dynamic one: `createPi` above
+// already pulls `@earendil-works/pi-coding-agent` into the boot path, so
+// reaching for its `getAgentDir` costs nothing extra here.
+import { getAgentDir } from "@earendil-works/pi-coding-agent";
 import type { HarnessId, HarnessInfo, HarnessModel } from "@repo/sidecar-api";
 import { Effect } from "effect";
 import { checkHarnessAvailability } from "./availability.ts";
@@ -144,9 +148,20 @@ export const createHarnessAdapter = (
 			return createOpenCode({ model: modelId, provider });
 		}
 		case "pi": {
-			if (model === undefined) return createPi();
+			// `agentDir` is what makes the harness read the *user's* Pi
+			// credentials (`~/.pi/agent/auth.json`, or wherever Pi's own
+			// `getAgentDir()` points). Left unset, `@ai-sdk/harness-pi` mints a
+			// private agent dir with an empty `auth.json` and resolves auth only
+			// from `settings.auth`/`process.env` — so every model failed with
+			// "No API key found for the selected model" even though
+			// `discoverPiModels` had just listed it as available, because
+			// discovery reads Pi's real store and execution read a different,
+			// empty one. Same directory for both is what keeps that list honest.
+			const agentDir = getAgentDir();
+			if (model === undefined) return createPi({ agentDir });
 			const { provider, model: modelId } = splitProviderModel(model);
 			return createPi({
+				agentDir,
 				model: provider === undefined ? modelId : `${provider}/${modelId}`,
 			});
 		}
