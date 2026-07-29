@@ -5,6 +5,7 @@ import { createOpenCode } from "@ai-sdk/harness-opencode";
 import { createPi } from "@ai-sdk/harness-pi";
 import type { HarnessId, HarnessInfo, HarnessModel } from "@repo/sidecar-api";
 import { Effect } from "effect";
+import { checkHarnessAvailability } from "./availability.ts";
 import {
 	createModelDiscoveryCache,
 	discoverClaudeCodeModels,
@@ -35,36 +36,63 @@ const DISCOVER_MODELS: Record<
 
 /**
  * The four adapters with their model lists, each flagged `enabled` against
- * `enabledHarnesses` — `walkthrough.harnesses`'s implementation. All four are
- * always returned (unfiltered): the onboarding picker needs every harness as
- * a checkbox, enabled or not. `enabledHarnesses === null` means "never
- * configured," treated as every harness enabled, same as
- * `@repo/settings`'s `DEFAULT_SETTINGS`. Availability still isn't knowable up
- * front (no `isAvailable` API on any adapter), so this never fails and a real
- * unavailability surfaces as a `generate` failure instead; `enabledHarnesses`
- * is a user declaration, not a probe.
+ * `enabledHarnesses` and `available` against a live `@repo/bin-resolver`
+ * check (`availability.ts`) — `walkthrough.harnesses`'s implementation. All
+ * four are always returned (unfiltered): the onboarding picker and the
+ * settings page both need every harness as a row, enabled or not, available
+ * or not. `enabledHarnesses === null` means "never configured," treated as
+ * every harness enabled, same as `@repo/settings`'s `DEFAULT_SETTINGS`. This
+ * never fails — `enabledHarnesses` is a user declaration, not a probe, and
+ * `available` is a detected fact that degrades gracefully rather than
+ * throwing.
  *
- * Model discovery — real for all four now, see `model-discovery.ts` — only
- * runs for harnesses that are actually enabled, each independently
- * timeout-bounded and cached, in parallel: no point paying for a subprocess
- * (or risking a slow one) for a harness the user hasn't turned on, and no
- * point serializing four discoveries behind each other when the UI is
- * waiting on all of them. A disabled harness gets an empty `models` list and
- * `modelsStatus: "unavailable"`.
+ * Model discovery — real for all four, see `model-discovery.ts` — only runs
+ * for harnesses that are both `enabled` *and* `available`, each
+ * independently timeout-bounded and cached, in parallel: no point paying for
+ * a subprocess (or risking a slow one) for a harness the user hasn't turned
+ * on, or one whose CLI isn't even on disk to ask. Short of that, a harness
+ * gets an empty `models` list and `modelsStatus: "unavailable"` without ever
+ * touching the discovery cache — so a harness that *was* available and has
+ * cached models, but has since had its CLI removed, correctly reports
+ * `"unavailable"` rather than serving stale cached models under a `"stale"`
+ * label that would read as a transient hiccup instead of "not installed."
+ *
+ * `opts.force` bypasses `model-discovery.ts`'s cache for this call — see
+ * `walkthrough.refreshHarnesses`. `opts.cache` overrides the shared
+ * module-level cache instance; tests use this to avoid cross-test state,
+ * production always defaults to the one singleton for the sidecar's
+ * lifetime.
  */
 export const listHarnesses = (
 	enabledHarnesses: ReadonlySet<HarnessId> | null,
+	opts?: {
+		readonly force?: boolean;
+		readonly cache?: ReturnType<typeof createModelDiscoveryCache>;
+	},
 ): Effect.Effect<ReadonlyArray<HarnessInfo>> => {
+	const cache = opts?.cache ?? modelDiscoveryCache;
 	const isEnabled = (id: HarnessId): boolean =>
 		enabledHarnesses === null || enabledHarnesses.has(id);
 
 	const discover = (id: HarnessId) =>
-		isEnabled(id)
-			? modelDiscoveryCache.get(id, DISCOVER_MODELS[id])
-			: Effect.succeed({
+		Effect.gen(function* () {
+			const availability = checkHarnessAvailability(id);
+			if (!isEnabled(id) || !availability.available) {
+				return {
+					...availability,
 					models: [] as ReadonlyArray<HarnessModel>,
 					status: "unavailable" as const,
-				});
+				};
+			}
+			const discovery = yield* cache.get(id, DISCOVER_MODELS[id], {
+				force: opts?.force,
+			});
+			return {
+				...availability,
+				models: discovery.models,
+				status: discovery.status,
+			};
+		});
 
 	return Effect.all(
 		{
@@ -83,6 +111,8 @@ export const listHarnesses = (
 					models: discoveries[id].models,
 					enabled: isEnabled(id),
 					modelsStatus: discoveries[id].status,
+					available: discoveries[id].available,
+					binaryPath: discoveries[id].binaryPath,
 				})),
 		),
 	);

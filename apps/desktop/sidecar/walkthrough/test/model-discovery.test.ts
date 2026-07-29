@@ -90,6 +90,49 @@ describe("createModelDiscoveryCache", () => {
 		});
 	});
 
+	test("force bypasses the cache-hit shortcut, re-running discover even within the TTL", async () => {
+		const cache = createModelDiscoveryCache();
+		let calls = 0;
+		const discover = Effect.sync(() => {
+			calls++;
+			return [{ id: `a${calls}`, label: `A${calls}` }];
+		});
+
+		const first = await Effect.runPromise(cache.get("codex", discover));
+		expect(first).toEqual({
+			models: [{ id: "a1", label: "A1" }],
+			status: "fresh",
+		});
+		expect(calls).toBe(1);
+
+		// Still well within the TTL — an unforced call would be a cache hit.
+		const forced = await Effect.runPromise(
+			cache.get("codex", discover, { force: true }),
+		);
+		expect(forced).toEqual({
+			models: [{ id: "a2", label: "A2" }],
+			status: "fresh",
+		});
+		expect(calls).toBe(2);
+	});
+
+	test("a forced re-fetch that fails still falls back to the last cached list, flagged stale — not dropped", async () => {
+		const cache = createModelDiscoveryCache();
+		const succeed = Effect.succeed([{ id: "a", label: "A" }]);
+
+		const primed = await Effect.runPromise(cache.get("codex", succeed));
+		expect(primed.status).toBe("fresh");
+
+		const fail = Effect.fail(new Error("cli crashed"));
+		const forced = await Effect.runPromise(
+			cache.get("codex", fail, { force: true }),
+		);
+		expect(forced).toEqual({
+			models: [{ id: "a", label: "A" }],
+			status: "stale",
+		});
+	});
+
 	test("independent harness ids don't share cache entries", async () => {
 		const cache = createModelDiscoveryCache();
 		const codexDiscover = Effect.succeed([{ id: "codex-model", label: "C" }]);

@@ -1,6 +1,7 @@
 import { resolveBin } from "@repo/bin-resolver";
 import type { HarnessId, HarnessModel, ModelsStatus } from "@repo/sidecar-api";
 import { Effect, Result } from "effect";
+import { HARNESS_CLI_BIN } from "./harness-bin.ts";
 
 /**
  * How long a live discovery call is allowed to run before it's treated as a
@@ -39,21 +40,31 @@ export const createModelDiscoveryCache = (ttlMs = CACHE_TTL_MS) => {
 	/**
 	 * Runs `discover` and returns its models, unless a cached result from
 	 * within `CACHE_TTL_MS` already exists (returned as `"fresh"` without
-	 * paying for I/O again). On failure — timeout, a missing CLI, malformed
-	 * output — falls back to the last cached result flagged `"stale"` rather
-	 * than failing the whole harness, or `"unavailable"` with an empty model
-	 * list when there's never been a successful discovery. Never fails: this
-	 * is exactly the "a harness whose discovery fails should still be
-	 * selectable rather than vanishing" requirement.
+	 * paying for I/O again) — unless `opts.force` is set, which skips that
+	 * cache-hit shortcut and always re-runs `discover`, for an explicit
+	 * user-initiated refresh (`harnesses.ts`'s `listHarnesses` `force` option,
+	 * behind `walkthrough.refreshHarnesses`). On failure — timeout, a missing
+	 * CLI, malformed output — falls back to the last cached result flagged
+	 * `"stale"` rather than failing the whole harness, or `"unavailable"` with
+	 * an empty model list when there's never been a successful discovery.
+	 * `force` doesn't disturb this fallback: the previous cache entry is kept
+	 * around for exactly this case even though the freshness check is
+	 * skipped. Never fails: this is exactly the "a harness whose discovery
+	 * fails should still be selectable rather than vanishing" requirement.
 	 */
 	const get = (
 		id: HarnessId,
 		discover: Effect.Effect<ReadonlyArray<HarnessModel>, unknown>,
+		opts?: { readonly force?: boolean },
 	): Effect.Effect<DiscoveryResult> =>
 		Effect.gen(function* () {
 			const now = Date.now();
 			const cached = cache.get(id);
-			if (cached !== undefined && now - cached.fetchedAt < ttlMs) {
+			if (
+				opts?.force !== true &&
+				cached !== undefined &&
+				now - cached.fetchedAt < ttlMs
+			) {
 				return { models: cached.models, status: "fresh" as const };
 			}
 
@@ -111,7 +122,13 @@ export const discoverOpenCodeModels = (): Effect.Effect<
 	ReadonlyArray<HarnessModel>,
 	Error
 > =>
-	runCli(resolveBin("opencode", "NISI_OPENCODE_BIN"), ["models"]).pipe(
+	runCli(
+		resolveBin(
+			HARNESS_CLI_BIN.opencode.name,
+			HARNESS_CLI_BIN.opencode.envOverrideVar,
+		),
+		["models"],
+	).pipe(
 		Effect.map((stdout) =>
 			stdout
 				.split("\n")
@@ -139,7 +156,13 @@ export const discoverCodexModels = (): Effect.Effect<
 	ReadonlyArray<HarnessModel>,
 	Error
 > =>
-	runCli(resolveBin("codex", "NISI_CODEX_BIN"), ["debug", "models"]).pipe(
+	runCli(
+		resolveBin(
+			HARNESS_CLI_BIN.codex.name,
+			HARNESS_CLI_BIN.codex.envOverrideVar,
+		),
+		["debug", "models"],
+	).pipe(
 		Effect.map((stdout) => {
 			const parsed = JSON.parse(stdout) as {
 				models: ReadonlyArray<CodexModelCatalogEntry>;
@@ -194,7 +217,10 @@ export const discoverClaudeCodeModels = (): Effect.Effect<
 			const session = query({
 				prompt: idlePrompt(),
 				options: {
-					pathToClaudeCodeExecutable: resolveBin("claude", "NISI_CLAUDE_BIN"),
+					pathToClaudeCodeExecutable: resolveBin(
+						HARNESS_CLI_BIN["claude-code"].name,
+						HARNESS_CLI_BIN["claude-code"].envOverrideVar,
+					),
 				},
 			});
 			// Drains the session's own message stream so its internal buffers

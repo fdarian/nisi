@@ -8,16 +8,29 @@ those two packages does I/O or knows about the other — this directory is where
 - `store.ts` — `WalkthroughStore`, persistence for generated walkthroughs (one row per session,
   regenerating overwrites). Lives here rather than in `@repo/walkthrough` because that package is
   deliberately I/O-free — see its AGENTS.md.
+- `harness-bin.ts` — `HARNESS_CLI_BIN`, the one map of harness → CLI binary name + env override var
+  (`claude`/`codex`/`opencode`; Pi has no entry, see `availability.ts`). Single source of truth both
+  `model-discovery.ts` (spawning it) and `availability.ts` (checking it's present) resolve through
+  `@repo/bin-resolver`.
+- `availability.ts` — `checkHarnessAvailability`, a live per-harness binary-presence check
+  (`@repo/bin-resolver`'s `checkBinAvailability`) — cheap enough to run on every `listHarnesses` call
+  with no caching of its own. This is `HarnessInfo.available`, distinct from `enabled`
+  (`@repo/settings`'s user declaration) — see `packages/sidecar-api/src/walkthrough.ts`'s doc.
 - `model-discovery.ts` — `discover*Models` (one real live-discovery function per harness — CLI
   subprocess for codex/opencode, `@anthropic-ai/claude-agent-sdk`'s `query()` for claude-code,
   `@earendil-works/pi-coding-agent`'s `ModelRegistry` for Pi, each timeout-bounded) and
-  `createModelDiscoveryCache` (the fresh/stale/unavailable TTL cache in front of them — see the
-  file's own comments for the fallback rules; follows oagent's `services/engine/src/model-catalog.ts`).
-- `harnesses.ts` — `listHarnesses` (the registry `walkthrough.harnesses` returns — always all four,
-  each carrying an `enabled` flag against the caller-supplied `enabledHarnesses` set and a
-  `modelsStatus` from `model-discovery.ts`, so the onboarding picker can render every harness as a
-  checkbox; `http.ts` reads `enabledHarnesses` from `@repo/settings`'s `SettingsStore` before calling
-  in) and `createHarnessAdapter` (harness/model choice → a real `HarnessV1` adapter instance).
+  `createModelDiscoveryCache` (the fresh/stale/unavailable TTL cache in front of them, with a `force`
+  option to bypass a cache hit — see the file's own comments for the fallback rules; follows oagent's
+  `services/engine/src/model-catalog.ts`).
+- `harnesses.ts` — `listHarnesses` (the registry `walkthrough.harnesses`/`walkthrough.refreshHarnesses`
+  return — always all four, each carrying an `enabled` flag against the caller-supplied
+  `enabledHarnesses` set, `available`/`binaryPath` from `availability.ts`, and a `modelsStatus` from
+  `model-discovery.ts`, so the onboarding picker and the settings page can render every harness as a
+  row; `http.ts` reads `enabledHarnesses` from `@repo/settings`'s `SettingsStore` before calling in).
+  Model discovery only runs for a harness that's both `enabled` *and* `available` — an unavailable
+  harness short-circuits to `modelsStatus: "unavailable"` without ever touching the discovery cache,
+  so a harness that loses its CLI never reports a misleadingly-reassuring `"stale"`. Also
+  `createHarnessAdapter` (harness/model choice → a real `HarnessV1` adapter instance).
 - `context.ts` — `gatherGenerationContext`: resolves a session's `repoRoot`/`baseRef` via
   `@repo/review`'s `ReviewStore` directly (not through `Store`, which has no raw "get one session"
   method) and fetches every changed file's patch + head content via `@repo/git`, producing exactly
@@ -85,6 +98,6 @@ those two packages does I/O or knows about the other — this directory is where
   above is a no-op for codex specifically; the custom tools are still reachable as plain
   user-defined tools regardless, which is what actually matters.
 - Model discovery can still hand back an id that no longer works by the time `generate` actually
-  runs (a CLI update between the cache's TTL window and the call) — there's no `isAvailable` API to
-  check a *harness* against up front, and discovery only validates that a model id exists, not that
+  runs (a CLI update between the cache's TTL window and the call) — `available` only means the CLI
+  binary is present, and discovery only validates that a model id exists, neither checks that
   auth/access for it is configured. A stale id still only ever fails at `generate` time.

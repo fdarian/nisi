@@ -6,8 +6,13 @@ composes them and translates between domain errors and oRPC error codes. See roo
 seam" for the port/token handshake this boots into.
 
 - `index.ts` — boot: handshake file, builds `MainLayer` (`Store` + `WalkthroughStore` +
-  `SettingsStore` + `SqliteDb` + Bun platform services), runs one `Effect` program via
+  `SettingsStore` + `SqliteDb` + `LoggingLive` + Bun platform services), runs one `Effect` program via
   `BunRuntime.runMain`.
+- `logging.ts` — `LoggingLive`: console (`Logger.consolePretty`, stderr) plus a
+  `@repo/logging`-backed rotating file logger at `<dataDir>/logs/sidecar.log`, both gated by the
+  same `LOG_LEVEL`-derived minimum level. This is the only place stdout-in-production's "goes
+  nowhere" problem (Rust spawns the compiled sidecar fire-and-forget) actually gets fixed — read
+  the file, don't rely on the console sink outside dev.
 - `services.ts` — `AppServices`, the service union `mainContext` carries. One alias so `http.ts` and
   the walkthrough generation loop (which bridges Effect from a plain `async function*`, not `.effect()`)
   agree on what's available without each hand-rolling the union.
@@ -28,9 +33,12 @@ seam" for the port/token handshake this boots into.
   `settings.get`/`settings.update` are the one pair of handlers backed directly by a domain
   package's own store (`@repo/settings`'s `SettingsStore`) rather than a sidecar-local wrapper —
   see that package's AGENTS.md for why it didn't need the `WalkthroughStore` split.
-  `walkthrough.harnesses` reads `SettingsStore` first and passes its `enabledHarnesses` into
-  `listHarnesses`, which always returns all four harnesses, each flagged `enabled` against that
-  set — the onboarding picker needs every harness as a checkbox, not a filtered list.
+  `walkthrough.harnesses`/`walkthrough.refreshHarnesses` (the latter forcing a fresh model-discovery
+  attempt, for the UI's manual refresh) read `SettingsStore` first and pass its `enabledHarnesses`
+  into `listHarnesses`, which always returns all four harnesses, each flagged `enabled` against that
+  set and `available` against a live `@repo/bin-resolver` check — every harness stays a checkbox,
+  not a filtered list, whether enabled, available, both, or neither. See
+  `sidecar/walkthrough/AGENTS.md`.
 - `events.ts` — in-memory pub/sub for `events.subscribe`, ported from rheya's sidecar verbatim. oRPC's
   `.effect()` can't return a live async iterator (it resolves the generator via `runPromise`), so
   `events.subscribe` uses the lower-level `.handler(async function* ...)` instead, bridging this

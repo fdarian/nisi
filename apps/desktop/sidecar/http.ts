@@ -257,6 +257,20 @@ export function startServer(
 					toEnabledHarnessSet(settings.enabledHarnesses),
 				);
 			}),
+			// Same as `harnesses`, but forces a fresh model-discovery attempt for
+			// every enabled+available harness rather than serving the cache — the
+			// UI's manual refresh action, for when a harness was just installed
+			// (or removed) while the sidecar's been running.
+			refreshHarnesses: authed.walkthrough.refreshHarnesses.effect(
+				function* () {
+					const settingsStore = yield* SettingsStore;
+					const settings = yield* settingsStore.get();
+					return yield* listHarnesses(
+						toEnabledHarnessSet(settings.enabledHarnesses),
+						{ force: true },
+					);
+				},
+			),
 			get: authed.walkthrough.get.effect(function* ({ input, errors }) {
 				const reviewStore = yield* ReviewStore;
 				yield* reviewStore.getSession(input.sessionId).pipe(
