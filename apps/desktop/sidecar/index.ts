@@ -6,6 +6,7 @@ import { Effect, Layer } from "effect";
 import { FileSystem } from "effect/FileSystem";
 import { startServer } from "./http.ts";
 import { startLivePolling } from "./live-poll.ts";
+import { LoggingLive } from "./logging.ts";
 import type { AppServices } from "./services.ts";
 import { Store } from "./store.ts";
 import { WalkthroughStore } from "./walkthrough/store.ts";
@@ -19,13 +20,19 @@ const program = Effect.scoped(
 		const dataDir = yield* dataDirConfig;
 		const sidecarJsonPath = join(dataDir, "sidecar.json");
 
+		yield* Effect.logInfo("starting up", { dataDir });
 		yield* fs.makeDirectory(dataDir, { recursive: true });
+
 		// Rust's wait_for_sidecar_json accepts whatever sidecar.json it finds first,
 		// with no freshness check — so a file left over from a previous boot (this
 		// process's port is ephemeral, a new one every run) could otherwise be read
 		// as if it were live. Clearing it before binding means there's never a
 		// stale file on disk for that race to latch onto.
+		const hadStaleFile = yield* fs.exists(sidecarJsonPath);
 		yield* fs.remove(sidecarJsonPath, { force: true });
+		if (hadStaleFile) {
+			yield* Effect.logInfo("cleared stale sidecar.json");
+		}
 
 		const token = crypto.randomUUID();
 		// Captures the ambient context (every service in `AppServices`) so oRPC
@@ -43,10 +50,9 @@ const program = Effect.scoped(
 		const server = yield* Effect.acquireRelease(
 			Effect.sync(() => startServer(token, mainContext)),
 			(server) =>
-				Effect.sync(() => {
-					console.error("[sidecar] shutting down");
-					server.stop();
-				}),
+				Effect.logInfo("shutting down").pipe(
+					Effect.andThen(Effect.sync(() => server.stop())),
+				),
 		);
 
 		yield* fs.writeFileString(
@@ -59,9 +65,7 @@ const program = Effect.scoped(
 		// permissions) wouldn't otherwise get tightened back to 0600.
 		yield* fs.chmod(sidecarJsonPath, 0o600);
 
-		console.error(
-			`[sidecar] running on port ${server.port}, data dir: ${dataDir}`,
-		);
+		yield* Effect.logInfo("ready", { port: server.port, dataDir });
 
 		// Backgrounded, tied to this program's scope — same shutdown path as
 		// the HTTP server above, just via the fiber getting interrupted instead
@@ -80,11 +84,13 @@ const program = Effect.scoped(
 // available in the final context too, not just be consumed while
 // constructing `Store`/`WalkthroughStore`/`SettingsStore` themselves, since
 // oRPC handlers (and the walkthrough generation loop) reach some of them
-// directly.
+// directly. `LoggingLive` joins the same merge — it also only needs
+// `FileSystem` (for the rotating file logger) to construct.
 const MainLayer = Layer.mergeAll(
 	Store.layer,
 	WalkthroughStore.layer,
 	SettingsStore.layer,
+	LoggingLive,
 ).pipe(
 	Layer.provideMerge(SqliteDb.layer),
 	Layer.provideMerge(BunServices.layer),

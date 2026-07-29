@@ -77,6 +77,15 @@ export function startServer(
 	token: string,
 	mainContext: Context.Context<AppServices>,
 ) {
+	// `events.subscribe`/`walkthrough.generate` are plain `.handler(async
+	// function* ...)` closures (see the comment on `events` below) — they
+	// never go through `.effect()`'s bridging into `mainContext`, so logging
+	// from inside one needs to run its own one-off Effect against the same
+	// captured context every `.effect()` handler already gets implicitly.
+	const runWithMainContext = <A>(
+		effect: Effect.Effect<A, never, AppServices>,
+	) => Effect.runPromise(Effect.provide(effect, mainContext));
+
 	const implementer = implement(contract).$context<ServerContext>();
 
 	const authed = implementer.use(({ context, next, errors }) => {
@@ -107,6 +116,11 @@ export function startServer(
 					),
 				);
 				emit({ type: "session-opened", session });
+				yield* Effect.logInfo("session opened", {
+					sessionId: session.id,
+					repoRoot: session.repoRoot,
+					pr: session.pr?.number ?? null,
+				});
 				return session;
 			}),
 			list: authed.sessions.list.effect(function* () {
@@ -131,6 +145,9 @@ export function startServer(
 				yield* Effect.promise(() => stopLiveSession(input.sessionId));
 				clearGeneration(input.sessionId);
 				emit({ type: "session-closed", sessionId: input.sessionId });
+				yield* Effect.logInfo("session closed", {
+					sessionId: input.sessionId,
+				});
 			}),
 		},
 		diff: {
@@ -226,6 +243,7 @@ export function startServer(
 					pending.push(event);
 					wake?.();
 				});
+				await runWithMainContext(Effect.logDebug("event subscriber attached"));
 
 				const onAbort = () => wake?.();
 				signal?.addEventListener("abort", onAbort);
@@ -244,12 +262,16 @@ export function startServer(
 				} finally {
 					signal?.removeEventListener("abort", onAbort);
 					unsubscribe();
+					await runWithMainContext(
+						Effect.logDebug("event subscriber detached"),
+					);
 				}
 			}),
 		},
 		walkthrough: {
 			// All four adapters, each flagged `enabled` against `SettingsStore`'s
-			// `enabledHarnesses` — never fails, see `listHarnesses`.
+			// `enabledHarnesses` and `available` against a live bin-resolver check
+			// — never fails, see `listHarnesses`.
 			harnesses: authed.walkthrough.harnesses.effect(function* () {
 				const settingsStore = yield* SettingsStore;
 				const settings = yield* settingsStore.get();
@@ -385,10 +407,31 @@ export function startServer(
 		// Bun's default 10s timeout).
 		idleTimeout: 0,
 		async fetch(req) {
+			// Generic per-call timing, covering every procedure without a
+			// per-handler instrumentation pass — `path` doubles as "which
+			// procedure" since RPCHandler routes `sessions.open` etc. to
+			// `/api/sessions/open`. For `events.subscribe`/`walkthrough.generate`
+			// (long-lived streams) `durationMs` reports the subscriber's whole
+			// connected lifetime, not a request/response round trip — that's the
+			// useful number for a stream, not a bug.
+			const startedAt = Date.now();
+			const path = new URL(req.url).pathname;
+			await runWithMainContext(Effect.logDebug("rpc call started", { path }));
+
 			const { matched, response } = await handler.handle(req, {
 				prefix: "/api",
 				context: { "effect/context": mainContext },
 			});
+
+			await runWithMainContext(
+				Effect.logDebug("rpc call finished", {
+					path,
+					matched,
+					status: response?.status ?? null,
+					durationMs: Date.now() - startedAt,
+				}),
+			);
+
 			if (matched) return response;
 
 			return new Response("not found", { status: 404 });
