@@ -6,8 +6,16 @@ composes them and translates between domain errors and oRPC error codes. See roo
 seam" for the port/token handshake this boots into.
 
 - `index.ts` — boot: handshake file, builds `MainLayer` (`Store` + `WalkthroughStore` +
-  `SettingsStore` + `SqliteDb` + `LoggingLive` + Bun platform services), runs one `Effect` program via
-  `BunRuntime.runMain`.
+  `SettingsStore` + `SqliteDb` + `LoggingLive` + Bun platform services), runs one `Effect` program
+  via `BunRuntime.runMain`. Before touching a pre-existing `sidecar.json`, `refuseIfAlreadyRunning`
+  asks *that file's own sidecar* (over the same authed oRPC channel everything else uses) whether
+  it's actually still alive — a real answer means another sidecar is already running for this data
+  dir, and this process logs `Fatal` and exits rather than stealing the file out from under it. Two
+  sidecars racing over one `sidecar.json` (whichever wrote last "wins," and the window you're
+  looking at might be bound to the other one) is exactly what made `sessions.open` succeed while a
+  stale session list stayed on screen — see `apps/desktop/AGENTS.md`'s "Dev/prod isolation" for the
+  main way that used to happen; this is the belt-and-suspenders for every other way (e.g. a manual
+  `bun run sidecar` against the production data dir while the app's already running).
 - `logging.ts` — `LoggingLive`: console (`Logger.consolePretty`, stderr) plus a
   `@repo/logging`-backed rotating file logger at `<dataDir>/logs/sidecar.log`, both gated by the
   same `LOG_LEVEL`-derived minimum level. This is the only place stdout-in-production's "goes
