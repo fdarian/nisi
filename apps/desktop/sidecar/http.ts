@@ -153,6 +153,24 @@ export function attachRouter(
 							}),
 						),
 					),
+					// A repo GitHub doesn't know about reviews against its default
+					// branch instead (see `@repo/git`'s `resolveReviewTarget`) —
+					// these two are the cases where there's genuinely nothing to
+					// review against, or where we couldn't find out.
+					Effect.catchTag("NoDefaultBranch", (cause) =>
+						Effect.fail(
+							errors.BAD_REQUEST({
+								message: `no branch to review against in ${cause.repoRoot} — the repository has no commits on a default branch`,
+							}),
+						),
+					),
+					Effect.catchTag("GitHubUnreachable", (cause) =>
+						Effect.fail(
+							errors.SERVICE_UNAVAILABLE({
+								message: `could not reach GitHub for ${cause.repoRoot}: ${cause.reason}`,
+							}),
+						),
+					),
 				);
 				emit({ type: "session-opened", session });
 				yield* Effect.logInfo("session opened", {

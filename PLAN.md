@@ -158,7 +158,7 @@ This is the seam, so it's specified here rather than discovered. Names are indic
 are not.
 
 ```
-sessions.open({ cwd })            → Session          // CLI calls this; idempotent per repo+PR
+sessions.open({ cwd })            → Session          // CLI calls this; idempotent per working tree + PR
 sessions.list()                   → Session[]
 sessions.close({ sessionId })     → void
 
@@ -182,9 +182,10 @@ every file at once; the diff pane needs contents for the handful actually on scr
 carries a three-tier size gate for the same reason (1MB auto-render, 2MB load-on-demand, above
 that patch-only) — worth copying, and it only works if content fetch is its own call.
 
-`sessions.open` returning `pr: null` is the no-PR case (detached HEAD, or a branch with no PR).
-Fall back to diffing against the repo's default branch rather than erroring — the tool is still
-useful, and the CLI is the right place to *tell* the user which mode they got.
+`sessions.open` returning `pr: null` is the no-PR case (detached HEAD, a branch with no PR, or a
+repo GitHub doesn't know at all — no remote included). Fall back to diffing against the repo's
+default branch rather than erroring — the tool is still useful, and the CLI is the right place to
+*tell* the user which mode they got.
 
 **Review state is written with its snapshot from day one.** `setViewed` stores the file's
 content hash and blob at tick time even though Phase 1 does nothing with it. Phase 2 is then

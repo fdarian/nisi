@@ -11,7 +11,7 @@ export const PullRequestRef = Schema.Struct({
 });
 export type PullRequestRef = Schema.Schema.Type<typeof PullRequestRef>;
 
-/** `pr: null` is the no-PR case (detached HEAD, or a branch with no open PR) — not an error. */
+/** `pr: null` is every case with no PR to review — detached HEAD, a branch with no open PR, or a repo GitHub doesn't know at all — not an error. */
 export const Session = Schema.Struct({
 	id: Schema.String,
 	repoRoot: Schema.String,
@@ -20,11 +20,18 @@ export const Session = Schema.Struct({
 export type Session = Schema.Schema.Type<typeof Session>;
 
 export const sessionsContract = {
-	/** Idempotent per repo+PR — the CLI calls this on every run; opening an already-open repo+PR reuses its session id. */
+	/**
+	 * Idempotent per working tree + PR — the CLI calls this on every run;
+	 * reopening the same checkout reuses its session id, while a second clone or
+	 * worktree of the same upstream gets its own.
+	 *
+	 * `SERVICE_UNAVAILABLE` is reserved for not being able to reach GitHub at
+	 * all; a repo GitHub simply doesn't know opens fine, with `pr: null`.
+	 */
 	open: oc
 		.input(Schema.Struct({ cwd: Schema.String }))
 		.output(Session)
-		.errors({ BAD_REQUEST: {} }),
+		.errors({ BAD_REQUEST: {}, SERVICE_UNAVAILABLE: {} }),
 	list: oc.output(Schema.Array(Session)),
 	close: oc
 		.input(Schema.Struct({ sessionId: Schema.String }))

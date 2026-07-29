@@ -5,6 +5,8 @@ import {
 	type GitCommandError,
 	type FileChange as GitFileChange,
 	type FileContent as GitFileContent,
+	type GitHubTarget,
+	type GitHubUnreachable,
 	getChangedFiles,
 	getFileContent,
 	type NoDefaultBranch,
@@ -24,6 +26,7 @@ import {
 	reconcile,
 	resolveReviewState,
 	SessionNotFound,
+	type SessionPullRequest,
 } from "@repo/review";
 import { Context, Effect, Layer, Schema } from "effect";
 import { FileSystem } from "effect/FileSystem";
@@ -72,6 +75,24 @@ const toActiveFileClaim = (
 	return { snapshotHash: state.snapshotHash, viewedAt: state.viewedAt };
 };
 
+/**
+ * A session's PR only exists when GitHub knows this repo *and* has an open PR
+ * for the current branch — every other case (no remote, a non-GitHub remote,
+ * an origin GitHub can't resolve, a branch with no PR) reviews against the
+ * default branch instead. See `@repo/git`'s `resolveReviewTarget`.
+ */
+const toSessionPullRequest = (
+	github: GitHubTarget | null,
+): SessionPullRequest | null =>
+	github === null || github.pr === null
+		? null
+		: {
+				number: github.pr.number,
+				title: github.pr.title,
+				owner: github.owner,
+				repo: github.repo,
+			};
+
 const toWireSession = (session: ReviewSession): Session => ({
 	id: session.id,
 	repoRoot: session.repoRoot,
@@ -83,8 +104,8 @@ const toWireSession = (session: ReviewSession): Session => ({
 					title: session.pr.title,
 					baseRef: session.baseRef,
 					headRef: session.headRef,
-					owner: session.owner,
-					repo: session.repo,
+					owner: session.pr.owner,
+					repo: session.pr.repo,
 				},
 });
 
@@ -108,22 +129,14 @@ export class Store extends Context.Service<Store>()("Store", {
 					resolveReviewTarget(repoRoot),
 					resolveCurrentBranch(repoRoot),
 				]);
-				const baseRef = reviewTarget.pr?.baseRef ?? reviewTarget.defaultBranch;
-				const headRef = reviewTarget.pr?.headRef ?? currentBranch;
+				const pr = toSessionPullRequest(reviewTarget.github);
 
 				const session = yield* reviewStore.openSession({
 					repoRoot,
-					owner: reviewTarget.owner,
-					repo: reviewTarget.repo,
-					baseRef,
-					headRef,
-					pr:
-						reviewTarget.pr === null
-							? null
-							: {
-									number: reviewTarget.pr.number,
-									title: reviewTarget.pr.title,
-								},
+					baseRef:
+						reviewTarget.github?.pr?.baseRef ?? reviewTarget.defaultBranch,
+					headRef: reviewTarget.github?.pr?.headRef ?? currentBranch,
+					pr,
 				});
 				return toWireSession(session);
 			});
@@ -409,5 +422,10 @@ export class Store extends Context.Service<Store>()("Store", {
 	);
 }
 
-export type { GhOutputDecodeError, GitCommandError, NoDefaultBranch };
+export type {
+	GhOutputDecodeError,
+	GitCommandError,
+	GitHubUnreachable,
+	NoDefaultBranch,
+};
 export { FileNotChanged, SessionNotFound };
