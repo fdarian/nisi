@@ -57,11 +57,9 @@ export type Section = Schema.Schema.Type<typeof Section>;
 
 export const Walkthrough = Schema.Struct({
 	version: Schema.Literal(1),
-	sections: Schema.Array(Section)
-		.check(Schema.isMinLength(1))
-		.annotate({
-			description: "The walkthrough's narrative, in reading order.",
-		}),
+	sections: Schema.Array(Section).check(Schema.isMinLength(1)).annotate({
+		description: "The walkthrough's narrative, in reading order.",
+	}),
 	references: Schema.Array(ReferenceBlock).annotate({
 		description:
 			"Every reference block linked from `sections`, plus any block needed to cover the remaining changed lines. Every changed line in every changed file must be claimed by at least one location here.",
