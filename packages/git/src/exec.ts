@@ -1,3 +1,4 @@
+import { resolveBin } from "@repo/bin-resolver";
 import { Effect, Stream } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
 import { GitCommandError } from "./errors.ts";
@@ -152,23 +153,43 @@ export const runBytes = (
 		}),
 	);
 
+/**
+ * Resolved once per process rather than per call — `resolveBin` only reads
+ * `PATH`/`process.env` and the filesystem, neither of which changes over the
+ * sidecar's lifetime, so there's no correctness reason to repeat the lookup
+ * on every `git`/`gh` invocation.
+ *
+ * Both go through `@repo/bin-resolver` rather than the bare command name for
+ * the same reason as `sidecar/walkthrough/model-discovery.ts`'s harness
+ * CLIs: a macOS `.app` launched from Finder/`open` inherits a minimal `PATH`
+ * (no login shell startup files ever run), so a bare `"gh"` — commonly
+ * installed via Homebrew at `/opt/homebrew/bin`, not on that minimal `PATH`
+ * — would silently fail to spawn in the built app even though it resolves
+ * fine from an interactive dev shell. `git` itself usually still resolves
+ * (Apple ships one at `/usr/bin/git`, which *is* on the minimal `PATH`), but
+ * a Homebrew-installed `git` takes the same exposure, so it's resolved the
+ * same way for consistency rather than as a special case.
+ */
+const GIT_BIN = resolveBin("git", "NISI_GIT_BIN");
+const GH_BIN = resolveBin("gh", "NISI_GH_BIN");
+
 export const git = (cwd: string, args: ReadonlyArray<string>, input?: string) =>
-	runText(cwd, "git", args, input);
+	runText(cwd, GIT_BIN, args, input);
 
 export const gitResult = (
 	cwd: string,
 	args: ReadonlyArray<string>,
 	input?: string,
-) => runResult(cwd, "git", args, input);
+) => runResult(cwd, GIT_BIN, args, input);
 
 export const gitBytes = (
 	cwd: string,
 	args: ReadonlyArray<string>,
 	input?: string,
-) => runBytes(cwd, "git", args, input);
+) => runBytes(cwd, GIT_BIN, args, input);
 
 export const gh = (cwd: string, args: ReadonlyArray<string>) =>
-	runText(cwd, "gh", args);
+	runText(cwd, GH_BIN, args);
 
 export const ghResult = (cwd: string, args: ReadonlyArray<string>) =>
-	runResult(cwd, "gh", args);
+	runResult(cwd, GH_BIN, args);
