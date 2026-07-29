@@ -29,8 +29,8 @@ seam" for the port/token handshake this boots into.
   package's own store (`@repo/settings`'s `SettingsStore`) rather than a sidecar-local wrapper —
   see that package's AGENTS.md for why it didn't need the `WalkthroughStore` split.
   `walkthrough.harnesses` reads `SettingsStore` first and passes its `enabledHarnesses` into
-  `listHarnesses`, so the registry reflects the user's declared harnesses instead of always
-  reporting all four.
+  `listHarnesses`, which always returns all four harnesses, each flagged `enabled` against that
+  set — the onboarding picker needs every harness as a checkbox, not a filtered list.
 - `events.ts` — in-memory pub/sub for `events.subscribe`, ported from rheya's sidecar verbatim. oRPC's
   `.effect()` can't return a live async iterator (it resolves the generator via `runPromise`), so
   `events.subscribe` uses the lower-level `.handler(async function* ...)` instead, bridging this

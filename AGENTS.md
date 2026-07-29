@@ -1,7 +1,8 @@
 # nisi
 
 macOS code review tool for GitHub PRs. Tauri 2 desktop app + Bun/Effect sidecar. See `PLAN.md` for the
-full architecture and phase breakdown — this repo is currently at Phase 0 (skeleton).
+full architecture and phase breakdown — all four phases (skeleton, git domain + Files Changed, tracked
+changes, walkthrough, settings) are built.
 
 ## Stack
 - **Bun** for package management *and* runtime (`bun install`, `bun add <pkg>` from inside the target

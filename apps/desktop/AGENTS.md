@@ -1,8 +1,8 @@
 # @repo/desktop
 
-Tauri 2 desktop app. Phase 1: the port/token handshake between Rust and the Bun/Effect sidecar, the
-sidecar's git/review domain (`sessions`, `diff`, `review`, `events`), and a frontend wired to that
-live contract — see `PLAN.md` at the repo root for the phase breakdown and
+Tauri 2 desktop app: the port/token handshake between Rust and the Bun/Effect sidecar, the
+sidecar's git/review/walkthrough/settings domains, and a frontend wired to that live contract —
+see `PLAN.md` at the repo root for the phase breakdown (all four phases are built) and
 `apps/desktop/sidecar/AGENTS.md` for how the sidecar's own pieces fit together.
 
 Three parts, one seam:
