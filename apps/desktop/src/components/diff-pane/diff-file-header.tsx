@@ -1,4 +1,9 @@
-import { FileIcon, MoreHorizontalIcon } from "lucide-react";
+import {
+	ChevronDownIcon,
+	ChevronRightIcon,
+	FileIcon,
+	MoreHorizontalIcon,
+} from "lucide-react";
 import type { BadgeProps } from "#/components/ui/badge";
 import { Badge } from "#/components/ui/badge";
 import { buttonVariants } from "#/components/ui/button";
@@ -32,6 +37,9 @@ type DiffFileHeaderProps = {
 	reviewStatus: ReviewState;
 	viewed: boolean;
 	onToggleViewed: () => void;
+	/** Whether this file's card currently shows header-only — see `diff-pane.tsx`'s `fileCollapseOverrides`. */
+	collapsed: boolean;
+	onToggleCollapse: () => void;
 };
 
 /**
@@ -69,11 +77,30 @@ export function DiffFileHeader({
 	reviewStatus,
 	viewed,
 	onToggleViewed,
+	collapsed,
+	onToggleCollapse,
 }: DiffFileHeaderProps): React.ReactElement {
 	const { dirname, basename } = splitPath(file.path);
 
 	return (
-		<div className="flex h-11 min-w-0 flex-1 items-center gap-3 border-b bg-background px-3">
+		// biome-ignore lint/a11y/useSemanticElements: can't be a real <button> — it hosts the Reviewed <label>/<Checkbox> and the "…" dropdown trigger, controls a nested <button> would break.
+		<div
+			aria-expanded={!collapsed}
+			className="flex h-11 min-w-0 flex-1 cursor-pointer items-center gap-3 border-b bg-background px-3"
+			onClick={onToggleCollapse}
+			onKeyDown={(event) => {
+				if (event.key !== "Enter" && event.key !== " ") return;
+				event.preventDefault();
+				onToggleCollapse();
+			}}
+			role="button"
+			tabIndex={0}
+		>
+			{collapsed ? (
+				<ChevronRightIcon className="size-3.5 shrink-0 text-muted-foreground" />
+			) : (
+				<ChevronDownIcon className="size-3.5 shrink-0 text-muted-foreground" />
+			)}
 			<FileIcon className="size-3.5 shrink-0 text-muted-foreground" />
 			<span className="flex min-w-0 flex-1 items-baseline gap-1.5 truncate font-mono text-xs">
 				{dirname && (
@@ -101,12 +128,13 @@ export function DiffFileHeader({
 			<label
 				className="flex shrink-0 cursor-pointer items-center gap-1.5 text-muted-foreground text-xs"
 				htmlFor={`reviewed-${file.path}`}
+				onClick={(event) => event.stopPropagation()}
+				onKeyDown={(event) => event.stopPropagation()}
 			>
 				<Checkbox
 					checked={viewed}
 					id={`reviewed-${file.path}`}
 					onCheckedChange={() => onToggleViewed()}
-					onClick={(event) => event.stopPropagation()}
 				/>
 				Reviewed
 			</label>
@@ -118,6 +146,9 @@ export function DiffFileHeader({
 						"shrink-0",
 					)}
 					onClick={(event: React.MouseEvent<HTMLButtonElement>) =>
+						event.stopPropagation()
+					}
+					onKeyDown={(event: React.KeyboardEvent<HTMLButtonElement>) =>
 						event.stopPropagation()
 					}
 				>

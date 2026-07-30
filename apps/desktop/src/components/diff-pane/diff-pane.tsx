@@ -206,6 +206,14 @@ export function DiffPane({
 	const [expandedHiddenPaths, setExpandedHiddenPaths] = useState<
 		ReadonlySet<string>
 	>(() => new Set());
+	// Per-path override on the default (collapsed once `reviewStatus ===
+	// "viewed"`) — a `Map` since it records both directions. Cleared on
+	// checkbox flip (`handleToggleViewed` below), so re-ticking re-collapses
+	// and unticking re-expands. Distinct from `expandedPaths` above, which
+	// un-collapses a marker, not the whole card.
+	const [fileCollapseOverrides, setFileCollapseOverrides] = useState<
+		ReadonlyMap<string, boolean>
+	>(() => new Map());
 
 	const contentPaths = useMemo(
 		() => files.filter((file) => !file.binary).map((file) => file.path),
@@ -245,24 +253,65 @@ export function DiffPane({
 		});
 	}, []);
 
+	const handleToggleFileCollapse = useCallback(
+		(path: string, nextCollapsed: boolean) => {
+			setFileCollapseOverrides((current) => {
+				const next = new Map(current);
+				next.set(path, nextCollapsed);
+				return next;
+			});
+		},
+		[],
+	);
+
+	// The only caller of `setViewed` in the frontend — the walkthrough pane's
+	// per-range checkbox is a separate mutation, `review.setRangeViewed`, that
+	// never touches this flag. Clearing the override here (not in `setViewed`
+	// itself) is what makes re-ticking re-collapse and unticking re-expand.
+	const handleToggleViewed = useCallback(
+		(path: string, nextViewed: boolean) => {
+			setFileCollapseOverrides((current) => {
+				if (!current.has(path)) return current;
+				const next = new Map(current);
+				next.delete(path);
+				return next;
+			});
+			setViewed(path, nextViewed);
+		},
+		[setViewed],
+	);
+
 	const { items, itemMetadata } = useMemo(() => {
 		const nextItems: Array<CodeViewItem<DiffAnnotationMetadata>> = [];
 		const nextMetadata = new Map<
 			string,
-			{ file: FileChange; viewed: boolean; reviewStatus: ReviewState }
+			{
+				file: FileChange;
+				viewed: boolean;
+				reviewStatus: ReviewState;
+				cardCollapsed: boolean;
+			}
 		>();
 
 		for (const file of files) {
 			const reviewStatus = reviewState.get(file.path) ?? "unreviewed";
 			const viewed = reviewStatus === "viewed";
-			nextMetadata.set(file.path, { file, viewed, reviewStatus });
+			// Defaults to collapsed once the file is "viewed" — overridable in
+			// either direction by clicking the header.
+			const cardCollapsed = fileCollapseOverrides.get(file.path) ?? viewed;
+			nextMetadata.set(file.path, {
+				file,
+				viewed,
+				reviewStatus,
+				cardCollapsed,
+			});
 			// Deliberately not keyed on selection: nothing an item renders — its
 			// diff, its `renderCustomHeader`, its annotations, `onPostRender`'s
 			// one class — differs for the selected file, so folding `selectedPath`
 			// in here only invalidated two items per click and dragged the whole
 			// memo (and every file's parse below) along with it. Selection reaches
 			// the pane through `scrollToPath`, not through rendering.
-			const baseVersionInput = `${file.fingerprint}:${diffStyle}:${reviewStatus}`;
+			const baseVersionInput = `${file.fingerprint}:${diffStyle}:${reviewStatus}:${cardCollapsed ? "card-collapsed" : "card-expanded"}`;
 
 			if (file.binary) {
 				nextItems.push({
@@ -277,6 +326,7 @@ export function DiffPane({
 					annotations: [
 						{ lineNumber: 1, metadata: { type: "binary" } },
 					] satisfies LineAnnotation<DiffAnnotationMetadata>[],
+					collapsed: cardCollapsed,
 					version: hashItemVersion(`${baseVersionInput}:binary`),
 				});
 				continue;
@@ -302,6 +352,7 @@ export function DiffPane({
 							},
 						},
 					] satisfies LineAnnotation<DiffAnnotationMetadata>[],
+					collapsed: cardCollapsed,
 					version: hashItemVersion(`${baseVersionInput}:error`),
 				});
 				continue;
@@ -335,6 +386,7 @@ export function DiffPane({
 							},
 						},
 					] satisfies LineAnnotation<DiffAnnotationMetadata>[],
+					collapsed: cardCollapsed,
 					version: hashItemVersion(
 						`${baseVersionInput}:hidden:${hiddenReason}`,
 					),
@@ -342,23 +394,29 @@ export function DiffPane({
 				continue;
 			}
 
-			// Collapsing is the default whenever this file has reviewed ranges to
-			// hide — until the user clicks a marker to expand it back, which wins
-			// over collapsing even if the underlying ranges haven't changed.
+			// Collapsing reviewed *regions* is the default whenever this file has
+			// any to hide — until the user clicks a marker to expand one back,
+			// which wins over collapsing even if the underlying ranges haven't
+			// changed. A "viewed" file (ticked, unchanged) never reaches this at
+			// all: its whole card already collapses via `cardCollapsed` above, so
+			// surgical collapsing would only ever produce the redundant
+			// "fully reviewed" marker this file's checkbox used to hijack —
+			// expanding the card should show the real diff, not that marker.
 			const isExpanded = expandedPaths.has(file.path);
-			const collapsed =
-				content.review !== null && !isExpanded
+			const collapsedDiff =
+				content.review !== null && !isExpanded && !viewed
 					? buildCollapsedFileDiff(content.patch, content.review.ranges)
 					: undefined;
-			const collapseSignature =
-				content.review === null
+			const collapseSignature = viewed
+				? "viewed-full"
+				: content.review === null
 					? "no-review"
 					: `${content.review.ranges.map((range) => `${range.startLine}-${range.endLine}-${range.status}-${reviewSourceKey(range.reviewedVia)}`).join(",")}:${isExpanded ? "expanded" : "collapsed"}`;
 			const version = hashItemVersion(
 				`${baseVersionInput}:${collapseSignature}`,
 			);
 
-			if (collapsed?.kind === "full") {
+			if (collapsedDiff?.kind === "full") {
 				nextItems.push({
 					id: file.path,
 					type: "file",
@@ -374,11 +432,12 @@ export function DiffPane({
 							metadata: {
 								type: "fully-reviewed",
 								path: file.path,
-								lineCount: collapsed.lineCount,
-								source: collapsed.source,
+								lineCount: collapsedDiff.lineCount,
+								source: collapsedDiff.source,
 							},
 						},
 					] satisfies LineAnnotation<DiffAnnotationMetadata>[],
+					collapsed: cardCollapsed,
 					version,
 				});
 				continue;
@@ -388,7 +447,7 @@ export function DiffPane({
 				fileDiffCache.current,
 				file,
 				content,
-				collapsed,
+				collapsedDiff,
 				collapseSignature,
 			);
 			if (fileDiff === undefined) continue;
@@ -405,8 +464,8 @@ export function DiffPane({
 					},
 				});
 			}
-			if (collapsed?.kind === "partial") {
-				for (const gap of collapsed.gaps) {
+			if (collapsedDiff?.kind === "partial") {
+				for (const gap of collapsedDiff.gaps) {
 					annotations.push({
 						side: "additions",
 						lineNumber: gap.anchorLine ?? 0,
@@ -425,6 +484,7 @@ export function DiffPane({
 				type: "diff",
 				fileDiff,
 				annotations,
+				collapsed: cardCollapsed,
 				version,
 			});
 		}
@@ -445,6 +505,7 @@ export function DiffPane({
 		forcedPaths,
 		expandedPaths,
 		expandedHiddenPaths,
+		fileCollapseOverrides,
 	]);
 
 	const renderCustomHeader = useCallback(
@@ -453,14 +514,20 @@ export function DiffPane({
 			if (!meta) return null;
 			return (
 				<DiffFileHeader
+					collapsed={meta.cardCollapsed}
 					file={meta.file}
-					onToggleViewed={() => setViewed(meta.file.path, !meta.viewed)}
+					onToggleCollapse={() =>
+						handleToggleFileCollapse(meta.file.path, !meta.cardCollapsed)
+					}
+					onToggleViewed={() =>
+						handleToggleViewed(meta.file.path, !meta.viewed)
+					}
 					reviewStatus={meta.reviewStatus}
 					viewed={meta.viewed}
 				/>
 			);
 		},
-		[itemMetadata, setViewed],
+		[itemMetadata, handleToggleFileCollapse, handleToggleViewed],
 	);
 
 	const renderAnnotation = useCallback(
