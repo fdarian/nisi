@@ -110,11 +110,13 @@ describe("readPatches", () => {
 
 			await repo.write("a.ts", "line1\nline2 changed\n");
 			await repo.write("b.ts", "hello world\n");
+			const head = await repo.commit("changes");
 
 			const patches = await Effect.runPromise(
-				readPatches(repo.root, base, [{ path: "a.ts" }, { path: "b.ts" }]).pipe(
-					Effect.provide(BunServices.layer),
-				),
+				readPatches(repo.root, base, { kind: "committed", sha: head }, [
+					{ path: "a.ts" },
+					{ path: "b.ts" },
+				]).pipe(Effect.provide(BunServices.layer)),
 			);
 
 			expect(patches.get("a.ts")).toContain("-line2");
@@ -135,10 +137,10 @@ describe("readPatches", () => {
 			const base = await repo.commit("initial");
 
 			await repo.git(["mv", "old.ts", "renamed.ts"]);
-			await repo.commit("rename");
+			const head = await repo.commit("rename");
 
 			const patches = await Effect.runPromise(
-				readPatches(repo.root, base, [
+				readPatches(repo.root, base, { kind: "committed", sha: head }, [
 					{ path: "renamed.ts", oldPath: "old.ts" },
 				]).pipe(Effect.provide(BunServices.layer)),
 			);
@@ -156,11 +158,33 @@ describe("readPatches", () => {
 			await repo.write("a.ts", "content\n");
 			const base = await repo.commit("initial");
 			const patches = await Effect.runPromise(
-				readPatches(repo.root, base, []).pipe(
+				readPatches(repo.root, base, { kind: "committed", sha: base }, []).pipe(
 					Effect.provide(BunServices.layer),
 				),
 			);
 			expect(patches.size).toBe(0);
+		} finally {
+			await cleanupTestRepo(repo);
+		}
+	});
+
+	test("diffs against the worktree when the target is `worktree`", async () => {
+		const repo = await makeTestRepo();
+		try {
+			await repo.write("a.ts", "line1\nline2\n");
+			const base = await repo.commit("initial");
+
+			// Uncommitted — only visible to a `worktree` target.
+			await repo.write("a.ts", "line1\nline2 changed\n");
+
+			const patches = await Effect.runPromise(
+				readPatches(repo.root, base, { kind: "worktree" }, [
+					{ path: "a.ts" },
+				]).pipe(Effect.provide(BunServices.layer)),
+			);
+
+			expect(patches.get("a.ts")).toContain("-line2");
+			expect(patches.get("a.ts")).toContain("+line2 changed");
 		} finally {
 			await cleanupTestRepo(repo);
 		}

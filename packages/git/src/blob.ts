@@ -205,3 +205,30 @@ export const readBlobsAtRef = (
 		}
 		return result;
 	});
+
+/**
+ * Every listed path's full content at `ref`, batched the same way as
+ * `readBlobsAtRef` but without its size gate — nothing here is ever withheld
+ * for being large, since this is for content-identity comparisons (hashing a
+ * file to compare against a stored snapshot), not rendering. A path missing
+ * from `ref`'s tree, or not a blob, is simply absent from the result map —
+ * same "absent means not found" convention `readBlobsAtRef` uses.
+ */
+export const readFileContentsAtRef = (
+	repoRoot: string,
+	ref: string,
+	paths: ReadonlyArray<string>,
+): Effect.Effect<
+	ReadonlyMap<string, Uint8Array>,
+	GitCommandError,
+	ChildProcessSpawner.ChildProcessSpawner
+> =>
+	readBlobsAtRef(repoRoot, ref, paths).pipe(
+		Effect.map((blobs) => {
+			const contents = new Map<string, Uint8Array>();
+			for (const [path, blob] of blobs) {
+				if (blob.content !== null) contents.set(path, blob.content);
+			}
+			return contents;
+		}),
+	);

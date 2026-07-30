@@ -21,6 +21,7 @@ import type { FileChange, ReviewState, Session } from "#/lib/pr-data";
 import {
 	useDiffStyleMode,
 	useHideReviewed,
+	useIncludeUncommitted,
 	useSidebarViewMode,
 } from "#/lib/settings-data";
 import { cn } from "#/lib/utils";
@@ -58,6 +59,8 @@ export function FilesChangedView({
 	const [viewMode, setViewMode] = useSidebarViewMode(orpc);
 	const [diffStyle, setDiffStyle] = useDiffStyleMode(orpc);
 	const [hideReviewed, setHideReviewed] = useHideReviewed(orpc);
+	const [includeUncommitted, setIncludeUncommitted] =
+		useIncludeUncommitted(orpc);
 
 	const viewedCount = useMemo(
 		() =>
@@ -136,6 +139,12 @@ export function FilesChangedView({
 								onCheckedChange={setHideReviewed}
 							>
 								Hide reviewed
+							</DropdownMenuCheckboxItem>
+							<DropdownMenuCheckboxItem
+								checked={includeUncommitted}
+								onCheckedChange={setIncludeUncommitted}
+							>
+								Include uncommitted
 							</DropdownMenuCheckboxItem>
 						</DropdownMenuContent>
 					</DropdownMenu>

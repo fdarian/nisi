@@ -49,6 +49,7 @@ const toWireSettings = (settings: {
 	readonly sidebarViewMode: WireSettings["sidebarViewMode"];
 	readonly diffStyleMode: WireSettings["diffStyleMode"];
 	readonly hideReviewed: WireSettings["hideReviewed"];
+	readonly includeUncommitted: WireSettings["includeUncommitted"];
 }): WireSettings => ({
 	enabledHarnesses:
 		settings.enabledHarnesses === null
@@ -57,6 +58,7 @@ const toWireSettings = (settings: {
 	sidebarViewMode: settings.sidebarViewMode,
 	diffStyleMode: settings.diffStyleMode,
 	hideReviewed: settings.hideReviewed,
+	includeUncommitted: settings.includeUncommitted,
 });
 
 /**
@@ -210,15 +212,17 @@ export function attachRouter(
 		diff: {
 			files: authed.diff.files.effect(function* ({ input, errors }) {
 				const store = yield* Store;
-				return yield* store.listChangedFiles(input.sessionId).pipe(
-					Effect.catchTag("SessionNotFound", () =>
-						Effect.fail(
-							errors.NOT_FOUND({
-								message: `session not found: ${input.sessionId}`,
-							}),
+				return yield* store
+					.listChangedFiles(input.sessionId, input.includeUncommitted ?? false)
+					.pipe(
+						Effect.catchTag("SessionNotFound", () =>
+							Effect.fail(
+								errors.NOT_FOUND({
+									message: `session not found: ${input.sessionId}`,
+								}),
+							),
 						),
-					),
-				);
+					);
 			}),
 			file: authed.diff.file.effect(function* ({ input, errors }) {
 				const store = yield* Store;
@@ -227,6 +231,7 @@ export function attachRouter(
 						input.sessionId,
 						input.path,
 						input.force ?? false,
+						input.includeUncommitted ?? false,
 						input.oldPath,
 					)
 					.pipe(

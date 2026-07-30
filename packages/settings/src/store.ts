@@ -25,6 +25,14 @@ export type Settings = {
 	readonly diffStyleMode: DiffStyleMode;
 	/** When true, files already marked reviewed are hidden from the files sidebar and the Files Changed list. */
 	readonly hideReviewed: boolean;
+	/**
+	 * When true, uncommitted working-tree changes should be included alongside
+	 * the PR's diff. Read server-side by `apps/desktop/sidecar/http.ts`'s
+	 * `diff.files`/`diff.file` handlers (via the frontend's query input) and by
+	 * `sidecar/walkthrough/context.ts`'s `gatherGenerationContext` (directly,
+	 * since a walkthrough generation has no frontend request to carry it).
+	 */
+	readonly includeUncommitted: boolean;
 };
 
 export type SettingsUpdate = Partial<Settings>;
@@ -42,6 +50,7 @@ export const DEFAULT_SETTINGS: Settings = {
 	sidebarViewMode: "tree",
 	diffStyleMode: "unified",
 	hideReviewed: false,
+	includeUncommitted: false,
 };
 
 const toSettings = (row: SettingsRow): Settings => ({
@@ -52,6 +61,7 @@ const toSettings = (row: SettingsRow): Settings => ({
 	sidebarViewMode: row.sidebarViewMode as SidebarViewMode,
 	diffStyleMode: row.diffStyleMode as DiffStyleMode,
 	hideReviewed: row.hideReviewed,
+	includeUncommitted: row.includeUncommitted,
 });
 
 /**
@@ -98,6 +108,7 @@ export class SettingsStore extends Context.Service<SettingsStore>()(
 						sidebarViewMode: next.sidebarViewMode,
 						diffStyleMode: next.diffStyleMode,
 						hideReviewed: next.hideReviewed,
+						includeUncommitted: next.includeUncommitted,
 						updatedAt: new Date(),
 					};
 

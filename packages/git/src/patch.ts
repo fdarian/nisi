@@ -2,6 +2,7 @@ import { Effect } from "effect";
 import type { ChildProcessSpawner } from "effect/unstable/process";
 import type { GitCommandError } from "./errors.ts";
 import { git } from "./exec.ts";
+import { type DiffTarget, diffTargetArgs } from "./repo.ts";
 
 const PATH_CHUNK_SIZE = 200;
 
@@ -70,6 +71,7 @@ const pathspecFor = (file: PatchTarget): ReadonlyArray<string> =>
 export const readPatches = (
 	repoRoot: string,
 	mergeBase: string,
+	target: DiffTarget,
 	files: ReadonlyArray<PatchTarget>,
 ): Effect.Effect<
 	ReadonlyMap<string, string>,
@@ -88,6 +90,7 @@ export const readPatches = (
 				"--no-ext-diff",
 				"--find-renames",
 				mergeBase,
+				...diffTargetArgs(target),
 				"--",
 				...pathspec,
 			]);
@@ -111,6 +114,7 @@ export const readPatches = (
 					"--no-ext-diff",
 					"--find-renames",
 					mergeBase,
+					...diffTargetArgs(target),
 					"--",
 					...pathspecFor(file),
 				]);

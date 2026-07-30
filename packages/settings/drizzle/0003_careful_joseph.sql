@@ -1,0 +1,1 @@
+ALTER TABLE `settings` ADD `includeUncommitted` integer DEFAULT false NOT NULL;

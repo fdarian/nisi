@@ -25,6 +25,13 @@ export type Settings = {
 	diffStyleMode: DiffStyleMode;
 	/** When true, files already marked reviewed are hidden from the files sidebar and the Files Changed list. */
 	hideReviewed: boolean;
+	/**
+	 * When true, uncommitted working-tree changes should be included alongside
+	 * the PR's diff. Sourced by `#/lib/pr-data.ts`'s `useFileChanges`/
+	 * `useFileContents` and folded into `diff.files`/`diff.file`'s query
+	 * `input` (part of the TanStack Query cache key, not just the request).
+	 */
+	includeUncommitted: boolean;
 };
 
 /**
@@ -39,6 +46,7 @@ const DEFAULT_SETTINGS: Settings = {
 	sidebarViewMode: "tree",
 	diffStyleMode: "unified",
 	hideReviewed: false,
+	includeUncommitted: false,
 };
 
 /** `settings.get`, defaulting to the sidecar's own defaults while the first fetch is in flight. */
@@ -130,4 +138,19 @@ export function useHideReviewed(
 	);
 
 	return [settings.hideReviewed, setHideReviewed];
+}
+
+/** "Include uncommitted" preference — see `@repo/settings`'s `includeUncommitted`. */
+export function useIncludeUncommitted(
+	orpc: SidecarQueryUtils,
+): [boolean, (includeUncommitted: boolean) => void] {
+	const { settings } = useSettings(orpc);
+	const update = useUpdateSettings(orpc);
+
+	const setIncludeUncommitted = useCallback(
+		(includeUncommitted: boolean) => update({ includeUncommitted }),
+		[update],
+	);
+
+	return [settings.includeUncommitted, setIncludeUncommitted];
 }

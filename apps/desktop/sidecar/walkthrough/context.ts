@@ -9,6 +9,7 @@ import {
 	type ReviewStoreError,
 	type SessionNotFound,
 } from "@repo/review";
+import { SettingsStore, type SettingsStoreError } from "@repo/settings";
 import type { ChangedFileFacts, DigestFile } from "@repo/walkthrough";
 import { Effect } from "effect";
 import type { FileSystem } from "effect/FileSystem";
@@ -37,18 +38,36 @@ const countLines = (content: string): number => {
  * Binary files contribute no patch text and no coverage obligation, but
  * still appear in the digest (as `[binary file]`) so the narrative can
  * mention them.
+ *
+ * Reads `includeUncommitted` from `@repo/settings` rather than taking it as a
+ * parameter — there's no frontend request driving a walkthrough generation
+ * (it's `generate.ts`'s own bounded turn loop), so this is the one call site
+ * that has to go straight to the persisted setting to keep the digest scoped
+ * the same way the user's own Files Changed view currently is.
  */
 export const gatherGenerationContext = (
 	sessionId: string,
 ): Effect.Effect<
 	GenerationContext,
-	SessionNotFound | ReviewStoreError | GitError | FileNotChanged,
-	ReviewStore | FileSystem | ChildProcessSpawner.ChildProcessSpawner
+	| SessionNotFound
+	| ReviewStoreError
+	| GitError
+	| FileNotChanged
+	| SettingsStoreError,
+	| ReviewStore
+	| SettingsStore
+	| FileSystem
+	| ChildProcessSpawner.ChildProcessSpawner
 > =>
 	Effect.gen(function* () {
 		const reviewStore = yield* ReviewStore;
+		const settingsStore = yield* SettingsStore;
 		const session = yield* reviewStore.getSession(sessionId);
-		const files = yield* getChangedFiles(session.repoRoot, session.baseRef);
+		const settings = yield* settingsStore.get();
+		const includeUncommitted = settings.includeUncommitted;
+		const files = yield* getChangedFiles(session.repoRoot, session.baseRef, {
+			includeUncommitted,
+		});
 
 		const withContent = yield* Effect.forEach(
 			files,
@@ -57,6 +76,7 @@ export const gatherGenerationContext = (
 					? Effect.succeed({ file, patch: "", newContent: undefined })
 					: getFileContent(session.repoRoot, session.baseRef, file.path, {
 							force: true,
+							includeUncommitted,
 						}).pipe(
 							Effect.map((content) => ({
 								file,

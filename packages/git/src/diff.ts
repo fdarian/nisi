@@ -9,7 +9,11 @@ import {
 	classifyFile,
 	type FileCategory,
 } from "./classify.ts";
-import { FileNotChanged, type GitError } from "./errors.ts";
+import {
+	FileNotChanged,
+	type GitCommandError,
+	type GitError,
+} from "./errors.ts";
 import { git } from "./exec.ts";
 import {
 	createAddedBinaryFilePatch,
@@ -17,7 +21,12 @@ import {
 	patchLooksBinary,
 	readPatches,
 } from "./patch.ts";
-import { resolveMergeBase } from "./repo.ts";
+import {
+	type DiffTarget,
+	diffTargetArgs,
+	resolveHeadSha,
+	resolveMergeBase,
+} from "./repo.ts";
 
 /** Content past this size is never read just to sniff it for classification markers. */
 const CONTENT_PREFIX_CAP = 32 * 1024;
@@ -113,6 +122,7 @@ const parseNumstat = (raw: string): ReadonlyArray<NumstatEntry> => {
 	return entries;
 };
 
+/** `git ls-files --others --exclude-standard -z` — untracked paths, only meaningful against `{ kind: "worktree" }`. */
 const listUntrackedFiles = (repoRoot: string) =>
 	git(repoRoot, ["ls-files", "--others", "--exclude-standard", "-z"]).pipe(
 		Effect.map((raw) => raw.split("\0").filter((path) => path.length > 0)),
@@ -138,7 +148,7 @@ const computeFingerprint = (input: {
 		.digest("hex");
 
 /** Reads a bounded content prefix from the worktree, for the classification content-marker signal. */
-const readContentPrefix = (
+const readContentPrefixFromWorktree = (
 	repoRoot: string,
 	path: string,
 	fs: FileSystem,
@@ -151,6 +161,57 @@ const readContentPrefix = (
 		),
 		Effect.orElseSucceed(() => undefined),
 	);
+
+/**
+ * Reads every listed path's content at `target`, capped at
+ * `CONTENT_PREFIX_CAP` — the classification content-marker signal. A path
+ * over the cap is simply absent from the result, not truncated. A committed
+ * `target` batches through `readBlobsAtRef`; a `worktree` one has no batched
+ * primitive to borrow, so each path is its own disk read.
+ */
+const readContentPrefixes = (
+	repoRoot: string,
+	target: DiffTarget,
+	paths: ReadonlyArray<string>,
+	fs: FileSystem,
+): Effect.Effect<
+	ReadonlyMap<string, string>,
+	GitCommandError,
+	ChildProcessSpawner.ChildProcessSpawner | FileSystem
+> => {
+	if (target.kind === "committed") {
+		return readBlobsAtRef(repoRoot, target.sha, paths, {
+			maxBytes: CONTENT_PREFIX_CAP,
+		}).pipe(
+			Effect.map((blobs) => {
+				const prefixes = new Map<string, string>();
+				for (const [path, blob] of blobs) {
+					if (blob.content !== null) {
+						prefixes.set(path, new TextDecoder().decode(blob.content));
+					}
+				}
+				return prefixes;
+			}),
+		);
+	}
+
+	return Effect.forEach(
+		paths,
+		(path) =>
+			readContentPrefixFromWorktree(repoRoot, path, fs).pipe(
+				Effect.map((prefix) => [path, prefix] as const),
+			),
+		{ concurrency: "unbounded" },
+	).pipe(
+		Effect.map((entries) => {
+			const prefixes = new Map<string, string>();
+			for (const [path, prefix] of entries) {
+				if (prefix !== undefined) prefixes.set(path, prefix);
+			}
+			return prefixes;
+		}),
+	);
+};
 
 type GatedContent = {
 	readonly content: string | undefined;
@@ -179,6 +240,33 @@ const gateBytes = (
 	};
 };
 
+/** Reads one path's content at a commit, gated by size — the committed-side counterpart to `readWorktreeGated`. */
+const readGatedBlob = (
+	repoRoot: string,
+	ref: string,
+	path: string,
+	force: boolean,
+): Effect.Effect<
+	GatedContent,
+	GitCommandError,
+	ChildProcessSpawner.ChildProcessSpawner
+> =>
+	readBlobsAtRef(repoRoot, ref, [path], {
+		maxBytes: force ? LOAD_ON_DEMAND_LIMIT : AUTO_RENDER_LIMIT,
+	}).pipe(
+		Effect.map((blobs) => {
+			const blob = blobs.get(path);
+			if (blob === undefined) {
+				return { content: undefined, truncated: false, binaryByNul: false };
+			}
+			if (blob.content === null) {
+				return { content: undefined, truncated: true, binaryByNul: false };
+			}
+			return gateBytes(blob.content, blob.size, force);
+		}),
+	);
+
+/** Reads one path's content from disk, gated by size — the worktree-side counterpart to `readGatedBlob`. */
 const readWorktreeGated = (
 	repoRoot: string,
 	path: string,
@@ -209,25 +297,53 @@ const readWorktreeGated = (
 	);
 
 /**
- * Every changed file's metadata — `merge-base(baseRef, HEAD)..worktree`,
- * including uncommitted and untracked changes. Cheap by design: no file
- * content is fetched beyond a small classification prefix, so this stays
- * fast regardless of how many files a PR touches.
+ * Every changed file's metadata for `merge-base(baseRef, HEAD)..<target>`.
+ * By default (`includeUncommitted: false`, the common case) `<target>` is
+ * `HEAD` — staged, unstaged, and untracked changes are excluded. With
+ * `includeUncommitted: true`, `<target>` is the worktree itself — git's own
+ * bare commit-vs-worktree diff form — and untracked files are enumerated and
+ * included too. Cheap by design: no file content is fetched beyond a small
+ * classification prefix, so this stays fast regardless of how many files a
+ * PR touches.
  */
 export const getChangedFiles = (
 	repoRoot: string,
 	baseRef: string,
+	options?: { readonly includeUncommitted?: boolean },
 ): Effect.Effect<ReadonlyArray<FileChange>, GitError, Requirements> =>
 	Effect.gen(function* () {
 		const fs = yield* FileSystem;
+		const includeUncommitted = options?.includeUncommitted ?? false;
 
 		const mergeBase = yield* resolveMergeBase(repoRoot, baseRef);
+		const target: DiffTarget = includeUncommitted
+			? { kind: "worktree" }
+			: { kind: "committed", sha: yield* resolveHeadSha(repoRoot) };
+
+		const untrackedPathsEffect =
+			target.kind === "worktree"
+				? listUntrackedFiles(repoRoot)
+				: Effect.succeed<ReadonlyArray<string>>([]);
 
 		const [nameStatusRaw, numstatRaw, untrackedPaths] = yield* Effect.all(
 			[
-				git(repoRoot, ["diff", "--name-status", "-z", "-M", mergeBase]),
-				git(repoRoot, ["diff", "--numstat", "-z", "-M", mergeBase]),
-				listUntrackedFiles(repoRoot),
+				git(repoRoot, [
+					"diff",
+					"--name-status",
+					"-z",
+					"-M",
+					mergeBase,
+					...diffTargetArgs(target),
+				]),
+				git(repoRoot, [
+					"diff",
+					"--numstat",
+					"-z",
+					"-M",
+					mergeBase,
+					...diffTargetArgs(target),
+				]),
+				untrackedPathsEffect,
 			],
 			{ concurrency: "unbounded" },
 		);
@@ -240,6 +356,7 @@ export const getChangedFiles = (
 		const trackedPatches = yield* readPatches(
 			repoRoot,
 			mergeBase,
+			target,
 			trackedEntries.map((entry) => ({
 				path: entry.path,
 				oldPath: entry.oldPath,
@@ -251,17 +368,14 @@ export const getChangedFiles = (
 			...untrackedPaths,
 		]);
 
-		const trackedPrefixes = yield* Effect.forEach(
-			trackedEntries,
-			(entry) =>
-				entry.status === "deleted"
-					? Effect.succeed([entry.path, undefined] as const)
-					: readContentPrefix(repoRoot, entry.path, fs).pipe(
-							Effect.map((prefix) => [entry.path, prefix] as const),
-						),
-			{ concurrency: "unbounded" },
+		const prefixByPath = yield* readContentPrefixes(
+			repoRoot,
+			target,
+			trackedEntries
+				.filter((entry) => entry.status !== "deleted")
+				.map((entry) => entry.path),
+			fs,
 		);
-		const prefixByPath = new Map(trackedPrefixes);
 
 		const trackedChanges: Array<FileChange> = trackedEntries.map((entry) => {
 			const numstat = numstatByPath.get(entry.path);
@@ -338,28 +452,49 @@ export const getChangedFiles = (
 	});
 
 /**
- * One file's patch and (size-gate permitting) full before/after content.
- * `force` overrides the load-on-demand tier (up to 2MB); nothing overrides
- * the patch-only tier above that.
+ * One file's patch and (size-gate permitting) full before/after content, at
+ * `merge-base(baseRef, HEAD)..<target>` — see `getChangedFiles` for what
+ * `<target>` is and how `includeUncommitted` picks it. `force` overrides the
+ * load-on-demand tier (up to 2MB); nothing overrides the patch-only tier
+ * above that.
  */
 export const getFileContent = (
 	repoRoot: string,
 	baseRef: string,
 	path: string,
-	options?: { readonly force?: boolean },
+	options?: {
+		readonly force?: boolean;
+		readonly includeUncommitted?: boolean;
+	},
 ): Effect.Effect<FileContent, GitError | FileNotChanged, Requirements> =>
 	Effect.gen(function* () {
 		const fs = yield* FileSystem;
 		const force = options?.force ?? false;
+		const includeUncommitted = options?.includeUncommitted ?? false;
 
 		const mergeBase = yield* resolveMergeBase(repoRoot, baseRef);
+		const target: DiffTarget = includeUncommitted
+			? { kind: "worktree" }
+			: { kind: "committed", sha: yield* resolveHeadSha(repoRoot) };
+
+		const statusEffect =
+			target.kind === "worktree"
+				? git(repoRoot, ["status", "--porcelain=v1", "-z", "--", path])
+				: Effect.succeed("");
 
 		// Not pathspec-restricted: a rename's deletion side lives at the *old*
 		// path, and restricting to just `path` would hide it from git's rename
 		// pairing, the same trap `readPatches` avoids via `pathspecFor`.
 		const [nameStatusRaw, statusRaw] = yield* Effect.all([
-			git(repoRoot, ["diff", "--name-status", "-z", "-M", mergeBase]),
-			git(repoRoot, ["status", "--porcelain=v1", "-z", "--", path]),
+			git(repoRoot, [
+				"diff",
+				"--name-status",
+				"-z",
+				"-M",
+				mergeBase,
+				...diffTargetArgs(target),
+			]),
+			statusEffect,
 		]);
 		const entry = parseNameStatus(nameStatusRaw).find(
 			(candidate) => candidate.path === path,
@@ -376,39 +511,20 @@ export const getFileContent = (
 		const oldGate: GatedContent =
 			status === "added" || isUntracked
 				? { content: undefined, truncated: false, binaryByNul: false }
-				: yield* readBlobsAtRef(repoRoot, mergeBase, [oldPath], {
-						maxBytes: force ? LOAD_ON_DEMAND_LIMIT : AUTO_RENDER_LIMIT,
-					}).pipe(
-						Effect.map((blobs) => {
-							const blob = blobs.get(oldPath);
-							if (blob === undefined) {
-								return {
-									content: undefined,
-									truncated: false,
-									binaryByNul: false,
-								};
-							}
-							if (blob.content === null) {
-								return {
-									content: undefined,
-									truncated: true,
-									binaryByNul: false,
-								};
-							}
-							return gateBytes(blob.content, blob.size, force);
-						}),
-					);
+				: yield* readGatedBlob(repoRoot, mergeBase, oldPath, force);
 
 		const newGate: GatedContent =
 			status === "deleted"
 				? { content: undefined, truncated: false, binaryByNul: false }
-				: yield* readWorktreeGated(repoRoot, path, force, fs);
+				: target.kind === "worktree"
+					? yield* readWorktreeGated(repoRoot, path, force, fs)
+					: yield* readGatedBlob(repoRoot, target.sha, path, force);
 
 		const patch = isUntracked
 			? oldGate.binaryByNul || newGate.binaryByNul
 				? createAddedBinaryFilePatch(path)
 				: createAddedFilePatch(path, newGate.content ?? "")
-			: ((yield* readPatches(repoRoot, mergeBase, [
+			: ((yield* readPatches(repoRoot, mergeBase, target, [
 					{
 						path,
 						...(entry?.oldPath === undefined ? {} : { oldPath: entry.oldPath }),

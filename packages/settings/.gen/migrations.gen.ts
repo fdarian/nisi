@@ -6,6 +6,7 @@ import m0001 from "../drizzle/0001_fluffy_roland_deschain.sql" with {
 	type: "text",
 };
 import m0002 from "../drizzle/0002_damp_quasimodo.sql" with { type: "text" };
+import m0003 from "../drizzle/0003_careful_joseph.sql" with { type: "text" };
 import journal from "../drizzle/meta/_journal.json" with { type: "json" };
 
 export default {
@@ -16,5 +17,6 @@ export default {
 		"0000_massive_prowler": m0000,
 		"0001_fluffy_roland_deschain": m0001,
 		"0002_damp_quasimodo": m0002,
+		"0003_careful_joseph": m0003,
 	} as Record<string, string>,
 };

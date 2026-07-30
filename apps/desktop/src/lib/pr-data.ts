@@ -19,6 +19,7 @@ import {
 } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo } from "react";
 import type { SidecarQueryUtils } from "#/lib/backend-context";
+import { useIncludeUncommitted } from "#/lib/settings-data";
 
 export type PullRequestInfo = {
 	number: number;
@@ -139,13 +140,24 @@ export function useSessions(orpc: SidecarQueryUtils): {
 	};
 }
 
-/** Mirrors `diff.files({ sessionId })` — metadata for every file in the PR. */
+/**
+ * Mirrors `diff.files({ sessionId, includeUncommitted })` — metadata for
+ * every file in the PR. `includeUncommitted` is sourced from the persisted
+ * setting rather than taken as a param, and folded straight into the query
+ * `input` — since oRPC's TanStack Query integration derives the actual cache
+ * key from the full `input` object, flipping the toggle produces a distinct
+ * key (and thus a real refetch) instead of leaving the other mode's cached
+ * result on screen.
+ */
 export function useFileChanges(
 	orpc: SidecarQueryUtils,
 	sessionId: string,
 ): { files: readonly FileChange[]; isLoading: boolean; error: unknown } {
+	const [includeUncommitted] = useIncludeUncommitted(orpc);
 	const query = useQuery(
-		orpc.diff.files.queryOptions({ input: { sessionId } }),
+		orpc.diff.files.queryOptions({
+			input: { sessionId, includeUncommitted },
+		}),
 	);
 	return {
 		files: query.data ?? [],
@@ -154,7 +166,7 @@ export function useFileChanges(
 	};
 }
 
-/** Mirrors `diff.file({ sessionId, path, force })`, lazy per file. */
+/** Mirrors `diff.file({ sessionId, path, force, includeUncommitted })`, lazy per file — same cache-key reasoning as `useFileChanges`. */
 export function useFileContents(
 	orpc: SidecarQueryUtils,
 	sessionId: string,
@@ -164,12 +176,13 @@ export function useFileContents(
 	string,
 	{ content: FileContent | undefined; isLoading: boolean; isError: boolean }
 > {
+	const [includeUncommitted] = useIncludeUncommitted(orpc);
 	const results = useQueries({
 		queries: paths.map((path) =>
 			orpc.diff.file.queryOptions({
 				input: forcedPaths.has(path)
-					? { sessionId, path, force: true }
-					: { sessionId, path },
+					? { sessionId, path, force: true, includeUncommitted }
+					: { sessionId, path, includeUncommitted },
 			}),
 		),
 	});

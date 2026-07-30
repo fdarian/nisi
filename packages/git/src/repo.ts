@@ -68,8 +68,33 @@ export const resolveLocalDefaultBranch = (repoRoot: string) =>
 		return yield* new NoDefaultBranch({ repoRoot });
 	});
 
+/** The commit `HEAD` currently points at. */
+export const resolveHeadSha = (repoRoot: string) =>
+	git(repoRoot, ["rev-parse", "HEAD"]).pipe(
+		Effect.map((stdout) => stdout.trim()),
+	);
+
 /** The commit both `baseRef` and the current `HEAD` descend from. */
 export const resolveMergeBase = (repoRoot: string, baseRef: string) =>
 	git(repoRoot, ["merge-base", baseRef, "HEAD"]).pipe(
 		Effect.map((stdout) => stdout.trim()),
 	);
+
+/**
+ * The right-hand side of every diff `readPatches`/`getChangedFiles`/
+ * `getFileContent` build: either a resolved commit (typically
+ * `resolveHeadSha`'s result), or git's own bare commit-vs-worktree form —
+ * omitting the second revision entirely, which is how `git diff <rev>` (no
+ * second arg) already means "against the worktree". This is threaded as one
+ * value rather than a raw `includeUncommitted` boolean re-interpreted at
+ * each call site, so "which side are we diffing against" is decided once,
+ * by construction, and can't drift out of sync between the git-args
+ * builders and the content readers that key off it.
+ */
+export type DiffTarget =
+	| { readonly kind: "committed"; readonly sha: string }
+	| { readonly kind: "worktree" };
+
+/** The trailing revision args for a `git diff <mergeBase> ...` call — empty for `worktree`, git's own bare-diff form. */
+export const diffTargetArgs = (target: DiffTarget): ReadonlyArray<string> =>
+	target.kind === "committed" ? [target.sha] : [];

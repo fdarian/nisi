@@ -42,6 +42,7 @@ export const Settings = Schema.Struct({
 	sidebarViewMode: SidebarViewMode,
 	diffStyleMode: DiffStyleMode,
 	hideReviewed: Schema.Boolean,
+	includeUncommitted: Schema.Boolean,
 });
 export type Settings = Schema.Schema.Type<typeof Settings>;
 
@@ -56,6 +57,7 @@ export const SettingsUpdate = Schema.Struct({
 	sidebarViewMode: Schema.optional(SidebarViewMode),
 	diffStyleMode: Schema.optional(DiffStyleMode),
 	hideReviewed: Schema.optional(Schema.Boolean),
+	includeUncommitted: Schema.optional(Schema.Boolean),
 });
 export type SettingsUpdate = Schema.Schema.Type<typeof SettingsUpdate>;
 

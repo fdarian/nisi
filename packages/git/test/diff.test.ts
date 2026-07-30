@@ -7,7 +7,13 @@ import { cleanupTestRepo, makeTestRepo, type TestRepo } from "./fixtures.ts";
 const run = <A, E>(effect: Effect.Effect<A, E, BunServices.BunServices>) =>
 	Effect.runPromise(effect.pipe(Effect.provide(BunServices.layer)));
 
-/** Sets up main-branch content, then a feature branch with a mix of changes against it. */
+/**
+ * Sets up main-branch content, then a feature branch with committed history
+ * to diff against — plus an uncommitted edit and an untracked file layered
+ * on top. That layer drives both modes: with `includeUncommitted` unset (or
+ * `false`), none of it may leak into `getChangedFiles`/`getFileContent`; with
+ * `includeUncommitted: true`, all of it must show up.
+ */
 const makeScenario = async (): Promise<{ repo: TestRepo; base: string }> => {
 	const repo = await makeTestRepo();
 	await repo.write("src/kept.ts", "unchanged\n");
@@ -27,7 +33,9 @@ const makeScenario = async (): Promise<{ repo: TestRepo; base: string }> => {
 	await repo.git(["add", "-A"]);
 	await repo.commit("feature work");
 
-	// Uncommitted + untracked on top, to exercise the worktree side of the diff.
+	// Uncommitted + untracked on top — must never surface in a diff scoped to
+	// committed history only.
+	await repo.write("src/kept.ts", "dirtied on disk, never committed\n");
 	await repo.write(
 		"src/modified.ts",
 		"line1\nline2 changed\nline3\nline4 uncommitted\n",
@@ -50,19 +58,20 @@ describe("getChangedFiles", () => {
 			expect(byPath.get("src/new-name.ts")?.status).toBe("renamed");
 			expect(byPath.get("src/new-name.ts")?.oldPath).toBe("src/old-name.ts");
 			expect(byPath.get("src/added.ts")?.status).toBe("added");
-			expect(byPath.get("src/untracked.ts")?.status).toBe("added");
+			expect(byPath.get("src/untracked.ts")).toBeUndefined();
 		} finally {
 			await cleanupTestRepo(repo);
 		}
 	});
 
-	test("includes uncommitted worktree edits in additions/deletions", async () => {
+	test("excludes uncommitted worktree edits from additions/deletions", async () => {
 		const { repo, base } = await makeScenario();
 		try {
 			const files = await run(getChangedFiles(repo.root, base));
 			const modified = files.find((file) => file.path === "src/modified.ts");
-			// line2 changed (+1/-1) and line4 added (+1) relative to base.
-			expect(modified?.additions).toBe(2);
+			// Only the committed "line2 changed" survives (+1/-1) — the
+			// uncommitted "line4" addition must not be counted.
+			expect(modified?.additions).toBe(1);
 			expect(modified?.deletions).toBe(1);
 		} finally {
 			await cleanupTestRepo(repo);
@@ -81,6 +90,7 @@ describe("getChangedFiles", () => {
 				"src/modified.ts",
 				"line1\nline2 changed again\nline3\n",
 			);
+			await repo.commit("modify again");
 			const after = await run(getChangedFiles(repo.root, base));
 			const afterFingerprint = after.find(
 				(f) => f.path === "src/modified.ts",
@@ -136,21 +146,51 @@ describe("getChangedFiles", () => {
 			await cleanupTestRepo(repo);
 		}
 	});
+
+	test("includes dirtied and untracked files when includeUncommitted is true", async () => {
+		const { repo, base } = await makeScenario();
+		try {
+			const files = await run(
+				getChangedFiles(repo.root, base, { includeUncommitted: true }),
+			);
+			const byPath = new Map(files.map((file) => [file.path, file]));
+
+			// Dirtied on disk but never committed — invisible in the default mode.
+			expect(byPath.get("src/kept.ts")?.status).toBe("modified");
+			expect(byPath.get("src/untracked.ts")?.status).toBe("added");
+		} finally {
+			await cleanupTestRepo(repo);
+		}
+	});
+
+	test("includes uncommitted worktree edits in additions/deletions when includeUncommitted is true", async () => {
+		const { repo, base } = await makeScenario();
+		try {
+			const files = await run(
+				getChangedFiles(repo.root, base, { includeUncommitted: true }),
+			);
+			const modified = files.find((file) => file.path === "src/modified.ts");
+			// line2 changed (+1/-1) and line4 added (+1) relative to base.
+			expect(modified?.additions).toBe(2);
+			expect(modified?.deletions).toBe(1);
+		} finally {
+			await cleanupTestRepo(repo);
+		}
+	});
 });
 
 describe("getFileContent", () => {
-	test("returns old and new content for a modified file", async () => {
+	test("returns old and new content for a modified file, excluding uncommitted edits", async () => {
 		const { repo, base } = await makeScenario();
 		try {
 			const content = await run(
 				getFileContent(repo.root, base, "src/modified.ts"),
 			);
 			expect(content.oldContent).toBe("line1\nline2\nline3\n");
-			expect(content.newContent).toBe(
-				"line1\nline2 changed\nline3\nline4 uncommitted\n",
-			);
+			expect(content.newContent).toBe("line1\nline2 changed\nline3\n");
 			expect(content.patch).toContain("-line2");
 			expect(content.patch).toContain("+line2 changed");
+			expect(content.patch).not.toContain("line4 uncommitted");
 			expect(content.truncated).toBe(false);
 		} finally {
 			await cleanupTestRepo(repo);
@@ -183,16 +223,15 @@ describe("getFileContent", () => {
 		}
 	});
 
-	test("synthesizes a patch for an untracked file", async () => {
+	test("fails with FileNotChanged for an untracked file", async () => {
 		const { repo, base } = await makeScenario();
 		try {
-			const content = await run(
-				getFileContent(repo.root, base, "src/untracked.ts"),
+			const exit = await Effect.runPromiseExit(
+				getFileContent(repo.root, base, "src/untracked.ts").pipe(
+					Effect.provide(BunServices.layer),
+				),
 			);
-			expect(content.oldContent).toBeUndefined();
-			expect(content.newContent).toBe("not yet added\n");
-			expect(content.patch).toContain("+not yet added");
-			expect(content.patch).toContain("new file mode");
+			expect(exit._tag).toBe("Failure");
 		} finally {
 			await cleanupTestRepo(repo);
 		}
@@ -212,7 +251,7 @@ describe("getFileContent", () => {
 		}
 	});
 
-	test("fails with FileNotChanged for a path outside the diff", async () => {
+	test("fails with FileNotChanged for a path outside the diff, even when dirtied uncommitted", async () => {
 		const { repo, base } = await makeScenario();
 		try {
 			const exit = await Effect.runPromiseExit(
@@ -265,6 +304,58 @@ describe("getFileContent", () => {
 			);
 			expect(forced.newContent).toBeUndefined();
 			expect(forced.truncated).toBe(true);
+		} finally {
+			await cleanupTestRepo(repo);
+		}
+	});
+
+	test("returns worktree content for a modified file when includeUncommitted is true", async () => {
+		const { repo, base } = await makeScenario();
+		try {
+			const content = await run(
+				getFileContent(repo.root, base, "src/modified.ts", {
+					includeUncommitted: true,
+				}),
+			);
+			expect(content.oldContent).toBe("line1\nline2\nline3\n");
+			expect(content.newContent).toBe(
+				"line1\nline2 changed\nline3\nline4 uncommitted\n",
+			);
+			expect(content.patch).toContain("-line2");
+			expect(content.patch).toContain("+line2 changed");
+			expect(content.truncated).toBe(false);
+		} finally {
+			await cleanupTestRepo(repo);
+		}
+	});
+
+	test("synthesizes a patch for an untracked file when includeUncommitted is true", async () => {
+		const { repo, base } = await makeScenario();
+		try {
+			const content = await run(
+				getFileContent(repo.root, base, "src/untracked.ts", {
+					includeUncommitted: true,
+				}),
+			);
+			expect(content.oldContent).toBeUndefined();
+			expect(content.newContent).toBe("not yet added\n");
+			expect(content.patch).toContain("+not yet added");
+			expect(content.patch).toContain("new file mode");
+		} finally {
+			await cleanupTestRepo(repo);
+		}
+	});
+
+	test("succeeds for a path dirtied only on disk when includeUncommitted is true", async () => {
+		const { repo, base } = await makeScenario();
+		try {
+			const content = await run(
+				getFileContent(repo.root, base, "src/kept.ts", {
+					includeUncommitted: true,
+				}),
+			);
+			expect(content.oldContent).toBe("unchanged\n");
+			expect(content.newContent).toBe("dirtied on disk, never committed\n");
 		} finally {
 			await cleanupTestRepo(repo);
 		}

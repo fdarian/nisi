@@ -1,3 +1,4 @@
+export { readFileContentsAtRef } from "./blob.ts";
 export type {
 	FileSignature,
 	RepoChangeSignature,

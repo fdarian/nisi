@@ -10,6 +10,7 @@ import {
 	getChangedFiles,
 	getFileContent,
 	type NoDefaultBranch,
+	readFileContentsAtRef,
 	resolveCurrentBranch,
 	resolveRepoRoot,
 	resolveReviewTarget,
@@ -30,6 +31,7 @@ import {
 } from "@repo/review";
 import { Context, Effect, Layer, Schema } from "effect";
 import { FileSystem } from "effect/FileSystem";
+import type { ChildProcessSpawner } from "effect/unstable/process";
 
 /** `sessions.open`'s `cwd` doesn't resolve to a git working tree. */
 export class InvalidCwd extends Schema.TaggedErrorClass<InvalidCwd>()(
@@ -150,68 +152,123 @@ export class Store extends Context.Service<Store>()("Store", {
 			reviewStore.closeSession(sessionId);
 
 		/**
-		 * The cheap half of review-vs-head comparison: hash the file's *current*
-		 * worktree bytes and let the caller compare against a stored snapshot
-		 * hash. A missing file (deleted since review) hashes as empty content,
-		 * the same "diff against /dev/null" convention `setFileViewed` and
-		 * `@repo/review`'s `reconcile` both use — not a swallowed error.
+		 * Hashes each of `paths`' *current* content the same way a review
+		 * snapshot is hashed (`@repo/review`'s `hashContent`, SHA-256 of raw
+		 * bytes — not a git object id, which wouldn't compare against a stored
+		 * `snapshotHash` at all), so the caller can tell a ticked file's snapshot
+		 * apart from what's actually there now. What "current" means follows
+		 * `includeUncommitted`: worktree bytes (`fs.readFile`, one call per path
+		 * — cheap enough locally that batching buys nothing) when `true`, HEAD's
+		 * tree (`@repo/git`'s `readFileContentsAtRef`, one batched `cat-file
+		 * --batch` call over every path) when `false`. Either way this only
+		 * ever runs over the paths the caller actually asks for — scoped to
+		 * files with active review state by both call sites below, not the
+		 * diff's total size. A path missing either way (deleted since review,
+		 * or never existed at HEAD) hashes as empty content, the same "diff
+		 * against /dev/null" convention `setFileViewed`/`@repo/review`'s
+		 * `reconcile` both use — not a swallowed error.
 		 */
-		const readHeadHash = (repoRoot: string, path: string) =>
-			fs.readFile(join(repoRoot, path)).pipe(
-				Effect.orElseSucceed(() => new Uint8Array()),
-				Effect.map(hashContent),
-			);
+		const readCurrentHashes = (
+			repoRoot: string,
+			includeUncommitted: boolean,
+			paths: ReadonlyArray<string>,
+		): Effect.Effect<
+			ReadonlyMap<string, string>,
+			GitCommandError,
+			FileSystem | ChildProcessSpawner.ChildProcessSpawner
+		> =>
+			Effect.gen(function* () {
+				if (includeUncommitted) {
+					const entries = yield* Effect.forEach(
+						paths,
+						(path) =>
+							fs.readFile(join(repoRoot, path)).pipe(
+								Effect.orElseSucceed(() => new Uint8Array()),
+								Effect.map((content) => [path, hashContent(content)] as const),
+							),
+						{ concurrency: "unbounded" },
+					);
+					return new Map(entries);
+				}
+
+				const contents = yield* readFileContentsAtRef(repoRoot, "HEAD", paths);
+				const hashes = new Map<string, string>();
+				for (const path of paths) {
+					hashes.set(path, hashContent(contents.get(path) ?? new Uint8Array()));
+				}
+				return hashes;
+			});
 
 		/**
 		 * Attaches each file's review state, looked up by its current path with
 		 * a fallback to `oldPath` for a rename (a rename's `reviewed_files` row
 		 * still lives under the pre-rename path — see `resolveReviewState`).
-		 * `changedSinceReview` costs a worktree read + hash per file that
-		 * actually has review state — bounded by how many files the user has
-		 * ticked, not by the diff's total size, unlike the live-update poller's
-		 * mtime/size-first discipline (which has to scan every changed file on
-		 * every tick regardless of review state).
+		 * `changedSinceReview` costs one `readCurrentHashes` batch over only the
+		 * files that actually have review state — bounded by how many files the
+		 * user has ticked, not by the diff's total size, unlike the live-update
+		 * poller's mtime/size-first discipline (which has to scan every changed
+		 * file on every tick regardless of review state).
 		 */
 		const attachReviewState = (
 			sessionId: string,
 			repoRoot: string,
+			includeUncommitted: boolean,
 			files: ReadonlyArray<GitFileChange>,
 		): Effect.Effect<
 			ReadonlyArray<FileChange>,
-			SessionNotFound | ReviewStoreError,
-			FileSystem
+			SessionNotFound | ReviewStoreError | GitCommandError,
+			FileSystem | ChildProcessSpawner.ChildProcessSpawner
 		> =>
 			Effect.gen(function* () {
 				const states = yield* reviewStore.listReviewStates(sessionId);
-				return yield* Effect.forEach(
-					files,
-					(file) =>
-						Effect.gen(function* () {
-							const state = resolveReviewState(states, file.path, file.oldPath);
-							if (
-								state === null ||
-								!state.viewed ||
-								state.snapshotHash === null
-							) {
-								return { ...file, review: null };
-							}
-							const headHash = yield* readHeadHash(repoRoot, file.path);
-							const review: FileReview = {
-								viewed: true,
-								reviewedHash: state.snapshotHash,
-								changedSinceReview: headHash !== state.snapshotHash,
-							};
-							return { ...file, review };
-						}),
-					{ concurrency: "unbounded" },
+
+				const claims = new Map<
+					string,
+					{ readonly snapshotHash: string; readonly viewedAt: number }
+				>();
+				for (const file of files) {
+					const claim = toActiveFileClaim(
+						resolveReviewState(states, file.path, file.oldPath),
+					);
+					if (claim !== null) claims.set(file.path, claim);
+				}
+
+				const currentHashes = yield* readCurrentHashes(
+					repoRoot,
+					includeUncommitted,
+					[...claims.keys()],
 				);
+
+				return files.map((file) => {
+					const claim = claims.get(file.path);
+					if (claim === undefined) return { ...file, review: null };
+					const currentHash =
+						currentHashes.get(file.path) ?? hashContent(new Uint8Array());
+					const review: FileReview = {
+						viewed: true,
+						reviewedHash: claim.snapshotHash,
+						changedSinceReview: currentHash !== claim.snapshotHash,
+					};
+					return { ...file, review };
+				});
 			});
 
-		const listChangedFiles = (sessionId: string) =>
+		const listChangedFiles = (sessionId: string, includeUncommitted: boolean) =>
 			Effect.gen(function* () {
 				const session = yield* reviewStore.getSession(sessionId);
-				const files = yield* getChangedFiles(session.repoRoot, session.baseRef);
-				return yield* attachReviewState(sessionId, session.repoRoot, files);
+				const files = yield* getChangedFiles(
+					session.repoRoot,
+					session.baseRef,
+					{
+						includeUncommitted,
+					},
+				);
+				return yield* attachReviewState(
+					sessionId,
+					session.repoRoot,
+					includeUncommitted,
+					files,
+				);
 			});
 
 		/**
@@ -296,18 +353,28 @@ export class Store extends Context.Service<Store>()("Store", {
 		 * `FileChange.oldPath` so a rename's review state resolves the same way
 		 * here as it does in `listChangedFiles`'s `attachReviewState`.
 		 *
+		 * `includeUncommitted` reaches `getFileContent` the same way it reaches
+		 * `listChangedFiles`, so `content.newContent` — and therefore
+		 * `reconcile`'s `changedSinceReview`/`ranges` below — already compares
+		 * against HEAD, not the worktree, in committed-only mode: no extra logic
+		 * needed here, it falls out of threading the flag into the one content
+		 * fetch this function makes. The `content.truncated` fallback just below
+		 * threads the same flag through `readCurrentHashes` instead, since a
+		 * size-gated file has no `content.newContent` to reuse.
+		 *
 		 * Reconciliation ranges are only computed when the patch content isn't
 		 * size-gated (`!content.truncated`) — gated content can't be trusted
 		 * for line-accurate ranges. The whole-file `changedSinceReview` hash
-		 * compare doesn't have that restriction (it's a direct worktree read),
-		 * but it only covers the whole-file claim — a size-gated file with only
-		 * range claims falls back to reporting no review at all, since there's
-		 * no gated equivalent for a range claim's drift.
+		 * compare doesn't have that restriction, but it only covers the
+		 * whole-file claim — a size-gated file with only range claims falls back
+		 * to reporting no review at all, since there's no gated equivalent for a
+		 * range claim's drift.
 		 */
 		const readFileContent = (
 			sessionId: string,
 			path: string,
 			force: boolean,
+			includeUncommitted: boolean,
 			oldPath?: string,
 		) =>
 			Effect.gen(function* () {
@@ -316,7 +383,7 @@ export class Store extends Context.Service<Store>()("Store", {
 					session.repoRoot,
 					session.baseRef,
 					path,
-					{ force },
+					{ force, includeUncommitted },
 				);
 
 				const states = yield* reviewStore.listReviewStates(sessionId);
@@ -330,8 +397,15 @@ export class Store extends Context.Service<Store>()("Store", {
 
 				if (content.truncated) {
 					if (activeFileClaim === null) return { ...content, review: null };
-					const headHash = yield* readHeadHash(session.repoRoot, path);
-					const changedSinceReview = headHash !== activeFileClaim.snapshotHash;
+					const currentHashes = yield* readCurrentHashes(
+						session.repoRoot,
+						includeUncommitted,
+						[path],
+					);
+					const currentHash =
+						currentHashes.get(path) ?? hashContent(new Uint8Array());
+					const changedSinceReview =
+						currentHash !== activeFileClaim.snapshotHash;
 					return { ...content, review: { changedSinceReview, ranges: [] } };
 				}
 

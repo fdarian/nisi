@@ -35,7 +35,9 @@ those two packages does I/O or knows about the other — this directory is where
   `@repo/review`'s `ReviewStore` directly (not through `Store`, which has no raw "get one session"
   method) and fetches every changed file's patch + head content via `@repo/git`, producing exactly
   what `@repo/walkthrough`'s pure functions need but can't fetch themselves — the digest's
-  per-file patches and each file's `ChangedFileFacts.lineCount`.
+  per-file patches and each file's `ChangedFileFacts.lineCount`. Also reads `@repo/settings`'s
+  `includeUncommitted` directly (there's no frontend request here to carry it) and threads it into
+  both `@repo/git` calls, so the digest an agent narrates matches what the user sees in Files Changed.
 - `live-sessions.ts` — the in-process `Map<sessionId, LiveWalkthroughSession>` a successful
   `generate` populates, so a regenerate can continue the same harness-agent conversation instead of
   starting cold. Gone on sidecar restart by design (`@repo/harness-local` omits `resumeSession` —

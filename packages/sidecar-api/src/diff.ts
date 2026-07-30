@@ -110,10 +110,23 @@ export const FileContent = Schema.Struct({
 });
 export type FileContent = Schema.Schema.Type<typeof FileContent>;
 
+/**
+ * Mirrors `@repo/settings`'s `includeUncommitted` — `false`/absent (the
+ * default) restricts the diff to `merge-base..HEAD`; `true` widens it to the
+ * worktree, staged/unstaged/untracked changes included too. See `@repo/git`'s
+ * `getChangedFiles`/`getFileContent` for what the flag does underneath.
+ */
+const IncludeUncommitted = Schema.optional(Schema.Boolean);
+
 export const diffContract = {
 	/** Metadata only, every changed file — the sidebar's data source. */
 	files: oc
-		.input(Schema.Struct({ sessionId: Schema.String }))
+		.input(
+			Schema.Struct({
+				sessionId: Schema.String,
+				includeUncommitted: IncludeUncommitted,
+			}),
+		)
 		.output(Schema.Array(FileChange))
 		.errors({ NOT_FOUND: {} }),
 	/** One file's patch + contents, lazy — the diff pane's data source. */
@@ -137,6 +150,7 @@ export const diffContract = {
 				 * patch-only tier above 2MB is never overridable.
 				 */
 				force: Schema.optional(Schema.Boolean),
+				includeUncommitted: IncludeUncommitted,
 			}),
 		)
 		.output(FileContent)

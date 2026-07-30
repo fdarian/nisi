@@ -47,6 +47,13 @@ seam" for the port/token handshake this boots into.
   `@repo/review`'s `ReviewStore` with `@repo/git`'s functions. `Session` here is the wire shape
   (`pr.baseRef`/`headRef` hoisted into the `pr` sub-object); `@repo/review`'s own `Session` keeps them
   at the top level since they apply whether or not there's a PR — `toWireSession` bridges the two.
+  `listChangedFiles`/`readFileContent` both take `includeUncommitted` and thread it straight into
+  their `@repo/git` calls (see that package's AGENTS.md for what the flag does). `changedSinceReview`
+  (`attachReviewState`'s sidebar badge, and `readFileContent`'s size-gated-content fallback) honors
+  the same flag via `readCurrentHashes`, which rehashes a ticked file's current content with
+  `@repo/review`'s own `hashContent` — worktree bytes when `includeUncommitted` is `true`, HEAD's
+  content via `@repo/git`'s `readFileContentsAtRef` (one batched read over just the ticked paths,
+  not the whole diff) when `false`.
   `readFileContent` is where Phase 3's range claims and Phase 2's whole-file toggle meet: it resolves
   both (with `oldPath` rename fallback for each — `resolveRangeClaims` re-queries on `oldPath` since
   `ReviewStore.listRangeClaims` is path-scoped, not a whole-session map like `listReviewStates`), reads

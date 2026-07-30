@@ -7,10 +7,13 @@ unit-testable against real temp repos without booting anything. Feeds `packages/
 
 - `exec.ts` — the only place that spawns processes. `git`/`gh` helpers plus a strict (fails on
   non-zero exit) and lenient (reports exit code, for "ran and said no" cases like no PR) variant.
-- `repo.ts` — repo root / current branch / merge-base / local default branch, pure `git`.
+- `repo.ts` — repo root / current branch / merge-base / HEAD sha / local default branch, pure
+  `git`. Also owns `DiffTarget` and `diffTargetArgs`: the diff's right-hand side (a commit, or the
+  worktree via git's own bare commit-vs-worktree form) and its translation to git args — threaded
+  through `patch.ts` and `diff.ts` instead of each re-deriving it from a boolean.
 - `pull-request.ts` — `resolveReviewTarget`: what a review is *against*. The GitHub half is
   optional — no remote, a host `gh` doesn't know, or an origin GitHub can't resolve all degrade to
-  `github: null` and `repo.ts`'s `resolveLocalDefaultBranch`, since nisi reviews working trees, not
+  `github: null` and `repo.ts`'s `resolveLocalDefaultBranch`, since nisi reviews local branches, not
   only PRs. Only *not being able to ask* (no `gh`, no auth, no network) fails, as
   `GitHubUnreachable`; see the module for why that split is matched on `gh`'s message rather than
   its exit code.
@@ -18,7 +21,11 @@ unit-testable against real temp repos without booting anything. Feeds `packages/
   `include` hand-expanded out of extglob syntax into brace alternation, since `Bun.Glob` (used
   here instead of a dependency) doesn't support `?(...)`.
 - `blob.ts` — batched `ls-tree` + `cat-file --batch-check` + `cat-file --batch` for reading blob
-  content at a ref without one subprocess per file.
+  content at a ref without one subprocess per file. `readBlobsAtRef` (internal, size-gated) backs
+  `diff.ts`'s content fetch; `readFileContentsAtRef` (exported, ungated) is the same batching for a
+  caller that wants every listed path's exact bytes at a ref regardless of size — e.g. the sidecar
+  rehashing a handful of reviewed files against HEAD, where a rendering-oriented size gate would
+  silently make some of them uncomparable.
 - `patch.ts` — combined `git diff` fetch, split client-side on `^diff --git`, with a per-file
   fallback when the split doesn't match the request.
 - `hunk.ts` — hunk model + parser.
@@ -30,10 +37,20 @@ unit-testable against real temp repos without booting anything. Feeds `packages/
   from `git status --porcelain`, plus HEAD's sha. What the sidecar's live-update poller diffs
   tick-to-tick to detect a session's files changed without hashing content on every tick.
 - `diff.ts` — orchestrates the above into `getChangedFiles` (cheap, all files, metadata only) and
-  `getFileContent` (one file, patch + gated content).
+  `getFileContent` (one file, patch + gated content). Both default to committed history only
+  (`merge-base(baseRef, HEAD)..HEAD`, `includeUncommitted: false`); passing `includeUncommitted:
+  true` switches the diff's right-hand side to the worktree — staged, unstaged, and untracked
+  changes included too.
 
 ## Gotchas
 
+- **`DiffTarget` (`repo.ts`), not a raw boolean, carries "committed vs worktree" through
+  `getChangedFiles`/`getFileContent`/`readPatches`.** `includeUncommitted` (default `false`) is
+  resolved to a `DiffTarget` once, at the top of each function, and threaded as-is from there — the
+  name-status/numstat calls, `readPatches`, and which of `readGatedBlob`/`readWorktreeGated` reads
+  the new side all key off that same value, so the two modes can't drift apart by being
+  re-interpreted independently downstream. `change-signal.ts` is the one module that always reads
+  live worktree state (mtime/size, never content), regardless of this flag.
 - **A rename's pathspec must include the old path.** `git diff -M <base> -- <newpath>` alone
   can't detect the rename — the pathspec hides the deletion half from git's rename pairing, so it
   renders as a plain add. Both `readPatches` (via `pathspecFor`) and `getFileContent`'s status

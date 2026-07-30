@@ -30,6 +30,8 @@ export const settings = sqliteTable("settings", {
 	 * `settings` row already does.
 	 */
 	hideReviewed: integer({ mode: "boolean" }).notNull().default(false),
+	/** Same `ALTER TABLE ADD COLUMN` default story as `hideReviewed` above. */
+	includeUncommitted: integer({ mode: "boolean" }).notNull().default(false),
 	updatedAt: integer({ mode: "timestamp_ms" })
 		.notNull()
 		.$defaultFn(() => new Date()),

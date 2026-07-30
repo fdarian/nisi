@@ -90,7 +90,7 @@ const localOnlyTarget = (repoRoot: string) =>
  *
  * A repo with no remote, a remote on a host `gh` doesn't know, or an origin
  * pointing at a repository GitHub can't resolve are all normal local-review
- * cases — nisi reviews working trees, not only pull requests — so they
+ * cases — nisi reviews local branches, not only pull requests — so they
  * degrade to `github: null` rather than failing. Not being able to *ask*
  * GitHub (no `gh`, no auth, no network) stays a failure: see
  * `GitHubUnreachable`.

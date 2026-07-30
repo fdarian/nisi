@@ -30,6 +30,10 @@ Git/review procedures sit alongside `health.check`.
   (`events.ts`), still want a Standard Schema. Convert with `Schema.toStandardSchemaV1(...)`.
 - `diff.file`'s `force` input field exists so the load-on-demand size tier (see `@repo/git`) has any
   way to actually be loaded. Optional, additive, flagged here so it isn't mistaken for scope creep.
+- `diff.files`/`diff.file` both gained `includeUncommitted`, mirroring `@repo/git`'s option of the
+  same name — the frontend sources it from `@repo/settings`'s persisted setting and folds it into
+  the query `input` (not a separate param) specifically so it's part of the TanStack Query cache key;
+  see `apps/desktop/src/lib/pr-data.ts`'s `useFileChanges`/`useFileContents`.
 - Phase 3's range-scoped review added `review.setRangeViewed` (mirrors `setViewed`'s tick/untick
   shape, scoped to one block's claim on a set of ranges within one file) and `diff.ts`'s `ReviewRange`
   gained `reviewedVia: ReviewSource | null` — `{kind: "file"}` or `{kind: "range", blockId,
