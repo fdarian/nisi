@@ -67,6 +67,18 @@ export type Reconciliation = {
 	readonly ranges: ReadonlyArray<ReviewRange>;
 };
 
+/**
+ * Whether any range of a reconciliation is still `"new"` — the file has a
+ * changed line no surviving claim (whole-file or block-scoped) covers.
+ * Deliberately narrower than `changedSinceReview`, which also flags a
+ * whole-file claim whose snapshot no longer matches head even when that
+ * leaves zero visible ranges (e.g. the file was deleted since review) — a
+ * caller deciding whether every changed line is *covered* only cares about
+ * `ranges`, not that unrelated divergence signal.
+ */
+export const hasUnreviewedRanges = (reconciliation: Reconciliation): boolean =>
+	reconciliation.ranges.some((range) => range.status === "new");
+
 type Interval = { readonly start: number; readonly end: number };
 
 /** A line number past any real file's length — the open end of a claim's whole-file range, or of the last unchanged run in a diff. Never rendered; every consumer clips it against a real bound (a base-hunk's head interval) before it reaches the wire. */

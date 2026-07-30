@@ -4,7 +4,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { BunServices } from "@effect/platform-bun";
 import { Effect } from "effect";
-import { type ReviewClaim, reconcile } from "../src/reconcile.ts";
+import {
+	hasUnreviewedRanges,
+	type ReviewClaim,
+	reconcile,
+} from "../src/reconcile.ts";
 
 const run = <A, E>(effect: Effect.Effect<A, E, BunServices.BunServices>) =>
 	Effect.runPromise(effect.pipe(Effect.provide(BunServices.layer)));
@@ -440,6 +444,67 @@ describe("reconcile — range claims", () => {
 				(r) => r.startLine <= 2 && r.endLine >= 2,
 			);
 			expect(insertion?.status).toBe("new");
+		});
+	});
+});
+
+describe("hasUnreviewedRanges", () => {
+	test("false when every range reconciled as reviewed", async () => {
+		await withTempRepo(async (repoRoot) => {
+			const content = "line1\nline2 REVIEWED\nline3\n";
+			const result = await run(
+				reconcile(repoRoot, {
+					baseContent: "line1\nline2\nline3\n",
+					headContent: content,
+					claims: [fileClaim(content)],
+				}),
+			);
+
+			expect(hasUnreviewedRanges(result)).toBe(false);
+		});
+	});
+
+	test("true when a range came back new", async () => {
+		await withTempRepo(async (repoRoot) => {
+			const result = await run(
+				reconcile(repoRoot, {
+					baseContent: "line1\nline2\nline3\n",
+					headContent: "line1\nline2 EDITED\nline3\n",
+					claims: [],
+				}),
+			);
+
+			expect(hasUnreviewedRanges(result)).toBe(true);
+		});
+	});
+
+	test("false when zero ranges exist at all (nothing changed since base)", async () => {
+		await withTempRepo(async (repoRoot) => {
+			const content = "line1\nline2\nline3\n";
+			const result = await run(
+				reconcile(repoRoot, {
+					baseContent: content,
+					headContent: content,
+					claims: [fileClaim(content)],
+				}),
+			);
+
+			expect(hasUnreviewedRanges(result)).toBe(false);
+		});
+	});
+
+	test("false even when changedSinceReview is true from a deleted-file file-claim divergence with no ranges", async () => {
+		await withTempRepo(async (repoRoot) => {
+			const result = await run(
+				reconcile(repoRoot, {
+					baseContent: "line1\nline2\n",
+					headContent: "",
+					claims: [fileClaim("line1\nline2 REVIEWED\n")],
+				}),
+			);
+
+			expect(result.changedSinceReview).toBe(true);
+			expect(hasUnreviewedRanges(result)).toBe(false);
 		});
 	});
 });

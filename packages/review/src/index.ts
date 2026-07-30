@@ -6,7 +6,7 @@ export type {
 	ReviewRange,
 	ReviewSource,
 } from "./reconcile.ts";
-export { reconcile } from "./reconcile.ts";
+export { hasUnreviewedRanges, reconcile } from "./reconcile.ts";
 export { resolveByPath, resolveReviewState } from "./resolve-review.ts";
 export type {
 	FileReviewState,

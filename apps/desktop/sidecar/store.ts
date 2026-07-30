@@ -12,12 +12,14 @@ import {
 	type NoDefaultBranch,
 	readFileContentsAtRef,
 	resolveCurrentBranch,
+	resolveMergeBase,
 	resolveRepoRoot,
 	resolveReviewTarget,
 } from "@repo/git";
 import {
 	type FileReviewState,
 	hashContent,
+	hasUnreviewedRanges,
 	type RangeReviewClaim,
 	type Reconciliation,
 	type ReviewClaim,
@@ -362,6 +364,42 @@ export class Store extends Context.Service<Store>()("Store", {
 			});
 
 		/**
+		 * The single-path gather-claims-and-reconcile step: resolves `path`'s
+		 * active range claims, combines them with its (already-resolved)
+		 * whole-file claim via `buildReviewClaims`, and reconciles against
+		 * `baseContent`/`headContent`. Shared by `readFileContents` (below,
+		 * fed the batched patch it already fetched) and `setRangeViewed`
+		 * (fed worktree content directly), so a path's reconciliation is
+		 * computed exactly one way regardless of caller.
+		 *
+		 * Returns `null` when the path has no active claim at all — reconcile
+		 * would otherwise report every base→head line "new", which isn't the
+		 * same as "never reviewed".
+		 */
+		const reconcilePathClaims = (
+			sessionId: string,
+			repoRoot: string,
+			path: string,
+			oldPath: string | undefined,
+			activeFileClaim: {
+				readonly snapshotHash: string;
+				readonly viewedAt: number;
+			} | null,
+			baseContent: string,
+			headContent: string,
+		): Effect.Effect<
+			Reconciliation | null,
+			SessionNotFound | ReviewStoreError | GitCommandError,
+			FileSystem | ChildProcessSpawner.ChildProcessSpawner
+		> =>
+			Effect.gen(function* () {
+				const rangeClaims = yield* resolveRangeClaims(sessionId, path, oldPath);
+				if (activeFileClaim === null && rangeClaims.length === 0) return null;
+				const claims = yield* buildReviewClaims(activeFileClaim, rangeClaims);
+				return yield* reconcile(repoRoot, { baseContent, headContent, claims });
+			});
+
+		/**
 		 * The batched sibling of the old per-path `readFileContent`: every
 		 * requested path's content in one `getFileContents` call (so N files
 		 * opened in the diff pane cost a constant handful of git subprocess
@@ -427,19 +465,7 @@ export class Store extends Context.Service<Store>()("Store", {
 								request.path,
 								request.oldPath,
 							);
-							const rangeClaims = yield* resolveRangeClaims(
-								sessionId,
-								request.path,
-								request.oldPath,
-							);
-
 							const activeFileClaim = toActiveFileClaim(fileState);
-							if (activeFileClaim === null && rangeClaims.length === 0) {
-								return {
-									path: request.path,
-									content: { ...content, review: null },
-								};
-							}
 
 							if (content.truncated) {
 								if (activeFileClaim === null) {
@@ -467,15 +493,15 @@ export class Store extends Context.Service<Store>()("Store", {
 								};
 							}
 
-							const claims = yield* buildReviewClaims(
+							const review = yield* reconcilePathClaims(
+								sessionId,
+								session.repoRoot,
+								request.path,
+								request.oldPath,
 								activeFileClaim,
-								rangeClaims,
+								content.oldContent ?? "",
+								content.newContent ?? "",
 							);
-							const review = yield* reconcile(session.repoRoot, {
-								baseContent: content.oldContent ?? "",
-								headContent: content.newContent ?? "",
-								claims,
-							});
 
 							return { path: request.path, content: { ...content, review } };
 						}),
@@ -505,10 +531,71 @@ export class Store extends Context.Service<Store>()("Store", {
 			});
 
 		/**
+		 * `reconcilePathClaims` fed worktree content directly instead of
+		 * `getFileContents`' batched patch: fetches `path`'s content at
+		 * `merge-base(baseRef, HEAD)` — the same old-side commit
+		 * `getFileContents` diffs against (see its doc comment: "Old-side
+		 * content is always at `mergeBase`"), never `baseRef` directly, so this
+		 * reconciles against the identical base content `readFileContents`
+		 * already showed the user, not a different one that happens to also be
+		 * called "base" — then reconciles it against `headContentBytes` (the
+		 * worktree bytes `setRangeViewed` already read or wrote) plus
+		 * `activeFileClaim`/every other currently active range claim. Used by
+		 * `setRangeViewed` to re-derive, right after a mark/unmark, whether the
+		 * file's whole-file `viewed` flag should follow.
+		 */
+		const reconcilePathAgainstBase = (
+			sessionId: string,
+			session: ReviewSession,
+			path: string,
+			activeFileClaim: {
+				readonly snapshotHash: string;
+				readonly viewedAt: number;
+			} | null,
+			headContentBytes: Uint8Array,
+		): Effect.Effect<
+			Reconciliation | null,
+			SessionNotFound | ReviewStoreError | GitCommandError,
+			FileSystem | ChildProcessSpawner.ChildProcessSpawner
+		> =>
+			Effect.gen(function* () {
+				const mergeBase = yield* resolveMergeBase(
+					session.repoRoot,
+					session.baseRef,
+				);
+				const baseContentBytes = yield* readFileContentsAtRef(
+					session.repoRoot,
+					mergeBase,
+					[path],
+				);
+				return yield* reconcilePathClaims(
+					sessionId,
+					session.repoRoot,
+					path,
+					undefined,
+					activeFileClaim,
+					new TextDecoder().decode(
+						baseContentBytes.get(path) ?? new Uint8Array(),
+					),
+					new TextDecoder().decode(headContentBytes),
+				);
+			});
+
+		/**
 		 * Ticks (or unticks) one walkthrough reference block's claim — same
 		 * "snapshot the whole file at tick time" discipline as `setFileViewed`,
 		 * just additive (a block's claim coexists with every other block's claim
 		 * and the whole-file toggle) rather than a single per-file slot.
+		 *
+		 * Also enforces the invariant the whole-file `viewed` flag is meant to
+		 * track: "every changed line of this file is covered by some claim".
+		 * Ticking a range that leaves nothing uncovered auto-ticks the file too
+		 * (skipped when a whole-file claim is already active — nothing to add);
+		 * unticking one re-checks the remaining claims before untangling the
+		 * file flag, since an overlapping block can still leave the file fully
+		 * covered (skipped when no whole-file claim is active — nothing to
+		 * remove). Either way this only changes the *file* row; the range claim
+		 * that was actually ticked/unticked already happened above.
 		 */
 		const setRangeViewed = (
 			sessionId: string,
@@ -523,10 +610,32 @@ export class Store extends Context.Service<Store>()("Store", {
 		) =>
 			Effect.gen(function* () {
 				const session = yield* reviewStore.getSession(sessionId);
+
 				if (!viewed) {
 					yield* reviewStore.unmarkRangeViewed(sessionId, path, blockId);
+
+					const states = yield* reviewStore.listReviewStates(sessionId);
+					const activeFileClaim = toActiveFileClaim(
+						resolveReviewState(states, path, undefined),
+					);
+					if (activeFileClaim === null) return;
+
+					const content = yield* fs
+						.readFile(join(session.repoRoot, path))
+						.pipe(Effect.orElseSucceed(() => new Uint8Array()));
+					const reconciliation = yield* reconcilePathAgainstBase(
+						sessionId,
+						session,
+						path,
+						activeFileClaim,
+						content,
+					);
+					if (reconciliation !== null && hasUnreviewedRanges(reconciliation)) {
+						yield* reviewStore.markFileUnviewed(sessionId, path);
+					}
 					return;
 				}
+
 				const content = yield* fs
 					.readFile(join(session.repoRoot, path))
 					.pipe(Effect.orElseSucceed(() => new Uint8Array()));
@@ -538,6 +647,23 @@ export class Store extends Context.Service<Store>()("Store", {
 					ranges,
 					content,
 				);
+
+				const states = yield* reviewStore.listReviewStates(sessionId);
+				const activeFileClaim = toActiveFileClaim(
+					resolveReviewState(states, path, undefined),
+				);
+				if (activeFileClaim !== null) return;
+
+				const reconciliation = yield* reconcilePathAgainstBase(
+					sessionId,
+					session,
+					path,
+					activeFileClaim,
+					content,
+				);
+				if (reconciliation !== null && !hasUnreviewedRanges(reconciliation)) {
+					yield* reviewStore.markFileViewed(sessionId, path, content);
+				}
 			});
 
 		return {
