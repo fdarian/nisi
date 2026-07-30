@@ -53,24 +53,23 @@ export function HarnessModelCombobox({
 	onChange,
 	emptyMessage = "No matching models.",
 }: HarnessModelComboboxProps): React.ReactElement {
-	const groups = useMemo<readonly ModelOptionGroup[]>(
-		() =>
-			harnesses
-				.filter((harness) => harness.enabled)
-				.map((harness) => ({
-					label: harness.label,
-					items: harness.models.map(
-						(model): ModelOption => ({
-							value: optionValue(harness.id, model.id),
-							label: model.label,
-							harness: harness.id,
-							modelId: model.id,
-						}),
-					),
-				}))
-				.filter((group) => group.items.length > 0),
-		[harnesses],
-	);
+	const groups = useMemo<readonly ModelOptionGroup[]>(() => {
+		const result: ModelOptionGroup[] = [];
+		for (const harness of harnesses) {
+			if (!harness.enabled) continue;
+			const items = harness.models.map(
+				(model): ModelOption => ({
+					value: optionValue(harness.id, model.id),
+					label: model.label,
+					harness: harness.id,
+					modelId: model.id,
+				}),
+			);
+			if (items.length === 0) continue;
+			result.push({ label: harness.label, items });
+		}
+		return result;
+	}, [harnesses]);
 
 	const selectedOption = useMemo(() => {
 		if (value === null) return null;

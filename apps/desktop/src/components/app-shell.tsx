@@ -1,7 +1,7 @@
 "use client";
 
 import { AlertTriangleIcon, InboxIcon } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { PrTabStrip } from "#/components/pr/pr-tab-strip";
 import { PrView } from "#/components/pr/pr-view";
 import {
@@ -90,39 +90,40 @@ function AppShellReady({
 	orpc: SidecarQueryUtils;
 }): React.ReactElement {
 	const { sessions, closeSession } = useSessions(orpc);
-	const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
+	const [requestedActiveSessionId, setRequestedActiveSessionId] = useState<
+		string | null
+	>(null);
 
-	// Keeps the active tab valid as `sessions` changes for any reason — our
-	// own close, the CLI opening a session out from under us, or an idle tab
-	// closing elsewhere (both arrive via `events.subscribe`, see `pr-data.ts`).
-	useEffect(() => {
-		setActiveSessionId((current) => {
-			if (
-				current != null &&
-				sessions.some((session) => session.id === current)
-			) {
-				return current;
-			}
-			return sessions[0]?.id ?? null;
-		});
-	}, [sessions]);
+	// Falls back to the first session whenever the requested id no longer
+	// matches any open session — our own close, the CLI opening a session out
+	// from under us, or an idle tab closing elsewhere (both arrive via
+	// `events.subscribe`, see `pr-data.ts`). Derived at render time rather
+	// than corrected in an effect, so `TabsPrimitive.Root` never commits a
+	// `value` with no matching `Panel` — an effect only runs after paint,
+	// which would blank the content pane for a frame first.
+	const activeSessionId = useMemo(() => {
+		if (
+			requestedActiveSessionId != null &&
+			sessions.some((session) => session.id === requestedActiveSessionId)
+		) {
+			return requestedActiveSessionId;
+		}
+		return sessions[0]?.id ?? null;
+	}, [requestedActiveSessionId, sessions]);
 
 	// Base UI's Tabs.Root only *suggests* a fallback value via onValueChange
 	// when the active tab disappears from a controlled root — it doesn't pick
 	// one for us. Closing the active tab picks its neighbor explicitly,
-	// mirroring how browser tab strips behave (the effect above still fires,
-	// but agrees with this pick since the neighbor is already valid).
+	// mirroring how browser tab strips behave.
 	const handleCloseSession = useCallback(
 		(sessionId: string) => {
 			closeSession(sessionId);
-			setActiveSessionId((current) => {
-				if (current !== sessionId) return current;
-				const index = sessions.findIndex((session) => session.id === sessionId);
-				const neighbor = sessions[index + 1] ?? sessions[index - 1];
-				return neighbor?.id ?? null;
-			});
+			if (activeSessionId !== sessionId) return;
+			const index = sessions.findIndex((session) => session.id === sessionId);
+			const neighbor = sessions[index + 1] ?? sessions[index - 1];
+			setRequestedActiveSessionId(neighbor?.id ?? null);
 		},
-		[closeSession, sessions],
+		[activeSessionId, closeSession, sessions],
 	);
 
 	const sessionIds = useMemo(
@@ -131,7 +132,7 @@ function AppShellReady({
 	);
 	useTabShortcuts({
 		activeTabId: activeSessionId,
-		onActivateTab: setActiveSessionId,
+		onActivateTab: setRequestedActiveSessionId,
 		onCloseTab: handleCloseSession,
 		tabIds: sessionIds,
 	});
@@ -155,7 +156,9 @@ function AppShellReady({
 	return (
 		<TabsPrimitive.Root
 			className="flex h-screen flex-col bg-sidebar"
-			onValueChange={(value) => setActiveSessionId(value as string | null)}
+			onValueChange={(value) =>
+				setRequestedActiveSessionId(value as string | null)
+			}
 			value={activeSessionId}
 		>
 			<PrTabStrip onCloseSession={handleCloseSession} sessions={sessions} />

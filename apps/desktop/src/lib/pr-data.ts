@@ -392,32 +392,60 @@ export function useReviewState(
  * `mutationOptions()` derives from this procedure's path) so the checkbox
  * flips the instant it's clicked instead of waiting on this round trip —
  * see that hook's doc comment.
+ *
+ * `onSuccess` returns the invalidations' promises rather than firing them off
+ * — TanStack Query keeps a mutation `"pending"` until a promise returned from
+ * `onSuccess` settles, so `useReviewState`'s overlay (matched on that same
+ * `"pending"` status) stays live until `diff.files`/this file's
+ * `diff.fileContents` chunk have actually refetched, not just until the
+ * write itself resolved. Dropping the overlay any earlier would open a
+ * window where it's cleared but the fresh server data hasn't landed yet —
+ * the checkbox would render the stale pre-click value for a frame before the
+ * refetch caught up, i.e. the flicker this is closing.
+ *
+ * That `onSuccess` is wired into `useMutation`'s own options, not `.mutate()`'s
+ * second argument, and that split is load-bearing, not style: TanStack
+ * Query only awaits the *hook-level* `onSuccess` (`this.options.onSuccess`
+ * inside `Mutation#execute`) before dispatching `"success"` — the
+ * *call-level* one passed to `.mutate(vars, { onSuccess })` runs from
+ * `MutationObserver#notify`, itself invoked from `onMutationUpdate` *after*
+ * that dispatch already flipped `state.status`. A call-level `onSuccess`
+ * returning a promise therefore delays nothing; `useReviewState`'s overlay
+ * would still drop the instant the write resolves, before either
+ * invalidation lands — the exact flicker this hook exists to close. Confirmed
+ * against `node_modules/.../@tanstack/query-core/build/modern/mutation.js`
+ * and `mutationObserver.js` and against a real click in the browser dev
+ * harness (`apps/desktop/CLAUDE.md`): a call-level `onSuccess` shows the
+ * overlay clearing (`pending=[]`) within ~5ms of the write resolving, while
+ * `diff.files` still holds the pre-click value for another ~150ms. Moving
+ * this back to `.mutate()`'s call site — e.g. to read `path` from the closure
+ * again instead of `variables` — type-checks fine and no test catches it;
+ * it just silently reopens that ~150ms window.
  */
 export function useSetFileViewed(
 	orpc: SidecarQueryUtils,
 	sessionId: string,
 ): (path: string, viewed: boolean) => void {
 	const queryClient = useQueryClient();
-	const mutation = useMutation(orpc.review.setViewed.mutationOptions());
+	const mutation = useMutation({
+		...orpc.review.setViewed.mutationOptions(),
+		onSuccess: (_data, variables) =>
+			Promise.all([
+				queryClient.invalidateQueries({
+					queryKey: orpc.diff.files.key({ input: { sessionId } }),
+				}),
+				queryClient.invalidateQueries({
+					queryKey: orpc.diff.fileContents.key({ input: { sessionId } }),
+					predicate: (query) => queryCoveredPath(query, variables.path),
+				}),
+			]),
+	});
 
 	return useCallback(
 		(path: string, viewed: boolean) => {
-			mutation.mutate(
-				{ sessionId, path, viewed },
-				{
-					onSuccess: () => {
-						queryClient.invalidateQueries({
-							queryKey: orpc.diff.files.key({ input: { sessionId } }),
-						});
-						queryClient.invalidateQueries({
-							queryKey: orpc.diff.fileContents.key({ input: { sessionId } }),
-							predicate: (query) => queryCoveredPath(query, path),
-						});
-					},
-				},
-			);
+			mutation.mutate({ sessionId, path, viewed });
 		},
-		[mutation, queryClient, orpc, sessionId],
+		[mutation, sessionId],
 	);
 }
 
@@ -438,6 +466,15 @@ export type SetRangeViewedParams = {
  * and land in the same chunk for a given path), so invalidating just that
  * chunk here is what keeps a tick in one view visible in the other without
  * a manual reload — and without refetching every other open file's chunk.
+ *
+ * Deliberately keeps the fire-and-forget call-level `onSuccess` shape
+ * `useSetFileViewed` moved away from — this mutation's key isn't what
+ * `useReviewState`'s `useMutationState` filter matches, so there's no
+ * optimistic overlay riding on it to protect from a premature drop. If a
+ * range-scoped overlay is ever added, it needs the same hook-level
+ * `onSuccess` treatment (see `useSetFileViewed`'s doc comment) — a
+ * call-level one won't delay the mutation's `"pending"` → `"success"`
+ * transition no matter what it returns.
  */
 export function useSetRangeViewed(
 	orpc: SidecarQueryUtils,
