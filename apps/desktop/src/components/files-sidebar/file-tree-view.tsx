@@ -1,5 +1,6 @@
 "use client";
 
+import type { GitStatusEntry } from "@pierre/trees";
 import { FileTree, useFileTree } from "@pierre/trees/react";
 import {
 	type MouseEvent as ReactMouseEvent,
@@ -9,19 +10,13 @@ import {
 	useRef,
 } from "react";
 import {
-	buildCategoryTreeModel,
-	CATEGORY_ROW_PATHS,
-	compareCategoryTreeEntries,
-} from "#/components/files-sidebar/category-tree-paths";
-import {
-	buildCategoryRowCSS,
 	buildTreeThemeStyle,
 	buildViewedMuteCSS,
 	createRowDecorationRenderer,
 	syncViewedMuteStyle,
 } from "#/components/files-sidebar/tree-shadow-dom";
 import type { FileChange, ReviewState } from "#/lib/pr-data";
-import { collectAncestorDirectoryPaths } from "#/lib/tree-paths";
+import { collectAncestorDirectoryPaths, comparePaths } from "#/lib/tree-paths";
 
 type FileTreeViewProps = {
 	files: readonly FileChange[];
@@ -30,13 +25,30 @@ type FileTreeViewProps = {
 	onSelectPath: (path: string) => void;
 };
 
+type TreeModel = {
+	readonly treePaths: readonly string[];
+	readonly gitStatus: readonly GitStatusEntry[];
+	/** Every real file path, to tell a file row from a directory row on click. */
+	readonly filePaths: ReadonlySet<string>;
+};
+
+function buildTreeModel(files: readonly FileChange[]): TreeModel {
+	const treePaths: string[] = [];
+	const gitStatus: GitStatusEntry[] = [];
+	const filePaths = new Set<string>();
+	for (const file of files) {
+		treePaths.push(file.path);
+		gitStatus.push({ path: file.path, status: file.status });
+		filePaths.add(file.path);
+	}
+	return { treePaths, gitStatus, filePaths };
+}
+
 /**
- * The whole sidebar as one `@pierre/trees` instance, with the category groups
- * as synthetic top-level directories (see `category-tree-paths.ts`). One tree
- * rather than one per category is what lets the library window its rows: it
- * only renders the rows its own scroller can show, and that scroller has to
- * be the sidebar's single bounded scroll region for the window to mean
- * anything.
+ * The whole sidebar as one `@pierre/trees` instance. One tree rather than
+ * many is what lets the library window its rows: it only renders the rows
+ * its own scroller can show, and that scroller has to be the sidebar's
+ * single bounded scroll region for the window to mean anything.
  */
 export function FileTreeView({
 	files,
@@ -45,34 +57,26 @@ export function FileTreeView({
 	onSelectPath,
 }: FileTreeViewProps): React.ReactElement {
 	const treeHostRef = useRef<HTMLDivElement>(null);
-	const treeModel = useMemo(() => buildCategoryTreeModel(files), [files]);
+	const treeModel = useMemo(() => buildTreeModel(files), [files]);
 
-	// Both of these are read from inside `renderRowDecoration`, which the tree
-	// captures once at construction — see `createRowDecorationRenderer`.
+	// Read from inside `renderRowDecoration`, which the tree captures once at
+	// construction — see `createRowDecorationRenderer`.
 	const reviewStateRef = useRef(reviewState);
-	const categoryRowCountsRef = useRef(treeModel.categoryRowCounts);
 	const renderRowDecoration = useMemo(
-		() => createRowDecorationRenderer(reviewStateRef, categoryRowCountsRef),
+		() => createRowDecorationRenderer(reviewStateRef),
 		[],
 	);
 
 	const { model } = useFileTree({
 		density: "compact",
-		// Off, unlike the pre-refactor tree: flattening merges any directory
-		// holding exactly one subdirectory into it, and a category whose files
-		// all live under one root (say a PR touching only `apps/desktop/**`) is
-		// exactly that — so `Tests/` would silently render as `Tests / tests /
-		// unit` with no header row and no count. There's no way to pin a
-		// directory against flattening, so the group rows only survive with it
-		// off. Costs indentation on deep paths; costs nothing to render now
-		// that the tree windows its rows.
-		flattenEmptyDirectories: false,
+		// `flattenEmptyDirectories` is left at the library's default (`true`):
+		// a run of directories that each hold exactly one subdirectory
+		// collapses into a single row, VS Code's "compact folders".
 		gitStatus: treeModel.gitStatus,
 		initialExpansion: "open",
 		paths: treeModel.treePaths,
 		renderRowDecoration,
-		sort: compareCategoryTreeEntries,
-		unsafeCSS: buildCategoryRowCSS(CATEGORY_ROW_PATHS),
+		sort: (left, right) => comparePaths(left.path, right.path),
 	});
 
 	useEffect(() => {
@@ -80,7 +84,6 @@ export function FileTreeView({
 	}, [reviewState]);
 
 	useEffect(() => {
-		categoryRowCountsRef.current = treeModel.categoryRowCounts;
 		model.resetPaths(treeModel.treePaths, {
 			initialExpandedPaths: collectAncestorDirectoryPaths(treeModel.treePaths),
 		});
@@ -89,11 +92,11 @@ export function FileTreeView({
 
 	const viewedMuteCSS = useMemo(() => {
 		const viewed = new Set<string>();
-		for (const [treePath, realPath] of treeModel.realPathByTreePath) {
-			if (reviewState.get(realPath) === "viewed") viewed.add(treePath);
+		for (const file of files) {
+			if (reviewState.get(file.path) === "viewed") viewed.add(file.path);
 		}
 		return buildViewedMuteCSS(viewed);
-	}, [treeModel, reviewState]);
+	}, [files, reviewState]);
 
 	useEffect(() => {
 		if (syncViewedMuteStyle(treeHostRef.current, viewedMuteCSS)) return;
@@ -103,30 +106,25 @@ export function FileTreeView({
 		return () => cancelAnimationFrame(frame);
 	}, [viewedMuteCSS]);
 
-	const selectedTreePath =
-		selectedPath === null
-			? null
-			: (treeModel.treePathByRealPath.get(selectedPath) ?? null);
-
 	useEffect(() => {
 		const currentlySelected = model.getSelectedPaths();
 
-		if (selectedTreePath == null) {
+		if (selectedPath === null) {
 			for (const path of currentlySelected) model.getItem(path)?.deselect();
 			return;
 		}
 
 		if (
 			currentlySelected.length === 1 &&
-			currentlySelected[0] === selectedTreePath
+			currentlySelected[0] === selectedPath
 		) {
 			return;
 		}
 
 		for (const path of currentlySelected) model.getItem(path)?.deselect();
-		model.getItem(selectedTreePath)?.select();
-		model.scrollToPath(selectedTreePath, { offset: "center" });
-	}, [model, selectedTreePath]);
+		model.getItem(selectedPath)?.select();
+		model.scrollToPath(selectedPath, { offset: "center" });
+	}, [model, selectedPath]);
 
 	// The effect above already scrolls when the selection changes, but
 	// re-clicking the *already*-selected file leaves that state unchanged, so
@@ -138,14 +136,14 @@ export function FileTreeView({
 		(event: ReactMouseEvent<HTMLElement>) => {
 			for (const target of event.nativeEvent.composedPath()) {
 				if (!(target instanceof HTMLElement)) continue;
-				const treePath = target.getAttribute("data-item-path");
-				if (treePath === null) continue;
-				const realPath = treeModel.realPathByTreePath.get(treePath);
-				// A category header row has no file behind it — leave the click to
-				// the tree's own expand/collapse handling.
-				if (realPath === undefined) return;
-				onSelectPath(realPath);
-				model.scrollToPath(treePath, { offset: "center" });
+				const path = target.getAttribute("data-item-path");
+				if (path === null) continue;
+				// A directory row's path isn't a real file — leave the click to
+				// the tree's own expand/collapse handling. This also covers a
+				// flattened chain's row, whose path is the terminal directory.
+				if (!treeModel.filePaths.has(path)) return;
+				onSelectPath(path);
+				model.scrollToPath(path, { offset: "center" });
 				return;
 			}
 		},
