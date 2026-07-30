@@ -6,7 +6,8 @@
 	"scripts": {
 		"dev": "bun scripts/dev.ts",
 		"dev:vite": "vite",
-		"build": "tsc && vite build",
+		"build": "tauri build",
+		"build:frontend": "tsc && vite build",
 		"preview": "vite preview",
 		"tauri": "tauri",
 		"sidecar": "bun run sidecar/index.ts",
