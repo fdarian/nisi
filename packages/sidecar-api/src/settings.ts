@@ -26,7 +26,7 @@ export type DiffStyleMode = Schema.Schema.Type<typeof DiffStyleMode>;
  * pure view state today, but real user preferences that ought to survive a
  * data-dir move, and the mechanism costs nothing extra once it exists for
  * `enabledHarnesses`. Theme stays in `localStorage` (`next-themes`) since
- * nothing server-side ever needs to read it. See PLAN.md, Phase 4.
+ * nothing server-side ever needs to read it.
  *
  * `enabledHarnesses` is `null` until the user has ever declared a choice —
  * distinct from `[]`, which means "deliberately disabled every harness".

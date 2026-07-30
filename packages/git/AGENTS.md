@@ -2,8 +2,8 @@
 
 Pure git domain: PR/diff detection and the file-change model consumed by the sidecar. No SQLite,
 no oRPC — everything here is `git`/`gh` shelled out to via `effect/unstable/process`, so it's
-unit-testable against real temp repos without booting anything. See `PLAN.md` (root) for the
-Phase 1 contract this feeds.
+unit-testable against real temp repos without booting anything. Feeds `packages/sidecar-api`'s
+`diff` contract.
 
 - `exec.ts` — the only place that spawns processes. `git`/`gh` helpers plus a strict (fails on
   non-zero exit) and lenient (reports exit code, for "ran and said no" cases like no PR) variant.
@@ -46,8 +46,8 @@ Phase 1 contract this feeds.
 - **`Effect.catchAll` doesn't exist in this Effect version** — use `Effect.orElseSucceed` (or
   `catchTag`/`catchCause` for narrower cases).
 - Size gate (`diff.ts`) mirrors codiff: ≤1MB auto-render, ≤2MB load-on-demand (needs
-  `getFileContent`'s `force` option — an addition beyond PLAN.md's contract sketch, since without
-  it that tier could never be loaded), above that patch-only always.
+  `getFileContent`'s `force` option, since without it that tier could never be loaded), above that
+  patch-only always.
 - Binary detection unions two signals: a NUL byte in decoded content, and the patch matching
   `Binary files ... differ` anchored to line start — either can be the only one available
   depending on which path (bulk metadata vs. single-file fetch) computed it.

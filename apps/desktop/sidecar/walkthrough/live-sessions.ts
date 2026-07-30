@@ -4,8 +4,7 @@ import type { WalkthroughBuffer } from "@repo/walkthrough";
 
 /**
  * A still-live harness session from a prior `generate` call, kept around so
- * a regenerate can *continue* the conversation instead of starting cold —
- * PLAN.md, Phase 3: "regenerate by resuming the prior agent session."
+ * a regenerate can *continue* the conversation instead of starting cold.
  * `@repo/harness-local` deliberately omits `resumeSession` (cross-process
  * resume is unavailable by design — see its AGENTS.md), so this is
  * in-process only: gone on sidecar restart, at which point `generate` falls

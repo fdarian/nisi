@@ -1,17 +1,17 @@
 /**
  * Slices a file's `base → head` unified patch down to only the head-line
  * spans `FileContentReview.ranges` marks `"new"`, dropping the `"reviewed"`
- * ones — the collapse behind a marker Phase 2's diff pane renders. Pure text
- * surgery built on `diff-hunk-slicing.ts`'s shared parse/slice primitives —
- * same mechanism PLAN.md's "Neither lib can render an arbitrary line-range
- * subset" constraint describes for Phase 3's reference blocks
- * (`build-location-diff.ts`), just with the opposite keep/drop policy: here
- * a *matched* "reviewed" range is what gets dropped, and anything unmatched
- * defaults to kept (not yet reviewed).
+ * ones — the collapse behind a marker the diff pane renders. Pure text
+ * surgery built on `diff-hunk-slicing.ts`'s shared parse/slice primitives
+ * (see that file for why this can't just slice file contents directly).
+ * `build-location-diff.ts` uses the same mechanism for reference blocks,
+ * just with the opposite keep/drop policy: here a *matched* "reviewed"
+ * range is what gets dropped, and anything unmatched defaults to kept (not
+ * yet reviewed).
  *
  * `ranges` can subdivide *within* one `base → head` hunk — `@repo/review`'s
  * `reconcile()` overlays `diff(reviewed, head)` on top of it — so slicing
- * happens per line, not per hunk. Phase 3 added a second reason to subdivide:
+ * happens per line, not per hunk. There's a second reason to subdivide:
  * two adjacent "reviewed" lines attributed to different claims (the
  * whole-file checkbox vs. a walkthrough block, or two different blocks)
  * render as two separate collapsed runs, not one — grouping keys on

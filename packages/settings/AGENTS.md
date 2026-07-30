@@ -3,8 +3,7 @@
 Persistent app-level preferences the *sidecar itself* needs to read — as opposed to view-only
 state, which stays in the frontend's `localStorage` the way `next-themes` already keeps theme.
 `bun:sqlite` + Drizzle, data dir shared with the sidecar's own handshake file and every other
-domain package's tables (`NISI_DATA_DIR`, same default as `@repo/review`/`@repo/db`). See
-`PLAN.md` (root), Phase 4.
+domain package's tables (`NISI_DATA_DIR`, same default as `@repo/review`/`@repo/db`).
 
 - `src/store.ts` — `SettingsStore`, the public service. One singleton row; `get()` returns
   `DEFAULT_SETTINGS` when the row doesn't exist yet, `update()` merges a partial patch over the

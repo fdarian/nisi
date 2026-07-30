@@ -1,14 +1,12 @@
 /**
  * Synthesizes a unified diff containing only the hunks (or hunk slices)
  * overlapping a reference block's target locations in one file — the same
- * technique `build-collapsed-diff.ts` uses for Phase 2's reviewed-region
- * collapsing, but with the opposite keep/drop policy: that one drops matched
- * "reviewed" spans and keeps everything else, this one keeps only what's
- * inside a given location and drops everything unmatched. PLAN.md's "Neither
- * lib can render an arbitrary line-range subset" note is exactly why —
- * slicing file contents directly would restart line numbers at 1, useless in
- * review, so this stays at the unified-diff level where the `@@` header
- * carries the real numbering.
+ * technique `build-collapsed-diff.ts` uses for reviewed-region collapsing,
+ * but with the opposite keep/drop policy: that one drops matched "reviewed"
+ * spans and keeps everything else, this one keeps only what's inside a
+ * given location and drops everything unmatched. See `diff-hunk-slicing.ts`
+ * for why this stays at the unified-diff level instead of slicing file
+ * contents directly — the `@@` header is what carries the real numbering.
  */
 import {
 	groupIntoRuns,

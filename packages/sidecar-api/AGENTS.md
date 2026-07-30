@@ -2,8 +2,7 @@
 
 Contract-first oRPC v2 contract for the desktop sidecar's wire API — the single source of truth shared
 by the sidecar (implementer, [`@repo/desktop`](../../apps/desktop/AGENTS.md)) and its frontend client.
-Phase 1 adds git/review procedures on top of Phase 0's `health.check`; see `PLAN.md` (root), "The
-contract", for the shapes these were specified against.
+Git/review procedures sit alongside `health.check`.
 
 - `health.ts`, `sessions.ts`, `diff.ts`, `review.ts`, `events.ts`, `walkthrough.ts`, `settings.ts`
   — schema + procedure contract per domain (`packages/sidecar-api/src/<domain>.ts`), each just
@@ -29,9 +28,8 @@ contract", for the shapes these were specified against.
 - `oc.input()`/`oc.output()` accept an Effect `Schema` directly (that's what the extension imports
   in `contract.ts` buy you) — but helpers outside that patched surface, like `eventIterator`
   (`events.ts`), still want a Standard Schema. Convert with `Schema.toStandardSchemaV1(...)`.
-- `diff.file`'s `force` input field isn't in PLAN.md's contract sketch — added so the load-on-demand
-  size tier (see `@repo/git`) has any way to actually be loaded. Optional, additive, flagged here so
-  it isn't mistaken for scope creep.
+- `diff.file`'s `force` input field exists so the load-on-demand size tier (see `@repo/git`) has any
+  way to actually be loaded. Optional, additive, flagged here so it isn't mistaken for scope creep.
 - Phase 3's range-scoped review added `review.setRangeViewed` (mirrors `setViewed`'s tick/untick
   shape, scoped to one block's claim on a set of ranges within one file) and `diff.ts`'s `ReviewRange`
   gained `reviewedVia: ReviewSource | null` — `{kind: "file"}` or `{kind: "range", blockId,

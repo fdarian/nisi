@@ -6,7 +6,7 @@ turns a bad answer into feedback instead of an exception. Pure and testable with
 agent: no SQLite, no process spawning, no network. Depends on `@repo/git` for the diff model
 (`Hunk`/`parseHunks`, `FileChange`) but does no I/O of its own — every function here takes
 already-fetched data (a patch string, a line count) rather than reading files or shelling out.
-See `PLAN.md` (root), Phase 3, for the contract this feeds; consumed by the sidecar together with
+Feeds `packages/sidecar-api`'s `walkthrough` contract; consumed by the sidecar together with
 `@repo/harness-local` (the actual agent transport — this package doesn't know it exists).
 
 - `schema.ts` — `Walkthrough`/`Section`/`ReferenceBlock`/`Location` (Effect Schema), plus

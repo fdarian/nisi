@@ -26,8 +26,7 @@ export type ReviewSource =
  * is head-at-tick-time, since a claim always snapshots the file it's
  * ticked against). Whole-file review is exactly the degenerate case of a
  * claim ranging over the entire file; `reconcile` treats both identically
- * once `ranges` is normalized, per `PLAN.md`'s Phase 3 note on why one
- * reconciliation path beats two.
+ * once `ranges` is normalized.
  */
 export type ReviewClaim = {
 	readonly source: ReviewSource;

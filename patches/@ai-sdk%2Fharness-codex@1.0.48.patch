@@ -7,9 +7,9 @@ index 2bd9a33154286c9440e7f6bd0855854c78be4782..c70549cfc53432554abfe224cfe2eeea
  import path from "path";
  import { fileURLToPath } from "url";
 +// nisi patch: same fix as @ai-sdk/harness-claude-code's patch — see
-+// patches/@ai-sdk%2Fharness-claude-code@1.0.47.patch and PLAN.md's
-+// "Compiled-binary constraints" note for why `readBridgeAsset`'s dynamic
-+// `new URL(`./bridge/${name}`, import.meta.url)` reads break under
++// patches/@ai-sdk%2Fharness-claude-code@1.0.47.patch and
++// knowledge/compiled-binary-differences.md for why `readBridgeAsset`'s
++// dynamic `new URL(`./bridge/${name}`, import.meta.url)` reads break under
 +// `bun build --compile`, and why static `with { type: "text" }` imports fix it.
 +import bridgePackageJsonText from "./bridge/package.json" with { type: "text" };
 +import bridgePnpmLockText from "./bridge/pnpm-lock.yaml" with { type: "text" };

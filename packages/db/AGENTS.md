@@ -37,9 +37,9 @@ not what any bundle contains.
 ## Non-obvious decisions
 
 - **One SQLite file, not one per domain.** "Migrations generated per package,
-  applied together at boot" (PLAN.md, Phase 3) reads as "one connection,
-  applied in sequence" rather than "one file per package plus a boot-order
-  guarantee." SQLite doesn't namespace by schema, so two packages' `CREATE
+  applied together at boot" reads as "one connection, applied in sequence"
+  rather than "one file per package plus a boot-order guarantee." SQLite
+  doesn't namespace by schema, so two packages' `CREATE
   TABLE` statements coexisting in one file is fine as long as table names
   don't collide (they don't: `sessions`/`reviewed_files` vs `walkthroughs`).
   This also means cross-domain foreign keys are possible in principle, but

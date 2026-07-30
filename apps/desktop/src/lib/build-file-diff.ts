@@ -1,7 +1,8 @@
 /**
  * Turns one file's contract data (`FileChange` metadata + `diff.file`'s
  * `FileContent`) into the `FileDiffMetadata` `@pierre/diffs`' `CodeView`
- * renders. Picks the parser per PLAN.md's size tier:
+ * renders. Picks the parser per the size tier content was gated on (≤1MB
+ * auto-render, ≤2MB load-on-demand, above that patch-only):
  *
  * - Not truncated → `parseDiffFromFile`, fed real before/after contents.
  *   This is what enables expand-unchanged context, and is also what a plain

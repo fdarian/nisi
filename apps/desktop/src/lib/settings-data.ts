@@ -4,8 +4,7 @@
  * `walkthrough.harnesses()` reflects it server-side), and the sidebar/diff
  * view modes ride along on the same store rather than `localStorage` since
  * the mechanism costs nothing extra once it exists. Theme stays in
- * `localStorage` via `next-themes` — nothing server-side ever reads it. See
- * PLAN.md, Phase 4.
+ * `localStorage` via `next-themes` — nothing server-side ever reads it.
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback } from "react";

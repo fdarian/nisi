@@ -34,7 +34,7 @@ import {
 } from "./live-sessions.ts";
 import { type StoredWalkthroughRecord, WalkthroughStore } from "./store.ts";
 
-/** Bounded write → validate → feedback → edit loop — PLAN.md, Phase 3. Never infinite: an agent that can't converge fails loudly instead of burning turns forever. */
+/** Bounded write → validate → feedback → edit loop. Never infinite: an agent that can't converge fails loudly instead of burning turns forever. */
 const MAX_TURNS = 4;
 
 /**
@@ -361,8 +361,7 @@ export async function* generateWalkthrough(
  * Starts a generation and records every event it produces into
  * `generation-log.ts`'s retained log, so a `generate` request that reattaches
  * later (a tab switch, a dropped connection) sees the full history instead
- * of nothing — PLAN.md's "the sidecar is the source of truth for an
- * in-flight generation."
+ * of nothing.
  *
  * Only the *first* event is awaited here — long enough to let
  * `GenerateSessionNotFound` (thrown from `generateWalkthrough`'s very first

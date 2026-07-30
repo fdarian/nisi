@@ -3,9 +3,9 @@ import { Schema } from "effect";
 
 export const reviewContract = {
 	/**
-	 * Writes the file's content snapshot immediately, even though Phase 1 does
-	 * nothing with it yet — Phase 2's reconciliation is then purely additive,
-	 * not a migration. See PLAN.md's Phase 1 note.
+	 * Writes the file's content snapshot immediately at tick time, regardless
+	 * of whether anything reads it yet — so reconciliation can consume
+	 * existing snapshots without ever needing a migration to backfill them.
 	 */
 	setViewed: oc
 		.input(

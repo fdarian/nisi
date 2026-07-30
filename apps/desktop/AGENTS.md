@@ -2,8 +2,7 @@
 
 Tauri 2 desktop app: the port/token handshake between Rust and the Bun/Effect sidecar, the
 sidecar's git/review/walkthrough/settings domains, and a frontend wired to that live contract —
-see `PLAN.md` at the repo root for the phase breakdown (all four phases are built) and
-`apps/desktop/sidecar/AGENTS.md` for how the sidecar's own pieces fit together.
+see `apps/desktop/sidecar/AGENTS.md` for how the sidecar's own pieces fit together.
 
 Three parts, one seam:
 - `src-tauri/` — **Rust, intentionally thin.** Spawns/discovers the sidecar, hands `{ port, token }` to
@@ -72,7 +71,7 @@ across restarts of the same session too.
 `dev.ts` prints `NISI_DATA_DIR=<path>` on startup — that line is deliberately copy-pasteable.
 Since prod keeps the untouched default, a plain `nisi` from a terminal always reaches the
 **production** app; pointing it at a dev session instead is `NISI_DATA_DIR=<path from that line> nisi`.
-There's no flag or auto-detection for this by design (see root `PLAN.md`'s "The seam" for why
+There's no flag or auto-detection for this by design (see [The seam](#the-seam) for why
 `packages/cli` doesn't get special-cased here) — and note the override only works this way because
 you set it yourself: devsess sets `NISI_DATA_DIR` only for the subprocesses `dev.ts` itself spawns
 (`runManagedSubprocess` merges `env` into *that child's* environment), never for a separate shell

@@ -1,12 +1,11 @@
 # @repo/harness-local
 
 `HarnessV1SandboxProvider` for AI SDK's `HarnessAgent` (`@ai-sdk/harness`), implemented over
-`node:child_process` + `node:fs` instead of a virtual filesystem or a remote sandbox. See
-`PLAN.md` (root), Phase 3's "Running the harness locally", for why this package exists: the two
-shipped providers — `@ai-sdk/sandbox-vercel` (remote-only) and `@ai-sdk/sandbox-just-bash`
-(a JS-reimplemented bash over an *in-memory* filesystem, despite the name) — can't run a coding
-CLI against the user's actual git worktree. This package's sessions operate directly on real
-disk, so `writeTextFile`, `run`, `spawn`, etc. do exactly what they say.
+`node:child_process` + `node:fs` instead of a virtual filesystem or a remote sandbox. This package
+exists because the two shipped providers — `@ai-sdk/sandbox-vercel` (remote-only) and
+`@ai-sdk/sandbox-just-bash` (a JS-reimplemented bash over an *in-memory* filesystem, despite the
+name) — can't run a coding CLI against the user's actual git worktree. This package's sessions
+operate directly on real disk, so `writeTextFile`, `run`, `spawn`, etc. do exactly what they say.
 
 Template: `@ai-sdk/sandbox-just-bash`'s own source (`node_modules/.bun/@ai-sdk+sandbox-just-bash@*/…/src/`,
 ~250 lines across three files) implements the identical interface over its virtual FS — this
@@ -94,12 +93,12 @@ internal boundary to put Effect at; contorting it in would just add ceremony aro
   anywhere that `defaultWorkingDirectory` is empty or provider-owned).
 - **The claude-code adapter's bootstrap directory is hardcoded to `/tmp/harness/claude-code`** —
   an absolute path baked into `@ai-sdk/harness-claude-code`'s `claude-code-harness.ts`
-  (`BOOTSTRAP_DIR`), not something `sandboxConfig` or this provider can redirect. PLAN.md already
-  flags "there's no config to redirect it." Because this provider's file operations are real,
-  persistent disk (not an ephemeral VM overlay), that path is stable across app relaunches on its
-  own — the bootstrap marker (`/tmp/harness/claude-code/.bootstrap-<hash>.ok`) survives without
-  this package needing to relocate anything under `NISI_DATA_DIR`. If a future adapter *does*
-  expose a configurable bootstrap dir, revisit this note.
+  (`BOOTSTRAP_DIR`), not something `sandboxConfig` or this provider can redirect. Because this
+  provider's file operations are real, persistent disk (not an ephemeral VM overlay), that path is
+  stable across app relaunches on its own — the bootstrap marker
+  (`/tmp/harness/claude-code/.bootstrap-<hash>.ok`) survives without this package needing to
+  relocate anything under `NISI_DATA_DIR`. If a future adapter *does* expose a configurable
+  bootstrap dir, revisit this note.
   - **Cold vs. warm `createSession()`**: measured (live-verification against real `claude`, this
     machine, 2026-07-28) at **~13–28s cold** (fresh clone + `pnpm install` of
     `@anthropic-ai/claude-code` and its deps, plus the CLI's own install step) vs. **~0.3–0.8s

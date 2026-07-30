@@ -69,8 +69,7 @@ those two packages does I/O or knows about the other — this directory is where
 - **Regenerate is the same `generate` call, not a separate procedure.** The sidecar decides what
   "regenerate" means by what it finds: a matching live session (continue the conversation), else a
   stored walkthrough (fresh session, seeded with the prior result as context), else nothing (cold
-  start). PLAN.md's "resuming the prior agent session" only ever means the in-process case — see
-  `live-sessions.ts`.
+  start) — see `live-sessions.ts`.
 - **Session-not-found is thrown, not yielded.** `generateWalkthrough` throws
   `GenerateSessionNotFound` for an unknown `sessionId` so `http.ts` can map it to the contract's
   declared `NOT_FOUND`, matching `diff.files`/`diff.file`'s precedent. Every other failure —  a git

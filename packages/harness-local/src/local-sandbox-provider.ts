@@ -33,8 +33,7 @@ export function createLocalSandbox(
  * real host filesystem and real processes, standing in for the two shipped
  * providers (`@ai-sdk/sandbox-vercel`, remote-only, and
  * `@ai-sdk/sandbox-just-bash`, an in-memory virtual filesystem), neither of
- * which can operate on the user's actual git worktree. See `PLAN.md`
- * (Phase 3, "Running the harness locally") for why this package exists.
+ * which can operate on the user's actual git worktree.
  *
  * One provider instance mints sessions rooted at one `defaultWorkingDirectory`
  * — construct one per repo/session, mirroring how `JustBashSandboxProvider`

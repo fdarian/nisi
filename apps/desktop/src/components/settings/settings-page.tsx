@@ -49,9 +49,9 @@ import { type HarnessId, useHarnesses } from "#/lib/walkthrough-data";
 
 /**
  * Top-level `/settings` route content — a sibling of the main `AppShell`, not
- * nested inside it, with its own `SidebarProvider` (rheya's pattern, see
- * PLAN.md Phase 4). Gates on the sidecar connection the same way `AppShell`
- * does, since the Harnesses section reads/writes through it.
+ * nested inside it, with its own `SidebarProvider` (rheya's pattern). Gates
+ * on the sidecar connection the same way `AppShell` does, since the
+ * Harnesses section reads/writes through it.
  */
 export function SettingsPage(): React.ReactElement {
 	const backend = useBackendContext();

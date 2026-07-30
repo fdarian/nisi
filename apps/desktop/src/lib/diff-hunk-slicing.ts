@@ -1,14 +1,20 @@
 /**
- * Shared pure primitives behind PLAN.md's "synthesize a unified diff
- * containing only the hunks overlapping the target range, with correct `@@`
- * offsets" mechanism. Both Phase 2's collapsed-reviewed-region rendering
- * (`build-collapsed-diff.ts`) and Phase 3's reference-block rendering
- * (`build-location-diff.ts`) need to keep some head-file lines of a patch and
- * drop others while preserving each surviving run's real `@@` position — this
- * is the one place that parses a patch into per-line old/new positions and
- * re-serializes a subset of them as valid sub-hunks. A kept run's first
- * line's old/new position already encodes the correct `@@` offset, so
- * omitting hunks (or slices of one) around it needs no offset recalculation.
+ * Neither `@pierre/diffs` nor `@pierre/trees` can render an arbitrary
+ * line-range subset of a file. Slicing the content itself would restart line
+ * numbers at 1, which is unacceptable in a review tool. So instead we
+ * synthesize a unified diff containing only the hunks overlapping the target
+ * range, with correct `@@` offsets — the hunk header is what drives line
+ * numbering, so the rendered range keeps its true numbers. This is the
+ * mechanism behind reference blocks.
+ *
+ * Both collapsed-reviewed-region rendering (`build-collapsed-diff.ts`) and
+ * reference-block rendering (`build-location-diff.ts`) need to keep some
+ * head-file lines of a patch and drop others while preserving each
+ * surviving run's real `@@` position — this is the one place that parses a
+ * patch into per-line old/new positions and re-serializes a subset of them
+ * as valid sub-hunks. A kept run's first line's old/new position already
+ * encodes the correct `@@` offset, so omitting hunks (or slices of one)
+ * around it needs no offset recalculation.
  */
 import { HUNK_HEADER } from "@pierre/diffs";
 

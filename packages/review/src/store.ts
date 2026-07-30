@@ -229,7 +229,7 @@ export class ReviewStore extends Context.Service<ReviewStore>()("ReviewStore", {
 		): Effect.Effect<Session, SessionNotFound | ReviewStoreError> =>
 			readSessionRow(sessionId).pipe(Effect.map(toSession));
 
-		/** Ticks a file Reviewed, snapshotting its current content immediately — see PLAN.md's Phase 1 note on why. */
+		/** Ticks a file Reviewed, snapshotting its current content immediately. */
 		const markFileViewed = (
 			sessionId: string,
 			path: string,

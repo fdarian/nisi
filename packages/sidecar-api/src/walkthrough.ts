@@ -2,11 +2,10 @@ import { eventIterator, oc } from "@orpc/contract";
 import { Schema } from "effect";
 
 /**
- * The four adapters `@repo/harness-local` can drive — see PLAN.md, Phase 3,
- * "Running the harness locally." `harnesses` always reports all four
- * regardless of whether each is currently `available` (see `HarnessInfo`) —
- * the onboarding picker and the settings page both need every harness as a
- * row, not a filtered list.
+ * The four adapters `@repo/harness-local` can drive. `harnesses` always
+ * reports all four regardless of whether each is currently `available` (see
+ * `HarnessInfo`) — the onboarding picker and the settings page both need
+ * every harness as a row, not a filtered list.
  */
 export const HarnessId = Schema.Literals([
 	"claude-code",

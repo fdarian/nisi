@@ -3,8 +3,7 @@
 Persistence (sessions, per-file reviewed state, content-addressed blob store) plus the tracked-changes
 reconciliation engine, now covering both Phase 2's whole-file review and Phase 3's range-scoped review.
 `bun:sqlite` + Drizzle, data dir shared with the sidecar's own handshake file (`NISI_DATA_DIR`, same
-default as `apps/desktop/sidecar`). See `PLAN.md` (root) for the contract this feeds, its Phase 2
-section for the `base`/`reviewed`/`head` three-way model, and Phase 3 for range-scoped review.
+default as `apps/desktop/sidecar`). Feeds `packages/sidecar-api`'s `review`/`diff` contracts.
 
 - `src/store.ts` — `ReviewStore`, the public service. Sessions (open/list/close/get), whole-file review
   state (mark viewed/unviewed, read one or all), range claims (mark/unmark one block's claim on a file,
@@ -15,9 +14,9 @@ section for the `base`/`reviewed`/`head` three-way model, and Phase 3 for range-
   splitting each `base → head` hunk into `reviewed`/`new` sub-ranges and attributing each surviving one
   to whichever claim currently covers it (most-recently-ticked wins on overlap — see `ReviewSource`).
   Whole-file review is the degenerate case of a claim ranging over the entire file (`ranges: null`), not
-  a separate code path — one reconciliation algorithm for both, per `PLAN.md`'s Phase 3 note. Depends on
-  `@repo/git`'s `diffContents` for the actual diffing — this package owns the reconciliation *algorithm*
-  (per `PLAN.md`'s Layout section), git owns diffing as a primitive.
+  a separate code path — one reconciliation algorithm for both. Depends on `@repo/git`'s
+  `diffContents` for the actual diffing — this package owns the reconciliation *algorithm*, git owns
+  diffing as a primitive.
 - `src/resolve-review.ts` — `resolveByPath`: looks up a value keyed by a file's current path, falling
   back to its pre-rename path — a rename changes a path-keyed row's key, not what a snapshot applies to.
   `resolveReviewState` is the whole-file-review-shaped wrapper around it; range claims resolve the same

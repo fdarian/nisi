@@ -21,7 +21,7 @@ export type FileCategory = Schema.Schema.Type<typeof FileCategory>;
  * Reviewed. Rides on `FileChange` rather than its own `review.list`
  * procedure: every consumer (sidebar mute + orange dot, diff pane checkbox +
  * collapsing) is already rendering a file row, so one round trip serves all
- * of them with no client-side join. See PLAN.md, Phase 1's contract note.
+ * of them with no client-side join.
  */
 export const FileReview = Schema.Struct({
 	viewed: Schema.Boolean,
@@ -133,9 +133,8 @@ export const diffContract = {
 				oldPath: Schema.optional(Schema.String),
 				/**
 				 * Overrides the load-on-demand size tier (up to 2MB) to actually load
-				 * it. Addition beyond PLAN.md's contract sketch: without it, that tier
-				 * could be reported but never fetched. The patch-only tier above 2MB
-				 * is never overridable.
+				 * it — without it, that tier could be reported but never fetched. The
+				 * patch-only tier above 2MB is never overridable.
 				 */
 				force: Schema.optional(Schema.Boolean),
 			}),

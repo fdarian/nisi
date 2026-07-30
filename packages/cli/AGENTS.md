@@ -1,8 +1,8 @@
 # @repo/cli
 
 The `nisi` command. One command, no subcommands: detects the PR for the current directory (or
-`nisi <path>`) and opens it in the desktop app. See `PLAN.md` (root), "The seam", for the design
-this implements.
+`nisi <path>`) and opens it in the desktop app. See `apps/desktop/AGENTS.md`'s "The seam" section
+for the design this implements.
 
 - `src/index.ts` — the `Command` (Effect CLI, `effect/unstable/cli`), argument parsing, and
   terminal reporting. Fails fast via `@repo/git`'s `resolveRepoRoot` before touching the sidecar

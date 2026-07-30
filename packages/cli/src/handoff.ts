@@ -180,11 +180,12 @@ const pollUntilReachable = (
 	});
 
 /**
- * The seam from `PLAN.md`: read `sidecar.json` and POST; if nothing answers,
- * spawn the app detached, then poll the same file/POST pair until the
- * newly-booted sidecar responds or we give up. Always the same POST either
- * way, so the app has exactly one ingest path rather than one for argv-at-boot
- * and another for a running instance.
+ * The seam (see apps/desktop/AGENTS.md's "The seam" section): read
+ * `sidecar.json` and POST; if nothing answers, spawn the app detached, then
+ * poll the same file/POST pair until the newly-booted sidecar responds or we
+ * give up. Always the same POST either way, so the app has exactly one
+ * ingest path rather than one for argv-at-boot and another for a running
+ * instance.
  */
 export const handoff = (
 	cwd: string,

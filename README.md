@@ -135,7 +135,9 @@ Per-package tests (there's no repo-wide `test` task):
 cd packages/<name> && bun test
 ```
 
-See `PLAN.md` for the architecture and `AGENTS.md` for stack conventions — every workspace has one.
+See `AGENTS.md` for stack conventions and the workspace map — every workspace has one. Longer-lived
+notes that fit no single file (performance budgets, testing protocol, open decisions) live in
+[knowledge/](knowledge/index.md).
 
 ### Running the app while developing the CLI
 

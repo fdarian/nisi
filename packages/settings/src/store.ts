@@ -57,10 +57,10 @@ const toSettings = (row: SettingsRow): Settings => ({
 /**
  * A handful of user preferences the sidecar itself needs to read — enabled
  * harnesses at minimum, since `walkthrough.harnesses()` runs in the sidecar
- * process, not the webview. See PLAN.md's Phase 4 note for why this can't be
- * `localStorage` the way theme is. One singleton row, typed accessors, no
- * config framework: `get()` defaults when unset, `update()` merges a partial
- * patch over the current row so untouched fields survive.
+ * process, not the webview, so it can't be `localStorage` the way theme is.
+ * One singleton row, typed accessors, no config framework: `get()` defaults
+ * when unset, `update()` merges a partial patch over the current row so
+ * untouched fields survive.
  */
 export class SettingsStore extends Context.Service<SettingsStore>()(
 	"SettingsStore",
