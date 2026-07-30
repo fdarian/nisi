@@ -1,8 +1,8 @@
 import {
-	type FileNotChanged,
+	FileNotChanged,
 	type GitError,
 	getChangedFiles,
-	getFileContent,
+	getFileContents,
 } from "@repo/git";
 import {
 	ReviewStore,
@@ -33,7 +33,7 @@ const countLines = (content: string): number => {
 /**
  * Everything `@repo/walkthrough`'s pure functions need but can't fetch
  * themselves: the digest's per-file patches and each file's head line count
- * (`ChangedFileFacts.lineCount` — from `getFileContent().newContent`, per
+ * (`ChangedFileFacts.lineCount` — from `getFileContents()`' `newContent`, per
  * that package's AGENTS.md note that this is deliberately the caller's job).
  * Binary files contribute no patch text and no coverage obligation, but
  * still appear in the digest (as `[binary file]`) so the narrative can
@@ -44,6 +44,19 @@ const countLines = (content: string): number => {
  * (it's `generate.ts`'s own bounded turn loop), so this is the one call site
  * that has to go straight to the persisted setting to keep the digest scoped
  * the same way the user's own Files Changed view currently is.
+ *
+ * Every non-binary file rides in one `getFileContents` call rather than a
+ * `getFileContent` loop — a walkthrough over an N-file PR used to cost N
+ * independent `getFileContent` calls' worth of git subprocess spawns just
+ * for this step; batching collapses that to a constant handful, the same
+ * fix `@repo/git`'s `getFileContents` doc comment describes for the diff
+ * pane's file-open path. `getFileContents` never fails on a path that turns
+ * out not to be in the diff — it's just absent from the result map — so a
+ * missing entry here (every file in `files` came from `getChangedFiles`
+ * against the same `repoRoot`/`baseRef`, so this should only happen if the
+ * worktree changed between that call and this one) is surfaced as
+ * `FileNotChanged`, matching what a `getFileContent` loop would have failed
+ * with in the same race.
  */
 export const gatherGenerationContext = (
 	sessionId: string,
@@ -69,22 +82,29 @@ export const gatherGenerationContext = (
 			includeUncommitted,
 		});
 
-		const withContent = yield* Effect.forEach(
-			files,
-			(file) =>
-				file.binary
-					? Effect.succeed({ file, patch: "", newContent: undefined })
-					: getFileContent(session.repoRoot, session.baseRef, file.path, {
-							force: true,
-							includeUncommitted,
-						}).pipe(
-							Effect.map((content) => ({
-								file,
-								patch: content.patch,
-								newContent: content.newContent,
-							})),
-						),
-			{ concurrency: 4 },
+		const contentByPath = yield* getFileContents(
+			session.repoRoot,
+			session.baseRef,
+			files
+				.filter((file) => !file.binary)
+				.map((file) => ({ path: file.path, force: true })),
+			{ includeUncommitted },
+		);
+
+		const withContent = yield* Effect.forEach(files, (file) =>
+			file.binary
+				? Effect.succeed({ file, patch: "", newContent: undefined })
+				: Effect.gen(function* () {
+						const content = contentByPath.get(file.path);
+						if (content === undefined) {
+							return yield* new FileNotChanged({ path: file.path });
+						}
+						return {
+							file,
+							patch: content.patch,
+							newContent: content.newContent,
+						};
+					}),
 		);
 
 		const digestFiles: ReadonlyArray<DigestFile> = withContent.map(

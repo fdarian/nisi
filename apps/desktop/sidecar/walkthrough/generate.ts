@@ -61,7 +61,7 @@ const FILE_MUTATING_BUILTINS: Record<HarnessId, ReadonlyArray<string>> = {
 	pi: ["write", "edit"],
 };
 
-/** Thrown (not yielded) so `http.ts`'s handler can map it to the contract's declared `NOT_FOUND`, the same treatment `diff.files`/`diff.file` give an unknown session — everything else that can go wrong mid-generation yields an in-band `failed` event instead of tearing down the stream. */
+/** Thrown (not yielded) so `http.ts`'s handler can map it to the contract's declared `NOT_FOUND`, the same treatment `diff.files`/`diff.fileContents` give an unknown session — everything else that can go wrong mid-generation yields an in-band `failed` event instead of tearing down the stream. */
 export class GenerateSessionNotFound extends Error {
 	constructor(readonly sessionId: string) {
 		super(`session not found: ${sessionId}`);

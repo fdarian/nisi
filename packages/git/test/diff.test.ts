@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { BunServices } from "@effect/platform-bun";
 import { Effect } from "effect";
-import { getChangedFiles, getFileContent } from "../src/diff.ts";
+import { getChangedFiles, getFileContents } from "../src/diff.ts";
 import { cleanupTestRepo, makeTestRepo, type TestRepo } from "./fixtures.ts";
 
 const run = <A, E>(effect: Effect.Effect<A, E, BunServices.BunServices>) =>
@@ -11,7 +11,7 @@ const run = <A, E>(effect: Effect.Effect<A, E, BunServices.BunServices>) =>
  * Sets up main-branch content, then a feature branch with committed history
  * to diff against — plus an uncommitted edit and an untracked file layered
  * on top. That layer drives both modes: with `includeUncommitted` unset (or
- * `false`), none of it may leak into `getChangedFiles`/`getFileContent`; with
+ * `false`), none of it may leak into `getChangedFiles`/`getFileContents`; with
  * `includeUncommitted: true`, all of it must show up.
  */
 const makeScenario = async (): Promise<{ repo: TestRepo; base: string }> => {
@@ -179,19 +179,20 @@ describe("getChangedFiles", () => {
 	});
 });
 
-describe("getFileContent", () => {
+describe("getFileContents", () => {
 	test("returns old and new content for a modified file, excluding uncommitted edits", async () => {
 		const { repo, base } = await makeScenario();
 		try {
-			const content = await run(
-				getFileContent(repo.root, base, "src/modified.ts"),
+			const batched = await run(
+				getFileContents(repo.root, base, [{ path: "src/modified.ts" }]),
 			);
-			expect(content.oldContent).toBe("line1\nline2\nline3\n");
-			expect(content.newContent).toBe("line1\nline2 changed\nline3\n");
-			expect(content.patch).toContain("-line2");
-			expect(content.patch).toContain("+line2 changed");
-			expect(content.patch).not.toContain("line4 uncommitted");
-			expect(content.truncated).toBe(false);
+			const content = batched.get("src/modified.ts");
+			expect(content?.oldContent).toBe("line1\nline2\nline3\n");
+			expect(content?.newContent).toBe("line1\nline2 changed\nline3\n");
+			expect(content?.patch).toContain("-line2");
+			expect(content?.patch).toContain("+line2 changed");
+			expect(content?.patch).not.toContain("line4 uncommitted");
+			expect(content?.truncated).toBe(false);
 		} finally {
 			await cleanupTestRepo(repo);
 		}
@@ -200,11 +201,12 @@ describe("getFileContent", () => {
 	test("has no old content for an added file", async () => {
 		const { repo, base } = await makeScenario();
 		try {
-			const content = await run(
-				getFileContent(repo.root, base, "src/added.ts"),
+			const batched = await run(
+				getFileContents(repo.root, base, [{ path: "src/added.ts" }]),
 			);
-			expect(content.oldContent).toBeUndefined();
-			expect(content.newContent).toBe("brand new tracked file\n");
+			const content = batched.get("src/added.ts");
+			expect(content?.oldContent).toBeUndefined();
+			expect(content?.newContent).toBe("brand new tracked file\n");
 		} finally {
 			await cleanupTestRepo(repo);
 		}
@@ -213,25 +215,24 @@ describe("getFileContent", () => {
 	test("has no new content for a deleted file", async () => {
 		const { repo, base } = await makeScenario();
 		try {
-			const content = await run(
-				getFileContent(repo.root, base, "src/to-delete.ts"),
+			const batched = await run(
+				getFileContents(repo.root, base, [{ path: "src/to-delete.ts" }]),
 			);
-			expect(content.oldContent).toBe("will be removed\n");
-			expect(content.newContent).toBeUndefined();
+			const content = batched.get("src/to-delete.ts");
+			expect(content?.oldContent).toBe("will be removed\n");
+			expect(content?.newContent).toBeUndefined();
 		} finally {
 			await cleanupTestRepo(repo);
 		}
 	});
 
-	test("fails with FileNotChanged for an untracked file", async () => {
+	test("omits an untracked file's content by default (no committed content to load)", async () => {
 		const { repo, base } = await makeScenario();
 		try {
-			const exit = await Effect.runPromiseExit(
-				getFileContent(repo.root, base, "src/untracked.ts").pipe(
-					Effect.provide(BunServices.layer),
-				),
+			const batched = await run(
+				getFileContents(repo.root, base, [{ path: "src/untracked.ts" }]),
 			);
-			expect(exit._tag).toBe("Failure");
+			expect(batched.has("src/untracked.ts")).toBe(false);
 		} finally {
 			await cleanupTestRepo(repo);
 		}
@@ -240,26 +241,13 @@ describe("getFileContent", () => {
 	test("resolves a rename against its old-side content", async () => {
 		const { repo, base } = await makeScenario();
 		try {
-			const content = await run(
-				getFileContent(repo.root, base, "src/new-name.ts"),
+			const batched = await run(
+				getFileContents(repo.root, base, [{ path: "src/new-name.ts" }]),
 			);
-			expect(content.oldContent).toContain("renamed content");
-			expect(content.newContent).toContain("renamed content");
-			expect(content.patch).toContain("rename from src/old-name.ts");
-		} finally {
-			await cleanupTestRepo(repo);
-		}
-	});
-
-	test("fails with FileNotChanged for a path outside the diff, even when dirtied uncommitted", async () => {
-		const { repo, base } = await makeScenario();
-		try {
-			const exit = await Effect.runPromiseExit(
-				getFileContent(repo.root, base, "src/kept.ts").pipe(
-					Effect.provide(BunServices.layer),
-				),
-			);
-			expect(exit._tag).toBe("Failure");
+			const content = batched.get("src/new-name.ts");
+			expect(content?.oldContent).toContain("renamed content");
+			expect(content?.newContent).toContain("renamed content");
+			expect(content?.patch).toContain("rename from src/old-name.ts");
 		} finally {
 			await cleanupTestRepo(repo);
 		}
@@ -275,16 +263,18 @@ describe("getFileContent", () => {
 			await repo.write("big.txt", "a".repeat(1024 * 1024 + 10));
 			await repo.commit("add big file");
 
-			const gated = await run(getFileContent(repo.root, base, "big.txt"));
-			expect(gated.newContent).toBeUndefined();
-			expect(gated.truncated).toBe(true);
+			const gated = await run(
+				getFileContents(repo.root, base, [{ path: "big.txt" }]),
+			);
+			expect(gated.get("big.txt")?.newContent).toBeUndefined();
+			expect(gated.get("big.txt")?.truncated).toBe(true);
 
 			const forced = await run(
-				getFileContent(repo.root, base, "big.txt", { force: true }),
+				getFileContents(repo.root, base, [{ path: "big.txt", force: true }]),
 			);
-			expect(forced.newContent).toBeDefined();
-			expect(forced.newContent?.length).toBe(1024 * 1024 + 10);
-			expect(forced.truncated).toBe(false);
+			expect(forced.get("big.txt")?.newContent).toBeDefined();
+			expect(forced.get("big.txt")?.newContent?.length).toBe(1024 * 1024 + 10);
+			expect(forced.get("big.txt")?.truncated).toBe(false);
 		} finally {
 			await cleanupTestRepo(repo);
 		}
@@ -300,10 +290,87 @@ describe("getFileContent", () => {
 			await repo.commit("add huge file");
 
 			const forced = await run(
-				getFileContent(repo.root, base, "huge.txt", { force: true }),
+				getFileContents(repo.root, base, [{ path: "huge.txt", force: true }]),
 			);
-			expect(forced.newContent).toBeUndefined();
-			expect(forced.truncated).toBe(true);
+			expect(forced.get("huge.txt")?.newContent).toBeUndefined();
+			expect(forced.get("huge.txt")?.truncated).toBe(true);
+		} finally {
+			await cleanupTestRepo(repo);
+		}
+	});
+
+	test("omits a requested path that isn't part of the diff", async () => {
+		const { repo, base } = await makeScenario();
+		try {
+			const batched = await run(
+				getFileContents(repo.root, base, [
+					{ path: "src/kept.ts" },
+					{ path: "src/modified.ts" },
+				]),
+			);
+			expect(batched.has("src/kept.ts")).toBe(false);
+			expect(batched.has("src/modified.ts")).toBe(true);
+		} finally {
+			await cleanupTestRepo(repo);
+		}
+	});
+
+	test("returns an empty map for an empty request list", async () => {
+		const { repo, base } = await makeScenario();
+		try {
+			const batched = await run(getFileContents(repo.root, base, []));
+			expect(batched.size).toBe(0);
+		} finally {
+			await cleanupTestRepo(repo);
+		}
+	});
+
+	test("respects a per-path force flag within the same batch", async () => {
+		const repo = await makeTestRepo();
+		try {
+			await repo.write("small.txt", "small\n");
+			const base = await repo.commit("base");
+			await repo.git(["checkout", "-q", "-b", "feature"]);
+			await repo.write("small.txt", "small changed\n");
+			await repo.write("big.txt", "a".repeat(1024 * 1024 + 10));
+			await repo.commit("add big file");
+
+			const batched = await run(
+				getFileContents(repo.root, base, [
+					{ path: "small.txt" },
+					{ path: "big.txt", force: true },
+				]),
+			);
+
+			expect(batched.get("small.txt")?.newContent).toBe("small changed\n");
+			expect(batched.get("big.txt")?.newContent?.length).toBe(1024 * 1024 + 10);
+			expect(batched.get("big.txt")?.truncated).toBe(false);
+		} finally {
+			await cleanupTestRepo(repo);
+		}
+	});
+
+	test("gates an unforced path even when another path in the batch is forced", async () => {
+		const repo = await makeTestRepo();
+		try {
+			await repo.write("readme.md", "hello\n");
+			const base = await repo.commit("base");
+			await repo.git(["checkout", "-q", "-b", "feature"]);
+			await repo.write("big-a.txt", "a".repeat(1024 * 1024 + 10));
+			await repo.write("big-b.txt", "b".repeat(1024 * 1024 + 10));
+			await repo.commit("add big files");
+
+			const batched = await run(
+				getFileContents(repo.root, base, [
+					{ path: "big-a.txt", force: true },
+					{ path: "big-b.txt" },
+				]),
+			);
+
+			expect(batched.get("big-a.txt")?.newContent).toBeDefined();
+			expect(batched.get("big-a.txt")?.truncated).toBe(false);
+			expect(batched.get("big-b.txt")?.newContent).toBeUndefined();
+			expect(batched.get("big-b.txt")?.truncated).toBe(true);
 		} finally {
 			await cleanupTestRepo(repo);
 		}
@@ -312,18 +379,19 @@ describe("getFileContent", () => {
 	test("returns worktree content for a modified file when includeUncommitted is true", async () => {
 		const { repo, base } = await makeScenario();
 		try {
-			const content = await run(
-				getFileContent(repo.root, base, "src/modified.ts", {
+			const batched = await run(
+				getFileContents(repo.root, base, [{ path: "src/modified.ts" }], {
 					includeUncommitted: true,
 				}),
 			);
-			expect(content.oldContent).toBe("line1\nline2\nline3\n");
-			expect(content.newContent).toBe(
+			const content = batched.get("src/modified.ts");
+			expect(content?.oldContent).toBe("line1\nline2\nline3\n");
+			expect(content?.newContent).toBe(
 				"line1\nline2 changed\nline3\nline4 uncommitted\n",
 			);
-			expect(content.patch).toContain("-line2");
-			expect(content.patch).toContain("+line2 changed");
-			expect(content.truncated).toBe(false);
+			expect(content?.patch).toContain("-line2");
+			expect(content?.patch).toContain("+line2 changed");
+			expect(content?.truncated).toBe(false);
 		} finally {
 			await cleanupTestRepo(repo);
 		}
@@ -332,15 +400,16 @@ describe("getFileContent", () => {
 	test("synthesizes a patch for an untracked file when includeUncommitted is true", async () => {
 		const { repo, base } = await makeScenario();
 		try {
-			const content = await run(
-				getFileContent(repo.root, base, "src/untracked.ts", {
+			const batched = await run(
+				getFileContents(repo.root, base, [{ path: "src/untracked.ts" }], {
 					includeUncommitted: true,
 				}),
 			);
-			expect(content.oldContent).toBeUndefined();
-			expect(content.newContent).toBe("not yet added\n");
-			expect(content.patch).toContain("+not yet added");
-			expect(content.patch).toContain("new file mode");
+			const content = batched.get("src/untracked.ts");
+			expect(content?.oldContent).toBeUndefined();
+			expect(content?.newContent).toBe("not yet added\n");
+			expect(content?.patch).toContain("+not yet added");
+			expect(content?.patch).toContain("new file mode");
 		} finally {
 			await cleanupTestRepo(repo);
 		}
@@ -349,13 +418,14 @@ describe("getFileContent", () => {
 	test("succeeds for a path dirtied only on disk when includeUncommitted is true", async () => {
 		const { repo, base } = await makeScenario();
 		try {
-			const content = await run(
-				getFileContent(repo.root, base, "src/kept.ts", {
+			const batched = await run(
+				getFileContents(repo.root, base, [{ path: "src/kept.ts" }], {
 					includeUncommitted: true,
 				}),
 			);
-			expect(content.oldContent).toBe("unchanged\n");
-			expect(content.newContent).toBe("dirtied on disk, never committed\n");
+			const content = batched.get("src/kept.ts");
+			expect(content?.oldContent).toBe("unchanged\n");
+			expect(content?.newContent).toBe("dirtied on disk, never committed\n");
 		} finally {
 			await cleanupTestRepo(repo);
 		}

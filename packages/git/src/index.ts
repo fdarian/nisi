@@ -9,8 +9,13 @@ export {
 } from "./change-signal.ts";
 export type { FileCategory } from "./classify.ts";
 export { diffContents } from "./content-diff.ts";
-export type { FileChange, FileContent, FileStatus } from "./diff.ts";
-export { getChangedFiles, getFileContent } from "./diff.ts";
+export type {
+	FileChange,
+	FileContent,
+	FileContentRequest,
+	FileStatus,
+} from "./diff.ts";
+export { getChangedFiles, getFileContents } from "./diff.ts";
 export {
 	FileNotChanged,
 	GhOutputDecodeError,

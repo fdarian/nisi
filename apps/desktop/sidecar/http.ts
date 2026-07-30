@@ -224,28 +224,28 @@ export function attachRouter(
 						),
 					);
 			}),
-			file: authed.diff.file.effect(function* ({ input, errors }) {
+			fileContents: authed.diff.fileContents.effect(function* ({
+				input,
+				errors,
+			}) {
 				const store = yield* Store;
 				return yield* store
-					.readFileContent(
+					.readFileContents(
 						input.sessionId,
-						input.path,
-						input.force ?? false,
+						input.paths.map((request) => ({
+							path: request.path,
+							...(request.oldPath === undefined
+								? {}
+								: { oldPath: request.oldPath }),
+							force: request.force ?? false,
+						})),
 						input.includeUncommitted ?? false,
-						input.oldPath,
 					)
 					.pipe(
 						Effect.catchTag("SessionNotFound", () =>
 							Effect.fail(
 								errors.NOT_FOUND({
 									message: `session not found: ${input.sessionId}`,
-								}),
-							),
-						),
-						Effect.catchTag("FileNotChanged", () =>
-							Effect.fail(
-								errors.NOT_FOUND({
-									message: `file not in diff: ${input.path}`,
 								}),
 							),
 						),

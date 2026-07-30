@@ -3,17 +3,13 @@ import { join } from "node:path";
 import { Effect } from "effect";
 import { FileSystem } from "effect/FileSystem";
 import type { ChildProcessSpawner } from "effect/unstable/process";
-import { readBlobsAtRef } from "./blob.ts";
+import { type BlobEntry, readBlobsAtRef } from "./blob.ts";
 import {
 	checkLinguistGenerated,
 	classifyFile,
 	type FileCategory,
 } from "./classify.ts";
-import {
-	FileNotChanged,
-	type GitCommandError,
-	type GitError,
-} from "./errors.ts";
+import type { GitCommandError, GitError } from "./errors.ts";
 import { git } from "./exec.ts";
 import {
 	createAddedBinaryFilePatch,
@@ -128,6 +124,27 @@ const listUntrackedFiles = (repoRoot: string) =>
 		Effect.map((raw) => raw.split("\0").filter((path) => path.length > 0)),
 	);
 
+/**
+ * Parses `git status --porcelain=v1 -z`'s NUL-separated output down to just
+ * the untracked (`"??"`) paths — the one signal `getFileContents` needs from
+ * it, without a per-path `-- <path>` restriction the way `getFileContent`
+ * uses it for a single file. A rename/copy entry carries an extra orig-path
+ * token after it; skipped so the next token is read as a fresh status entry.
+ */
+const parseUntrackedPaths = (raw: string): ReadonlySet<string> => {
+	const tokens = raw.split("\0").filter((token) => token.length > 0);
+	const paths = new Set<string>();
+	let index = 0;
+	while (index < tokens.length) {
+		const token = tokens[index++];
+		if (token === undefined) break;
+		const code = token.slice(0, 2);
+		if (code === "??") paths.add(token.slice(3));
+		if (code[0] === "R" || code[0] === "C") index++;
+	}
+	return paths;
+};
+
 const countLines = (content: string): number => {
 	if (content.length === 0) return 0;
 	const trimmed = content.endsWith("\n") ? content.slice(0, -1) : content;
@@ -219,6 +236,24 @@ type GatedContent = {
 	readonly binaryByNul: boolean;
 };
 
+const EMPTY_GATE: GatedContent = {
+	content: undefined,
+	truncated: false,
+	binaryByNul: false,
+};
+
+/** Applies `gateBytes`' size/force tiering to a `readBlobsAtRef` lookup result — shared by `getFileContent` and `getFileContents` for a path's old-side (base) content. */
+const gateFromBlob = (
+	blob: BlobEntry | undefined,
+	force: boolean,
+): GatedContent => {
+	if (blob === undefined) return EMPTY_GATE;
+	if (blob.content === null) {
+		return { content: undefined, truncated: true, binaryByNul: false };
+	}
+	return gateBytes(blob.content, blob.size, force);
+};
+
 const gateBytes = (
 	bytes: Uint8Array,
 	size: number,
@@ -240,33 +275,7 @@ const gateBytes = (
 	};
 };
 
-/** Reads one path's content at a commit, gated by size — the committed-side counterpart to `readWorktreeGated`. */
-const readGatedBlob = (
-	repoRoot: string,
-	ref: string,
-	path: string,
-	force: boolean,
-): Effect.Effect<
-	GatedContent,
-	GitCommandError,
-	ChildProcessSpawner.ChildProcessSpawner
-> =>
-	readBlobsAtRef(repoRoot, ref, [path], {
-		maxBytes: force ? LOAD_ON_DEMAND_LIMIT : AUTO_RENDER_LIMIT,
-	}).pipe(
-		Effect.map((blobs) => {
-			const blob = blobs.get(path);
-			if (blob === undefined) {
-				return { content: undefined, truncated: false, binaryByNul: false };
-			}
-			if (blob.content === null) {
-				return { content: undefined, truncated: true, binaryByNul: false };
-			}
-			return gateBytes(blob.content, blob.size, force);
-		}),
-	);
-
-/** Reads one path's content from disk, gated by size — the worktree-side counterpart to `readGatedBlob`. */
+/** Reads one path's content from disk, gated by size — the worktree-side counterpart to `gateFromBlob`. */
 const readWorktreeGated = (
 	repoRoot: string,
 	path: string,
@@ -451,25 +460,73 @@ export const getChangedFiles = (
 		);
 	});
 
+export type FileContentRequest = {
+	readonly path: string;
+	/**
+	 * Overrides the load-on-demand size tier (up to 2MB) to actually load it —
+	 * without it, that tier is reported (`truncated: true`) but never fetched.
+	 * The patch-only tier above that (`LOAD_ON_DEMAND_LIMIT`) is never
+	 * overridable. Per-path, since one batch commonly mixes a just-forced file
+	 * with everything else.
+	 */
+	readonly force?: boolean;
+};
+
 /**
- * One file's patch and (size-gate permitting) full before/after content, at
- * `merge-base(baseRef, HEAD)..<target>` — see `getChangedFiles` for what
- * `<target>` is and how `includeUncommitted` picks it. `force` overrides the
- * load-on-demand tier (up to 2MB); nothing overrides the patch-only tier
- * above that.
+ * Every requested path's patch and (size-gate permitting) full before/after
+ * content, at `merge-base(baseRef, HEAD)..<target>` — see `getChangedFiles`
+ * for what `<target>` is and how `includeUncommitted` picks it — resolved
+ * with a constant number of subprocess spawns regardless of how many paths
+ * are requested — fork/exec, not git's own work, dominates the cost here, so
+ * batching N requests into one call is what actually pays off, not making
+ * any single call faster.
+ *
+ * The merge base and `name-status` are resolved once for the whole batch,
+ * against `target`. Worktree `status` is resolved once too, but only when
+ * `target.kind === "worktree"` — a committed target has no untracked files
+ * by definition, so skipping it there isn't just an optimization, it also
+ * keeps a worktree-only untracked file from leaking into a committed-mode
+ * result. When it does run, `status` is deliberately unrestricted (not
+ * `-- <path>` for one path) and `parseUntrackedPaths` picks the requested
+ * paths back out of it, the batched equivalent of restricting a single-path
+ * lookup.
+ *
+ * Old-side content is always at `mergeBase`, so it goes through one
+ * `readBlobsAtRef` call regardless of `target`. New-side content follows
+ * `target`: one more `readBlobsAtRef` call at `target.sha` when committed,
+ * or one disk read per path when worktree — there's no batched primitive
+ * for the worktree (see `readContentPrefixes`). Patches go through one
+ * `readPatches` call, threaded with the same `target`. All three are already
+ * chunked internally (`PATH_CHUNK_SIZE`) so a huge request still bounds each
+ * subprocess's argument/stdin size. The one deliberate imprecision: blobs
+ * are fetched under the *widest* possible tier (`LOAD_ON_DEMAND_LIMIT`)
+ * regardless of each path's own `force`, since `readBlobsAtRef` takes a
+ * single `maxBytes` for the whole batch — `gateFromBlob`/`gateBytes` below
+ * still re-apply each path's real tier, so the only cost is occasionally
+ * reading a 1-2MB blob's bytes for a path that won't end up using them.
+ *
+ * A requested path that isn't actually part of the diff is simply absent
+ * from the result map, rather than failing the whole batch — the caller
+ * decides what a missing entry means for that one path (see
+ * `apps/desktop/sidecar/walkthrough/context.ts`'s `gatherGenerationContext`
+ * for a caller that turns a missing entry back into a thrown
+ * `FileNotChanged`, matching what a per-path fetch would have failed with).
+ *
+ * A rename's deletion side lives at the *old* path — restricting either the
+ * `name-status` or `status` call to just the requested paths would hide it
+ * from git's rename pairing, the same trap `readPatches` avoids via
+ * `pathspecFor`.
  */
-export const getFileContent = (
+export const getFileContents = (
 	repoRoot: string,
 	baseRef: string,
-	path: string,
-	options?: {
-		readonly force?: boolean;
-		readonly includeUncommitted?: boolean;
-	},
-): Effect.Effect<FileContent, GitError | FileNotChanged, Requirements> =>
+	requests: ReadonlyArray<FileContentRequest>,
+	options?: { readonly includeUncommitted?: boolean },
+): Effect.Effect<ReadonlyMap<string, FileContent>, GitError, Requirements> =>
 	Effect.gen(function* () {
+		if (requests.length === 0) return new Map();
+
 		const fs = yield* FileSystem;
-		const force = options?.force ?? false;
 		const includeUncommitted = options?.includeUncommitted ?? false;
 
 		const mergeBase = yield* resolveMergeBase(repoRoot, baseRef);
@@ -479,62 +536,132 @@ export const getFileContent = (
 
 		const statusEffect =
 			target.kind === "worktree"
-				? git(repoRoot, ["status", "--porcelain=v1", "-z", "--", path])
+				? git(repoRoot, ["status", "--porcelain=v1", "-z"])
 				: Effect.succeed("");
 
-		// Not pathspec-restricted: a rename's deletion side lives at the *old*
-		// path, and restricting to just `path` would hide it from git's rename
-		// pairing, the same trap `readPatches` avoids via `pathspecFor`.
-		const [nameStatusRaw, statusRaw] = yield* Effect.all([
-			git(repoRoot, [
-				"diff",
-				"--name-status",
-				"-z",
-				"-M",
-				mergeBase,
-				...diffTargetArgs(target),
-			]),
-			statusEffect,
-		]);
-		const entry = parseNameStatus(nameStatusRaw).find(
-			(candidate) => candidate.path === path,
+		// Not pathspec-restricted, for the same rename-pairing reason
+		// `getChangedFiles` leaves `name-status` unrestricted.
+		const [nameStatusRaw, statusRaw] = yield* Effect.all(
+			[
+				git(repoRoot, [
+					"diff",
+					"--name-status",
+					"-z",
+					"-M",
+					mergeBase,
+					...diffTargetArgs(target),
+				]),
+				statusEffect,
+			],
+			{ concurrency: "unbounded" },
 		);
-		const isUntracked = entry === undefined && statusRaw.startsWith("??");
+		const nameStatusByPath = new Map(
+			parseNameStatus(nameStatusRaw).map(
+				(entry) => [entry.path, entry] as const,
+			),
+		);
+		const untrackedPaths = parseUntrackedPaths(statusRaw);
 
-		if (entry === undefined && !isUntracked) {
-			return yield* new FileNotChanged({ path });
+		type ResolvedRequest = {
+			readonly request: FileContentRequest;
+			readonly entry: NameStatusEntry | undefined;
+			readonly status: FileStatus;
+			readonly oldBlobPath: string;
+			readonly isUntracked: boolean;
+		};
+		const resolved: Array<ResolvedRequest> = [];
+		for (const request of requests) {
+			const entry = nameStatusByPath.get(request.path);
+			const isUntracked =
+				entry === undefined && untrackedPaths.has(request.path);
+			if (entry === undefined && !isUntracked) continue;
+			resolved.push({
+				request,
+				entry,
+				status: entry?.status ?? "added",
+				oldBlobPath: entry?.oldPath ?? request.path,
+				isUntracked,
+			});
 		}
 
-		const status: FileStatus = entry?.status ?? "added";
-		const oldPath = entry?.oldPath ?? path;
+		const oldBlobPaths = resolved
+			.filter((item) => item.status !== "added" && !item.isUntracked)
+			.map((item) => item.oldBlobPath);
+		const oldBlobs = yield* readBlobsAtRef(repoRoot, mergeBase, oldBlobPaths, {
+			maxBytes: LOAD_ON_DEMAND_LIMIT,
+		});
 
-		const oldGate: GatedContent =
-			status === "added" || isUntracked
-				? { content: undefined, truncated: false, binaryByNul: false }
-				: yield* readGatedBlob(repoRoot, mergeBase, oldPath, force);
+		const newBlobs: ReadonlyMap<string, BlobEntry> =
+			target.kind === "committed"
+				? yield* readBlobsAtRef(
+						repoRoot,
+						target.sha,
+						resolved
+							.filter((item) => item.status !== "deleted" && !item.isUntracked)
+							.map((item) => item.request.path),
+						{ maxBytes: LOAD_ON_DEMAND_LIMIT },
+					)
+				: new Map();
 
-		const newGate: GatedContent =
-			status === "deleted"
-				? { content: undefined, truncated: false, binaryByNul: false }
-				: target.kind === "worktree"
-					? yield* readWorktreeGated(repoRoot, path, force, fs)
-					: yield* readGatedBlob(repoRoot, target.sha, path, force);
+		const newGateEntries = yield* Effect.forEach(
+			resolved,
+			(item) => {
+				if (item.status === "deleted") {
+					return Effect.succeed([item.request.path, EMPTY_GATE] as const);
+				}
+				const force = item.request.force ?? false;
+				return target.kind === "worktree"
+					? readWorktreeGated(repoRoot, item.request.path, force, fs).pipe(
+							Effect.map((gate) => [item.request.path, gate] as const),
+						)
+					: Effect.succeed([
+							item.request.path,
+							gateFromBlob(newBlobs.get(item.request.path), force),
+						] as const);
+			},
+			{ concurrency: "unbounded" },
+		);
+		const newGateByPath = new Map(newGateEntries);
 
-		const patch = isUntracked
-			? oldGate.binaryByNul || newGate.binaryByNul
-				? createAddedBinaryFilePatch(path)
-				: createAddedFilePatch(path, newGate.content ?? "")
-			: ((yield* readPatches(repoRoot, mergeBase, target, [
-					{
-						path,
-						...(entry?.oldPath === undefined ? {} : { oldPath: entry.oldPath }),
-					},
-				])).get(path) ?? "");
+		const patches = yield* readPatches(
+			repoRoot,
+			mergeBase,
+			target,
+			resolved
+				.filter((item) => !item.isUntracked)
+				.map((item) => ({
+					path: item.request.path,
+					...(item.entry?.oldPath === undefined
+						? {}
+						: { oldPath: item.entry.oldPath }),
+				})),
+		);
 
-		return {
-			patch,
-			...(oldGate.content === undefined ? {} : { oldContent: oldGate.content }),
-			...(newGate.content === undefined ? {} : { newContent: newGate.content }),
-			truncated: oldGate.truncated || newGate.truncated,
-		};
+		const result = new Map<string, FileContent>();
+		for (const item of resolved) {
+			const force = item.request.force ?? false;
+			const oldGate: GatedContent =
+				item.status === "added" || item.isUntracked
+					? EMPTY_GATE
+					: gateFromBlob(oldBlobs.get(item.oldBlobPath), force);
+			const newGate = newGateByPath.get(item.request.path) ?? EMPTY_GATE;
+
+			const patch = item.isUntracked
+				? oldGate.binaryByNul || newGate.binaryByNul
+					? createAddedBinaryFilePatch(item.request.path)
+					: createAddedFilePatch(item.request.path, newGate.content ?? "")
+				: (patches.get(item.request.path) ?? "");
+
+			result.set(item.request.path, {
+				patch,
+				...(oldGate.content === undefined
+					? {}
+					: { oldContent: oldGate.content }),
+				...(newGate.content === undefined
+					? {}
+					: { newContent: newGate.content }),
+				truncated: oldGate.truncated || newGate.truncated,
+			});
+		}
+		return result;
 	});

@@ -9,10 +9,15 @@
  * Phase 2 made `FileChange.review`/`FileContent.review` real (see
  * `packages/sidecar-api/src/diff.ts`), closing the read-path gap Phase 1 left
  * open — `useReviewState` below derives the sidebar/pane's `ReviewState` map
- * straight from `FileChange.review` instead of tracking ticks client-side.
+ * straight from `FileChange.review`, overlaid with any `review.setViewed`
+ * call still in flight so the checkbox doesn't wait on a round trip for the
+ * one field (the boolean) that's honest to predict — see that hook's doc
+ * comment for the split.
  */
+import type { Query } from "@tanstack/react-query";
 import {
 	useMutation,
+	useMutationState,
 	useQueries,
 	useQuery,
 	useQueryClient,
@@ -166,7 +171,45 @@ export function useFileChanges(
 	};
 }
 
-/** Mirrors `diff.file({ sessionId, path, force, includeUncommitted })`, lazy per file — same cache-key reasoning as `useFileChanges`. */
+/**
+ * How many paths ride in one `diff.fileContents` request. Fork/exec, not
+ * git's own work, dominates the sidecar's cost per request (see
+ * `@repo/git`'s `getFileContents` doc comment), so collapsing a whole PR's
+ * open files into one request is what actually pays off — but `paths` here
+ * can be *every* non-binary file in the PR (`DiffPane` passes it every
+ * visible `FileChange`, not just what's scrolled into view; `@pierre/diffs`
+ * virtualizes rendering, not fetching), and one request is all-or-nothing:
+ * the pane would wait on the slowest file in the whole PR before rendering
+ * any of them. Chunking splits the difference — a typical PR (well under
+ * this size) still collapses to a single request, while a large one streams
+ * in a handful of waves instead of blocking on one giant round trip.
+ */
+const FILE_CONTENTS_CHUNK_SIZE = 30;
+
+const chunkPaths = (
+	paths: readonly string[],
+	size: number,
+): readonly (readonly string[])[] => {
+	const chunks: Array<readonly string[]> = [];
+	for (let index = 0; index < paths.length; index += size) {
+		chunks.push(paths.slice(index, index + size));
+	}
+	return chunks;
+};
+
+/**
+ * Mirrors `diff.fileContents({ sessionId, paths, includeUncommitted })`,
+ * batched — `paths` is chunked (`FILE_CONTENTS_CHUNK_SIZE`) into one
+ * `useQueries` entry per chunk rather than one per path, so opening N files
+ * costs a small constant number of sidecar round trips instead of N
+ * independent ones. `includeUncommitted` is sourced from the persisted
+ * setting and folded into every chunk's `input` — same cache-key reasoning
+ * as `useFileChanges`. Callers still get the same per-path map back; the
+ * chunking is an internal batching detail; a path absent from its chunk's
+ * response (not actually part of the diff, or a request still loading with
+ * no cached data) reports `content: undefined` with `isError`/`isLoading`
+ * reflecting its chunk's own status.
+ */
 export function useFileContents(
 	orpc: SidecarQueryUtils,
 	sessionId: string,
@@ -177,12 +220,21 @@ export function useFileContents(
 	{ content: FileContent | undefined; isLoading: boolean; isError: boolean }
 > {
 	const [includeUncommitted] = useIncludeUncommitted(orpc);
+	const chunks = useMemo(
+		() => chunkPaths(paths, FILE_CONTENTS_CHUNK_SIZE),
+		[paths],
+	);
+
 	const results = useQueries({
-		queries: paths.map((path) =>
-			orpc.diff.file.queryOptions({
-				input: forcedPaths.has(path)
-					? { sessionId, path, force: true, includeUncommitted }
-					: { sessionId, path, includeUncommitted },
+		queries: chunks.map((chunk) =>
+			orpc.diff.fileContents.queryOptions({
+				input: {
+					sessionId,
+					paths: chunk.map((path) =>
+						forcedPaths.has(path) ? { path, force: true } : { path },
+					),
+					includeUncommitted,
+				},
 			}),
 		),
 	});
@@ -192,31 +244,124 @@ export function useFileContents(
 			string,
 			{ content: FileContent | undefined; isLoading: boolean; isError: boolean }
 		>();
-		paths.forEach((path, index) => {
-			const result = results[index];
-			map.set(path, {
-				content: result?.data,
-				isLoading: result?.isLoading ?? false,
-				isError: result?.isError ?? false,
-			});
+		chunks.forEach((chunk, chunkIndex) => {
+			const result = results[chunkIndex];
+			const contentByPath = new Map(
+				(result?.data ?? []).map(
+					(entry) => [entry.path, entry.content] as const,
+				),
+			);
+			for (const path of chunk) {
+				const content = contentByPath.get(path);
+				// A path the sidecar reported as not part of the diff (`content:
+				// null`) is a fetch-level error the same way a 404 used to be —
+				// distinct from "this chunk hasn't resolved yet" (`undefined`).
+				const pathNotInDiff = result?.isSuccess === true && content === null;
+				map.set(path, {
+					content: content ?? undefined,
+					isLoading: result?.isLoading ?? false,
+					isError: (result?.isError ?? false) || pathNotInDiff,
+				});
+			}
 		});
 		return map;
-	}, [paths, results]);
+	}, [chunks, results]);
 }
 
+/** Narrows `value` to a plain object so a property read off it is type-safe rather than an `unknown`-on-`unknown` cast. */
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+	typeof value === "object" && value !== null;
+
 /**
- * Derives the sidebar/pane's three-value `ReviewState` map straight from
- * `FileChange.review` — a file with no row is `"unreviewed"`, one whose
- * snapshot still matches head is `"viewed"` (mutes the row), and one that's
- * moved since is `"changed-after-review"` (the orange dot). No client-side
- * tracking: a reload sees exactly what the sidecar persisted.
+ * `invalidateQueries`' `predicate`, meant to be combined with a `queryKey`
+ * filter that already narrows to one session's `diff.fileContents` queries
+ * (see `useSetFileViewed`/`useSetRangeViewed` below) — true when that
+ * query's own recorded request actually covered `path`, so a single file's
+ * review-state change refetches only the one chunk it landed in instead of
+ * every chunk for the session.
+ *
+ * Reads the request TanStack Query already cached for that query (the last
+ * element of `query.queryKey` is the `{ input }` oRPC embeds — see
+ * `generateOperationKey` in `@orpc/tanstack-query`) rather than
+ * recomputing `useFileContents`' chunk boundaries here from a fresh
+ * `paths`/`forcedPaths` pair: this function's only callers are a mutation's
+ * `onSuccess`, which has no way to know the exact per-path `force` flag a
+ * given chunk was actually fetched with, so reconstructing that chunk's
+ * request and matching it key-for-key would silently fail to invalidate
+ * whenever it guessed a `force` flag wrong. Asking the cache what it
+ * actually fetched sidesteps that.
+ *
+ * Fails open, not closed. `@orpc/tanstack-query` is a pinned beta — if a
+ * future bump ever changes `query.queryKey`'s layout, every `isRecord`/
+ * `Array.isArray` check below fails and this returns `true` rather than
+ * `false`. `true` over-invalidates (degrades back to the session-wide
+ * refetch this function exists to narrow past — merely slower); `false`
+ * would under-invalidate and leave stale reconciliation ranges on screen
+ * with nothing to signal it. Only a positively parsed `paths` array that
+ * provably excludes `path` is allowed to return `false` — don't collapse
+ * this back into an `as`-cast-plus-`?? false` chain.
+ */
+const queryCoveredPath = (query: Query, path: string): boolean => {
+	const queryKey = query.queryKey;
+	const meta = queryKey[queryKey.length - 1];
+	if (!isRecord(meta)) return true;
+
+	const input = meta.input;
+	if (!isRecord(input)) return true;
+
+	const paths = input.paths;
+	if (!Array.isArray(paths)) return true;
+
+	return paths.some((request) => isRecord(request) && request.path === path);
+};
+
+/** The part of a pending `review.setViewed` call we're willing to predict — see `useReviewState`. */
+type PendingFileViewed = { path: string; viewed: boolean };
+
+/**
+ * Derives the sidebar/pane's three-value `ReviewState` map from
+ * `FileChange.review`, overlaid with any `review.setViewed` calls still in
+ * flight — a file with no row and no pending call is `"unreviewed"`, one
+ * whose snapshot still matches head (or whose pending call just requested
+ * `viewed: true`) is `"viewed"` (mutes the row), and one that's moved since
+ * is `"changed-after-review"` (the orange dot). That last distinction stays
+ * server-only: a pending call only ever predicts `"viewed"`/`"unreviewed"`,
+ * never `"changed-after-review"`, since `changedSinceReview` comes from a
+ * snapshot hash we don't have until the server responds (see the doc comment
+ * on `useSetFileViewed` for why nothing beyond the boolean is honest to
+ * predict). The overlay is read via `useMutationState`'s `status: "pending"`
+ * filter, so it self-clears the instant a call settles either way — success
+ * lands through the invalidation below, failure just reverts to whatever
+ * `diff.files` already said, with no stuck checkbox — and it can't be
+ * clobbered by a `diff.files` refetch that resolves mid-flight, since it
+ * doesn't read that query's data at all.
  */
 export function useReviewState(
+	orpc: SidecarQueryUtils,
 	files: readonly FileChange[],
 ): ReadonlyMap<string, ReviewState> {
+	const pendingMutationKey = useMemo(
+		() => orpc.review.setViewed.mutationKey(),
+		[orpc],
+	);
+	const pendingViewedCalls = useMutationState({
+		filters: { mutationKey: pendingMutationKey, status: "pending" },
+		select: (mutation) => mutation.state.variables as PendingFileViewed,
+	});
+
 	return useMemo(() => {
+		const pendingByPath = new Map<string, boolean>();
+		for (const call of pendingViewedCalls) {
+			pendingByPath.set(call.path, call.viewed);
+		}
+
 		const map = new Map<string, ReviewState>();
 		for (const file of files) {
+			const pendingViewed = pendingByPath.get(file.path);
+			if (pendingViewed !== undefined) {
+				map.set(file.path, pendingViewed ? "viewed" : "unreviewed");
+				continue;
+			}
 			if (file.review === null) continue;
 			map.set(
 				file.path,
@@ -224,16 +369,29 @@ export function useReviewState(
 			);
 		}
 		return map;
-	}, [files]);
+	}, [files, pendingViewedCalls]);
 }
 
 /**
  * `review.setViewed`, refetching the two queries its snapshot write
  * invalidates on success: `diff.files` (the sidebar's mute + orange dot) and
- * this file's `diff.file` (the pane's collapse ranges). No optimistic flip —
- * `changedSinceReview` and the reconciliation ranges are server-computed from
- * the snapshot this write just took, so there's nothing honest to predict
- * client-side before the round trip resolves.
+ * this file's `diff.fileContents` chunk (the pane's collapse ranges).
+ * `diff.fileContents` is batched (`useFileContents`), so there's no
+ * single-path cache entry to target directly — `queryCoveredPath` narrows
+ * the session-wide `diff.fileContents` match down to just the one chunk
+ * that actually requested `path`, so ticking one file's checkbox costs one
+ * chunk's refetch regardless of how many files/chunks the PR has, not the
+ * whole session's worth (contrast `useLiveFileChanges` below, which
+ * deliberately *does* refetch every chunk — a real worktree change could
+ * touch any file, not just one). No optimistic cache write here —
+ * `changedSinceReview` and the reconciliation ranges are server-computed
+ * from the snapshot this write just took, so there's nothing honest to
+ * predict client-side before the round trip resolves. The boolean itself is
+ * the exception: `useReviewState` overlays this mutation's in-flight
+ * `variables` (via `useMutationState`, matched by the stable `mutationKey`
+ * `mutationOptions()` derives from this procedure's path) so the checkbox
+ * flips the instant it's clicked instead of waiting on this round trip —
+ * see that hook's doc comment.
  */
 export function useSetFileViewed(
 	orpc: SidecarQueryUtils,
@@ -252,7 +410,8 @@ export function useSetFileViewed(
 							queryKey: orpc.diff.files.key({ input: { sessionId } }),
 						});
 						queryClient.invalidateQueries({
-							queryKey: orpc.diff.file.key({ input: { sessionId, path } }),
+							queryKey: orpc.diff.fileContents.key({ input: { sessionId } }),
+							predicate: (query) => queryCoveredPath(query, path),
 						});
 					},
 				},
@@ -272,11 +431,13 @@ export type SetRangeViewedParams = {
 
 /**
  * `review.setRangeViewed` — one walkthrough reference block's claim on a set
- * of ranges within one file. Same invalidation shape as `useSetFileViewed`:
- * the reference pane's own `diff.file` query and the Files Changed diff
- * pane's are the same cache entry (same `sessionId`+`path` key), so
- * invalidating it here is what keeps a tick in one view visible in the other
- * without a manual reload.
+ * of ranges within one file. Same invalidation shape as `useSetFileViewed`,
+ * narrowed to `params.path`'s own `diff.fileContents` chunk via
+ * `queryCoveredPath`: the reference pane's own query and the Files Changed
+ * diff pane's are the same batched cache entries (both key off `sessionId`
+ * and land in the same chunk for a given path), so invalidating just that
+ * chunk here is what keeps a tick in one view visible in the other without
+ * a manual reload — and without refetching every other open file's chunk.
  */
 export function useSetRangeViewed(
 	orpc: SidecarQueryUtils,
@@ -295,9 +456,8 @@ export function useSetRangeViewed(
 							queryKey: orpc.diff.files.key({ input: { sessionId } }),
 						});
 						queryClient.invalidateQueries({
-							queryKey: orpc.diff.file.key({
-								input: { sessionId, path: params.path },
-							}),
+							queryKey: orpc.diff.fileContents.key({ input: { sessionId } }),
+							predicate: (query) => queryCoveredPath(query, params.path),
 						});
 					},
 				},
@@ -308,12 +468,17 @@ export function useSetRangeViewed(
 }
 
 /**
- * Keeps `diff.files`/`diff.file` live: on the sidecar's `session-files-changed`
- * event (the 2s worktree poller noticing a change — see
- * `packages/sidecar-api/src/events.ts`) for *this* session, invalidates both
- * queries so the sidebar and pane refetch. Deliberately just an invalidate,
- * not a manual cache write — `diff-pane.tsx`'s `hashItemVersion` +
- * `FileChange.fingerprint` already make sure only files whose content
+ * Keeps `diff.files`/`diff.fileContents` live: on the sidecar's
+ * `session-files-changed` event (the 2s worktree poller noticing a change —
+ * see `packages/sidecar-api/src/events.ts`) for *this* session, invalidates
+ * both queries so the sidebar and pane refetch. Deliberately session-wide
+ * (every `diff.fileContents` chunk, not just one path's via
+ * `queryCoveredPath` the way `useSetFileViewed`/`useSetRangeViewed` narrow
+ * it) — unlike those two, this event doesn't say *which* file moved, only
+ * that *something* did (the poller's mtime/size signal, not a diff), so
+ * there's no single path to scope the invalidation to. Deliberately just an
+ * invalidate, not a manual cache write — `diff-pane.tsx`'s `hashItemVersion`
+ * + `FileChange.fingerprint` already make sure only files whose content
  * actually changed get a new `CodeViewItem.version`, so the virtualizer
  * leaves everything else's scroll position and highlight cache alone.
  */
@@ -332,7 +497,7 @@ export function useLiveFileChanges(
 			queryKey: orpc.diff.files.key({ input: { sessionId } }),
 		});
 		queryClient.invalidateQueries({
-			queryKey: orpc.diff.file.key({ input: { sessionId } }),
+			queryKey: orpc.diff.fileContents.key({ input: { sessionId } }),
 		});
 	}, [eventsQuery.data, queryClient, orpc, sessionId]);
 }

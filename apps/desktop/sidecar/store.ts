@@ -1,6 +1,6 @@
 import { join } from "node:path";
 import {
-	FileNotChanged,
+	type FileContentRequest,
 	type GhOutputDecodeError,
 	type GitCommandError,
 	type FileChange as GitFileChange,
@@ -8,7 +8,7 @@ import {
 	type GitHubTarget,
 	type GitHubUnreachable,
 	getChangedFiles,
-	getFileContent,
+	getFileContents,
 	type NoDefaultBranch,
 	readFileContentsAtRef,
 	resolveCurrentBranch,
@@ -63,12 +63,25 @@ export type FileReview = {
 /** `@repo/git`'s `FileChange` plus the review state Phase 1 shipped write-only — see `attachReviewState`. */
 export type FileChange = GitFileChange & { readonly review: FileReview | null };
 
-/** `@repo/git`'s `FileContent` plus Phase 2's reconciliation — see `readFileContent`. */
+/** `@repo/git`'s `FileContent` plus Phase 2's reconciliation — see `readFileContents`. */
 export type FileContent = GitFileContent & {
 	readonly review: Reconciliation | null;
 };
 
-/** Narrows a whole-file review row down to the shape `readFileContent` actually needs — `null` unless it's a real, snapshotted "viewed" tick. */
+/** One path within a `readFileContents` batch request — mirrors `packages/sidecar-api`'s `FileContentRequest`, minus the wire encoding. */
+export type FileContentBatchRequest = {
+	readonly path: string;
+	readonly oldPath?: string;
+	readonly force: boolean;
+};
+
+/** One path's result within a `readFileContents` batch — `content` is `null` when the path turned out not to be part of the diff. */
+export type FileContentBatchResult = {
+	readonly path: string;
+	readonly content: FileContent | null;
+};
+
+/** Narrows a whole-file review row down to the shape `readFileContents` actually needs — `null` unless it's a real, snapshotted "viewed" tick. */
 const toActiveFileClaim = (
 	state: FileReviewState | null,
 ): { readonly snapshotHash: string; readonly viewedAt: number } | null => {
@@ -349,6 +362,21 @@ export class Store extends Context.Service<Store>()("Store", {
 			});
 
 		/**
+		 * The batched sibling of the old per-path `readFileContent`: every
+		 * requested path's content in one `getFileContents` call (so N files
+		 * opened in the diff pane cost a constant handful of git subprocess
+		 * spawns rather than N times as many — see `@repo/git`'s doc comment on
+		 * that function), reconciled against review state per path exactly the
+		 * same way `readFileContent` did — reconciliation itself isn't batched
+		 * (`reconcile` still runs once per path, at `{ concurrency: "unbounded" }`
+		 * fan-out, same as `attachReviewState` above), since it's only ever
+		 * invoked for a path that actually has an active claim.
+		 *
+		 * A requested path absent from `getFileContents`' result (not actually
+		 * part of the diff) reports `content: null` in its own result entry
+		 * rather than failing the whole batch — the caller decides what that
+		 * means for just that path.
+		 *
 		 * `oldPath` — the file's pre-rename path, when it's a rename — mirrors
 		 * `FileChange.oldPath` so a rename's review state resolves the same way
 		 * here as it does in `listChangedFiles`'s `attachReviewState`.
@@ -370,59 +398,95 @@ export class Store extends Context.Service<Store>()("Store", {
 		 * to reporting no review at all, since there's no gated equivalent for a
 		 * range claim's drift.
 		 */
-		const readFileContent = (
+		const readFileContents = (
 			sessionId: string,
-			path: string,
-			force: boolean,
+			requests: ReadonlyArray<FileContentBatchRequest>,
 			includeUncommitted: boolean,
-			oldPath?: string,
 		) =>
 			Effect.gen(function* () {
 				const session = yield* reviewStore.getSession(sessionId);
-				const content = yield* getFileContent(
+				const contentByPath = yield* getFileContents(
 					session.repoRoot,
 					session.baseRef,
-					path,
-					{ force, includeUncommitted },
+					requests satisfies ReadonlyArray<FileContentRequest>,
+					{ includeUncommitted },
 				);
-
 				const states = yield* reviewStore.listReviewStates(sessionId);
-				const fileState = resolveReviewState(states, path, oldPath);
-				const rangeClaims = yield* resolveRangeClaims(sessionId, path, oldPath);
 
-				const activeFileClaim = toActiveFileClaim(fileState);
-				if (activeFileClaim === null && rangeClaims.length === 0) {
-					return { ...content, review: null };
-				}
+				return yield* Effect.forEach(
+					requests,
+					(request) =>
+						Effect.gen(function* () {
+							const content = contentByPath.get(request.path);
+							if (content === undefined) {
+								return { path: request.path, content: null };
+							}
 
-				if (content.truncated) {
-					if (activeFileClaim === null) return { ...content, review: null };
-					const currentHashes = yield* readCurrentHashes(
-						session.repoRoot,
-						includeUncommitted,
-						[path],
-					);
-					const currentHash =
-						currentHashes.get(path) ?? hashContent(new Uint8Array());
-					const changedSinceReview =
-						currentHash !== activeFileClaim.snapshotHash;
-					return { ...content, review: { changedSinceReview, ranges: [] } };
-				}
+							const fileState = resolveReviewState(
+								states,
+								request.path,
+								request.oldPath,
+							);
+							const rangeClaims = yield* resolveRangeClaims(
+								sessionId,
+								request.path,
+								request.oldPath,
+							);
 
-				const claims = yield* buildReviewClaims(activeFileClaim, rangeClaims);
-				const review = yield* reconcile(session.repoRoot, {
-					baseContent: content.oldContent ?? "",
-					headContent: content.newContent ?? "",
-					claims,
-				});
+							const activeFileClaim = toActiveFileClaim(fileState);
+							if (activeFileClaim === null && rangeClaims.length === 0) {
+								return {
+									path: request.path,
+									content: { ...content, review: null },
+								};
+							}
 
-				return { ...content, review };
+							if (content.truncated) {
+								if (activeFileClaim === null) {
+									return {
+										path: request.path,
+										content: { ...content, review: null },
+									};
+								}
+								const currentHashes = yield* readCurrentHashes(
+									session.repoRoot,
+									includeUncommitted,
+									[request.path],
+								);
+								const currentHash =
+									currentHashes.get(request.path) ??
+									hashContent(new Uint8Array());
+								const changedSinceReview =
+									currentHash !== activeFileClaim.snapshotHash;
+								return {
+									path: request.path,
+									content: {
+										...content,
+										review: { changedSinceReview, ranges: [] },
+									},
+								};
+							}
+
+							const claims = yield* buildReviewClaims(
+								activeFileClaim,
+								rangeClaims,
+							);
+							const review = yield* reconcile(session.repoRoot, {
+								baseContent: content.oldContent ?? "",
+								headContent: content.newContent ?? "",
+								claims,
+							});
+
+							return { path: request.path, content: { ...content, review } };
+						}),
+					{ concurrency: "unbounded" },
+				);
 			});
 
 		/**
 		 * Un-ticking Reviewed just clears the snapshot. Ticking it reads the
 		 * file's *current worktree* content directly — this is a plain read, not
-		 * `@repo/git`'s size-gated `getFileContent`, since a review snapshot's
+		 * `@repo/git`'s size-gated `getFileContents`, since a review snapshot's
 		 * whole point is fidelity. A missing file (ticking Reviewed on a
 		 * deletion) snapshots as empty content, matching how git itself treats
 		 * "diff against /dev/null" — not a swallowed error.
@@ -481,7 +545,7 @@ export class Store extends Context.Service<Store>()("Store", {
 			listSessions,
 			closeSession,
 			listChangedFiles,
-			readFileContent,
+			readFileContents,
 			setFileViewed,
 			setRangeViewed,
 		};
@@ -502,4 +566,4 @@ export type {
 	GitHubUnreachable,
 	NoDefaultBranch,
 };
-export { FileNotChanged, SessionNotFound };
+export { SessionNotFound };

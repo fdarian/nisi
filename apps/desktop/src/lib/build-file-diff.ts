@@ -1,5 +1,5 @@
 /**
- * Turns one file's contract data (`FileChange` metadata + `diff.file`'s
+ * Turns one file's contract data (`FileChange` metadata + `diff.fileContents`'
  * `FileContent`) into the `FileDiffMetadata` `@pierre/diffs`' `CodeView`
  * renders. Picks the parser per the size tier content was gated on (≤1MB
  * auto-render, ≤2MB load-on-demand, above that patch-only):

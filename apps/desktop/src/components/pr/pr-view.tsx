@@ -35,7 +35,7 @@ export function PrView({
 	onCloseTab,
 }: PrViewProps): React.ReactElement {
 	const { files, isLoading, error } = useFileChanges(orpc, session.id);
-	const reviewState = useReviewState(files);
+	const reviewState = useReviewState(orpc, files);
 	const setViewed = useSetFileViewed(orpc, session.id);
 	useLiveFileChanges(orpc, session.id);
 

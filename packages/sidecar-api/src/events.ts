@@ -6,7 +6,7 @@ import { Session } from "./sessions.ts";
  * Phase 1 shipped just enough for a running desktop app's tab strip to react
  * when the CLI opens (or an idle tab closes) a session out from under it.
  * Phase 2 adds `session-files-changed`: the live-update poller's signal that
- * a session's `diff.files`/`diff.file` results are stale and worth
+ * a session's `diff.files`/`diff.fileContents` results are stale and worth
  * refetching — deliberately just a `sessionId`, not a diff of what changed,
  * since the poller only knows *that* something moved (via the cheap
  * mtime/size signal — see `@repo/git`'s `readRepoChangeSignature`), not

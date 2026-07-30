@@ -74,7 +74,7 @@ those two packages does I/O or knows about the other — this directory is where
   start) — see `live-sessions.ts`.
 - **Session-not-found is thrown, not yielded.** `generateWalkthrough` throws
   `GenerateSessionNotFound` for an unknown `sessionId` so `http.ts` can map it to the contract's
-  declared `NOT_FOUND`, matching `diff.files`/`diff.file`'s precedent. Every other failure —  a git
+  declared `NOT_FOUND`, matching `diff.files`/`diff.fileContents`'s precedent. Every other failure —  a git
   error, a harness/sandbox crash, a validation loop that never converges — yields an in-band
   `{ type: "failed" }` event instead, so the stream ends cleanly rather than dropping the connection.
 - **`gatherGenerationContext` fetches every non-binary file's content with `force: true`**,

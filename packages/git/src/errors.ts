@@ -55,7 +55,14 @@ export class GitHubUnreachable extends Schema.TaggedErrorClass<GitHubUnreachable
 	{ repoRoot: Schema.String, reason: Schema.String },
 ) {}
 
-/** `diff.file` was asked for a path that isn't part of the current diff. */
+/**
+ * A path turned out not to be part of the current diff. `getFileContents`
+ * (`diff.ts`) never raises this itself — a path missing from a batch is
+ * simply absent from its result map — so this exists for callers that need
+ * fail-fast, single-path semantics on top of that (e.g.
+ * `apps/desktop/sidecar/walkthrough/context.ts`'s `gatherGenerationContext`,
+ * which constructs one manually when a requested path comes back missing).
+ */
 export class FileNotChanged extends Schema.TaggedErrorClass<FileNotChanged>()(
 	"FileNotChanged",
 	{ path: Schema.String },

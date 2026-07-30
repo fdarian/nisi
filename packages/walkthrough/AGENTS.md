@@ -63,7 +63,7 @@ Feeds `packages/sidecar-api`'s `walkthrough` contract; consumed by the sidecar t
   total, decremented per file, capped per file) was worth taking.
 - **`ChangedFileFacts.lineCount` is supplied by the caller, not computed here.** Getting a file's
   true head line count means reading its content — I/O this package deliberately doesn't do. The
-  caller (sidecar wiring) already has it from `@repo/git`'s `getFileContent().newContent`; a file
+  caller (sidecar wiring) already has it from `@repo/git`'s `getFileContents()`' `newContent`; a file
   with no head content (a deletion) is simply omitted, so a `Location` pointing at it reports
   `unknown-file` rather than a misleading `out-of-range` against a fabricated zero.
 

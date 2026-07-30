@@ -20,7 +20,7 @@ export const reviewContract = {
 	/**
 	 * Ticks (or unticks) one walkthrough reference block's claim on a set of
 	 * line ranges within one file — Phase 3's range-scoped review, the
-	 * write-side of `diff.file`'s `FileContentReview.ranges[].reviewedVia`.
+	 * write-side of `diff.fileContents`' `FileContentReview.ranges[].reviewedVia`.
 	 * `ranges` is the block's full set of locations for this path (a block can
 	 * claim several non-contiguous ranges in the same file — see
 	 * `@repo/walkthrough`'s `ReferenceBlock.locations`), ticked or unticked as

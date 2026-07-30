@@ -28,12 +28,19 @@ Git/review procedures sit alongside `health.check`.
 - `oc.input()`/`oc.output()` accept an Effect `Schema` directly (that's what the extension imports
   in `contract.ts` buy you) — but helpers outside that patched surface, like `eventIterator`
   (`events.ts`), still want a Standard Schema. Convert with `Schema.toStandardSchemaV1(...)`.
-- `diff.file`'s `force` input field exists so the load-on-demand size tier (see `@repo/git`) has any
-  way to actually be loaded. Optional, additive, flagged here so it isn't mistaken for scope creep.
-- `diff.files`/`diff.file` both gained `includeUncommitted`, mirroring `@repo/git`'s option of the
-  same name — the frontend sources it from `@repo/settings`'s persisted setting and folds it into
-  the query `input` (not a separate param) specifically so it's part of the TanStack Query cache key;
-  see `apps/desktop/src/lib/pr-data.ts`'s `useFileChanges`/`useFileContents`.
+- `diff.fileContents` is batched (`paths: FileContentRequest[]` in, `FileContentResult[]` out, one
+  per requested path) rather than one-path-per-call — it replaced a singular `diff.file` outright
+  (its only caller, `apps/desktop/src/lib/pr-data.ts`'s `useFileContents`, chunks a large PR's paths
+  across several calls rather than issuing one per file). A path not actually in the diff reports
+  `content: null` in its own result entry instead of failing the batch. Each path's `force` input
+  field exists so the load-on-demand size tier (see `@repo/git`) has any way to actually be loaded.
+- `diff.files`/`diff.fileContents` both gained `includeUncommitted`, mirroring `@repo/git`'s option
+  of the same name — the frontend sources it from `@repo/settings`'s persisted setting and folds it
+  into the query `input` (not a separate param) specifically so it's part of the TanStack Query
+  cache key; see `apps/desktop/src/lib/pr-data.ts`'s `useFileChanges`/`useFileContents`.
+  `fileContents`' flag sits at the batch's top level, not per-path in `FileContentRequest` — it
+  mirrors a session-wide setting applied uniformly, the same reasoning `@repo/git`'s
+  `getFileContents` resolves it to one `DiffTarget` for the whole call rather than per-path.
 - Phase 3's range-scoped review added `review.setRangeViewed` (mirrors `setViewed`'s tick/untick
   shape, scoped to one block's claim on a set of ranges within one file) and `diff.ts`'s `ReviewRange`
   gained `reviewedVia: ReviewSource | null` — `{kind: "file"}` or `{kind: "range", blockId,
@@ -43,7 +50,7 @@ Git/review procedures sit alongside `health.check`.
 - `HarnessInfo` gained `available`/`binaryPath` (a live `@repo/bin-resolver` check — see the type's own
   doc for why this is independent of `enabled`), and `walkthrough.harnesses` gained a sibling
   `walkthrough.refreshHarnesses` — same output shape, but bypasses `model-discovery.ts`'s cache. A
-  separate procedure rather than a `force` input field (unlike `diff.file`'s, above) so the UI can
+  separate procedure rather than a `force` input field (unlike `diff.fileContents`'s, above) so the UI can
   keep one stable, shared query-cache entry for `harnesses` while `refreshHarnesses` is called
   imperatively and its result written back into that same cache — see `apps/desktop/src/lib/walkthrough-data.ts`'s
   `useHarnesses`.

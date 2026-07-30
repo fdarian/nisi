@@ -30,7 +30,7 @@ export const FileReview = Schema.Struct({
 	 * Cheap (a content hash compare, not a diff) — `true` whenever the
 	 * worktree has moved since the snapshot was taken, regardless of *where*.
 	 * The detailed line-range breakdown of what's actually new is
-	 * `diff.file`'s `review.ranges`, fetched lazily like the rest of a file's
+	 * `diff.fileContents`' `review.ranges`, fetched lazily like the rest of a file's
 	 * content.
 	 */
 	changedSinceReview: Schema.Boolean,
@@ -114,9 +114,38 @@ export type FileContent = Schema.Schema.Type<typeof FileContent>;
  * Mirrors `@repo/settings`'s `includeUncommitted` — `false`/absent (the
  * default) restricts the diff to `merge-base..HEAD`; `true` widens it to the
  * worktree, staged/unstaged/untracked changes included too. See `@repo/git`'s
- * `getChangedFiles`/`getFileContent` for what the flag does underneath.
+ * `getChangedFiles`/`getFileContents` for what the flag does underneath.
  */
 const IncludeUncommitted = Schema.optional(Schema.Boolean);
+
+/** One requested path within a `diff.fileContents` batch — see that procedure's doc comment. */
+export const FileContentRequest = Schema.Struct({
+	path: Schema.String,
+	/**
+	 * The file's pre-rename path, when it's a rename — the same
+	 * `FileChange.oldPath` the sidebar already has. Without it, a rename's
+	 * review state (keyed by the pre-rename path — see `@repo/review`'s
+	 * `resolveReviewState`) can't be found from just the new path, and
+	 * `review` would be reported `null` even though the file was reviewed
+	 * under its old name.
+	 */
+	oldPath: Schema.optional(Schema.String),
+	/**
+	 * Overrides the load-on-demand size tier (up to 2MB) to actually load it
+	 * — without it, that tier could be reported but never fetched. The
+	 * patch-only tier above 2MB is never overridable. Per-path, since one
+	 * batch commonly mixes a just-forced file with everything else.
+	 */
+	force: Schema.optional(Schema.Boolean),
+});
+export type FileContentRequest = Schema.Schema.Type<typeof FileContentRequest>;
+
+/** One path's result within a `diff.fileContents` batch — `content` is `null` when the path turned out not to be part of the diff (mirrors the single-file procedure's old `NOT_FOUND`), rather than failing the whole batch over one stale path. */
+export const FileContentResult = Schema.Struct({
+	path: Schema.String,
+	content: Schema.NullOr(FileContent),
+});
+export type FileContentResult = Schema.Schema.Type<typeof FileContentResult>;
 
 export const diffContract = {
 	/** Metadata only, every changed file — the sidebar's data source. */
@@ -129,30 +158,22 @@ export const diffContract = {
 		)
 		.output(Schema.Array(FileChange))
 		.errors({ NOT_FOUND: {} }),
-	/** One file's patch + contents, lazy — the diff pane's data source. */
-	file: oc
+	/**
+	 * Every requested path's patch + contents, in one round trip — the diff
+	 * pane's data source. Batched (not one-procedure-per-file) because
+	 * opening N files otherwise costs N independent round trips, each paying
+	 * its own merge-base/status/blob-read/patch-read subprocess spawns on the
+	 * sidecar side for no benefit — `@repo/git`'s `getFileContents` resolves
+	 * all of them once per call regardless of how many paths are requested.
+	 */
+	fileContents: oc
 		.input(
 			Schema.Struct({
 				sessionId: Schema.String,
-				path: Schema.String,
-				/**
-				 * The file's pre-rename path, when it's a rename — the same
-				 * `FileChange.oldPath` the sidebar already has. Without it, a
-				 * rename's review state (keyed by the pre-rename path — see
-				 * `@repo/review`'s `resolveReviewState`) can't be found from just
-				 * the new path, and `review` would be reported `null` even though
-				 * the file was reviewed under its old name.
-				 */
-				oldPath: Schema.optional(Schema.String),
-				/**
-				 * Overrides the load-on-demand size tier (up to 2MB) to actually load
-				 * it — without it, that tier could be reported but never fetched. The
-				 * patch-only tier above 2MB is never overridable.
-				 */
-				force: Schema.optional(Schema.Boolean),
+				paths: Schema.Array(FileContentRequest),
 				includeUncommitted: IncludeUncommitted,
 			}),
 		)
-		.output(FileContent)
+		.output(Schema.Array(FileContentResult))
 		.errors({ NOT_FOUND: {} }),
 };

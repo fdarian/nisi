@@ -9,7 +9,7 @@ import { type Hunk, parseHunks } from "./hunk.ts";
  * returns its sha1. `-w` (not just `hash-object`) is required — `git diff`
  * on two bare object ids can only read content that actually exists in the
  * odb. Content-addressed, so re-diffing the same reviewed/head pair (the
- * common case — polling, repeated `diff.file` calls) never grows the odb
+ * common case — polling, repeated `diff.fileContents` calls) never grows the odb
  * past one object per distinct content seen.
  */
 const hashObject = (
@@ -48,10 +48,10 @@ export const diffContents = (
 	Effect.gen(function* () {
 		if (oldContent === newContent) return [];
 
-		const [oldSha, newSha] = yield* Effect.all([
-			hashObject(repoRoot, oldContent),
-			hashObject(repoRoot, newContent),
-		]);
+		const [oldSha, newSha] = yield* Effect.all(
+			[hashObject(repoRoot, oldContent), hashObject(repoRoot, newContent)],
+			{ concurrency: "unbounded" },
+		);
 
 		// `git diff` exits 1 when the two blobs differ — expected, not an
 		// error — and anything past 1 is a real failure (e.g. a bad sha).

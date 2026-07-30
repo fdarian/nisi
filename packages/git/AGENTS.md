@@ -20,12 +20,12 @@ unit-testable against real temp repos without booting anything. Feeds `packages/
 - `classify.ts` — implementation/test/generated. Test globs are Jest's `testMatch` / Vitest's
   `include` hand-expanded out of extglob syntax into brace alternation, since `Bun.Glob` (used
   here instead of a dependency) doesn't support `?(...)`.
-- `blob.ts` — batched `ls-tree` + `cat-file --batch-check` + `cat-file --batch` for reading blob
-  content at a ref without one subprocess per file. `readBlobsAtRef` (internal, size-gated) backs
-  `diff.ts`'s content fetch; `readFileContentsAtRef` (exported, ungated) is the same batching for a
-  caller that wants every listed path's exact bytes at a ref regardless of size — e.g. the sidecar
-  rehashing a handful of reviewed files against HEAD, where a rendering-oriented size gate would
-  silently make some of them uncomparable.
+- `blob.ts` — batched `cat-file --batch-check` (keyed by `<ref>:<path>` directly, no `ls-tree`
+  path→oid pass) + `cat-file --batch` for reading blob content at a ref without one subprocess per
+  file. `readBlobsAtRef` (internal, size-gated) backs `diff.ts`'s content fetch; `readFileContentsAtRef`
+  (exported, ungated) is the same batching for a caller that wants every listed path's exact bytes
+  at a ref regardless of size — e.g. the sidecar rehashing a handful of reviewed files against HEAD,
+  where a rendering-oriented size gate would silently make some of them uncomparable.
 - `patch.ts` — combined `git diff` fetch, split client-side on `^diff --git`, with a per-file
   fallback when the split doesn't match the request.
 - `hunk.ts` — hunk model + parser.
@@ -37,24 +37,30 @@ unit-testable against real temp repos without booting anything. Feeds `packages/
   from `git status --porcelain`, plus HEAD's sha. What the sidecar's live-update poller diffs
   tick-to-tick to detect a session's files changed without hashing content on every tick.
 - `diff.ts` — orchestrates the above into `getChangedFiles` (cheap, all files, metadata only) and
-  `getFileContent` (one file, patch + gated content). Both default to committed history only
+  `getFileContents` (every requested path's patch + gated content in one pass, so opening N files
+  in the diff pane, or gathering a walkthrough's digest, costs a constant handful of spawns rather
+  than N times as many — both `apps/desktop/src/lib/pr-data.ts`'s `useFileContents` and
+  `apps/desktop/sidecar/walkthrough/context.ts`'s `gatherGenerationContext` call it, there's no
+  remaining per-path `getFileContent`). Both default to committed history only
   (`merge-base(baseRef, HEAD)..HEAD`, `includeUncommitted: false`); passing `includeUncommitted:
   true` switches the diff's right-hand side to the worktree — staged, unstaged, and untracked
-  changes included too.
+  changes included too. `getFileContents` resolves `includeUncommitted` once for the whole batch,
+  not per requested path — it's a session-wide setting, not a per-file one.
 
 ## Gotchas
 
 - **`DiffTarget` (`repo.ts`), not a raw boolean, carries "committed vs worktree" through
-  `getChangedFiles`/`getFileContent`/`readPatches`.** `includeUncommitted` (default `false`) is
-  resolved to a `DiffTarget` once, at the top of each function, and threaded as-is from there — the
-  name-status/numstat calls, `readPatches`, and which of `readGatedBlob`/`readWorktreeGated` reads
-  the new side all key off that same value, so the two modes can't drift apart by being
-  re-interpreted independently downstream. `change-signal.ts` is the one module that always reads
-  live worktree state (mtime/size, never content), regardless of this flag.
+  `getChangedFiles`/`getFileContents`/`readPatches`.** `includeUncommitted` (default `false`) is
+  resolved to a `DiffTarget` once, at the top of each function (once per whole batch in
+  `getFileContents`, not per requested path), and threaded as-is from there — the name-status/numstat
+  calls, `readPatches`, and which of `gateFromBlob`/`readWorktreeGated` reads the new side all key
+  off that same value, so the two modes can't drift apart by being re-interpreted independently
+  downstream. `change-signal.ts` is the one module that always reads live worktree state (mtime/size,
+  never content), regardless of this flag.
 - **A rename's pathspec must include the old path.** `git diff -M <base> -- <newpath>` alone
   can't detect the rename — the pathspec hides the deletion half from git's rename pairing, so it
-  renders as a plain add. Both `readPatches` (via `pathspecFor`) and `getFileContent`'s status
-  lookup work around this; `getFileContent` does it by not pathspec-restricting the name-status
+  renders as a plain add. Both `readPatches` (via `pathspecFor`) and `getFileContents`' status
+  lookup work around this; `getFileContents` does it by not pathspec-restricting the name-status
   call at all rather than needing to know the rename ahead of time. Caught by a real test
   (`test/patch.test.ts`) — don't reintroduce a single-path pathspec on a rename-sensitive call.
 - **`effect/unstable/process`'s barrel re-exports namespaces, not classes.** `ChildProcessSpawner`
@@ -63,8 +69,8 @@ unit-testable against real temp repos without booting anything. Feeds `packages/
 - **`Effect.catchAll` doesn't exist in this Effect version** — use `Effect.orElseSucceed` (or
   `catchTag`/`catchCause` for narrower cases).
 - Size gate (`diff.ts`) mirrors codiff: ≤1MB auto-render, ≤2MB load-on-demand (needs
-  `getFileContent`'s `force` option, since without it that tier could never be loaded), above that
-  patch-only always.
+  `getFileContents`' per-path `force` option, since without it that tier could never be loaded),
+  above that patch-only always.
 - Binary detection unions two signals: a NUL byte in decoded content, and the patch matching
   `Binary files ... differ` anchored to line start — either can be the only one available
   depending on which path (bulk metadata vs. single-file fetch) computed it.

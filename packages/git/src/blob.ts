@@ -21,78 +21,60 @@ export type BlobEntry = {
 	readonly content: Uint8Array | null;
 };
 
-type TreeEntry = { readonly object: string; readonly type: string };
+/** `type` is `git`'s object type at that path (`"blob"`, or `"commit"` for a submodule); absent entirely from the map when `<ref>:<path>` doesn't resolve. */
+type PathObject = {
+	readonly object: string;
+	readonly type: string;
+	readonly size: number;
+};
 
-/** `git ls-tree -rz <ref>`, chunked over the path list rather than one call per path. */
-const readTreeEntries = (
+/**
+ * Resolves every path directly to its object id, type, and size in one
+ * `git cat-file --batch-check` pass, keyed by `<ref>:<path>` on stdin —
+ * chunked over the path list rather than one call per path. This is what
+ * lets `readBlobsAtRef` skip both the `ls-tree` path→oid lookup and a
+ * second batch-check-by-oid pass for size: `--batch-check` already reports
+ * all three for an arbitrary revision expression, not just a bare object id.
+ * A path missing from the tree at `ref` produces a `<input> missing` line
+ * (git echoes the input token verbatim), which is dropped rather than
+ * mapped — batch-check preserves input order 1:1 with output lines, so a
+ * chunk's paths zip directly against its output rather than needing the
+ * path parsed back out of each line.
+ */
+const readPathObjects = (
 	repoRoot: string,
 	ref: string,
 	paths: ReadonlyArray<string>,
 ): Effect.Effect<
-	ReadonlyMap<string, TreeEntry>,
+	ReadonlyMap<string, PathObject>,
 	GitCommandError,
 	ChildProcessSpawner.ChildProcessSpawner
 > =>
 	Effect.gen(function* () {
-		const entries = new Map<string, TreeEntry>();
+		const entries = new Map<string, PathObject>();
 		for (const pathChunk of chunk([...new Set(paths)], PATH_CHUNK_SIZE)) {
 			if (pathChunk.length === 0) continue;
-			const raw = yield* git(repoRoot, [
-				"ls-tree",
-				"-rz",
-				ref,
-				"--",
-				...pathChunk,
-			]);
-			for (const record of raw.split("\0")) {
-				if (record.length === 0) continue;
-				const tabIndex = record.indexOf("\t");
-				if (tabIndex === -1) continue;
-				const [, type, object] = record.slice(0, tabIndex).split(" ");
-				const path = record.slice(tabIndex + 1);
-				if (type !== undefined && object !== undefined) {
-					entries.set(path, { object, type });
-				}
-			}
-		}
-		return entries;
-	});
-
-type ObjectSize = { readonly size: number; readonly type: string };
-
-/** `git cat-file --batch-check`, chunked over the object list. */
-const readObjectSizes = (
-	repoRoot: string,
-	objects: ReadonlyArray<string>,
-): Effect.Effect<
-	ReadonlyMap<string, ObjectSize>,
-	GitCommandError,
-	ChildProcessSpawner.ChildProcessSpawner
-> =>
-	Effect.gen(function* () {
-		const sizes = new Map<string, ObjectSize>();
-		for (const objectChunk of chunk([...new Set(objects)], PATH_CHUNK_SIZE)) {
-			if (objectChunk.length === 0) continue;
 			const raw = yield* git(
 				repoRoot,
 				["cat-file", "--batch-check=%(objectname) %(objecttype) %(objectsize)"],
-				`${objectChunk.join("\n")}\n`,
+				pathChunk.map((path) => `${ref}:${path}\n`).join(""),
 			);
-			for (const line of raw.split("\n")) {
-				if (line.length === 0) continue;
+			const lines = raw.split("\n").filter((line) => line.length > 0);
+			pathChunk.forEach((path, index) => {
+				const line = lines[index];
+				if (line === undefined || line.endsWith(" missing")) return;
 				const [object, type, sizeText] = line.split(" ");
 				if (
 					object === undefined ||
 					type === undefined ||
 					sizeText === undefined
 				) {
-					continue;
+					return;
 				}
-				if (type === "missing") continue;
-				sizes.set(object, { size: Number(sizeText), type });
-			}
+				entries.set(path, { object, type, size: Number(sizeText) });
+			});
 		}
-		return sizes;
+		return entries;
 	});
 
 /**
@@ -155,10 +137,10 @@ const readObjectContents = (
 
 /**
  * Reads blob metadata (always) and content (when within `maxBytes`) for a
- * set of paths at a ref, via batched `ls-tree` + `cat-file --batch-check` +
+ * set of paths at a ref, via batched `cat-file --batch-check` +
  * `cat-file --batch` rather than one subprocess per path. Paths missing from
- * the tree at `ref` (e.g. a file added since) are simply absent from the
- * result map.
+ * the tree at `ref` (e.g. a file added since), and paths that resolve to a
+ * submodule rather than a blob, are simply absent from the result map.
  */
 export const readBlobsAtRef = (
 	repoRoot: string,
@@ -171,35 +153,25 @@ export const readBlobsAtRef = (
 	ChildProcessSpawner.ChildProcessSpawner
 > =>
 	Effect.gen(function* () {
-		const entries = yield* readTreeEntries(repoRoot, ref, paths);
-		const blobEntries = [...entries.values()].filter(
-			(entry) => entry.type === "blob",
-		);
-		const sizes = yield* readObjectSizes(
-			repoRoot,
-			blobEntries.map((entry) => entry.object),
-		);
+		const entries = yield* readPathObjects(repoRoot, ref, paths);
 
 		const maxBytes = options?.maxBytes;
-		const readable = [...new Set(blobEntries.map((entry) => entry.object))]
-			.map((object) => {
-				const info = sizes.get(object);
-				return info !== undefined &&
-					(maxBytes === undefined || info.size <= maxBytes)
-					? { object, size: info.size }
-					: null;
-			})
-			.filter((entry) => entry !== null);
+		const blobByObject = new Map(
+			[...entries.values()]
+				.filter((entry) => entry.type === "blob")
+				.map((entry) => [entry.object, entry] as const),
+		);
+		const readable = [...blobByObject.values()]
+			.filter((entry) => maxBytes === undefined || entry.size <= maxBytes)
+			.map((entry) => ({ object: entry.object, size: entry.size }));
 
 		const contents = yield* readObjectContents(repoRoot, readable);
 
 		const result = new Map<string, BlobEntry>();
 		for (const [path, entry] of entries) {
 			if (entry.type !== "blob") continue;
-			const info = sizes.get(entry.object);
-			if (info === undefined) continue;
 			result.set(path, {
-				size: info.size,
+				size: entry.size,
 				content: contents.get(entry.object) ?? null,
 			});
 		}
