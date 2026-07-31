@@ -44,10 +44,12 @@ function useDiffWorkerPoolOptions() {
 	);
 }
 
-/** The theme/layout/metrics knobs every `CodeView` instance in the app shares — `diffStyle` and `onPostRender` are the two that vary per pane. */
+/** The theme/layout/metrics knobs every `CodeView` instance in the app shares — `diffStyle`, `onPostRender` and `extraCSS` are what vary per pane. */
 export function buildDiffCodeViewOptions<Metadata>(overrides: {
 	diffStyle?: DiffStyleMode;
 	onPostRender?: CodeViewOptions<Metadata>["onPostRender"];
+	/** Appended to `diffViewUnsafeCSS` inside each item's shadow root — for styling only one pane's items, e.g. `diffCardChromeCSS`. */
+	extraCSS?: string;
 }): CodeViewOptions<Metadata> {
 	return {
 		diffIndicators: "bars",
@@ -61,7 +63,7 @@ export function buildDiffCodeViewOptions<Metadata>(overrides: {
 		theme: DIFF_VIEW_THEME,
 		themeType: "system",
 		tokenizeMaxLength: 100_000,
-		unsafeCSS: diffViewUnsafeCSS,
+		unsafeCSS: `${diffViewUnsafeCSS}${overrides.extraCSS ?? ""}`,
 	};
 }
 

@@ -38,6 +38,78 @@ export const diffItemMetrics = {
 /** Host class toggled per item in `onPostRender` when the file is Reviewed. */
 export const DIFF_VIEWED_HOST_CLASS = "nisi-diff-viewed";
 
+/**
+ * The card's left/right/bottom edge, appended to `diffViewUnsafeCSS` by the
+ * Files Changed pane only (`diff-pane.tsx` — the walkthrough reference pane
+ * renders the same items without card chrome). Its top edge is the header's
+ * (`diff-file-header.tsx`), and that split is the whole point:
+ * `stickyHeaders: true` pins the header to the *pane's* top while the
+ * `<diffs-container>` host keeps scrolling, so any edge drawn on the host runs
+ * straight past the pinned header's rounded top corners and the card stops
+ * looking like a card the moment you scroll into it. Drawing the top edge on
+ * the one element that stays put keeps the card a card at any scroll position.
+ *
+ * An inset ring rather than a `border` because it must not add height:
+ * `CodeView` computes every item's box from line counts and `itemMetrics`
+ * (`diffItemMetrics` above) and never measures the rendered result — it
+ * console-errors when its sticky container disagrees by even 1px. Only three
+ * sides: the seam under the header is the header's own `border-b`, which is
+ * the one that stays put once it's pinned.
+ */
+export const diffCardChromeCSS = `
+	/**
+	 * A rounded corner has to be *painted*, not cut out: everything stacked
+	 * behind a pinned header — the \`<pre>\`, whose box runs right past it, and
+	 * the host — is an opaque full-width rectangle at that scroll position, so
+	 * a corner that merely clips the header away reveals a hard square of
+	 * \`--diffs-bg\` instead of the surface the card sits on.
+	 *
+	 * \`[data-diffs-header]\` is @pierre/diffs' own wrapper around the
+	 * \`<slot>\` our header renders into: header-sized, pinned, and painted
+	 * above the \`<pre>\`. Filling it with the pane's own surface turns it into
+	 * the backdrop the header's rounded corners cut into — so they read as
+	 * corners at any scroll position, and in any state, without this having to
+	 * know whether the card is collapsed.
+	 *
+	 * \`--pane-surface\` is declared by \`app-shell.tsx\` (\`INSET_PANE_CLASS\`)
+	 * and reaches here by inheriting through the shadow boundary, the same way
+	 * \`diffViewUnsafeCSS\`'s \`--font-mono\` etc. do.
+	 */
+	[data-diffs-header] {
+		background-color: var(--pane-surface, var(--diffs-bg));
+	}
+
+	/**
+	 * An overlay, not a \`border\` and not an inset ring on the \`<pre>\` itself.
+	 * A \`border\` would add height, and \`CodeView\` derives every item's box
+	 * from line counts and \`itemMetrics\` (\`diffItemMetrics\` above) rather
+	 * than measuring — the 1px would accumulate down the list, and the
+	 * mismatch check that would have caught it is behind a dev-build flag we
+	 * don't set. An inset \`box-shadow\` paints *under* an element's children,
+	 * and the \`<code>\` inside covers the \`<pre>\` edge to edge with its own
+	 * opaque background, so the sides simply never showed.
+	 *
+	 * Anchored to the \`<pre>\` rather than the \`<code>\`: \`[data-code]\` is
+	 * the horizontal scroll container for long lines, so an overlay inside it
+	 * would slide away with the content.
+	 */
+	pre {
+		border-radius: 0 0 var(--radius-xl) var(--radius-xl);
+		position: relative;
+	}
+
+	pre::after {
+		content: "";
+		position: absolute;
+		inset: 0;
+		z-index: 4;
+		pointer-events: none;
+		border: 1px solid var(--border);
+		border-top: 0;
+		border-radius: inherit;
+	}
+`;
+
 export const diffViewUnsafeCSS = `
 	:host {
 		--diffs-font-family: var(--font-mono);

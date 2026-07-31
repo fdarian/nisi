@@ -47,8 +47,11 @@ type DiffFileHeaderProps = {
  * React, slotted into the `<diffs-container>` custom element that
  * `diff-pane.tsx` styles as a card (see its `[&_diffs-container]` classes).
  * This is that card's header row, so it carries its own opaque background
- * (`stickyHeaders` scrolls content underneath it) plus the `border-b` that
- * separates it from the diff body. `bg-background`, not `bg-card`: the whole
+ * (`stickyHeaders` scrolls content underneath it) and the card's whole top
+ * edge — rounded corners included, since it stays pinned at the pane's top
+ * long after the container's own corners have scrolled away (see
+ * `diffCardChromeCSS`, which draws the other three edges). `bg-background`,
+ * not `bg-card`: the whole
  * card tracks the surrounding panel's tone — `--card` is measurably lighter
  * than `--background` in dark mode (index.css) — so the header, the
  * `<diffs-container>` behind it (`diff-pane.tsx`) and the diff body
@@ -86,7 +89,12 @@ export function DiffFileHeader({
 		// biome-ignore lint/a11y/useSemanticElements: can't be a real <button> — it hosts the Reviewed <label>/<Checkbox> and the "…" dropdown trigger, controls a nested <button> would break.
 		<div
 			aria-expanded={!collapsed}
-			className="flex h-11 min-w-0 flex-1 cursor-pointer items-center gap-3 border-b bg-background px-3"
+			className={cn(
+				"flex h-11 min-w-0 flex-1 cursor-pointer items-center gap-3 border bg-background px-3",
+				// This row *is* the card's top edge — see `diffCardChromeCSS`.
+				// Collapsed there's no body under it, so it's the whole card.
+				collapsed ? "rounded-xl" : "rounded-t-xl",
+			)}
 			onClick={onToggleCollapse}
 			onKeyDown={(event) => {
 				if (event.key !== "Enter" && event.key !== " ") return;

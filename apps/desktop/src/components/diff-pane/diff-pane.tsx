@@ -23,7 +23,10 @@ import {
 	DiffCodeView,
 } from "#/components/diff-pane/diff-code-view";
 import { DiffFileHeader } from "#/components/diff-pane/diff-file-header";
-import { DIFF_VIEWED_HOST_CLASS } from "#/components/diff-pane/diff-view-theme";
+import {
+	DIFF_VIEWED_HOST_CLASS,
+	diffCardChromeCSS,
+} from "#/components/diff-pane/diff-view-theme";
 import { Button } from "#/components/ui/button";
 import {
 	Empty,
@@ -628,6 +631,7 @@ export function DiffPane({
 		() =>
 			buildDiffCodeViewOptions({
 				diffStyle,
+				extraCSS: diffCardChromeCSS,
 				onPostRender: (node, _instance, _phase, context) => {
 					const meta = itemMetadata.get(context.item.id);
 					node.classList.toggle(DIFF_VIEWED_HOST_CLASS, meta?.viewed === true);
@@ -710,18 +714,22 @@ export function DiffPane({
 		<DiffCodeView
 			// Each file's `<diffs-container>` (the custom element `@pierre/diffs`
 			// creates per virtualized item, see its own `constants.js` —
-			// `DIFFS_TAG_NAME`) is styled here as its own card: rounded, bordered,
-			// clipped so the diff body's square shadow-DOM background respects
-			// the rounded corners. Deliberately `bg-background`, not `bg-card`:
-			// the two are the same white in light mode but `--card` is a
-			// measurably lighter tone than `--background` in dark mode
-			// (index.css), which made every card read as a raised slab against
-			// the Files Changed panel. The header (`DiffFileHeader`) and the
-			// diff body (`diff-view-theme.ts`'s `--diffs-*-bg`) both track
-			// `--background` for the same reason, so the card is one continuous
-			// surface with the panel and reads as a card purely through its
-			// border and shadow — the header's border-b being the only inner
-			// seam. Clipping uses `clip-path`,
+			// `DIFFS_TAG_NAME`) is the card's *box*, clipped so the diff body's
+			// square shadow-DOM background respects the rounded corners — but
+			// not its outline. The card's four edges are drawn inside the shadow
+			// root instead, split between the header and the `<pre>`
+			// (`diffCardChromeCSS`), because a border on this host would keep
+			// painting a straight edge alongside the sticky header once the
+			// host's own corners have scrolled past the top of the pane. It
+			// carries no background for the same reason — the header and the
+			// `<pre>` tile it completely, so a background here would only ever
+			// show as a square behind those pinned rounded corners.
+			//
+			// The card's surface is `--background` (the header's `bg-background`
+			// and `diff-view-theme.ts`'s `--diffs-*-bg`), not `bg-card`: the two
+			// are the same white in light mode but `--card` is a measurably
+			// lighter tone than `--background` in dark mode (index.css), which
+			// made every card read as a raised slab. Clipping uses `clip-path`,
 			// not `overflow-hidden` — `overflow` (any value but `visible`) makes
 			// an element a scroll container, which becomes the containing block
 			// for any `position: sticky` descendant; `stickyHeaders: true`
@@ -745,7 +753,7 @@ export function DiffPane({
 			// like any other content and leaves the header flush with the top.
 			className={cn(
 				"min-h-0 w-full flex-1 overflow-auto overscroll-contain px-3 [contain:strict]",
-				"[&_diffs-container]:rounded-xl [&_diffs-container]:border [&_diffs-container]:bg-background [&_diffs-container]:shadow-xs/5 [&_diffs-container]:[clip-path:inset(0_round_var(--radius-xl))]",
+				"[&_diffs-container]:[clip-path:inset(0_round_var(--radius-xl))]",
 			)}
 			items={items}
 			options={codeViewOptions}
