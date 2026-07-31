@@ -13,6 +13,7 @@ import {
 	buildTreeThemeStyle,
 	buildViewedMuteCSS,
 	createRowDecorationRenderer,
+	syncFolderIconStyle,
 	syncViewedMuteStyle,
 } from "#/components/files-sidebar/tree-shadow-dom";
 import type { FileChange, ReviewState } from "#/lib/pr-data";
@@ -105,6 +106,16 @@ export function FileTreeView({
 		});
 		return () => cancelAnimationFrame(frame);
 	}, [viewedMuteCSS]);
+
+	// Static CSS (no reactive deps), but the shadow root may not exist on the
+	// tree's first render — retry once on the next frame, same as above.
+	useEffect(() => {
+		if (syncFolderIconStyle(treeHostRef.current)) return;
+		const frame = requestAnimationFrame(() => {
+			syncFolderIconStyle(treeHostRef.current);
+		});
+		return () => cancelAnimationFrame(frame);
+	}, []);
 
 	useEffect(() => {
 		const currentlySelected = model.getSelectedPaths();
