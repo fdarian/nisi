@@ -35,8 +35,9 @@ export function PrTabStrip({
 	onCloseSession,
 }: PrTabStripProps): React.ReactElement {
 	return (
-		<div className="flex h-10 shrink-0 items-stretch pr-2 pl-[78px]">
-			<TabsPrimitive.List className="flex min-w-0 flex-1 items-stretch gap-1 overflow-x-auto">
+		<div className="flex pt-2 shrink-0 pr-2">
+			<TrafficLightSpace />
+			<TabsPrimitive.List className="flex min-w-0 flex-1 gap-1 overflow-x-auto">
 				{sessions.map((session) => (
 					<PrTab
 						key={session.id}
@@ -86,5 +87,23 @@ function PrTab({
 				<XIcon className="size-3" />
 			</button>
 		</TabsPrimitive.Tab>
+	);
+}
+
+/**
+ * Dummy for trafficlight placement. Remove the `opacity-0` to preview
+ */
+function TrafficLightSpace() {
+	return (
+		<div className="flex shrink-0 items-center gap-[8.9px] px-3 opacity-0">
+			{import.meta.env.DEV &&
+				["#FF5F57", "#FEBC2E", "#28C840"].map((color) => (
+					<span
+						className="size-3.5 rounded-full"
+						key={color}
+						style={{ background: color }}
+					/>
+				))}
+		</div>
 	);
 }
