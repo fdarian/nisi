@@ -278,7 +278,7 @@
 	}
 
 	body {
-		@apply bg-background text-foreground fixed flex flex-col h-screen w-screen overflow-hidden antialiased;
+		@apply bg-neutral-100 text-foreground fixed flex flex-col h-screen w-screen overflow-hidden antialiased;
 	}
 
 	code,
