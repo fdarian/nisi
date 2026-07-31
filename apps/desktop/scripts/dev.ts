@@ -62,6 +62,15 @@ const dev = Command.make(
 			const fs = yield* FileSystem;
 			yield* fs.makeDirectory(dataDir, { recursive: true });
 
+			// A sidecar removes its `sidecar.lock` on shutdown but leaves
+			// `sidecar.json` behind, so the previous run's `{ port, token }` is
+			// still sitting there when this one starts — and the port is stale,
+			// since each boot binds a fresh ephemeral one. Clearing it first is
+			// what makes `awaitSidecarHandshake` below actually wait: otherwise
+			// its very first read succeeds against the dead handshake and vite
+			// gets pointed at a port nothing is listening on.
+			yield* fs.remove(path.join(dataDir, "sidecar.json"), { force: true });
+
 			// Printed as `KEY=value` so it's directly copy-pasteable in front of
 			// `nisi` — a plain `nisi` targets the production data dir (the default
 			// when `NISI_DATA_DIR` is unset); pointing it at this session instead is
