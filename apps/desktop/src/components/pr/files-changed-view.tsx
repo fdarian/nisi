@@ -24,6 +24,7 @@ import {
 	useIncludeUncommitted,
 	useSidebarViewMode,
 } from "#/lib/settings-data";
+import { comparePaths } from "#/lib/tree-paths";
 import { cn } from "#/lib/utils";
 
 type FilesChangedViewProps = {
@@ -73,13 +74,17 @@ export function FilesChangedView({
 	// keyed off the unfiltered `files`/`viewedCount` so "N of M" keeps
 	// reporting real progress instead of collapsing toward "0 of M" as
 	// reviewed files disappear from view.
-	const visibleFiles = useMemo(
-		() =>
-			hideReviewed
-				? files.filter((file) => reviewState.get(file.path) !== "viewed")
-				: files,
-		[files, reviewState, hideReviewed],
-	);
+	//
+	// Sorted with the same `comparePaths` the tree sidebar uses, so the diff
+	// pane's card order (which never re-sorts) walks the tree in the same
+	// order the sidebar renders it, instead of the backend's flat
+	// whole-path `localeCompare` order.
+	const visibleFiles = useMemo(() => {
+		const filtered = hideReviewed
+			? files.filter((file) => reviewState.get(file.path) !== "viewed")
+			: files;
+		return [...filtered].sort((a, b) => comparePaths(a.path, b.path));
+	}, [files, reviewState, hideReviewed]);
 
 	return (
 		<div className="flex min-h-0 flex-1">
