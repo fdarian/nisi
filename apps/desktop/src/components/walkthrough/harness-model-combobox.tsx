@@ -12,6 +12,7 @@ import {
 	ComboboxList,
 	ComboboxPopup,
 } from "#/components/ui/combobox";
+import { cn } from "#/lib/utils";
 import type { HarnessId, HarnessInfo } from "#/lib/walkthrough-data";
 
 export type ModelSelection = {
@@ -44,6 +45,8 @@ type HarnessModelComboboxProps = {
 	 * determines but this component has no other reason to know about.
 	 */
 	emptyMessage?: string;
+	/** Pins each group's label to the top of the popup while its models scroll underneath. Disables the popup's top scroll-fade, since the sticky label already occludes the content behind it. */
+	stickyGroupLabels?: boolean;
 };
 
 /** Only enabled harnesses get a model group — `HarnessInfo.enabled` already reflects `@repo/settings`'s `enabledHarnesses` server-side, so there's no separate id set to thread through. */
@@ -52,6 +55,7 @@ export function HarnessModelCombobox({
 	value,
 	onChange,
 	emptyMessage = "No matching models.",
+	stickyGroupLabels = true,
 }: HarnessModelComboboxProps): React.ReactElement {
 	const groups = useMemo<readonly ModelOptionGroup[]>(() => {
 		const result: ModelOptionGroup[] = [];
@@ -95,10 +99,16 @@ export function HarnessModelCombobox({
 			<ComboboxInput placeholder="Choose a model…" />
 			<ComboboxPopup>
 				<ComboboxEmpty>{emptyMessage}</ComboboxEmpty>
-				<ComboboxList>
+				<ComboboxList scrollFadeTop={!stickyGroupLabels}>
 					{(group: ModelOptionGroup) => (
 						<ComboboxGroup items={group.items} key={group.label}>
-							<ComboboxGroupLabel>{group.label}</ComboboxGroupLabel>
+							<ComboboxGroupLabel
+								className={cn(
+									stickyGroupLabels && "sticky top-0 z-10 bg-popover",
+								)}
+							>
+								{group.label}
+							</ComboboxGroupLabel>
 							{group.items.map((option) => (
 								<ComboboxItem key={option.value} value={option}>
 									{option.label}
