@@ -1,13 +1,13 @@
 import { FileIcon } from "lucide-react";
 import { GroupHeader } from "#/components/files-sidebar/group-header";
-import type { FileChange, ReviewState } from "#/lib/pr-data";
+import type { FileChange, ReviewState, ReviewStateEntry } from "#/lib/pr-data";
 import { splitPath } from "#/lib/tree-paths";
 import { cn } from "#/lib/utils";
 
 type FlatFileGroupProps = {
 	title: string;
 	files: readonly FileChange[];
-	reviewState: ReadonlyMap<string, ReviewState>;
+	reviewState: ReadonlyMap<string, ReviewStateEntry>;
 	selectedPath: string | null;
 	onSelectPath: (path: string) => void;
 };
@@ -28,7 +28,7 @@ export function FlatFileGroup({
 					<FlatFileRow
 						key={file.path}
 						file={file}
-						reviewState={reviewState.get(file.path) ?? "unreviewed"}
+						reviewState={reviewState.get(file.path)?.status ?? "unreviewed"}
 						selected={file.path === selectedPath}
 						onSelectPath={onSelectPath}
 					/>

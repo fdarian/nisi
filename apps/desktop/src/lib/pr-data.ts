@@ -102,6 +102,23 @@ export type FileContent = {
 
 export type ReviewState = "unreviewed" | "viewed" | "changed-after-review";
 
+/**
+ * `useReviewState`'s per-file entry — `status` is the three-value read
+ * described on that hook, `reviewPending` is `true` for exactly the files
+ * `status` predicted from an in-flight `review.setViewed` call rather than
+ * from `FileChange.review` (i.e. `pendingByPath` had a row for this path).
+ * While pending, only the boolean itself is honest to predict —
+ * `FileContentReview.ranges` (server-computed reconciliation ranges) hasn't
+ * caught up yet, so a consumer that derives a collapse/summary from ranges
+ * should skip that derivation for a pending path rather than run it against
+ * the stale ranges still sitting in the `diff.fileContents` cache (see
+ * `diff-pane.tsx`'s `collapsedDiff`).
+ */
+export type ReviewStateEntry = {
+	status: ReviewState;
+	reviewPending: boolean;
+};
+
 /** Mirrors `sessions.list()` plus a `sessions.close` mutation, kept live by `events.subscribe`. */
 export function useSessions(orpc: SidecarQueryUtils): {
 	sessions: readonly Session[];
@@ -339,7 +356,7 @@ type PendingFileViewed = { path: string; viewed: boolean };
 export function useReviewState(
 	orpc: SidecarQueryUtils,
 	files: readonly FileChange[],
-): ReadonlyMap<string, ReviewState> {
+): ReadonlyMap<string, ReviewStateEntry> {
 	const pendingMutationKey = useMemo(
 		() => orpc.review.setViewed.mutationKey(),
 		[orpc],
@@ -355,18 +372,23 @@ export function useReviewState(
 			pendingByPath.set(call.path, call.viewed);
 		}
 
-		const map = new Map<string, ReviewState>();
+		const map = new Map<string, ReviewStateEntry>();
 		for (const file of files) {
 			const pendingViewed = pendingByPath.get(file.path);
 			if (pendingViewed !== undefined) {
-				map.set(file.path, pendingViewed ? "viewed" : "unreviewed");
+				map.set(file.path, {
+					status: pendingViewed ? "viewed" : "unreviewed",
+					reviewPending: true,
+				});
 				continue;
 			}
 			if (file.review === null) continue;
-			map.set(
-				file.path,
-				file.review.changedSinceReview ? "changed-after-review" : "viewed",
-			);
+			map.set(file.path, {
+				status: file.review.changedSinceReview
+					? "changed-after-review"
+					: "viewed",
+				reviewPending: false,
+			});
 		}
 		return map;
 	}, [files, pendingViewedCalls]);

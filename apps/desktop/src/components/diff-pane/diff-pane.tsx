@@ -45,6 +45,7 @@ import type {
 	FileContent,
 	ReviewSource,
 	ReviewState,
+	ReviewStateEntry,
 } from "#/lib/pr-data";
 import { useFileContents } from "#/lib/pr-data";
 import type { DiffStyleMode } from "#/lib/settings-data";
@@ -113,7 +114,7 @@ type DiffPaneProps = {
 	sessionId: string;
 	files: readonly FileChange[];
 	selectedPath: string | null;
-	reviewState: ReadonlyMap<string, ReviewState>;
+	reviewState: ReadonlyMap<string, ReviewStateEntry>;
 	setViewed: (path: string, viewed: boolean) => void;
 	diffStyle: DiffStyleMode;
 	/** A "reviewed in `<block>`" marker's click target — switches to the Walkthrough tab with this block selected. */
@@ -297,7 +298,9 @@ export function DiffPane({
 		>();
 
 		for (const file of files) {
-			const reviewStatus = reviewState.get(file.path) ?? "unreviewed";
+			const reviewEntry = reviewState.get(file.path);
+			const reviewStatus = reviewEntry?.status ?? "unreviewed";
+			const reviewPending = reviewEntry?.reviewPending ?? false;
 			const viewed = reviewStatus === "viewed";
 			// Defaults to collapsed once the file is "viewed" — overridable in
 			// either direction by clicking the header.
@@ -406,15 +409,29 @@ export function DiffPane({
 			// "fully reviewed" marker this file's checkbox used to hijack —
 			// expanding the card should show the real diff, not that marker.
 			const isExpanded = expandedPaths.has(file.path);
+			// `reviewPending` means the ranges below are still whatever the last
+			// settled fetch produced — stale relative to the `viewed` this render
+			// just predicted optimistically (see `useReviewState`'s doc comment on
+			// `ReviewStateEntry`). Rendering a collapse from them here would
+			// synthesize a placeholder for the state the user just left, not the
+			// one they're in — skip the collapse and show the plain diff until the
+			// refetch settles and `reviewPending` clears.
 			const collapsedDiff =
-				content.review !== null && !isExpanded && !viewed
+				content.review !== null && !isExpanded && !viewed && !reviewPending
 					? buildCollapsedFileDiff(content.patch, content.review.ranges)
 					: undefined;
-			const collapseSignature = viewed
-				? "viewed-full"
-				: content.review === null
-					? "no-review"
-					: `${content.review.ranges.map((range) => `${range.startLine}-${range.endLine}-${range.status}-${reviewSourceKey(range.reviewedVia)}`).join(",")}:${isExpanded ? "expanded" : "collapsed"}`;
+			// Prefixed with `reviewPending` so a pending render can never share a
+			// signature (and thus `version`/`resolveFileDiff` cache key) with the
+			// settled render that follows it, even when ranges/viewed/isExpanded
+			// happen to match byte-for-byte — see `ReviewStateEntry` in
+			// `pr-data.ts` for why that collision is real, not hypothetical.
+			const collapseSignature = `${reviewPending ? "pending" : "settled"}:${
+				viewed
+					? "viewed-full"
+					: content.review === null
+						? "no-review"
+						: `${content.review.ranges.map((range) => `${range.startLine}-${range.endLine}-${range.status}-${reviewSourceKey(range.reviewedVia)}`).join(",")}:${isExpanded ? "expanded" : "collapsed"}`
+			}`;
 			const version = hashItemVersion(
 				`${baseVersionInput}:${collapseSignature}`,
 			);

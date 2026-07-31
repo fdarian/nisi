@@ -11,13 +11,13 @@ import {
 	InputGroupInput,
 } from "#/components/ui/input-group";
 import { ScrollArea } from "#/components/ui/scroll-area";
-import type { FileChange, ReviewState } from "#/lib/pr-data";
+import type { FileChange, ReviewStateEntry } from "#/lib/pr-data";
 import type { SidebarViewMode } from "#/lib/settings-data";
 import { CATEGORY_LABELS, groupFilesByCategory } from "#/lib/tree-paths";
 
 type FilesSidebarProps = {
 	files: readonly FileChange[];
-	reviewState: ReadonlyMap<string, ReviewState>;
+	reviewState: ReadonlyMap<string, ReviewStateEntry>;
 	viewMode: SidebarViewMode;
 	selectedPath: string | null;
 	onSelectPath: (path: string) => void;

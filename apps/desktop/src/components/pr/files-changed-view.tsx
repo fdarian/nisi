@@ -17,7 +17,7 @@ import {
 } from "#/components/ui/menu";
 import { ToggleGroup, ToggleGroupItem } from "#/components/ui/toggle-group";
 import type { SidecarQueryUtils } from "#/lib/backend-context";
-import type { FileChange, ReviewState, Session } from "#/lib/pr-data";
+import type { FileChange, ReviewStateEntry, Session } from "#/lib/pr-data";
 import {
 	useDiffStyleMode,
 	useHideReviewed,
@@ -31,7 +31,7 @@ type FilesChangedViewProps = {
 	session: Session;
 	orpc: SidecarQueryUtils;
 	files: readonly FileChange[];
-	reviewState: ReadonlyMap<string, ReviewState>;
+	reviewState: ReadonlyMap<string, ReviewStateEntry>;
 	setViewed: (path: string, viewed: boolean) => void;
 	onNavigateToBlock: (blockId: string) => void;
 };
@@ -65,7 +65,8 @@ export function FilesChangedView({
 
 	const viewedCount = useMemo(
 		() =>
-			files.filter((file) => reviewState.get(file.path) === "viewed").length,
+			files.filter((file) => reviewState.get(file.path)?.status === "viewed")
+				.length,
 		[files, reviewState],
 	);
 
@@ -81,7 +82,7 @@ export function FilesChangedView({
 	// whole-path `localeCompare` order.
 	const visibleFiles = useMemo(() => {
 		const filtered = hideReviewed
-			? files.filter((file) => reviewState.get(file.path) !== "viewed")
+			? files.filter((file) => reviewState.get(file.path)?.status !== "viewed")
 			: files;
 		return [...filtered].sort((a, b) => comparePaths(a.path, b.path));
 	}, [files, reviewState, hideReviewed]);

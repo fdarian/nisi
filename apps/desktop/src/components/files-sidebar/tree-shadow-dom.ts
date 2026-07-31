@@ -8,7 +8,7 @@
 import type { FileTreeRowDecorationRenderer } from "@pierre/trees";
 import { FILE_TREE_TAG_NAME } from "@pierre/trees";
 import type { CSSProperties } from "react";
-import type { FileChange, ReviewState } from "#/lib/pr-data";
+import type { FileChange, ReviewStateEntry } from "#/lib/pr-data";
 
 /**
  * Maps our design tokens onto the tree's theme surface. The height is
@@ -369,11 +369,11 @@ export function syncScrollFadeStyle(treeHost: HTMLElement | null): boolean {
 }
 
 export function createRowDecorationRenderer(reviewStateRef: {
-	current: ReadonlyMap<string, ReviewState>;
+	current: ReadonlyMap<string, ReviewStateEntry>;
 }): FileTreeRowDecorationRenderer {
 	return ({ item }) => {
 		if (item.kind !== "file") return null;
-		const state = reviewStateRef.current.get(item.path);
+		const state = reviewStateRef.current.get(item.path)?.status;
 		if (state === "changed-after-review") {
 			return {
 				text: "changed after review",

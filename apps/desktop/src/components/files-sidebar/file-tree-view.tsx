@@ -17,12 +17,12 @@ import {
 	syncScrollFadeStyle,
 	syncStatusColorStyle,
 } from "#/components/files-sidebar/tree-shadow-dom";
-import type { FileChange, ReviewState } from "#/lib/pr-data";
+import type { FileChange, ReviewStateEntry } from "#/lib/pr-data";
 import { collectAncestorDirectoryPaths, comparePaths } from "#/lib/tree-paths";
 
 type FileTreeViewProps = {
 	files: readonly FileChange[];
-	reviewState: ReadonlyMap<string, ReviewState>;
+	reviewState: ReadonlyMap<string, ReviewStateEntry>;
 	selectedPath: string | null;
 	onSelectPath: (path: string) => void;
 };
