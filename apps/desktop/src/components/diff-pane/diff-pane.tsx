@@ -743,7 +743,10 @@ export function DiffPane({
 			// visible above it. `@pierre/diffs` applies its own layout padding as
 			// margins on the inner scrolled container instead, which scrolls away
 			// like any other content and leaves the header flush with the top.
-			className="min-h-0 w-full flex-1 overflow-auto overscroll-contain px-3 [contain:strict] [&_diffs-container]:rounded-xl [&_diffs-container]:border [&_diffs-container]:bg-background [&_diffs-container]:shadow-xs/5 [&_diffs-container]:[clip-path:inset(0_round_var(--radius-xl))]"
+			className={cn(
+				"min-h-0 w-full flex-1 overflow-auto overscroll-contain px-3 [contain:strict]",
+				"[&_diffs-container]:rounded-xl [&_diffs-container]:border [&_diffs-container]:bg-background [&_diffs-container]:shadow-xs/5 [&_diffs-container]:[clip-path:inset(0_round_var(--radius-xl))]",
+			)}
 			items={items}
 			options={codeViewOptions}
 			ref={codeViewRef}
