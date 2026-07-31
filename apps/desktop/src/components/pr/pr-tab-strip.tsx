@@ -96,14 +96,13 @@ function PrTab({
 function TrafficLightSpace() {
 	return (
 		<div className="flex shrink-0 items-center gap-[8.9px] px-3 opacity-0">
-			{import.meta.env.DEV &&
-				["#FF5F57", "#FEBC2E", "#28C840"].map((color) => (
-					<span
-						className="size-3.5 rounded-full"
-						key={color}
-						style={{ background: color }}
-					/>
-				))}
+			{["#FF5F57", "#FEBC2E", "#28C840"].map((color) => (
+				<span
+					className="size-3.5 rounded-full"
+					key={color}
+					style={{ background: color }}
+				/>
+			))}
 		</div>
 	);
 }
