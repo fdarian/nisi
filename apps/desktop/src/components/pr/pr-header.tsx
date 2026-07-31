@@ -34,7 +34,6 @@ export function PrHeader({
 	stat,
 	onCloseTab,
 }: PrHeaderProps): React.ReactElement {
-	const [starred, setStarred] = useState(false);
 	const repoNameSegments = repoRoot.split("/");
 	const repoName = repoNameSegments[repoNameSegments.length - 1] || repoRoot;
 
@@ -72,15 +71,6 @@ export function PrHeader({
 					</span>
 				</div>
 			</div>
-			<Button
-				aria-label={starred ? "Unstar pull request" : "Star pull request"}
-				aria-pressed={starred}
-				onClick={() => setStarred((current) => !current)}
-				size="icon-sm"
-				variant="ghost"
-			>
-				<StarIcon className={cn(starred && "fill-current text-warning")} />
-			</Button>
 			<DropdownMenu>
 				<DropdownMenuTrigger
 					aria-label="More actions"
