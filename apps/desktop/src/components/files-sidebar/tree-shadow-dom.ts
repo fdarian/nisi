@@ -16,7 +16,7 @@
 import type { FileTreeRowDecorationRenderer } from "@pierre/trees";
 import { FILE_TREE_TAG_NAME } from "@pierre/trees";
 import type { CSSProperties } from "react";
-import type { ReviewState } from "#/lib/pr-data";
+import type { FileChange, ReviewState } from "#/lib/pr-data";
 
 /**
  * Maps our design tokens onto the tree's theme surface. The height is
@@ -44,6 +44,7 @@ export function buildTreeThemeStyle(): CSSProperties {
 
 const VIEWED_MUTE_STYLE_ATTRIBUTE = "data-nisi-viewed-mute";
 const FOLDER_ICON_STYLE_ATTRIBUTE = "data-nisi-folder-icons";
+const STATUS_COLOR_STYLE_ATTRIBUTE = "data-nisi-status-color";
 
 function escapeCSSAttributeValue(value: string): string {
 	return value.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
@@ -90,6 +91,31 @@ export function syncViewedMuteStyle(
 	css: string,
 ): boolean {
 	return syncShadowStyle(treeHost, VIEWED_MUTE_STYLE_ATTRIBUTE, css);
+}
+
+const ADDED_FILE_NAME_COLOR = "var(--color-green-500)";
+const DELETED_FILE_NAME_COLOR = "var(--color-red-500)";
+
+/** CSS text coloring the filename of every added (green) and deleted (red) row. */
+export function buildStatusColorCSS(files: readonly FileChange[]): string {
+	return files
+		.filter((file) => file.status === "added" || file.status === "deleted")
+		.map((file) => {
+			const selector = `[data-item-path="${escapeCSSAttributeValue(file.path)}"] > [data-item-section="content"]`;
+			const color =
+				file.status === "added"
+					? ADDED_FILE_NAME_COLOR
+					: DELETED_FILE_NAME_COLOR;
+			return `${selector} { color: ${color}; }`;
+		})
+		.join("\n");
+}
+
+export function syncStatusColorStyle(
+	treeHost: HTMLElement | null,
+	css: string,
+): boolean {
+	return syncShadowStyle(treeHost, STATUS_COLOR_STYLE_ATTRIBUTE, css);
 }
 
 /** A lucide glyph as a `mask-image` URL — the fill comes from `currentcolor`. */

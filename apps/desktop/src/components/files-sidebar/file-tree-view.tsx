@@ -1,6 +1,5 @@
 "use client";
 
-import type { GitStatusEntry } from "@pierre/trees";
 import { FileTree, useFileTree } from "@pierre/trees/react";
 import {
 	type MouseEvent as ReactMouseEvent,
@@ -10,10 +9,12 @@ import {
 	useRef,
 } from "react";
 import {
+	buildStatusColorCSS,
 	buildTreeThemeStyle,
 	buildViewedMuteCSS,
 	createRowDecorationRenderer,
 	syncFolderIconStyle,
+	syncStatusColorStyle,
 	syncViewedMuteStyle,
 } from "#/components/files-sidebar/tree-shadow-dom";
 import type { FileChange, ReviewState } from "#/lib/pr-data";
@@ -28,21 +29,18 @@ type FileTreeViewProps = {
 
 type TreeModel = {
 	readonly treePaths: readonly string[];
-	readonly gitStatus: readonly GitStatusEntry[];
 	/** Every real file path, to tell a file row from a directory row on click. */
 	readonly filePaths: ReadonlySet<string>;
 };
 
 function buildTreeModel(files: readonly FileChange[]): TreeModel {
 	const treePaths: string[] = [];
-	const gitStatus: GitStatusEntry[] = [];
 	const filePaths = new Set<string>();
 	for (const file of files) {
 		treePaths.push(file.path);
-		gitStatus.push({ path: file.path, status: file.status });
 		filePaths.add(file.path);
 	}
-	return { treePaths, gitStatus, filePaths };
+	return { treePaths, filePaths };
 }
 
 /**
@@ -73,7 +71,6 @@ export function FileTreeView({
 		// `flattenEmptyDirectories` is left at the library's default (`true`):
 		// a run of directories that each hold exactly one subdirectory
 		// collapses into a single row, VS Code's "compact folders".
-		gitStatus: treeModel.gitStatus,
 		initialExpansion: "open",
 		paths: treeModel.treePaths,
 		renderRowDecoration,
@@ -88,8 +85,20 @@ export function FileTreeView({
 		model.resetPaths(treeModel.treePaths, {
 			initialExpandedPaths: collectAncestorDirectoryPaths(treeModel.treePaths),
 		});
-		model.setGitStatus(treeModel.gitStatus);
 	}, [model, treeModel]);
+
+	const statusColorCSS = useMemo(() => buildStatusColorCSS(files), [files]);
+
+	// Synced before the viewed-mute style below so, at equal selector
+	// specificity, a viewed row's muting wins the cascade over its
+	// added/deleted color.
+	useEffect(() => {
+		if (syncStatusColorStyle(treeHostRef.current, statusColorCSS)) return;
+		const frame = requestAnimationFrame(() => {
+			syncStatusColorStyle(treeHostRef.current, statusColorCSS);
+		});
+		return () => cancelAnimationFrame(frame);
+	}, [statusColorCSS]);
 
 	const viewedMuteCSS = useMemo(() => {
 		const viewed = new Set<string>();
