@@ -17,6 +17,7 @@ import { useTabShortcuts } from "#/hooks/use-tab-shortcuts";
 import type { SidecarQueryUtils } from "#/lib/backend-context";
 import { useBackendContext } from "#/lib/backend-context";
 import { useSessions } from "#/lib/pr-data";
+import { cn } from "#/lib/utils";
 
 /**
  * Mirrors `SidebarInset`'s inset treatment (`ui/sidebar.tsx`, used as-is by
@@ -170,7 +171,7 @@ function AppShellReady({
 			data-tauri-drag-region="deep"
 		>
 			<PrTabStrip onCloseSession={handleCloseSession} sessions={sessions} />
-			<FramePanel className={INSET_PANE_CLASS}>
+			<FramePanel className={cn(INSET_PANE_CLASS, 'mt-0')}>
 				{sessions.map((session) => (
 					<TabsPrimitive.Panel
 						className="flex min-h-0 flex-1 flex-col outline-none"

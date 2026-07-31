@@ -35,9 +35,9 @@ export function PrTabStrip({
 	onCloseSession,
 }: PrTabStripProps): React.ReactElement {
 	return (
-		<div className="flex pt-2 shrink-0 pr-2">
+		<div className="flex shrink-0 pr-2">
 			<TrafficLightSpace />
-			<TabsPrimitive.List className="flex min-w-0 flex-1 gap-1 overflow-x-auto">
+			<TabsPrimitive.List className="flex min-w-0 flex-1 gap-1 overflow-x-auto py-2">
 				{sessions.map((session) => (
 					<PrTab
 						key={session.id}
@@ -64,9 +64,9 @@ function PrTab({
 	return (
 		<TabsPrimitive.Tab
 			className={cn(
-				"group relative flex min-w-32 max-w-56 shrink cursor-pointer items-center gap-1.5 self-end rounded-t-md px-2.5 py-1.5 text-muted-foreground text-xs outline-none",
-				"hover:bg-background/60",
-				"data-active:bg-background data-active:text-foreground",
+				"group relative flex min-w-32 max-w-56 shrink cursor-pointer items-center gap-1.5 self-end rounded-md px-2.5 py-1.5 text-muted-foreground text-xs outline-none",
+				"bg-pane-surface hover:bg-background hover:text-foreground",
+				"data-active:bg-background data-active:text-foreground data-active:bg-clip-padding data-active:shadow-xs/5 data-active:before:pointer-events-none data-active:before:absolute data-active:before:inset-0 data-active:before:rounded-[calc(var(--radius-md)-1px)] before:shadow-[0_1px_--theme(--color-black/4%)] dark:before:shadow-[0_-1px_--theme(--color-white/6%)]",
 				"focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
 			)}
 			nativeButton={false}
