@@ -41,7 +41,8 @@ them if you touch that file.
 - **Dev**: `bun dev` runs `scripts/dev.ts`, a [devsess](https://devsess.fdarian.com/) orchestrator
   (see below) that races the sidecar against `tauri dev` (`Effect.raceAll` — either exiting kills
   the other, via each process's Effect `Scope`). `beforeDevCommand` only runs `vite`; the sidecar
-  is started by `dev.ts`, not by Tauri.
+  is started by `dev.ts`, not by Tauri. `bun dev --browser` swaps `tauri dev` for a plain `vite dev`
+  against the same sidecar instead — see [Browser dev harness](#browser-dev-harness).
 - **Prod**: Rust spawns the compiled `binaries/sidecar` (`externalBin`, `shell:allow-spawn`) from
   `.setup()` — fire-and-forget.
 - Sidecar boot (`sidecar/index.ts`) is one Effect program run via `BunRuntime.runMain`: the HTTP
@@ -88,8 +89,25 @@ browser-automation tools) drive the app against a live sidecar. `import.meta.env
 whole branch dead code in a packaged build (Vite inlines it to `false` and strips the branch), so
 there's no path to it in production regardless of env vars, and the token is never logged.
 
-Full recipe, run from `apps/desktop` against a **scratch** data dir (never the default — that's
-prod's, or whatever `bun dev` session you already have running):
+**`bun dev --browser`** (from `apps/desktop`) is the easy path: same devsess orchestration as plain
+`bun dev` (own session, own `NISI_DATA_DIR`, sequenced instead of raced — the frontend process waits
+on the sidecar's `sidecar.json` handshake before it spawns `vite`, then both race each other same as
+`tauri dev` would), just with `vite dev` in place of the Tauri webview. Add `--port <n>` to pin a
+fixed vite port instead of devsess's per-session sticky one — needed for `.claude/launch.json`'s
+`desktop-browser` entry, whose `"port"` field has to be a known number, not something only
+discoverable from this script's own stdout after it starts. Open a PR/diff to look at the same way
+`nisi` itself hands off to a running sidecar (see `packages/cli/AGENTS.md`):
+
+```sh
+bun dev --browser --port 5200   # prints NISI_DATA_DIR=<session data dir>
+# in another shell:
+NISI_DATA_DIR=<that path> bun ../../packages/cli/src/index.ts /path/to/some/git/repo
+```
+
+For a data dir fully outside devsess's session tracking (e.g. scripting against a specific sidecar
+without a `.data/sessions/<slug>` directory involved), boot the pieces by hand instead, against a
+**scratch** data dir (never the default — that's prod's, or whatever `bun dev` session you already
+have running):
 
 ```sh
 # Pick a path nobody else is using — a fixed name here gets copy-pasted, and two
@@ -100,9 +118,6 @@ bun run sidecar/index.ts &               # boots the sidecar, writes $NISI_DATA_
 
 cat $NISI_DATA_DIR/sidecar.json          # => { "port": ..., "token": "..." }
 
-# Open a session so there's a PR/diff to look at — same handoff `nisi` itself does,
-# reusing the still-running sidecar instead of spawning the desktop app (see
-# packages/cli/AGENTS.md).
 bun ../../packages/cli/src/index.ts /path/to/some/git/repo
 
 VITE_DEV_BACKEND_PORT=<port> VITE_DEV_BACKEND_TOKEN=<token> bun run dev:vite
