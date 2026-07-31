@@ -83,7 +83,7 @@ export function FilesChangedView({
 
 	return (
 		<div className="flex min-h-0 flex-1 flex-col">
-			<div className="flex h-9 shrink-0 items-center justify-between border-b px-3 text-muted-foreground text-xs">
+			<div className="flex h-9 shrink-0 items-center justify-between px-3 text-muted-foreground text-xs">
 				<span>
 					Files{" "}
 					<span className="font-medium text-foreground tabular-nums">
