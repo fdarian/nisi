@@ -1,17 +1,9 @@
 /**
  * `@pierre/trees` renders into a shadow root, so Tailwind classes never reach
- * it. Two things live here as a result:
- *
- * - Theming happens through the tree's own `--trees-*-override` custom
- *   properties, set as an inline `style` on the light-DOM host. Custom
- *   properties pierce shadow boundaries natively, so this needs no
- *   `unsafeCSS` or post-construction patching.
- * - "Viewed" muting has no construction-time option — there's no per-row
- *   class hook, and `renderRowDecoration` only ever paints a separate
- *   decoration lane, not the row's own name/icon. The only way to recolor
- *   those is a `<style>` element appended straight into the shadow root,
- *   scoped by `[data-item-path]`, patched in after the fact and kept in sync
- *   on every render (mirrors codiff's `syncReloadDeltaGitStatusCSS`).
+ * it. Theming happens through the tree's own `--trees-*-override` custom
+ * properties, set as an inline `style` on the light-DOM host. Custom
+ * properties pierce shadow boundaries natively, so this needs no `unsafeCSS`
+ * or post-construction patching.
  */
 import type { FileTreeRowDecorationRenderer } from "@pierre/trees";
 import { FILE_TREE_TAG_NAME } from "@pierre/trees";
@@ -38,25 +30,15 @@ export function buildTreeThemeStyle(): CSSProperties {
 		"--trees-font-family-override": "var(--font-sans)",
 		"--trees-focus-ring-color-override": "var(--ring)",
 		"--trees-border-radius-override": "var(--radius-md)",
-		"--trees-row-height": "28px",
 		height: "100%",
 	} as CSSProperties;
 }
 
-const VIEWED_MUTE_STYLE_ATTRIBUTE = "data-nisi-viewed-mute";
 const FOLDER_ICON_STYLE_ATTRIBUTE = "data-nisi-folder-icons";
 const STATUS_COLOR_STYLE_ATTRIBUTE = "data-nisi-status-color";
 
 function escapeCSSAttributeValue(value: string): string {
 	return value.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
-}
-
-/** CSS text muting the name+icon+git-status-letter of every row in `viewedPaths`. */
-export function buildViewedMuteCSS(viewedPaths: ReadonlySet<string>): string {
-	return Array.from(viewedPaths, (path) => {
-		const selector = `[data-item-path="${escapeCSSAttributeValue(path)}"]`;
-		return `${selector} > [data-item-section="content"], ${selector} > [data-item-section="icon"], ${selector} > [data-item-section="git"] { color: var(--trees-fg-muted); }`;
-	}).join("\n");
 }
 
 /**
@@ -85,13 +67,6 @@ function syncShadowStyle(
 	style.textContent = css;
 	if (!existingStyle) shadowRoot.append(style);
 	return true;
-}
-
-export function syncViewedMuteStyle(
-	treeHost: HTMLElement | null,
-	css: string,
-): boolean {
-	return syncShadowStyle(treeHost, VIEWED_MUTE_STYLE_ATTRIBUTE, css);
 }
 
 const ADDED_FILE_NAME_COLOR = "var(--color-green-500)";
@@ -133,6 +108,8 @@ const FOLDER_MASK = lucideMaskDataURI(
 const FOLDER_OPEN_MASK = lucideMaskDataURI(
 	'<path d="m6 14 1.5-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.54 6a2 2 0 0 1-1.95 1.5H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H18a2 2 0 0 1 2 2v2"/>',
 );
+/** lucide `check` */
+const CHECK_MASK = lucideMaskDataURI('<path d="M20 6 9 17l-5-5"/>');
 
 const FOLDER_ICON_SLOT =
 	'[data-item-type="folder"] > [data-item-section="icon"]';
@@ -242,29 +219,171 @@ export function syncFolderIconStyle(treeHost: HTMLElement | null): boolean {
 	);
 }
 
+const DECORATION_ICON_STYLE_ATTRIBUTE = "data-nisi-decoration-icons";
+const REVIEWED_DECORATION_TITLE = "Reviewed";
+const REVIEWED_DECORATION_SLOT = `[data-item-section="decoration"] > span[title="${REVIEWED_DECORATION_TITLE}"]`;
+
+/**
+ * Paints the "reviewed" decoration as a masked lucide `check`, the same
+ * technique `buildFolderIconCSS` uses — `renderRowDecoration`'s text/icon
+ * decoration only ever paints a plain glyph, with no construction-time
+ * option for a real icon.
+ */
+function buildDecorationIconCSS(): string {
+	return `
+${REVIEWED_DECORATION_SLOT} {
+	position: relative;
+	display: inline-block;
+	width: 14px;
+	height: 14px;
+}
+
+${REVIEWED_DECORATION_SLOT}::before {
+	content: "";
+	position: absolute;
+	inset: 0;
+	background-color: var(--primary);
+	-webkit-mask-image: ${CHECK_MASK};
+	mask-image: ${CHECK_MASK};
+	-webkit-mask-repeat: no-repeat;
+	mask-repeat: no-repeat;
+	-webkit-mask-position: center;
+	mask-position: center;
+	-webkit-mask-size: 100% 100%;
+	mask-size: 100% 100%;
+}
+`;
+}
+
+/**
+ * Appends/updates the decoration-icon `<style>` inside the tree's shadow
+ * root. Returns false when the shadow root doesn't exist yet (tree not
+ * mounted), so the caller can retry on the next frame.
+ */
+export function syncDecorationIconStyle(treeHost: HTMLElement | null): boolean {
+	return syncShadowStyle(
+		treeHost,
+		DECORATION_ICON_STYLE_ATTRIBUTE,
+		buildDecorationIconCSS(),
+	);
+}
+
 const CHANGED_AFTER_REVIEW_DOT_COLOR = "var(--color-orange-500)";
 
 /**
- * Paints a file's "changed after review" dot into the decoration lane —
- * the only per-row hook the tree exposes.
+ * Paints a file's review state into the decoration lane — the only per-row
+ * hook the tree exposes: an orange dot once it's changed again after review,
+ * a checkmark (via `buildDecorationIconCSS`) while it's still viewed.
  *
  * `renderRowDecoration` is read once at tree construction — there's no
  * `setRenderRowDecoration`. To stay responsive without reconstructing the
  * tree, the callback closes over a ref the caller keeps current on every
  * render (mirrors codiff's `lineCountsByPathRef`).
  */
+const SCROLL_FADE_STYLE_ATTRIBUTE = "data-nisi-scroll-fade";
+
+/** The tree's internal virtualized scroller — `@pierre/trees`' only `overflow-y: auto` element. */
+const SCROLL_CONTAINER_SELECTOR = '[data-file-tree-virtualized-scroll="true"]';
+
+/** Matches `ScrollArea`'s own `scrollFade` fade depth (see scroll-area.tsx). */
+const SCROLL_FADE_SIZE = "24px";
+const SCROLL_FADE_REVEAL = "96px";
+
+/**
+ * Port of shadcn's `scroll-fade` utility (ui.shadcn.com/docs/utils/scroll-fade),
+ * hand-copied rather than pulled in as the `shadcn` npm dependency: this repo
+ * doesn't install the shadcn CLI as a package (see `apps/desktop/CLAUDE.md`,
+ * `@coss` is fetched over `bunx`), and the published utility also injects
+ * unrelated utilities (`shimmer`, `no-scrollbar`) this tree doesn't use.
+ *
+ * `ScrollArea`'s own `scrollFade` prop can't reach here — Base UI's viewport
+ * tracks overflow itself, but the tree's scroller lives in a shadow root Base
+ * UI never sees — so this re-implements the same mask-image technique scoped
+ * to the tree's own scroll container.
+ *
+ * `@property` is what makes the mask edge glide instead of jumping: without a
+ * registered `<length-percentage>` syntax, the browser can't interpolate the
+ * custom property across the scroll-linked keyframes. That registration is
+ * per-shadow-root, so it has to live in this injected `<style>`, not just in
+ * the page's global CSS.
+ */
+function buildScrollFadeCSS(): string {
+	return `
+@property --scroll-fade-t {
+	syntax: "<length-percentage>";
+	inherits: false;
+	initial-value: 0px;
+}
+@property --scroll-fade-b {
+	syntax: "<length-percentage>";
+	inherits: false;
+	initial-value: 0px;
+}
+
+@keyframes scroll-fade-reveal-t {
+	from { --scroll-fade-t: 0px; }
+	to { --scroll-fade-t: ${SCROLL_FADE_SIZE}; }
+}
+@keyframes scroll-fade-reveal-b {
+	from { --scroll-fade-b: ${SCROLL_FADE_SIZE}; }
+	to { --scroll-fade-b: 0px; }
+}
+
+${SCROLL_CONTAINER_SELECTOR} {
+	-webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 var(--scroll-fade-t, 0px), #000 calc(100% - var(--scroll-fade-b, 0px)), transparent 100%);
+	mask-image: linear-gradient(to bottom, transparent 0, #000 var(--scroll-fade-t, 0px), #000 calc(100% - var(--scroll-fade-b, 0px)), transparent 100%);
+	-webkit-mask-repeat: no-repeat;
+	mask-repeat: no-repeat;
+}
+
+/* Scroll-driven animation unsupported (pre-26 WebKit): fall back to a static top+bottom fade. */
+@supports not (animation-timeline: scroll()) {
+	${SCROLL_CONTAINER_SELECTOR} {
+		--scroll-fade-t: ${SCROLL_FADE_SIZE};
+		--scroll-fade-b: ${SCROLL_FADE_SIZE};
+	}
+}
+
+@supports (animation-timeline: scroll()) {
+	${SCROLL_CONTAINER_SELECTOR} {
+		animation: scroll-fade-reveal-t 1ms ease-in-out, scroll-fade-reveal-b 1ms ease-in-out;
+		animation-timeline: scroll(self y), scroll(self y);
+		animation-range: 0 ${SCROLL_FADE_REVEAL}, calc(100% - ${SCROLL_FADE_REVEAL}) 100%;
+		animation-fill-mode: both;
+	}
+}
+`;
+}
+
+/**
+ * Appends/updates the scroll-fade `<style>` inside the tree's shadow root.
+ * Returns false when the shadow root doesn't exist yet (tree not mounted),
+ * so the caller can retry on the next frame.
+ */
+export function syncScrollFadeStyle(treeHost: HTMLElement | null): boolean {
+	return syncShadowStyle(
+		treeHost,
+		SCROLL_FADE_STYLE_ATTRIBUTE,
+		buildScrollFadeCSS(),
+	);
+}
+
 export function createRowDecorationRenderer(reviewStateRef: {
 	current: ReadonlyMap<string, ReviewState>;
 }): FileTreeRowDecorationRenderer {
 	return ({ item }) => {
 		if (item.kind !== "file") return null;
-		if (reviewStateRef.current.get(item.path) !== "changed-after-review") {
-			return null;
+		const state = reviewStateRef.current.get(item.path);
+		if (state === "changed-after-review") {
+			return {
+				text: "changed after review",
+				title: "Changed after review",
+				parts: [{ text: "●", color: CHANGED_AFTER_REVIEW_DOT_COLOR }],
+			};
 		}
-		return {
-			text: "changed after review",
-			title: "Changed after review",
-			parts: [{ text: "●", color: CHANGED_AFTER_REVIEW_DOT_COLOR }],
-		};
+		if (state === "viewed") {
+			return { text: "", title: REVIEWED_DECORATION_TITLE };
+		}
+		return null;
 	};
 }

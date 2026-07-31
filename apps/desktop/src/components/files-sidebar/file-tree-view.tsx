@@ -11,11 +11,11 @@ import {
 import {
 	buildStatusColorCSS,
 	buildTreeThemeStyle,
-	buildViewedMuteCSS,
 	createRowDecorationRenderer,
+	syncDecorationIconStyle,
 	syncFolderIconStyle,
+	syncScrollFadeStyle,
 	syncStatusColorStyle,
-	syncViewedMuteStyle,
 } from "#/components/files-sidebar/tree-shadow-dom";
 import type { FileChange, ReviewState } from "#/lib/pr-data";
 import { collectAncestorDirectoryPaths, comparePaths } from "#/lib/tree-paths";
@@ -68,6 +68,12 @@ export function FileTreeView({
 
 	const { model } = useFileTree({
 		density: "compact",
+		// Overrides compact's 24px default. Row height has to be set here
+		// rather than through a `--trees-row-height` CSS override: the
+		// virtualizer computes scroll offsets from this option, not from CSS,
+		// so a CSS-only override desyncs the two and the scroller bottoms out
+		// short of the real content height.
+		itemHeight: 28,
 		// `flattenEmptyDirectories` is left at the library's default (`true`):
 		// a run of directories that each hold exactly one subdirectory
 		// collapses into a single row, VS Code's "compact folders".
@@ -89,9 +95,6 @@ export function FileTreeView({
 
 	const statusColorCSS = useMemo(() => buildStatusColorCSS(files), [files]);
 
-	// Synced before the viewed-mute style below so, at equal selector
-	// specificity, a viewed row's muting wins the cascade over its
-	// added/deleted color.
 	useEffect(() => {
 		if (syncStatusColorStyle(treeHostRef.current, statusColorCSS)) return;
 		const frame = requestAnimationFrame(() => {
@@ -100,28 +103,28 @@ export function FileTreeView({
 		return () => cancelAnimationFrame(frame);
 	}, [statusColorCSS]);
 
-	const viewedMuteCSS = useMemo(() => {
-		const viewed = new Set<string>();
-		for (const file of files) {
-			if (reviewState.get(file.path) === "viewed") viewed.add(file.path);
-		}
-		return buildViewedMuteCSS(viewed);
-	}, [files, reviewState]);
-
-	useEffect(() => {
-		if (syncViewedMuteStyle(treeHostRef.current, viewedMuteCSS)) return;
-		const frame = requestAnimationFrame(() => {
-			syncViewedMuteStyle(treeHostRef.current, viewedMuteCSS);
-		});
-		return () => cancelAnimationFrame(frame);
-	}, [viewedMuteCSS]);
-
 	// Static CSS (no reactive deps), but the shadow root may not exist on the
 	// tree's first render — retry once on the next frame, same as above.
 	useEffect(() => {
 		if (syncFolderIconStyle(treeHostRef.current)) return;
 		const frame = requestAnimationFrame(() => {
 			syncFolderIconStyle(treeHostRef.current);
+		});
+		return () => cancelAnimationFrame(frame);
+	}, []);
+
+	useEffect(() => {
+		if (syncDecorationIconStyle(treeHostRef.current)) return;
+		const frame = requestAnimationFrame(() => {
+			syncDecorationIconStyle(treeHostRef.current);
+		});
+		return () => cancelAnimationFrame(frame);
+	}, []);
+
+	useEffect(() => {
+		if (syncScrollFadeStyle(treeHostRef.current)) return;
+		const frame = requestAnimationFrame(() => {
+			syncScrollFadeStyle(treeHostRef.current);
 		});
 		return () => cancelAnimationFrame(frame);
 	}, []);

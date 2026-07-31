@@ -44,7 +44,7 @@ export function FilesSidebar({
 	);
 
 	return (
-		<div className="flex h-full w-72 shrink-0 flex-col bg-sidebar">
+		<div className="flex h-full w-72 shrink-0 flex-col bg-sidebar pb-2">
 			<div className="p-2">
 				<InputGroup>
 					<InputGroupAddon>
@@ -76,7 +76,7 @@ export function FilesSidebar({
 					selectedPath={selectedPath}
 				/>
 			) : (
-				<ScrollArea className="min-h-0 flex-1">
+				<ScrollArea className="min-h-0 flex-1" scrollFade>
 					<div className="flex flex-col gap-1 pb-3">
 						{groups.map((group) => (
 							<FlatFileGroup
