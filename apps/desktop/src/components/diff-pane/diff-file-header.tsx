@@ -126,7 +126,10 @@ export function DiffFileHeader({
 				<span className="text-destructive-foreground">-{file.deletions}</span>
 			</span>
 			<label
-				className="flex shrink-0 cursor-pointer items-center gap-1.5 text-muted-foreground text-xs"
+				className={cn(
+					buttonVariants({ variant: "ghost", size: "sm" }),
+					"shrink-0 text-muted-foreground",
+				)}
 				htmlFor={`reviewed-${file.path}`}
 				onClick={(event) => event.stopPropagation()}
 				onKeyDown={(event) => event.stopPropagation()}
