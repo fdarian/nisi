@@ -27,7 +27,7 @@ export const diffHighlighterOptions = {
 
 export const diffCodeViewLayout: CodeViewLayout = {
 	gap: 12,
-	paddingBottom: 28,
+	paddingBottom: 36,
 	paddingTop: 0,
 };
 
