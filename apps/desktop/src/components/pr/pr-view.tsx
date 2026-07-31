@@ -75,10 +75,13 @@ export function PrView({
 				onValueChange={(value) => setActiveTab(value as string)}
 				value={activeTab}
 			>
-				<TabsList className="mx-4 mt-2 self-start" variant="underline">
-					<TabsTrigger value="walkthrough">Walkthrough</TabsTrigger>
-					<TabsTrigger value="files">Files Changed</TabsTrigger>
-				</TabsList>
+				<div className="border-b">
+					<TabsList className="mx-4" variant="underline">
+						<TabsTrigger value="walkthrough">Walkthrough</TabsTrigger>
+						<TabsTrigger value="files">Files Changed</TabsTrigger>
+					</TabsList>
+				</div>
+
 				<TabsContent className="flex min-h-0 flex-1 flex-col" value="files">
 					{error != null ? (
 						<FilesChangedError error={error} />
