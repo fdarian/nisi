@@ -78,9 +78,6 @@ export function PrView({
 				<TabsList className="mx-4 mt-2 self-start" variant="underline">
 					<TabsTrigger value="files">Files Changed</TabsTrigger>
 					<TabsTrigger value="walkthrough">Walkthrough</TabsTrigger>
-					<TabsTrigger disabled value="commits">
-						Commits
-					</TabsTrigger>
 				</TabsList>
 				<TabsContent className="flex min-h-0 flex-1 flex-col" value="files">
 					{error != null ? (
