@@ -25,7 +25,6 @@ import {
 	useSidebarViewMode,
 } from "#/lib/settings-data";
 import { cn } from "#/lib/utils";
-import { FramePanel } from "../ui/frame";
 
 type FilesChangedViewProps = {
 	session: Session;

@@ -171,7 +171,7 @@ function AppShellReady({
 			data-tauri-drag-region="deep"
 		>
 			<PrTabStrip onCloseSession={handleCloseSession} sessions={sessions} />
-			<FramePanel className={cn(INSET_PANE_CLASS, 'mt-0')}>
+			<FramePanel className={cn(INSET_PANE_CLASS, "mt-0")}>
 				{sessions.map((session) => (
 					<TabsPrimitive.Panel
 						className="flex min-h-0 flex-1 flex-col outline-none"

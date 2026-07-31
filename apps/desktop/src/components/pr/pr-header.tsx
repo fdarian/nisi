@@ -1,7 +1,6 @@
 "use client";
 
-import { MoreHorizontalIcon, StarIcon } from "lucide-react";
-import { useState } from "react";
+import { MoreHorizontalIcon } from "lucide-react";
 import {
 	Breadcrumb,
 	BreadcrumbItem,
@@ -9,7 +8,7 @@ import {
 	BreadcrumbPage,
 	BreadcrumbSeparator,
 } from "#/components/ui/breadcrumb";
-import { Button, buttonVariants } from "#/components/ui/button";
+import { buttonVariants } from "#/components/ui/button";
 import {
 	DropdownMenu,
 	DropdownMenuContent,
