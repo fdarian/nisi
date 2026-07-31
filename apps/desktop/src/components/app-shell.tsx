@@ -30,9 +30,15 @@ import { useSessions } from "#/lib/pr-data";
  * rather than a plain `div` so the pane also picks up its hairline `border`
  * and refined `shadow-xs/5` edge — `p-0` overrides `FramePanel`'s own `p-5`
  * via `cn`'s `twMerge`, since this pane manages its own children's padding.
+ *
+ * The surface is declared as `--pane-surface` in `index.css` and consumed by
+ * `bg-pane-surface` here so descendants can reach the exact tone they sit on
+ * — the diff pane's cards need it to paint the corners of a pinned file
+ * header, and they can't derive it, since `background` doesn't inherit
+ * (`diffCardChromeCSS`).
  */
 const INSET_PANE_CLASS =
-	"m-2 flex min-h-0 flex-1 flex-col overflow-hidden p-0 bg-neutral-50";
+	"m-2 flex min-h-0 flex-1 flex-col overflow-hidden bg-pane-surface p-0";
 
 /** Top-level shell: gates on the sidecar connection, then renders the multi-PR tab strip. */
 export function AppShell(): React.ReactElement {
