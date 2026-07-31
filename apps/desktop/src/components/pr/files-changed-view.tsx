@@ -97,7 +97,7 @@ export function FilesChangedView({
 				viewMode={viewMode}
 			/>
 
-			<div className="flex min-h-0 flex-1 flex-col pt-2 gap-2">
+			<div className="flex min-h-0 flex-1 flex-col py-2 gap-2">
 				<div className="rounded-xl bg-background px-3 py-2 flex shrink-0 items-center justify-between mx-3 text-muted-foreground text-xs">
 					<span className="flex items-center gap-2">
 						<ProgressCircle total={files.length} value={viewedCount} />
