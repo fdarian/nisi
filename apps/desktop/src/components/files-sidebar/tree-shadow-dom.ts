@@ -38,6 +38,7 @@ export function buildTreeThemeStyle(): CSSProperties {
 		"--trees-font-family-override": "var(--font-sans)",
 		"--trees-focus-ring-color-override": "var(--ring)",
 		"--trees-border-radius-override": "var(--radius-md)",
+		"--trees-row-height": "28px",
 		height: "100%",
 	} as CSSProperties;
 }
