@@ -160,6 +160,7 @@ function AppShellReady({
 				setRequestedActiveSessionId(value as string | null)
 			}
 			value={activeSessionId}
+			data-tauri-drag-region="deep"
 		>
 			<PrTabStrip onCloseSession={handleCloseSession} sessions={sessions} />
 			<FramePanel className={INSET_PANE_CLASS}>
