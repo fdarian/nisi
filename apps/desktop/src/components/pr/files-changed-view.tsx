@@ -25,6 +25,7 @@ import {
 	useSidebarViewMode,
 } from "#/lib/settings-data";
 import { cn } from "#/lib/utils";
+import { FramePanel } from "../ui/frame";
 
 type FilesChangedViewProps = {
 	session: Session;
@@ -82,82 +83,88 @@ export function FilesChangedView({
 	);
 
 	return (
-		<div className="flex min-h-0 flex-1 flex-col">
-			<div className="flex h-9 shrink-0 items-center justify-between px-3 text-muted-foreground text-xs">
-				<span>
-					Files{" "}
-					<span className="font-medium text-foreground tabular-nums">
-						{viewedCount}
-					</span>{" "}
-					of{" "}
-					<span className="font-medium text-foreground tabular-nums">
-						{files.length}
-					</span>{" "}
-					files
-				</span>
-				<div className="flex items-center gap-2">
-					<ToggleGroup
-						onValueChange={(value) => {
-							const next = value[0];
-							if (next === "unified" || next === "split") setDiffStyle(next);
-						}}
-						size="sm"
-						value={[diffStyle]}
-						variant="outline"
-					>
-						<ToggleGroupItem aria-label="Unified diff" value="unified">
-							<RowsIcon />
-						</ToggleGroupItem>
-						<ToggleGroupItem aria-label="Split diff" value="split">
-							<Columns2Icon />
-						</ToggleGroupItem>
-					</ToggleGroup>
-					<DropdownMenu>
-						<DropdownMenuTrigger
-							aria-label="Files sidebar display options"
-							className={cn(
-								buttonVariants({ variant: "ghost", size: "icon-sm" }),
-							)}
+		<div className="flex min-h-0 flex-1">
+			<FilesSidebar
+				files={visibleFiles}
+				onSelectPath={selectPath}
+				reviewState={reviewState}
+				selectedPath={selectedPath}
+				viewMode={viewMode}
+			/>
+
+			<div className="flex min-h-0 flex-1 flex-col pt-2 gap-2">
+				<div className="rounded-xl bg-background px-3 py-2 flex shrink-0 items-center justify-between mx-3 text-muted-foreground text-xs">
+					<span className="flex items-center gap-2">
+						<ProgressCircle total={files.length} value={viewedCount} />
+						<span>
+							<span className="font-medium text-foreground tabular-nums">
+								{viewedCount}
+							</span>{" "}
+							of{" "}
+							<span className="font-medium text-foreground tabular-nums">
+								{files.length}
+							</span>{" "}
+							viewed
+						</span>
+					</span>
+
+					<div className="flex items-center gap-2">
+						<ToggleGroup
+							onValueChange={(value) => {
+								const next = value[0];
+								if (next === "unified" || next === "split") setDiffStyle(next);
+							}}
+							size="sm"
+							value={[diffStyle]}
+							variant="outline"
 						>
-							<SlidersHorizontalIcon />
-						</DropdownMenuTrigger>
-						<DropdownMenuContent align="end">
-							<DropdownMenuRadioGroup
-								onValueChange={(value) => setViewMode(value as "tree" | "flat")}
-								value={viewMode}
+							<ToggleGroupItem aria-label="Unified diff" value="unified">
+								<RowsIcon />
+							</ToggleGroupItem>
+							<ToggleGroupItem aria-label="Split diff" value="split">
+								<Columns2Icon />
+							</ToggleGroupItem>
+						</ToggleGroup>
+						<DropdownMenu>
+							<DropdownMenuTrigger
+								aria-label="Files sidebar display options"
+								className={cn(
+									buttonVariants({ variant: "ghost", size: "icon-sm" }),
+								)}
 							>
-								<DropdownMenuRadioItem closeOnClick value="tree">
-									Tree
-								</DropdownMenuRadioItem>
-								<DropdownMenuRadioItem closeOnClick value="flat">
-									Flat
-								</DropdownMenuRadioItem>
-							</DropdownMenuRadioGroup>
-							<DropdownMenuSeparator />
-							<DropdownMenuCheckboxItem
-								checked={hideReviewed}
-								onCheckedChange={setHideReviewed}
-							>
-								Hide reviewed
-							</DropdownMenuCheckboxItem>
-							<DropdownMenuCheckboxItem
-								checked={includeUncommitted}
-								onCheckedChange={setIncludeUncommitted}
-							>
-								Include uncommitted
-							</DropdownMenuCheckboxItem>
-						</DropdownMenuContent>
-					</DropdownMenu>
+								<SlidersHorizontalIcon />
+							</DropdownMenuTrigger>
+							<DropdownMenuContent align="end">
+								<DropdownMenuRadioGroup
+									onValueChange={(value) =>
+										setViewMode(value as "tree" | "flat")
+									}
+									value={viewMode}
+								>
+									<DropdownMenuRadioItem closeOnClick value="tree">
+										Tree
+									</DropdownMenuRadioItem>
+									<DropdownMenuRadioItem closeOnClick value="flat">
+										Flat
+									</DropdownMenuRadioItem>
+								</DropdownMenuRadioGroup>
+								<DropdownMenuSeparator />
+								<DropdownMenuCheckboxItem
+									checked={hideReviewed}
+									onCheckedChange={setHideReviewed}
+								>
+									Hide reviewed
+								</DropdownMenuCheckboxItem>
+								<DropdownMenuCheckboxItem
+									checked={includeUncommitted}
+									onCheckedChange={setIncludeUncommitted}
+								>
+									Include uncommitted
+								</DropdownMenuCheckboxItem>
+							</DropdownMenuContent>
+						</DropdownMenu>
+					</div>
 				</div>
-			</div>
-			<div className="flex min-h-0 flex-1">
-				<FilesSidebar
-					files={visibleFiles}
-					onSelectPath={selectPath}
-					reviewState={reviewState}
-					selectedPath={selectedPath}
-					viewMode={viewMode}
-				/>
 				<DiffPane
 					diffStyle={diffStyle}
 					files={visibleFiles}
@@ -171,5 +178,64 @@ export function FilesChangedView({
 				/>
 			</div>
 		</div>
+	);
+}
+
+// Adapted from magicui's Animated Circular Progress Bar
+// (https://magicui.design/docs/components/animated-circular-progress-bar),
+// scaled down to an inline badge with no center label — the "N of M viewed"
+// text next to it already says the number.
+function ProgressCircle({
+	value,
+	total,
+}: {
+	value: number;
+	total: number;
+}): React.ReactElement {
+	const circumference = 2 * Math.PI * 45;
+	const percentPx = circumference / 100;
+	const currentPercent = total === 0 ? 0 : Math.round((value / total) * 100);
+
+	return (
+		<svg
+			aria-label={`${value} of ${total} viewed`}
+			className="size-3.5 shrink-0"
+			fill="none"
+			role="img"
+			strokeWidth="2"
+			style={
+				{
+					"--circumference": circumference,
+					"--percent-to-px": `${percentPx}px`,
+				} as React.CSSProperties
+			}
+			viewBox="0 0 100 100"
+		>
+			<circle
+				cx="50"
+				cy="50"
+				fill="none"
+				r="45"
+				strokeWidth="10"
+				className="stroke-border"
+			/>
+			<circle
+				className="stroke-foreground transition-[stroke-dasharray] duration-300 ease-linear"
+				cx="50"
+				cy="50"
+				fill="none"
+				r="45"
+				strokeDasharray="calc(var(--percent-current) * var(--percent-to-px)) var(--circumference)"
+				strokeLinecap="round"
+				strokeWidth="10"
+				style={
+					{
+						"--percent-current": currentPercent,
+						transform: "rotate(-90deg)",
+						transformOrigin: "50px 50px",
+					} as React.CSSProperties
+				}
+			/>
+		</svg>
 	);
 }
