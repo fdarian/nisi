@@ -1,11 +1,16 @@
 "use client";
 
-import { Columns2Icon, RowsIcon, SlidersHorizontalIcon } from "lucide-react";
+import {
+	Columns2Icon,
+	RefreshCwIcon,
+	RowsIcon,
+	SlidersHorizontalIcon,
+} from "lucide-react";
 import { useCallback, useMemo, useRef, useState } from "react";
 import type { DiffPaneHandle } from "#/components/diff-pane/diff-pane";
 import { DiffPane } from "#/components/diff-pane/diff-pane";
 import { FilesSidebar } from "#/components/files-sidebar/files-sidebar";
-import { buttonVariants } from "#/components/ui/button";
+import { Button, buttonVariants } from "#/components/ui/button";
 import {
 	DropdownMenu,
 	DropdownMenuCheckboxItem,
@@ -34,6 +39,8 @@ type FilesChangedViewProps = {
 	reviewState: ReadonlyMap<string, ReviewStateEntry>;
 	setViewed: (path: string, viewed: boolean) => void;
 	onNavigateToBlock: (blockId: string) => void;
+	hasPendingChanges: boolean;
+	onRefresh: () => void;
 };
 
 export function FilesChangedView({
@@ -43,6 +50,8 @@ export function FilesChangedView({
 	reviewState,
 	setViewed,
 	onNavigateToBlock,
+	hasPendingChanges,
+	onRefresh,
 }: FilesChangedViewProps): React.ReactElement {
 	const [selectedPath, setSelectedPath] = useState<string | null>(null);
 	const diffPaneRef = useRef<DiffPaneHandle>(null);
@@ -114,6 +123,12 @@ export function FilesChangedView({
 					</span>
 
 					<div className="flex items-center gap-2">
+						{hasPendingChanges && (
+							<Button onClick={onRefresh} size="xs" variant="warning-secondary">
+								<RefreshCwIcon />
+								Refresh
+							</Button>
+						)}
 						<ToggleGroup
 							onValueChange={(value) => {
 								const next = value[0];

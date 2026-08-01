@@ -85,9 +85,14 @@ seam" for the port/token handshake this boots into.
 - `live-poll.ts` — `startLivePolling`, forked as a background fiber from `index.ts`'s boot program.
   Every `POLL_INTERVAL`, diffs each open session's `@repo/git` change signature against the previous
   tick (module-level `Map`, same in-memory-state shape as `events.ts`'s subscriber `Set`) and emits
-  `session-files-changed` when it moved. Never reads file content itself — that's what makes it cheap
-  enough to run on every open session on every tick; a stale-data refetch is the frontend's job once
-  the event lands.
+  `session-files-changed` when it moved; a stale-data refetch is the frontend's job once the event
+  lands. `checkSessionForChanges` reads `SettingsStore`'s `includeUncommitted` itself (this poller has
+  no per-request input to carry it) and threads it into `readRepoChangeSignature` — off (the common
+  case) skips `@repo/git`'s `status`/hashing outright, on hashes each dirty path's content. The stored
+  signature carries the mode it was read under alongside the signature itself: a mode flip changes the
+  signature's *shape* for a reason unrelated to the repo, so a check that lands right after the user
+  toggles the setting re-baselines silently instead of emitting a spurious `session-files-changed` —
+  the frontend already refetches on that toggle on its own (folded into its query key).
 - `walkthrough/` — Phase 3's wiring layer. See its own AGENTS.md.
 
 ## Gotchas

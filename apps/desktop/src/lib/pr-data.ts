@@ -22,7 +22,7 @@ import {
 	useQuery,
 	useQueryClient,
 } from "@tanstack/react-query";
-import { useCallback, useEffect, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { SidecarQueryUtils } from "#/lib/backend-context";
 import { useIncludeUncommitted } from "#/lib/settings-data";
 
@@ -526,15 +526,23 @@ export function useSetRangeViewed(
 	);
 }
 
+export type LiveFileChanges = {
+	hasPendingChanges: boolean;
+	refresh: () => void;
+};
+
 /**
- * Keeps `diff.files`/`diff.fileContents` live: on the sidecar's
- * `session-files-changed` event (the 2s worktree poller noticing a change —
- * see `packages/sidecar-api/src/events.ts`) for *this* session, invalidates
- * both queries so the sidebar and pane refetch. Deliberately session-wide
- * (every `diff.fileContents` chunk, not just one path's via
- * `queryCoveredPath` the way `useSetFileViewed`/`useSetRangeViewed` narrow
- * it) — unlike those two, this event doesn't say *which* file moved, only
- * that *something* did (the poller's mtime/size signal, not a diff), so
+ * Tracks whether `diff.files`/`diff.fileContents` have gone stale: on the
+ * sidecar's `session-files-changed` event (the 2s worktree poller noticing a
+ * change — see `packages/sidecar-api/src/events.ts`) for *this* session, sets
+ * `hasPendingChanges` instead of invalidating right away, so the caller can
+ * surface a "Refresh" affordance rather than yanking the diff out from under
+ * whoever's reading it. Calling `refresh` invalidates both queries so the
+ * sidebar and pane refetch, and clears the flag — a later event re-sets it.
+ * Deliberately session-wide (every `diff.fileContents` chunk, not just one
+ * path's via `queryCoveredPath` the way `useSetFileViewed`/`useSetRangeViewed`
+ * narrow it) — unlike those two, this event doesn't say *which* file moved,
+ * only that *something* did (the poller's mtime/size signal, not a diff), so
  * there's no single path to scope the invalidation to. Deliberately just an
  * invalidate, not a manual cache write — `diff-pane.tsx`'s `hashItemVersion`
  * + `FileChange.fingerprint` already make sure only files whose content
@@ -544,19 +552,91 @@ export function useSetRangeViewed(
 export function useLiveFileChanges(
 	orpc: SidecarQueryUtils,
 	sessionId: string,
-): void {
+): LiveFileChanges {
 	const queryClient = useQueryClient();
 	const eventsQuery = useQuery(orpc.events.subscribe.liveOptions());
+	const [hasPendingChanges, setHasPendingChanges] = useState(false);
 
 	useEffect(() => {
 		const event = eventsQuery.data;
 		if (event === undefined || event.type !== "session-files-changed") return;
 		if (event.sessionId !== sessionId) return;
+		setHasPendingChanges(true);
+	}, [eventsQuery.data, sessionId]);
+
+	const refresh = useCallback(() => {
 		queryClient.invalidateQueries({
 			queryKey: orpc.diff.files.key({ input: { sessionId } }),
 		});
 		queryClient.invalidateQueries({
 			queryKey: orpc.diff.fileContents.key({ input: { sessionId } }),
 		});
-	}, [eventsQuery.data, queryClient, orpc, sessionId]);
+		setHasPendingChanges(false);
+	}, [queryClient, orpc, sessionId]);
+
+	return { hasPendingChanges, refresh };
+}
+
+/**
+ * Drives `sessions.setWatching` from a computed `watched` predicate — the
+ * frontend half of the poll-gating this session's `live-poll.ts` enforces on
+ * the sidecar side. `watched` is meant to be `windowFocused && activeTab ===
+ * "files" && this PrView is the selected PR tab` (see `pr-view.tsx`), so the
+ * sidecar's 2s poller only checks a session while its Files Changed tab is
+ * actually on screen for someone to see the result. Fires the mutation only
+ * on an actual change to `watched` (never on every render, via the `ref`
+ * below) and sends a final `false` on unmount, so backgrounding the tab or
+ * closing it actually stops the poll rather than leaking a watch entry until
+ * `sessions.close` cleans it up on its own schedule.
+ */
+export function useSessionWatch(
+	orpc: SidecarQueryUtils,
+	sessionId: string,
+	watched: boolean,
+): void {
+	const mutation = useMutation(orpc.sessions.setWatching.mutationOptions());
+	const mutateRef = useRef(mutation.mutate);
+	mutateRef.current = mutation.mutate;
+
+	// `mutation.mutate` gets a new identity on every render (a fresh
+	// `useMutation()` object) — routing every call through `mutateRef` keeps
+	// this effect's own deps down to just `sessionId`/`watched`, so it fires
+	// only on an actual change to the watch predicate, not on every render.
+	useEffect(() => {
+		mutateRef.current({ sessionId, watching: watched });
+		return () => {
+			mutateRef.current({ sessionId, watching: false });
+		};
+	}, [sessionId, watched]);
+}
+
+/**
+ * Calls `refresh` on the false→true rising edge of `watched` — in
+ * `pr-view.tsx`, `watched` is `windowFocused && isFilesChangedVisible`, so
+ * that one edge is exactly the union of the two transitions Files Changed
+ * should refetch on: switching into this PR's tab while the window is
+ * focused, and regaining window focus while this tab is already the visible
+ * one. Takes `refresh` rather than reimplementing the invalidation — reuses
+ * `useLiveFileChanges`'s own `refresh`, which already covers both
+ * `diff.files`/`diff.fileContents` and clears `hasPendingChanges`, correct
+ * here since a refetch just applied everything that flag was announcing.
+ *
+ * Seeds the "previous" ref from `watched` itself, not `false` — an app that
+ * opens already focused with Files Changed active starts `watched` at
+ * `true`, and that initial value must not read as a rising edge (the query
+ * is already loading on its own; firing `refresh` on top of it would be a
+ * redundant, mount-time refetch, not a real transition).
+ */
+export function useRefreshOnWatchedEdge(
+	watched: boolean,
+	refresh: () => void,
+): void {
+	const previouslyWatched = useRef(watched);
+
+	useEffect(() => {
+		if (!previouslyWatched.current && watched) {
+			refresh();
+		}
+		previouslyWatched.current = watched;
+	}, [watched, refresh]);
 }

@@ -22,7 +22,9 @@ import {
 	type SidecarEvent,
 	subscribe as subscribeToSidecarEvents,
 } from "./events.ts";
+import { checkSessionForChanges } from "./live-poll.ts";
 import type { AppServices } from "./services.ts";
+import { SessionWatch } from "./session-watch.ts";
 import { Store } from "./store.ts";
 import {
 	beginTrackedGeneration,
@@ -188,6 +190,7 @@ export function attachRouter(
 			}),
 			close: authed.sessions.close.effect(function* ({ input, errors }) {
 				const store = yield* Store;
+				const sessionWatch = yield* SessionWatch;
 				yield* store.closeSession(input.sessionId).pipe(
 					Effect.catchTag("SessionNotFound", () =>
 						Effect.fail(
@@ -203,10 +206,51 @@ export function attachRouter(
 				// it — nothing left to reattach to once the session itself is gone.
 				yield* Effect.promise(() => stopLiveSession(input.sessionId));
 				clearGeneration(input.sessionId);
+				// Otherwise a closed session's id lingers in the watch registry
+				// forever — nothing else ever removes it, since the frontend's own
+				// unmount-time `setWatching(false)` races this close and isn't
+				// guaranteed to land first (or at all, if the tab close came from
+				// elsewhere — the CLI, another window).
+				yield* sessionWatch.remove(input.sessionId);
 				emit({ type: "session-closed", sessionId: input.sessionId });
 				yield* Effect.logInfo("session closed", {
 					sessionId: input.sessionId,
 				});
+			}),
+			setWatching: authed.sessions.setWatching.effect(function* ({
+				input,
+				errors,
+			}) {
+				const sessionWatch = yield* SessionWatch;
+
+				if (!input.watching) {
+					// Idempotent, no existence check — this also covers the case
+					// where the session already closed (whose handler already
+					// removed it above) right before this call lands.
+					yield* sessionWatch.remove(input.sessionId);
+					return;
+				}
+
+				const store = yield* Store;
+				const sessions = yield* store.listSessions();
+				const session = sessions.find(
+					(candidate) => candidate.id === input.sessionId,
+				);
+				if (session === undefined) {
+					return yield* Effect.fail(
+						errors.NOT_FOUND({
+							message: `session not found: ${input.sessionId}`,
+						}),
+					);
+				}
+
+				yield* sessionWatch.add(input.sessionId);
+				// The rising-edge check: runs once, right here, rather than
+				// waiting up to POLL_INTERVAL for the next tick — this is what
+				// lets the Refresh affordance appear immediately on refocus.
+				// Only the signature check, never a diff invalidation — applying
+				// changes stays behind the user's own Refresh click.
+				yield* checkSessionForChanges(session);
 			}),
 		},
 		diff: {

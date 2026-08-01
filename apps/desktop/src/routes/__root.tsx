@@ -1,5 +1,7 @@
 import { createRootRoute, Outlet } from "@tanstack/react-router";
 import { ThemeProvider } from "next-themes";
+import { DevToolProvider } from "#/components/devtool/dev-tool-context";
+import { ToastProvider } from "#/components/ui/toast";
 import { useSettingsShortcut } from "#/hooks/use-settings-shortcut";
 import { BackendProvider } from "#/lib/backend-context";
 
@@ -12,9 +14,13 @@ function RootLayout() {
 
 	return (
 		<ThemeProvider attribute="class" defaultTheme="system" enableSystem>
-			<BackendProvider>
-				<Outlet />
-			</BackendProvider>
+			<DevToolProvider>
+				<ToastProvider>
+					<BackendProvider>
+						<Outlet />
+					</BackendProvider>
+				</ToastProvider>
+			</DevToolProvider>
 		</ThemeProvider>
 	);
 }

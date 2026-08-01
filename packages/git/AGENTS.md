@@ -33,9 +33,12 @@ unit-testable against real temp repos without booting anything. Feeds `packages/
   `git hash-object -w --stdin` + `git diff` on the resulting blobs. What `@repo/review`'s
   reconciliation is built on — a review snapshot isn't a ref, so a ref-based `git diff` can't compare
   it against head.
-- `change-signal.ts` — `readRepoChangeSignature`: a cheap mtime+size (never content) signature per path
-  from `git status --porcelain`, plus HEAD's sha. What the sidecar's live-update poller diffs
-  tick-to-tick to detect a session's files changed without hashing content on every tick.
+- `change-signal.ts` — `readRepoChangeSignature`: HEAD's sha plus, only when `includeUncommitted` is
+  `true`, a content hash (never mtime/size — collides too easily, see the module's doc comment) per
+  path `git status --porcelain` reports dirty. `false` (default) skips `status` and hashing
+  entirely — the signature is just `headSha`. What the sidecar's live-update poller diffs
+  tick-to-tick to detect a session's files changed; the caller (`live-poll.ts`) resolves the flag
+  from `@repo/settings` and passes it in, since this package doesn't read settings itself.
 - `diff.ts` — orchestrates the above into `getChangedFiles` (cheap, all files, metadata only) and
   `getFileContents` (every requested path's patch + gated content in one pass, so opening N files
   in the diff pane, or gathering a walkthrough's digest, costs a constant handful of spawns rather
@@ -55,8 +58,9 @@ unit-testable against real temp repos without booting anything. Feeds `packages/
   `getFileContents`, not per requested path), and threaded as-is from there — the name-status/numstat
   calls, `readPatches`, and which of `gateFromBlob`/`readWorktreeGated` reads the new side all key
   off that same value, so the two modes can't drift apart by being re-interpreted independently
-  downstream. `change-signal.ts` is the one module that always reads live worktree state (mtime/size,
-  never content), regardless of this flag.
+  downstream. `change-signal.ts` takes the same flag but resolves it independently (it has no
+  `DiffTarget`/diff to thread it through) — `false` skips `status`/hashing outright rather than
+  reading the worktree and discarding the result.
 - **A rename's pathspec must include the old path.** `git diff -M <base> -- <newpath>` alone
   can't detect the rename — the pathspec hides the deletion half from git's rename pairing, so it
   renders as a plain add. Both `readPatches` (via `pathspecFor`) and `getFileContents`' status

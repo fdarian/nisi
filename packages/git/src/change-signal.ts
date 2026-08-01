@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { join } from "node:path";
 import { Effect, Option } from "effect";
 import { FileSystem } from "effect/FileSystem";
@@ -6,15 +7,31 @@ import type { GitCommandError } from "./errors.ts";
 import { git } from "./exec.ts";
 
 /**
- * A cheap-to-compute stand-in for "did this file's content change" —
- * `mtime`/`size` instead of a content hash. Codiff content-hashes every
- * changed file (up to 64MB) on every poll tick; this is the signal that lets
- * the sidecar's live-update poller skip that entirely in the common case
- * where nothing moved.
+ * A sha256 of the file's bytes, computed only for the paths `git status`
+ * already reports as dirty — never the whole tree, and never a file with
+ * nothing to compare against, the same bound `readRepoChangeSignature`
+ * already applied when this was `mtime`/`size` instead.
+ *
+ * It used to be `mtime`/`size` — cheaper, but provably unsound: two
+ * different same-length writes that land on the same recorded mtime
+ * collide on the signature exactly the way a real "nothing changed" tick
+ * does, so the live-update poller silently never notices the edit. That's
+ * not just a theoretical race — forcing an identical mtime via `utimes` on
+ * two different same-size contents reproduces it every time (see
+ * `test/change-signal.test.ts`), and real filesystems hand you that
+ * collision for free: any mount with coarser-than-APFS timestamp
+ * resolution (network shares, several container bind-mount drivers), or a
+ * tool that preserves/resets a file's mtime on write (some formatters,
+ * sync clients). Content-hashing trades that gap for reading the dirty
+ * files' bytes every tick — bounded by how many paths are actually dirty
+ * (never every changed file in the diff the way Codiff's own hashing
+ * works, which is what this module was written to avoid), so the cost
+ * stays proportional to what a human could plausibly be mid-editing, not
+ * to the PR's total size.
  */
-export type FileSignature = { readonly mtimeMs: number; readonly size: number };
+export type FileSignature = { readonly contentHash: string };
 
-/** One repo's worth of cheap change signals: HEAD (catches commits) + per-path mtime/size (catches worktree edits). */
+/** One repo's worth of cheap change signals: HEAD (catches commits) + per-path content hash (catches worktree edits). */
 export type RepoChangeSignature = {
 	readonly headSha: string;
 	readonly files: ReadonlyMap<string, FileSignature>;
@@ -41,21 +58,46 @@ const parseStatusPaths = (raw: string): ReadonlyArray<string> => {
 	return paths;
 };
 
+const hashBytes = (bytes: Uint8Array): string =>
+	createHash("sha256").update(bytes).digest("hex");
+
 /**
  * Reads the cheap change signature `git status --porcelain` reports for a
- * repo: HEAD's sha (catches new commits, which `status` alone can't) plus
- * `mtime`/`size` for every path `status` reports as touched (staged,
- * unstaged, or untracked). A missing path (e.g. a signature read racing a
- * deletion) is simply absent from `files` rather than failing the read.
+ * repo: HEAD's sha (catches new commits, which `status` alone can't) plus,
+ * when `options.includeUncommitted` is `true`, a content hash for every path
+ * `status` reports as touched (staged, unstaged, or untracked) — never any
+ * path `status` doesn't mention, so this stays bounded by how much is
+ * actually dirty, not the repo's total size. A missing path (e.g. a
+ * signature read racing a deletion) is simply absent from `files` rather
+ * than failing the read.
+ *
+ * `options?.includeUncommitted` (default `false`) mirrors `diff.ts`'s
+ * `getChangedFiles`/`getFileContents` convention. With it `false` — the
+ * common case, since it means the visible diff target is HEAD and worktree
+ * dirt can't affect anything shown — `git status` and the hashing are
+ * skipped entirely, not just discarded afterward: the signature is only
+ * ever `headSha` with an empty `files` map. This package stays pure and
+ * doesn't read the setting itself; the caller (the sidecar's live-poll)
+ * resolves it and passes it in.
  */
 export const readRepoChangeSignature = (
 	repoRoot: string,
+	options?: { readonly includeUncommitted?: boolean },
 ): Effect.Effect<
 	RepoChangeSignature,
 	GitCommandError,
 	ChildProcessSpawner.ChildProcessSpawner | FileSystem
 > =>
 	Effect.gen(function* () {
+		const includeUncommitted = options?.includeUncommitted ?? false;
+
+		if (!includeUncommitted) {
+			const headSha = yield* git(repoRoot, ["rev-parse", "HEAD"]).pipe(
+				Effect.map((out) => out.trim()),
+			);
+			return { headSha, files: new Map() };
+		}
+
 		const fs = yield* FileSystem;
 
 		const [headSha, statusRaw] = yield* Effect.all([
@@ -69,19 +111,9 @@ export const readRepoChangeSignature = (
 		const entries = yield* Effect.forEach(
 			paths,
 			(path) =>
-				fs.stat(join(repoRoot, path)).pipe(
+				fs.readFile(join(repoRoot, path)).pipe(
 					Effect.map(
-						(stat) =>
-							[
-								path,
-								{
-									mtimeMs: Option.getOrElse(
-										stat.mtime,
-										() => new Date(0),
-									).getTime(),
-									size: Number(stat.size),
-								},
-							] as const,
+						(bytes) => [path, { contentHash: hashBytes(bytes) }] as const,
 					),
 					Effect.option,
 				),
@@ -105,11 +137,7 @@ export const repoChangeSignatureEquals = (
 	if (a.files.size !== b.files.size) return false;
 	for (const [path, signature] of a.files) {
 		const other = b.files.get(path);
-		if (
-			other === undefined ||
-			other.mtimeMs !== signature.mtimeMs ||
-			other.size !== signature.size
-		) {
+		if (other === undefined || other.contentHash !== signature.contentHash) {
 			return false;
 		}
 	}

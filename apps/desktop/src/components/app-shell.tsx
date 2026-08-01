@@ -2,6 +2,7 @@
 
 import { AlertTriangleIcon, InboxIcon } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
+import { DevToolButton } from "#/components/devtool/dev-tool";
 import { PrTabStrip } from "#/components/pr/pr-tab-strip";
 import { PrView } from "#/components/pr/pr-view";
 import {
@@ -180,6 +181,7 @@ function AppShellReady({
 						value={session.id}
 					>
 						<PrView
+							isSelectedTab={session.id === activeSessionId}
 							onCloseTab={() => handleCloseSession(session.id)}
 							orpc={orpc}
 							session={session}
@@ -187,6 +189,11 @@ function AppShellReady({
 					</TabsPrimitive.Panel>
 				))}
 			</FramePanel>
+			{import.meta.env.DEV === true ? (
+				<div className="absolute -bottom-1 left-3">
+					<DevToolButton />
+				</div>
+			) : null}
 		</TabsPrimitive.Root>
 	);
 }

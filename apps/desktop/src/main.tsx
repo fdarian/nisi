@@ -6,7 +6,19 @@ import ReactDOM from "react-dom/client";
 import { routeTree } from "./routeTree.gen";
 
 const router = createRouter({ routeTree });
-const queryClient = new QueryClient();
+// The sidecar's `events.subscribe` stream (session-opened/closed,
+// session-files-changed) is this app's freshness mechanism — a blanket
+// window-refocus refetch of every query would be redundant on top of that,
+// and would defeat the Files Changed tab's manual-refresh gate
+// (`useLiveFileChanges`, `src/lib/pr-data.ts`), which deliberately holds
+// pending changes behind the user's click rather than auto-invalidating.
+// Files Changed gets a scoped, deliberate exception instead —
+// `useRefreshOnWatchedEdge` (`src/lib/pr-data.ts`) refetches it specifically
+// on regaining focus while it's the visible tab, reusing the same `refresh`
+// the gate's button calls, so this global default stays off.
+const queryClient = new QueryClient({
+	defaultOptions: { queries: { refetchOnWindowFocus: false } },
+});
 
 declare module "@tanstack/react-router" {
 	interface Register {

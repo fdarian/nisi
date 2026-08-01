@@ -26,6 +26,7 @@ importantly, the rules for deciding whether a thing belongs here at all.
 
 * [What breaks only in the compiled binary](compiled-binary-differences.md) - the four ways `bun build --compile` differs from `bun run`, and when you must test against it
 * [Why the walkthrough runs on HarnessAgent](why-harness-agent-not-direct-sdks.md) - driving the four CLIs directly is the obvious approach and the wrong one
+* [Reverted lines are invisible after review](reverted-lines-invisible-after-review.md) - content that existed only in a review snapshot has no row in the base → head diff, so nothing renders it
 
 # Performance
 

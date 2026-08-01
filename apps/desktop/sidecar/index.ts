@@ -7,6 +7,7 @@ import { attachRouter, bindHealthCheckServer } from "./http.ts";
 import { startLivePolling } from "./live-poll.ts";
 import { LoggingLive } from "./logging.ts";
 import type { AppServices } from "./services.ts";
+import { SessionWatch } from "./session-watch.ts";
 import {
 	acquireSidecarLock,
 	publishSidecarJson,
@@ -131,6 +132,7 @@ const MainLayer = Layer.mergeAll(
 	Store.layer,
 	WalkthroughStore.layer,
 	SettingsStore.layer,
+	SessionWatch.layer,
 ).pipe(
 	Layer.provideMerge(SqliteDb.layer),
 	Layer.provideMerge(BunServices.layer),
