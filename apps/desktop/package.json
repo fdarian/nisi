@@ -6,7 +6,7 @@
 	"scripts": {
 		"dev": "bun scripts/dev.ts",
 		"dev:vite": "vite",
-		"build": "tauri build",
+		"build": "tauri build --config src-tauri/tauri.build.conf.json",
 		"build:frontend": "tsc && vite build",
 		"preview": "vite preview",
 		"tauri": "tauri",

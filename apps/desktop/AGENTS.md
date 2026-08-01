@@ -151,6 +151,12 @@ Two rules if anything else might be working in this checkout at the same time:
   contract) — writes to the real app-data dir since `NISI_DATA_DIR` is unset outside a manual override.
 - The compiled `src-tauri/binaries/sidecar-*` is gitignored; `beforeBuildCommand` regenerates it via
   `build:sidecar` (host triple `aarch64-apple-darwin` only — cross-compile is future work).
+- **`externalBin` is not in `tauri.conf.json`** — it lives in `src-tauri/tauri.build.conf.json`, which
+  only `bun build` merges in (`tauri build --config …`). `tauri-build` validates every `externalBin`
+  path at compile time in *both* modes, so keeping it in the base config made `bun dev` fail on a
+  missing binary that dev never runs (dev's sidecar is `bun run sidecar/index.ts`, see
+  [Dev/prod isolation](#devprod-isolation)). The cost of the split: a rename of the binary or its
+  triple suffix now only breaks `bun build`, never dev.
 - **`HarnessInfo.available` and `.enabled` are independent, both always present.** `available` is a
   live `@repo/bin-resolver` binary-presence check (`sidecar/walkthrough/availability.ts`), never
   cached; `enabled` is `@repo/settings`'s `enabledHarnesses`, a user declaration. A harness can be
