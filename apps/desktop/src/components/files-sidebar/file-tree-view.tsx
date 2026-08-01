@@ -1,5 +1,9 @@
 "use client";
 
+import type {
+	FileTreeDirectoryHandle,
+	FileTreeItemHandle,
+} from "@pierre/trees";
 import { FileTree, useFileTree } from "@pierre/trees/react";
 import {
 	type MouseEvent as ReactMouseEvent,
@@ -32,6 +36,18 @@ type TreeModel = {
 	/** Every real file path, to tell a file row from a directory row on click. */
 	readonly filePaths: ReadonlySet<string>;
 };
+
+/**
+ * `isDirectory()` returning a literal `true`/`false` per handle type doesn't
+ * narrow `FileTreeItemHandle` on its own — TS only discriminates unions
+ * through property/`in` checks or an explicit type guard, not through a
+ * method call's return value.
+ */
+function isDirectoryHandle(
+	item: FileTreeItemHandle,
+): item is FileTreeDirectoryHandle {
+	return item.isDirectory();
+}
 
 function buildTreeModel(files: readonly FileChange[]): TreeModel {
 	const treePaths: string[] = [];
@@ -145,6 +161,18 @@ export function FileTreeView({
 		}
 
 		for (const path of currentlySelected) model.getItem(path)?.deselect();
+
+		// J/K nav can land on a file inside a collapsed folder — expand every
+		// collapsed ancestor first, or the row stays hidden and the scroll
+		// below has no target. A directory handle's `expand()` mutates the
+		// tree store synchronously, so the following `scrollToPath` sees the
+		// now-visible row in the same tick.
+		for (const dirPath of collectAncestorDirectoryPaths([selectedPath])) {
+			const item = model.getItem(dirPath);
+			if (item === null || !isDirectoryHandle(item)) continue;
+			if (!item.isExpanded()) item.expand();
+		}
+
 		model.getItem(selectedPath)?.select();
 		model.scrollToPath(selectedPath, { offset: "center" });
 	}, [model, selectedPath]);
