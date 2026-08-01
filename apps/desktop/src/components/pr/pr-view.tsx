@@ -15,6 +15,7 @@ import {
 import { Spinner } from "#/components/ui/spinner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "#/components/ui/tabs";
 import { WalkthroughView } from "#/components/walkthrough/walkthrough-view";
+import { useKeyBindings } from "#/hooks/use-key-bindings";
 import { useWindowFocused } from "#/hooks/use-window-focused";
 import type { SidecarQueryUtils } from "#/lib/backend-context";
 import type { Session } from "#/lib/pr-data";
@@ -30,7 +31,12 @@ import {
 type PrViewProps = {
 	session: Session;
 	orpc: SidecarQueryUtils;
-	/** Whether this PR's tab is the one currently selected in the multi-PR tab strip — every `PrView` stays mounted (`app-shell.tsx`'s `TabsPrimitive.Panel` keeps `keepMounted`), so this is what tells an inactive one apart from the active one. */
+	/** Whether this PR's tab is the one currently selected in the multi-PR tab strip —
+	 * every `PrView` stays mounted (`app-shell.tsx`'s `TabsPrimitive.Panel` keeps
+	 * `keepMounted`), so this is what tells an inactive one apart from the active
+	 * one. Gates both the sidecar watch below and every keyboard shortcut here —
+	 * and everything threaded down to `FilesChangedView`/`FilesSidebar` — to only
+	 * the selected tab. */
 	isSelectedTab: boolean;
 	onCloseTab: () => void;
 };
@@ -80,6 +86,14 @@ export function PrView({
 		setActiveTab("walkthrough");
 	}, []);
 
+	useKeyBindings(
+		{
+			"1": () => setActiveTab("walkthrough"),
+			"2": () => setActiveTab("files"),
+		},
+		{ enabled: isSelectedTab },
+	);
+
 	const stat = useMemo(
 		() =>
 			files.reduce(
@@ -127,6 +141,7 @@ export function PrView({
 							reviewState={reviewState}
 							session={session}
 							setViewed={setViewed}
+							shortcutsEnabled={isSelectedTab}
 						/>
 					)}
 				</TabsContent>

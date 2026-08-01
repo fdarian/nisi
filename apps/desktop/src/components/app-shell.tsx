@@ -181,6 +181,11 @@ function AppShellReady({
 						value={session.id}
 					>
 						<PrView
+							// `keepMounted` above means every open PR tab's `PrView` stays
+							// mounted at once — this is what tells the visible tab apart
+							// from a background one, both for the sidecar watch gating
+							// below and for keyboard shortcuts (`j`/`k`/`r`/`u`, `1`/`2`),
+							// which must only be live for whichever tab is selected.
 							isSelectedTab={session.id === activeSessionId}
 							onCloseTab={() => handleCloseSession(session.id)}
 							orpc={orpc}
