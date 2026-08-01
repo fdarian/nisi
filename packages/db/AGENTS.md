@@ -81,3 +81,10 @@ not what any bundle contains.
   the walkthrough store's layer) only opens the connection once, *as long as*
   both reference the same `SqliteDb.layer` value rather than each building
   their own `Layer.effect(SqliteDb, SqliteDb.make)`.
+- `bun run db:generate` failing with `Please install latest version of
+  drizzle-orm` is a lie — it's drizzle-kit's `bin.cjs` swallowing a failed
+  `await import("drizzle-orm/version")`, i.e. module-not-found, not a version
+  mismatch. Cause: drizzle-kit declares no peerDependency on drizzle-orm, and
+  `enableGlobalVirtualStore: true` puts its package dir outside the project
+  tree, so pnpm never links one as a sibling — fixed via a `drizzle-kit`
+  `packageExtensions` entry in the root `pnpm-workspace.yaml`.

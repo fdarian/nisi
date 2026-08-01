@@ -14,6 +14,9 @@ packageExtensions:
   next-themes:
     dependencies:
       "@types/react": "*"
+  drizzle-kit:
+    peerDependencies:
+      drizzle-orm: "*"
 patchedDependencies:
   "@ai-sdk/harness@1.0.46": patches/@ai-sdk%2Fharness@1.0.46.patch
   "@ai-sdk/harness-claude-code@1.0.47": patches/@ai-sdk%2Fharness-claude-code@1.0.47.patch
