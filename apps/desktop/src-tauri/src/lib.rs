@@ -3,7 +3,10 @@ use std::sync::Mutex;
 use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
-use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, Submenu, WINDOW_SUBMENU_ID};
+use tauri::menu::{
+    AboutMetadata, Menu, MenuItem, PredefinedMenuItem, Submenu, HELP_SUBMENU_ID,
+    WINDOW_SUBMENU_ID,
+};
 use tauri::{Emitter, Manager, Runtime};
 use tauri_plugin_shell::process::CommandChild;
 #[cfg(not(debug_assertions))]
@@ -126,40 +129,110 @@ async fn get_backend(
         .map(|state| state.clone())
 }
 
-/** Id of the Window menu's ⌘W item, and the event it emits to the frontend. */
+/** Id of the File menu's ⌘W item, and the event it emits to the frontend. */
 const CLOSE_TAB_MENU_ID: &str = "close-tab";
 const CLOSE_TAB_EVENT: &str = "menu://close-tab";
+/** Id of the File menu's ⌘⇧W item — closes the app's window, handled entirely in Rust. */
+const CLOSE_WINDOW_MENU_ID: &str = "close-window";
 
 /**
- * Tauri's default macOS menu (`Menu::default`) puts a predefined "Close"
- * item on ⌘W, and AppKit offers a keystroke to the main menu's key
- * equivalents *before* the key window's responder chain — so the webview
- * never sees ⌘W and a frontend listener for it can never fire. This swaps
- * the whole Window submenu for one whose ⌘W is a plain "Close Tab" item that
- * does nothing but emit `CLOSE_TAB_EVENT`, leaving the actual decision —
- * close the active tab, or close the window when it's the last one — to
- * `src/hooks/use-tab-shortcuts.ts`, alongside the rest of the tab
- * keybindings.
+ * Builds the macOS menu bar from scratch rather than patching
+ * `Menu::default`'s output. `Menu::default` (see
+ * `tauri-2.11.5/src/menu/menu.rs:142-241`) turns out to seed *two*
+ * `PredefinedMenuItem::close_window` items on macOS — one in the Window
+ * submenu (the one this function used to swap out) and an untouched second
+ * one in its own File submenu. muda hardcodes that predefined item to ⌘W on
+ * macOS (`muda-0.19.3/src/items/predefined.rs:330-333`), and AppKit gives
+ * the main menu first refusal on key equivalents before the key window's
+ * responder chain — so File ▸ Close silently kept ⌘W and closed the whole
+ * window, while the custom Close Tab item built into Window never fired.
+ * Patching a menu you don't fully control the contents of is the bug class;
+ * building the whole tree explicitly here means every close item is
+ * accounted for, and no predefined `close_window` survives anywhere in it.
  *
- * Rebuilding the submenu wholesale rather than deleting just the predefined
- * item is deliberate: the top-level submenu has a public, stable id
- * (`WINDOW_SUBMENU_ID`) to find it by, while a predefined item's id is
- * generated at construction and could only be matched by its label.
+ * File holds two custom items instead — `MenuItem::with_id`, not
+ * `PredefinedMenuItem::close_window`, since only the former can take an
+ * accelerator override:
+ * - "Close Tab" (⌘W) emits `CLOSE_TAB_EVENT`; the frontend decides what that
+ *   means (close the active tab, or the window when it's the last one — see
+ *   `src/hooks/use-tab-shortcuts.ts`).
+ * - "Close Window" (⌘⇧W) closes the app's (single, "main"-labeled) window
+ *   directly below, no frontend round trip.
+ *
+ * The Window submenu (still at the stable `WINDOW_SUBMENU_ID`) keeps only
+ * minimize/maximize — both ways to close now live in File.
  */
-fn menu_with_close_tab<R: Runtime>(handle: &tauri::AppHandle<R>) -> tauri::Result<Menu<R>> {
-    let menu = Menu::default(handle)?;
-    let position = menu
-        .items()?
-        .iter()
-        .position(|item| item.id() == WINDOW_SUBMENU_ID)
-        .ok_or_else(|| {
-            tauri::Error::Setup(
-                Box::<dyn std::error::Error>::from(
-                    "Tauri's default menu no longer has a Window submenu to put Close Tab in",
-                )
-                .into(),
-            )
-        })?;
+fn build_macos_menu<R: Runtime>(handle: &tauri::AppHandle<R>) -> tauri::Result<Menu<R>> {
+    let pkg_info = handle.package_info();
+    let config = handle.config();
+    let about_metadata = AboutMetadata {
+        name: Some(pkg_info.name.clone()),
+        version: Some(pkg_info.version.to_string()),
+        copyright: config.bundle.copyright.clone(),
+        authors: config.bundle.publisher.clone().map(|p| vec![p]),
+        ..Default::default()
+    };
+
+    let app_menu = Submenu::with_items(
+        handle,
+        pkg_info.name.clone(),
+        true,
+        &[
+            &PredefinedMenuItem::about(handle, None, Some(about_metadata))?,
+            &PredefinedMenuItem::separator(handle)?,
+            &PredefinedMenuItem::services(handle, None)?,
+            &PredefinedMenuItem::separator(handle)?,
+            &PredefinedMenuItem::hide(handle, None)?,
+            &PredefinedMenuItem::hide_others(handle, None)?,
+            &PredefinedMenuItem::show_all(handle, None)?,
+            &PredefinedMenuItem::separator(handle)?,
+            &PredefinedMenuItem::quit(handle, None)?,
+        ],
+    )?;
+
+    let file_menu = Submenu::with_items(
+        handle,
+        "File",
+        true,
+        &[
+            &MenuItem::with_id(
+                handle,
+                CLOSE_TAB_MENU_ID,
+                "Close Tab",
+                true,
+                Some("CmdOrCtrl+W"),
+            )?,
+            &MenuItem::with_id(
+                handle,
+                CLOSE_WINDOW_MENU_ID,
+                "Close Window",
+                true,
+                Some("CmdOrCtrl+Shift+W"),
+            )?,
+        ],
+    )?;
+
+    let edit_menu = Submenu::with_items(
+        handle,
+        "Edit",
+        true,
+        &[
+            &PredefinedMenuItem::undo(handle, None)?,
+            &PredefinedMenuItem::redo(handle, None)?,
+            &PredefinedMenuItem::separator(handle)?,
+            &PredefinedMenuItem::cut(handle, None)?,
+            &PredefinedMenuItem::copy(handle, None)?,
+            &PredefinedMenuItem::paste(handle, None)?,
+            &PredefinedMenuItem::select_all(handle, None)?,
+        ],
+    )?;
+
+    let view_menu = Submenu::with_items(
+        handle,
+        "View",
+        true,
+        &[&PredefinedMenuItem::fullscreen(handle, None)?],
+    )?;
 
     let window_menu = Submenu::with_id_and_items(
         handle,
@@ -169,30 +242,43 @@ fn menu_with_close_tab<R: Runtime>(handle: &tauri::AppHandle<R>) -> tauri::Resul
         &[
             &PredefinedMenuItem::minimize(handle, None)?,
             &PredefinedMenuItem::maximize(handle, None)?,
-            &PredefinedMenuItem::separator(handle)?,
-            &MenuItem::with_id(
-                handle,
-                CLOSE_TAB_MENU_ID,
-                "Close Tab",
-                true,
-                Some("CmdOrCtrl+W"),
-            )?,
         ],
     )?;
 
-    menu.remove_at(position)?;
-    menu.insert(&window_menu, position)?;
-    Ok(menu)
+    let help_menu = Submenu::with_id_and_items(handle, HELP_SUBMENU_ID, "Help", true, &[])?;
+
+    Menu::with_items(
+        handle,
+        &[
+            &app_menu,
+            &file_menu,
+            &edit_menu,
+            &view_menu,
+            &window_menu,
+            &help_menu,
+        ],
+    )
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let builder = tauri::Builder::default()
-        .menu(menu_with_close_tab)
+        .menu(build_macos_menu)
         .on_menu_event(|app, event| {
             if event.id() == CLOSE_TAB_MENU_ID {
                 if let Err(e) = app.emit(CLOSE_TAB_EVENT, ()) {
                     eprintln!("failed to forward the Close Tab menu event: {e}");
+                }
+            } else if event.id() == CLOSE_WINDOW_MENU_ID {
+                // Single-window app (no `label` in `tauri.conf.json`'s `windows`
+                // entry, so it defaults to "main") — `get_focused_window` would
+                // need the `unstable` cargo feature for no benefit here.
+                if let Some(window) = app.get_webview_window("main") {
+                    if let Err(e) = window.close() {
+                        eprintln!("failed to close window: {e}");
+                    }
+                } else {
+                    eprintln!("Close Window menu event fired but no window labeled 'main' was found");
                 }
             }
         })

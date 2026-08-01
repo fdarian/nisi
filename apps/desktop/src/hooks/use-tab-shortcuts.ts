@@ -5,7 +5,7 @@ import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useEffect } from "react";
 
-/** Emitted by the Window menu's "Close Tab" item — see `src-tauri/src/lib.rs`. */
+/** Emitted by the File menu's "Close Tab" item — see `src-tauri/src/lib.rs`. */
 const CLOSE_TAB_EVENT = "menu://close-tab";
 
 /** ⌘1…⌘8 in order; ⌘9 is handled separately because it means "last", not "ninth". */
@@ -35,10 +35,11 @@ type TabShortcutsOptions = {
  * (`app-shell.tsx`): ⌘⇧] / ⌘⇧[ to step (wrapping), ⌘1…⌘9 to jump, and ⌘W to
  * close.
  *
- * ⌘W arrives as a *menu* event rather than a keystroke: it's a real Window
- * menu item so it shows up where macOS users look for it, and on macOS a menu
- * key equivalent is consumed before the webview ever sees the key anyway (see
- * `menu_with_close_tab` in `src-tauri/src/lib.rs`). That also means ⌘W is the
+ * ⌘W arrives as a *menu* event rather than a keystroke: it's a real File
+ * menu item ("Close Tab", distinct from "Close Window" on ⌘⇧W) so it shows up
+ * where macOS users look for it, and on macOS a menu key equivalent is
+ * consumed before the webview ever sees the key anyway (see
+ * `build_macos_menu` in `src-tauri/src/lib.rs`). That also means ⌘W is the
  * one shortcut here with no effect in a plain browser tab — there's no menu to
  * fire it and no window to close.
  */

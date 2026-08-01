@@ -6,9 +6,10 @@ see `apps/desktop/sidecar/AGENTS.md` for how the sidecar's own pieces fit togeth
 
 Three parts, one seam:
 - `src-tauri/` — **Rust, intentionally thin.** Spawns/discovers the sidecar, hands `{ port, token }` to
-  the frontend via the `get_backend` command, and owns the macOS app menu. No business logic: the
-  Window menu's ⌘W item only emits `menu://close-tab` and lets the frontend decide what it means
-  (see `menu_with_close_tab` in `src/lib.rs`).
+  the frontend via the `get_backend` command, and owns the macOS app menu, built explicitly rather
+  than patched from `Menu::default` (see `build_macos_menu` in `src/lib.rs`). No business logic: the
+  File menu's ⌘W item only emits `menu://close-tab` and lets the frontend decide what it means; ⌘⇧W
+  ("Close Window") is the only menu action handled directly in Rust.
 - `sidecar/` — the real backend, a long-running Bun process (Effect). Implements `packages/sidecar-api`'s
   contract by composing `@repo/git` (pure PR/diff detection) and `@repo/review` (SQLite persistence)
   behind one `Store` service — see `sidecar/AGENTS.md`.
@@ -169,5 +170,7 @@ Two rules if anything else might be working in this checkout at the same time:
 - A keyboard shortcut that collides with a macOS menu accelerator can't be handled in the frontend
   at all — AppKit gives the main menu first refusal, so the webview never sees the key. Give the
   shortcut a real menu item that emits an event instead (⌘W does this); the rest live in
-  `src/hooks/use-tab-shortcuts.ts` / `use-settings-shortcut.ts`.
+  `src/hooks/use-tab-shortcuts.ts` / `use-settings-shortcut.ts`. A predefined item can also turn up
+  in more than one default submenu (`Menu::default()` seeded a `close_window` in both Window and
+  File) — `build_macos_menu` builds the whole tree explicitly instead of patching the default.
 - `#/*` → `src/*`, not `@/*`.
