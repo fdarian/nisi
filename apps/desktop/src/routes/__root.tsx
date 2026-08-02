@@ -1,5 +1,5 @@
 import { createRootRoute, Outlet } from "@tanstack/react-router";
-import {Agentation} from 'agentation'
+import { Agentation } from "agentation";
 import { ThemeProvider } from "next-themes";
 import { DevToolProvider } from "#/components/devtool/dev-tool-context";
 import { ToastProvider } from "#/components/ui/toast";
@@ -19,7 +19,7 @@ function RootLayout() {
 				<ToastProvider>
 					<BackendProvider>
 						<Outlet />
-						{import.meta.env.DEV ? <Agentation />: null}
+						{import.meta.env.DEV ? <Agentation /> : null}
 					</BackendProvider>
 				</ToastProvider>
 			</DevToolProvider>
