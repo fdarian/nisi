@@ -1,4 +1,5 @@
 import { basename, dirname } from "node:path";
+import { DevToolsTelemetry } from "@ai-sdk/devtools";
 import { HarnessAgent } from "@ai-sdk/harness/agent";
 import { createLocalSandbox } from "@repo/harness-local";
 import type {
@@ -16,6 +17,7 @@ import {
 	renderDigest,
 	WALKTHROUGH_TOOL_NAMES,
 } from "@repo/walkthrough";
+import { registerTelemetry } from "ai";
 import type { Context } from "effect";
 import { Effect, Result } from "effect";
 import type { AppServices } from "../services.ts";
@@ -33,6 +35,18 @@ import {
 	stopLiveSession,
 } from "./live-sessions.ts";
 import { type StoredWalkthroughRecord, WalkthroughStore } from "./store.ts";
+
+/**
+ * HarnessAgent drives AI SDK's own `Telemetry` contract per turn (see its
+ * `telemetry` option below), but stays OpenTelemetry-agnostic itself — an
+ * integration has to be registered from the consumer side. Opt-in via
+ * `AI_SDK_DEVTOOLS=1` (then `npx @ai-sdk/devtools` for the viewer); with
+ * nothing registered the dispatcher no-ops, so leaving this unset costs
+ * nothing.
+ */
+if (process.env.AI_SDK_DEVTOOLS === "1") {
+	registerTelemetry(DevToolsTelemetry());
+}
 
 /** Bounded write → validate → feedback → edit loop. Never infinite: an agent that can't converge fails loudly instead of burning turns forever. */
 const MAX_TURNS = 4;
@@ -152,6 +166,7 @@ const startFreshSession = async (
 		},
 		inactiveTools: FILE_MUTATING_BUILTINS[input.harness],
 		instructions: buildSystemPrompt(toolNames),
+		telemetry: {},
 	});
 	const session = await agent.createSession();
 	return { agent, session, buffer };
