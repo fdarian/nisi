@@ -89,6 +89,36 @@ describe("ReviewStore sessions", () => {
 		});
 	});
 
+	test("two no-PR sessions on the same branch but different bases are distinct, each keeping its own baseRef", async () => {
+		await withTempDataDir(async (dataDir) => {
+			const [onMain, onDevelop, open] = await run(
+				dataDir,
+				Effect.gen(function* () {
+					const store = yield* ReviewStore;
+					const a = yield* store.openSession({
+						...prInput,
+						pr: null,
+						baseRef: "main",
+					});
+					const b = yield* store.openSession({
+						...prInput,
+						pr: null,
+						baseRef: "develop",
+					});
+					const listed = yield* store.listOpenSessions();
+					return [a, b, listed] as const;
+				}),
+			);
+
+			expect(onDevelop.id).not.toBe(onMain.id);
+			expect(open).toHaveLength(2);
+			expect([...open].map((session) => session.baseRef).sort()).toEqual([
+				"develop",
+				"main",
+			]);
+		});
+	});
+
 	test("two working copies of the same PR are two sessions, each keeping its own repoRoot", async () => {
 		await withTempDataDir(async (dataDir) => {
 			const [first, second, open] = await run(

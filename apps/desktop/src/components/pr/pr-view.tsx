@@ -110,9 +110,9 @@ export function PrView({
 		<div className="flex min-h-0 flex-1 flex-col">
 			<PrHeader
 				onCloseTab={onCloseTab}
-				pr={session.pr}
 				repoRoot={session.repoRoot}
 				stat={stat}
+				target={session.target}
 			/>
 			<Tabs
 				className="flex min-h-0 flex-1 flex-col gap-0"

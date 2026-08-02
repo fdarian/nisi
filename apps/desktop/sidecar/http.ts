@@ -149,11 +149,32 @@ export function attachRouter(
 		sessions: {
 			open: authed.sessions.open.effect(function* ({ input, errors }) {
 				const store = yield* Store;
-				const session = yield* store.openSession(input.cwd).pipe(
+				const session = yield* store.openSession(input.cwd, input.target).pipe(
 					Effect.catchTag("InvalidCwd", (cause) =>
 						Effect.fail(
 							errors.BAD_REQUEST({
 								message: `not a git repository: ${cause.cwd}`,
+							}),
+						),
+					),
+					// `target: { kind: "pr" }` asked for a PR that isn't there —
+					// the one case that refuses to degrade to a branch diff on
+					// its own (see `store.ts`'s `resolveSessionTarget`).
+					Effect.catchTag("NoPullRequest", (cause) =>
+						Effect.fail(
+							errors.BAD_REQUEST({
+								message: `no open pull request for the current branch in ${cause.repoRoot}`,
+							}),
+						),
+					),
+					// `target: { kind: "branch", baseRef }` named a ref `git` couldn't
+					// resolve (typically a typo) — caught here, before the session is
+					// persisted, so it fails the request instead of surfacing later as
+					// an opaque error the first time Files Changed loads.
+					Effect.catchTag("InvalidBaseRef", (cause) =>
+						Effect.fail(
+							errors.BAD_REQUEST({
+								message: `unknown base ref '${cause.baseRef}' in ${cause.repoRoot}: ${cause.stderr.trim()}`,
 							}),
 						),
 					),
@@ -180,7 +201,7 @@ export function attachRouter(
 				yield* Effect.logInfo("session opened", {
 					sessionId: session.id,
 					repoRoot: session.repoRoot,
-					pr: session.pr?.number ?? null,
+					target: session.target.kind,
 				});
 				return session;
 			}),

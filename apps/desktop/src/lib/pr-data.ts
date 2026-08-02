@@ -26,19 +26,29 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { SidecarQueryUtils } from "#/lib/backend-context";
 import { useIncludeUncommitted } from "#/lib/settings-data";
 
-export type PullRequestInfo = {
-	number: number;
-	title: string;
-	baseRef: string;
-	headRef: string;
-	owner: string;
-	repo: string;
-};
+/**
+ * What a session is actually reviewing — mirrors `SessionTarget`
+ * (`packages/sidecar-api/src/sessions.ts`). `"pr"` is a real open pull
+ * request; `"branch"` covers every other case (no PR, or an explicit
+ * `nisi diff <base>`) and still carries its own `baseRef`/`headRef` rather
+ * than leaving them at the `Session` level.
+ */
+export type SessionTarget =
+	| {
+			kind: "pr";
+			number: number;
+			title: string;
+			baseRef: string;
+			headRef: string;
+			owner: string;
+			repo: string;
+	  }
+	| { kind: "branch"; baseRef: string; headRef: string };
 
 export type Session = {
 	id: string;
 	repoRoot: string;
-	pr: PullRequestInfo | null;
+	target: SessionTarget;
 };
 
 export type FileStatus = "added" | "modified" | "deleted" | "renamed";

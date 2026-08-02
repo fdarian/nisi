@@ -57,9 +57,10 @@ function PrTab({
 	session: Session;
 	onClose: () => void;
 }): React.ReactElement {
-	const label = session.pr
-		? `#${session.pr.number} ${session.pr.title}`
-		: session.repoRoot;
+	const label =
+		session.target.kind === "pr"
+			? `#${session.target.number} ${session.target.title}`
+			: session.target.headRef;
 
 	return (
 		<TabsPrimitive.Tab

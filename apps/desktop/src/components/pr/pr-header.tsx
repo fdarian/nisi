@@ -15,12 +15,11 @@ import {
 	DropdownMenuItem,
 	DropdownMenuTrigger,
 } from "#/components/ui/menu";
-import type { PullRequestInfo } from "#/lib/pr-data";
+import type { SessionTarget } from "#/lib/pr-data";
 import { cn } from "#/lib/utils";
 
 type PrHeaderProps = {
-	/** `null` is the no-PR case — a repo with no open PR for its current branch, diffed against the default branch instead. */
-	pr: PullRequestInfo | null;
+	target: SessionTarget;
 	repoRoot: string;
 	stat: { additions: number; deletions: number };
 	onCloseTab: () => void;
@@ -28,7 +27,7 @@ type PrHeaderProps = {
 
 /** Keep it quiet — the diff is the subject. */
 export function PrHeader({
-	pr,
+	target,
 	repoRoot,
 	stat,
 	onCloseTab,
@@ -42,25 +41,27 @@ export function PrHeader({
 				<Breadcrumb>
 					<BreadcrumbList className="text-xs">
 						<BreadcrumbItem>
-							{pr ? `${pr.owner}/${pr.repo}` : repoName}
+							{target.kind === "pr"
+								? `${target.owner}/${target.repo}`
+								: repoName}
 						</BreadcrumbItem>
-						{pr && (
-							<>
-								<BreadcrumbSeparator />
-								<BreadcrumbItem>
-									<BreadcrumbPage className="text-muted-foreground">
-										#{pr.number}
-									</BreadcrumbPage>
-								</BreadcrumbItem>
-							</>
-						)}
+						<BreadcrumbSeparator />
+						<BreadcrumbItem>
+							<BreadcrumbPage className="text-muted-foreground">
+								{target.kind === "pr" ? (
+									`#${target.number}`
+								) : (
+									<>
+										vs <span className="font-mono">{target.baseRef}</span>
+									</>
+								)}
+							</BreadcrumbPage>
+						</BreadcrumbItem>
 					</BreadcrumbList>
 				</Breadcrumb>
 				<div className="flex min-w-0 items-baseline gap-2">
 					<h1 className="truncate font-heading font-semibold text-base">
-						{pr
-							? pr.title
-							: "No open pull request — diffing against default branch"}
+						{target.kind === "pr" ? target.title : target.headRef}
 					</h1>
 					<span className="shrink-0 font-mono text-xs tabular-nums">
 						<span className="text-success-foreground">+{stat.additions}</span>{" "}

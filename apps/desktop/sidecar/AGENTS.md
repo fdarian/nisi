@@ -44,9 +44,20 @@ seam" for the port/token handshake this boots into.
   agree on what's available without each hand-rolling the union.
 - `store.ts` — `Store`, the service `http.ts`'s git/review handlers depend on. One method per contract
   procedure (`openSession`, `listChangedFiles`, `setFileViewed`, `setRangeViewed`, ...), each composing
-  `@repo/review`'s `ReviewStore` with `@repo/git`'s functions. `Session` here is the wire shape
-  (`pr.baseRef`/`headRef` hoisted into the `pr` sub-object); `@repo/review`'s own `Session` keeps them
-  at the top level since they apply whether or not there's a PR — `toWireSession` bridges the two.
+  `@repo/review`'s `ReviewStore` with `@repo/git`'s functions. `Session` here is the wire shape — a
+  discriminated `target` (`{kind: "pr", ...}` or `{kind: "branch", baseRef, headRef}`, mirroring
+  `packages/sidecar-api`'s `SessionTarget`) rather than a nullable `pr`, since a branch session still
+  has a real base and head to review against; `@repo/review`'s own `Session` keeps `baseRef`/`headRef`
+  at the top level and `pr` nullable instead, since those apply whether or not there's a PR —
+  `toWireSession` bridges the two. `openSession` takes an `OpenSessionTarget` selector
+  (`"auto"`/`"pr"`/`"branch"`, defaulting to `"auto"`) mirroring the CLI's `nisi`/`nisi pr`/`nisi diff
+  [<base>]` grammar; `resolveSessionTarget` is where that selector turns into the `baseRef`/`headRef`/`pr`
+  triple `ReviewStore.openSession` needs, skipping `resolveReviewTarget` (and its GitHub round trip)
+  entirely when `"branch"` supplies its own `baseRef` — but still validating that ref via
+  `resolveMergeBase`, failing with `InvalidBaseRef` (git's own `stderr` attached) before a session
+  is ever persisted, rather than letting a typo surface later as an opaque failure the first time
+  Files Changed loads. `"pr"` fails with `NoPullRequest` when `resolveReviewTarget` finds none open
+  — the one selector that doesn't degrade to a branch diff on its own.
   `listChangedFiles`/`readFileContents` both take `includeUncommitted` and thread it straight into
   their `@repo/git` calls (see that package's AGENTS.md for what the flag does). `changedSinceReview`
   (`attachReviewState`'s sidebar badge, and `readFileContents`'s size-gated-content fallback) honors

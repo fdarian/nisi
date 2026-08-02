@@ -43,17 +43,55 @@ export class InvalidCwd extends Schema.TaggedErrorClass<InvalidCwd>()(
 	},
 ) {}
 
+/** `sessions.open`'s `target: { kind: "pr" }` asked for a PR, but `resolveReviewTarget` found none open for the current branch. */
+export class NoPullRequest extends Schema.TaggedErrorClass<NoPullRequest>()(
+	"NoPullRequest",
+	{
+		repoRoot: Schema.String,
+	},
+) {}
+
+/** `sessions.open`'s `target: { kind: "branch", baseRef }` named a ref `git` couldn't resolve — typically a typo. `stderr` is git's own explanation, carried through so the caller sees which ref was bad instead of a generic "invalid base". */
+export class InvalidBaseRef extends Schema.TaggedErrorClass<InvalidBaseRef>()(
+	"InvalidBaseRef",
+	{
+		repoRoot: Schema.String,
+		baseRef: Schema.String,
+		stderr: Schema.String,
+	},
+) {}
+
+/**
+ * `sessions.open`'s target selector — mirrors `packages/sidecar-api`'s
+ * `OpenSessionTarget`. Kept as this module's own type (not imported) the same
+ * way `Session` below is, since `http.ts` decodes the wire input before this
+ * ever sees it.
+ */
+export type OpenSessionTarget =
+	| { readonly kind: "auto" }
+	| { readonly kind: "pr" }
+	| { readonly kind: "branch"; readonly baseRef?: string };
+
+export type SessionTarget =
+	| {
+			readonly kind: "pr";
+			readonly number: number;
+			readonly title: string;
+			readonly baseRef: string;
+			readonly headRef: string;
+			readonly owner: string;
+			readonly repo: string;
+	  }
+	| {
+			readonly kind: "branch";
+			readonly baseRef: string;
+			readonly headRef: string;
+	  };
+
 export type Session = {
 	readonly id: string;
 	readonly repoRoot: string;
-	readonly pr: {
-		readonly number: number;
-		readonly title: string;
-		readonly baseRef: string;
-		readonly headRef: string;
-		readonly owner: string;
-		readonly repo: string;
-	} | null;
+	readonly target: SessionTarget;
 };
 
 export type FileReview = {
@@ -113,10 +151,11 @@ const toSessionPullRequest = (
 const toWireSession = (session: ReviewSession): Session => ({
 	id: session.id,
 	repoRoot: session.repoRoot,
-	pr:
+	target:
 		session.pr === null
-			? null
+			? { kind: "branch", baseRef: session.baseRef, headRef: session.headRef }
 			: {
+					kind: "pr",
 					number: session.pr.number,
 					title: session.pr.title,
 					baseRef: session.baseRef,
@@ -125,6 +164,81 @@ const toWireSession = (session: ReviewSession): Session => ({
 					repo: session.pr.repo,
 				},
 });
+
+/**
+ * Resolves what `target` actually means for `repoRoot` right now — the
+ * `@repo/review` inputs `openSession` needs (`baseRef`/`headRef`/`pr`), one
+ * per selector variant:
+ *
+ * - `"branch"` with an explicit `baseRef` is a pure local diff and skips
+ *   `resolveReviewTarget` (and therefore any GitHub round trip) entirely —
+ *   the caller named its own base, there's nothing to look up. It's still
+ *   validated via `resolveMergeBase`, the same resolution `getChangedFiles`/
+ *   `getFileContents` would do anyway, just run here so a typo'd ref fails
+ *   the request (`InvalidBaseRef`) before a session is ever persisted,
+ *   instead of surfacing as an opaque error the first time Files Changed
+ *   loads.
+ * - `"branch"` with no `baseRef` falls back to the repo's default branch,
+ *   still ignoring any PR open on the current branch — not re-validated,
+ *   since `resolveReviewTarget`'s own resolution is git-derived by
+ *   construction.
+ * - `"pr"` requires a PR: `resolveReviewTarget` finding none fails with
+ *   `NoPullRequest` rather than silently degrading to a branch diff the
+ *   caller didn't ask for.
+ * - `"auto"` is today's behavior — PR if one's open, else the default
+ *   branch.
+ *
+ * Head is always the current checkout (`resolveCurrentBranch`, or the PR's
+ * own `headRefName` for `"pr"`/`"auto"` when a PR is in play) — nisi doesn't
+ * support reviewing an arbitrary head.
+ */
+const resolveSessionTarget = (repoRoot: string, target: OpenSessionTarget) =>
+	Effect.gen(function* () {
+		if (target.kind === "branch" && target.baseRef !== undefined) {
+			const baseRef = target.baseRef;
+			yield* resolveMergeBase(repoRoot, baseRef).pipe(
+				Effect.catchTag("GitCommandError", (cause) =>
+					Effect.fail(
+						new InvalidBaseRef({ repoRoot, baseRef, stderr: cause.stderr }),
+					),
+				),
+			);
+			const headRef = yield* resolveCurrentBranch(repoRoot);
+			return { baseRef, headRef, pr: null };
+		}
+
+		const [reviewTarget, currentBranch] = yield* Effect.all([
+			resolveReviewTarget(repoRoot),
+			resolveCurrentBranch(repoRoot),
+		]);
+
+		if (target.kind === "branch") {
+			return {
+				baseRef: reviewTarget.defaultBranch,
+				headRef: currentBranch,
+				pr: null,
+			};
+		}
+
+		const githubPr = reviewTarget.github?.pr ?? null;
+
+		if (target.kind === "pr") {
+			if (githubPr === null) {
+				return yield* new NoPullRequest({ repoRoot });
+			}
+			return {
+				baseRef: githubPr.baseRef,
+				headRef: githubPr.headRef,
+				pr: toSessionPullRequest(reviewTarget.github),
+			};
+		}
+
+		return {
+			baseRef: githubPr?.baseRef ?? reviewTarget.defaultBranch,
+			headRef: githubPr?.headRef ?? currentBranch,
+			pr: toSessionPullRequest(reviewTarget.github),
+		};
+	});
 
 /**
  * Combines `@repo/git` (pure PR/diff detection) and `@repo/review`
@@ -137,23 +251,21 @@ export class Store extends Context.Service<Store>()("Store", {
 		const reviewStore = yield* ReviewStore;
 		const fs = yield* FileSystem;
 
-		const openSession = (cwd: string) =>
+		const openSession = (
+			cwd: string,
+			target: OpenSessionTarget = { kind: "auto" },
+		) =>
 			Effect.gen(function* () {
 				const repoRoot = yield* resolveRepoRoot(cwd).pipe(
 					Effect.catchTag("NotAGitRepository", () => new InvalidCwd({ cwd })),
 				);
-				const [reviewTarget, currentBranch] = yield* Effect.all([
-					resolveReviewTarget(repoRoot),
-					resolveCurrentBranch(repoRoot),
-				]);
-				const pr = toSessionPullRequest(reviewTarget.github);
+				const resolved = yield* resolveSessionTarget(repoRoot, target);
 
 				const session = yield* reviewStore.openSession({
 					repoRoot,
-					baseRef:
-						reviewTarget.github?.pr?.baseRef ?? reviewTarget.defaultBranch,
-					headRef: reviewTarget.github?.pr?.headRef ?? currentBranch,
-					pr,
+					baseRef: resolved.baseRef,
+					headRef: resolved.headRef,
+					pr: resolved.pr,
 				});
 				return toWireSession(session);
 			});

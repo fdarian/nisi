@@ -68,20 +68,29 @@ export type RangeReviewClaim = {
 
 /**
  * `sessions.open`'s idempotency key: the working tree, narrowed by the PR
- * open on it, or by the branch when there is no PR. Rooted at `repoRoot`
- * rather than the GitHub repo because review state is a set of snapshots of
- * *these* files — two clones or worktrees of the same upstream hold different
- * bytes, so reviewing one must not repoint the other's session. Deliberately
- * a single derived column rather than a composite unique index: SQLite treats
- * `NULL` as distinct within a unique index, so anything involving a nullable
- * `prNumber` would let every no-PR open insert a new row.
+ * open on it, or by the branch *and* base when there is no PR. The base is
+ * part of the key, not just the branch — `nisi diff <base>` lets a caller
+ * pick an arbitrary base ref on the same branch (see `packages/cli`), and
+ * two different bases reviewed from the same branch are two distinct
+ * reviews of two distinct diffs, not one session that silently repoints its
+ * reviewed snapshots underneath whichever base opened last. Rooted at
+ * `repoRoot` rather than the GitHub repo because review state is a set of
+ * snapshots of *these* files — two clones or worktrees of the same upstream
+ * hold different bytes, so reviewing one must not repoint the other's
+ * session. Deliberately a single derived column rather than a composite
+ * unique index: SQLite treats `NULL` as distinct within a unique index, so
+ * anything involving a nullable `prNumber` would let every no-PR open insert
+ * a new row.
  */
 const computeSessionKey = (
 	repoRoot: string,
 	pr: OpenSessionInput["pr"],
+	baseRef: string,
 	headRef: string,
 ): string =>
-	pr === null ? `${repoRoot}#branch${headRef}` : `${repoRoot}#pr${pr.number}`;
+	pr === null
+		? `${repoRoot}#branch${headRef}#base${baseRef}`
+		: `${repoRoot}#pr${pr.number}`;
 
 /** A PR is all four columns or none — a partially-filled row is a row we can't describe, not a PR with blanks. */
 const toPullRequest = (row: SessionRow): SessionPullRequest | null =>
@@ -145,6 +154,7 @@ export class ReviewStore extends Context.Service<ReviewStore>()("ReviewStore", {
 				const sessionKey = computeSessionKey(
 					input.repoRoot,
 					input.pr,
+					input.baseRef,
 					input.headRef,
 				);
 				const now = new Date();

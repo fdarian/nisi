@@ -40,12 +40,15 @@ for why review's tables and the walkthrough store's tables share one `app.db` fi
 ## Non-obvious decisions
 
 - **`sessionKey` is one derived text column, not a composite unique index.** `sessions.open` is
-  idempotent per *working tree* + PR — `${repoRoot}#pr${n}`, or `${repoRoot}#branch${headRef}` when
-  there's no PR. Rooted at `repoRoot`, not the GitHub repo, because review state is snapshots of
-  those exact files: two clones or worktrees of one upstream are two reviews, and keying on repo
-  identity made the second open silently repoint the first's `repoRoot`. SQLite treats `NULL` as
-  distinct within a unique index, so anything composite involving `prNumber` would let every no-PR
-  open insert a fresh row instead of reusing one — `sessionKey` sidesteps that by never being `NULL`.
+  idempotent per *working tree* + PR — `${repoRoot}#pr${n}`, or `${repoRoot}#branch${headRef}#base${baseRef}`
+  when there's no PR. The base is part of the no-PR key, not just the branch: `nisi diff <base>`
+  (`packages/cli`) can review the same branch against different bases, and those are distinct
+  reviews with distinct reviewed snapshots, not one session two bases would silently repoint.
+  Rooted at `repoRoot`, not the GitHub repo, because review state is snapshots of those exact
+  files: two clones or worktrees of one upstream are two reviews, and keying on repo identity made
+  the second open silently repoint the first's `repoRoot`. SQLite treats `NULL` as distinct within
+  a unique index, so anything composite involving `prNumber` would let every no-PR open insert a
+  fresh row instead of reusing one — `sessionKey` sidesteps that by never being `NULL`.
 - **A session's `owner`/`repo` are PR-scoped and nullable.** A repo with no GitHub origin (or one
   `gh` can't resolve) still opens a session and reviews against its default branch, so there's no
   GitHub identity to record — `Session.pr` carries `owner`/`repo` and is `null` as a unit rather

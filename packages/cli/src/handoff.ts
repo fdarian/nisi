@@ -1,7 +1,11 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { isDefinedError, safe } from "@orpc/client";
-import { makeSidecarClient, type Session } from "@repo/sidecar-api";
+import {
+	makeSidecarClient,
+	type OpenSessionTarget,
+	type Session,
+} from "@repo/sidecar-api";
 import { Config, Effect, Schema } from "effect";
 import { FileSystem } from "effect/FileSystem";
 import type { ChildProcessSpawner } from "effect/unstable/process";
@@ -114,6 +118,7 @@ const readHandshake = (sidecarJsonPath: string) =>
 const attempt = (
 	sidecarJsonPath: string,
 	cwd: string,
+	target: OpenSessionTarget,
 ): Effect.Effect<HandoffOutcome, never, FileSystem> =>
 	Effect.gen(function* () {
 		const handshake = yield* readHandshake(sidecarJsonPath);
@@ -124,13 +129,14 @@ const attempt = (
 		yield* Effect.logDebug("POSTing sessions.open", {
 			port: handshake.port,
 			cwd,
+			target,
 		});
 
 		const client = makeSidecarClient(handshake);
 		const result = yield* Effect.promise(() =>
 			safe(
 				client.sessions.open(
-					{ cwd },
+					{ cwd, target },
 					{ signal: AbortSignal.timeout(POST_TIMEOUT_MS) },
 				),
 			),
@@ -167,16 +173,17 @@ const attempt = (
 const pollUntilReachable = (
 	sidecarJsonPath: string,
 	cwd: string,
+	target: OpenSessionTarget,
 	deadline: number,
 ): Effect.Effect<HandoffOutcome, never, FileSystem> =>
 	Effect.gen(function* () {
-		const outcome = yield* attempt(sidecarJsonPath, cwd);
+		const outcome = yield* attempt(sidecarJsonPath, cwd, target);
 		const conclusive = outcome._tag === "opened" || outcome._tag === "rejected";
 		if (conclusive || Date.now() >= deadline) {
 			return outcome;
 		}
 		yield* Effect.sleep(`${POLL_INTERVAL_MS} millis`);
-		return yield* pollUntilReachable(sidecarJsonPath, cwd, deadline);
+		return yield* pollUntilReachable(sidecarJsonPath, cwd, target, deadline);
 	});
 
 /**
@@ -185,10 +192,13 @@ const pollUntilReachable = (
  * poll the same file/POST pair until the newly-booted sidecar responds or we
  * give up. Always the same POST either way, so the app has exactly one
  * ingest path rather than one for argv-at-boot and another for a running
- * instance.
+ * instance. `target` is the CLI's own `nisi`/`nisi pr`/`nisi diff [<base>]`
+ * selection (`packages/cli/src/index.ts`), passed straight through to
+ * `sessions.open` — this module doesn't interpret it.
  */
 export const handoff = (
 	cwd: string,
+	target: OpenSessionTarget,
 ): Effect.Effect<
 	HandoffOutcome,
 	never,
@@ -203,7 +213,7 @@ export const handoff = (
 			logFile: join(dataDir, "logs", "sidecar.log"),
 		});
 
-		const first = yield* attempt(sidecarJsonPath, cwd);
+		const first = yield* attempt(sidecarJsonPath, cwd, target);
 		if (first._tag === "opened" || first._tag === "rejected") {
 			return first;
 		}
@@ -217,6 +227,7 @@ export const handoff = (
 			return yield* pollUntilReachable(
 				sidecarJsonPath,
 				cwd,
+				target,
 				Date.now() + pollTimeoutMs,
 			);
 		}
@@ -233,6 +244,7 @@ export const handoff = (
 		return yield* pollUntilReachable(
 			sidecarJsonPath,
 			cwd,
+			target,
 			Date.now() + pollTimeoutMs,
 		);
 	});
