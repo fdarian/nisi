@@ -140,6 +140,7 @@ export const GenerateEvent = Schema.Union([
 		type: Schema.Literal("tool-call"),
 		turn: Schema.Number,
 		toolName: Schema.String,
+		input: Schema.Unknown,
 	}),
 	/** Coverage/reference validation rejected the turn's buffer; `feedback` is what's fed back to the agent for the next turn. */
 	Schema.Struct({

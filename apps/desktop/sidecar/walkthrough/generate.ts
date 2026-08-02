@@ -282,7 +282,12 @@ export async function* generateWalkthrough(
 			const result = await agent.stream({ session, prompt: turnPrompt });
 			for await (const part of result.fullStream) {
 				if (part.type === "tool-call") {
-					yield { type: "tool-call", turn, toolName: part.toolName };
+					yield {
+						type: "tool-call",
+						turn,
+						toolName: part.toolName,
+						input: part.input,
+					};
 				}
 				if (part.type === "error") {
 					const described = describeStreamError(part.error);

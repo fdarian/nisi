@@ -87,7 +87,7 @@ export type StoredWalkthrough = {
 export type GenerateEvent =
 	| { type: "bootstrapping" }
 	| { type: "turn-started"; turn: number }
-	| { type: "tool-call"; turn: number; toolName: string }
+	| { type: "tool-call"; turn: number; toolName: string; input: unknown }
 	| { type: "validation-failed"; turn: number; feedback: string }
 	| { type: "retrying"; turn: number }
 	| { type: "done"; walkthrough: StoredWalkthrough }

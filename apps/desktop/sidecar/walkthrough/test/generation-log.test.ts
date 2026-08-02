@@ -54,6 +54,7 @@ describe("generation-log", () => {
 			type: "tool-call",
 			turn: 1,
 			toolName: "write",
+			input: { path: "walkthrough.json" },
 		});
 
 		// Simulates disconnecting and resubscribing: a fresh subscriber attaches
@@ -64,7 +65,12 @@ describe("generation-log", () => {
 		expect(received).toEqual([
 			{ type: "bootstrapping" },
 			{ type: "turn-started", turn: 1 },
-			{ type: "tool-call", turn: 1, toolName: "write" },
+			{
+				type: "tool-call",
+				turn: 1,
+				toolName: "write",
+				input: { path: "walkthrough.json" },
+			},
 		]);
 
 		// Events recorded after attaching arrive live, appended to the same feed.
