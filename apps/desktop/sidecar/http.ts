@@ -7,6 +7,7 @@ import {
 	type RequestHeadersHandlerPluginContext,
 } from "@orpc/server/plugins";
 import { refreshLoginShellPath } from "@repo/bin-resolver";
+import type { GitCommandError } from "@repo/git";
 import { ReviewStore } from "@repo/review";
 import { SettingsStore } from "@repo/settings";
 import type {
@@ -75,6 +76,25 @@ const toEnabledHarnessSet = (
 	enabledHarnesses === null
 		? null
 		: new Set(enabledHarnesses as ReadonlyArray<HarnessId>);
+
+/**
+ * `diff.files`/`diff.fileContents` both surface any underlying
+ * `GitCommandError` (merge-base resolution, status, patch/blob reads — every
+ * git invocation `getChangedFiles`/`getFileContents` makes) the same way, so
+ * this is shared rather than duplicated across the two handlers. `stderr` is
+ * the only part of a `GitCommandError` git actually explains itself with —
+ * everything else here is just enough to reproduce the failing invocation.
+ * A `null` exitCode means the process never started (missing binary,
+ * permissions), not "exit code 0", so it's spelled out rather than coerced.
+ */
+const formatGitCommandError = (cause: GitCommandError): string => {
+	const invocation = [cause.command, ...cause.args].join(" ");
+	const exitDescription =
+		cause.exitCode === null
+			? "process never started"
+			: `exit code ${cause.exitCode}`;
+	return `git command failed (${exitDescription}) in ${cause.cwd}: ${invocation}\n${cause.stderr.trim()}`;
+};
 
 type ServerContext = WithEffectContext<AppServices> &
 	RequestHeadersHandlerPluginContext;
@@ -287,6 +307,13 @@ export function attachRouter(
 								}),
 							),
 						),
+						Effect.catchTag("GitCommandError", (cause) =>
+							Effect.fail(
+								errors.INTERNAL_SERVER_ERROR({
+									message: formatGitCommandError(cause),
+								}),
+							),
+						),
 					);
 			}),
 			fileContents: authed.diff.fileContents.effect(function* ({
@@ -311,6 +338,13 @@ export function attachRouter(
 							Effect.fail(
 								errors.NOT_FOUND({
 									message: `session not found: ${input.sessionId}`,
+								}),
+							),
+						),
+						Effect.catchTag("GitCommandError", (cause) =>
+							Effect.fail(
+								errors.INTERNAL_SERVER_ERROR({
+									message: formatGitCommandError(cause),
 								}),
 							),
 						),

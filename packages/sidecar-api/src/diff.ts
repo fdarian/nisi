@@ -157,7 +157,7 @@ export const diffContract = {
 			}),
 		)
 		.output(Schema.Array(FileChange))
-		.errors({ NOT_FOUND: {} }),
+		.errors({ NOT_FOUND: {}, INTERNAL_SERVER_ERROR: {} }),
 	/**
 	 * Every requested path's patch + contents, in one round trip — the diff
 	 * pane's data source. Batched (not one-procedure-per-file) because
@@ -175,5 +175,5 @@ export const diffContract = {
 			}),
 		)
 		.output(Schema.Array(FileContentResult))
-		.errors({ NOT_FOUND: {} }),
+		.errors({ NOT_FOUND: {}, INTERNAL_SERVER_ERROR: {} }),
 };
