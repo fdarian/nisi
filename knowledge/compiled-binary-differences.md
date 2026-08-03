@@ -32,7 +32,7 @@ from a `drizzle/` folder that won't exist.[^migrations]
 invisible to the compiler, yet `import.meta.url` is still rewritten to a virtual `/$bunfs/...` path
 — so the computed path resolves to nothing and fails as `ENOENT: /$bunfs/bridge/package.json`.
 `import x from "./f" with { type: "text" }` is inlined as a string literal and survives. This is what
-three of the four `@ai-sdk/harness*` patches do.
+three of the five `@ai-sdk/harness*` patches do.
 
 **`PATH` is narrower.** `bun run` prepends its own node-shim directory to a child's `PATH`; the
 compiled binary does not. OpenCode's bridge died with `exit code 127 — /bin/bash: node: command not
@@ -42,7 +42,7 @@ reproduction recipe is in
 
 # The patches are load-bearing and silent
 
-All four `@ai-sdk/harness*` patches are pinned to exact versions and registered in
+All five `@ai-sdk/harness*` patches are pinned to exact versions and registered in
 `pnpm-workspace.yaml` (not `package.json` — pnpm 10+ ignores that key there without warning). A
 version bump drops them with no error: the build succeeds and the failure shows up at runtime, in
 the packaged app. **Re-verify a compiled build whenever a harness package is bumped.**

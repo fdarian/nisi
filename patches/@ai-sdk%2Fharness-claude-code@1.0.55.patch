@@ -1,10 +1,10 @@
 diff --git a/dist/index.js b/dist/index.js
-index 3f5b674744c1dec2b2d02b1ca60e8469644cbb91..7b8c38a5b94584a95aa56a739003fe0063a58c9f 100644
+index f70943aea9561d5a1df2cb099e182ff8cd14aeb9..c1544bf3fb02a757210e0e1285337515053c774f 100644
 --- a/dist/index.js
 +++ b/dist/index.js
-@@ -2,6 +2,19 @@
- import { randomBytes } from "crypto";
+@@ -3,6 +3,19 @@ import { randomBytes } from "crypto";
  import { readFile } from "fs/promises";
+ import { posix } from "path";
  import { fileURLToPath } from "url";
 +// nisi patch: `readBridgeAsset` originally resolved these three files at
 +// runtime via `new URL(`./bridge/${name}`, import.meta.url)`. Bun's compiler
@@ -22,7 +22,7 @@ index 3f5b674744c1dec2b2d02b1ca60e8469644cbb91..7b8c38a5b94584a95aa56a739003fe00
  import {
    commonTool,
    harnessV1DiagnosticFromBridgeFrame,
-@@ -691,21 +704,18 @@ async function writeClaudeCodeSkills({
+@@ -695,21 +708,18 @@ async function writeClaudeCodeSkills({
    });
  }
  async function readBridgeAsset(name) {

@@ -1,5 +1,5 @@
 diff --git a/dist/index.js b/dist/index.js
-index 6d1a2c48fbbb32cc2ca48b1862cee63105347418..bced9feb2e0a2ea673a9ba803562961476355288 100644
+index 51e20d87b8ff4bcfb47dbe2121155ef062cdb67c..cb9e207cab2c1d8bbe1d963d931f07a1c4184e2e 100644
 --- a/dist/index.js
 +++ b/dist/index.js
 @@ -3,6 +3,15 @@ import { randomBytes } from "crypto";
@@ -7,7 +7,7 @@ index 6d1a2c48fbbb32cc2ca48b1862cee63105347418..bced9feb2e0a2ea673a9ba8035629614
  import path from "path";
  import { fileURLToPath } from "url";
 +// nisi patch: same fix as @ai-sdk/harness-claude-code's patch — see
-+// patches/@ai-sdk%2Fharness-claude-code@1.0.47.patch and
++// patches/@ai-sdk%2Fharness-claude-code@1.0.55.patch and
 +// knowledge/compiled-binary-differences.md for why `readBridgeAsset`'s
 +// dynamic `new URL(`./bridge/${name}`, import.meta.url)` reads break under
 +// `bun build --compile`, and why static `with { type: "text" }` imports fix it.
@@ -18,7 +18,7 @@ index 6d1a2c48fbbb32cc2ca48b1862cee63105347418..bced9feb2e0a2ea673a9ba8035629614
  import {
    commonTool,
    HarnessCapabilityUnsupportedError,
-@@ -519,21 +528,20 @@ function resolveBridgePort(sandboxSession, override) {
+@@ -522,21 +531,20 @@ function resolveBridgePort(sandboxSession, override) {
    });
  }
  async function readBridgeAsset(name) {

@@ -1,5 +1,5 @@
 diff --git a/dist/index.js b/dist/index.js
-index 71b299f..9393428 100644
+index 71b299fd3089ed0bef9af69cc1510b16062c6dc7..939342896d12f9cd416f47706ea7c6c4f828e113 100644
 --- a/dist/index.js
 +++ b/dist/index.js
 @@ -211,7 +211,17 @@ var harnessV1CompactionPartSchema = z2.object({
@@ -22,7 +22,7 @@ index 71b299f..9393428 100644
  var harnessV1RawPartSchema = z2.object({
    type: z2.literal("raw"),
 diff --git a/dist/utils/index.js b/dist/utils/index.js
-index e220b86..954b20f 100644
+index e220b86359db2bba91c6898a824d1b3930237be1..954b20f2906bf3b867acfe3e8cfd4469ad9e94e0 100644
 --- a/dist/utils/index.js
 +++ b/dist/utils/index.js
 @@ -669,7 +669,17 @@ var harnessV1CompactionPartSchema = z2.object({

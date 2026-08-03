@@ -278,6 +278,14 @@ export async function* generateWalkthrough(
 			yield await endCancelled(input.sessionId);
 			return;
 		}
+		await runEffect(
+			Effect.logDebug("starting fresh harness session", {
+				sessionId: input.sessionId,
+				harness: input.harness,
+				model: input.model,
+			}),
+			mainContext,
+		);
 		try {
 			({ agent, session, buffer } = await startFreshSession(
 				input,

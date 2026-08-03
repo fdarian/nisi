@@ -17,9 +17,9 @@
 	},
 	"dependencies": {
 		"@ai-sdk/provider": "4.0.4",
-		"@ai-sdk/provider-utils": "5.0.14",
+		"@ai-sdk/provider-utils": "5.0.18",
 		"@repo/git": "workspace:*",
-		"ai": "7.0.40",
+		"ai": "7.0.48",
 		"drizzle-orm": "^0.45.2",
 		"effect": "4.0.0-beta.102"
 	},
