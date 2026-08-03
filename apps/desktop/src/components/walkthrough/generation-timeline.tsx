@@ -34,7 +34,9 @@ export function GenerationTimeline({
 }: GenerationTimelineProps): React.ReactElement {
 	const last = history[history.length - 1];
 	const isTerminal =
-		last?.event.type === "done" || last?.event.type === "failed";
+		last?.event.type === "done" ||
+		last?.event.type === "failed" ||
+		last?.event.type === "cancelled";
 
 	return (
 		<div className="flex w-full max-w-md flex-col gap-3">
@@ -98,6 +100,8 @@ function headline(event: GenerateEvent | undefined): string {
 			return "Walkthrough ready.";
 		case "failed":
 			return "Generation failed.";
+		case "cancelled":
+			return "Generation stopped.";
 	}
 }
 
@@ -117,6 +121,8 @@ function describeEvent(event: GenerateEvent): string {
 			return "Walkthrough generated.";
 		case "failed":
 			return event.message;
+		case "cancelled":
+			return "Stopped by request.";
 	}
 }
 
@@ -164,6 +170,9 @@ function EventIcon({ event }: { event: GenerateEvent }): React.ReactElement {
 		return (
 			<CheckIcon className="mt-0.5 size-3 shrink-0 text-success-foreground" />
 		);
+	}
+	if (event.type === "cancelled") {
+		return <XIcon className="mt-0.5 size-3 shrink-0 text-muted-foreground" />;
 	}
 	if (event.type === "validation-failed") {
 		return (

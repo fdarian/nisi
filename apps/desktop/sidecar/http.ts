@@ -32,6 +32,7 @@ import {
 	GenerateSessionNotFound,
 } from "./walkthrough/generate.ts";
 import {
+	abortGeneration,
 	attachToGeneration,
 	clearGeneration,
 	getGeneration,
@@ -539,7 +540,13 @@ export function attachRouter(
 						const event = pending.shift();
 						if (event !== undefined) {
 							yield event;
-							if (event.type === "done" || event.type === "failed") return;
+							if (
+								event.type === "done" ||
+								event.type === "failed" ||
+								event.type === "cancelled"
+							) {
+								return;
+							}
 							continue;
 						}
 						await new Promise<void>((resolve) => {
@@ -549,6 +556,24 @@ export function attachRouter(
 				} finally {
 					unsubscribe?.();
 				}
+			}),
+			// A no-op, not an error, when nothing's running for this session —
+			// `abortGeneration` already guards on that (see `generation-log.ts`).
+			// The generation loop (`generate.ts`) is what actually tears down the
+			// harness session and yields the terminal `cancelled` event; this only
+			// signals it.
+			stop: authed.walkthrough.stop.effect(function* ({ input, errors }) {
+				const reviewStore = yield* ReviewStore;
+				yield* reviewStore.getSession(input.sessionId).pipe(
+					Effect.catchTag("SessionNotFound", () =>
+						Effect.fail(
+							errors.NOT_FOUND({
+								message: `session not found: ${input.sessionId}`,
+							}),
+						),
+					),
+				);
+				abortGeneration(input.sessionId);
 			}),
 		},
 		settings: {

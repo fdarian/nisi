@@ -91,7 +91,9 @@ export type GenerateEvent =
 	| { type: "validation-failed"; turn: number; feedback: string }
 	| { type: "retrying"; turn: number }
 	| { type: "done"; walkthrough: StoredWalkthrough }
-	| { type: "failed"; message: string };
+	| { type: "failed"; message: string }
+	/** Terminal outcome of a user-initiated `stop` — distinct from `failed` since nothing went wrong, the generation just ended on request. */
+	| { type: "cancelled" };
 
 /**
  * Mirrors `walkthrough.harnesses()` — the harness/model registry, live
@@ -201,6 +203,10 @@ function reduceGenerateEvent(event: GenerateEvent): GenerationProgress {
 			return { phase: "idle" };
 		case "failed":
 			return { phase: "failed", message: event.message };
+		case "cancelled":
+			// Same terminal handling as "done" — explicitly not a "failed", so no
+			// error message surfaces for a generation the user stopped on purpose.
+			return { phase: "idle" };
 	}
 }
 
@@ -265,6 +271,8 @@ export function useWalkthroughGeneration(
 	history: readonly GenerationLogEntry[];
 	isReattaching: boolean;
 	generate: (harness: HarnessId, model: string | undefined) => void;
+	stop: () => void;
+	isStopping: boolean;
 } {
 	const queryClient = useQueryClient();
 	const [request, setRequest] = useState<GenerateRequest | null>(null);
@@ -384,7 +392,22 @@ export function useWalkthroughGeneration(
 		[],
 	);
 
-	return { progress, history, isReattaching, generate };
+	// The backend returns as soon as the abort is signalled — the actual
+	// `cancelled` event arrives over the stream above a moment later and is
+	// what clears the timeline, so this deliberately doesn't touch
+	// `progress`/`history` itself on success.
+	const stopMutation = useMutation({
+		mutationFn: () => orpc.walkthrough.stop.call({ sessionId }),
+	});
+
+	return {
+		progress,
+		history,
+		isReattaching,
+		generate,
+		stop: stopMutation.mutate,
+		isStopping: stopMutation.isPending,
+	};
 }
 
 export type FileDrift = "new" | "edited" | "deleted";

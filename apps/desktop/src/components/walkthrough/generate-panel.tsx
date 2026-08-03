@@ -32,6 +32,8 @@ type GeneratePanelProps = {
 	progress: GenerationProgress;
 	history: readonly GenerationLogEntry[];
 	onGenerate: (harness: HarnessId, model: string | undefined) => void;
+	onStop: () => void;
+	isStopping: boolean;
 };
 
 /** Enabled harnesses whose `modelsStatus` is `"unavailable"` — either the CLI isn't installed (`!harness.available`) or its live discovery has never once succeeded, see `HarnessInfo`'s doc comment. These are the ones worth naming to the user; `"stale"` is quietly using a cached list and isn't worth alarming over. */
@@ -67,6 +69,8 @@ export function GeneratePanel({
 	progress,
 	history,
 	onGenerate,
+	onStop,
+	isStopping,
 }: GeneratePanelProps): React.ReactElement {
 	const { harnesses, refresh, isRefreshing } = useHarnesses(orpc);
 	const { settings } = useSettings(orpc);
@@ -79,8 +83,18 @@ export function GeneratePanel({
 	// rather than swapping one spinner for another.
 	if (progress.phase === "starting" || progress.phase === "running") {
 		return (
-			<div className="flex flex-1 items-center justify-center px-6">
+			<div className="flex flex-1 flex-col items-center justify-center gap-4 px-6">
 				<GenerationTimeline history={history} />
+				<Button
+					aria-label="Stop generation"
+					loading={isStopping}
+					onClick={onStop}
+					size="sm"
+					title="Stop generation"
+					variant="outline"
+				>
+					Stop
+				</Button>
 			</div>
 		);
 	}

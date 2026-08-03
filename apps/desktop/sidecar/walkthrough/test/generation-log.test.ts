@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { randomUUID } from "node:crypto";
 import type { GenerateEvent } from "@repo/sidecar-api";
 import {
+	abortGeneration,
 	attachToGeneration,
 	beginGeneration,
 	clearGeneration,
@@ -28,7 +29,7 @@ describe("generation-log", () => {
 
 	test("a subscriber attached before any events replays nothing, then follows live ones", () => {
 		const id = sessionId();
-		beginGeneration(id, "codex", "gpt-5.1-codex");
+		beginGeneration(id, "codex", "gpt-5.1-codex", new AbortController());
 
 		const received: Array<GenerateEvent> = [];
 		const unsubscribe = attachToGeneration(id, (event) => received.push(event));
@@ -47,7 +48,7 @@ describe("generation-log", () => {
 
 	test("a subscriber attaching mid-generation replays the backlog, then follows live ones — the tab-switch-and-back scenario", () => {
 		const id = sessionId();
-		beginGeneration(id, "claude-code", undefined);
+		beginGeneration(id, "claude-code", undefined, new AbortController());
 		recordGenerationEvent(id, { type: "bootstrapping" });
 		recordGenerationEvent(id, { type: "turn-started", turn: 1 });
 		recordGenerationEvent(id, {
@@ -91,7 +92,12 @@ describe("generation-log", () => {
 
 	test("multiple concurrent subscribers each get the full backlog plus their own live feed", () => {
 		const id = sessionId();
-		beginGeneration(id, "opencode", "anthropic/claude-sonnet-4-5");
+		beginGeneration(
+			id,
+			"opencode",
+			"anthropic/claude-sonnet-4-5",
+			new AbortController(),
+		);
 		recordGenerationEvent(id, { type: "bootstrapping" });
 
 		const a: Array<GenerateEvent> = [];
@@ -113,7 +119,7 @@ describe("generation-log", () => {
 
 	test("unsubscribing stops further live delivery without affecting the retained log", () => {
 		const id = sessionId();
-		beginGeneration(id, "pi", undefined);
+		beginGeneration(id, "pi", undefined, new AbortController());
 		const received: Array<GenerateEvent> = [];
 		const unsubscribe = attachToGeneration(id, (event) => received.push(event));
 		unsubscribe?.();
@@ -125,7 +131,7 @@ describe("generation-log", () => {
 
 	test("status tracks the last recorded event's terminal type", () => {
 		const id = sessionId();
-		beginGeneration(id, "codex", undefined);
+		beginGeneration(id, "codex", undefined, new AbortController());
 		expect(getGeneration(id)?.status).toBe("running");
 
 		recordGenerationEvent(id, { type: "turn-started", turn: 1 });
@@ -137,7 +143,7 @@ describe("generation-log", () => {
 
 	test("a completed generation is not reattachable — the next generate call for the session starts fresh", () => {
 		const id = sessionId();
-		beginGeneration(id, "codex", undefined);
+		beginGeneration(id, "codex", undefined, new AbortController());
 		recordGenerationEvent(id, {
 			type: "failed",
 			message: "coverage never converged",
@@ -156,14 +162,14 @@ describe("generation-log", () => {
 
 	test("beginGeneration discards a previous generation's retained log", () => {
 		const id = sessionId();
-		beginGeneration(id, "codex", undefined);
+		beginGeneration(id, "codex", undefined, new AbortController());
 		recordGenerationEvent(id, {
 			type: "done",
 			walkthrough: doneWalkthrough(id),
 		});
 		expect(getGeneration(id)?.status).toBe("done");
 
-		beginGeneration(id, "claude-code", "sonnet");
+		beginGeneration(id, "claude-code", "sonnet", new AbortController());
 		expect(getGeneration(id)).toEqual({
 			harness: "claude-code",
 			model: "sonnet",
@@ -174,7 +180,7 @@ describe("generation-log", () => {
 
 	test("clearGeneration removes the retained state entirely", () => {
 		const id = sessionId();
-		beginGeneration(id, "codex", undefined);
+		beginGeneration(id, "codex", undefined, new AbortController());
 		recordGenerationEvent(id, { type: "bootstrapping" });
 		clearGeneration(id);
 		expect(getGeneration(id)).toBeUndefined();
@@ -187,6 +193,31 @@ describe("generation-log", () => {
 			recordGenerationEvent(id, { type: "bootstrapping" }),
 		).not.toThrow();
 		expect(getGeneration(id)).toBeUndefined();
+	});
+
+	test("abortGeneration signals the retained controller for a running generation", () => {
+		const id = sessionId();
+		const controller = new AbortController();
+		beginGeneration(id, "codex", undefined, controller);
+
+		abortGeneration(id);
+
+		expect(controller.signal.aborted).toBe(true);
+	});
+
+	test("abortGeneration against an unknown session is a safe no-op", () => {
+		expect(() => abortGeneration(sessionId())).not.toThrow();
+	});
+
+	test("abortGeneration is a no-op once the generation already reached a terminal status", () => {
+		const id = sessionId();
+		const controller = new AbortController();
+		beginGeneration(id, "codex", undefined, controller);
+		recordGenerationEvent(id, { type: "cancelled" });
+
+		abortGeneration(id);
+
+		expect(controller.signal.aborted).toBe(false);
 	});
 });
 

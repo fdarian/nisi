@@ -201,6 +201,19 @@ const resolveContext = async (
 };
 
 /**
+ * Releases whatever the aborted generation was holding onto (the harness
+ * subprocess, its leased port) and produces the terminal event for it. An
+ * abort is a distinct outcome from `failed` — nothing went wrong, the user
+ * asked the generation to stop — and unlike the success path it never writes
+ * to SQLite. Stopping the live session here also keeps a later `generate`
+ * call from `reuseLive`-ing a session the user just cancelled.
+ */
+const endCancelled = async (sessionId: string): Promise<GenerateEvent> => {
+	await stopLiveSession(sessionId);
+	return { type: "cancelled" };
+};
+
+/**
  * The generation loop's implementation, streamed as `GenerateEvent`s through
  * the same `eventIterator` mechanism `events.subscribe` uses. Bridges Effect
  * (session/digest lookup, persistence) from plain async code (the harness
@@ -211,6 +224,7 @@ const resolveContext = async (
 export async function* generateWalkthrough(
 	input: GenerateInput,
 	mainContext: Context.Context<AppServices>,
+	abortSignal: AbortSignal,
 ): AsyncGenerator<GenerateEvent> {
 	const context = await resolveContext(input.sessionId, mainContext);
 	if (context === undefined) {
@@ -218,6 +232,10 @@ export async function* generateWalkthrough(
 			type: "failed",
 			message: "Could not read this session's diff — see the sidecar log.",
 		};
+		return;
+	}
+	if (abortSignal.aborted) {
+		yield await endCancelled(input.sessionId);
 		return;
 	}
 
@@ -236,6 +254,15 @@ export async function* generateWalkthrough(
 	let turnPrompt: string;
 
 	if (reuseLive) {
+		// No `setLiveSession` call here, unlike the fresh-session branch below —
+		// two reasons neither needs one. `reuseLive` is only true when
+		// `live.harness`/`live.model` already equal `input.harness`/`input.model`,
+		// so those fields can never go stale by skipping a re-write. And
+		// `agent`/`session`/`buffer` are the exact objects already stored in
+		// `live-sessions.ts`'s map (not copies) — `buffer.content` in particular
+		// is mutated in place by the write/edit tools (see `@repo/walkthrough`'s
+		// `buffer.ts`), never replaced, so the map's entry stays current with
+		// every turn regardless of whether it's ever written back here.
 		({ agent, session, buffer } = live);
 		turnPrompt = buildContinuationPrompt(digestText);
 	} else {
@@ -247,6 +274,10 @@ export async function* generateWalkthrough(
 			}).pipe(Effect.orElseSucceed(() => null)),
 			mainContext,
 		);
+		if (abortSignal.aborted) {
+			yield await endCancelled(input.sessionId);
+			return;
+		}
 		try {
 			({ agent, session, buffer } = await startFreshSession(
 				input,
@@ -259,27 +290,45 @@ export async function* generateWalkthrough(
 			};
 			return;
 		}
+
+		// Tracked from the moment the session exists, not just on eventual
+		// success — a regenerate that arrives while this turn loop is still
+		// retrying (or after it ultimately fails validation) should still be
+		// able to continue the same conversation rather than finding nothing.
+		// Registering it here, rather than after computing `turnPrompt` below,
+		// also means the abort check right after this can tear it down through
+		// the same `stopLiveSession`-backed `endCancelled` every other abort
+		// check uses, instead of a session that exists but isn't reachable by
+		// `sessionId` yet.
+		setLiveSession(input.sessionId, {
+			harness: input.harness,
+			model: input.model,
+			agent,
+			session,
+			buffer,
+		});
+
+		if (abortSignal.aborted) {
+			yield await endCancelled(input.sessionId);
+			return;
+		}
 		turnPrompt = buildFreshPrompt(digestText, prior?.content);
 	}
 
-	// Tracked from the moment a session exists, not just on eventual success —
-	// a regenerate that arrives while this turn loop is still retrying (or
-	// after it ultimately fails validation) should still be able to continue
-	// the same conversation rather than finding nothing.
-	setLiveSession(input.sessionId, {
-		harness: input.harness,
-		model: input.model,
-		agent,
-		session,
-		buffer,
-	});
-
 	for (let turn = 1; turn <= MAX_TURNS; turn++) {
+		if (abortSignal.aborted) {
+			yield await endCancelled(input.sessionId);
+			return;
+		}
 		yield { type: "turn-started", turn };
 
 		const streamErrors: Array<string> = [];
 		try {
-			const result = await agent.stream({ session, prompt: turnPrompt });
+			const result = await agent.stream({
+				session,
+				prompt: turnPrompt,
+				abortSignal,
+			});
 			for await (const part of result.fullStream) {
 				if (part.type === "tool-call") {
 					yield {
@@ -295,12 +344,19 @@ export async function* generateWalkthrough(
 				}
 			}
 		} catch (error) {
-			// A thrown failure always fails the turn, even if it describes
-			// itself poorly — unlike an in-band `error` part, it already tore
-			// the stream down, so there's nothing left to salvage.
-			streamErrors.push(
-				describeStreamError(error) ?? "The harness stream failed.",
-			);
+			// An abort tears the stream down the same way a real transport
+			// failure would — checked below, before this is ever read, so an
+			// abort-triggered throw never gets misreported as `failed`.
+			if (!abortSignal.aborted) {
+				streamErrors.push(
+					describeStreamError(error) ?? "The harness stream failed.",
+				);
+			}
+		}
+
+		if (abortSignal.aborted) {
+			yield await endCancelled(input.sessionId);
+			return;
 		}
 
 		// Fails the whole generation rather than spending another turn: the
@@ -397,14 +453,22 @@ export async function* generateWalkthrough(
  *
  * `beginGeneration` runs as the very first statement, before any `await`, so
  * two `generate` calls racing for the same session can't both start one:
- * whichever runs second always finds the record the first just created.
+ * whichever runs second always finds the record the first just created. The
+ * `AbortController` minted here is registered with `generation-log.ts` in
+ * that same synchronous step, so a `walkthrough.stop` call landing at any
+ * point afterward can always reach it by `sessionId`.
  */
 export async function beginTrackedGeneration(
 	input: GenerateInput,
 	mainContext: Context.Context<AppServices>,
 ): Promise<void> {
-	beginGeneration(input.sessionId, input.harness, input.model);
-	const iterator = generateWalkthrough(input, mainContext);
+	const abortController = new AbortController();
+	beginGeneration(input.sessionId, input.harness, input.model, abortController);
+	const iterator = generateWalkthrough(
+		input,
+		mainContext,
+		abortController.signal,
+	);
 
 	let first: IteratorResult<GenerateEvent>;
 	try {

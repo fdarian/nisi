@@ -154,6 +154,8 @@ export const GenerateEvent = Schema.Union([
 		walkthrough: StoredWalkthrough,
 	}),
 	Schema.Struct({ type: Schema.Literal("failed"), message: Schema.String }),
+	/** Terminal outcome of a user-initiated `stop` — distinct from `failed` since nothing went wrong, the generation just ended on request rather than by finishing or erroring. */
+	Schema.Struct({ type: Schema.Literal("cancelled") }),
 ]);
 export type GenerateEvent = Schema.Schema.Type<typeof GenerateEvent>;
 
@@ -173,7 +175,7 @@ export const ActiveGeneration = Schema.Struct({
 	harness: HarnessId,
 	model: Schema.NullOr(Schema.String),
 	events: Schema.Array(GenerateEvent),
-	status: Schema.Literals(["running", "done", "failed"]),
+	status: Schema.Literals(["running", "done", "failed", "cancelled"]),
 });
 export type ActiveGeneration = Schema.Schema.Type<typeof ActiveGeneration>;
 
@@ -232,5 +234,16 @@ export const walkthroughContract = {
 			}),
 		)
 		.output(eventIterator(Schema.toStandardSchemaV1(GenerateEvent)))
+		.errors({ NOT_FOUND: {} }),
+	/**
+	 * Aborts the generation currently running for `sessionId`, if any — a
+	 * no-op, not an error, when nothing's running (already finished, or never
+	 * started). The aborted generation's stream yields a terminal `cancelled`
+	 * event rather than `failed`. `NOT_FOUND` is reserved for an unknown
+	 * `sessionId`, same as `generate`'s siblings.
+	 */
+	stop: oc
+		.input(Schema.Struct({ sessionId: Schema.String }))
+		.output(Schema.Void)
 		.errors({ NOT_FOUND: {} }),
 };

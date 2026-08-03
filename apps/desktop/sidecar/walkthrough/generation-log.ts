@@ -1,6 +1,6 @@
 import type { GenerateEvent, HarnessId } from "@repo/sidecar-api";
 
-type GenerationStatus = "running" | "done" | "failed";
+type GenerationStatus = "running" | "done" | "failed" | "cancelled";
 
 type GenerationRecord = {
 	readonly harness: HarnessId;
@@ -8,6 +8,8 @@ type GenerationRecord = {
 	readonly events: Array<GenerateEvent>;
 	status: GenerationStatus;
 	readonly subscribers: Set<(event: GenerateEvent) => void>;
+	/** Owned here rather than in a second map, since this module already tracks "is a generation running for this session" — see `abortGeneration`/`beginGeneration`. */
+	readonly abortController: AbortController;
 };
 
 /**
@@ -20,7 +22,9 @@ type GenerationRecord = {
 const generations = new Map<string, GenerationRecord>();
 
 const statusOf = (event: GenerateEvent): GenerationStatus =>
-	event.type === "done" || event.type === "failed" ? event.type : "running";
+	event.type === "done" || event.type === "failed" || event.type === "cancelled"
+		? event.type
+		: "running";
 
 /**
  * Starts tracking a new generation for `sessionId`, discarding whatever was
@@ -31,11 +35,18 @@ const statusOf = (event: GenerateEvent): GenerationStatus =>
  * `attachToGeneration` first, so as long as this runs before either yields
  * to the event loop, the second one always finds the record the first just
  * created and reattaches instead of starting a duplicate.
+ *
+ * `abortController` is minted by the caller (`generate.ts`'s
+ * `beginTrackedGeneration`), which also threads its `signal` into the
+ * generation loop — this module only retains it so `abortGeneration` can
+ * reach it by `sessionId` later, from a separate `walkthrough.stop` request
+ * that has no other handle on the loop in progress.
  */
 export const beginGeneration = (
 	sessionId: string,
 	harness: HarnessId,
 	model: string | undefined,
+	abortController: AbortController,
 ): void => {
 	generations.set(sessionId, {
 		harness,
@@ -43,7 +54,21 @@ export const beginGeneration = (
 		events: [],
 		status: "running",
 		subscribers: new Set(),
+		abortController,
 	});
+};
+
+/**
+ * Aborts the generation retained for `sessionId`, if any — a no-op, not an
+ * error, when nothing's running for it (already finished, or never
+ * started). Only signals the abort; the generation loop itself is what
+ * observes it and yields the terminal `cancelled` event, so this returns
+ * before that happens.
+ */
+export const abortGeneration = (sessionId: string): void => {
+	const record = generations.get(sessionId);
+	if (record === undefined || record.status !== "running") return;
+	record.abortController.abort();
 };
 
 /** Discards a session's retained generation — used when starting one turns out to have failed before anything worth keeping was recorded (e.g. the session itself doesn't exist). */

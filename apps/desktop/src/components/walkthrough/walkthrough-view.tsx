@@ -75,7 +75,9 @@ export function WalkthroughView({
 		return (
 			<GeneratePanel
 				history={generation.history}
+				isStopping={generation.isStopping}
 				onGenerate={generation.generate}
+				onStop={generation.stop}
 				orpc={orpc}
 				progress={generation.progress}
 			/>
