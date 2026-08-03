@@ -187,6 +187,14 @@ export function createMockOrpc(data: MockOrpcData = {}): SidecarQueryUtils {
 			get: async () => settings,
 			update: async (patch) => Object.assign(settings, patch),
 		},
+		// Never referenced by any story yet — the open-PR palette has no
+		// storybook coverage — so these stubs exist only to keep `SidecarClient`
+		// satisfied, same reasoning as `events.subscribe` above.
+		pullRequests: {
+			search: async () => [],
+			open: neverSettles,
+			recordRepoPath: neverSettles,
+		},
 		walkthrough: {
 			harnesses: async () => harnesses,
 			refreshHarnesses: async () => harnesses,

@@ -9,12 +9,23 @@ import {
 	type GitHubUnreachable,
 	getChangedFiles,
 	getFileContents,
+	inferRepoPath,
 	type NoDefaultBranch,
+	type NoOriginRemote,
+	openPullRequestWorktree,
+	type PullRequestNotFound,
+	type PullRequestRefNotFound,
+	type RepoPathVerificationError,
 	readFileContentsAtRef,
 	resolveCurrentBranch,
 	resolveMergeBase,
+	resolvePullRequestHeadRef,
 	resolveRepoRoot,
 	resolveReviewTarget,
+	resolveReviewTargetForPullRequest,
+	verifyRepoPathMatchesOrigin,
+	type WorktreeBranchInUse,
+	type WorktreePathOccupied,
 } from "@repo/git";
 import {
 	type FileReviewState,
@@ -31,6 +42,7 @@ import {
 	SessionNotFound,
 	type SessionPullRequest,
 } from "@repo/review";
+import { SettingsStore, type SettingsStoreError } from "@repo/settings";
 import { Context, Effect, Layer, Schema } from "effect";
 import { FileSystem } from "effect/FileSystem";
 import type { ChildProcessSpawner } from "effect/unstable/process";
@@ -63,13 +75,17 @@ export class InvalidBaseRef extends Schema.TaggedErrorClass<InvalidBaseRef>()(
 
 /**
  * `sessions.open`'s target selector — mirrors `packages/sidecar-api`'s
- * `OpenSessionTarget`. Kept as this module's own type (not imported) the same
- * way `Session` below is, since `http.ts` decodes the wire input before this
- * ever sees it.
+ * `OpenSessionTarget`, plus one variant that never crosses the wire:
+ * `"specificPullRequest"` is constructed only by `openPullRequestSession`
+ * below, for a PR the caller already identified by number rather than one
+ * `sessions.open`'s own contract input can ask for — see
+ * `resolveSessionTarget`'s doc comment for why it needs its own resolution
+ * path instead of reusing `"pr"`.
  */
 export type OpenSessionTarget =
 	| { readonly kind: "auto" }
 	| { readonly kind: "pr" }
+	| { readonly kind: "specificPullRequest"; readonly number: number }
 	| { readonly kind: "branch"; readonly baseRef?: string };
 
 export type SessionTarget =
@@ -93,6 +109,22 @@ export type Session = {
 	readonly repoRoot: string;
 	readonly target: SessionTarget;
 };
+
+/** `pullRequests.open`'s input — the palette only ever knows `owner/repo#number`, never a local path; see `openPullRequestSession`'s doc for how the rest gets resolved. */
+export type OpenPullRequestInput = {
+	readonly owner: string;
+	readonly repo: string;
+	readonly number: number;
+};
+
+/** Mirrors `packages/sidecar-api`'s `OpenPullRequestOutcome` — see that contract's doc for why this is a discriminated union rather than a separate pre-flight route. */
+export type OpenPullRequestOutcome =
+	| { readonly status: "opened"; readonly session: Session }
+	| {
+			readonly status: "needs-repo-path";
+			readonly owner: string;
+			readonly repo: string;
+	  };
 
 export type FileReview = {
 	readonly viewed: boolean;
@@ -182,15 +214,25 @@ const toWireSession = (session: ReviewSession): Session => ({
  *   still ignoring any PR open on the current branch — not re-validated,
  *   since `resolveReviewTarget`'s own resolution is git-derived by
  *   construction.
- * - `"pr"` requires a PR: `resolveReviewTarget` finding none fails with
- *   `NoPullRequest` rather than silently degrading to a branch diff the
- *   caller didn't ask for.
+ * - `"pr"` requires a PR *for the current branch*: `resolveReviewTarget`
+ *   finding none fails with `NoPullRequest` rather than silently degrading
+ *   to a branch diff the caller didn't ask for.
+ * - `"specificPullRequest"` requires a PR *by number*, regardless of what's
+ *   checked out — what `openPullRequestSession` below uses once it already
+ *   knows which PR it's opening. Unlike `"pr"`, this doesn't derive the PR
+ *   from the current branch at all: `openPullRequestWorktree` checks a PR
+ *   out into a nisi-local branch (`nisi/pr-<n>/<headRef>`) that doesn't
+ *   exist on `origin`, so `gh pr view` with no arguments could never
+ *   resolve it. `resolveReviewTargetForPullRequest` fails outright
+ *   (`PullRequestNotFound`) rather than degrading when the number `gh`
+ *   can't resolve, since the caller explicitly picked this PR — that
+ *   failure must surface, not disappear into a no-PR session.
  * - `"auto"` is today's behavior — PR if one's open, else the default
  *   branch.
  *
  * Head is always the current checkout (`resolveCurrentBranch`, or the PR's
- * own `headRefName` for `"pr"`/`"auto"` when a PR is in play) — nisi doesn't
- * support reviewing an arbitrary head.
+ * own `headRefName` for any of the PR-resolving variants when a PR is in
+ * play) — nisi doesn't support reviewing an arbitrary head.
  */
 const resolveSessionTarget = (repoRoot: string, target: OpenSessionTarget) =>
 	Effect.gen(function* () {
@@ -205,6 +247,19 @@ const resolveSessionTarget = (repoRoot: string, target: OpenSessionTarget) =>
 			);
 			const headRef = yield* resolveCurrentBranch(repoRoot);
 			return { baseRef, headRef, pr: null };
+		}
+
+		if (target.kind === "specificPullRequest") {
+			const [reviewTarget, currentBranch] = yield* Effect.all([
+				resolveReviewTargetForPullRequest(repoRoot, target.number),
+				resolveCurrentBranch(repoRoot),
+			]);
+			const githubPr = reviewTarget.github?.pr ?? null;
+			return {
+				baseRef: githubPr?.baseRef ?? reviewTarget.defaultBranch,
+				headRef: githubPr?.headRef ?? currentBranch,
+				pr: toSessionPullRequest(reviewTarget.github),
+			};
 		}
 
 		const [reviewTarget, currentBranch] = yield* Effect.all([
@@ -249,6 +304,7 @@ const resolveSessionTarget = (repoRoot: string, target: OpenSessionTarget) =>
 export class Store extends Context.Service<Store>()("Store", {
 	make: Effect.gen(function* () {
 		const reviewStore = yield* ReviewStore;
+		const settingsStore = yield* SettingsStore;
 		const fs = yield* FileSystem;
 
 		const openSession = (
@@ -260,7 +316,6 @@ export class Store extends Context.Service<Store>()("Store", {
 					Effect.catchTag("NotAGitRepository", () => new InvalidCwd({ cwd })),
 				);
 				const resolved = yield* resolveSessionTarget(repoRoot, target);
-
 				const session = yield* reviewStore.openSession({
 					repoRoot,
 					baseRef: resolved.baseRef,
@@ -268,6 +323,124 @@ export class Store extends Context.Service<Store>()("Store", {
 					pr: resolved.pr,
 				});
 				return toWireSession(session);
+			});
+
+		/**
+		 * `owner/repo`'s local checkout path — a known mapping if one's already
+		 * recorded, else a verified sibling-directory guess (see `@repo/git`'s
+		 * `inferRepoPath`), persisted the moment it verifies so the next open
+		 * of this repo skips inference entirely. `null` when neither applies:
+		 * the caller (`openPullRequestSession`) turns that into the
+		 * `"needs-repo-path"` outcome rather than failing — there being no
+		 * known path yet is an expected, common first-time state, not an error.
+		 */
+		const resolveRepoPath = (owner: string, repo: string) =>
+			Effect.gen(function* () {
+				const known = yield* settingsStore.getRepoPath(owner, repo);
+				if (known !== null) return known;
+
+				const everyKnownPath = yield* settingsStore.listRepoPaths();
+				const inferred = yield* inferRepoPath(everyKnownPath, owner, repo);
+				if (inferred === null) return null;
+
+				yield* settingsStore.setRepoPath(owner, repo, inferred);
+				return inferred;
+			});
+
+		/**
+		 * The palette's "open this PR" action. Resolves `owner/repo` to a local
+		 * checkout first (`resolveRepoPath` above) — the palette never knows a
+		 * path itself, only `owner/repo#number` (`gh search prs` can't return
+		 * ref names either, see `@repo/git`'s `PullRequestSearchResult` doc) —
+		 * short-circuiting to `"needs-repo-path"` when nothing resolves, then
+		 * resolves the PR's `headRef` (`resolvePullRequestHeadRef`, needed
+		 * *before* the worktree exists to name its branch) and create-or-reuses
+		 * a worktree for it (`@repo/git`'s `openPullRequestWorktree`, idempotent
+		 * from git's own `worktree list` registration). Finally opens a session
+		 * against the worktree with `{ kind: "specificPullRequest" }` — the
+		 * worktree's own path becomes the session's `cwd`, and
+		 * `resolveSessionTarget` resolves the PR *by the number the caller
+		 * already knows* rather than re-deriving it from the worktree's
+		 * checked-out branch (see that function's doc comment for why a plain
+		 * `"auto"`/`"pr"` open could never resolve it). Not a parallel
+		 * session-creation path — routes through the same `openSession` every
+		 * other caller uses, so a worktree's own `repoRoot` makes
+		 * `@repo/review`'s session dedup key do the right thing, the same way
+		 * two independent clones of one upstream already get independent
+		 * sessions.
+		 */
+		const openPullRequestSession = (
+			input: OpenPullRequestInput,
+		): Effect.Effect<
+			OpenPullRequestOutcome,
+			| GitCommandError
+			| GhOutputDecodeError
+			| PullRequestNotFound
+			| NoOriginRemote
+			| PullRequestRefNotFound
+			| WorktreeBranchInUse
+			| WorktreePathOccupied
+			| NoDefaultBranch
+			| GitHubUnreachable
+			| InvalidCwd
+			| InvalidBaseRef
+			| NoPullRequest
+			| ReviewStoreError
+			| SettingsStoreError,
+			ChildProcessSpawner.ChildProcessSpawner | FileSystem
+		> =>
+			Effect.gen(function* () {
+				const repoRoot = yield* resolveRepoPath(input.owner, input.repo);
+				if (repoRoot === null) {
+					return {
+						status: "needs-repo-path" as const,
+						owner: input.owner,
+						repo: input.repo,
+					};
+				}
+
+				const headRef = yield* resolvePullRequestHeadRef(
+					repoRoot,
+					input.number,
+				);
+				const worktreePath = yield* openPullRequestWorktree({
+					repoRoot,
+					number: input.number,
+					headRef,
+				});
+				const session = yield* openSession(worktreePath, {
+					kind: "specificPullRequest",
+					number: input.number,
+				});
+				return { status: "opened" as const, session };
+			});
+
+		/**
+		 * The other half of the `"needs-repo-path"` flow: persists the local
+		 * folder the user picked for `owner/repo`, but only once
+		 * `verifyRepoPathMatchesOrigin` confirms its `origin` remote actually
+		 * resolves to that `owner/repo` — a user-picked folder gets exactly the
+		 * same gate a silent inference guess does, so picking the wrong folder
+		 * fails loudly here rather than quietly opening the wrong repo's code
+		 * on the next `open`. What's persisted (and returned) is
+		 * `verifyRepoPathMatchesOrigin`'s normalized main-clone root, not the
+		 * raw folder the user picked — a subdirectory or a worktree the picker
+		 * let them choose still ends up mapped to the repo's real home on disk,
+		 * the same normalization `resolveRepoPath`'s inference path applies.
+		 */
+		const recordRepoPath = (
+			owner: string,
+			repo: string,
+			path: string,
+		): Effect.Effect<
+			{ readonly owner: string; readonly repo: string; readonly path: string },
+			RepoPathVerificationError | GitCommandError | SettingsStoreError,
+			ChildProcessSpawner.ChildProcessSpawner
+		> =>
+			Effect.gen(function* () {
+				const repoRoot = yield* verifyRepoPathMatchesOrigin(path, owner, repo);
+				yield* settingsStore.setRepoPath(owner, repo, repoRoot);
+				return { owner, repo, path: repoRoot };
 			});
 
 		const listSessions = () =>
@@ -780,6 +953,8 @@ export class Store extends Context.Service<Store>()("Store", {
 
 		return {
 			openSession,
+			openPullRequestSession,
+			recordRepoPath,
 			listSessions,
 			closeSession,
 			listChangedFiles,
@@ -793,8 +968,13 @@ export class Store extends Context.Service<Store>()("Store", {
 	// `ReviewStore` directly (to resolve a session's `repoRoot`/`baseRef`
 	// without going through `Store`), not just as `Store.make`'s own
 	// construction-time dependency. Same gotcha as `FileSystem` below it.
+	// `SettingsStore.layer` is the same value `index.ts`'s `MainLayer` merges
+	// in at the top level — Effect memoizes layers by reference, so this
+	// doesn't open a second connection, it just satisfies `Store.make`'s own
+	// construction-time dependency on it (`resolveRepoPath`/`recordRepoPath`).
 	static layer = Layer.effect(Store, Store.make).pipe(
 		Layer.provideMerge(ReviewStore.layer),
+		Layer.provideMerge(SettingsStore.layer),
 	);
 }
 

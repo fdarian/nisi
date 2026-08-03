@@ -13,6 +13,7 @@ import { oc } from "@orpc/contract";
 import { diffContract } from "./diff.ts";
 import { eventsContract } from "./events.ts";
 import { healthContract } from "./health.ts";
+import { pullRequestsContract } from "./pull-requests.ts";
 import { reviewContract } from "./review.ts";
 import { sessionsContract } from "./sessions.ts";
 import { settingsContract } from "./settings.ts";
@@ -21,6 +22,7 @@ import { walkthroughContract } from "./walkthrough.ts";
 export * from "./diff.ts";
 export * from "./events.ts";
 export * from "./health.ts";
+export * from "./pull-requests.ts";
 export * from "./review.ts";
 export * from "./sessions.ts";
 export * from "./settings.ts";
@@ -37,4 +39,5 @@ export const contract = oc.errors({ UNAUTHORIZED: {} }).router({
 	events: eventsContract,
 	walkthrough: walkthroughContract,
 	settings: settingsContract,
+	pullRequests: pullRequestsContract,
 });

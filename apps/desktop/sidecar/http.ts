@@ -7,7 +7,7 @@ import {
 	type RequestHeadersHandlerPluginContext,
 } from "@orpc/server/plugins";
 import { refreshLoginShellPath } from "@repo/bin-resolver";
-import type { GitCommandError } from "@repo/git";
+import { type GitCommandError, searchPullRequests } from "@repo/git";
 import { ReviewStore } from "@repo/review";
 import { SettingsStore } from "@repo/settings";
 import type {
@@ -584,6 +584,194 @@ export function attachRouter(
 			update: authed.settings.update.effect(function* ({ input }) {
 				const store = yield* SettingsStore;
 				return toWireSettings(yield* store.update(input));
+			}),
+		},
+		pullRequests: {
+			// Live `gh search prs`, no local index — see `@repo/git`'s
+			// `searchPullRequests` for the empty-query/typed-query/qualifier
+			// branching. `process.cwd()` is fine as the invocation directory: a
+			// PR search spans every repo the account can see, not one checkout,
+			// and `gh search prs` doesn't care what directory it runs from
+			// (verified live — same results run from this repo or from `/tmp`).
+			search: authed.pullRequests.search.effect(function* ({ input, errors }) {
+				return yield* searchPullRequests(process.cwd(), input.query).pipe(
+					Effect.catchTag("GhNotAuthenticated", (cause) =>
+						Effect.fail(
+							errors.GH_NOT_AUTHENTICATED({
+								message: `gh is not authenticated: ${cause.reason}`,
+							}),
+						),
+					),
+					Effect.catchTag("GhRateLimited", (cause) =>
+						Effect.fail(
+							errors.TOO_MANY_REQUESTS({
+								message: `GitHub's search API is rate-limited right now: ${cause.reason}`,
+							}),
+						),
+					),
+					Effect.catchTag("GitHubSearchUnreachable", (cause) =>
+						Effect.fail(
+							errors.SERVICE_UNAVAILABLE({
+								message: `could not reach GitHub: ${cause.reason}`,
+							}),
+						),
+					),
+					Effect.catchTag("GhOutputDecodeError", (cause) =>
+						Effect.fail(
+							errors.SERVICE_UNAVAILABLE({
+								message: `gh returned output nisi couldn't parse (${cause.command})`,
+							}),
+						),
+					),
+				);
+			}),
+			// Creates (or reuses) a worktree for the PR, then feeds it straight
+			// into `Store.openSession` — the *same* domain logic `sessions.open`
+			// itself calls, not a parallel path — so the resulting session dedups
+			// and lists exactly like any other. Synchronous, like `sessions.open`
+			// already is: a `gh`/`git fetch` round trip plus a worktree checkout
+			// is the same duration class as `sessions.open`'s own `gh` calls, not
+			// the open-ended kind `walkthrough.generate`'s streaming handler
+			// exists for.
+			open: authed.pullRequests.open.effect(function* ({ input, errors }) {
+				const store = yield* Store;
+				const outcome = yield* store
+					.openPullRequestSession({
+						owner: input.owner,
+						repo: input.repo,
+						number: input.number,
+					})
+					.pipe(
+						// `openPullRequestWorktree`'s four tagged errors are each a
+						// distinct, user-actionable situation — kept as four distinct
+						// contract errors rather than collapsed into one, so the
+						// palette can tell the user which thing actually went wrong.
+						Effect.catchTag("NoOriginRemote", (cause) =>
+							Effect.fail(
+								errors.BAD_REQUEST({
+									message: `${cause.repoRoot} has no origin remote to fetch the pull request from`,
+								}),
+							),
+						),
+						Effect.catchTag("PullRequestRefNotFound", (cause) =>
+							Effect.fail(
+								errors.NOT_FOUND({
+									message: `pull request #${cause.number} not found on origin — the number may be wrong, or GitHub has garbage-collected a long-closed PR's ref`,
+								}),
+							),
+						),
+						Effect.catchTag("WorktreeBranchInUse", (cause) =>
+							Effect.fail(
+								errors.CONFLICT({
+									message: `pull request #${cause.number} is already checked out in another worktree for ${cause.repoRoot}`,
+								}),
+							),
+						),
+						Effect.catchTag("WorktreePathOccupied", (cause) =>
+							Effect.fail(
+								errors.PRECONDITION_FAILED({
+									message: `${cause.path} exists but isn't a registered git worktree — remove it and try again`,
+								}),
+							),
+						),
+						Effect.catchTag("GitCommandError", (cause) =>
+							Effect.fail(
+								errors.SERVICE_UNAVAILABLE({
+									message: `${cause.command} could not be run: ${cause.stderr || String(cause.cause)}`,
+								}),
+							),
+						),
+						// The PR number itself is what the user picked — `gh` failing to
+						// resolve it (wrong number, closed/GC'd since, an auth hiccup) is
+						// a genuine error here, unlike `sessions.open`'s branch-based
+						// lookup, which degrades a missing PR to a default-branch diff
+						// instead. See `resolveReviewTargetForPullRequest`.
+						Effect.catchTag("PullRequestNotFound", (cause) =>
+							Effect.fail(
+								errors.NOT_FOUND({
+									message: `pull request #${cause.number} couldn't be resolved on GitHub for ${cause.repoRoot}: ${cause.reason}`,
+								}),
+							),
+						),
+						// Same mapping `sessions.open` itself uses — only reachable here
+						// if GitHub can't be reached to resolve the worktree's review
+						// target.
+						Effect.catchTag("NoDefaultBranch", (cause) =>
+							Effect.fail(
+								errors.BAD_REQUEST({
+									message: `no branch to review against in ${cause.repoRoot} — the repository has no commits on a default branch`,
+								}),
+							),
+						),
+						Effect.catchTag("GitHubUnreachable", (cause) =>
+							Effect.fail(
+								errors.SERVICE_UNAVAILABLE({
+									message: `could not reach GitHub for ${cause.repoRoot}: ${cause.reason}`,
+								}),
+							),
+						),
+					);
+				if (outcome.status === "opened") {
+					const session = outcome.session;
+					emit({ type: "session-opened", session });
+					yield* Effect.logInfo("pull request worktree opened", {
+						sessionId: session.id,
+						repoRoot: session.repoRoot,
+						pr: session.target.kind === "pr" ? session.target.number : null,
+					});
+				}
+				return outcome;
+			}),
+			// The other half of the `"needs-repo-path"` flow: persists the
+			// folder the user picked in the native dialog, but only once its
+			// `origin` remote is confirmed to actually resolve to `owner/repo` —
+			// every way that verification can fail collapses to `BAD_REQUEST`,
+			// the message naming which one. Frontend calls `open` again on
+			// success; nothing here opens a session itself.
+			recordRepoPath: authed.pullRequests.recordRepoPath.effect(function* ({
+				input,
+				errors,
+			}) {
+				const store = yield* Store;
+				return yield* store
+					.recordRepoPath(input.owner, input.repo, input.path)
+					.pipe(
+						Effect.catchTag("RepoPathNotFound", (cause) =>
+							Effect.fail(
+								errors.BAD_REQUEST({
+									message: `${cause.path} doesn't exist`,
+								}),
+							),
+						),
+						Effect.catchTag("RepoPathNotAGitRepo", (cause) =>
+							Effect.fail(
+								errors.BAD_REQUEST({
+									message: `${cause.path} isn't a git repository`,
+								}),
+							),
+						),
+						Effect.catchTag("RepoPathNoOriginRemote", (cause) =>
+							Effect.fail(
+								errors.BAD_REQUEST({
+									message: `${cause.path} has no origin remote to verify against`,
+								}),
+							),
+						),
+						Effect.catchTag("RepoPathOriginMismatch", (cause) =>
+							Effect.fail(
+								errors.BAD_REQUEST({
+									message: `${cause.path}'s origin remote is ${cause.actualOwner ?? "?"}/${cause.actualRepo ?? "?"}, not ${cause.expectedOwner}/${cause.expectedRepo}`,
+								}),
+							),
+						),
+						Effect.catchTag("GitCommandError", (cause) =>
+							Effect.fail(
+								errors.SERVICE_UNAVAILABLE({
+									message: `${cause.command} could not be run: ${cause.stderr || String(cause.cause)}`,
+								}),
+							),
+						),
+					);
 			}),
 		},
 	});

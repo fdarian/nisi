@@ -1,3 +1,4 @@
+import { stat } from "node:fs/promises";
 import { Effect } from "effect";
 import { NoDefaultBranch, NotAGitRepository } from "./errors.ts";
 import { git, gitResult } from "./exec.ts";
@@ -67,6 +68,22 @@ export const resolveLocalDefaultBranch = (repoRoot: string) =>
 		}
 		return yield* new NoDefaultBranch({ repoRoot });
 	});
+
+/** Whether `path` exists on disk at all — no distinction between "file" and "directory", since every caller only cares that something is there to `stat` further. */
+export const pathExistsOnDisk = (path: string) =>
+	Effect.promise(() =>
+		stat(path)
+			.then(() => true)
+			.catch(() => false),
+	);
+
+/** `origin`'s remote URL, or `null` when `repoRoot` has no `origin` remote configured at all. */
+export const originUrlOrNull = (repoRoot: string) =>
+	gitResult(repoRoot, ["remote", "get-url", "origin"]).pipe(
+		Effect.map((result) =>
+			result.exitCode === 0 ? result.stdout.trim() : null,
+		),
+	);
 
 /** The commit `HEAD` currently points at. */
 export const resolveHeadSha = (repoRoot: string) =>

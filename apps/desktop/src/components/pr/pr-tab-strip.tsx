@@ -1,13 +1,17 @@
 "use client";
 
-import { GitPullRequestIcon, XIcon } from "lucide-react";
+import { GitPullRequestIcon, PlusIcon, XIcon } from "lucide-react";
+import { Kbd } from "#/components/ui/kbd";
 import { TabsPrimitive } from "#/components/ui/tabs";
+import { Tooltip, TooltipPopup, TooltipTrigger } from "#/components/ui/tooltip";
 import type { Session } from "#/lib/pr-data";
 import { cn } from "#/lib/utils";
+import { Button } from "../ui/button";
 
 type PrTabStripProps = {
 	sessions: readonly Session[];
 	onCloseSession: (sessionId: string) => void;
+	onOpenPullRequest: () => void;
 };
 
 /**
@@ -33,11 +37,12 @@ type PrTabStripProps = {
 export function PrTabStrip({
 	sessions,
 	onCloseSession,
+	onOpenPullRequest,
 }: PrTabStripProps): React.ReactElement {
 	return (
 		<div className="flex shrink-0 pr-2">
 			<TrafficLightSpace />
-			<TabsPrimitive.List className="flex min-w-0 flex-1 gap-1 overflow-x-auto py-2">
+			<TabsPrimitive.List className="flex min-w-0 flex-1 gap-1 overflow-x-auto py-2 items-center">
 				{sessions.map((session) => (
 					<PrTab
 						key={session.id}
@@ -45,8 +50,43 @@ export function PrTabStrip({
 						session={session}
 					/>
 				))}
+				<OpenPullRequestButton onClick={onOpenPullRequest} />
 			</TabsPrimitive.List>
 		</div>
+	);
+}
+
+/**
+ * The ghost "+" that opens the "open pull request" palette
+ * (`open-pull-request-palette.tsx`) — a real `<button>` sitting outside
+ * `TabsPrimitive.List` as a third child of the strip's own root, matching
+ * the close button's own opt-out from the drag region (see this file's top
+ * doc comment).
+ */
+function OpenPullRequestButton({
+	onClick,
+}: {
+	onClick: () => void;
+}): React.ReactElement {
+	return (
+		<Tooltip>
+			<TooltipTrigger
+				render={
+					<Button
+						aria-label="Open pull request"
+						onClick={onClick}
+						size="icon-xs"
+						variant="ghost"
+						type="button"
+					>
+						<PlusIcon />
+					</Button>
+				}
+			/>
+			<TooltipPopup>
+				Open pull request <Kbd>⌘T</Kbd>
+			</TooltipPopup>
+		</Tooltip>
 	);
 }
 

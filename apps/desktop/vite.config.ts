@@ -84,8 +84,20 @@ export default defineConfig(async () => ({
 				}
 			: undefined,
 		watch: {
-			// 3. tell Vite to ignore watching `src-tauri`
-			ignored: ["**/src-tauri/**"],
+			ignored: [
+				// 3. tell Vite to ignore watching `src-tauri`
+				"**/src-tauri/**",
+				// devsess's per-session data dirs (`AGENTS.md`'s "Dev/prod isolation")
+				// live under here, and a PR worktree (`@repo/git`'s
+				// `openPullRequestWorktree`) lands inside one of those — a full git
+				// checkout appearing mid-request inside a watched directory, tsconfig
+				// files and all. Left unignored, that triggers a full-page reload
+				// right as `pullRequests.open` is still in flight. The whole `.data`
+				// tree is excluded, not just its `worktrees/` subdirectory, since
+				// sessions also write `sidecar.json`/`app.db` there that don't need
+				// watching either.
+				"**/.data/**",
+			],
 		},
 	},
 }));

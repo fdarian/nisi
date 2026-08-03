@@ -3,10 +3,13 @@
 import { AlertTriangleIcon, InboxIcon } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { DevToolButton } from "#/components/devtool/dev-tool";
+import { OpenPullRequestPalette } from "#/components/pr/open-pull-request-palette";
 import { PrTabStrip } from "#/components/pr/pr-tab-strip";
 import { PrView } from "#/components/pr/pr-view";
+import { Button } from "#/components/ui/button";
 import {
 	Empty,
+	EmptyContent,
 	EmptyDescription,
 	EmptyMedia,
 	EmptyTitle,
@@ -14,6 +17,7 @@ import {
 import { FramePanel } from "#/components/ui/frame";
 import { Spinner } from "#/components/ui/spinner";
 import { TabsPrimitive } from "#/components/ui/tabs";
+import { useOpenPrPaletteShortcut } from "#/hooks/use-open-pr-palette-shortcut";
 import { useTabShortcuts } from "#/hooks/use-tab-shortcuts";
 import type { SidecarQueryUtils } from "#/lib/backend-context";
 import { useBackendContext } from "#/lib/backend-context";
@@ -102,6 +106,9 @@ function AppShellReady({
 	const [requestedActiveSessionId, setRequestedActiveSessionId] = useState<
 		string | null
 	>(null);
+	const [paletteOpen, setPaletteOpen] = useState(false);
+	const openPalette = useCallback(() => setPaletteOpen(true), []);
+	useOpenPrPaletteShortcut(openPalette);
 
 	// Falls back to the first session whenever the requested id no longer
 	// matches any open session — our own close, the CLI opening a session out
@@ -155,9 +162,21 @@ function AppShellReady({
 					</EmptyMedia>
 					<EmptyTitle>No open pull requests</EmptyTitle>
 					<EmptyDescription>
-						Run <code>nisi</code> from a repo to open one.
+						Run <code>nisi</code> from a repo to open one, or pick one from your
+						open pull requests.
 					</EmptyDescription>
+					<EmptyContent>
+						<Button onClick={openPalette} size="sm">
+							Open pull request
+						</Button>
+					</EmptyContent>
 				</Empty>
+				<OpenPullRequestPalette
+					onOpenChange={setPaletteOpen}
+					onSessionOpened={setRequestedActiveSessionId}
+					open={paletteOpen}
+					orpc={orpc}
+				/>
 			</ShellFrame>
 		);
 	}
@@ -171,7 +190,11 @@ function AppShellReady({
 			value={activeSessionId}
 			data-tauri-drag-region="deep"
 		>
-			<PrTabStrip onCloseSession={handleCloseSession} sessions={sessions} />
+			<PrTabStrip
+				onCloseSession={handleCloseSession}
+				onOpenPullRequest={openPalette}
+				sessions={sessions}
+			/>
 			<FramePanel className={cn(INSET_PANE_CLASS, "mt-0")}>
 				{sessions.map((session) => (
 					<TabsPrimitive.Panel
@@ -199,6 +222,12 @@ function AppShellReady({
 					<DevToolButton />
 				</div>
 			) : null}
+			<OpenPullRequestPalette
+				onOpenChange={setPaletteOpen}
+				onSessionOpened={setRequestedActiveSessionId}
+				open={paletteOpen}
+				orpc={orpc}
+			/>
 		</TabsPrimitive.Root>
 	);
 }

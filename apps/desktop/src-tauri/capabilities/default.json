@@ -9,6 +9,7 @@
 		"core:window:allow-close",
 		"core:menu:default",
 		"opener:default",
+		"dialog:allow-open",
 		{
 			"identifier": "shell:allow-spawn",
 			"allow": [{ "name": "binaries/sidecar", "sidecar": true, "args": [] }]

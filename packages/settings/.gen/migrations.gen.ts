@@ -7,6 +7,11 @@ import m0001 from "../drizzle/0001_fluffy_roland_deschain.sql" with {
 };
 import m0002 from "../drizzle/0002_damp_quasimodo.sql" with { type: "text" };
 import m0003 from "../drizzle/0003_careful_joseph.sql" with { type: "text" };
+import m0004 from "../drizzle/0004_amusing_toad_men.sql" with { type: "text" };
+import m0005 from "../drizzle/0005_tan_maggott.sql" with { type: "text" };
+import m0006 from "../drizzle/0006_cheerful_captain_america.sql" with {
+	type: "text",
+};
 import journal from "../drizzle/meta/_journal.json" with { type: "json" };
 
 export default {
@@ -18,5 +23,8 @@ export default {
 		"0001_fluffy_roland_deschain": m0001,
 		"0002_damp_quasimodo": m0002,
 		"0003_careful_joseph": m0003,
+		"0004_amusing_toad_men": m0004,
+		"0005_tan_maggott": m0005,
+		"0006_cheerful_captain_america": m0006,
 	} as Record<string, string>,
 };

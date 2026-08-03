@@ -1,8 +1,13 @@
 import { SqliteDb } from "@repo/db";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { Context, Effect, Layer } from "effect";
 import { dbUse, runMigrations } from "./db/client.ts";
-import { type SettingsRow, settings as settingsTable } from "./db/schema.ts";
+import {
+	type RepoPathRow,
+	repoPaths as repoPathsTable,
+	type SettingsRow,
+	settings as settingsTable,
+} from "./db/schema.ts";
 
 export type SidebarViewMode = "tree" | "flat";
 export type DiffStyleMode = "unified" | "split";
@@ -37,6 +42,13 @@ export type Settings = {
 
 export type SettingsUpdate = Partial<Settings>;
 
+/** One learned `owner/repo` → local checkout path mapping — see `db/schema.ts`'s `repoPaths`. */
+export type RepoPathMapping = {
+	readonly owner: string;
+	readonly repo: string;
+	readonly path: string;
+};
+
 /**
  * What `get()` returns before any `update()` has ever been written.
  * `enabledHarnesses: null` keeps "never configured" distinguishable from
@@ -62,6 +74,12 @@ const toSettings = (row: SettingsRow): Settings => ({
 	diffStyleMode: row.diffStyleMode as DiffStyleMode,
 	hideReviewed: row.hideReviewed,
 	includeUncommitted: row.includeUncommitted,
+});
+
+const toRepoPathMapping = (row: RepoPathRow): RepoPathMapping => ({
+	owner: row.owner,
+	repo: row.repo,
+	path: row.path,
 });
 
 /**
@@ -129,7 +147,62 @@ export class SettingsStore extends Context.Service<SettingsStore>()(
 					return next;
 				});
 
-			return { get, update };
+			const repoPathRow = (owner: string, repo: string) =>
+				dbUse(db, (client) =>
+					client
+						.select()
+						.from(repoPathsTable)
+						.where(
+							and(
+								eq(repoPathsTable.owner, owner),
+								eq(repoPathsTable.repo, repo),
+							),
+						)
+						.limit(1)
+						.all(),
+				).pipe(Effect.map((rows) => rows.at(0)));
+
+			/** The known local checkout path for `owner/repo`, or `null` when nothing's been recorded for it yet. */
+			const getRepoPath = (owner: string, repo: string) =>
+				repoPathRow(owner, repo).pipe(Effect.map((row) => row?.path ?? null));
+
+			/**
+			 * Records (or overwrites) the local checkout path for `owner/repo` —
+			 * the caller (the sidecar's `pullRequests.recordRepoPath`/inference
+			 * flow) is responsible for having already verified the path's
+			 * `origin` actually matches before calling this; this store just
+			 * persists whatever it's given, same as `update()` does for the
+			 * singleton settings row.
+			 */
+			const setRepoPath = (owner: string, repo: string, path: string) =>
+				Effect.gen(function* () {
+					const existing = yield* repoPathRow(owner, repo);
+					const updatedAt = new Date();
+					if (existing === undefined) {
+						yield* dbUse(db, (client) =>
+							client
+								.insert(repoPathsTable)
+								.values({ owner, repo, path, updatedAt })
+								.run(),
+						);
+					} else {
+						yield* dbUse(db, (client) =>
+							client
+								.update(repoPathsTable)
+								.set({ path, updatedAt })
+								.where(eq(repoPathsTable.id, existing.id))
+								.run(),
+						);
+					}
+				});
+
+			/** Every known `owner/repo` → path mapping — the candidate set `@repo/git`'s `inferRepoPath` guesses a sibling from. */
+			const listRepoPaths = () =>
+				dbUse(db, (client) => client.select().from(repoPathsTable).all()).pipe(
+					Effect.map((rows) => rows.map(toRepoPathMapping)),
+				);
+
+			return { get, update, getRepoPath, setRepoPath, listRepoPaths };
 		}),
 	},
 ) {

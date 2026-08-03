@@ -143,3 +143,84 @@ describe("SettingsStore", () => {
 		});
 	});
 });
+
+describe("SettingsStore repo path mapping", () => {
+	test("getRepoPath() returns null before anything's been recorded", async () => {
+		await withTempDataDir(async (dataDir) => {
+			const result = await run(
+				dataDir,
+				Effect.gen(function* () {
+					const store = yield* SettingsStore;
+					return yield* store.getRepoPath("fdarian", "nisi");
+				}),
+			);
+			expect(result).toBeNull();
+		});
+	});
+
+	test("setRepoPath() round-trips through getRepoPath()", async () => {
+		await withTempDataDir(async (dataDir) => {
+			const result = await run(
+				dataDir,
+				Effect.gen(function* () {
+					const store = yield* SettingsStore;
+					yield* store.setRepoPath("fdarian", "nisi", "/Users/x/code/nisi");
+					return yield* store.getRepoPath("fdarian", "nisi");
+				}),
+			);
+			expect(result).toBe("/Users/x/code/nisi");
+		});
+	});
+
+	test("setRepoPath() overwrites the same owner/repo's row instead of inserting a second one", async () => {
+		await withTempDataDir(async (dataDir) => {
+			const result = await run(
+				dataDir,
+				Effect.gen(function* () {
+					const store = yield* SettingsStore;
+					yield* store.setRepoPath("fdarian", "nisi", "/first/path");
+					yield* store.setRepoPath("fdarian", "nisi", "/second/path");
+					const path = yield* store.getRepoPath("fdarian", "nisi");
+					const all = yield* store.listRepoPaths();
+					return { path, all };
+				}),
+			);
+			expect(result.path).toBe("/second/path");
+			expect(result.all).toHaveLength(1);
+		});
+	});
+
+	test("different repos under the same owner get independent rows", async () => {
+		await withTempDataDir(async (dataDir) => {
+			const result = await run(
+				dataDir,
+				Effect.gen(function* () {
+					const store = yield* SettingsStore;
+					yield* store.setRepoPath("fdarian", "nisi", "/code/fdarian/nisi");
+					yield* store.setRepoPath("fdarian", "whap", "/code/fdarian/whap");
+					return yield* store.listRepoPaths();
+				}),
+			);
+			expect(result).toHaveLength(2);
+			expect(result).toEqual(
+				expect.arrayContaining([
+					{ owner: "fdarian", repo: "nisi", path: "/code/fdarian/nisi" },
+					{ owner: "fdarian", repo: "whap", path: "/code/fdarian/whap" },
+				]),
+			);
+		});
+	});
+
+	test("listRepoPaths() is empty before anything's been recorded", async () => {
+		await withTempDataDir(async (dataDir) => {
+			const result = await run(
+				dataDir,
+				Effect.gen(function* () {
+					const store = yield* SettingsStore;
+					return yield* store.listRepoPaths();
+				}),
+			);
+			expect(result).toEqual([]);
+		});
+	});
+});

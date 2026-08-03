@@ -9,6 +9,9 @@ type ProcessResult = {
 	readonly exitCode: number;
 };
 
+/** What {@link ghResult} (and {@link gitResult}) resolve to — exported so callers that branch on a lenient result's `exitCode`/`stderr` (rather than just piping it into a decoder) can name the type. */
+export type GhResult = ProcessResult;
+
 /**
  * Every `git`/`gh` invocation goes through this — the one place that's
  * bitten us before (a bare `"gh"` silently failing to spawn under a GUI

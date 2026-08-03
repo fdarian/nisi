@@ -100,3 +100,29 @@ describe("Store.openSession — branch target with an explicit baseRef", () => {
 		});
 	});
 });
+
+describe("Store.openPullRequestSession — repo path resolution", () => {
+	test("returns needs-repo-path when owner/repo is unknown and nothing can be inferred, without ever shelling out to gh", async () => {
+		const dataDir = await mkdtemp(join(tmpdir(), "nisi-sidecar-store-data-"));
+		try {
+			const outcome = await Effect.runPromise(
+				Effect.gen(function* () {
+					const store = yield* Store;
+					return yield* store.openPullRequestSession({
+						owner: "fdarian",
+						repo: "nisi",
+						number: 1,
+					});
+				}).pipe(Effect.provide(makeTestLayer(dataDir))),
+			);
+
+			expect(outcome).toEqual({
+				status: "needs-repo-path",
+				owner: "fdarian",
+				repo: "nisi",
+			});
+		} finally {
+			await rm(dataDir, { recursive: true, force: true });
+		}
+	});
+});

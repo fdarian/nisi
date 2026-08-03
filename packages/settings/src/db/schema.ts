@@ -1,4 +1,9 @@
-import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import {
+	integer,
+	sqliteTable,
+	text,
+	uniqueIndex,
+} from "drizzle-orm/sqlite-core";
 
 /**
  * Singleton row — at most one ever exists. `SettingsStore.get()` returns
@@ -37,4 +42,32 @@ export const settings = sqliteTable("settings", {
 		.$defaultFn(() => new Date()),
 });
 
+/**
+ * A learned `owner/repo` → local checkout path mapping — one row per repo
+ * the user has opened a PR from, unlike `settings`' singleton row. Built up
+ * as `pullRequests.open` resolves (or the user picks) a path; read back to
+ * silently infer a sibling repo's path and to avoid re-prompting for one
+ * already known. See `@repo/git`'s `repo-path-mapping.ts` for the
+ * inference/verification logic this table's rows feed.
+ */
+export const repoPaths = sqliteTable(
+	"repo_paths",
+	{
+		id: integer({ mode: "number" }).primaryKey({ autoIncrement: true }),
+		owner: text().notNull(),
+		repo: text().notNull(),
+		path: text().notNull(),
+		createdAt: integer({ mode: "timestamp_ms" })
+			.notNull()
+			.$defaultFn(() => new Date()),
+		updatedAt: integer({ mode: "timestamp_ms" })
+			.notNull()
+			.$defaultFn(() => new Date()),
+	},
+	(table) => [
+		uniqueIndex("repo_paths_owner_repo_idx").on(table.owner, table.repo),
+	],
+);
+
 export type SettingsRow = typeof settings.$inferSelect;
+export type RepoPathRow = typeof repoPaths.$inferSelect;

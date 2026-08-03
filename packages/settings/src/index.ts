@@ -1,6 +1,7 @@
 export { SettingsStoreError } from "./errors.ts";
 export type {
 	DiffStyleMode,
+	RepoPathMapping,
 	Settings,
 	SettingsUpdate,
 	SidebarViewMode,
