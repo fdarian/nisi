@@ -90,7 +90,7 @@ const dev = Command.make(
 
 			const sidecarProcess = runManagedSubprocess(
 				"bun",
-				["run", "sidecar/index.ts"],
+				["run", "--hot", "sidecar/index.ts"],
 				{ env },
 			);
 
