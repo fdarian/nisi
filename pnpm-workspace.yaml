@@ -23,3 +23,4 @@ patchedDependencies:
   "@ai-sdk/harness-codex@1.0.56": patches/@ai-sdk%2Fharness-codex@1.0.56.patch
   "@ai-sdk/harness-opencode@1.0.55": patches/@ai-sdk%2Fharness-opencode@1.0.55.patch
   "@ai-sdk/harness-pi@1.0.54": patches/@ai-sdk%2Fharness-pi@1.0.54.patch
+  '@pierre/diffs@1.2.12': patches/@pierre__diffs@1.2.12.patch

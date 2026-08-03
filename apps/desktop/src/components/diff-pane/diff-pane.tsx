@@ -113,6 +113,15 @@ type DiffPaneProps = {
 	orpc: SidecarQueryUtils;
 	sessionId: string;
 	files: readonly FileChange[];
+	/**
+	 * Every changed file in the session, unfiltered by "Hide reviewed" or
+	 * review state — unlike `files` above (what actually renders as a card),
+	 * this only changes when the diff itself does (a push, `includeUncommitted`
+	 * flipping). Feeds `contentPaths` below instead of `files` so a file
+	 * leaving the rendered list never reshuffles `useFileContents`' chunk
+	 * boundaries — see `contentPaths`' comment for the mechanism.
+	 */
+	allFiles: readonly FileChange[];
 	selectedPath: string | null;
 	reviewState: ReadonlyMap<string, ReviewStateEntry>;
 	setViewed: (path: string, viewed: boolean) => void;
@@ -187,6 +196,7 @@ export function DiffPane({
 	orpc,
 	sessionId,
 	files,
+	allFiles,
 	selectedPath,
 	reviewState,
 	setViewed,
@@ -219,9 +229,16 @@ export function DiffPane({
 		ReadonlyMap<string, boolean>
 	>(() => new Map());
 
+	// Deliberately `allFiles`, not `files` (the rendered/display list) —
+	// `useFileContents` chunks this into fixed-size windows purely by array
+	// position (`chunkPaths`), so a file leaving `files` (ticked Reviewed with
+	// "Hide reviewed" on) would otherwise shift every later chunk boundary and
+	// invalidate most of them at once. `allFiles` only changes when the diff
+	// itself does, so a review-state change can never reshuffle a chunk this
+	// file isn't even in.
 	const contentPaths = useMemo(
-		() => files.filter((file) => !file.binary).map((file) => file.path),
-		[files],
+		() => allFiles.filter((file) => !file.binary).map((file) => file.path),
+		[allFiles],
 	);
 	const fileContents = useFileContents(
 		orpc,

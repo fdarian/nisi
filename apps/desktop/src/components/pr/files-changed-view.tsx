@@ -297,6 +297,7 @@ export function FilesChangedView({
 					</div>
 				</div>
 				<DiffPane
+					allFiles={files}
 					diffStyle={diffStyle}
 					files={visibleFiles}
 					onNavigateToBlock={onNavigateToBlock}
