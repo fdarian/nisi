@@ -1,3 +1,6 @@
 # devsess session store (per-worktree data dir + vite port)
 .data/
 .devtools
+
+*storybook.log
+storybook-static

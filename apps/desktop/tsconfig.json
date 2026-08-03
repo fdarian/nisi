@@ -21,7 +21,7 @@
 			"#/*": ["./src/*"]
 		}
 	},
-	"include": ["src"],
+	"include": ["src", ".storybook"],
 	// `*.test.ts` files use `bun:test`, a Bun-runtime module absent from this
 	// config's browser-facing `lib`/`types` (no `@types/bun` here, unlike
 	// `tsconfig.sidecar.json`'s explicit `types: ["bun"]`) — `bun test` itself

@@ -14,7 +14,9 @@
 		"check:type": "tsc --noEmit && tsc --noEmit -p tsconfig.sidecar.json && tsc --noEmit -p tsconfig.scripts.json",
 		"check:lint": "biome lint .",
 		"test": "bun test sidecar",
-		"build:sidecar": "bun build --compile --target=bun-darwin-arm64 sidecar/index.ts --outfile src-tauri/binaries/sidecar-aarch64-apple-darwin"
+		"build:sidecar": "bun build --compile --target=bun-darwin-arm64 sidecar/index.ts --outfile src-tauri/binaries/sidecar-aarch64-apple-darwin",
+		"storybook": "storybook dev -p 6006",
+		"build-storybook": "storybook build"
 	},
 	"dependencies": {
 		"@ai-sdk/harness": "1.0.46",
@@ -63,6 +65,9 @@
 	},
 	"devDependencies": {
 		"@ai-sdk/devtools": "^1.0.9",
+		"@orpc/shared": "2.0.0-beta.21",
+		"@storybook/addon-a11y": "^10.5.5",
+		"@storybook/react-vite": "^10.5.5",
 		"@tailwindcss/vite": "^4.3.0",
 		"@tanstack/router-plugin": "^1.168.23",
 		"@tauri-apps/cli": "^2.11.4",
@@ -73,6 +78,7 @@
 		"@types/react-dom": "^19.1.6",
 		"@vitejs/plugin-react": "^4.6.0",
 		"agentation": "^3.0.2",
+		"storybook": "^10.5.5",
 		"tailwindcss": "^4.3.0",
 		"typescript": "7.0.2",
 		"vite": "^7.0.4"

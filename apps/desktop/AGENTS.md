@@ -136,6 +136,17 @@ Two rules if anything else might be working in this checkout at the same time:
 - **Don't create branches or worktrees** to isolate the work. There's one checkout; a branch
   switch moves it out from under everyone. Isolate through `NISI_DATA_DIR` and scratch repos.
 
+## Storybook
+`pnpm run storybook` (port 6006, or the `storybook` entry in the repo root's `.claude/launch.json`)
+renders components against fixture data instead of a live sidecar — no `bun dev`, no agent CLI run.
+`.storybook/main.ts` reuses `vite.config.ts` (the `#/*` alias, Tailwind, `@pierre/diffs`' worker
+format and `server.fs.allow`) via Vite's own `loadConfigFromFile`, dropping only its `react()` plugin
+(Storybook's `@storybook/react-vite` framework already installs one, and two react-refresh passes
+over the same file crash the build). `.storybook/mock-orpc.ts`'s `createMockOrpc(...)` is a fake
+`SidecarClient` wrapped in the same `createTanstackQueryUtils` the real app uses — story-specific data
+(a stored walkthrough, harnesses, file contents) is supplied per call. The walkthrough tab's own
+fixture PR lives at `src/components/walkthrough/walkthrough.fixture.ts`.
+
 ## Non-obvious decisions
 - `tsconfig.json` (the frontend one) is hand-rolled, not `extends: "@total-typescript/tsconfig/..."`
   like `tsconfig.sidecar.json`/`tsconfig.scripts.json` are. The shared preset doesn't set `jsx` or path
