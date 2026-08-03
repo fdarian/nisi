@@ -204,6 +204,7 @@ export function createMockOrpc(data: MockOrpcData = {}): SidecarQueryUtils {
 				if (runningGeneration === undefined) return neverIterator();
 				return toAsyncIteratorClass(replayThenHang(runningGeneration.events));
 			},
+			stop: async () => undefined,
 		},
 	};
 
