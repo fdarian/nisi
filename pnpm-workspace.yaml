@@ -6,6 +6,9 @@ allowBuilds:
   esbuild: true
   msgpackr-extract: true
   protobufjs: true
+  # Hash-pinned: pnpm resolves GitHub specs to codeload tarballs, which have no
+  # stable allowBuilds key — bump this alongside any agentation update.
+  agentation@https://codeload.github.com/fdarian/agentation/tar.gz/ad60acffd03c394fc098796c85337d2cc6384783#path:package: true
 enableGlobalVirtualStore: true
 packageExtensions:
   bun-types:

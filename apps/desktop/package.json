@@ -78,7 +78,7 @@
 		"@types/react": "^19.1.8",
 		"@types/react-dom": "^19.1.6",
 		"@vitejs/plugin-react": "^4.6.0",
-		"agentation": "^3.0.2",
+		"agentation": "github:fdarian/agentation#path:package&main",
 		"storybook": "^10.5.5",
 		"tailwindcss": "^4.3.0",
 		"typescript": "7.0.2",
