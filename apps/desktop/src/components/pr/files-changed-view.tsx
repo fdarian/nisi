@@ -303,6 +303,7 @@ export function FilesChangedView({
 					onNavigateToBlock={onNavigateToBlock}
 					orpc={orpc}
 					ref={diffPaneRef}
+					repoRoot={session.repoRoot}
 					reviewState={reviewState}
 					selectedPath={selectedPath}
 					sessionId={session.id}

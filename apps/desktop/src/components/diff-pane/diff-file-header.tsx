@@ -34,6 +34,8 @@ const STATUS_VARIANT: Record<FileStatus, BadgeProps["variant"]> = {
 
 type DiffFileHeaderProps = {
 	file: FileChange;
+	/** The session's repo root — joined with `file.path` for "Copy absolute path". */
+	repoRoot: string;
 	reviewStatus: ReviewState;
 	viewed: boolean;
 	onToggleViewed: () => void;
@@ -77,6 +79,7 @@ type DiffFileHeaderProps = {
  */
 export function DiffFileHeader({
 	file,
+	repoRoot,
 	reviewStatus,
 	viewed,
 	onToggleViewed,
@@ -170,6 +173,13 @@ export function DiffFileHeader({
 						onClick={() => navigator.clipboard.writeText(file.path)}
 					>
 						Copy path
+					</DropdownMenuItem>
+					<DropdownMenuItem
+						onClick={() =>
+							navigator.clipboard.writeText(`${repoRoot}/${file.path}`)
+						}
+					>
+						Copy absolute path
 					</DropdownMenuItem>
 				</DropdownMenuContent>
 			</DropdownMenu>

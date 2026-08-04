@@ -112,6 +112,8 @@ export type DiffPaneHandle = {
 type DiffPaneProps = {
 	orpc: SidecarQueryUtils;
 	sessionId: string;
+	/** The session's repo root — joined with `FileChange.path` for the header dropdown's "Copy absolute path". */
+	repoRoot: string;
 	files: readonly FileChange[];
 	/**
 	 * Every changed file in the session, unfiltered by "Hide reviewed" or
@@ -195,6 +197,7 @@ function resolveFileDiff(
 export function DiffPane({
 	orpc,
 	sessionId,
+	repoRoot,
 	files,
 	allFiles,
 	selectedPath,
@@ -559,12 +562,13 @@ export function DiffPane({
 					onToggleViewed={() =>
 						handleToggleViewed(meta.file.path, !meta.viewed)
 					}
+					repoRoot={repoRoot}
 					reviewStatus={meta.reviewStatus}
 					viewed={meta.viewed}
 				/>
 			);
 		},
-		[itemMetadata, handleToggleFileCollapse, handleToggleViewed],
+		[itemMetadata, handleToggleFileCollapse, handleToggleViewed, repoRoot],
 	);
 
 	const renderAnnotation = useCallback(
