@@ -21,7 +21,7 @@ export function buildTreeThemeStyle(): CSSProperties {
 	return {
 		"--trees-fg-override": "var(--sidebar-foreground)",
 		"--trees-fg-muted-override": "var(--muted-foreground)",
-		"--trees-bg-override": "var(--sidebar)",
+		"--trees-bg-override": "var(--pane-surface)",
 		"--trees-bg-muted-override": "var(--sidebar-accent)",
 		"--trees-border-color-override": "var(--sidebar-border)",
 		"--trees-accent-override": "var(--primary)",

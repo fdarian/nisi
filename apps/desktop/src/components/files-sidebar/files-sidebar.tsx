@@ -61,7 +61,7 @@ export function FilesSidebar({
 	);
 
 	return (
-		<div className="flex h-full w-72 shrink-0 flex-col bg-sidebar pb-2">
+		<div className="flex h-full w-72 shrink-0 flex-col bg-pane-surface pb-2">
 			<div className="p-2">
 				<InputGroup>
 					<InputGroupAddon>

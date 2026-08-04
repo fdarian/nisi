@@ -207,7 +207,7 @@ function AppShellReady({
 
 	return (
 		<TabsPrimitive.Root
-			className="flex h-screen flex-col bg-neutral-100"
+			className="flex h-screen flex-col bg-sidebar"
 			onValueChange={(value) =>
 				setRequestedActiveSessionId(value as string | null)
 			}
