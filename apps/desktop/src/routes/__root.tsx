@@ -22,7 +22,7 @@ function RootLayout() {
 				<ToastProvider>
 					<BackendProvider>
 						<Outlet />
-						{import.meta.env.DEV ? <AgentationToggle /> : null}
+						<AgentationToggle />
 					</BackendProvider>
 				</ToastProvider>
 			</DevToolProvider>

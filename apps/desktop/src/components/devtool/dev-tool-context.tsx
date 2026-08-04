@@ -48,7 +48,7 @@ function createDevToolStore(): StoreApi<DevToolStore> {
 		toastOnRefetch: false,
 		devToolVisible:
 			localStorage.getItem(DEV_TOOL_VISIBLE_STORAGE_KEY) === "true",
-		agentationEnabled: true,
+		agentationEnabled: false,
 		registerScope: (scope) =>
 			set((state) => {
 				const next = new Map(state.scopeCounts);
