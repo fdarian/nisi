@@ -2,7 +2,7 @@
 
 import { Menu } from "@tauri-apps/api/menu";
 import { AlertTriangleIcon, InboxIcon } from "lucide-react";
-import { useCallback, useMemo, useState } from "react";
+import { type ComponentProps, useCallback, useMemo, useState } from "react";
 import { DevToolButton } from "#/components/devtool/dev-tool";
 import { useDevToolVisible } from "#/components/devtool/dev-tool-context";
 import { OpenPullRequestPalette } from "#/components/pr/open-pull-request-palette";
@@ -84,13 +84,17 @@ export function AppShell(): React.ReactElement {
 
 function ShellFrame({
 	children,
+	...rest
 }: {
 	children: React.ReactNode;
+	onContextMenu?: ComponentProps<"div">["onContextMenu"];
 }): React.ReactElement {
 	return (
-		<div className="flex h-screen flex-col bg-sidebar">
+		<div className="flex h-screen flex-col bg-sidebar" {...rest}>
 			<div className="h-10 shrink-0" data-tauri-drag-region />
 			<FramePanel className={INSET_PANE_CLASS}>{children}</FramePanel>
+
+			<DevTool />
 		</div>
 	);
 }
@@ -175,7 +179,7 @@ function AppShellReady({
 
 	if (sessions.length === 0) {
 		return (
-			<ShellFrame>
+			<ShellFrame onContextMenu={handleTabStripContextMenu}>
 				<Empty className="flex-1">
 					<EmptyMedia variant="icon">
 						<InboxIcon />
@@ -238,11 +242,7 @@ function AppShellReady({
 					</TabsPrimitive.Panel>
 				))}
 			</FramePanel>
-			{import.meta.env.DEV === true || devToolVisible ? (
-				<div className="absolute -bottom-1 left-3">
-					<DevToolButton />
-				</div>
-			) : null}
+			<DevTool />
 			<OpenPullRequestPalette
 				onOpenChange={setPaletteOpen}
 				onSessionOpened={setRequestedActiveSessionId}
@@ -251,4 +251,14 @@ function AppShellReady({
 			/>
 		</TabsPrimitive.Root>
 	);
+}
+
+function DevTool() {
+	const [devToolVisible] = useDevToolVisible();
+
+	return import.meta.env.DEV === true || devToolVisible ? (
+		<div className="absolute -bottom-1 left-3">
+			<DevToolButton />
+		</div>
+	) : null;
 }

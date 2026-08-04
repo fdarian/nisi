@@ -1,5 +1,6 @@
 import type React from "react";
 import {
+	useAgentationEnabled,
 	useIsDevToolScopeActive,
 	useToastOnRefetch,
 } from "#/components/devtool/dev-tool-context";
@@ -20,21 +21,37 @@ export function DevToolButton(): React.ReactElement {
 	);
 }
 
-/** Renders every option row whose scope is currently active, or a muted empty state when none apply. */
+/** Renders every option row whose scope is currently active, plus the always-available global options. */
 function DevToolOptions(): React.ReactElement {
 	const isFilesChangedActive = useIsDevToolScopeActive("files-changed");
 
-	if (!isFilesChangedActive) {
-		return (
-			<p className="text-muted-foreground text-sm">
-				No devtool options for this view.
-			</p>
-		);
-	}
-
 	return (
 		<div className="flex flex-col gap-3">
-			<ToastOnRefetchOption />
+			<AgentationOption />
+			{isFilesChangedActive ? (
+				<ToastOnRefetchOption />
+			) : (
+				<p className="text-muted-foreground text-sm">
+					No other devtool options for this view.
+				</p>
+			)}
+		</div>
+	);
+}
+
+const AGENTATION_ID = "devtool-agentation";
+
+function AgentationOption(): React.ReactElement {
+	const [agentationEnabled, setAgentationEnabled] = useAgentationEnabled();
+
+	return (
+		<div className="flex items-center justify-between gap-3 text-sm">
+			<label htmlFor={AGENTATION_ID}>Agentation</label>
+			<Switch
+				checked={agentationEnabled}
+				id={AGENTATION_ID}
+				onCheckedChange={setAgentationEnabled}
+			/>
 		</div>
 	);
 }

@@ -16,6 +16,7 @@ type DevToolState = {
 	scopeCounts: ReadonlyMap<DevToolScope, number>;
 	toastOnRefetch: boolean;
 	devToolVisible: boolean;
+	agentationEnabled: boolean;
 };
 
 type DevToolActions = {
@@ -23,6 +24,7 @@ type DevToolActions = {
 	unregisterScope: (scope: DevToolScope) => void;
 	setToastOnRefetch: (value: boolean) => void;
 	setDevToolVisible: (value: boolean) => void;
+	setAgentationEnabled: (value: boolean) => void;
 };
 
 type DevToolStore = DevToolState & DevToolActions;
@@ -46,6 +48,7 @@ function createDevToolStore(): StoreApi<DevToolStore> {
 		toastOnRefetch: false,
 		devToolVisible:
 			localStorage.getItem(DEV_TOOL_VISIBLE_STORAGE_KEY) === "true",
+		agentationEnabled: true,
 		registerScope: (scope) =>
 			set((state) => {
 				const next = new Map(state.scopeCounts);
@@ -69,6 +72,7 @@ function createDevToolStore(): StoreApi<DevToolStore> {
 			localStorage.setItem(DEV_TOOL_VISIBLE_STORAGE_KEY, String(value));
 			set({ devToolVisible: value });
 		},
+		setAgentationEnabled: (value) => set({ agentationEnabled: value }),
 	}));
 }
 
@@ -159,4 +163,22 @@ export function useDevToolVisible(): readonly [
 	const devToolVisible = useStore(store, (state) => state.devToolVisible);
 	const setDevToolVisible = useStore(store, (state) => state.setDevToolVisible);
 	return [devToolVisible, setDevToolVisible] as const;
+}
+
+/**
+ * Whether `<Agentation />` (the third-party visual-feedback toolbar mounted in
+ * `__root.tsx`) should render. Ephemeral like `toastOnRefetch` — defaults to
+ * `true` to match the toolbar's previous always-on-in-dev behavior.
+ */
+export function useAgentationEnabled(): readonly [
+	boolean,
+	(value: boolean) => void,
+] {
+	const store = useDevToolStore();
+	const agentationEnabled = useStore(store, (state) => state.agentationEnabled);
+	const setAgentationEnabled = useStore(
+		store,
+		(state) => state.setAgentationEnabled,
+	);
+	return [agentationEnabled, setAgentationEnabled] as const;
 }
