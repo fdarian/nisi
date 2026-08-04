@@ -34,6 +34,14 @@ invisible to the compiler, yet `import.meta.url` is still rewritten to a virtual
 `import x from "./f" with { type: "text" }` is inlined as a string literal and survives. This is what
 three of the five `@ai-sdk/harness*` patches do.
 
+Same class, different library: `@earendil-works/pi-ai` loads its OAuth flows through a computed
+`import()` (`dist/auth/oauth/load.js`), so the compiled sidecar has no source tree to resolve them
+from and every OAuth-backed pi provider (e.g. xai) throws at the `resolve.js` "OAuth auth derivation
+failed" site. Fixed the same way the library fixes it for its own CLI: statically import and call
+`registerBunOAuthFlows()` from `@earendil-works/pi-ai/bun-oauth`
+(`apps/desktop/sidecar/walkthrough/harnesses.ts`) so bun embeds the flow modules instead of reaching
+for them at runtime.
+
 **`PATH` is narrower.** `bun run` prepends its own node-shim directory to a child's `PATH`; the
 compiled binary does not. OpenCode's bridge died with `exit code 127 — /bin/bash: node: command not
 found` for exactly this reason, and only ever under the compiled binary. The bare-`PATH`

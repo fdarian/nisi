@@ -3,6 +3,13 @@ import { createClaudeCode } from "@ai-sdk/harness-claude-code";
 import { createCodex } from "@ai-sdk/harness-codex";
 import { createOpenCode } from "@ai-sdk/harness-opencode";
 import { createPi } from "@ai-sdk/harness-pi";
+// `@earendil-works/pi-ai` picks its OAuth flow modules via a computed dynamic
+// import, so `bun build --compile` never embeds them and the compiled
+// sidecar throws "OAuth auth derivation failed" for any pi provider using
+// OAuth (e.g. xai). This is the library's own escape hatch — a static import
+// so bun embeds the flow modules, plus the call below. See
+// `knowledge/compiled-binary-differences.md`.
+import { registerBunOAuthFlows } from "@earendil-works/pi-ai/bun-oauth";
 // Static import, unlike `model-discovery.ts`'s dynamic one: `createPi` above
 // already pulls `@earendil-works/pi-coding-agent` into the boot path, so
 // reaching for its `getAgentDir` costs nothing extra here.
@@ -17,6 +24,8 @@ import {
 	discoverOpenCodeModels,
 	discoverPiModels,
 } from "./model-discovery.ts";
+
+registerBunOAuthFlows();
 
 const HARNESS_LABELS: Record<HarnessId, string> = {
 	"claude-code": "Claude Code",
