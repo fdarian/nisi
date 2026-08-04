@@ -1,8 +1,10 @@
 "use client";
 
+import { Menu } from "@tauri-apps/api/menu";
 import { AlertTriangleIcon, InboxIcon } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { DevToolButton } from "#/components/devtool/dev-tool";
+import { useDevToolVisible } from "#/components/devtool/dev-tool-context";
 import { OpenPullRequestPalette } from "#/components/pr/open-pull-request-palette";
 import { PrTabStrip } from "#/components/pr/pr-tab-strip";
 import { PrView } from "#/components/pr/pr-view";
@@ -110,6 +112,24 @@ function AppShellReady({
 	const openPalette = useCallback(() => setPaletteOpen(true), []);
 	useOpenPrPaletteShortcut(openPalette);
 
+	const [devToolVisible, setDevToolVisible] = useDevToolVisible();
+	const handleTabStripContextMenu = useCallback(
+		async (event: React.MouseEvent) => {
+			event.preventDefault();
+			const menu = await Menu.new({
+				items: [
+					{
+						id: "toggle-devtool",
+						text: devToolVisible ? "Hide DevTool" : "Enable DevTool",
+						action: () => setDevToolVisible(!devToolVisible),
+					},
+				],
+			});
+			await menu.popup();
+		},
+		[devToolVisible, setDevToolVisible],
+	);
+
 	// Falls back to the first session whenever the requested id no longer
 	// matches any open session — our own close, the CLI opening a session out
 	// from under us, or an idle tab closing elsewhere (both arrive via
@@ -189,6 +209,7 @@ function AppShellReady({
 			}
 			value={activeSessionId}
 			data-tauri-drag-region="deep"
+			onContextMenu={handleTabStripContextMenu}
 		>
 			<PrTabStrip
 				onCloseSession={handleCloseSession}
@@ -217,7 +238,7 @@ function AppShellReady({
 					</TabsPrimitive.Panel>
 				))}
 			</FramePanel>
-			{import.meta.env.DEV === true ? (
+			{import.meta.env.DEV === true || devToolVisible ? (
 				<div className="absolute -bottom-1 left-3">
 					<DevToolButton />
 				</div>

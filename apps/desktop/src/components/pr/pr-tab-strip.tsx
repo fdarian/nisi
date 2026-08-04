@@ -12,6 +12,7 @@ type PrTabStripProps = {
 	sessions: readonly Session[];
 	onCloseSession: (sessionId: string) => void;
 	onOpenPullRequest: () => void;
+	onContextMenu?: (event: React.MouseEvent) => void;
 };
 
 /**
@@ -38,9 +39,11 @@ export function PrTabStrip({
 	sessions,
 	onCloseSession,
 	onOpenPullRequest,
+	onContextMenu,
 }: PrTabStripProps): React.ReactElement {
 	return (
-		<div className="flex shrink-0 pr-2">
+		// biome-ignore lint/a11y/noStaticElementInteractions: right-click only, opens a native OS menu — nothing here needs keyboard/focus semantics.
+		<div className="flex shrink-0 pr-2" onContextMenu={onContextMenu}>
 			<TrafficLightSpace />
 			<TabsPrimitive.List className="flex min-w-0 flex-1 gap-1 overflow-x-auto py-2 items-center">
 				{sessions.map((session) => (

@@ -15,12 +15,14 @@ export type DevToolScope = "files-changed";
 type DevToolState = {
 	scopeCounts: ReadonlyMap<DevToolScope, number>;
 	toastOnRefetch: boolean;
+	devToolVisible: boolean;
 };
 
 type DevToolActions = {
 	registerScope: (scope: DevToolScope) => void;
 	unregisterScope: (scope: DevToolScope) => void;
 	setToastOnRefetch: (value: boolean) => void;
+	setDevToolVisible: (value: boolean) => void;
 };
 
 type DevToolStore = DevToolState & DevToolActions;
@@ -36,10 +38,14 @@ type DevToolStore = DevToolState & DevToolActions;
  * registered. Counting occupants instead of presence makes that ordering
  * irrelevant.
  */
+const DEV_TOOL_VISIBLE_STORAGE_KEY = "nisi:devtool-visible";
+
 function createDevToolStore(): StoreApi<DevToolStore> {
 	return createStore<DevToolStore>((set) => ({
 		scopeCounts: new Map(),
 		toastOnRefetch: false,
+		devToolVisible:
+			localStorage.getItem(DEV_TOOL_VISIBLE_STORAGE_KEY) === "true",
 		registerScope: (scope) =>
 			set((state) => {
 				const next = new Map(state.scopeCounts);
@@ -59,6 +65,10 @@ function createDevToolStore(): StoreApi<DevToolStore> {
 				return { scopeCounts: next };
 			}),
 		setToastOnRefetch: (value) => set({ toastOnRefetch: value }),
+		setDevToolVisible: (value) => {
+			localStorage.setItem(DEV_TOOL_VISIBLE_STORAGE_KEY, String(value));
+			set({ devToolVisible: value });
+		},
 	}));
 }
 
@@ -133,4 +143,20 @@ export function useToastOnRefetch(): readonly [
 	const toastOnRefetch = useStore(store, (state) => state.toastOnRefetch);
 	const setToastOnRefetch = useStore(store, (state) => state.setToastOnRefetch);
 	return [toastOnRefetch, setToastOnRefetch] as const;
+}
+
+/**
+ * Whether the devtool button should render even outside `import.meta.env.DEV`
+ * — flipped from the tab strip's native right-click menu ("Enable DevTool"/
+ * "Hide DevTool", see `app-shell.tsx`). Unlike every other option in this
+ * store, it's persisted to `localStorage` so the choice survives a restart.
+ */
+export function useDevToolVisible(): readonly [
+	boolean,
+	(value: boolean) => void,
+] {
+	const store = useDevToolStore();
+	const devToolVisible = useStore(store, (state) => state.devToolVisible);
+	const setDevToolVisible = useStore(store, (state) => state.setDevToolVisible);
+	return [devToolVisible, setDevToolVisible] as const;
 }
