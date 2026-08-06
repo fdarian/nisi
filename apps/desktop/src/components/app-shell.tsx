@@ -3,6 +3,7 @@
 import { Menu } from "@tauri-apps/api/menu";
 import { AlertTriangleIcon, InboxIcon } from "lucide-react";
 import { type ComponentProps, useCallback, useMemo, useState } from "react";
+import { CommandPalette } from "#/components/command-palette";
 import { DevToolButton } from "#/components/devtool/dev-tool";
 import { useDevToolVisible } from "#/components/devtool/dev-tool-context";
 import { OpenPullRequestPalette } from "#/components/pr/open-pull-request-palette";
@@ -19,6 +20,7 @@ import {
 import { FramePanel } from "#/components/ui/frame";
 import { Spinner } from "#/components/ui/spinner";
 import { TabsPrimitive } from "#/components/ui/tabs";
+import { useCommandPaletteShortcut } from "#/hooks/use-command-palette-shortcut";
 import { useOpenPrPaletteShortcut } from "#/hooks/use-open-pr-palette-shortcut";
 import { useTabShortcuts } from "#/hooks/use-tab-shortcuts";
 import type { SidecarQueryUtils } from "#/lib/backend-context";
@@ -116,6 +118,10 @@ function AppShellReady({
 	const openPalette = useCallback(() => setPaletteOpen(true), []);
 	useOpenPrPaletteShortcut(openPalette);
 
+	const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
+	const openCommandPalette = useCallback(() => setCommandPaletteOpen(true), []);
+	useCommandPaletteShortcut(openCommandPalette);
+
 	const [devToolVisible, setDevToolVisible] = useDevToolVisible();
 	const handleTabStripContextMenu = useCallback(
 		async (event: React.MouseEvent) => {
@@ -150,6 +156,11 @@ function AppShellReady({
 		}
 		return sessions[0]?.id ?? null;
 	}, [requestedActiveSessionId, sessions]);
+
+	const activeSession = useMemo(
+		() => sessions.find((session) => session.id === activeSessionId) ?? null,
+		[sessions, activeSessionId],
+	);
 
 	// Base UI's Tabs.Root only *suggests* a fallback value via onValueChange
 	// when the active tab disappears from a controlled root — it doesn't pick
@@ -201,6 +212,11 @@ function AppShellReady({
 					open={paletteOpen}
 					orpc={orpc}
 				/>
+				<CommandPalette
+					activeSession={activeSession}
+					onOpenChange={setCommandPaletteOpen}
+					open={commandPaletteOpen}
+				/>
 			</ShellFrame>
 		);
 	}
@@ -248,6 +264,11 @@ function AppShellReady({
 				onSessionOpened={setRequestedActiveSessionId}
 				open={paletteOpen}
 				orpc={orpc}
+			/>
+			<CommandPalette
+				activeSession={activeSession}
+				onOpenChange={setCommandPaletteOpen}
+				open={commandPaletteOpen}
 			/>
 		</TabsPrimitive.Root>
 	);
