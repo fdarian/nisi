@@ -3,6 +3,7 @@
 import type {
 	CodeViewItem,
 	CodeViewOptions,
+	CodeViewScrollTarget,
 	DiffLineAnnotation,
 	FileDiffMetadata,
 	LineAnnotation,
@@ -35,19 +36,23 @@ import {
 	EmptyTitle,
 } from "#/components/ui/empty";
 import { Skeleton } from "#/components/ui/skeleton";
-import type { SidecarQueryUtils } from "#/lib/backend-context";
+import { useDiffMatchHighlighting } from "#/hooks/use-diff-match-highlighting";
 import type { CollapsedFileDiff } from "#/lib/build-collapsed-diff";
 import { buildCollapsedFileDiff } from "#/lib/build-collapsed-diff";
 import { buildFileDiff } from "#/lib/build-file-diff";
+import type { LineRange } from "#/lib/build-location-diff";
+import { buildLocationFileDiff } from "#/lib/build-location-diff";
+import { pollUntilReady } from "#/lib/diff-match-dom";
+import type { DiffMatch } from "#/lib/diff-search";
 import { hashItemVersion } from "#/lib/item-version";
 import type {
 	FileChange,
 	FileContent,
+	FileContentsMap,
 	ReviewSource,
 	ReviewState,
 	ReviewStateEntry,
 } from "#/lib/pr-data";
-import { useFileContents } from "#/lib/pr-data";
 import type { DiffStyleMode } from "#/lib/settings-data";
 import { cn } from "#/lib/utils";
 
@@ -107,23 +112,38 @@ const HIDDEN_FILE_REASON_TEXT: Record<HiddenFileReason, string> = {
  */
 export type DiffPaneHandle = {
 	scrollToPath: (path: string) => void;
+	/** Scrolls to one keyword-search match's own rendered row (`match.side`/`match.rowLine`, not `match.headLine` — see `DiffMatch`'s doc comment for why those can differ). Purely a viewport concern; the *highlight* on this match is driven declaratively by the `currentMatch` prop instead, so navigating and highlighting stay decoupled. */
+	scrollToMatch: (match: DiffMatch) => void;
 };
 
 type DiffPaneProps = {
-	orpc: SidecarQueryUtils;
-	sessionId: string;
 	/** The session's repo root — joined with `FileChange.path` for the header dropdown's "Copy absolute path". */
 	repoRoot: string;
 	files: readonly FileChange[];
 	/**
-	 * Every changed file in the session, unfiltered by "Hide reviewed" or
-	 * review state — unlike `files` above (what actually renders as a card),
-	 * this only changes when the diff itself does (a push, `includeUncommitted`
-	 * flipping). Feeds `contentPaths` below instead of `files` so a file
-	 * leaving the rendered list never reshuffles `useFileContents`' chunk
-	 * boundaries — see `contentPaths`' comment for the mechanism.
+	 * Every requested path's patch + contents, keyed by path — lifted up into
+	 * `FilesChangedView` (alongside `forcedPaths`/`onForceLoad` below) so its
+	 * own keyword-search predicate and this pane's rendering read the exact
+	 * same `useFileContents` call, sharing one TanStack Query cache entry per
+	 * chunk instead of each mounting an independent (and differently chunked)
+	 * fetch.
 	 */
-	allFiles: readonly FileChange[];
+	fileContents: FileContentsMap;
+	/** Paths the user clicked "Load full file" on — see the `stillTooLarge` annotation below. */
+	forcedPaths: ReadonlySet<string>;
+	/**
+	 * Keyword-search hits, grouped by path — non-empty for a path only while
+	 * keyword mode has a non-empty query *and* that file has at least one
+	 * match (`FilesChangedView` only ever includes matching files in `files`
+	 * while this is active, since keyword mode also narrows the sidebar).
+	 * Presence in this map (not just a mode flag) is what triggers the
+	 * location-diff narrowing below — an empty map means keyword mode is off,
+	 * exactly like `files-changed-view.tsx`'s `EMPTY_MATCHES_BY_PATH`.
+	 */
+	keywordMatchesByPath: ReadonlyMap<string, readonly DiffMatch[]>;
+	/** The match `n`/`N`/Enter last parked on — highlighted distinctly from the rest (see `useDiffMatchHighlighting`). `undefined` means no match is "current" yet (keyword mode is off, or the user hasn't navigated/submitted the query). */
+	currentMatch: DiffMatch | undefined;
+	onForceLoad: (path: string) => void;
 	selectedPath: string | null;
 	reviewState: ReadonlyMap<string, ReviewStateEntry>;
 	setViewed: (path: string, viewed: boolean) => void;
@@ -133,7 +153,23 @@ type DiffPaneProps = {
 	ref?: React.Ref<DiffPaneHandle>;
 };
 
-const SCROLL_RETRY_FRAME_LIMIT = 60;
+/**
+ * Lines of context padded onto each side of a match's head line before
+ * handing ranges to `buildLocationFileDiff` — a bare one-line range per
+ * match renders unreadably tight. No separate merge step is needed for
+ * overlapping or adjacent ranges: `buildLocationFileDiff` resolves keep/drop
+ * per head line (`ranges.some(...)`), so any run of consecutive lines that
+ * end up "keep" — whether one match's padding or several overlapping ones —
+ * already collapses into a single kept run before serialization.
+ */
+const MATCH_CONTEXT_LINES = 3;
+
+function matchRangesWithContext(matches: readonly DiffMatch[]): LineRange[] {
+	return matches.map((match) => ({
+		startLine: Math.max(1, match.headLine - MATCH_CONTEXT_LINES),
+		endLine: match.headLine + MATCH_CONTEXT_LINES,
+	}));
+}
 
 /** One file's last parsed `FileDiffMetadata`, alongside the key that produced it. */
 type CachedFileDiff = {
@@ -195,11 +231,13 @@ function resolveFileDiff(
 }
 
 export function DiffPane({
-	orpc,
-	sessionId,
 	repoRoot,
 	files,
-	allFiles,
+	fileContents,
+	forcedPaths,
+	keywordMatchesByPath,
+	currentMatch,
+	onForceLoad,
 	selectedPath,
 	reviewState,
 	setViewed,
@@ -209,9 +247,19 @@ export function DiffPane({
 }: DiffPaneProps): React.ReactElement {
 	const codeViewRef = useRef<CodeViewHandle<DiffAnnotationMetadata>>(null);
 	const fileDiffCache = useRef(new Map<string, CachedFileDiff>());
-	const [forcedPaths, setForcedPaths] = useState<ReadonlySet<string>>(
-		() => new Set(),
-	);
+
+	// Owns the CSS Custom Highlight API registry (two `Highlight`s per
+	// instance) and the per-item highlight bookkeeping — see
+	// `use-diff-match-highlighting.ts` for why this needed its own module
+	// (the `@pierre/diffs` DOM-addressing quirks it relies on, the
+	// document-global registry it has to instance-scope, and the
+	// async-re-render fix are all documented there, not here).
+	const { highlightCSS, onItemPostRender } = useDiffMatchHighlighting({
+		codeViewRef,
+		keywordMatchesByPath,
+		currentMatch,
+	});
+
 	// Files the user clicked "expand" on — collapsing is otherwise the default
 	// whenever a file has reviewed ranges to hide behind a marker.
 	const [expandedPaths, setExpandedPaths] = useState<ReadonlySet<string>>(
@@ -231,33 +279,6 @@ export function DiffPane({
 	const [fileCollapseOverrides, setFileCollapseOverrides] = useState<
 		ReadonlyMap<string, boolean>
 	>(() => new Map());
-
-	// Deliberately `allFiles`, not `files` (the rendered/display list) —
-	// `useFileContents` chunks this into fixed-size windows purely by array
-	// position (`chunkPaths`), so a file leaving `files` (ticked Reviewed with
-	// "Hide reviewed" on) would otherwise shift every later chunk boundary and
-	// invalidate most of them at once. `allFiles` only changes when the diff
-	// itself does, so a review-state change can never reshuffle a chunk this
-	// file isn't even in.
-	const contentPaths = useMemo(
-		() => allFiles.filter((file) => !file.binary).map((file) => file.path),
-		[allFiles],
-	);
-	const fileContents = useFileContents(
-		orpc,
-		sessionId,
-		contentPaths,
-		forcedPaths,
-	);
-
-	const handleForceLoad = useCallback((path: string) => {
-		setForcedPaths((current) => {
-			if (current.has(path)) return current;
-			const next = new Set(current);
-			next.add(path);
-			return next;
-		});
-	}, []);
 
 	const handleExpandCollapsed = useCallback((path: string) => {
 		setExpandedPaths((current) => {
@@ -386,6 +407,51 @@ export function DiffPane({
 
 			const content = entry?.content;
 			if (content === undefined) continue; // still loading — appears once resolved
+
+			// Keyword mode: a different *view* of the file, not a filter layered
+			// on the review view — takes priority over every other narrowing
+			// pass below, including the generated/large "hidden by default"
+			// gate. If a file surfaced in the keyword-filtered list at all, the
+			// user searched for it explicitly; hiding the match behind "Show
+			// diff" (or behind `buildCollapsedFileDiff`/the "fully reviewed"
+			// short-circuit) would defeat the point of searching for it. Only a
+			// file `keywordMatchesByPath` actually has an entry for takes this
+			// branch — everything else (including keyword mode with no matches
+			// anywhere, or a file whose matches haven't loaded yet) falls
+			// through to the normal review-aware rendering below.
+			const keywordMatches = keywordMatchesByPath.get(file.path);
+			if (keywordMatches !== undefined && keywordMatches.length > 0) {
+				const ranges = matchRangesWithContext(keywordMatches);
+				const matchSignature = keywordMatches
+					.map((match) => match.headLine)
+					.join(",");
+				const synthesizedPatch = buildLocationFileDiff(content.patch, ranges);
+				const keywordFileDiff =
+					synthesizedPatch === undefined
+						? undefined
+						: parsePatchFiles(
+								synthesizedPatch,
+								`${file.fingerprint}:keyword:${matchSignature}`,
+							)[0]?.files[0];
+				if (keywordFileDiff !== undefined) {
+					nextItems.push({
+						id: file.path,
+						type: "diff",
+						fileDiff: keywordFileDiff,
+						annotations: [],
+						collapsed: cardCollapsed,
+						version: hashItemVersion(
+							`${baseVersionInput}:keyword:${matchSignature}`,
+						),
+					});
+					continue;
+				}
+				// `synthesizedPatch`/`keywordFileDiff` resolving to `undefined`
+				// means none of the padded ranges actually overlap a head line
+				// after all (the patch changed since matches were computed) —
+				// fall through to the normal render rather than dropping the
+				// file silently.
+			}
 
 			// Whole-body noise collapse — generated/large files render nothing
 			// but the header until the user opts in, independent of review state.
@@ -540,6 +606,7 @@ export function DiffPane({
 	}, [
 		files,
 		fileContents,
+		keywordMatchesByPath,
 		reviewState,
 		diffStyle,
 		forcedPaths,
@@ -649,7 +716,7 @@ export function DiffPane({
 					<span>Showing the patch only — file contents are large.</span>
 					<button
 						className="rounded border px-1.5 py-0.5 font-medium text-foreground hover:bg-accent"
-						onClick={() => handleForceLoad(metadata.path)}
+						onClick={() => onForceLoad(metadata.path)}
 						type="button"
 					>
 						Load full file
@@ -658,7 +725,7 @@ export function DiffPane({
 			);
 		},
 		[
-			handleForceLoad,
+			onForceLoad,
 			handleExpandCollapsed,
 			handleShowHiddenFile,
 			onNavigateToBlock,
@@ -669,58 +736,103 @@ export function DiffPane({
 		() =>
 			buildDiffCodeViewOptions({
 				diffStyle,
-				extraCSS: diffCardChromeCSS,
-				onPostRender: (node, _instance, _phase, context) => {
+				extraCSS: diffCardChromeCSS + highlightCSS,
+				onPostRender: (node, _instance, phase, context) => {
 					const meta = itemMetadata.get(context.item.id);
 					node.classList.toggle(DIFF_VIEWED_HOST_CLASS, meta?.viewed === true);
+					onItemPostRender(
+						context.item.id,
+						phase === "unmount" ? undefined : (node.shadowRoot ?? undefined),
+					);
 				},
 			}),
-		[diffStyle, itemMetadata],
+		[diffStyle, itemMetadata, highlightCSS, onItemPostRender],
 	);
 
-	// Scrolls the pane to one file's card. Item ids are the file path directly
-	// (one item per file in Phase 1), so no id lookup is needed — just retry a
-	// few frames until the item is measured, since it may not be rendered yet
-	// when the request arrives (e.g. its content is still loading). A new
-	// request cancels the previous one's retry loop so a quick sequence of
-	// clicks doesn't leave an earlier target still chasing the viewport.
-	const pendingScrollFrame = useRef<number | null>(null);
-	const scrollToPath = useCallback((path: string) => {
-		if (pendingScrollFrame.current !== null) {
-			cancelAnimationFrame(pendingScrollFrame.current);
-			pendingScrollFrame.current = null;
-		}
-		let attempts = 0;
+	// Scrolls the pane to a target inside one item, retrying across frames
+	// until that item is actually measured — it may not be rendered yet when
+	// the request arrives (e.g. its content is still loading, or it's
+	// virtualized out of view). Shared by `scrollToPath` (whole-card,
+	// `type: "item"`) and `scrollToMatch` (a specific line within the card,
+	// `type: "line"`) below; each keeps its own pending-frame ref so a
+	// path-scroll and a match-scroll in flight never cancel each other.
+	const scrollWhenReady = useCallback(
+		(
+			path: string,
+			target: CodeViewScrollTarget,
+			frameRef: { current: number | null },
+		) => {
+			pollUntilReady(() => {
+				const handle = codeViewRef.current;
+				const viewer = handle?.getInstance();
+				if (!handle || !viewer || viewer.getTopForItem(path) === undefined) {
+					return false;
+				}
+				handle.scrollTo(target);
+				return true;
+			}, frameRef);
+		},
+		[],
+	);
 
-		const tryScroll = () => {
-			pendingScrollFrame.current = null;
-			const handle = codeViewRef.current;
-			const viewer = handle?.getInstance();
-			if (handle && viewer && viewer.getTopForItem(path) !== undefined) {
-				handle.scrollTo({
+	// Item ids are the file path directly (one item per file), so no id
+	// lookup is needed before scrolling to its card.
+	const pendingPathScrollFrame = useRef<number | null>(null);
+	const scrollToPath = useCallback(
+		(path: string) => {
+			scrollWhenReady(
+				path,
+				{
 					type: "item",
 					id: path,
 					align: "start",
 					offset: 12,
 					behavior: "smooth",
-				});
-				return;
-			}
-			if (attempts < SCROLL_RETRY_FRAME_LIMIT) {
-				attempts += 1;
-				pendingScrollFrame.current = requestAnimationFrame(tryScroll);
-			}
-		};
+				},
+				pendingPathScrollFrame,
+			);
+		},
+		[scrollWhenReady],
+	);
 
-		tryScroll();
-	}, []);
+	// Scrolls to a match's own row (`side`/`rowLine` — see `DiffMatch`'s doc
+	// comment for why that can differ from `headLine`). Purely a viewport
+	// concern: the highlight update for whichever match is "current" is
+	// driven declaratively by `useDiffMatchHighlighting`'s own reaction to
+	// the `currentMatch` prop, not by this call, so a caller can highlight a
+	// match without forcing a scroll (typing a query resets to the first
+	// match without yanking the viewport) and vice versa.
+	const pendingMatchScrollFrame = useRef<number | null>(null);
+	const scrollToMatch = useCallback(
+		(match: DiffMatch) => {
+			scrollWhenReady(
+				match.path,
+				{
+					type: "line",
+					id: match.path,
+					lineNumber: match.rowLine,
+					side: match.side,
+					align: "center",
+					behavior: "smooth",
+				},
+				pendingMatchScrollFrame,
+			);
+		},
+		[scrollWhenReady],
+	);
 
-	useImperativeHandle(ref, () => ({ scrollToPath }), [scrollToPath]);
+	useImperativeHandle(ref, () => ({ scrollToPath, scrollToMatch }), [
+		scrollToPath,
+		scrollToMatch,
+	]);
 
 	useEffect(
 		() => () => {
-			if (pendingScrollFrame.current !== null) {
-				cancelAnimationFrame(pendingScrollFrame.current);
+			if (pendingPathScrollFrame.current !== null) {
+				cancelAnimationFrame(pendingPathScrollFrame.current);
+			}
+			if (pendingMatchScrollFrame.current !== null) {
+				cancelAnimationFrame(pendingMatchScrollFrame.current);
 			}
 		},
 		[],

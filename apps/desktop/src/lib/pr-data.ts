@@ -110,6 +110,12 @@ export type FileContent = {
 	review: FileContentReview | null;
 };
 
+/** `useFileContents`' return shape — named so callers threading it through (e.g. `FilesChangedView` lifting the hook and passing it down to `DiffPane`, plus its own keyword-search predicate) don't each redeclare the inline map type. */
+export type FileContentsMap = ReadonlyMap<
+	string,
+	{ content: FileContent | undefined; isLoading: boolean; isError: boolean }
+>;
+
 export type ReviewState = "unreviewed" | "viewed" | "changed-after-review";
 
 /**
@@ -242,10 +248,7 @@ export function useFileContents(
 	sessionId: string,
 	paths: readonly string[],
 	forcedPaths: ReadonlySet<string>,
-): ReadonlyMap<
-	string,
-	{ content: FileContent | undefined; isLoading: boolean; isError: boolean }
-> {
+): FileContentsMap {
 	const [includeUncommitted] = useIncludeUncommitted(orpc);
 	const chunks = useMemo(
 		() => chunkPaths(paths, FILE_CONTENTS_CHUNK_SIZE),

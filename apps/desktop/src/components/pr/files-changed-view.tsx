@@ -9,6 +9,7 @@ import {
 import { useCallback, useMemo, useRef, useState } from "react";
 import type { DiffPaneHandle } from "#/components/diff-pane/diff-pane";
 import { DiffPane } from "#/components/diff-pane/diff-pane";
+import type { SearchMode } from "#/components/files-sidebar/files-sidebar";
 import { FilesSidebar } from "#/components/files-sidebar/files-sidebar";
 import { Button, buttonVariants } from "#/components/ui/button";
 import {
@@ -23,7 +24,18 @@ import {
 import { ToggleGroup, ToggleGroupItem } from "#/components/ui/toggle-group";
 import { useKeyBindings } from "#/hooks/use-key-bindings";
 import type { SidecarQueryUtils } from "#/lib/backend-context";
-import type { FileChange, ReviewStateEntry, Session } from "#/lib/pr-data";
+import {
+	type DiffMatch,
+	diffContentMatchesQuery,
+	findDiffMatches,
+} from "#/lib/diff-search";
+import type {
+	FileChange,
+	FileContentsMap,
+	ReviewStateEntry,
+	Session,
+} from "#/lib/pr-data";
+import { useFileContents } from "#/lib/pr-data";
 import {
 	useDiffStyleMode,
 	useHideReviewed,
@@ -38,6 +50,11 @@ type ReviewedToggleRecord = {
 	path: string;
 	previousViewed: boolean;
 };
+
+/** Stable identity for the "keyword mode inactive" case — a fresh `[]`/`Map` every render would defeat `DiffPane`'s `items` memo just as surely as a genuinely different value would. */
+const EMPTY_MATCHES: readonly DiffMatch[] = [];
+const EMPTY_MATCHES_BY_PATH: ReadonlyMap<string, readonly DiffMatch[]> =
+	new Map();
 
 type FilesChangedViewProps = {
 	session: Session;
@@ -83,6 +100,31 @@ export function FilesChangedView({
 	// list the sidebar renders, so the filtering itself (not just the query
 	// string) lives here now. `FilesSidebar` still owns grouping.
 	const [filterQuery, setFilterQuery] = useState("");
+	// Ephemeral, not a persisted setting — it's tied to the transient query
+	// above, not a standing preference like `viewMode`/`hideReviewed` below.
+	const [searchMode, setSearchMode] = useState<SearchMode>("files");
+	// Which match `n`/`N`/Enter last parked on, as an index into
+	// `keywordMatches` below — always read through `currentMatchIndexInBounds`
+	// (safe modulo), not directly, since the match list can shrink out from
+	// under a raw index (the query changes, or a file's content changes) and
+	// there's no effect keeping this in sync. Reset to 0 wherever the query
+	// or mode changes (`handleFilterQueryChange`/`handleSearchModeChange`
+	// below), so "current" always starts back at the first match.
+	const [currentMatchIndex, setCurrentMatchIndex] = useState(0);
+	// `setCurrentMatchIndex` alone isn't enough for `navigateMatch` (below) to
+	// stack correctly: React batches state updates, so two `n` keydowns
+	// dispatched before a re-render would both compute "current + 1" off the
+	// same stale `currentMatchIndex` and land on the same index instead of
+	// advancing twice (confirmed live — a burst of rapid-fire keydowns only
+	// ever advanced by one). This ref is written synchronously alongside
+	// every `setCurrentMatchIndex` call (`setCurrentMatchIndexBoth` below),
+	// so `navigateMatch` always computes its next step from the true latest
+	// value regardless of React's render timing.
+	const currentMatchIndexRef = useRef(0);
+	const setCurrentMatchIndexBoth = useCallback((index: number) => {
+		currentMatchIndexRef.current = index;
+		setCurrentMatchIndex(index);
+	}, []);
 
 	const [viewMode, setViewMode] = useSidebarViewMode(orpc);
 	const [diffStyle, setDiffStyle] = useDiffStyleMode(orpc);
@@ -114,17 +156,164 @@ export function FilesChangedView({
 		return [...filtered].sort((a, b) => comparePaths(a.path, b.path));
 	}, [files, reviewState, hideReviewed]);
 
+	// Lifted from `DiffPane` (rather than duplicated) — its keyword-search
+	// predicate below and the diff pane's own rendering need to read the
+	// exact same `useFileContents` call so TanStack Query dedupes both to one
+	// cached entry per chunk instead of mounting two independently-chunked
+	// fetches. `contentPaths` deliberately comes from `files` (the unfiltered
+	// prop), not `visibleFiles`/`queryFilteredFiles` below, for the same
+	// reason `DiffPane` used to key its chunks off `allFiles`: a file
+	// dropping out of the filtered/hide-reviewed view must never reshuffle
+	// another chunk's boundary.
+	const contentPaths = useMemo(
+		() => files.filter((file) => !file.binary).map((file) => file.path),
+		[files],
+	);
+	const [forcedPaths, setForcedPaths] = useState<ReadonlySet<string>>(
+		() => new Set(),
+	);
+	const fileContents: FileContentsMap = useFileContents(
+		orpc,
+		session.id,
+		contentPaths,
+		forcedPaths,
+	);
+	const handleForceLoad = useCallback((path: string) => {
+		setForcedPaths((current) => {
+			if (current.has(path)) return current;
+			const next = new Set(current);
+			next.add(path);
+			return next;
+		});
+	}, []);
+
 	// What the sidebar actually renders — `visibleFiles` narrowed by the text
 	// filter. `j`/`k` walk this list; `DiffPane` below keeps receiving the
 	// unfiltered `visibleFiles`, since the text filter only narrows the
-	// sidebar today.
+	// sidebar today. Files mode filters by path (untouched); keyword mode
+	// greps each file's loaded diff content instead — only run once the query
+	// is non-empty, so files mode (and an empty query in either mode) never
+	// pays for a content pass.
 	const queryFilteredFiles = useMemo(() => {
 		const query = filterQuery.trim().toLowerCase();
 		if (!query) return visibleFiles;
+		if (searchMode === "keyword") {
+			return visibleFiles.filter((file) =>
+				diffContentMatchesQuery(fileContents.get(file.path)?.content, query),
+			);
+		}
 		return visibleFiles.filter((file) =>
 			file.path.toLowerCase().includes(query),
 		);
-	}, [visibleFiles, filterQuery]);
+	}, [visibleFiles, filterQuery, searchMode, fileContents]);
+
+	// Keyword mode with a non-empty query is a different *view* of the diff
+	// pane, not just a sidebar narrowing: the pane itself shows only the
+	// matched hunks (`DiffPane`'s ~L409-412 branch), so it needs both the
+	// narrowed file list and, per file, where the matches actually are.
+	// Files mode never reaches here — `keywordMatchesByPath` stays the shared
+	// empty map, and `diffPaneFiles` stays `visibleFiles`, exactly today's
+	// behavior.
+	const isKeywordFilterActive =
+		searchMode === "keyword" && filterQuery.trim() !== "";
+	const diffPaneFiles = isKeywordFilterActive
+		? queryFilteredFiles
+		: visibleFiles;
+	// The flat, ordered match list — file order (`queryFilteredFiles`, already
+	// sorted to match render order), then line, then offset. `currentMatchIndex`
+	// and the "x of y" footer both index into this directly.
+	const keywordMatches = useMemo(() => {
+		if (!isKeywordFilterActive) return EMPTY_MATCHES;
+		const query = filterQuery.trim().toLowerCase();
+		return findDiffMatches(queryFilteredFiles, fileContents, query);
+	}, [isKeywordFilterActive, filterQuery, queryFilteredFiles, fileContents]);
+
+	const keywordMatchesByPath = useMemo(() => {
+		if (keywordMatches.length === 0) return EMPTY_MATCHES_BY_PATH;
+		const grouped = new Map<string, DiffMatch[]>();
+		for (const match of keywordMatches) {
+			const existing = grouped.get(match.path);
+			if (existing) existing.push(match);
+			else grouped.set(match.path, [match]);
+		}
+		return grouped;
+	}, [keywordMatches]);
+
+	// Safe modulo, not the raw index — `keywordMatches` can shrink (a query
+	// edit, or a file's content settling) without anything resetting
+	// `currentMatchIndex` in between, so a stale index must still resolve to
+	// something in range rather than `undefined`.
+	const currentMatchIndexInBounds =
+		keywordMatches.length === 0
+			? 0
+			: ((currentMatchIndex % keywordMatches.length) + keywordMatches.length) %
+				keywordMatches.length;
+	const currentMatch: DiffMatch | undefined =
+		keywordMatches[currentMatchIndexInBounds];
+
+	// Every place the query/mode itself changes resets navigation back to the
+	// first match — typing a new query (or switching modes) makes the
+	// previous "current" position meaningless.
+	const handleFilterQueryChange = useCallback(
+		(value: string) => {
+			setFilterQuery(value);
+			setCurrentMatchIndexBoth(0);
+		},
+		[setCurrentMatchIndexBoth],
+	);
+	const handleSearchModeChange = useCallback(
+		(mode: SearchMode) => {
+			setSearchMode(mode);
+			setCurrentMatchIndexBoth(0);
+		},
+		[setCurrentMatchIndexBoth],
+	);
+
+	// Jumps to an absolute match index: records it as "current", crosses
+	// `selectedPath` into that match's file when it lives elsewhere (so the
+	// sidebar never disagrees with what the pane is showing), and scrolls the
+	// pane to it. Shared by `n`/`N` (relative, via `navigateMatch` below) and
+	// by the filter input's Enter (`handleQuerySubmit`, always index 0).
+	const jumpToMatch = useCallback(
+		(index: number) => {
+			if (keywordMatches.length === 0) return;
+			setCurrentMatchIndexBoth(index);
+			const match = keywordMatches[index];
+			if (match === undefined) return;
+			if (match.path !== selectedPath) setSelectedPath(match.path);
+			diffPaneRef.current?.scrollToMatch(match);
+		},
+		[keywordMatches, selectedPath, setCurrentMatchIndexBoth],
+	);
+
+	// Reads `currentMatchIndexRef`, not the `currentMatchIndexInBounds` state
+	// derived value — see the ref's own doc comment for why a state read
+	// isn't safe here under rapid-fire `n`/`N` calls.
+	const navigateMatch = useCallback(
+		(direction: 1 | -1) => {
+			if (keywordMatches.length === 0) return;
+			const base =
+				((currentMatchIndexRef.current % keywordMatches.length) +
+					keywordMatches.length) %
+				keywordMatches.length;
+			const nextIndex =
+				(((base + direction) % keywordMatches.length) + keywordMatches.length) %
+				keywordMatches.length;
+			jumpToMatch(nextIndex);
+		},
+		[keywordMatches, jumpToMatch],
+	);
+
+	// Enter in the filter input always jumps to the *first* match (index 0),
+	// regardless of wherever `n`/`N` last left `currentMatchIndex` — the
+	// natural type→Enter→`n`→`n` flow, and re-pressing Enter after navigating
+	// away is "start over from the top", not "stay put". A no-op when
+	// there's nothing to jump to (files mode, or a keyword query with zero
+	// matches); `FilesSidebar` blurs the input regardless, same as it
+	// already does for Escape.
+	const handleQuerySubmit = useCallback(() => {
+		jumpToMatch(0);
+	}, [jumpToMatch]);
 
 	// A ref, not state: nothing renders off the undo stack, and a setState
 	// updater is the wrong place for `setViewed`/`selectPath`'s side effects —
@@ -189,6 +378,12 @@ export function FilesChangedView({
 			k: () => selectRelative(-1),
 			r: handleToggleReviewed,
 			u: handleUndo,
+			// Suppressed while the filter input has focus (bare-key guard in
+			// `useKeyBindings`), so typing "n" into a query never fires this —
+			// only meaningful once the input's been blurred (Enter, or a click
+			// elsewhere). Both wrap; a no-op with zero matches.
+			n: () => navigateMatch(1),
+			N: () => navigateMatch(-1),
 			// The filter input's own `onKeyDown` (`FilesSidebar`) already
 			// preventDefaults and blurs on the *first* Escape while it's
 			// focused — the bare-key guard in `useKeyBindings` suppresses
@@ -198,7 +393,7 @@ export function FilesChangedView({
 			// keeps it from interfering with something else's Escape
 			// handler (e.g. a Base UI popover) once there's nothing to clear.
 			Escape: () => {
-				if (filterQuery !== "") setFilterQuery("");
+				if (filterQuery !== "") handleFilterQueryChange("");
 			},
 		},
 		{ enabled: shortcutsEnabled },
@@ -210,9 +405,12 @@ export function FilesChangedView({
 				shortcutsEnabled={shortcutsEnabled}
 				filterQuery={filterQuery}
 				files={queryFilteredFiles}
-				onFilterQueryChange={setFilterQuery}
+				onFilterQueryChange={handleFilterQueryChange}
+				onQuerySubmit={handleQuerySubmit}
+				onSearchModeChange={handleSearchModeChange}
 				onSelectPath={selectPath}
 				reviewState={reviewState}
+				searchMode={searchMode}
 				selectedPath={selectedPath}
 				viewMode={viewMode}
 			/>
@@ -297,18 +495,38 @@ export function FilesChangedView({
 					</div>
 				</div>
 				<DiffPane
-					allFiles={files}
+					currentMatch={currentMatch}
 					diffStyle={diffStyle}
-					files={visibleFiles}
+					fileContents={fileContents}
+					files={diffPaneFiles}
+					forcedPaths={forcedPaths}
+					keywordMatchesByPath={keywordMatchesByPath}
+					onForceLoad={handleForceLoad}
 					onNavigateToBlock={onNavigateToBlock}
-					orpc={orpc}
 					ref={diffPaneRef}
 					repoRoot={session.repoRoot}
 					reviewState={reviewState}
 					selectedPath={selectedPath}
-					sessionId={session.id}
 					setViewed={setViewed}
 				/>
+				{isKeywordFilterActive && (
+					<div className="mx-3 flex shrink-0 items-center justify-center rounded-xl bg-background px-3 py-1.5 text-muted-foreground text-xs">
+						{keywordMatches.length === 0 ? (
+							<span>No matches</span>
+						) : (
+							<span>
+								<span className="font-medium text-foreground tabular-nums">
+									{currentMatchIndexInBounds + 1}
+								</span>{" "}
+								of{" "}
+								<span className="font-medium text-foreground tabular-nums">
+									{keywordMatches.length}
+								</span>{" "}
+								matches
+							</span>
+						)}
+					</div>
+				)}
 			</div>
 		</div>
 	);

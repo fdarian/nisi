@@ -39,6 +39,37 @@ export const diffItemMetrics = {
 export const DIFF_VIEWED_HOST_CLASS = "nisi-diff-viewed";
 
 /**
+ * `::highlight()` rules for keyword-search matches, painted via the CSS
+ * Custom Highlight API (`CSS.highlights`, `diff-pane.tsx`) instead of
+ * wrapping matched text in DOM elements — a `Range` can span whatever
+ * syntax-highlighted `<span>`s a match happens to cross without needing to
+ * split or reconcile them. Highlight *names* are per-`DiffPane`-instance
+ * (`useId()`-derived, passed in here) rather than one fixed name, since
+ * `CSS.highlights` is a single document-global registry and more than one
+ * `DiffPane` can be mounted at once (one per open PR tab) — a fixed name
+ * would let a background tab's search silently overwrite the active tab's
+ * highlights. `current`'s rule doesn't need higher specificity to win over
+ * `all`'s for a range in both sets — `diff-pane.tsx` gives it a higher
+ * `Highlight.priority` instead, since `::highlight()` layering is resolved
+ * by priority, not selector specificity.
+ */
+export function diffSearchHighlightCSS(names: {
+	all: string;
+	current: string;
+}): string {
+	return `
+		::highlight(${names.all}) {
+			background-color: color-mix(in srgb, var(--color-yellow-500) 35%, transparent);
+		}
+
+		::highlight(${names.current}) {
+			background-color: var(--color-orange-500);
+			color: var(--color-black);
+		}
+	`;
+}
+
+/**
  * The card's left/right/bottom edge, appended to `diffViewUnsafeCSS` by the
  * Files Changed pane only (`diff-pane.tsx` — the walkthrough reference pane
  * renders the same items without card chrome). Its top edge is the header's
