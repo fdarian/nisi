@@ -9,6 +9,12 @@ import { defineConfig, searchForWorkspaceRoot } from "vite";
 const host = process.env.TAURI_DEV_HOST;
 // @ts-expect-error process is a nodejs global
 const port = process.env.VITE_PORT ? Number(process.env.VITE_PORT) : 1420;
+// `scripts/dev.ts --host` — binds the server to every interface instead of
+// localhost-only. Distinct from `host` above: `TAURI_DEV_HOST` points the HMR
+// *client* at a specific LAN address (Tauri mobile dev), this only widens
+// what the server binds to.
+// @ts-expect-error process is a nodejs global
+const exposeHost = process.env.VITE_HOST === "true";
 
 /**
  * Extra `server.fs.allow` roots for files the dev server must serve from a
@@ -72,7 +78,7 @@ export default defineConfig(async () => ({
 	server: {
 		port,
 		strictPort: true,
-		host: host || false,
+		host: host || exposeHost || false,
 		fs: {
 			allow: [searchForWorkspaceRoot(__dirname), ...globalVirtualStoreRoots()],
 		},

@@ -1,6 +1,7 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { BunRuntime, BunServices } from "@effect/platform-bun";
+import { getDataDirConfig } from "@repo/db";
 import {
 	CurrentSession,
 	DevSessions,
@@ -18,20 +19,48 @@ const SidecarHandshake = Schema.Struct({
 	port: Schema.Number,
 	token: Schema.String,
 });
+type SidecarHandshake = typeof SidecarHandshake.Type;
 
-/**
- * Polls `sidecar.json` until the sidecar has published its handshake. Mirrors Rust's
- * `wait_for_sidecar_json`/the CLI's `readHandshake`, but simpler: no bounded timeout,
- * since this only ever runs raced against the sidecar subprocess itself — if the
- * sidecar dies before publishing, `Effect.raceAll` interrupts this poll along with it.
- */
-const awaitSidecarHandshake = (dataDir: string) =>
+/** Fails when `sidecar.json` is missing or doesn't parse — both just mean "no handshake to read (yet)". */
+const readHandshake = (dataDir: string) =>
 	Effect.gen(function* () {
 		const fs = yield* FileSystem;
 		const raw = yield* fs.readFileString(path.join(dataDir, "sidecar.json"));
 		return yield* Effect.try(() =>
 			Schema.decodeUnknownSync(SidecarHandshake)(JSON.parse(raw)),
 		);
+	});
+
+/**
+ * Polls `sidecar.json` until the sidecar publishes a handshake that isn't
+ * `previous` — the one already on disk before this run spawned anything.
+ * Mirrors Rust's `wait_for_sidecar_json`/the CLI's `readHandshake`, but with no
+ * bounded timeout, since this only ever runs raced against the sidecar
+ * subprocess itself: if the sidecar dies before publishing (or refuses to boot
+ * because another one holds the lock), `Effect.raceAll` interrupts this poll
+ * along with it.
+ *
+ * The `previous` comparison is what makes this actually *wait*. A sidecar
+ * removes its `sidecar.lock` on shutdown but leaves `sidecar.json` behind, so
+ * the last run's `{ port, token }` is still sitting there when this one starts
+ * — and that port is stale, since every boot binds a fresh ephemeral one.
+ * Without the check, the very first read succeeds against the dead handshake
+ * and vite gets pointed at a port nothing is listening on. Compared by `token`,
+ * not `port`: it's a fresh `crypto.randomUUID()` per boot, so it can't collide
+ * the way a recycled ephemeral port can.
+ */
+const awaitFreshHandshake = (
+	dataDir: string,
+	previous: SidecarHandshake | undefined,
+) =>
+	Effect.gen(function* () {
+		const handshake = yield* readHandshake(dataDir);
+		if (handshake.token === previous?.token) {
+			return yield* Effect.fail(
+				new Error("sidecar.json still holds the pre-boot handshake"),
+			);
+		}
+		return handshake;
 	}).pipe(Effect.retry(Schedule.spaced("300 millis")));
 
 /**
@@ -53,31 +82,60 @@ const dev = Command.make(
 		// known ahead of time, not something only discoverable from this
 		// script's own stdout after it starts.
 		port: Flag.integer("port").pipe(Flag.optional),
+		// Escape hatch out of devsess's per-session data dir, onto the same
+		// `NISI_DATA_DIR` prod (and a plain `nisi`) resolve to — see
+		// apps/desktop/AGENTS.md's "Dev/prod isolation". Safe to point at a
+		// live production app: `sidecar-lock.ts`'s `acquireSidecarLock` health-
+		// checks any existing owner and refuses to boot (loudly) rather than
+		// splitting the data dir between two sidecars.
+		prodDataDir: Flag.boolean("prod-data-dir"),
+		// Binds vite to `0.0.0.0` (`VITE_HOST`, read by `vite.config.ts`) instead
+		// of localhost-only, so another device on the LAN can load the dev
+		// server — e.g. testing `--browser` mode from a phone. Distinct from
+		// `TAURI_DEV_HOST`, which points the HMR *client* at a specific address
+		// for Tauri mobile dev; this only widens what the server binds to.
+		host: Flag.boolean("host"),
 	},
-	({ browser, port }) =>
+	({ browser, port, prodDataDir, host }) =>
 		Effect.gen(function* () {
 			const session = yield* CurrentSession;
-			const dataDir = yield* session.path("data");
+			const dataDir = prodDataDir
+				? yield* getDataDirConfig()
+				: yield* session.path("data");
 
 			const fs = yield* FileSystem;
 			yield* fs.makeDirectory(dataDir, { recursive: true });
 
-			// A sidecar removes its `sidecar.lock` on shutdown but leaves
-			// `sidecar.json` behind, so the previous run's `{ port, token }` is
-			// still sitting there when this one starts — and the port is stale,
-			// since each boot binds a fresh ephemeral one. Clearing it first is
-			// what makes `awaitSidecarHandshake` below actually wait: otherwise
-			// its very first read succeeds against the dead handshake and vite
-			// gets pointed at a port nothing is listening on.
-			yield* fs.remove(path.join(dataDir, "sidecar.json"), { force: true });
+			// Snapshotted before anything is spawned: whatever's on disk now
+			// belongs to a previous sidecar (or a live production one under
+			// `--prod-data-dir`), and it's what `awaitFreshHandshake` measures
+			// our own sidecar's handshake against. Read rather than deleted —
+			// deleting would rip the handshake out from under a running
+			// production app, and this run's sidecar refuses to boot against a
+			// live one anyway (`sidecar-lock.ts`).
+			const previousHandshake = yield* readHandshake(dataDir).pipe(
+				Effect.orElseSucceed(() => undefined),
+			);
 
 			// Printed as `KEY=value` so it's directly copy-pasteable in front of
 			// `nisi` — a plain `nisi` targets the production data dir (the default
 			// when `NISI_DATA_DIR` is unset); pointing it at this session instead is
 			// `NISI_DATA_DIR=<this> nisi`. See apps/desktop/AGENTS.md.
 			yield* Effect.sync(() =>
-				console.log(`[dev] session: ${session.name}, NISI_DATA_DIR=${dataDir}`),
+				console.log(
+					prodDataDir
+						? `[dev] using PRODUCTION data dir, NISI_DATA_DIR=${dataDir}`
+						: `[dev] session: ${session.name}, NISI_DATA_DIR=${dataDir}`,
+				),
 			);
+
+			if (host) {
+				yield* Effect.sync(() =>
+					console.log(
+						"[dev] vite bound to 0.0.0.0 — reachable from your local network",
+					),
+				);
+			}
 
 			const vitePort = Option.isSome(port)
 				? port.value
@@ -86,6 +144,7 @@ const dev = Command.make(
 			const env = {
 				NISI_DATA_DIR: dataDir,
 				VITE_PORT: String(vitePort),
+				VITE_HOST: String(host),
 			};
 
 			const sidecarProcess = runManagedSubprocess(
@@ -104,7 +163,10 @@ const dev = Command.make(
 			// publishing interrupts the wait instead of hanging forever.
 			const frontendProcess = browser
 				? Effect.gen(function* () {
-						const handshake = yield* awaitSidecarHandshake(dataDir);
+						const handshake = yield* awaitFreshHandshake(
+							dataDir,
+							previousHandshake,
+						);
 						return yield* runManagedSubprocess("bun", ["run", "dev:vite"], {
 							env: {
 								...env,

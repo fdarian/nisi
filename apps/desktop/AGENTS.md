@@ -80,6 +80,12 @@ you set it yourself: devsess sets `NISI_DATA_DIR` only for the subprocesses `dev
 you happen to have open. There's no direnv-style magic where opening a terminal "inside" a session
 picks it up automatically.
 
+Going the other way — a dev sidecar against the *real* app-data dir instead of a session's —
+is `bun dev --prod-data-dir`. Safe to run even while the packaged app is open: it resolves the
+same `NISI_DATA_DIR` default prod does, and `sidecar-lock.ts`'s `acquireSidecarLock` health-checks
+any existing owner and refuses to boot (loudly) rather than splitting the data dir between two
+sidecars.
+
 ## Browser dev harness
 `invoke("get_backend")` (see [The seam](#the-seam)) only resolves inside the Tauri webview — a
 plain `vite dev` tab has no IPC bridge, so it throws immediately and the app can't render.

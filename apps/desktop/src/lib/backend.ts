@@ -3,6 +3,8 @@ import { invoke } from "@tauri-apps/api/core";
 type BackendInfo = {
 	port: number;
 	token: string;
+	/** Only set by the dev harness — see `devBackendOverride`. Rust's `get_backend` omits it, leaving `makeSidecarClient` on its loopback default. */
+	host?: string;
 };
 
 /**
@@ -21,7 +23,12 @@ function devBackendOverride(): BackendInfo | undefined {
 	const port = import.meta.env.VITE_DEV_BACKEND_PORT;
 	const token = import.meta.env.VITE_DEV_BACKEND_TOKEN;
 	if (!port || !token) return undefined;
-	return { port: Number(port), token };
+	// Whatever address this page was loaded from is, by construction, an address
+	// the dev machine answers on — vite and the sidecar are the same host. A
+	// hardcoded loopback would only be right when the browser is on that machine
+	// too; opened from a phone over the LAN (`bun dev --browser --host`), it
+	// resolves to the phone itself and every request fails.
+	return { port: Number(port), token, host: window.location.hostname };
 }
 
 /** Invoke the Rust get_backend command to get sidecar connection info. Throws on failure. */
