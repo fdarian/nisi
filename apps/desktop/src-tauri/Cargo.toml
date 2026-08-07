@@ -28,6 +28,10 @@ tokio = { version = "1", features = ["fs", "time", "sync"] }
 # only, never TLS) before trusting it — `default-features = false` drops the
 # TLS backend (native-tls/rustls) neither this nor any http:// call needs.
 reqwest = { version = "0.12", default-features = false, features = ["json"] }
+objc2 = "0.6.4"
+objc2-app-kit = "0.3.2"
+objc2-foundation = "0.3.2"
+percent-encoding = "2.3.2"
 
 [dev-dependencies]
 # Test-only runtime bits for `#[tokio::test]` — kept out of the production

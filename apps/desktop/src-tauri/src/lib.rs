@@ -1,7 +1,10 @@
+mod editors;
+
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::time::Duration;
 
+use editors::{list_available_editors, open_in_editor};
 use serde::{Deserialize, Serialize};
 use tauri::menu::{
     AboutMetadata, Menu, MenuItem, PredefinedMenuItem, Submenu, HELP_SUBMENU_ID,
@@ -327,7 +330,11 @@ pub fn run() {
             app.manage(BackendCell(OnceCell::new()));
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![get_backend]);
+        .invoke_handler(tauri::generate_handler![
+            get_backend,
+            list_available_editors,
+            open_in_editor
+        ]);
 
     builder
         .build(tauri::generate_context!())
