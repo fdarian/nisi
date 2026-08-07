@@ -232,3 +232,69 @@ export type RepoPathVerificationError =
 	| RepoPathNotAGitRepo
 	| RepoPathNoOriginRemote
 	| RepoPathOriginMismatch;
+
+/**
+ * `gh pr view <number> --json ...,mergeStateStatus,...` failed on that field
+ * specifically — GitHub only resolves `mergeStateStatus` for an actor with
+ * push access to the repo, an undocumented `gh` quirk confirmed via the
+ * GraphQL permission error it surfaces (`pull-request-merge.ts`'s
+ * `isMergeStatusPermissionFailure`). Distinct from `PullRequestNotFound`:
+ * the PR itself resolves fine, only this one field doesn't — so a caller
+ * checking mergeability from a fork or a read-only clone gets a real error
+ * instead of a silently substituted `"UNKNOWN"`.
+ */
+export class PullRequestMergeStatusUnavailable extends Schema.TaggedErrorClass<PullRequestMergeStatusUnavailable>()(
+	"PullRequestMergeStatusUnavailable",
+	{ repoRoot: Schema.String, number: Schema.Number, reason: Schema.String },
+) {}
+
+/**
+ * `gh repo view` reported every merge method (merge/squash/rebase) disabled
+ * — a genuine repo misconfiguration (GitHub requires at least one enabled to
+ * merge anything through the UI or API at all), not a case to silently
+ * default a method for.
+ */
+export class NoMergeMethodsEnabled extends Schema.TaggedErrorClass<NoMergeMethodsEnabled>()(
+	"NoMergeMethodsEnabled",
+	{ owner: Schema.String, repo: Schema.String },
+) {}
+
+/**
+ * `gh pr merge` refused because the PR isn't actually mergeable right now
+ * (conflicts, a blocked/required check, behind base, ...) — matched by
+ * message since `gh` reports this as a plain exit 1 like every other
+ * failure.
+ */
+export class PullRequestNotMergeable extends Schema.TaggedErrorClass<PullRequestNotMergeable>()(
+	"PullRequestNotMergeable",
+	{ repoRoot: Schema.String, number: Schema.Number, reason: Schema.String },
+) {}
+
+/**
+ * `gh pr merge` failed for a reason that isn't auth, not-found, or
+ * not-mergeable — the catch-all so a merge attempt never silently no-ops.
+ */
+export class GhMergeFailed extends Schema.TaggedErrorClass<GhMergeFailed>()(
+	"GhMergeFailed",
+	{ repoRoot: Schema.String, number: Schema.Number, reason: Schema.String },
+) {}
+
+export type PullRequestMergeabilityError =
+	| GhOutputDecodeError
+	| GhNotAuthenticated
+	| GhRateLimited
+	| PullRequestMergeStatusUnavailable
+	| PullRequestNotFound;
+
+export type RepoMergeMethodsError =
+	| GhOutputDecodeError
+	| GhNotAuthenticated
+	| GhRateLimited
+	| GitHubUnreachable
+	| NoMergeMethodsEnabled;
+
+export type PullRequestMergeError =
+	| GhNotAuthenticated
+	| PullRequestNotFound
+	| PullRequestNotMergeable
+	| GhMergeFailed;

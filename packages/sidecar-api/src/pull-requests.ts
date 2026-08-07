@@ -64,6 +64,40 @@ export const RepoPathMapping = Schema.Struct({
 });
 export type RepoPathMapping = Schema.Schema.Type<typeof RepoPathMapping>;
 
+/** Mirrors `@repo/git`'s `MergeMethod` — the merge strategy GitHub's own PR UI offers, in its own ordering (Merge → Squash → Rebase). */
+export const MergeMethod = Schema.Literals(["merge", "squash", "rebase"]);
+export type MergeMethod = Schema.Schema.Type<typeof MergeMethod>;
+
+/**
+ * Mirrors `@repo/git`'s `PullRequestMergeability` plus the repo's enabled
+ * merge methods, combined into one struct since the PR header's Merge
+ * button needs both to render at all (a disabled/enabled state from the
+ * former, a method picker from the latter). `defaultMethod` is computed
+ * server-side — the first of `allowedMethods` in GitHub's own UI ordering —
+ * since GitHub exposes no "default method" field of its own; see
+ * `apps/desktop/sidecar/http.ts`'s `mergeStatus` handler.
+ */
+export const PullRequestMergeStatus = Schema.Struct({
+	state: Schema.Literals(["OPEN", "CLOSED", "MERGED"]),
+	mergeable: Schema.Literals(["MERGEABLE", "CONFLICTING", "UNKNOWN"]),
+	mergeStateStatus: Schema.Literals([
+		"BEHIND",
+		"BLOCKED",
+		"CLEAN",
+		"DIRTY",
+		"DRAFT",
+		"HAS_HOOKS",
+		"UNKNOWN",
+		"UNSTABLE",
+	]),
+	isDraft: Schema.Boolean,
+	allowedMethods: Schema.Array(MergeMethod),
+	defaultMethod: MergeMethod,
+});
+export type PullRequestMergeStatus = Schema.Schema.Type<
+	typeof PullRequestMergeStatus
+>;
+
 /**
  * `search` asks GitHub live via `@repo/git`'s `searchPullRequests` — no
  * local index or cache, so every call is a real `gh search prs` round trip.
@@ -106,6 +140,22 @@ export type RepoPathMapping = Schema.Schema.Type<typeof RepoPathMapping>;
  * `owner/repo` — the message names which) and `SERVICE_UNAVAILABLE` covering
  * `git` failing to run at all. Persists nothing on failure; on success, the
  * frontend calls `open` again, which now resolves without a fresh prompt.
+ *
+ * `mergeStatus`/`merge` back the PR header's Merge button. `mergeStatus`
+ * combines `@repo/git`'s `fetchPullRequestMergeability` and
+ * `fetchRepoMergeMethods` into one round trip — the button needs both to
+ * decide its label/enabled state and its method picker at once, and they're
+ * independent `gh` calls with no reason to force two round trips where one
+ * will do. `MERGE_STATUS_UNAVAILABLE` is the one error code that isn't
+ * shared with `search`/`open`: `mergeStateStatus` specifically requires push
+ * access to the repo, and a caller without it gets this rather than a
+ * silently substituted `"UNKNOWN"` — see `PullRequestMergeStatusUnavailable`
+ * in `@repo/git`. `merge` fires `gh pr merge` with the caller's chosen
+ * method; `CONFLICT` covers a PR that genuinely isn't mergeable right now
+ * (conflicts, a blocked/required check, behind base), distinct from the
+ * generic `SERVICE_UNAVAILABLE` a `gh` failure that isn't auth/not-found/
+ * not-mergeable falls back to. See `apps/desktop/sidecar/http.ts`'s handlers
+ * for the full error mapping.
  */
 export const pullRequestsContract = {
 	search: oc
@@ -142,4 +192,38 @@ export const pullRequestsContract = {
 		)
 		.output(RepoPathMapping)
 		.errors({ BAD_REQUEST: {}, SERVICE_UNAVAILABLE: {} }),
+	mergeStatus: oc
+		.input(
+			Schema.Struct({
+				repoRoot: Schema.String,
+				owner: Schema.String,
+				repo: Schema.String,
+				number: Schema.Number,
+			}),
+		)
+		.output(PullRequestMergeStatus)
+		.errors({
+			GH_NOT_AUTHENTICATED: {},
+			TOO_MANY_REQUESTS: {},
+			SERVICE_UNAVAILABLE: {},
+			NOT_FOUND: {},
+			MERGE_STATUS_UNAVAILABLE: {},
+		}),
+	merge: oc
+		.input(
+			Schema.Struct({
+				repoRoot: Schema.String,
+				owner: Schema.String,
+				repo: Schema.String,
+				number: Schema.Number,
+				method: MergeMethod,
+			}),
+		)
+		.output(Schema.Void)
+		.errors({
+			CONFLICT: {},
+			GH_NOT_AUTHENTICATED: {},
+			NOT_FOUND: {},
+			SERVICE_UNAVAILABLE: {},
+		}),
 };

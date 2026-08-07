@@ -194,6 +194,8 @@ export function createMockOrpc(data: MockOrpcData = {}): SidecarQueryUtils {
 			search: async () => [],
 			open: neverSettles,
 			recordRepoPath: neverSettles,
+			mergeStatus: neverSettles,
+			merge: neverSettles,
 		},
 		walkthrough: {
 			harnesses: async () => harnesses,

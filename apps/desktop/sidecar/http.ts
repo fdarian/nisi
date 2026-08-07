@@ -7,7 +7,13 @@ import {
 	type RequestHeadersHandlerPluginContext,
 } from "@orpc/server/plugins";
 import { refreshLoginShellPath } from "@repo/bin-resolver";
-import { type GitCommandError, searchPullRequests } from "@repo/git";
+import {
+	fetchPullRequestMergeability,
+	fetchRepoMergeMethods,
+	type GitCommandError,
+	mergePullRequest,
+	searchPullRequests,
+} from "@repo/git";
 import { ReviewStore } from "@repo/review";
 import { SettingsStore } from "@repo/settings";
 import type {
@@ -772,6 +778,154 @@ export function attachRouter(
 							),
 						),
 					);
+			}),
+			// Combines `@repo/git`'s two independent `gh` reads (PR mergeability,
+			// repo merge-method settings) into one round trip — the PR header's
+			// Merge button needs both to decide its label/enabled state and its
+			// method picker at once.
+			mergeStatus: authed.pullRequests.mergeStatus.effect(function* ({
+				input,
+				errors,
+			}) {
+				const [mergeability, allowedMethods] = yield* Effect.all(
+					[
+						fetchPullRequestMergeability(input.repoRoot, input.number),
+						fetchRepoMergeMethods(input.repoRoot, input.owner, input.repo),
+					],
+					{ concurrency: "unbounded" },
+				).pipe(
+					Effect.catchTag("GhNotAuthenticated", (cause) =>
+						Effect.fail(
+							errors.GH_NOT_AUTHENTICATED({
+								message: `gh is not authenticated: ${cause.reason}`,
+							}),
+						),
+					),
+					Effect.catchTag("GhRateLimited", (cause) =>
+						Effect.fail(
+							errors.TOO_MANY_REQUESTS({
+								message: `GitHub's API is rate-limited right now: ${cause.reason}`,
+							}),
+						),
+					),
+					Effect.catchTag("GhOutputDecodeError", (cause) =>
+						Effect.fail(
+							errors.SERVICE_UNAVAILABLE({
+								message: `gh returned output nisi couldn't parse (${cause.command})`,
+							}),
+						),
+					),
+					Effect.catchTag("GitHubUnreachable", (cause) =>
+						Effect.fail(
+							errors.SERVICE_UNAVAILABLE({
+								message: `could not reach GitHub for ${cause.repoRoot}: ${cause.reason}`,
+							}),
+						),
+					),
+					Effect.catchTag("GitCommandError", (cause) =>
+						Effect.fail(
+							errors.SERVICE_UNAVAILABLE({
+								message: `${cause.command} could not be run: ${cause.stderr || String(cause.cause)}`,
+							}),
+						),
+					),
+					Effect.catchTag("PullRequestNotFound", (cause) =>
+						Effect.fail(
+							errors.NOT_FOUND({
+								message: `pull request #${cause.number} couldn't be resolved on GitHub for ${cause.repoRoot}: ${cause.reason}`,
+							}),
+						),
+					),
+					// `mergeStateStatus` specifically requires push access to the
+					// repo — deliberately not folded into `SERVICE_UNAVAILABLE`, so
+					// the button can say "merge status unavailable" rather than a
+					// generic connectivity failure.
+					Effect.catchTag("PullRequestMergeStatusUnavailable", (cause) =>
+						Effect.fail(
+							errors.MERGE_STATUS_UNAVAILABLE({
+								message: `couldn't determine merge status for pull request #${cause.number} in ${cause.repoRoot} — this usually means nisi doesn't have push access to the repo: ${cause.reason}`,
+							}),
+						),
+					),
+					Effect.catchTag("NoMergeMethodsEnabled", (cause) =>
+						Effect.fail(
+							errors.SERVICE_UNAVAILABLE({
+								message: `${cause.owner}/${cause.repo} has every merge method disabled`,
+							}),
+						),
+					),
+				);
+
+				// `allowedMethods` is guaranteed non-empty here — `fetchRepoMergeMethods`
+				// already fails `NoMergeMethodsEnabled` (mapped above) when it would
+				// otherwise be empty — and is already in GitHub's own Merge → Squash →
+				// Rebase ordering, so the default is simply its first entry.
+				const defaultMethod = allowedMethods[0];
+				if (defaultMethod === undefined) {
+					return yield* Effect.die(
+						new Error(
+							"fetchRepoMergeMethods resolved with an empty allowedMethods array",
+						),
+					);
+				}
+
+				return {
+					state: mergeability.state,
+					mergeable: mergeability.mergeable,
+					mergeStateStatus: mergeability.mergeStateStatus,
+					isDraft: mergeability.isDraft,
+					allowedMethods,
+					defaultMethod,
+				};
+			}),
+			merge: authed.pullRequests.merge.effect(function* ({ input, errors }) {
+				yield* mergePullRequest(
+					input.repoRoot,
+					input.number,
+					input.method,
+				).pipe(
+					Effect.catchTag("GhNotAuthenticated", (cause) =>
+						Effect.fail(
+							errors.GH_NOT_AUTHENTICATED({
+								message: `gh is not authenticated: ${cause.reason}`,
+							}),
+						),
+					),
+					Effect.catchTag("PullRequestNotFound", (cause) =>
+						Effect.fail(
+							errors.NOT_FOUND({
+								message: `pull request #${cause.number} couldn't be resolved on GitHub for ${cause.repoRoot}: ${cause.reason}`,
+							}),
+						),
+					),
+					Effect.catchTag("PullRequestNotMergeable", (cause) =>
+						Effect.fail(
+							errors.CONFLICT({
+								message: `pull request #${cause.number} isn't mergeable right now: ${cause.reason}`,
+							}),
+						),
+					),
+					Effect.catchTag("GhMergeFailed", (cause) =>
+						Effect.fail(
+							errors.SERVICE_UNAVAILABLE({
+								message: `gh pr merge failed for pull request #${cause.number}: ${cause.reason}`,
+							}),
+						),
+					),
+					Effect.catchTag("GitCommandError", (cause) =>
+						Effect.fail(
+							errors.SERVICE_UNAVAILABLE({
+								message: `${cause.command} could not be run: ${cause.stderr || String(cause.cause)}`,
+							}),
+						),
+					),
+				);
+
+				yield* Effect.logInfo("pull request merged", {
+					repoRoot: input.repoRoot,
+					number: input.number,
+					method: input.method,
+				});
 			}),
 		},
 	});

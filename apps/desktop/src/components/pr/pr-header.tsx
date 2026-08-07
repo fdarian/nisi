@@ -21,10 +21,13 @@ import {
 	DropdownMenuTrigger,
 } from "#/components/ui/menu";
 import { toastManager } from "#/components/ui/toast";
+import type { SidecarQueryUtils } from "#/lib/backend-context";
 import type { SessionTarget } from "#/lib/pr-data";
 import { cn } from "#/lib/utils";
+import { PrMergeButton } from "./pr-merge-button";
 
 type PrHeaderProps = {
+	orpc: SidecarQueryUtils;
 	target: SessionTarget;
 	repoRoot: string;
 	stat: { additions: number; deletions: number };
@@ -61,6 +64,7 @@ function openInEditor(
 
 /** Keep it quiet — the diff is the subject. */
 export function PrHeader({
+	orpc,
 	target,
 	repoRoot,
 	stat,
@@ -106,6 +110,15 @@ export function PrHeader({
 					</span>
 				</div>
 			</div>
+			{target.kind === "pr" && (
+				<PrMergeButton
+					number={target.number}
+					orpc={orpc}
+					owner={target.owner}
+					repo={target.repo}
+					repoRoot={repoRoot}
+				/>
+			)}
 			<DropdownMenu
 				onOpenChange={(open) => {
 					if (!open) return;

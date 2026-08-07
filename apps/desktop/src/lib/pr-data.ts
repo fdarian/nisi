@@ -14,7 +14,7 @@
  * one field (the boolean) that's honest to predict — see that hook's doc
  * comment for the split.
  */
-import type { Query } from "@tanstack/react-query";
+import type { Query, UseQueryResult } from "@tanstack/react-query";
 import {
 	useMutation,
 	useMutationState,
@@ -649,4 +649,104 @@ export function useRefreshOnWatchedEdge(
 		}
 		previouslyWatched.current = watched;
 	}, [watched, refresh]);
+}
+
+/** Mirrors `MergeMethod` (`packages/sidecar-api/src/pull-requests.ts`) — the merge strategy GitHub's own PR UI offers, in its own Merge → Squash → Rebase ordering. */
+export type MergeMethod = "merge" | "squash" | "rebase";
+
+/** Mirrors `PullRequestMergeStatus` (`packages/sidecar-api/src/pull-requests.ts`). */
+export type PullRequestMergeStatus = {
+	state: "OPEN" | "CLOSED" | "MERGED";
+	mergeable: "MERGEABLE" | "CONFLICTING" | "UNKNOWN";
+	mergeStateStatus:
+		| "BEHIND"
+		| "BLOCKED"
+		| "CLEAN"
+		| "DIRTY"
+		| "DRAFT"
+		| "HAS_HOOKS"
+		| "UNKNOWN"
+		| "UNSTABLE";
+	isDraft: boolean;
+	allowedMethods: readonly MergeMethod[];
+	defaultMethod: MergeMethod;
+};
+
+export type PullRequestMergeStatusParams = {
+	repoRoot: string;
+	owner: string;
+	repo: string;
+	number: number;
+};
+
+/**
+ * `pullRequests.mergeStatus` — PR mergeability plus the repo's enabled merge
+ * methods in one query, everything the PR header's Merge button needs to
+ * decide its label/enabled state and its method picker. GitHub computes
+ * `mergeable` asynchronously, so this re-polls every 2s while it's still
+ * `"UNKNOWN"` rather than leaving the button stuck on "Checking
+ * mergeability…" until something else happens to trigger a refetch —
+ * `false` (TanStack Query's "stop polling") the instant it resolves either
+ * way.
+ */
+export function usePullRequestMergeStatus(
+	orpc: SidecarQueryUtils,
+	params: PullRequestMergeStatusParams,
+): UseQueryResult<PullRequestMergeStatus> {
+	return useQuery({
+		...orpc.pullRequests.mergeStatus.queryOptions({ input: params }),
+		refetchInterval: (query) =>
+			query.state.data?.mergeable === "UNKNOWN" ? 2000 : false,
+	});
+}
+
+export type MergePullRequestParams = {
+	repoRoot: string;
+	owner: string;
+	repo: string;
+	number: number;
+	method: MergeMethod;
+};
+
+/**
+ * `pullRequests.merge` — fires `gh pr merge` with the caller's chosen
+ * method. On success invalidates this PR's own `mergeStatus` (flips the
+ * button to "Merged") and the sessions list, mirroring `useSetRangeViewed`'s
+ * fire-and-forget call-level `onSuccess` shape: unlike `useSetFileViewed`,
+ * nothing elsewhere reads this mutation's `"pending"` state via
+ * `useMutationState`, so there's no overlay whose timing a hook-level
+ * `onSuccess` would need to protect.
+ */
+export function useMergePullRequest(orpc: SidecarQueryUtils): {
+	merge: (params: MergePullRequestParams) => void;
+	isPending: boolean;
+	error: unknown;
+} {
+	const queryClient = useQueryClient();
+	const mutation = useMutation(orpc.pullRequests.merge.mutationOptions());
+
+	const merge = useCallback(
+		(params: MergePullRequestParams) => {
+			mutation.mutate(params, {
+				onSuccess: () => {
+					queryClient.invalidateQueries({
+						queryKey: orpc.pullRequests.mergeStatus.key({
+							input: {
+								repoRoot: params.repoRoot,
+								owner: params.owner,
+								repo: params.repo,
+								number: params.number,
+							},
+						}),
+					});
+					queryClient.invalidateQueries({
+						queryKey: orpc.sessions.list.queryKey(),
+					});
+				},
+			});
+		},
+		[mutation, queryClient, orpc],
+	);
+
+	return { merge, isPending: mutation.isPending, error: mutation.error };
 }

@@ -498,7 +498,8 @@ const SEARCH_JSON_FIELDS =
  */
 const AUTH_MARKERS = ["Bad credentials", "HTTP 401"] as const;
 
-const isAuthFailure = (result: GhResult): boolean =>
+/** Exported for `pull-request-merge.ts`, whose `gh pr view`/`gh repo view`/`gh pr merge` calls hit the same authentication failure shape. */
+export const isAuthFailure = (result: GhResult): boolean =>
 	result.exitCode === 4 ||
 	AUTH_MARKERS.some((marker) => result.stderr.includes(marker));
 
@@ -510,7 +511,9 @@ const isAuthFailure = (result: GhResult): boolean =>
  * whatever else uses it), so this is sourced from GitHub's documented error
  * text rather than an observed run. See this phase's report.
  */
-const isRateLimited = (stderr: string): boolean => /rate limit/i.test(stderr);
+/** Exported for `pull-request-merge.ts` — same GitHub API rate-limit message shape. */
+export const isRateLimited = (stderr: string): boolean =>
+	/rate limit/i.test(stderr);
 
 const classifySearchFailure = (result: GhResult): PullRequestSearchError => {
 	if (isAuthFailure(result)) {

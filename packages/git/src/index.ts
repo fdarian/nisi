@@ -18,6 +18,7 @@ export type {
 export { getChangedFiles, getFileContents } from "./diff.ts";
 export {
 	FileNotChanged,
+	GhMergeFailed,
 	GhNotAuthenticated,
 	GhOutputDecodeError,
 	GhRateLimited,
@@ -26,12 +27,18 @@ export {
 	GitHubSearchUnreachable,
 	GitHubUnreachable,
 	NoDefaultBranch,
+	NoMergeMethodsEnabled,
 	NoOriginRemote,
 	NotAGitRepository,
+	type PullRequestMergeabilityError,
+	type PullRequestMergeError,
+	PullRequestMergeStatusUnavailable,
 	PullRequestNotFound,
+	PullRequestNotMergeable,
 	PullRequestRefNotFound,
 	type PullRequestSearchError,
 	type PullRequestWorktreeError,
+	type RepoMergeMethodsError,
 	RepoPathNoOriginRemote,
 	RepoPathNotAGitRepo,
 	RepoPathNotFound,
@@ -54,6 +61,15 @@ export {
 	resolveReviewTargetForPullRequest,
 	searchPullRequests,
 } from "./pull-request.ts";
+export type {
+	MergeMethod,
+	PullRequestMergeability,
+} from "./pull-request-merge.ts";
+export {
+	fetchPullRequestMergeability,
+	fetchRepoMergeMethods,
+	mergePullRequest,
+} from "./pull-request-merge.ts";
 export {
 	resolveCurrentBranch,
 	resolveLocalDefaultBranch,
