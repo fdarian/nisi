@@ -41,7 +41,9 @@ const exposeHost = process.env.VITE_HOST === "true";
  */
 function globalVirtualStoreRoots(): string[] {
 	const segments = fs
-		.realpathSync(path.resolve(__dirname, "node_modules/@pierre/diffs"))
+		.realpathSync(
+			path.resolve(import.meta.dirname, "node_modules/@pierre/diffs"),
+		)
 		.split(path.sep);
 	const linksIndex = segments.indexOf("links");
 	if (linksIndex === -1) return [];
@@ -67,7 +69,7 @@ export default defineConfig(async () => ({
 
 	resolve: {
 		alias: {
-			"#": path.resolve(__dirname, "./src"),
+			"#": path.resolve(import.meta.dirname, "./src"),
 		},
 	},
 
@@ -90,7 +92,10 @@ export default defineConfig(async () => ({
 		strictPort: true,
 		host: host || exposeHost || false,
 		fs: {
-			allow: [searchForWorkspaceRoot(__dirname), ...globalVirtualStoreRoots()],
+			allow: [
+				searchForWorkspaceRoot(import.meta.dirname),
+				...globalVirtualStoreRoots(),
+			],
 		},
 		hmr: host
 			? {
