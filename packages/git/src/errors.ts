@@ -68,6 +68,23 @@ export class FileNotChanged extends Schema.TaggedErrorClass<FileNotChanged>()(
 	{ path: Schema.String },
 ) {}
 
+/**
+ * `readWorktreeBlobContent` couldn't read a worktree path as a
+ * git-blob-equivalent value — `lstat`/`readlink`/`readFile` raised anything
+ * other than the path simply not existing (permissions, a directory sitting
+ * where the path used to be, ...). Absence itself isn't this: a deleted or
+ * never-existed path is `Option.none()`, the common case every caller
+ * already handles as a value, not a failure — see that function's doc
+ * comment.
+ */
+export class WorktreeReadFailed extends Schema.TaggedErrorClass<WorktreeReadFailed>()(
+	"WorktreeReadFailed",
+	{
+		path: Schema.String,
+		cause: Schema.Defect(),
+	},
+) {}
+
 export type GitError =
 	| GitCommandError
 	| NotAGitRepository

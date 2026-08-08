@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { Effect } from "effect";
+import { Effect, Option } from "effect";
 import type { FileSystem } from "effect/FileSystem";
 import { ReviewStore } from "../src/store.ts";
 import { makeTestLayer, withTempDataDir } from "./fixtures.ts";
@@ -207,7 +207,7 @@ describe("ReviewStore file review state", () => {
 					yield* store.markFileViewed(
 						session.id,
 						"src/a.ts",
-						new TextEncoder().encode("content\n"),
+						Option.some(new TextEncoder().encode("content\n")),
 					);
 					return yield* store.getFileReviewState(session.id, "src/a.ts");
 				}),
@@ -228,7 +228,7 @@ describe("ReviewStore file review state", () => {
 					yield* store.markFileViewed(
 						session.id,
 						"src/a.ts",
-						new TextEncoder().encode("content\n"),
+						Option.some(new TextEncoder().encode("content\n")),
 					);
 					yield* store.markFileUnviewed(session.id, "src/a.ts");
 					return yield* store.getFileReviewState(session.id, "src/a.ts");
@@ -265,7 +265,7 @@ describe("ReviewStore file review state", () => {
 					return yield* store.markFileViewed(
 						"does-not-exist",
 						"src/a.ts",
-						new TextEncoder().encode("x"),
+						Option.some(new TextEncoder().encode("x")),
 					);
 				}).pipe(Effect.provide(makeTestLayer(dataDir))),
 			);

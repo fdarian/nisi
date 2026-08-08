@@ -1,9 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtemp, rm, symlink } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { BunServices } from "@effect/platform-bun";
 import { SqliteDb } from "@repo/db";
+import { ReviewStore } from "@repo/review";
 import { ConfigProvider, Effect, Layer, Result } from "effect";
 import { Store } from "../store.ts";
 
@@ -127,6 +128,95 @@ describe("Store.setFileViewed — a committed symlink", () => {
 			const linkFile = files.find((file) => file.path === "link.txt");
 			expect(linkFile?.review?.viewed).toBe(true);
 			expect(linkFile?.review?.changedSinceReview).toBe(false);
+		});
+	});
+});
+
+describe("Store.setFileViewed — working-tree read failures", () => {
+	/**
+	 * Puts `a.ts` in the session's diff (changed between `main` and a
+	 * `feature` branch checked out on top of it) without touching what's
+	 * actually on disk right now — each test below mutates the working tree
+	 * itself (deletes the file, or replaces it with a directory) after this,
+	 * so `a.ts` stays a real diff entry while its current working-tree state
+	 * diverges from both `main` and `feature`'s committed content.
+	 */
+	const makeRepoWithChangedFile = async (repoRoot: string): Promise<void> => {
+		await sh(repoRoot, ["checkout", "-q", "-b", "feature"]);
+		await Bun.write(join(repoRoot, "a.ts"), "hello\nworld\n");
+		await sh(repoRoot, ["commit", "-q", "-am", "change a.ts"]);
+	};
+
+	test('ticking Reviewed on a path absent from the working tree records a NULL snapshot, not sha256(""), and still reports it reviewed while absent', async () => {
+		await withTestRepoAndDataDir(async (repoRoot, dataDir) => {
+			await makeRepoWithChangedFile(repoRoot);
+			await rm(join(repoRoot, "a.ts"));
+
+			const result = await Effect.runPromise(
+				Effect.gen(function* () {
+					const store = yield* Store;
+					const reviewStore = yield* ReviewStore;
+					const session = yield* store.openSession(repoRoot, {
+						kind: "branch",
+						baseRef: "main",
+					});
+
+					yield* store.setFileViewed(session.id, "a.ts", true);
+
+					const state = yield* reviewStore.getFileReviewState(
+						session.id,
+						"a.ts",
+					);
+					// `includeUncommitted: true` — "current" has to mean the
+					// working tree (still missing the file) for this to exercise
+					// the absent-stays-reviewed path; committed-only mode would
+					// compare against HEAD, where `a.ts` still exists.
+					const files = yield* store.listChangedFiles(session.id, true);
+					const file = files.find((f) => f.path === "a.ts");
+					return { state, review: file?.review ?? null };
+				}).pipe(Effect.provide(makeTestLayer(dataDir))),
+			);
+
+			expect(result.state?.viewed).toBe(true);
+			expect(result.state?.snapshotHash).toBeNull();
+			expect(result.review).toEqual({
+				viewed: true,
+				reviewedHash: null,
+				changedSinceReview: false,
+			});
+		});
+	});
+
+	test("ticking Reviewed on a path that's actually a directory propagates the read failure instead of recording an empty snapshot", async () => {
+		await withTestRepoAndDataDir(async (repoRoot, dataDir) => {
+			await makeRepoWithChangedFile(repoRoot);
+			await rm(join(repoRoot, "a.ts"));
+			await mkdir(join(repoRoot, "a.ts"));
+
+			const result = await Effect.runPromise(
+				Effect.gen(function* () {
+					const store = yield* Store;
+					const reviewStore = yield* ReviewStore;
+					const session = yield* store.openSession(repoRoot, {
+						kind: "branch",
+						baseRef: "main",
+					});
+
+					const outcome = yield* store
+						.setFileViewed(session.id, "a.ts", true)
+						.pipe(Effect.result);
+					const state = yield* reviewStore.getFileReviewState(
+						session.id,
+						"a.ts",
+					);
+					return { outcome, state };
+				}).pipe(Effect.provide(makeTestLayer(dataDir))),
+			);
+
+			expect(Result.isFailure(result.outcome)).toBe(true);
+			// Never recorded as a claim at all — a swallowed error would have
+			// left a `viewed: true` row (empty-content snapshot) behind.
+			expect(result.state).toBeNull();
 		});
 	});
 });

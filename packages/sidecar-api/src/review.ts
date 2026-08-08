@@ -16,7 +16,7 @@ export const reviewContract = {
 			}),
 		)
 		.output(Schema.Void)
-		.errors({ NOT_FOUND: {} }),
+		.errors({ NOT_FOUND: {}, INTERNAL_SERVER_ERROR: {} }),
 	/**
 	 * Ticks (or unticks) one walkthrough reference block's claim on a set of
 	 * line ranges within one file — Phase 3's range-scoped review, the
@@ -43,5 +43,5 @@ export const reviewContract = {
 			}),
 		)
 		.output(Schema.Void)
-		.errors({ NOT_FOUND: {} }),
+		.errors({ NOT_FOUND: {}, INTERNAL_SERVER_ERROR: {} }),
 };

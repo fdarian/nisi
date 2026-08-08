@@ -45,7 +45,17 @@ export const reviewedFiles = sqliteTable(
 			.references(() => sessions.id, { onDelete: "cascade" }),
 		path: text().notNull(),
 		viewed: integer({ mode: "boolean" }).notNull(),
-		/** sha256 hex of the snapshot blob in the content-addressed store; null when `viewed` is false. */
+		/**
+		 * sha256 hex of the snapshot blob in the content-addressed store.
+		 * `NULL` on an unviewed row (`viewed: false`, written by
+		 * `markFileUnviewed`) as before, but also a legitimate value on a
+		 * *viewed* row: `viewed: true` + `NULL` means the file was reviewed
+		 * while absent from the working tree — there was no content to
+		 * snapshot, so there's no blob to point at. That's distinct from
+		 * `sha256("")` (a genuinely empty file reviewed as such); see
+		 * `markFileViewed`'s `content: Option<Uint8Array>` for how the two
+		 * are told apart at write time.
+		 */
 		snapshotHash: text(),
 		viewedAt: integer({ mode: "timestamp_ms" })
 			.notNull()

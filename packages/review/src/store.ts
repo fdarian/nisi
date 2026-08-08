@@ -1,6 +1,6 @@
 import { SqliteDb } from "@repo/db";
 import { and, desc, eq, isNull } from "drizzle-orm";
-import { Context, Effect, Layer } from "effect";
+import { Context, Effect, Layer, Option } from "effect";
 import { FileSystem } from "effect/FileSystem";
 import { v7 as uuidv7 } from "uuid";
 import { readBlob, writeBlob } from "./blob-store.ts";
@@ -239,15 +239,25 @@ export class ReviewStore extends Context.Service<ReviewStore>()("ReviewStore", {
 		): Effect.Effect<Session, SessionNotFound | ReviewStoreError> =>
 			readSessionRow(sessionId).pipe(Effect.map(toSession));
 
-		/** Ticks a file Reviewed, snapshotting its current content immediately. */
+		/**
+		 * Ticks a file Reviewed, snapshotting its current content immediately.
+		 * `content: Option.none()` means the file was absent from the working
+		 * tree at tick time (deleted, or never existed) — no blob is written
+		 * and the row's `snapshotHash` is persisted as `NULL` rather than
+		 * `sha256("")`, so "reviewed while absent" and "reviewed a genuinely
+		 * empty file" stay two distinct, honestly-comparable claims. See
+		 * `reviewedFiles.snapshotHash`'s column comment.
+		 */
 		const markFileViewed = (
 			sessionId: string,
 			path: string,
-			content: Uint8Array,
+			content: Option.Option<Uint8Array>,
 		): Effect.Effect<void, SessionNotFound | ReviewStoreError, FileSystem> =>
 			Effect.gen(function* () {
 				const session = yield* readSessionRow(sessionId);
-				const hash = yield* writeBlob(blobsDir, content);
+				const hash = Option.isSome(content)
+					? yield* writeBlob(blobsDir, content.value)
+					: null;
 				const now = new Date();
 				yield* dbUse(db, (client) =>
 					client

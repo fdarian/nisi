@@ -23,6 +23,7 @@ import {
 	useQueryClient,
 } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { toastManager } from "#/components/ui/toast";
 import type { SidecarQueryUtils } from "#/lib/backend-context";
 import { useIncludeUncommitted } from "#/lib/settings-data";
 
@@ -450,6 +451,15 @@ export function useReviewState(
  * this back to `.mutate()`'s call site — e.g. to read `path` from the closure
  * again instead of `variables` — type-checks fine and no test catches it;
  * it just silently reopens that ~150ms window.
+ *
+ * `onError` needs no rollback of its own: the overlay above is driven purely
+ * by `useMutationState`'s `status: "pending"` filter, never an imperative
+ * cache write, so the instant this mutation settles — success *or* error —
+ * `useReviewState` stops predicting and falls back to whatever `diff.files`
+ * already said, which a failed write never touched. The toast here is purely
+ * user feedback for a failure that would otherwise be silent (`NOT_FOUND` or
+ * `INTERNAL_SERVER_ERROR` alike — both are `ORPCError`s, so `.message`
+ * covers either without discriminating on the tag).
  */
 export function useSetFileViewed(
 	orpc: SidecarQueryUtils,
@@ -468,6 +478,13 @@ export function useSetFileViewed(
 					predicate: (query) => queryCoveredPath(query, variables.path),
 				}),
 			]),
+		onError: (error, variables) => {
+			toastManager.add({
+				title: `Failed to update review state for ${variables.path}`,
+				description: error instanceof Error ? error.message : String(error),
+				type: "error",
+			});
+		},
 	});
 
 	return useCallback(
@@ -504,6 +521,11 @@ export type SetRangeViewedParams = {
  * `onSuccess` treatment (see `useSetFileViewed`'s doc comment) — a
  * call-level one won't delay the mutation's `"pending"` → `"success"`
  * transition no matter what it returns.
+ *
+ * `onError` is call-level too, for the same reason `onSuccess` is: there's
+ * no overlay here for a failure to leave stuck, so nothing needs the
+ * hook-level await-before-transition timing — just a toast so a failed tick
+ * (`NOT_FOUND` or `INTERNAL_SERVER_ERROR`) doesn't fail silently.
  */
 export function useSetRangeViewed(
 	orpc: SidecarQueryUtils,
@@ -524,6 +546,14 @@ export function useSetRangeViewed(
 						queryClient.invalidateQueries({
 							queryKey: orpc.diff.fileContents.key({ input: { sessionId } }),
 							predicate: (query) => queryCoveredPath(query, params.path),
+						});
+					},
+					onError: (error) => {
+						toastManager.add({
+							title: `Failed to update review state for ${params.path}`,
+							description:
+								error instanceof Error ? error.message : String(error),
+							type: "error",
 						});
 					},
 				},

@@ -1,8 +1,8 @@
 import { lstat, readFile, readlink } from "node:fs/promises";
-import type { Cause } from "effect";
-import { Effect } from "effect";
+import { Effect, Option } from "effect";
 import type { ChildProcessSpawner } from "effect/unstable/process";
 import type { GitCommandError } from "./errors.ts";
+import { WorktreeReadFailed } from "./errors.ts";
 import { git, gitBytes } from "./exec.ts";
 
 const PATH_CHUNK_SIZE = 200;
@@ -207,6 +207,11 @@ export const readFileContentsAtRef = (
 		}),
 	);
 
+const isEnoent = (error: unknown): boolean =>
+	error instanceof Object &&
+	"code" in error &&
+	(error as NodeJS.ErrnoException).code === "ENOENT";
+
 /**
  * A worktree path's content, defined the same way git itself defines a
  * tracked path's content rather than the way `fs.readFile` does: a symlink
@@ -219,14 +224,33 @@ export const readFileContentsAtRef = (
  * path's committed blob must land on identical bytes for a symlink, or the
  * two sides never reconcile equal. Every worktree read joined against a
  * `repoRoot` should go through this instead of a raw `fs.readFile`.
+ *
+ * Absence is a value, not a failure: a path deleted since review (or one
+ * that never existed) is `Option.none()`, since every caller already has to
+ * handle "not there right now" as an expected outcome. Every other failure
+ * (`EACCES`, `EISDIR` — the path is now a directory, ...) propagates as
+ * `WorktreeReadFailed` instead of collapsing into either case — an empty
+ * buffer is a *meaningful* value to callers that hash worktree content for a
+ * review snapshot, so treating a genuine read failure the same as "not
+ * there" would silently record a wrong snapshot for what's actually a bug.
  */
 export const readWorktreeBlobContent = (
 	path: string,
-): Effect.Effect<Uint8Array, Cause.UnknownError> =>
-	Effect.tryPromise(async () => {
-		const stats = await lstat(path);
-		if (stats.isSymbolicLink()) {
-			return new TextEncoder().encode(await readlink(path));
-		}
-		return await readFile(path);
-	});
+): Effect.Effect<Option.Option<Uint8Array>, WorktreeReadFailed> =>
+	Effect.tryPromise({
+		try: async () => {
+			const stats = await lstat(path);
+			if (stats.isSymbolicLink()) {
+				return new TextEncoder().encode(await readlink(path));
+			}
+			return await readFile(path);
+		},
+		catch: (cause) => new WorktreeReadFailed({ path, cause }),
+	}).pipe(
+		Effect.map(Option.some),
+		Effect.catchTag("WorktreeReadFailed", (error) =>
+			isEnoent(error.cause)
+				? Effect.succeed(Option.none())
+				: Effect.fail(error),
+		),
+	);

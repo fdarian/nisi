@@ -28,6 +28,7 @@ import {
 	verifyRepoPathMatchesOrigin,
 	type WorktreeBranchInUse,
 	type WorktreePathOccupied,
+	type WorktreeReadFailed,
 } from "@repo/git";
 import {
 	type FileReviewState,
@@ -45,7 +46,7 @@ import {
 	type SessionPullRequest,
 } from "@repo/review";
 import { SettingsStore, type SettingsStoreError } from "@repo/settings";
-import { Context, Effect, Layer, Schema } from "effect";
+import { Context, Effect, Layer, Option, Schema } from "effect";
 import type { FileSystem } from "effect/FileSystem";
 import type { ChildProcessSpawner } from "effect/unstable/process";
 
@@ -155,12 +156,21 @@ export type FileContentBatchResult = {
 	readonly content: FileContent | null;
 };
 
-/** Narrows a whole-file review row down to the shape `readFileContents` actually needs — `null` unless it's a real, snapshotted "viewed" tick. */
+/**
+ * Narrows a whole-file review row down to the shape `readFileContents`
+ * actually needs — `null` unless it's a real, ticked "viewed" row.
+ * `snapshotHash` itself can be `null` on a real claim: that means the file
+ * was absent from the working tree at tick time (see `@repo/review`'s
+ * `markFileViewed` and `reviewedFiles.snapshotHash`'s column comment) —
+ * callers must compare it explicitly rather than assume a hash string.
+ */
 const toActiveFileClaim = (
 	state: FileReviewState | null,
-): { readonly snapshotHash: string; readonly viewedAt: number } | null => {
-	if (state === null || !state.viewed || state.snapshotHash === null)
-		return null;
+): {
+	readonly snapshotHash: string | null;
+	readonly viewedAt: number;
+} | null => {
+	if (state === null || !state.viewed) return null;
 	return { snapshotHash: state.snapshotHash, viewedAt: state.viewedAt };
 };
 
@@ -462,13 +472,18 @@ export class Store extends Context.Service<Store>()("Store", {
 		 * `readWorktreeBlobContent`, one call per path — cheap enough locally
 		 * that batching buys nothing) when `true`, HEAD's tree (`@repo/git`'s
 		 * `readFileContentsAtRef`, one batched `cat-file --batch` call over
-		 * every path) when `false`. Either way this only
-		 * ever runs over the paths the caller actually asks for — scoped to
-		 * files with active review state by both call sites below, not the
-		 * diff's total size. A path missing either way (deleted since review,
-		 * or never existed at HEAD) hashes as empty content, the same "diff
-		 * against /dev/null" convention `setFileViewed`/`@repo/review`'s
-		 * `reconcile` both use — not a swallowed error.
+		 * every path) when `false`. Either way this only ever runs over the
+		 * paths the caller actually asks for — scoped to files with active
+		 * review state by both call sites below, not the diff's total size. A
+		 * path missing either way (deleted since review, or never existed at
+		 * HEAD) is simply absent from the returned map — not a swallowed
+		 * error; both call sites below already apply the "diff against
+		 * /dev/null" `?? hashContent(new Uint8Array())` fallback where an
+		 * absent entry needs to compare as empty content, the same convention
+		 * `setFileViewed`/`@repo/review`'s `reconcile` use. A genuine read
+		 * failure (permissions, a directory in the file's place, ...)
+		 * propagates as `WorktreeReadFailed` instead of collapsing into
+		 * either case.
 		 */
 		const readCurrentHashes = (
 			repoRoot: string,
@@ -476,8 +491,8 @@ export class Store extends Context.Service<Store>()("Store", {
 			paths: ReadonlyArray<string>,
 		): Effect.Effect<
 			ReadonlyMap<string, string>,
-			GitCommandError,
-			FileSystem | ChildProcessSpawner.ChildProcessSpawner
+			GitCommandError | WorktreeReadFailed,
+			ChildProcessSpawner.ChildProcessSpawner
 		> =>
 			Effect.gen(function* () {
 				if (includeUncommitted) {
@@ -485,20 +500,25 @@ export class Store extends Context.Service<Store>()("Store", {
 						paths,
 						(path) =>
 							readWorktreeBlobContent(join(repoRoot, path)).pipe(
-								Effect.orElseSucceed(() => new Uint8Array()),
-								Effect.map((content) => [path, hashContent(content)] as const),
+								Effect.map((content) => [path, content] as const),
 							),
 						{ concurrency: "unbounded" },
 					);
-					return new Map(entries);
+					const hashes = new Map<string, string>();
+					for (const [path, content] of entries) {
+						if (Option.isSome(content)) {
+							hashes.set(path, hashContent(content.value));
+						}
+					}
+					return hashes;
 				}
 
 				const contents = yield* readFileContentsAtRef(repoRoot, "HEAD", paths);
-				const hashes = new Map<string, string>();
-				for (const path of paths) {
-					hashes.set(path, hashContent(contents.get(path) ?? new Uint8Array()));
-				}
-				return hashes;
+				return new Map(
+					[...contents].map(
+						([path, bytes]) => [path, hashContent(bytes)] as const,
+					),
+				);
 			});
 
 		/**
@@ -518,15 +538,15 @@ export class Store extends Context.Service<Store>()("Store", {
 			files: ReadonlyArray<GitFileChange>,
 		): Effect.Effect<
 			ReadonlyArray<FileChange>,
-			SessionNotFound | ReviewStoreError | GitCommandError,
-			FileSystem | ChildProcessSpawner.ChildProcessSpawner
+			SessionNotFound | ReviewStoreError | GitCommandError | WorktreeReadFailed,
+			ChildProcessSpawner.ChildProcessSpawner
 		> =>
 			Effect.gen(function* () {
 				const states = yield* reviewStore.listReviewStates(sessionId);
 
 				const claims = new Map<
 					string,
-					{ readonly snapshotHash: string; readonly viewedAt: number }
+					{ readonly snapshotHash: string | null; readonly viewedAt: number }
 				>();
 				for (const file of files) {
 					const claim = toActiveFileClaim(
@@ -544,13 +564,26 @@ export class Store extends Context.Service<Store>()("Store", {
 				return files.map((file) => {
 					const claim = claims.get(file.path);
 					if (claim === undefined) return { ...file, review: null };
-					const currentHash =
-						currentHashes.get(file.path) ?? hashContent(new Uint8Array());
-					const review: FileReview = {
-						viewed: true,
-						reviewedHash: claim.snapshotHash,
-						changedSinceReview: currentHash !== claim.snapshotHash,
-					};
+					// `claim.snapshotHash === null` means this file was reviewed
+					// while absent from the working tree — there's no hash to
+					// compare against (`null` isn't `sha256("")`), so "changed"
+					// means "the file exists now" rather than a hash mismatch; a
+					// still-absent file (not in `currentHashes`, see
+					// `readCurrentHashes`) keeps its tick.
+					const review: FileReview =
+						claim.snapshotHash === null
+							? {
+									viewed: true,
+									reviewedHash: null,
+									changedSinceReview: currentHashes.has(file.path),
+								}
+							: {
+									viewed: true,
+									reviewedHash: claim.snapshotHash,
+									changedSinceReview:
+										(currentHashes.get(file.path) ??
+											hashContent(new Uint8Array())) !== claim.snapshotHash,
+								};
 					return { ...file, review };
 				});
 			});
@@ -601,7 +634,7 @@ export class Store extends Context.Service<Store>()("Store", {
 		 */
 		const buildReviewClaims = (
 			fileState: {
-				readonly snapshotHash: string;
+				readonly snapshotHash: string | null;
 				readonly viewedAt: number;
 			} | null,
 			rangeClaims: ReadonlyArray<RangeReviewClaim>,
@@ -616,9 +649,17 @@ export class Store extends Context.Service<Store>()("Store", {
 						? null
 						: {
 								source: { kind: "file" },
-								snapshotContent: new TextDecoder().decode(
-									yield* reviewStore.readSnapshot(fileState.snapshotHash),
-								),
+								// `snapshotHash === null` means the file was absent when
+								// this claim was ticked — there's no blob to read back,
+								// so its snapshot content is `""`, the same "missing
+								// content at any state is empty" convention
+								// `@repo/review`'s `reconcile` already documents.
+								snapshotContent:
+									fileState.snapshotHash === null
+										? ""
+										: new TextDecoder().decode(
+												yield* reviewStore.readSnapshot(fileState.snapshotHash),
+											),
 								ranges: null,
 								viewedAt: fileState.viewedAt,
 							};
@@ -669,7 +710,7 @@ export class Store extends Context.Service<Store>()("Store", {
 			path: string,
 			oldPath: string | undefined,
 			activeFileClaim: {
-				readonly snapshotHash: string;
+				readonly snapshotHash: string | null;
 				readonly viewedAt: number;
 			} | null,
 			baseContent: string,
@@ -766,11 +807,16 @@ export class Store extends Context.Service<Store>()("Store", {
 									includeUncommitted,
 									[request.path],
 								);
-								const currentHash =
-									currentHashes.get(request.path) ??
-									hashContent(new Uint8Array());
+								// Same null-aware comparison as `attachReviewState` —
+								// see its comment: a `null` `snapshotHash` means this
+								// file was reviewed while absent, so "changed" means
+								// "present now" rather than a hash mismatch.
 								const changedSinceReview =
-									currentHash !== activeFileClaim.snapshotHash;
+									activeFileClaim.snapshotHash === null
+										? currentHashes.has(request.path)
+										: (currentHashes.get(request.path) ??
+												hashContent(new Uint8Array())) !==
+											activeFileClaim.snapshotHash;
 								return {
 									path: request.path,
 									content: {
@@ -840,8 +886,13 @@ export class Store extends Context.Service<Store>()("Store", {
 		 * file's *current worktree* content directly — this is a plain read, not
 		 * `@repo/git`'s size-gated `getFileContents`, since a review snapshot's
 		 * whole point is fidelity. A missing file (ticking Reviewed on a
-		 * deletion) snapshots as empty content, matching how git itself treats
-		 * "diff against /dev/null" — not a swallowed error.
+		 * deletion, or a path that never existed) persists as a `NULL`
+		 * snapshot hash on a viewed row (`@repo/review`'s `markFileViewed`)
+		 * rather than a `sha256("")` blob — the two are distinct claims: `NULL`
+		 * means "reviewed while absent" (stays reviewed as long as it's still
+		 * absent), `sha256("")` means "reviewed a genuinely empty file". A
+		 * genuine read failure (permissions, a directory in the file's place)
+		 * propagates instead of collapsing into either.
 		 */
 		const setFileViewed = (sessionId: string, path: string, viewed: boolean) =>
 			Effect.gen(function* () {
@@ -852,7 +903,7 @@ export class Store extends Context.Service<Store>()("Store", {
 				}
 				const content = yield* readWorktreeBlobContent(
 					join(session.repoRoot, path),
-				).pipe(Effect.orElseSucceed(() => new Uint8Array()));
+				);
 				yield* reviewStore.markFileViewed(sessionId, path, content);
 			});
 
@@ -875,7 +926,7 @@ export class Store extends Context.Service<Store>()("Store", {
 			session: ReviewSession,
 			path: string,
 			activeFileClaim: {
-				readonly snapshotHash: string;
+				readonly snapshotHash: string | null;
 				readonly viewedAt: number;
 			} | null,
 			headContentBytes: Uint8Array,
@@ -946,9 +997,19 @@ export class Store extends Context.Service<Store>()("Store", {
 					);
 					if (activeFileClaim === null) return;
 
-					const content = yield* readWorktreeBlobContent(
+					// Feeds `reconcilePathAgainstBase` as head content only — never
+					// persisted here, so absence maps to empty content per the
+					// "missing content at any state is `\"\"`" convention
+					// (`@repo/review`'s `reconcile.ts`), the same as every other
+					// reconciliation call treats an absent file. A genuine read
+					// failure still propagates.
+					const contentOption = yield* readWorktreeBlobContent(
 						join(session.repoRoot, path),
-					).pipe(Effect.orElseSucceed(() => new Uint8Array()));
+					);
+					const content = Option.getOrElse(
+						contentOption,
+						() => new Uint8Array(),
+					);
 					const reconciliation = yield* reconcilePathAgainstBase(
 						sessionId,
 						session,
@@ -962,16 +1023,28 @@ export class Store extends Context.Service<Store>()("Store", {
 					return;
 				}
 
-				const content = yield* readWorktreeBlobContent(
+				const contentOption = yield* readWorktreeBlobContent(
 					join(session.repoRoot, path),
-				).pipe(Effect.orElseSucceed(() => new Uint8Array()));
+				);
+				// `review_range_claims.snapshotHash` is `NOT NULL` (unlike
+				// `reviewed_files`', which now distinguishes absence via `NULL` —
+				// see `setFileViewed`) — relaxing that needs a full SQLite table
+				// rebuild (see `packages/review/AGENTS.md`), not worth it for this
+				// case. Absence deliberately maps to empty content here, the same
+				// "missing content at any state is `\"\"`" convention
+				// `reconcile.ts` documents — a genuine read failure still
+				// propagates, this is reached only on real absence.
+				const rangeContent = Option.getOrElse(
+					contentOption,
+					() => new Uint8Array(),
+				);
 				yield* reviewStore.markRangeViewed(
 					sessionId,
 					path,
 					blockId,
 					blockLabel,
 					ranges,
-					content,
+					rangeContent,
 				);
 
 				const states = yield* reviewStore.listReviewStates(sessionId);
@@ -985,10 +1058,14 @@ export class Store extends Context.Service<Store>()("Store", {
 					session,
 					path,
 					activeFileClaim,
-					content,
+					rangeContent,
 				);
 				if (reconciliation !== null && !hasUnreviewedRanges(reconciliation)) {
-					yield* reviewStore.markFileViewed(sessionId, path, content);
+					// Preserves absence through to `markFileViewed` (unlike
+					// `rangeContent` above) so an auto-tick of the whole-file claim
+					// gets the same `NULL`-snapshot encoding a direct
+					// `setFileViewed` tick would.
+					yield* reviewStore.markFileViewed(sessionId, path, contentOption);
 				}
 			});
 

@@ -46,6 +46,7 @@ export {
 	type RepoPathVerificationError,
 	WorktreeBranchInUse,
 	WorktreePathOccupied,
+	WorktreeReadFailed,
 } from "./errors.ts";
 export type { Hunk } from "./hunk.ts";
 export { parseHunks } from "./hunk.ts";

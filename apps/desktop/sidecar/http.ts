@@ -13,6 +13,7 @@ import {
 	type GitCommandError,
 	mergePullRequest,
 	searchPullRequests,
+	type WorktreeReadFailed,
 } from "@repo/git";
 import { ReviewStore } from "@repo/review";
 import { SettingsStore } from "@repo/settings";
@@ -102,6 +103,18 @@ const formatGitCommandError = (cause: GitCommandError): string => {
 			: `exit code ${cause.exitCode}`;
 	return `git command failed (${exitDescription}) in ${cause.cwd}: ${invocation}\n${cause.stderr.trim()}`;
 };
+
+/**
+ * `diff.files`/`diff.fileContents`/`review.setViewed`/`review.setRangeViewed`
+ * all read the working tree (`@repo/git`'s `readWorktreeBlobContent`,
+ * transitively via `store.ts`'s `readCurrentHashes`/`setFileViewed`/
+ * `setRangeViewed`), where absence is already handled as a value — anything
+ * that reaches here is a genuine failure (permissions, a directory in the
+ * file's place, ...), so it's an `INTERNAL_SERVER_ERROR` the same way a
+ * `GitCommandError` is, not something a caller could route around.
+ */
+const formatWorktreeReadFailed = (cause: WorktreeReadFailed): string =>
+	`failed to read ${cause.path}: ${String(cause.cause)}`;
 
 type ServerContext = WithEffectContext<AppServices> &
 	RequestHeadersHandlerPluginContext;
@@ -321,6 +334,13 @@ export function attachRouter(
 								}),
 							),
 						),
+						Effect.catchTag("WorktreeReadFailed", (cause) =>
+							Effect.fail(
+								errors.INTERNAL_SERVER_ERROR({
+									message: formatWorktreeReadFailed(cause),
+								}),
+							),
+						),
 					);
 			}),
 			fileContents: authed.diff.fileContents.effect(function* ({
@@ -355,6 +375,13 @@ export function attachRouter(
 								}),
 							),
 						),
+						Effect.catchTag("WorktreeReadFailed", (cause) =>
+							Effect.fail(
+								errors.INTERNAL_SERVER_ERROR({
+									message: formatWorktreeReadFailed(cause),
+								}),
+							),
+						),
 					);
 			}),
 		},
@@ -368,6 +395,13 @@ export function attachRouter(
 							Effect.fail(
 								errors.NOT_FOUND({
 									message: `session not found: ${input.sessionId}`,
+								}),
+							),
+						),
+						Effect.catchTag("WorktreeReadFailed", (cause) =>
+							Effect.fail(
+								errors.INTERNAL_SERVER_ERROR({
+									message: formatWorktreeReadFailed(cause),
 								}),
 							),
 						),
@@ -392,6 +426,13 @@ export function attachRouter(
 							Effect.fail(
 								errors.NOT_FOUND({
 									message: `session not found: ${input.sessionId}`,
+								}),
+							),
+						),
+						Effect.catchTag("WorktreeReadFailed", (cause) =>
+							Effect.fail(
+								errors.INTERNAL_SERVER_ERROR({
+									message: formatWorktreeReadFailed(cause),
 								}),
 							),
 						),
