@@ -33,6 +33,11 @@ export const diffCodeViewLayout: CodeViewLayout = {
 
 export const diffItemMetrics = {
 	diffHeaderHeight: 44,
+	/**
+	 * Must equal the rendered height of `[data-separator="line-info-basic"]`
+	 * in `diffViewUnsafeCSS` below — see the comment on that rule for why.
+	 */
+	hunkSeparatorHeight: 40,
 };
 
 /** Host class toggled per item in `onPostRender` when the file is Reviewed. */
@@ -194,31 +199,44 @@ export const diffViewUnsafeCSS = `
 	}
 
 	/**
-	 * Hunk-separator pill override — @pierre/diffs has no layout option for
-	 * this (checked: hunkSeparators, collapsedContextThreshold,
-	 * expansionLineCount, the render* props — none of them touch the
-	 * separator's shape, only its content/thresholds). With
-	 * \`hunkSeparators: "line-info-basic"\` (see diff-code-view.tsx) it
-	 * always renders the "N unchanged lines" control as a 32px band spanning
-	 * the full diff width — see createSeparator.js and the
-	 * \`[data-separator="line-info-basic"]\` rules in @pierre/diffs'
-	 * style.js. The Linear reference this is matching renders that control
-	 * as a small centered pill floating between hunks instead, so it's
-	 * overridden here against the library's own stable "data-separator" and
-	 * "data-expand" attribute hooks (not CSS classes, so this survives minor
-	 * version bumps better than most escape hatches would). @pierre/diffs
-	 * never uses !important in its own stylesheet
-	 * (verified against its shipped style.js), so this block doesn't need
-	 * to chase its selector specificity — !important here is deliberate and
-	 * contained to this one block. If a @pierre/diffs upgrade changes that
-	 * markup, this is the one place to update.
+	 * Hunk-separator pill override, against the library's own stable
+	 * "data-separator" and "data-expand" attribute hooks (not CSS classes, so
+	 * this survives minor version bumps better than most escape hatches
+	 * would). With \`hunkSeparators: "line-info-basic"\` (see
+	 * diff-code-view.tsx) @pierre/diffs renders the "N unchanged lines"
+	 * control as a 32px band spanning the full diff width by default — see
+	 * createSeparator.js and the \`[data-separator="line-info-basic"]\` rules
+	 * in @pierre/diffs' style.js. The Linear reference this is matching
+	 * renders that control as a small centered pill floating between hunks
+	 * instead, so the shape is overridden here.
+	 *
+	 * The height below is deliberately a fixed pixel value, not \`auto\` — and
+	 * it is NOT a free choice: \`CodeView\` never measures a rendered item, it
+	 * computes every item's \`top\` from \`itemMetrics\` alone (see
+	 * \`diffItemMetrics\` above), and for a hunk separator specifically
+	 * \`VirtualizedFileDiff.reconcileHeights()\` can't correct that estimate
+	 * later either — it only remeasures diff items that carry line
+	 * annotations, which a separator never does. A standing few-pixel error
+	 * here silently shifts the computed position of every item below it, and
+	 * is what caused scroll to visibly jump/stutter as different files became
+	 * the virtualizer's scroll anchor mid-gesture. So this height and
+	 * \`hunkSeparatorHeight\` in \`diffItemMetrics\` are a matched pair — change
+	 * one, change the other — and the value itself must be measured from the
+	 * live rendered pill (\`[data-separator="line-info-basic"]\`
+	 * \`.getBoundingClientRect().height\` in a browser), not computed from the
+	 * padding/font-size below, since flex/line-height rounding doesn't
+	 * reliably match hand arithmetic. \`!important\` is deliberate and
+	 * contained to this one block — @pierre/diffs never uses \`!important\` in
+	 * its own stylesheet (verified against its shipped style.js), so this
+	 * doesn't need to chase its selector specificity either. If a
+	 * @pierre/diffs upgrade changes that markup, this is the one place to
+	 * update — and re-measure.
 	 */
 	[data-separator="line-info-basic"] {
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		height: auto !important;
-		min-height: 40px;
+		height: 40px !important;
 		background: transparent !important;
 	}
 
