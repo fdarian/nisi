@@ -1,0 +1,6 @@
+[[post-start]]
+# -c = clonefile(2): instant CoW copy that preserves mtimes. Both matter — a plain `cp -R` of the
+# 12G target takes minutes and stamps every file with its own copy time, which scrambles the mtime
+# ordering cargo's freshness check relies on and forces a near-full rebuild.
+copy_tauri_target = '''cp -Rc {{ repo_path }}/apps/desktop/src-tauri/target ./apps/desktop/src-tauri/target'''
+
