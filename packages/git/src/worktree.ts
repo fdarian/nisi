@@ -12,7 +12,7 @@ import {
 	WorktreeBranchInUse,
 	WorktreePathOccupied,
 } from "./errors.ts";
-import { git } from "./exec.ts";
+import { git, gitResult } from "./exec.ts";
 import { originUrlOrNull, pathExistsOnDisk } from "./repo.ts";
 
 export type OpenPullRequestWorktreeInput = {
@@ -28,7 +28,10 @@ export type OpenPullRequestWorktreeInput = {
  * `@repo/review`'s `sessionKey` is rooted at `repoRoot`. The hash suffix (not
  * the path alone) is what makes that safe as a directory *name*: two repos
  * that happen to share a basename (`~/work/api` and `~/oss/api`) would
- * otherwise collide.
+ * otherwise collide. Only backs the app-data fallback's naming now — see
+ * {@link worktreePathFor} — since the app-data worktrees directory
+ * (`resolveTargetParentDir`'s fallback branch) is shared across every repo
+ * nisi has ever opened, unlike a repo-local convention dir.
  */
 const repoSlug = (repoRoot: string): string => {
 	const sanitizedName = basename(repoRoot).replace(/[^a-zA-Z0-9._-]+/g, "-");
@@ -36,11 +39,56 @@ const repoSlug = (repoRoot: string): string => {
 	return `${sanitizedName}-${hash}`;
 };
 
+/**
+ * Flattens `headRef` into a single path segment. Git branch names may contain
+ * `/` (`feat/foo`); left alone that would nest the worktree under
+ * `.../feat/foo` — and `dirname()` of that is `.../feat`, which would then
+ * poison {@link inferredWorktreeParentDir}'s majority-parent vote for every
+ * later PR. Git's refname rules already forbid the other characters that
+ * would be unsafe in a path segment (`\`, `:`, `..`, a leading `-`, a
+ * trailing `.lock`), so `/` is the only case left to handle. Throws rather
+ * than falling back to a placeholder name in the (practically unreachable —
+ * it would require `headRef` to already be empty) case sanitizing collapses
+ * it to nothing.
+ */
+const sanitizeHeadRefForPathSegment = (headRef: string): string => {
+	const sanitized = headRef.replaceAll("/", "-");
+	if (sanitized.length === 0) {
+		throw new Error(
+			`headRef sanitized to an empty path segment: ${JSON.stringify(headRef)}`,
+		);
+	}
+	return sanitized;
+};
+
+/**
+ * Where {@link resolveTargetParentDir} decided a new worktree's parent
+ * directory should live — carried alongside the path itself since
+ * {@link worktreePathFor} needs to know *which* it got, not just where: the
+ * two cases have different uniqueness requirements and so name the worktree
+ * differently.
+ */
+type TargetParentDir =
+	| { readonly kind: "inferred"; readonly path: string }
+	| { readonly kind: "appDataFallback"; readonly path: string };
+
+/**
+ * Under an inferred repo-local convention dir, git already guarantees branch
+ * names are unique within a repo, so the sanitized `headRef` alone is a safe,
+ * human-readable directory name — no disambiguator needed. Under the
+ * app-data fallback, shared across every repo nisi has ever opened, a bare
+ * branch name isn't unique enough (two repos can each have a `feature`
+ * branch), so that case keeps the old `<repo>-<hash>-pr<n>` scheme.
+ */
 const worktreePathFor = (
-	parentDir: string,
+	targetParentDir: TargetParentDir,
 	repoRoot: string,
 	number: number,
-): string => join(parentDir, `${repoSlug(repoRoot)}-pr${number}`);
+	headRef: string,
+): string =>
+	targetParentDir.kind === "inferred"
+		? join(targetParentDir.path, sanitizeHeadRefForPathSegment(headRef))
+		: join(targetParentDir.path, `${repoSlug(repoRoot)}-pr${number}`);
 
 /**
  * The local branch a PR's worktree checks out. Namespaced under `nisi/` and
@@ -112,16 +160,19 @@ const findActiveWorktreeForBranch = (
 
 /**
  * The repo's own worktree convention, inferred from where its *linked* worktrees (everything but
- * the main checkout — see {@link listWorktrees}) already live. Only trusted when every linked
- * worktree's immediate parent directory is the exact same string: one real, populated folder, not
- * a synthesized ancestor. That's the safety property a "deepest common ancestor" walk over
- * scattered paths doesn't have — this can never produce a path shorter than a real worktree's own
- * parent, so it can't degrade to `/Users` or `/` the way climbing up from divergent paths can. Two
- * worktrees that merely happen to both live somewhere under `/Users/x` (different subfolders)
- * don't share an immediate parent, so this correctly reports "no convention" (`null`, falling
- * through to the app-data fallback) rather than guessing `/Users/x`. The `"/"` check is
- * belt-and-suspenders on top of that — a worktree would have to live directly at `/<name>` for it
- * to trip, which realistically never happens, but it costs nothing to rule out explicitly.
+ * the main checkout — see {@link listWorktrees}) already live. Only trusted when a strict majority
+ * of linked worktrees share the same immediate parent directory: one real, populated folder, not a
+ * synthesized ancestor. That's the safety property a "deepest common ancestor" walk over scattered
+ * paths doesn't have — this can never produce a path shorter than a real worktree's own parent, so
+ * it can't degrade to `/Users` or `/` the way climbing up from divergent paths can. A strict
+ * majority (rather than unanimity) is what keeps one stray worktree — created once by an earlier
+ * fallback, or manually elsewhere — from permanently defeating the inference and pinning every
+ * future PR to the app-data fallback; a bare plurality isn't enough, since an even split shouldn't
+ * pick a winner. Truly scattered worktrees (no parent used by more than half) still correctly
+ * report "no convention" (`null`, falling through to the app-data fallback) rather than guessing.
+ * The `"/"` check is belt-and-suspenders on top of that — a worktree would have to live directly at
+ * `/<name>` for it to trip, which realistically never happens, but it costs nothing to rule out
+ * explicitly.
  */
 const inferredWorktreeParentDir = (
 	entries: ReadonlyArray<WorktreeEntry>,
@@ -129,28 +180,40 @@ const inferredWorktreeParentDir = (
 	const linked = entries.slice(1).filter((entry) => !entry.prunable);
 	if (linked.length === 0) return null;
 
-	const parents = [...new Set(linked.map((entry) => dirname(entry.path)))];
-	if (parents.length !== 1) return null;
+	const countByParent = new Map<string, number>();
+	for (const entry of linked) {
+		const parent = dirname(entry.path);
+		countByParent.set(parent, (countByParent.get(parent) ?? 0) + 1);
+	}
 
-	const [parent] = parents;
-	return parent === undefined || parent === "/" ? null : parent;
+	const [majorityParent, topCount] = [...countByParent.entries()].reduce(
+		(best, candidate) => (candidate[1] > best[1] ? candidate : best),
+	);
+	if (topCount * 2 <= linked.length) return null;
+
+	return majorityParent === "/" ? null : majorityParent;
 };
 
 /**
  * Where a newly created worktree should live: the repo's own convention when one genuinely exists
  * ({@link inferredWorktreeParentDir}), otherwise the app-data directory this module has always used.
- * The fallback branch is the only place left that touches `NISI_DATA_DIR` at all.
+ * The fallback branch is the only place left that touches `NISI_DATA_DIR` at all. Returns which of
+ * the two it picked, not just the path — {@link worktreePathFor} names the worktree differently
+ * depending on that.
  */
 const resolveTargetParentDir = (
 	entries: ReadonlyArray<WorktreeEntry>,
-): Effect.Effect<string> =>
+): Effect.Effect<TargetParentDir> =>
 	Effect.gen(function* () {
 		const inferred = inferredWorktreeParentDir(entries);
-		if (inferred !== null) return inferred;
+		if (inferred !== null) return { kind: "inferred" as const, path: inferred };
 
 		const dataDir = yield* getDataDirConfig().pipe(Effect.orDie);
 		const canonicalDataDir = yield* resolveCanonicalDataDir(dataDir);
-		return join(canonicalDataDir, "worktrees");
+		return {
+			kind: "appDataFallback" as const,
+			path: join(canonicalDataDir, "worktrees"),
+		};
 	});
 
 /**
@@ -174,6 +237,21 @@ const BRANCH_IN_USE_MARKERS = [
 
 const isBranchInUse = (stderr: string) =>
 	BRANCH_IN_USE_MARKERS.some((marker) => stderr.includes(marker));
+
+/**
+ * `git fetch`'s stderr wording for "no such ref on `origin`" — both fetch call sites below
+ * (`fetchPullRequestRef` and `fetchPullRequestHeadSha`) match on this same string to turn a raw
+ * `GitCommandError` into a `PullRequestRefNotFound`, so if git's wording ever changes, this is the
+ * one place that needs to change with it.
+ */
+const failIfPullRequestRefMissing = (
+	repoRoot: string,
+	number: number,
+	cause: GitCommandError,
+): Effect.Effect<never, GitCommandError | PullRequestRefNotFound> =>
+	cause.stderr.includes("couldn't find remote ref")
+		? Effect.fail(new PullRequestRefNotFound({ repoRoot, number }))
+		: Effect.fail(cause);
 
 /**
  * Fetches `refs/pull/<n>/head` from `origin` into the PR's nisi-owned local branch (force-updating
@@ -201,18 +279,92 @@ const fetchPullRequestRef = (
 				never,
 				GitCommandError | PullRequestRefNotFound | WorktreeBranchInUse
 			> => {
-				if (cause.stderr.includes("couldn't find remote ref")) {
-					return Effect.fail(new PullRequestRefNotFound({ repoRoot, number }));
-				}
 				if (isBranchInUse(cause.stderr)) {
 					return Effect.fail(
 						new WorktreeBranchInUse({ repoRoot, number, stderr: cause.stderr }),
 					);
 				}
-				return Effect.fail(cause);
+				return failIfPullRequestRefMissing(repoRoot, number, cause);
 			},
 		),
 	);
+
+/**
+ * The sha at local `refs/heads/<branch>`, or `null` when no local branch by that name exists.
+ * `--verify --quiet` turns "no such branch" into a plain non-zero exit with empty stderr instead
+ * of an error to catch, which is what lets this use the lenient `gitResult` runner rather than
+ * `git`.
+ */
+const localBranchSha = (
+	repoRoot: string,
+	branch: string,
+): Effect.Effect<
+	string | null,
+	GitCommandError,
+	ChildProcessSpawner.ChildProcessSpawner
+> =>
+	gitResult(repoRoot, [
+		"rev-parse",
+		"--verify",
+		"--quiet",
+		`refs/heads/${branch}`,
+	]).pipe(
+		Effect.map((result) =>
+			result.exitCode === 0 ? result.stdout.trim() : null,
+		),
+	);
+
+/**
+ * The PR's current head sha, fetched with *no destination refspec* — it lands in `FETCH_HEAD`
+ * only, so this can never move any local branch (the user's own `headRef` branch included). Used
+ * only to decide, in {@link openPullRequestWorktree}, whether an existing same-named local branch
+ * can be fast-forwarded onto the PR head; the fetch that actually moves a ref is
+ * `fetchPullRequestRef`, and it only ever moves the nisi-managed branch.
+ */
+const fetchPullRequestHeadSha = (
+	repoRoot: string,
+	number: number,
+): Effect.Effect<
+	string,
+	GitCommandError | PullRequestRefNotFound,
+	ChildProcessSpawner.ChildProcessSpawner
+> =>
+	git(repoRoot, ["fetch", "origin", `refs/pull/${number}/head`]).pipe(
+		Effect.catchTag("GitCommandError", (cause) =>
+			failIfPullRequestRefMissing(repoRoot, number, cause),
+		),
+		Effect.flatMap(() => git(repoRoot, ["rev-parse", "FETCH_HEAD"])),
+		Effect.map((sha) => sha.trim()),
+	);
+
+/**
+ * Whether `ancestorSha` is reachable from `descendantSha` (including being equal to it) — i.e.
+ * whether fast-forwarding `ancestorSha` to `descendantSha` would only add commits, never discard
+ * any. This is the fork in the road for a local branch that already shares its name with
+ * `headRef` (checked out nowhere active, by the time this runs — step 1 already handled that
+ * case): an ancestor relationship means the branch is exactly what the PR wants it to be, plus or
+ * minus commits already on the PR, so it's safe for `openPullRequestWorktree` to fast-forward it
+ * and check it out directly. A `false` here means the two have diverged — the local branch has
+ * commits the PR head doesn't — and moving it, even just forward, would silently discard the
+ * user's work from the branch's perspective. That case falls through to the existing
+ * `nisi/pr-<n>/<headRef>` branch instead, the same hazard `worktreeBranchFor`'s doc comment
+ * describes for the "never even try" case.
+ */
+const isAncestor = (
+	repoRoot: string,
+	ancestorSha: string,
+	descendantSha: string,
+): Effect.Effect<
+	boolean,
+	GitCommandError,
+	ChildProcessSpawner.ChildProcessSpawner
+> =>
+	gitResult(repoRoot, [
+		"merge-base",
+		"--is-ancestor",
+		ancestorSha,
+		descendantSha,
+	]).pipe(Effect.map((result) => result.exitCode === 0));
 
 const addWorktree = (
 	repoRoot: string,
@@ -262,7 +414,10 @@ const addWorktree = (
  *    already in use.
  * 3. **Otherwise, create one.** Placed under the repo's own worktree convention when its existing
  *    linked worktrees genuinely share one (see `inferredWorktreeParentDir`), else under the
- *    app-data worktree directory this module has always used.
+ *    app-data worktree directory this module has always used — named after `headRef` in the
+ *    former case, `<repo>-<hash>-pr<n>` in the latter (see `worktreePathFor`). Which branch it's
+ *    created *on* is a further decision — see the block below the target-path resolution, and
+ *    `isAncestor`'s doc comment for the fast-forward-vs-diverged split.
  *
  * Steps 1 and 2 are both decided from one `git worktree list --porcelain` call — the actual
  * registration — never a `stat()` on a target path, since a worktree's location is no longer
@@ -270,7 +425,11 @@ const addWorktree = (
  *
  * A stale (`prunable`) registration at the computed target path is cleared with `git worktree
  * prune` before a fresh one is created there; an *occupied* target path with no registration at
- * all (something else is there) fails with `WorktreePathOccupied` rather than overwriting it.
+ * all (something else is there) fails with `WorktreePathOccupied` rather than overwriting it. So
+ * does a *live* registration there checked out on neither `headRef` nor this PR's own
+ * `nisi/pr-<n>/<headRef>` — a bare `headRef` name is less collision-proof than the old
+ * hash-suffixed one, so an unrelated branch sitting at the computed path is a hazard to refuse,
+ * not a worktree to hand back.
  */
 export const openPullRequestWorktree = (
 	input: OpenPullRequestWorktreeInput,
@@ -306,18 +465,56 @@ export const openPullRequestWorktree = (
 			targetParentDir,
 			input.repoRoot,
 			input.number,
+			input.headRef,
 		);
 
 		const registeredAtTarget =
 			entries.find((entry) => entry.path === worktreePath) ?? null;
 		if (registeredAtTarget !== null && !registeredAtTarget.prunable) {
-			return worktreePath;
+			if (
+				registeredAtTarget.branch === input.headRef ||
+				registeredAtTarget.branch === branch
+			) {
+				return worktreePath;
+			}
+			// A bare `headRef` is less unique than the old hash-suffixed name: two
+			// PRs from different forks can share a head branch name, and
+			// sanitizing can in principle collapse two names together. Reusing
+			// whatever's actually registered here would silently hand back
+			// another PR's worktree, so this is a hazard to fail on, not a case
+			// to reuse.
+			return yield* new WorktreePathOccupied({ path: worktreePath });
 		}
 
 		if (registeredAtTarget?.prunable) {
 			yield* git(input.repoRoot, ["worktree", "prune"]);
 		} else if (yield* pathExistsOnDisk(worktreePath)) {
 			return yield* new WorktreePathOccupied({ path: worktreePath });
+		}
+
+		const localSha = yield* localBranchSha(input.repoRoot, input.headRef);
+		if (localSha !== null) {
+			const prHeadSha = yield* fetchPullRequestHeadSha(
+				input.repoRoot,
+				input.number,
+			);
+			const canFastForward = yield* isAncestor(
+				input.repoRoot,
+				localSha,
+				prHeadSha,
+			);
+			if (canFastForward) {
+				yield* addWorktree(
+					input.repoRoot,
+					input.number,
+					worktreePath,
+					input.headRef,
+				);
+				if (localSha !== prHeadSha) {
+					yield* git(worktreePath, ["merge", "--ff-only", prHeadSha]);
+				}
+				return worktreePath;
+			}
 		}
 
 		yield* fetchPullRequestRef(input.repoRoot, input.number, branch);

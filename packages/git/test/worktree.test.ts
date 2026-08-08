@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, realpath, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { BunServices } from "@effect/platform-bun";
 import { ConfigProvider, Effect } from "effect";
 import { openPullRequestWorktree } from "../src/worktree.ts";
@@ -443,6 +443,374 @@ describe("openPullRequestWorktree", () => {
 			await rm(dataDir, { recursive: true, force: true });
 			await rm(scatteredA, { recursive: true, force: true });
 			await rm(scatteredB, { recursive: true, force: true });
+		}
+	});
+
+	test("places a new worktree next to the majority parent even when one stray worktree lives elsewhere", async () => {
+		const fixture = await makeOriginBackedRepo();
+		const dataDir = await mkdtemp(join(tmpdir(), "nisi-worktree-data-"));
+		const conventionParent = await mkdtemp(
+			join(tmpdir(), "nisi-worktree-convention-"),
+		);
+		const strayParent = await mkdtemp(join(tmpdir(), "nisi-worktree-stray-"));
+		try {
+			await publishPullRequestRef(fixture.bareDir, 1, fixture.baseSha);
+			await sh(fixture.repo.root, ["branch", "sibling-a", fixture.baseSha]);
+			await sh(fixture.repo.root, ["branch", "sibling-b", fixture.baseSha]);
+			await sh(fixture.repo.root, ["branch", "stray", fixture.baseSha]);
+			await sh(fixture.repo.root, [
+				"worktree",
+				"add",
+				"-q",
+				join(conventionParent, "sibling-a"),
+				"sibling-a",
+			]);
+			await sh(fixture.repo.root, [
+				"worktree",
+				"add",
+				"-q",
+				join(conventionParent, "sibling-b"),
+				"sibling-b",
+			]);
+			await sh(fixture.repo.root, [
+				"worktree",
+				"add",
+				"-q",
+				join(strayParent, "stray"),
+				"stray",
+			]);
+
+			const path = await run(
+				openPullRequestWorktree({
+					repoRoot: fixture.repo.root,
+					number: 1,
+					headRef: "feature",
+				}),
+				dataDir,
+			);
+			expect(dirname(path)).toBe(await realpath(conventionParent));
+		} finally {
+			await cleanupOriginBackedRepo(fixture);
+			await rm(dataDir, { recursive: true, force: true });
+			await rm(conventionParent, { recursive: true, force: true });
+			await rm(strayParent, { recursive: true, force: true });
+		}
+	});
+
+	test("checks out an existing local branch matching headRef, already at the PR head, instead of creating a nisi-managed branch", async () => {
+		const fixture = await makeOriginBackedRepo();
+		const dataDir = await mkdtemp(join(tmpdir(), "nisi-worktree-data-"));
+		try {
+			await publishPullRequestRef(fixture.bareDir, 1, fixture.baseSha);
+			// A local branch already named `headRef`, sitting at the exact PR
+			// head, but not checked out anywhere — step 1 only matches a
+			// *checked-out* branch, so without the new fallback this would fetch
+			// a redundant `nisi/pr-1/feature` instead of reusing it.
+			await sh(fixture.repo.root, ["branch", "feature", fixture.baseSha]);
+
+			const path = await run(
+				openPullRequestWorktree({
+					repoRoot: fixture.repo.root,
+					number: 1,
+					headRef: "feature",
+				}),
+				dataDir,
+			);
+
+			expect(
+				(await sh(path, ["rev-parse", "--abbrev-ref", "HEAD"])).trim(),
+			).toBe("feature");
+			expect((await sh(path, ["rev-parse", "HEAD"])).trim()).toBe(
+				fixture.baseSha,
+			);
+			expect(
+				(
+					await sh(fixture.repo.root, ["branch", "--list", "nisi/pr-1/feature"])
+				).trim(),
+			).toBe("");
+		} finally {
+			await cleanupOriginBackedRepo(fixture);
+			await rm(dataDir, { recursive: true, force: true });
+		}
+	});
+
+	test("fast-forwards an existing local branch matching headRef when it's behind the PR head", async () => {
+		const fixture = await makeOriginBackedRepo();
+		const dataDir = await mkdtemp(join(tmpdir(), "nisi-worktree-data-"));
+		try {
+			// A local branch at the PR's *old* head, not checked out anywhere.
+			await sh(fixture.repo.root, ["branch", "feature", fixture.baseSha]);
+
+			// The PR itself moved forward in the meantime.
+			await fixture.repo.write("b.ts", "advance\n");
+			const advancedSha = await fixture.repo.commit("advance");
+			await fixture.repo.git(["push", "-q", "origin", "main"]);
+			await publishPullRequestRef(fixture.bareDir, 1, advancedSha);
+
+			const path = await run(
+				openPullRequestWorktree({
+					repoRoot: fixture.repo.root,
+					number: 1,
+					headRef: "feature",
+				}),
+				dataDir,
+			);
+
+			expect(
+				(await sh(path, ["rev-parse", "--abbrev-ref", "HEAD"])).trim(),
+			).toBe("feature");
+			expect((await sh(path, ["rev-parse", "HEAD"])).trim()).toBe(advancedSha);
+			// The fast-forward moved the branch itself, not just what this one
+			// worktree happens to have checked out.
+			expect(
+				(await sh(fixture.repo.root, ["rev-parse", "feature"])).trim(),
+			).toBe(advancedSha);
+		} finally {
+			await cleanupOriginBackedRepo(fixture);
+			await rm(dataDir, { recursive: true, force: true });
+		}
+	});
+
+	test("leaves a diverged local branch untouched and falls back to the nisi-managed branch", async () => {
+		const fixture = await makeOriginBackedRepo();
+		const dataDir = await mkdtemp(join(tmpdir(), "nisi-worktree-data-"));
+		try {
+			// A local branch sharing the PR's headRef name, with its own commit
+			// the PR head never saw — not an ancestor of the PR head in either
+			// direction.
+			await sh(fixture.repo.root, [
+				"checkout",
+				"-q",
+				"-b",
+				"feature",
+				fixture.baseSha,
+			]);
+			await fixture.repo.write("local-only.ts", "diverged\n");
+			const divergedSha = await fixture.repo.commit("diverged, local only");
+			await sh(fixture.repo.root, ["checkout", "-q", "main"]);
+
+			// The PR moved forward independently, from the same base.
+			await fixture.repo.write("b.ts", "pr-side\n");
+			const prHeadSha = await fixture.repo.commit("pr-side");
+			await fixture.repo.git(["push", "-q", "origin", "main"]);
+			await publishPullRequestRef(fixture.bareDir, 1, prHeadSha);
+
+			const path = await run(
+				openPullRequestWorktree({
+					repoRoot: fixture.repo.root,
+					number: 1,
+					headRef: "feature",
+				}),
+				dataDir,
+			);
+
+			expect(
+				(await sh(path, ["rev-parse", "--abbrev-ref", "HEAD"])).trim(),
+			).toBe("nisi/pr-1/feature");
+			expect((await sh(path, ["rev-parse", "HEAD"])).trim()).toBe(prHeadSha);
+			// The user's own branch must be left exactly where it was.
+			expect(
+				(await sh(fixture.repo.root, ["rev-parse", "feature"])).trim(),
+			).toBe(divergedSha);
+		} finally {
+			await cleanupOriginBackedRepo(fixture);
+			await rm(dataDir, { recursive: true, force: true });
+		}
+	});
+
+	test("fails with PullRequestRefNotFound even when a local branch already shares headRef's name", async () => {
+		const fixture = await makeOriginBackedRepo();
+		const dataDir = await mkdtemp(join(tmpdir(), "nisi-worktree-data-"));
+		try {
+			await sh(fixture.repo.root, ["branch", "feature", fixture.baseSha]);
+			// Deliberately never publish `refs/pull/999/head` — the "branch
+			// already exists" path must surface this the same way the plain
+			// fetch-and-create path does, not swallow it.
+
+			const error = await runFailure(
+				openPullRequestWorktree({
+					repoRoot: fixture.repo.root,
+					number: 999,
+					headRef: "feature",
+				}),
+				dataDir,
+			);
+			expect(error._tag).toBe("PullRequestRefNotFound");
+		} finally {
+			await cleanupOriginBackedRepo(fixture);
+			await rm(dataDir, { recursive: true, force: true });
+		}
+	});
+
+	test("names a worktree placed under an inferred convention dir after headRef, not the old hash-suffixed scheme", async () => {
+		const fixture = await makeOriginBackedRepo();
+		const dataDir = await mkdtemp(join(tmpdir(), "nisi-worktree-data-"));
+		const conventionParent = await mkdtemp(
+			join(tmpdir(), "nisi-worktree-convention-"),
+		);
+		try {
+			await publishPullRequestRef(fixture.bareDir, 1, fixture.baseSha);
+			await sh(fixture.repo.root, ["branch", "sibling", fixture.baseSha]);
+			await sh(fixture.repo.root, [
+				"worktree",
+				"add",
+				"-q",
+				join(conventionParent, "existing-sibling"),
+				"sibling",
+			]);
+
+			const path = await run(
+				openPullRequestWorktree({
+					repoRoot: fixture.repo.root,
+					number: 1,
+					headRef: "feature",
+				}),
+				dataDir,
+			);
+			expect(dirname(path)).toBe(await realpath(conventionParent));
+			expect(basename(path)).toBe("feature");
+		} finally {
+			await cleanupOriginBackedRepo(fixture);
+			await rm(dataDir, { recursive: true, force: true });
+			await rm(conventionParent, { recursive: true, force: true });
+		}
+	});
+
+	test("flattens a headRef containing a slash into a single path segment directly under the convention dir", async () => {
+		const fixture = await makeOriginBackedRepo();
+		const dataDir = await mkdtemp(join(tmpdir(), "nisi-worktree-data-"));
+		const conventionParent = await mkdtemp(
+			join(tmpdir(), "nisi-worktree-convention-"),
+		);
+		try {
+			await publishPullRequestRef(fixture.bareDir, 1, fixture.baseSha);
+			await sh(fixture.repo.root, ["branch", "sibling", fixture.baseSha]);
+			await sh(fixture.repo.root, [
+				"worktree",
+				"add",
+				"-q",
+				join(conventionParent, "existing-sibling"),
+				"sibling",
+			]);
+
+			// A slash in headRef would otherwise nest the worktree a directory
+			// deeper — `dirname()` of that nested path would then poison the
+			// majority-parent inference for every later PR, which is what this
+			// asserts against by checking the parent dir is exactly the
+			// convention dir, not one level below it.
+			const path = await run(
+				openPullRequestWorktree({
+					repoRoot: fixture.repo.root,
+					number: 1,
+					headRef: "feat/nested-thing",
+				}),
+				dataDir,
+			);
+			expect(dirname(path)).toBe(await realpath(conventionParent));
+			expect(basename(path)).toBe("feat-nested-thing");
+		} finally {
+			await cleanupOriginBackedRepo(fixture);
+			await rm(dataDir, { recursive: true, force: true });
+			await rm(conventionParent, { recursive: true, force: true });
+		}
+	});
+
+	test("still uses the old disambiguated <repo>-<hash>-pr<n> name when placed under the app-data fallback", async () => {
+		const fixture = await makeOriginBackedRepo();
+		const dataDir = await mkdtemp(join(tmpdir(), "nisi-worktree-data-"));
+		const scatteredA = await mkdtemp(
+			join(tmpdir(), "nisi-worktree-scatter-a-"),
+		);
+		const scatteredB = await mkdtemp(
+			join(tmpdir(), "nisi-worktree-scatter-b-"),
+		);
+		try {
+			await publishPullRequestRef(fixture.bareDir, 1, fixture.baseSha);
+			await sh(fixture.repo.root, ["branch", "sibling-a", fixture.baseSha]);
+			await sh(fixture.repo.root, ["branch", "sibling-b", fixture.baseSha]);
+			await sh(fixture.repo.root, [
+				"worktree",
+				"add",
+				"-q",
+				join(scatteredA, "wt-a"),
+				"sibling-a",
+			]);
+			await sh(fixture.repo.root, [
+				"worktree",
+				"add",
+				"-q",
+				join(scatteredB, "wt-b"),
+				"sibling-b",
+			]);
+
+			const path = await run(
+				openPullRequestWorktree({
+					repoRoot: fixture.repo.root,
+					number: 1,
+					headRef: "feature",
+				}),
+				dataDir,
+			);
+			expect(dirname(path)).toBe(join(await realpath(dataDir), "worktrees"));
+			// Bare `headRef` isn't unique enough across every repo the app-data
+			// fallback is shared by, so the fallback keeps the old
+			// hash-suffixed, PR-number-suffixed name rather than switching to
+			// `headRef` too.
+			expect(basename(path)).not.toBe("feature");
+			expect(basename(path)).toMatch(/^.+-[0-9a-f]{10}-pr1$/);
+		} finally {
+			await cleanupOriginBackedRepo(fixture);
+			await rm(dataDir, { recursive: true, force: true });
+			await rm(scatteredA, { recursive: true, force: true });
+			await rm(scatteredB, { recursive: true, force: true });
+		}
+	});
+
+	test("fails with WorktreePathOccupied when a live worktree is already registered at the target path but checked out on an unrelated branch", async () => {
+		const fixture = await makeOriginBackedRepo();
+		const dataDir = await mkdtemp(join(tmpdir(), "nisi-worktree-data-"));
+		const conventionParent = await mkdtemp(
+			join(tmpdir(), "nisi-worktree-convention-"),
+		);
+		try {
+			await sh(fixture.repo.root, ["branch", "sibling", fixture.baseSha]);
+			await sh(fixture.repo.root, [
+				"worktree",
+				"add",
+				"-q",
+				join(conventionParent, "existing-sibling"),
+				"sibling",
+			]);
+
+			// Something else entirely is already checked out at the exact path
+			// `headRef: "feature"` would compute under this convention dir —
+			// neither `feature` itself nor this PR's nisi-managed branch. A bare
+			// `headRef` name is less collision-proof than the old hash-suffixed
+			// scheme (two PRs from different forks can share a head branch
+			// name), so reusing it would silently hand back the wrong PR's
+			// worktree.
+			await sh(fixture.repo.root, ["branch", "unrelated", fixture.baseSha]);
+			await sh(fixture.repo.root, [
+				"worktree",
+				"add",
+				"-q",
+				join(conventionParent, "feature"),
+				"unrelated",
+			]);
+
+			const error = await runFailure(
+				openPullRequestWorktree({
+					repoRoot: fixture.repo.root,
+					number: 1,
+					headRef: "feature",
+				}),
+				dataDir,
+			);
+			expect(error._tag).toBe("WorktreePathOccupied");
+		} finally {
+			await cleanupOriginBackedRepo(fixture);
+			await rm(dataDir, { recursive: true, force: true });
+			await rm(conventionParent, { recursive: true, force: true });
 		}
 	});
 });
