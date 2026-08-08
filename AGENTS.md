@@ -47,15 +47,11 @@ once the duplication actually hurts.
   `package.json`.
 - Beta packages (`effect`, `@effect/platform-bun`, `@orpc/*`) are pinned to exact versions, not `^`
   ranges — bump them deliberately.
-- The `@ai-sdk/harness*` patches live in `patches/` but are registered under `patchedDependencies`
-  in `pnpm-workspace.yaml`, not `package.json` — pnpm 10+ silently ignores that key in
-  `package.json` with no warning. Three are the compiled-binary asset fix on the adapters (see
-  [knowledge/compiled-binary-differences.md](knowledge/compiled-binary-differences.md)); one, on
-  `@ai-sdk/harness` itself, widens the
-  stream's `error` part so a payload-less `{"type":"error"}` frame decodes instead of tearing the
-  whole stream down — OpenCode's bridge emits one partway through any busy session; the fifth, on
-  `@ai-sdk/harness-pi`, makes its model resolver provider-aware — see
-  [knowledge/harness-pi-model-resolver-patch.md](knowledge/harness-pi-model-resolver-patch.md) for
-  why and when it's safe to drop.
+- Patches in `patches/` register under `patchedDependencies` in `pnpm-workspace.yaml`, never
+  `package.json` — pnpm 10+ silently ignores that key there with no warning. Current patches:
+  - `@ai-sdk/harness*` (five, across the adapters, `@ai-sdk/harness` itself, and
+    `@ai-sdk/harness-pi`) — see
+    [knowledge/compiled-binary-differences.md](knowledge/compiled-binary-differences.md) and
+    [knowledge/harness-pi-model-resolver-patch.md](knowledge/harness-pi-model-resolver-patch.md).
 - Path alias is `#/*` → `src/*` in every package, not `@/*`.
 - `AGENTS.md` is the source of truth in every workspace; `CLAUDE.md` is always a symlink to it.

@@ -37,6 +37,7 @@ export function MenuPopup({
 	side = "bottom",
 	anchor,
 	portalProps,
+	onClick,
 	...props
 }: MenuPrimitive.Popup.Props & {
 	align?: MenuPrimitive.Positioner.Props["align"];
@@ -63,6 +64,17 @@ export function MenuPopup({
 						className,
 					)}
 					data-slot="menu-popup"
+					onClick={(event) => {
+						// The popup renders through a portal, so its DOM position tells you
+						// nothing about propagation — React still bubbles portaled clicks
+						// through the *fiber* tree, i.e. to whatever JSX this menu is
+						// nested under (e.g. a clickable row it's the "..." trigger for).
+						// A menu's own item clicks are never that ancestor's business, so
+						// this stops them here once, for every menu in the app, rather than
+						// leaving each item to guard itself.
+						event.stopPropagation();
+						onClick?.(event);
+					}}
 					{...props}
 				>
 					<div className="max-h-(--available-height) w-full overflow-y-auto p-1">
