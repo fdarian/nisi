@@ -8,7 +8,7 @@ import {
 	getStickyPort,
 	runManagedSubprocess,
 } from "devsess";
-import { Effect, Option, Schedule, Schema } from "effect";
+import { Config, Effect, Option, Schedule, Schema } from "effect";
 import { FileSystem } from "effect/FileSystem";
 import { Command, Flag } from "effect/unstable/cli";
 
@@ -77,10 +77,10 @@ const dev = Command.make(
 	"desktop-dev",
 	{
 		browser: Flag.boolean("browser"),
-		// Pins the vite port instead of devsess's per-session sticky one — for
-		// `.claude/launch.json`, whose "port" field has to be a fixed number
-		// known ahead of time, not something only discoverable from this
-		// script's own stdout after it starts.
+		// Pins the vite port instead of devsess's per-session sticky one. Rarely
+		// needed by hand — `.claude/launch.json` gets the same effect from
+		// `autoPort`, which passes its chosen port through `PORT` (see
+		// `vitePort` below).
 		port: Flag.integer("port").pipe(Flag.optional),
 		// Escape hatch out of devsess's per-session data dir, onto the same
 		// `NISI_DATA_DIR` prod (and a plain `nisi`) resolve to — see
@@ -137,8 +137,15 @@ const dev = Command.make(
 				);
 			}
 
-			const vitePort = Option.isSome(port)
-				? port.value
+			// `PORT` is what `.claude/launch.json`'s `autoPort` uses to tell us
+			// which port it settled on: it prefers that entry's `"port"`, falls
+			// back to a free one when something already holds it (a `bun dev`
+			// you started yourself), and opens its tab there — so vite has to
+			// bind what it was handed, not what the session remembers.
+			const envPort = yield* Config.number("PORT").pipe(Config.option);
+			const pinnedPort = Option.orElse(port, () => envPort);
+			const vitePort = Option.isSome(pinnedPort)
+				? pinnedPort.value
 				: yield* getStickyPort(session);
 
 			const env = {

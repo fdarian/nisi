@@ -1,0 +1,22 @@
+{
+	"version": "0.0.1",
+	"configurations": [
+		{
+			"name": "desktop-browser",
+			"runtimeExecutable": "sh",
+			"runtimeArgs": ["-c", "cd apps/desktop && bun dev --browser"],
+			"port": 5200,
+			"autoPort": true
+		},
+		{
+			"name": "storybook",
+			"runtimeExecutable": "sh",
+			"runtimeArgs": [
+				"-c",
+				"cd apps/desktop && pnpm exec storybook dev -p $PORT --ci"
+			],
+			"port": 6006,
+			"autoPort": true
+		}
+	]
+}

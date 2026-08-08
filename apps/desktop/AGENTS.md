@@ -100,14 +100,21 @@ there's no path to it in production regardless of env vars, and the token is nev
 **`bun dev --browser`** (from `apps/desktop`) is the easy path: same devsess orchestration as plain
 `bun dev` (own session, own `NISI_DATA_DIR`, sequenced instead of raced — the frontend process waits
 on the sidecar's `sidecar.json` handshake before it spawns `vite`, then both race each other same as
-`tauri dev` would), just with `vite dev` in place of the Tauri webview. Add `--port <n>` to pin a
-fixed vite port instead of devsess's per-session sticky one — needed for `.claude/launch.json`'s
-`desktop-browser` entry, whose `"port"` field has to be a known number, not something only
-discoverable from this script's own stdout after it starts. Open a PR/diff to look at the same way
-`nisi` itself hands off to a running sidecar (see `packages/cli/AGENTS.md`):
+`tauri dev` would), just with `vite dev` in place of the Tauri webview. Vite's port is the flag
+`--port <n>` if given, else `PORT`, else devsess's per-session sticky one. `PORT` is how
+`.claude/launch.json`'s `desktop-browser` entry drives it: that entry sets `"autoPort": true`, so
+the port is picked by whoever spawns the entry — its declared `"port"` when free, a free one when
+not — and passed down as `PORT`. That's what keeps an agent's `bun dev --browser` off a port you're
+already using instead of colliding with it, so **don't reintroduce a hardcoded `--port` there**.
+
+`.claude/launch.json` is tracked (the rest of `.claude/` isn't) because it's the agreed way to start
+a dev server here: an agent that spawns it owns the process and can read its logs, which it can't do
+for a server you started in your own terminal. Prefer it over a bare `bun dev --browser`.
+Open a PR/diff to look at the same way `nisi` itself hands off to a running sidecar (see
+`packages/cli/AGENTS.md`):
 
 ```sh
-bun dev --browser --port 5200   # prints NISI_DATA_DIR=<session data dir>
+bun dev --browser   # prints NISI_DATA_DIR=<session data dir> and vite's port
 # in another shell:
 NISI_DATA_DIR=<that path> bun ../../packages/cli/src/index.ts /path/to/some/git/repo
 ```
@@ -144,8 +151,10 @@ Two rules if anything else might be working in this checkout at the same time:
   switch moves it out from under everyone. Isolate through `NISI_DATA_DIR` and scratch repos.
 
 ## Storybook
-`pnpm run storybook` (port 6006, or the `storybook` entry in the repo root's `.claude/launch.json`)
-renders components against fixture data instead of a live sidecar — no `bun dev`, no agent CLI run.
+`pnpm run storybook` (port 6006, pinned by `-p` in the script) renders components against fixture
+data instead of a live sidecar — no `bun dev`, no agent CLI run. The `storybook` entry in
+`.claude/launch.json` runs the same server on an `autoPort`-assigned `$PORT` instead of 6006 — that
+entry, not the package script, is what an agent should start.
 `.storybook/main.ts` reuses `vite.config.ts` (the `#/*` alias, Tailwind, `@pierre/diffs`' worker
 format and `server.fs.allow`) via Vite's own `loadConfigFromFile`, dropping only its `react()` plugin
 (Storybook's `@storybook/react-vite` framework already installs one, and two react-refresh passes

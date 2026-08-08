@@ -12,5 +12,10 @@ routeTree.gen.ts
 # macOS
 .DS_Store
 
-# Local tool state (e.g. browser-preview launch configs), not project config
-.claude/
+# Local tool state (worktrees, etc.), not project config. `/*` rather than `/` so
+# launch.json can be negated below — git can't re-include a file whose parent
+# directory is itself excluded.
+.claude/*
+# Shared: how an agent starts the dev server / storybook under its own process
+# management, so it can read the logs. See apps/desktop/AGENTS.md.
+!.claude/launch.json
