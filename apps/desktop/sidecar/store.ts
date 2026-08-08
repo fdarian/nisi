@@ -18,6 +18,7 @@ import {
 	type PullRequestRefNotFound,
 	type RepoPathVerificationError,
 	readFileContentsAtRef,
+	readWorktreeBlobContent,
 	resolveCurrentBranch,
 	resolveMergeBase,
 	resolvePullRequestHeadRef,
@@ -45,7 +46,7 @@ import {
 } from "@repo/review";
 import { SettingsStore, type SettingsStoreError } from "@repo/settings";
 import { Context, Effect, Layer, Schema } from "effect";
-import { FileSystem } from "effect/FileSystem";
+import type { FileSystem } from "effect/FileSystem";
 import type { ChildProcessSpawner } from "effect/unstable/process";
 
 /** `sessions.open`'s `cwd` doesn't resolve to a git working tree. */
@@ -306,7 +307,6 @@ export class Store extends Context.Service<Store>()("Store", {
 	make: Effect.gen(function* () {
 		const reviewStore = yield* ReviewStore;
 		const settingsStore = yield* SettingsStore;
-		const fs = yield* FileSystem;
 
 		const openSession = (
 			cwd: string,
@@ -458,10 +458,11 @@ export class Store extends Context.Service<Store>()("Store", {
 		 * bytes — not a git object id, which wouldn't compare against a stored
 		 * `snapshotHash` at all), so the caller can tell a ticked file's snapshot
 		 * apart from what's actually there now. What "current" means follows
-		 * `includeUncommitted`: worktree bytes (`fs.readFile`, one call per path
-		 * — cheap enough locally that batching buys nothing) when `true`, HEAD's
-		 * tree (`@repo/git`'s `readFileContentsAtRef`, one batched `cat-file
-		 * --batch` call over every path) when `false`. Either way this only
+		 * `includeUncommitted`: worktree bytes (`@repo/git`'s
+		 * `readWorktreeBlobContent`, one call per path — cheap enough locally
+		 * that batching buys nothing) when `true`, HEAD's tree (`@repo/git`'s
+		 * `readFileContentsAtRef`, one batched `cat-file --batch` call over
+		 * every path) when `false`. Either way this only
 		 * ever runs over the paths the caller actually asks for — scoped to
 		 * files with active review state by both call sites below, not the
 		 * diff's total size. A path missing either way (deleted since review,
@@ -483,7 +484,7 @@ export class Store extends Context.Service<Store>()("Store", {
 					const entries = yield* Effect.forEach(
 						paths,
 						(path) =>
-							fs.readFile(join(repoRoot, path)).pipe(
+							readWorktreeBlobContent(join(repoRoot, path)).pipe(
 								Effect.orElseSucceed(() => new Uint8Array()),
 								Effect.map((content) => [path, hashContent(content)] as const),
 							),
@@ -849,9 +850,9 @@ export class Store extends Context.Service<Store>()("Store", {
 					yield* reviewStore.markFileUnviewed(sessionId, path);
 					return;
 				}
-				const content = yield* fs
-					.readFile(join(session.repoRoot, path))
-					.pipe(Effect.orElseSucceed(() => new Uint8Array()));
+				const content = yield* readWorktreeBlobContent(
+					join(session.repoRoot, path),
+				).pipe(Effect.orElseSucceed(() => new Uint8Array()));
 				yield* reviewStore.markFileViewed(sessionId, path, content);
 			});
 
@@ -945,9 +946,9 @@ export class Store extends Context.Service<Store>()("Store", {
 					);
 					if (activeFileClaim === null) return;
 
-					const content = yield* fs
-						.readFile(join(session.repoRoot, path))
-						.pipe(Effect.orElseSucceed(() => new Uint8Array()));
+					const content = yield* readWorktreeBlobContent(
+						join(session.repoRoot, path),
+					).pipe(Effect.orElseSucceed(() => new Uint8Array()));
 					const reconciliation = yield* reconcilePathAgainstBase(
 						sessionId,
 						session,
@@ -961,9 +962,9 @@ export class Store extends Context.Service<Store>()("Store", {
 					return;
 				}
 
-				const content = yield* fs
-					.readFile(join(session.repoRoot, path))
-					.pipe(Effect.orElseSucceed(() => new Uint8Array()));
+				const content = yield* readWorktreeBlobContent(
+					join(session.repoRoot, path),
+				).pipe(Effect.orElseSucceed(() => new Uint8Array()));
 				yield* reviewStore.markRangeViewed(
 					sessionId,
 					path,

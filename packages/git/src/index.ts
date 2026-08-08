@@ -1,4 +1,4 @@
-export { readFileContentsAtRef } from "./blob.ts";
+export { readFileContentsAtRef, readWorktreeBlobContent } from "./blob.ts";
 export type {
 	FileSignature,
 	RepoChangeSignature,

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { BunServices } from "@effect/platform-bun";
@@ -97,6 +97,36 @@ describe("Store.openSession — branch target with an explicit baseRef", () => {
 				baseRef: "main",
 				headRef: "main",
 			});
+		});
+	});
+});
+
+describe("Store.setFileViewed — a committed symlink", () => {
+	test("stays reviewed on the next read instead of immediately reporting changedSinceReview", async () => {
+		await withTestRepoAndDataDir(async (repoRoot, dataDir) => {
+			// `link.txt` is added on a feature branch cut from `main` — needed so
+			// it actually shows up in `listChangedFiles`' base..head diff, not
+			// just sitting unchanged in the repo's one existing commit.
+			await sh(repoRoot, ["checkout", "-q", "-b", "feature"]);
+			await Bun.write(join(repoRoot, "target.txt"), "target content\n");
+			await symlink("target.txt", join(repoRoot, "link.txt"));
+			await sh(repoRoot, ["add", "-A"]);
+			await sh(repoRoot, ["commit", "-q", "-m", "add symlink"]);
+
+			const files = await Effect.runPromise(
+				Effect.gen(function* () {
+					const store = yield* Store;
+					const session = yield* store.openSession(repoRoot, {
+						kind: "branch",
+					});
+					yield* store.setFileViewed(session.id, "link.txt", true);
+					return yield* store.listChangedFiles(session.id, false);
+				}).pipe(Effect.provide(makeTestLayer(dataDir))),
+			);
+
+			const linkFile = files.find((file) => file.path === "link.txt");
+			expect(linkFile?.review?.viewed).toBe(true);
+			expect(linkFile?.review?.changedSinceReview).toBe(false);
 		});
 	});
 });

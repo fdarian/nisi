@@ -1,3 +1,5 @@
+import { lstat, readFile, readlink } from "node:fs/promises";
+import type { Cause } from "effect";
 import { Effect } from "effect";
 import type { ChildProcessSpawner } from "effect/unstable/process";
 import type { GitCommandError } from "./errors.ts";
@@ -204,3 +206,27 @@ export const readFileContentsAtRef = (
 			return contents;
 		}),
 	);
+
+/**
+ * A worktree path's content, defined the same way git itself defines a
+ * tracked path's content rather than the way `fs.readFile` does: a symlink
+ * (mode `120000` once committed) *is* its link-target text, verbatim —
+ * `readlink`, never a dereferencing read of whatever the link happens to
+ * point at. Every other path is read as ordinary file bytes. This is what
+ * lets a worktree read agree with `readBlobsAtRef`/`readFileContentsAtRef`'s
+ * git-blob semantics for the same path: a caller that snapshots worktree
+ * content (a review "mark as viewed") and a caller that reads the same
+ * path's committed blob must land on identical bytes for a symlink, or the
+ * two sides never reconcile equal. Every worktree read joined against a
+ * `repoRoot` should go through this instead of a raw `fs.readFile`.
+ */
+export const readWorktreeBlobContent = (
+	path: string,
+): Effect.Effect<Uint8Array, Cause.UnknownError> =>
+	Effect.tryPromise(async () => {
+		const stats = await lstat(path);
+		if (stats.isSymbolicLink()) {
+			return new TextEncoder().encode(await readlink(path));
+		}
+		return await readFile(path);
+	});
