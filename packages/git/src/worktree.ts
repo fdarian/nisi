@@ -11,6 +11,7 @@ import {
 	type PullRequestWorktreeError,
 	WorktreeBranchInUse,
 	WorktreePathOccupied,
+	WorktreeRelocationFailed,
 } from "./errors.ts";
 import { git, gitResult } from "./exec.ts";
 import { originUrlOrNull, pathExistsOnDisk } from "./repo.ts";
@@ -521,4 +522,76 @@ export const openPullRequestWorktree = (
 		yield* addWorktree(input.repoRoot, input.number, worktreePath, branch);
 
 		return worktreePath;
+	});
+
+export type RevalidateWorktreePathInput<E, R> = {
+	/** A previously-resolved worktree path — reused as-is when it's still on disk. */
+	readonly path: string;
+	/** The branch the worktree was checked out on when `path` was resolved — a PR's own `headRef`, checked first, same priority order `openPullRequestWorktree` itself uses. */
+	readonly headRef: string;
+	/** The PR this worktree belongs to, or `null` for a plain branch checkout — only a PR worktree can also be checked out on the nisi-managed `nisi/pr-<n>/<headRef>` branch (see `worktreeBranchFor`), so only that case adds it as a second candidate. */
+	readonly number: number | null;
+	/**
+	 * Resolves where to run `git worktree list --porcelain` from when `path`
+	 * no longer exists — the repo's own main clone, tracked independently of
+	 * any one worktree so it survives that worktree's own relocation. `null`
+	 * when there's no such mapping to consult at all. An `Effect` rather than
+	 * a plain value: the common case (`path` still on disk) never needs this
+	 * at all, so a caller whose lookup costs a round trip (the sidecar's own
+	 * `resolveRepoPath`, backed by `@repo/settings`) doesn't pay it on every
+	 * call — only when `path` has actually gone missing.
+	 */
+	readonly resolveSourceRepoRoot: Effect.Effect<string | null, E, R>;
+};
+
+/**
+ * Revalidates a previously-resolved worktree path before reuse, self-healing
+ * when it's moved. Nothing revalidates a path once `openPullRequestWorktree`
+ * has resolved it — a `git worktree move`, or an external worktree-management
+ * tool (e.g. `wt`/worktrunk) repointing a worktree nisi created (its own
+ * naming, see `worktreePathFor`) out from under it, leaves that path pointing
+ * at nothing, and every git spawn against it would otherwise fail identically
+ * forever (`GitCommandError`, `ENOENT`).
+ *
+ * The common case (`path` still exists) costs one `stat()`, no git spawn and
+ * no `resolveSourceRepoRoot` at all. Only when that fails does this consult
+ * the resolved source repo's own `git worktree list --porcelain` (the same
+ * registration `openPullRequestWorktree` itself reads, via
+ * {@link listWorktrees}) for an active, non-prunable worktree checked out on
+ * `headRef` or — for a PR worktree — the nisi-managed branch derived from it.
+ * Branch-keyed, like every other reuse decision in this module, never a path
+ * comparison: the whole point is that the old path is gone. Fails with
+ * {@link WorktreeRelocationFailed} when neither branch is registered
+ * anywhere — no source repo to even check, or the worktree really was
+ * removed (`git worktree remove`), not just moved.
+ */
+export const revalidateWorktreePath = <E, R>(
+	input: RevalidateWorktreePathInput<E, R>,
+): Effect.Effect<
+	string,
+	GitCommandError | WorktreeRelocationFailed | E,
+	ChildProcessSpawner.ChildProcessSpawner | R
+> =>
+	Effect.gen(function* () {
+		if (yield* pathExistsOnDisk(input.path)) return input.path;
+
+		const sourceRepoRoot = yield* input.resolveSourceRepoRoot;
+
+		if (sourceRepoRoot !== null) {
+			const entries = yield* listWorktrees(sourceRepoRoot);
+			const candidateBranches =
+				input.number === null
+					? [input.headRef]
+					: [input.headRef, worktreeBranchFor(input.number, input.headRef)];
+			for (const branch of candidateBranches) {
+				const match = findActiveWorktreeForBranch(entries, branch);
+				if (match !== null) return match.path;
+			}
+		}
+
+		return yield* new WorktreeRelocationFailed({
+			path: input.path,
+			headRef: input.headRef,
+			sourceRepoRoot,
+		});
 	});

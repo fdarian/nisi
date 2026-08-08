@@ -76,6 +76,16 @@ seam" for the port/token handshake this boots into.
   an empty patch means "nothing new since your last pass." Skipped (stays `"base"`) whenever there's no
   active claim, or the content is size-gated — reconciliation needs the full content a size gate
   withheld.
+  Every method that shells out against a session's files (`listChangedFiles`, `readFileContents`,
+  `setFileViewed`, `setRangeViewed`) resolves `repoRoot` through `resolveLiveRepoRoot` rather than
+  trusting the persisted `ReviewSession.repoRoot` directly — a `git worktree move`, or an external
+  tool (`wt`/worktrunk) relocating a worktree nisi created, otherwise leaves every git spawn against
+  that session `ENOENT`ing forever. See `@repo/git`'s `revalidateWorktreePath` for the mechanism
+  (cheap `stat` fast path, branch-keyed re-resolution against the PR's known main clone, tagged
+  failure when the worktree is genuinely gone); `resolveLiveRepoRoot` is just the piece that persists
+  a healed path back onto the session row (`ReviewStore.updateRepoRoot`) so every other caller —
+  including the next `live-poll.ts` tick — sees the fix too. `resolveSessionRepoRoot` is the
+  sessionId-keyed public wrapper `live-poll.ts` calls, since it only ever starts from an id.
 - `http.ts` — `bindHealthCheckServer` binds the real port immediately with a hand-rolled
   `health.check`-only handler (no `AppServices` needed), which `index.ts` records in the lock
   before `AppServices` exists at all; `attachRouter` swaps in the full oRPC router afterward via
@@ -110,6 +120,12 @@ seam" for the port/token handshake this boots into.
   signature's *shape* for a reason unrelated to the repo, so a check that lands right after the user
   toggles the setting re-baselines silently instead of emitting a spurious `session-files-changed` —
   the frontend already refetches on that toggle on its own (folded into its query key).
+  `checkSessionForChanges` resolves `repoRoot` via `Store.resolveSessionRepoRoot` before reading a
+  signature (see `store.ts` above) rather than trusting a session's `repoRoot` as listed — but a
+  session whose worktree is genuinely gone (`WorktreeRelocationFailed`) gets added to
+  `unresolvableSessions` and logged exactly once: that condition can't self-clear tick-to-tick, so
+  retrying it every `POLL_INTERVAL` forever would just re-produce the WARN flood a dead `cwd` used
+  to cause on every git spawn. Pruned from that set the same tick a session closes.
 - `walkthrough/` — Phase 3's wiring layer. See its own AGENTS.md.
 
 ## Gotchas

@@ -23,6 +23,10 @@ import {
 import { toastManager } from "#/components/ui/toast";
 import type { SidecarQueryUtils } from "#/lib/backend-context";
 import type { SessionTarget } from "#/lib/pr-data";
+import {
+	useMarkPullRequestReady,
+	usePullRequestMergeStatus,
+} from "#/lib/pr-data";
 import { cn } from "#/lib/utils";
 import { PrMergeButton } from "./pr-merge-button";
 
@@ -59,6 +63,50 @@ function openInEditor(
 				type: "error",
 			});
 		},
+	);
+}
+
+type MarkReadyMenuItemProps = {
+	orpc: SidecarQueryUtils;
+	repoRoot: string;
+	owner: string;
+	repo: string;
+	number: number;
+};
+
+/**
+ * Only mounted when the parent already knows `target.kind === "pr"` (see
+ * `PrHeader` below) — that's what lets it call `usePullRequestMergeStatus`
+ * unconditionally despite the hook needing `owner`/`repo`/`number`, which a
+ * branch session doesn't have. Reads the exact same query `PrMergeButton`
+ * already polls (shared cache, no extra round trip), so draftness has one
+ * source of truth, and renders nothing until that query actually confirms
+ * the PR is a draft.
+ */
+function MarkReadyMenuItem({
+	orpc,
+	repoRoot,
+	owner,
+	repo,
+	number,
+}: MarkReadyMenuItemProps): React.ReactElement | null {
+	const statusQuery = usePullRequestMergeStatus(orpc, {
+		repoRoot,
+		owner,
+		repo,
+		number,
+	});
+	const { markReady, isPending } = useMarkPullRequestReady(orpc);
+
+	if (statusQuery.data?.isDraft !== true) return null;
+
+	return (
+		<DropdownMenuItem
+			disabled={isPending}
+			onClick={() => markReady({ repoRoot, owner, repo, number })}
+		>
+			Mark as Ready
+		</DropdownMenuItem>
 	);
 }
 
@@ -141,6 +189,15 @@ export function PrHeader({
 					<MoreHorizontalIcon />
 				</DropdownMenuTrigger>
 				<DropdownMenuContent align="end">
+					{target.kind === "pr" && (
+						<MarkReadyMenuItem
+							number={target.number}
+							orpc={orpc}
+							owner={target.owner}
+							repo={target.repo}
+							repoRoot={repoRoot}
+						/>
+					)}
 					<DropdownMenuItem onClick={onCloseTab}>Close tab</DropdownMenuItem>
 					{editors.length > 0 && (
 						<DropdownMenuSub>

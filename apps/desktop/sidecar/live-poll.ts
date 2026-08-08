@@ -7,7 +7,6 @@ import { SettingsStore } from "@repo/settings";
 import { Duration, Effect, Schedule } from "effect";
 import { emit } from "./events.ts";
 import { SessionWatch } from "./session-watch.ts";
-import type { Session } from "./store.ts";
 import { Store } from "./store.ts";
 
 /** How often each watched session's repo is checked for changes since the last tick. */
@@ -40,12 +39,35 @@ type StoredSignature = {
 const previousSignatures = new Map<string, StoredSignature>();
 
 /**
+ * Sessions whose worktree couldn't be found at all on a previous check —
+ * `Store.resolveSessionRepoRoot` (`@repo/git`'s `revalidateWorktreePath`
+ * under it) found the persisted `repoRoot` gone *and* nothing checked out on
+ * the session's branch in its known main clone either, so the worktree was
+ * genuinely removed (`git worktree remove`), not just moved. That condition
+ * is deterministic — nothing about the repo is going to make the same
+ * lookup succeed on the next tick — so once it's seen for a session, this
+ * poller stops attempting that session at all rather than retrying (and
+ * re-warning) every `POLL_INTERVAL` for the rest of its life, the exact
+ * flood a stale worktree used to cause (every git spawn against a dead
+ * `cwd` logging its own `ENOENT` warning, forever). Pruned alongside
+ * `previousSignatures` below when the session closes, so a session reopened
+ * fresh under the same id gets a clean slate.
+ */
+const unresolvableSessions = new Set<string>();
+
+/**
  * Reads one session's cheap change signature (HEAD sha, plus — only when
  * the `includeUncommitted` setting is on — a content hash per dirty path,
  * see `readRepoChangeSignature`) and emits `session-files-changed` if it
  * moved since the last check for this session. A session's first check ever
  * (or first check since its previous signature was dropped, see below)
  * never emits — there's nothing to compare against yet.
+ *
+ * `Store.resolveSessionRepoRoot` runs first — see `unresolvableSessions`
+ * above for what happens when a session's worktree is permanently gone, and
+ * `store.ts`'s own doc comment for the common case (nothing moved, one cheap
+ * `stat()`) and the self-healing one (moved, silently re-resolved and
+ * persisted so every other caller sees the same fix).
  *
  * When the stored signature's own `includeUncommitted` mode differs from
  * this check's (the user just flipped the setting), the signature's shape
@@ -65,28 +87,46 @@ const previousSignatures = new Map<string, StoredSignature>();
  * than failing the caller — the next tick tries again, and one session's
  * hiccup shouldn't stop every other session from being checked.
  */
-export const checkSessionForChanges = (
-	session: Pick<Session, "id" | "repoRoot">,
-) =>
+export const checkSessionForChanges = (sessionId: string) =>
 	Effect.gen(function* () {
+		if (unresolvableSessions.has(sessionId)) return;
+
+		const store = yield* Store;
 		const settingsStore = yield* SettingsStore;
 		const settings = yield* settingsStore.get();
 		const includeUncommitted = settings.includeUncommitted;
 
-		const signature = yield* readRepoChangeSignature(session.repoRoot, {
+		const repoRoot = yield* store.resolveSessionRepoRoot(sessionId);
+		const signature = yield* readRepoChangeSignature(repoRoot, {
 			includeUncommitted,
 		});
 
-		const previous = previousSignatures.get(session.id);
-		previousSignatures.set(session.id, { signature, includeUncommitted });
+		const previous = previousSignatures.get(sessionId);
+		previousSignatures.set(sessionId, { signature, includeUncommitted });
 		if (
 			previous !== undefined &&
 			previous.includeUncommitted === includeUncommitted &&
 			!repoChangeSignatureEquals(previous.signature, signature)
 		) {
-			emit({ type: "session-files-changed", sessionId: session.id });
+			emit({ type: "session-files-changed", sessionId });
 		}
-	}).pipe(Effect.orElseSucceed(() => undefined));
+	}).pipe(
+		Effect.catchTag("WorktreeRelocationFailed", (cause) =>
+			Effect.gen(function* () {
+				unresolvableSessions.add(sessionId);
+				yield* Effect.logWarning(
+					"session worktree is gone — pausing live-update polling for this session",
+					{
+						sessionId,
+						path: cause.path,
+						headRef: cause.headRef,
+						sourceRepoRoot: cause.sourceRepoRoot,
+					},
+				);
+			}),
+		),
+		Effect.orElseSucceed(() => undefined),
+	);
 
 /**
  * One poll tick: checks every open session currently in `SessionWatch`'s
@@ -104,15 +144,21 @@ const pollOnce = Effect.gen(function* () {
 		watchedIds.has(session.id),
 	);
 
-	yield* Effect.forEach(watchedSessions, checkSessionForChanges, {
-		concurrency: "unbounded",
-	});
+	yield* Effect.forEach(
+		watchedSessions,
+		(session) => checkSessionForChanges(session.id),
+		{ concurrency: "unbounded" },
+	);
 
-	// Drop signatures for sessions that closed since the last tick, so this
-	// map doesn't grow for the lifetime of a long-running sidecar process.
+	// Drop signatures (and any remembered "unresolvable" state) for sessions
+	// that closed since the last tick, so neither map/set grows for the
+	// lifetime of a long-running sidecar process.
 	const openIds = new Set(sessions.map((session) => session.id));
 	for (const id of previousSignatures.keys()) {
 		if (!openIds.has(id)) previousSignatures.delete(id);
+	}
+	for (const id of unresolvableSessions) {
+		if (!openIds.has(id)) unresolvableSessions.delete(id);
 	}
 });
 

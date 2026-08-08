@@ -4,6 +4,7 @@ import {
 	GhMergeFailed,
 	GhNotAuthenticated,
 	GhOutputDecodeError,
+	GhPullRequestReadyFailed,
 	GhRateLimited,
 	type GitCommandError,
 	GitHubUnreachable,
@@ -13,6 +14,7 @@ import {
 	PullRequestMergeStatusUnavailable,
 	PullRequestNotFound,
 	PullRequestNotMergeable,
+	type PullRequestReadyError,
 	type RepoMergeMethodsError,
 } from "./errors.ts";
 import { ghResult } from "./exec.ts";
@@ -281,5 +283,44 @@ export const mergePullRequest = (
 			repoRoot,
 			number,
 			reason: result.stderr.trim() || `gh pr merge exited ${result.exitCode}`,
+		});
+	});
+
+/**
+ * `gh pr ready <number>` — flips a draft PR to ready for review. Failure is
+ * classified auth → not-found → generic, the same order `mergePullRequest`
+ * uses minus the not-mergeable case (readiness doesn't depend on
+ * mergeability), ending in `GhPullRequestReadyFailed` as the catch-all so a
+ * ready attempt never silently no-ops on an unrecognized `gh` message.
+ */
+export const markPullRequestReady = (
+	repoRoot: string,
+	number: number,
+): Effect.Effect<
+	void,
+	PullRequestReadyError | GitCommandError,
+	ChildProcessSpawner.ChildProcessSpawner
+> =>
+	Effect.gen(function* () {
+		const result = yield* ghResult(repoRoot, ["pr", "ready", String(number)]);
+
+		if (result.exitCode === 0) return;
+
+		if (isAuthFailure(result)) {
+			return yield* new GhNotAuthenticated({
+				reason: result.stderr.trim() || "gh is not authenticated",
+			});
+		}
+		if (isNotFoundFailure(result.stderr)) {
+			return yield* new PullRequestNotFound({
+				repoRoot,
+				number,
+				reason: result.stderr.trim(),
+			});
+		}
+		return yield* new GhPullRequestReadyFailed({
+			repoRoot,
+			number,
+			reason: result.stderr.trim() || `gh pr ready exited ${result.exitCode}`,
 		});
 	});

@@ -5,9 +5,13 @@ reconciliation engine, now covering both Phase 2's whole-file review and Phase 3
 `bun:sqlite` + Drizzle, data dir shared with the sidecar's own handshake file (`NISI_DATA_DIR`, same
 default as `apps/desktop/sidecar`). Feeds `packages/sidecar-api`'s `review`/`diff` contracts.
 
-- `src/store.ts` — `ReviewStore`, the public service. Sessions (open/list/close/get), whole-file review
-  state (mark viewed/unviewed, read one or all), range claims (mark/unmark one block's claim on a file,
-  list a file's active claims), and reading a snapshot's content back out of the blob store.
+- `src/store.ts` — `ReviewStore`, the public service. Sessions (open/list/close/get/`updateRepoRoot` —
+  the last one repoints an open session onto a worktree's new location once the sidecar's
+  `resolveLiveRepoRoot` has confirmed, via `@repo/git`'s `revalidateWorktreePath`, that it moved
+  rather than vanished; deliberately doesn't touch `sessionKey`, see that function's own doc comment),
+  whole-file review state (mark viewed/unviewed, read one or all), range claims (mark/unmark one
+  block's claim on a file, list a file's active claims), and reading a snapshot's content back out of
+  the blob store.
 - `src/blob-store.ts` — sha256-addressed content storage on disk (`<dataDir>/blobs/<hash>`).
 - `src/reconcile.ts` — `reconcile()`: reconciles `base`/`head` against every currently-active
   `ReviewClaim` on a file (the whole-file toggle and/or any number of block-scoped range claims),

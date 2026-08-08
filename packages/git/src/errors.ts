@@ -85,6 +85,33 @@ export class WorktreeReadFailed extends Schema.TaggedErrorClass<WorktreeReadFail
 	},
 ) {}
 
+/**
+ * Neither `@{upstream}` nor `origin/<branch>` resolves for the current
+ * branch — `resolveUnpushedCommitCount` (`repo.ts`) has nothing to diff
+ * `HEAD` against, so the pre-merge "unpushed commits" check
+ * (`apps/desktop/sidecar/http.ts`'s `unpushedCommits` handler) has no way to
+ * tell whether anything is actually unpushed. Deliberately not defaulted to
+ * a count of `0` — an unverifiable state isn't "nothing to push", and the
+ * frontend shows a distinct dialog for it.
+ */
+export class NoRemoteRefToCompare extends Schema.TaggedErrorClass<NoRemoteRefToCompare>()(
+	"NoRemoteRefToCompare",
+	{ repoRoot: Schema.String, branch: Schema.String },
+) {}
+
+/**
+ * `git rev-list --count <remoteRef>..HEAD` exited `0` (so `GitCommandError`
+ * doesn't apply) but its stdout wasn't the plain non-negative integer that
+ * flag always prints — near-unreachable in practice, but a value this
+ * function can't trust isn't one it should coerce into a count: `Number()`
+ * on unexpected output produces `NaN`, which would otherwise reach the wire
+ * and render as "NaN commits" in the pre-merge dialog.
+ */
+export class UnpushedCommitCountUnparseable extends Schema.TaggedErrorClass<UnpushedCommitCountUnparseable>()(
+	"UnpushedCommitCountUnparseable",
+	{ repoRoot: Schema.String, remoteRef: Schema.String, raw: Schema.String },
+) {}
+
 export type GitError =
 	| GitCommandError
 	| NotAGitRepository
@@ -137,6 +164,28 @@ export type PullRequestWorktreeError =
 	| PullRequestRefNotFound
 	| WorktreeBranchInUse
 	| WorktreePathOccupied;
+
+/**
+ * A session's persisted worktree path no longer exists on disk, and nothing
+ * checked out on its branch is registered in the repo's known main clone
+ * either — `revalidateWorktreePath` (`worktree.ts`) couldn't recover it. The
+ * worktree was genuinely removed (`git worktree remove`), not just relocated
+ * (`git worktree move`, or an external tool like `wt`/worktrunk repointing a
+ * worktree nisi created out from under it — the recoverable case, which
+ * self-heals silently instead of reaching this error). `sourceRepoRoot` is
+ * `null` when there was no known main clone to even check against (a branch
+ * session opened directly against a plain checkout, never a nisi-managed PR
+ * worktree) — that case has no second path to consult, so a missing `path`
+ * fails outright.
+ */
+export class WorktreeRelocationFailed extends Schema.TaggedErrorClass<WorktreeRelocationFailed>()(
+	"WorktreeRelocationFailed",
+	{
+		path: Schema.String,
+		headRef: Schema.String,
+		sourceRepoRoot: Schema.NullOr(Schema.String),
+	},
+) {}
 
 /**
  * `gh pr view <number>` couldn't resolve the PR the caller asked for by
@@ -315,3 +364,18 @@ export type PullRequestMergeError =
 	| PullRequestNotFound
 	| PullRequestNotMergeable
 	| GhMergeFailed;
+
+/**
+ * `gh pr ready` failed for a reason that isn't auth or not-found — the
+ * catch-all so marking a PR ready for review never silently no-ops. Mirrors
+ * `GhMergeFailed`'s role for `mergePullRequest`.
+ */
+export class GhPullRequestReadyFailed extends Schema.TaggedErrorClass<GhPullRequestReadyFailed>()(
+	"GhPullRequestReadyFailed",
+	{ repoRoot: Schema.String, number: Schema.Number, reason: Schema.String },
+) {}
+
+export type PullRequestReadyError =
+	| GhNotAuthenticated
+	| PullRequestNotFound
+	| GhPullRequestReadyFailed;

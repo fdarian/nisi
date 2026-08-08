@@ -11,9 +11,12 @@ import {
 	fetchPullRequestMergeability,
 	fetchRepoMergeMethods,
 	type GitCommandError,
+	markPullRequestReady,
 	mergePullRequest,
+	resolveUnpushedCommitCount,
 	searchPullRequests,
 	type WorktreeReadFailed,
+	type WorktreeRelocationFailed,
 } from "@repo/git";
 import { ReviewStore } from "@repo/review";
 import { SettingsStore } from "@repo/settings";
@@ -117,6 +120,25 @@ const formatGitCommandError = (cause: GitCommandError): string => {
  */
 const formatWorktreeReadFailed = (cause: WorktreeReadFailed): string =>
 	`failed to read ${cause.path}: ${String(cause.cause)}`;
+
+/**
+ * `store.ts`'s `resolveLiveRepoRoot` (behind `listChangedFiles`/
+ * `readFileContents`/`setFileViewed`/`setRangeViewed`) already tried the
+ * self-heal path — `@repo/git`'s `revalidateWorktreePath` found nothing
+ * checked out on this session's branch in its known main clone either, so
+ * the worktree is genuinely gone (`git worktree remove`), not just moved.
+ * Names the concrete, actionable fix: close this session and reopen the PR,
+ * which re-creates the worktree fresh — the same recovery a `WorktreePathOccupied`
+ * or `WorktreeBranchInUse` failure on the *open* path already asks for.
+ */
+const formatWorktreeRelocationFailed = (
+	cause: WorktreeRelocationFailed,
+): string =>
+	`this session's worktree (${cause.path}) no longer exists${
+		cause.sourceRepoRoot === null
+			? ""
+			: ` and no worktree for branch "${cause.headRef}" is registered in ${cause.sourceRepoRoot}`
+	} — close this session and reopen the pull request to recreate it.`;
 
 type ServerContext = WithEffectContext<AppServices> &
 	RequestHeadersHandlerPluginContext;
@@ -313,7 +335,7 @@ export function attachRouter(
 				// lets the Refresh affordance appear immediately on refocus.
 				// Only the signature check, never a diff invalidation — applying
 				// changes stays behind the user's own Refresh click.
-				yield* checkSessionForChanges(session);
+				yield* checkSessionForChanges(input.sessionId);
 			}),
 		},
 		diff: {
@@ -340,6 +362,13 @@ export function attachRouter(
 							Effect.fail(
 								errors.INTERNAL_SERVER_ERROR({
 									message: formatWorktreeReadFailed(cause),
+								}),
+							),
+						),
+						Effect.catchTag("WorktreeRelocationFailed", (cause) =>
+							Effect.fail(
+								errors.INTERNAL_SERVER_ERROR({
+									message: formatWorktreeRelocationFailed(cause),
 								}),
 							),
 						),
@@ -384,6 +413,13 @@ export function attachRouter(
 								}),
 							),
 						),
+						Effect.catchTag("WorktreeRelocationFailed", (cause) =>
+							Effect.fail(
+								errors.INTERNAL_SERVER_ERROR({
+									message: formatWorktreeRelocationFailed(cause),
+								}),
+							),
+						),
 					);
 			}),
 		},
@@ -404,6 +440,20 @@ export function attachRouter(
 							Effect.fail(
 								errors.INTERNAL_SERVER_ERROR({
 									message: formatWorktreeReadFailed(cause),
+								}),
+							),
+						),
+						Effect.catchTag("GitCommandError", (cause) =>
+							Effect.fail(
+								errors.INTERNAL_SERVER_ERROR({
+									message: formatGitCommandError(cause),
+								}),
+							),
+						),
+						Effect.catchTag("WorktreeRelocationFailed", (cause) =>
+							Effect.fail(
+								errors.INTERNAL_SERVER_ERROR({
+									message: formatWorktreeRelocationFailed(cause),
 								}),
 							),
 						),
@@ -435,6 +485,20 @@ export function attachRouter(
 							Effect.fail(
 								errors.INTERNAL_SERVER_ERROR({
 									message: formatWorktreeReadFailed(cause),
+								}),
+							),
+						),
+						Effect.catchTag("GitCommandError", (cause) =>
+							Effect.fail(
+								errors.INTERNAL_SERVER_ERROR({
+									message: formatGitCommandError(cause),
+								}),
+							),
+						),
+						Effect.catchTag("WorktreeRelocationFailed", (cause) =>
+							Effect.fail(
+								errors.INTERNAL_SERVER_ERROR({
+									message: formatWorktreeRelocationFailed(cause),
 								}),
 							),
 						),
@@ -969,6 +1033,80 @@ export function attachRouter(
 					number: input.number,
 					method: input.method,
 				});
+			}),
+			// The PR header overflow menu's "Mark as Ready" item, shown only
+			// while `mergeStatus.isDraft` is true. Error mapping
+			// mirrors `merge`'s minus `CONFLICT` — readiness doesn't depend on
+			// mergeability.
+			markReady: authed.pullRequests.markReady.effect(function* ({
+				input,
+				errors,
+			}) {
+				yield* markPullRequestReady(input.repoRoot, input.number).pipe(
+					Effect.catchTag("GhNotAuthenticated", (cause) =>
+						Effect.fail(
+							errors.GH_NOT_AUTHENTICATED({
+								message: `gh is not authenticated: ${cause.reason}`,
+							}),
+						),
+					),
+					Effect.catchTag("PullRequestNotFound", (cause) =>
+						Effect.fail(
+							errors.NOT_FOUND({
+								message: `pull request #${cause.number} couldn't be resolved on GitHub for ${cause.repoRoot}: ${cause.reason}`,
+							}),
+						),
+					),
+					Effect.catchTag("GhPullRequestReadyFailed", (cause) =>
+						Effect.fail(
+							errors.SERVICE_UNAVAILABLE({
+								message: `gh pr ready failed for pull request #${cause.number}: ${cause.reason}`,
+							}),
+						),
+					),
+					Effect.catchTag("GitCommandError", (cause) =>
+						Effect.fail(
+							errors.SERVICE_UNAVAILABLE({
+								message: `${cause.command} could not be run: ${cause.stderr || String(cause.cause)}`,
+							}),
+						),
+					),
+				);
+
+				yield* Effect.logInfo("pull request marked ready for review", {
+					repoRoot: input.repoRoot,
+					number: input.number,
+				});
+			}),
+			// The pre-merge "you have local unpushed commits" check — about the
+			// local worktree branch, not the PR, so it only needs `repoRoot`.
+			unpushedCommits: authed.pullRequests.unpushedCommits.effect(function* ({
+				input,
+				errors,
+			}) {
+				return yield* resolveUnpushedCommitCount(input.repoRoot).pipe(
+					Effect.catchTag("NoRemoteRefToCompare", (cause) =>
+						Effect.fail(
+							errors.NO_REMOTE_REF({
+								message: `${cause.branch} has no configured upstream and no matching origin/${cause.branch} in ${cause.repoRoot}`,
+							}),
+						),
+					),
+					Effect.catchTag("GitCommandError", (cause) =>
+						Effect.fail(
+							errors.SERVICE_UNAVAILABLE({
+								message: `${cause.command} could not be run: ${cause.stderr || String(cause.cause)}`,
+							}),
+						),
+					),
+					Effect.catchTag("UnpushedCommitCountUnparseable", (cause) =>
+						Effect.fail(
+							errors.SERVICE_UNAVAILABLE({
+								message: `git rev-list --count against ${cause.remoteRef} in ${cause.repoRoot} returned output nisi couldn't parse: ${cause.raw}`,
+							}),
+						),
+					),
+				);
 			}),
 		},
 	});

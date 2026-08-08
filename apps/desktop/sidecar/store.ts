@@ -25,10 +25,12 @@ import {
 	resolveRepoRoot,
 	resolveReviewTarget,
 	resolveReviewTargetForPullRequest,
+	revalidateWorktreePath,
 	verifyRepoPathMatchesOrigin,
 	type WorktreeBranchInUse,
 	type WorktreePathOccupied,
 	type WorktreeReadFailed,
+	type WorktreeRelocationFailed,
 } from "@repo/git";
 import {
 	type FileReviewState,
@@ -359,6 +361,73 @@ export class Store extends Context.Service<Store>()("Store", {
 			});
 
 		/**
+		 * `session.repoRoot`, revalidated against disk and, when that fails,
+		 * re-resolved via `@repo/git`'s `revalidateWorktreePath` — see that
+		 * function's doc comment for why a persisted `repoRoot` can't be trusted
+		 * blindly: a `git worktree move`, or an external tool (`wt`/worktrunk)
+		 * relocating a worktree nisi created, leaves it pointing at a directory
+		 * that no longer exists, and every git spawn against it would otherwise
+		 * fail identically forever. The common case — nothing moved — costs one
+		 * `stat()`, no git spawn at all.
+		 *
+		 * `sourceRepoRoot` for that lookup is the PR's own known main clone
+		 * (`resolveRepoPath` above, same lookup `openPullRequestSession` uses) —
+		 * `null` for a no-PR branch session, which has no second path to consult
+		 * at all. When resolution lands on a path other than what's persisted,
+		 * this writes it back (`ReviewStore.updateRepoRoot`) so every other
+		 * caller — including the next live-poll tick — sees the healed path too,
+		 * not just this one call.
+		 */
+		const resolveLiveRepoRoot = (
+			session: ReviewSession,
+		): Effect.Effect<
+			string,
+			| GitCommandError
+			| WorktreeRelocationFailed
+			| SettingsStoreError
+			| SessionNotFound
+			| ReviewStoreError,
+			ChildProcessSpawner.ChildProcessSpawner
+		> =>
+			Effect.gen(function* () {
+				const liveRepoRoot = yield* revalidateWorktreePath({
+					path: session.repoRoot,
+					headRef: session.headRef,
+					number: session.pr?.number ?? null,
+					resolveSourceRepoRoot:
+						session.pr === null
+							? Effect.succeed(null)
+							: resolveRepoPath(session.pr.owner, session.pr.repo),
+				});
+
+				if (liveRepoRoot !== session.repoRoot) {
+					yield* reviewStore.updateRepoRoot(session.id, liveRepoRoot);
+				}
+				return liveRepoRoot;
+			});
+
+		/**
+		 * The public, sessionId-keyed sibling of {@link resolveLiveRepoRoot} —
+		 * what `live-poll.ts`'s `checkSessionForChanges` calls, since it only
+		 * ever has a session id to start from, not an already-fetched session row.
+		 */
+		const resolveSessionRepoRoot = (
+			sessionId: string,
+		): Effect.Effect<
+			string,
+			| SessionNotFound
+			| ReviewStoreError
+			| GitCommandError
+			| WorktreeRelocationFailed
+			| SettingsStoreError,
+			ChildProcessSpawner.ChildProcessSpawner
+		> =>
+			Effect.gen(function* () {
+				const session = yield* reviewStore.getSession(sessionId);
+				return yield* resolveLiveRepoRoot(session);
+			});
+
+		/**
 		 * The palette's "open this PR" action. Resolves `owner/repo` to a local
 		 * checkout first (`resolveRepoPath` above) — the palette never knows a
 		 * path itself, only `owner/repo#number` (`gh search prs` can't return
@@ -591,16 +660,13 @@ export class Store extends Context.Service<Store>()("Store", {
 		const listChangedFiles = (sessionId: string, includeUncommitted: boolean) =>
 			Effect.gen(function* () {
 				const session = yield* reviewStore.getSession(sessionId);
-				const files = yield* getChangedFiles(
-					session.repoRoot,
-					session.baseRef,
-					{
-						includeUncommitted,
-					},
-				);
+				const repoRoot = yield* resolveLiveRepoRoot(session);
+				const files = yield* getChangedFiles(repoRoot, session.baseRef, {
+					includeUncommitted,
+				});
 				return yield* attachReviewState(
 					sessionId,
-					session.repoRoot,
+					repoRoot,
 					includeUncommitted,
 					files,
 				);
@@ -771,8 +837,9 @@ export class Store extends Context.Service<Store>()("Store", {
 		) =>
 			Effect.gen(function* () {
 				const session = yield* reviewStore.getSession(sessionId);
+				const repoRoot = yield* resolveLiveRepoRoot(session);
 				const contentByPath = yield* getFileContents(
-					session.repoRoot,
+					repoRoot,
 					session.baseRef,
 					requests satisfies ReadonlyArray<FileContentRequest>,
 					{ includeUncommitted },
@@ -803,7 +870,7 @@ export class Store extends Context.Service<Store>()("Store", {
 									};
 								}
 								const currentHashes = yield* readCurrentHashes(
-									session.repoRoot,
+									repoRoot,
 									includeUncommitted,
 									[request.path],
 								);
@@ -832,7 +899,7 @@ export class Store extends Context.Service<Store>()("Store", {
 
 							const reconciliation = yield* reconcilePathClaims(
 								sessionId,
-								session.repoRoot,
+								repoRoot,
 								request.path,
 								request.oldPath,
 								activeFileClaim,
@@ -857,7 +924,7 @@ export class Store extends Context.Service<Store>()("Store", {
 							// together, so the patch and `oldContent` never disagree
 							// about which baseline they're against.
 							const reviewedPatch = yield* diffContentsPatch(
-								session.repoRoot,
+								repoRoot,
 								request.path,
 								reconciliation.reviewedBaseline,
 								content.newContent ?? "",
@@ -896,14 +963,13 @@ export class Store extends Context.Service<Store>()("Store", {
 		 */
 		const setFileViewed = (sessionId: string, path: string, viewed: boolean) =>
 			Effect.gen(function* () {
-				const session = yield* reviewStore.getSession(sessionId);
 				if (!viewed) {
 					yield* reviewStore.markFileUnviewed(sessionId, path);
 					return;
 				}
-				const content = yield* readWorktreeBlobContent(
-					join(session.repoRoot, path),
-				);
+				const session = yield* reviewStore.getSession(sessionId);
+				const repoRoot = yield* resolveLiveRepoRoot(session);
+				const content = yield* readWorktreeBlobContent(join(repoRoot, path));
 				yield* reviewStore.markFileViewed(sessionId, path, content);
 			});
 
@@ -919,11 +985,15 @@ export class Store extends Context.Service<Store>()("Store", {
 		 * worktree bytes `setRangeViewed` already read or wrote) plus
 		 * `activeFileClaim`/every other currently active range claim. Used by
 		 * `setRangeViewed` to re-derive, right after a mark/unmark, whether the
-		 * file's whole-file `viewed` flag should follow.
+		 * file's whole-file `viewed` flag should follow. Takes `repoRoot`
+		 * separately from `session` — `setRangeViewed` resolves it once (via
+		 * `resolveLiveRepoRoot`) and reuses it across every call this makes,
+		 * rather than each one re-deriving it from `session.repoRoot` directly.
 		 */
 		const reconcilePathAgainstBase = (
 			sessionId: string,
 			session: ReviewSession,
+			repoRoot: string,
 			path: string,
 			activeFileClaim: {
 				readonly snapshotHash: string | null;
@@ -936,18 +1006,15 @@ export class Store extends Context.Service<Store>()("Store", {
 			FileSystem | ChildProcessSpawner.ChildProcessSpawner
 		> =>
 			Effect.gen(function* () {
-				const mergeBase = yield* resolveMergeBase(
-					session.repoRoot,
-					session.baseRef,
-				);
+				const mergeBase = yield* resolveMergeBase(repoRoot, session.baseRef);
 				const baseContentBytes = yield* readFileContentsAtRef(
-					session.repoRoot,
+					repoRoot,
 					mergeBase,
 					[path],
 				);
 				return yield* reconcilePathClaims(
 					sessionId,
-					session.repoRoot,
+					repoRoot,
 					path,
 					undefined,
 					activeFileClaim,
@@ -987,6 +1054,7 @@ export class Store extends Context.Service<Store>()("Store", {
 		) =>
 			Effect.gen(function* () {
 				const session = yield* reviewStore.getSession(sessionId);
+				const repoRoot = yield* resolveLiveRepoRoot(session);
 
 				if (!viewed) {
 					yield* reviewStore.unmarkRangeViewed(sessionId, path, blockId);
@@ -1004,7 +1072,7 @@ export class Store extends Context.Service<Store>()("Store", {
 					// reconciliation call treats an absent file. A genuine read
 					// failure still propagates.
 					const contentOption = yield* readWorktreeBlobContent(
-						join(session.repoRoot, path),
+						join(repoRoot, path),
 					);
 					const content = Option.getOrElse(
 						contentOption,
@@ -1013,6 +1081,7 @@ export class Store extends Context.Service<Store>()("Store", {
 					const reconciliation = yield* reconcilePathAgainstBase(
 						sessionId,
 						session,
+						repoRoot,
 						path,
 						activeFileClaim,
 						content,
@@ -1024,7 +1093,7 @@ export class Store extends Context.Service<Store>()("Store", {
 				}
 
 				const contentOption = yield* readWorktreeBlobContent(
-					join(session.repoRoot, path),
+					join(repoRoot, path),
 				);
 				// `review_range_claims.snapshotHash` is `NOT NULL` (unlike
 				// `reviewed_files`', which now distinguishes absence via `NULL` —
@@ -1056,6 +1125,7 @@ export class Store extends Context.Service<Store>()("Store", {
 				const reconciliation = yield* reconcilePathAgainstBase(
 					sessionId,
 					session,
+					repoRoot,
 					path,
 					activeFileClaim,
 					rangeContent,
@@ -1075,6 +1145,7 @@ export class Store extends Context.Service<Store>()("Store", {
 			recordRepoPath,
 			listSessions,
 			closeSession,
+			resolveSessionRepoRoot,
 			listChangedFiles,
 			readFileContents,
 			setFileViewed,
@@ -1101,5 +1172,6 @@ export type {
 	GitCommandError,
 	GitHubUnreachable,
 	NoDefaultBranch,
+	WorktreeRelocationFailed,
 };
 export { SessionNotFound };

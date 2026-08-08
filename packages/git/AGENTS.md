@@ -52,6 +52,16 @@ unit-testable against real temp repos without booting anything. Feeds `packages/
   true` switches the diff's right-hand side to the worktree — staged, unstaged, and untracked
   changes included too. `getFileContents` resolves `includeUncommitted` once for the whole batch,
   not per requested path — it's a session-wide setting, not a per-file one.
+- `worktree.ts` — `openPullRequestWorktree`: create-or-reuse a PR's local worktree, resolution keyed
+  off `git worktree list --porcelain` (branch, never a path comparison — see the module's doc
+  comment for the full reuse order). `revalidateWorktreePath` is the read-path sibling: given a
+  worktree path a caller resolved earlier, cheaply confirms it still exists (`stat`, no git spawn)
+  and, only when it doesn't, re-resolves it the same branch-keyed way — recovering from a `git
+  worktree move` (or an external tool like `wt`/worktrunk relocating a worktree nisi created) without
+  the caller ever re-running the create-or-reuse flow. Fails with `WorktreeRelocationFailed` when
+  nothing registered matches the branch either — a worktree actually `git worktree remove`d, not
+  just moved. `apps/desktop/sidecar/store.ts`'s `resolveLiveRepoRoot` is the one caller, and also
+  where a resolved relocation gets persisted back onto the session row.
 
 ## Gotchas
 

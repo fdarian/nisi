@@ -99,6 +99,19 @@ export type PullRequestMergeStatus = Schema.Schema.Type<
 >;
 
 /**
+ * Mirrors `@repo/git`'s `UnpushedCommits` — how many commits the local
+ * worktree branch has that its remote doesn't, plus the remote ref
+ * (`origin/main`, or whatever `@{upstream}` names) that count was computed
+ * against, since the pre-merge dialog names it rather than saying "the
+ * remote" generically.
+ */
+export const UnpushedCommits = Schema.Struct({
+	count: Schema.Number,
+	remoteRef: Schema.String,
+});
+export type UnpushedCommits = Schema.Schema.Type<typeof UnpushedCommits>;
+
+/**
  * `search` asks GitHub live via `@repo/git`'s `searchPullRequests` — no
  * local index or cache, so every call is a real `gh search prs` round trip.
  * See that function's own doc for the empty-query/typed-query/qualifier-
@@ -156,6 +169,25 @@ export type PullRequestMergeStatus = Schema.Schema.Type<
  * generic `SERVICE_UNAVAILABLE` a `gh` failure that isn't auth/not-found/
  * not-mergeable falls back to. See `apps/desktop/sidecar/http.ts`'s handlers
  * for the full error mapping.
+ *
+ * `unpushedCommits` backs the pre-merge "you have local unpushed commits"
+ * check — unlike every other procedure here, it's about the *local*
+ * worktree branch, not the PR itself, so its input is just `repoRoot`
+ * (whatever branch is actually checked out there). Wraps `@repo/git`'s
+ * `resolveUnpushedCommitCount`; `NO_REMOTE_REF` is that function's one
+ * failure mode — no `@{upstream}` and no matching `origin/<branch>`, so
+ * there's genuinely nothing to compare `HEAD` against — kept distinct from
+ * `SERVICE_UNAVAILABLE` (a `git` command itself failing to run) since the
+ * frontend shows a different dialog for each.
+ *
+ * `markReady` fires `gh pr ready`, flipping a draft PR to ready for review —
+ * backs the PR header overflow menu's own item, shown only while
+ * `mergeStatus.isDraft` is true. Input is just `repoRoot`/`number` (unlike
+ * `merge`, `gh pr ready` needs no method); the frontend still invalidates
+ * `mergeStatus` on success the same way `merge` does, since `isDraft` drives
+ * both that menu item's visibility and the merge button's own draft label.
+ * Error codes mirror `merge`'s minus `CONFLICT` — readiness doesn't depend on
+ * mergeability, so there's no analogous "not mergeable right now" outcome.
  */
 export const pullRequestsContract = {
 	search: oc
@@ -224,6 +256,26 @@ export const pullRequestsContract = {
 			CONFLICT: {},
 			GH_NOT_AUTHENTICATED: {},
 			NOT_FOUND: {},
+			SERVICE_UNAVAILABLE: {},
+		}),
+	markReady: oc
+		.input(
+			Schema.Struct({
+				repoRoot: Schema.String,
+				number: Schema.Number,
+			}),
+		)
+		.output(Schema.Void)
+		.errors({
+			GH_NOT_AUTHENTICATED: {},
+			NOT_FOUND: {},
+			SERVICE_UNAVAILABLE: {},
+		}),
+	unpushedCommits: oc
+		.input(Schema.Struct({ repoRoot: Schema.String }))
+		.output(UnpushedCommits)
+		.errors({
+			NO_REMOTE_REF: {},
 			SERVICE_UNAVAILABLE: {},
 		}),
 };

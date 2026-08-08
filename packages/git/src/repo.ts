@@ -1,6 +1,11 @@
 import { stat } from "node:fs/promises";
 import { Effect } from "effect";
-import { NoDefaultBranch, NotAGitRepository } from "./errors.ts";
+import {
+	NoDefaultBranch,
+	NoRemoteRefToCompare,
+	NotAGitRepository,
+	UnpushedCommitCountUnparseable,
+} from "./errors.ts";
 import { git, gitResult } from "./exec.ts";
 
 /** Resolves the repository root for any path inside a git working tree. */
@@ -84,6 +89,82 @@ export const originUrlOrNull = (repoRoot: string) =>
 			result.exitCode === 0 ? result.stdout.trim() : null,
 		),
 	);
+
+/**
+ * The remote ref {@link resolveUnpushedCommitCount} diffs `HEAD` against:
+ * the branch's configured `@{upstream}` when it has one, else
+ * `origin/<currentBranch>` when that ref actually exists. `null` when
+ * neither resolves — a branch nisi created for a PR worktree
+ * (`worktree.ts`'s `openPullRequestWorktree`) is never pushed with `-u`, so
+ * `@{upstream}` is the exception rather than the rule here, but a branch
+ * that also has no matching `origin/<branch>` (never pushed at all, or
+ * pushed under a different name) genuinely has nothing to compare against.
+ */
+const resolveComparisonRemoteRef = (repoRoot: string, currentBranch: string) =>
+	Effect.gen(function* () {
+		const upstream = yield* gitOutputOrNull(repoRoot, [
+			"rev-parse",
+			"--abbrev-ref",
+			"@{upstream}",
+		]);
+		if (upstream !== null) return upstream;
+
+		const originCandidate = `origin/${currentBranch}`;
+		return (yield* refExists(repoRoot, originCandidate))
+			? originCandidate
+			: null;
+	});
+
+/** How many commits `HEAD` has that its remote doesn't, plus the remote ref that count was computed against. */
+export type UnpushedCommits = {
+	readonly count: number;
+	readonly remoteRef: string;
+};
+
+/**
+ * The pre-merge "you have local unpushed commits" check
+ * (`apps/desktop/sidecar/http.ts`'s `unpushedCommits` handler) is built on:
+ * how far `HEAD` has diverged, in commits, from the ref it should have been
+ * pushed to. Resolves that ref via {@link resolveComparisonRemoteRef}, then
+ * counts with `git rev-list --count <remoteRef>..HEAD` — commits reachable
+ * from `HEAD` but not from `remoteRef`. Fails with
+ * {@link NoRemoteRefToCompare} rather than returning `0` when no remote ref
+ * resolves at all, since that's an unverifiable state, not "nothing to
+ * push"; fails with {@link UnpushedCommitCountUnparseable} rather than
+ * coercing (`Number()` on unexpected output silently produces `NaN`) when
+ * `rev-list`'s stdout isn't the plain non-negative integer that flag always
+ * prints on a zero exit.
+ */
+export const resolveUnpushedCommitCount = (repoRoot: string) =>
+	Effect.gen(function* () {
+		const currentBranch = yield* resolveCurrentBranch(repoRoot);
+		const remoteRef = yield* resolveComparisonRemoteRef(
+			repoRoot,
+			currentBranch,
+		);
+		if (remoteRef === null) {
+			return yield* new NoRemoteRefToCompare({
+				repoRoot,
+				branch: currentBranch,
+			});
+		}
+
+		const stdout = yield* git(repoRoot, [
+			"rev-list",
+			"--count",
+			`${remoteRef}..HEAD`,
+		]);
+		const raw = stdout.trim();
+		if (!/^\d+$/.test(raw)) {
+			return yield* new UnpushedCommitCountUnparseable({
+				repoRoot,
+				remoteRef,
+				raw: stdout,
+			});
+		}
+
+		return { count: Number(raw), remoteRef } satisfies UnpushedCommits;
+	});
 
 /** The commit `HEAD` currently points at. */
 export const resolveHeadSha = (repoRoot: string) =>

@@ -20,7 +20,7 @@ import { AsyncIteratorClass } from "@orpc/shared";
 import { createTanstackQueryUtils } from "@orpc/tanstack-query";
 import type { SidecarClient } from "@repo/sidecar-api";
 import type { SidecarQueryUtils } from "#/lib/backend-context";
-import type { FileContent } from "#/lib/pr-data";
+import type { FileContent, PullRequestMergeStatus } from "#/lib/pr-data";
 import type { Settings } from "#/lib/settings-data";
 import type {
 	GenerateEvent,
@@ -93,6 +93,10 @@ export type MockOrpcData = {
 	settings?: Partial<Settings>;
 	/** `diff.fileContents`' per-path results — keyed by the same paths the story's `files` prop uses. A path with no entry here reports `content: null` ("not part of the current diff"), same as the real sidecar. */
 	fileContents?: Readonly<Record<string, FileContent>>;
+	/** `pullRequests.mergeStatus`'s result — omit to leave the mock pending forever (`neverSettles`), same as before this field existed. */
+	mergeStatus?: PullRequestMergeStatus;
+	/** When set, `pullRequests.mergeStatus` rejects with this message instead of resolving — covers the "query failed and never once succeeded" case. Takes priority over `mergeStatus` if both are set (they shouldn't be). */
+	mergeStatusError?: string;
 	/**
 	 * When set, `walkthrough.activeGeneration` reports a `"running"`
 	 * generation and `walkthrough.generate` replays `events` in order (each a
@@ -156,6 +160,8 @@ export function createMockOrpc(data: MockOrpcData = {}): SidecarQueryUtils {
 	const harnesses = data.harnesses ?? DEFAULT_HARNESSES;
 	const fileContents = data.fileContents ?? {};
 	const runningGeneration = data.runningGeneration;
+	const mergeStatus = data.mergeStatus;
+	const mergeStatusError = data.mergeStatusError;
 
 	const client: SidecarClient = {
 		health: {
@@ -191,15 +197,25 @@ export function createMockOrpc(data: MockOrpcData = {}): SidecarQueryUtils {
 			get: async () => settings,
 			update: async (patch) => Object.assign(settings, patch),
 		},
-		// Never referenced by any story yet — the open-PR palette has no
-		// storybook coverage — so these stubs exist only to keep `SidecarClient`
-		// satisfied, same reasoning as `events.subscribe` above.
+		// `search`/`open`/`recordRepoPath` are never referenced by any story
+		// yet — the open-PR palette has no storybook coverage — so those three
+		// stubs exist only to keep `SidecarClient` satisfied, same reasoning as
+		// `events.subscribe` above.
 		pullRequests: {
 			search: async () => [],
 			open: neverSettles,
 			recordRepoPath: neverSettles,
-			mergeStatus: neverSettles,
-			merge: neverSettles,
+			mergeStatus:
+				mergeStatusError !== undefined
+					? async () => {
+							throw new Error(mergeStatusError);
+						}
+					: mergeStatus === undefined
+						? neverSettles
+						: async () => mergeStatus,
+			merge: async () => undefined,
+			markReady: async () => undefined,
+			unpushedCommits: neverSettles,
 		},
 		walkthrough: {
 			harnesses: async () => harnesses,

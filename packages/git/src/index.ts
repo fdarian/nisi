@@ -21,6 +21,7 @@ export {
 	GhMergeFailed,
 	GhNotAuthenticated,
 	GhOutputDecodeError,
+	GhPullRequestReadyFailed,
 	GhRateLimited,
 	GitCommandError,
 	type GitError,
@@ -29,12 +30,14 @@ export {
 	NoDefaultBranch,
 	NoMergeMethodsEnabled,
 	NoOriginRemote,
+	NoRemoteRefToCompare,
 	NotAGitRepository,
 	type PullRequestMergeabilityError,
 	type PullRequestMergeError,
 	PullRequestMergeStatusUnavailable,
 	PullRequestNotFound,
 	PullRequestNotMergeable,
+	type PullRequestReadyError,
 	PullRequestRefNotFound,
 	type PullRequestSearchError,
 	type PullRequestWorktreeError,
@@ -44,9 +47,11 @@ export {
 	RepoPathNotFound,
 	RepoPathOriginMismatch,
 	type RepoPathVerificationError,
+	UnpushedCommitCountUnparseable,
 	WorktreeBranchInUse,
 	WorktreePathOccupied,
 	WorktreeReadFailed,
+	WorktreeRelocationFailed,
 } from "./errors.ts";
 export type { Hunk } from "./hunk.ts";
 export { parseHunks } from "./hunk.ts";
@@ -69,13 +74,16 @@ export type {
 export {
 	fetchPullRequestMergeability,
 	fetchRepoMergeMethods,
+	markPullRequestReady,
 	mergePullRequest,
 } from "./pull-request-merge.ts";
+export type { UnpushedCommits } from "./repo.ts";
 export {
 	resolveCurrentBranch,
 	resolveLocalDefaultBranch,
 	resolveMergeBase,
 	resolveRepoRoot,
+	resolveUnpushedCommitCount,
 } from "./repo.ts";
 export type { KnownRepoPath } from "./repo-path-mapping.ts";
 export {
@@ -84,5 +92,8 @@ export {
 	parseOwnerRepoFromRemoteUrl,
 	verifyRepoPathMatchesOrigin,
 } from "./repo-path-mapping.ts";
-export type { OpenPullRequestWorktreeInput } from "./worktree.ts";
-export { openPullRequestWorktree } from "./worktree.ts";
+export type {
+	OpenPullRequestWorktreeInput,
+	RevalidateWorktreePathInput,
+} from "./worktree.ts";
+export { openPullRequestWorktree, revalidateWorktreePath } from "./worktree.ts";

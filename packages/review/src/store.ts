@@ -240,6 +240,32 @@ export class ReviewStore extends Context.Service<ReviewStore>()("ReviewStore", {
 			readSessionRow(sessionId).pipe(Effect.map(toSession));
 
 		/**
+		 * Repoints an already-open session's `repoRoot` to a worktree's new
+		 * location — called by `apps/desktop/sidecar/store.ts` once `@repo/git`'s
+		 * `revalidateWorktreePath` confirms, via `git worktree list --porcelain`,
+		 * that the persisted path just moved rather than vanished (a `git
+		 * worktree move`, or an external tool like `wt`/worktrunk, relocating a
+		 * worktree nisi created). Deliberately doesn't touch `sessionKey` — that
+		 * stays rooted at the `repoRoot` the session was originally opened under
+		 * (see its own doc comment for why), not a live address to keep in sync;
+		 * this only updates where the *same* open session's files currently live.
+		 */
+		const updateRepoRoot = (
+			sessionId: string,
+			repoRoot: string,
+		): Effect.Effect<void, SessionNotFound | ReviewStoreError> =>
+			Effect.gen(function* () {
+				const row = yield* readSessionRow(sessionId);
+				yield* dbUse(db, (client) =>
+					client
+						.update(sessions)
+						.set({ repoRoot, updatedAt: new Date() })
+						.where(eq(sessions.id, row.id))
+						.run(),
+				);
+			});
+
+		/**
 		 * Ticks a file Reviewed, snapshotting its current content immediately.
 		 * `content: Option.none()` means the file was absent from the working
 		 * tree at tick time (deleted, or never existed) — no blob is written
@@ -488,6 +514,7 @@ export class ReviewStore extends Context.Service<ReviewStore>()("ReviewStore", {
 			listOpenSessions,
 			closeSession,
 			getSession,
+			updateRepoRoot,
 			markFileViewed,
 			markFileUnviewed,
 			getFileReviewState,

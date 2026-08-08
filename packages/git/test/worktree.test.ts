@@ -5,7 +5,10 @@ import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { BunServices } from "@effect/platform-bun";
 import { ConfigProvider, Effect } from "effect";
-import { openPullRequestWorktree } from "../src/worktree.ts";
+import {
+	openPullRequestWorktree,
+	revalidateWorktreePath,
+} from "../src/worktree.ts";
 import { cleanupTestRepo, makeTestRepo, type TestRepo } from "./fixtures.ts";
 
 /** Runs real `git` for test setup — the code under test uses its own Effect-based runner. */
@@ -811,6 +814,182 @@ describe("openPullRequestWorktree", () => {
 			await cleanupOriginBackedRepo(fixture);
 			await rm(dataDir, { recursive: true, force: true });
 			await rm(conventionParent, { recursive: true, force: true });
+		}
+	});
+});
+
+describe("revalidateWorktreePath", () => {
+	test("returns the path unchanged, without consulting git at all, when it's still on disk", async () => {
+		const repo = await makeTestRepo();
+		const dataDir = await mkdtemp(join(tmpdir(), "nisi-worktree-data-"));
+		try {
+			await repo.write("a.ts", "hello\n");
+			await repo.commit("base");
+
+			// `resolveSourceRepoRoot` fails outright if evaluated at all — if the
+			// fast path did anything besides `stat(path)`, this would fail rather
+			// than short-circuit.
+			const result = await run(
+				revalidateWorktreePath({
+					path: repo.root,
+					headRef: "main",
+					number: null,
+					resolveSourceRepoRoot: Effect.die(
+						"resolveSourceRepoRoot should never run when path exists",
+					),
+				}),
+				dataDir,
+			);
+			expect(result).toBe(repo.root);
+		} finally {
+			await cleanupTestRepo(repo);
+			await rm(dataDir, { recursive: true, force: true });
+		}
+	});
+
+	test("re-resolves a moved worktree by finding its branch in the source repo's own `git worktree list`", async () => {
+		const fixture = await makeOriginBackedRepo();
+		const dataDir = await mkdtemp(join(tmpdir(), "nisi-worktree-data-"));
+		const oldLocation = await mkdtemp(join(tmpdir(), "nisi-worktree-old-"));
+		const newParent = await mkdtemp(join(tmpdir(), "nisi-worktree-new-"));
+		try {
+			await rm(oldLocation, { recursive: true, force: true });
+			await sh(fixture.repo.root, ["branch", "feature", fixture.baseSha]);
+			await sh(fixture.repo.root, [
+				"worktree",
+				"add",
+				"-q",
+				oldLocation,
+				"feature",
+			]);
+
+			// Simulates what `wt`/worktrunk (or a plain `git worktree move`) did in
+			// the field: the worktree's checkout relocates, git's own
+			// registration follows it, but nothing tells nisi the path it
+			// persisted is now stale.
+			const newLocation = join(newParent, "relocated");
+			await sh(fixture.repo.root, [
+				"worktree",
+				"move",
+				oldLocation,
+				newLocation,
+			]);
+			expect(existsSync(oldLocation)).toBe(false);
+
+			const result = await run(
+				revalidateWorktreePath({
+					path: oldLocation,
+					headRef: "feature",
+					number: null,
+					resolveSourceRepoRoot: Effect.succeed(fixture.repo.root),
+				}),
+				dataDir,
+			);
+			expect(result).toBe(await realpath(newLocation));
+		} finally {
+			await cleanupOriginBackedRepo(fixture);
+			await rm(dataDir, { recursive: true, force: true });
+			await rm(oldLocation, { recursive: true, force: true });
+			await rm(newParent, { recursive: true, force: true });
+		}
+	});
+
+	test("re-resolves a moved PR worktree by its nisi-managed branch when headRef itself isn't registered", async () => {
+		const fixture = await makeOriginBackedRepo();
+		const dataDir = await mkdtemp(join(tmpdir(), "nisi-worktree-data-"));
+		const newParent = await mkdtemp(join(tmpdir(), "nisi-worktree-new-"));
+		try {
+			await publishPullRequestRef(fixture.bareDir, 1, fixture.baseSha);
+
+			const oldLocation = await run(
+				openPullRequestWorktree({
+					repoRoot: fixture.repo.root,
+					number: 1,
+					headRef: "feature",
+				}),
+				dataDir,
+			);
+			// `openPullRequestWorktree` created this on the nisi-managed
+			// `nisi/pr-1/feature` branch, not a local `feature` branch — the
+			// PR's own `headRef` alone would never match this registration.
+			const newLocation = join(newParent, "relocated");
+			await sh(fixture.repo.root, [
+				"worktree",
+				"move",
+				oldLocation,
+				newLocation,
+			]);
+
+			const result = await run(
+				revalidateWorktreePath({
+					path: oldLocation,
+					headRef: "feature",
+					number: 1,
+					resolveSourceRepoRoot: Effect.succeed(fixture.repo.root),
+				}),
+				dataDir,
+			);
+			expect(result).toBe(await realpath(newLocation));
+		} finally {
+			await cleanupOriginBackedRepo(fixture);
+			await rm(dataDir, { recursive: true, force: true });
+			await rm(newParent, { recursive: true, force: true });
+		}
+	});
+
+	test("fails with WorktreeRelocationFailed when the worktree was genuinely removed, not just moved", async () => {
+		const fixture = await makeOriginBackedRepo();
+		const dataDir = await mkdtemp(join(tmpdir(), "nisi-worktree-data-"));
+		try {
+			await sh(fixture.repo.root, ["branch", "feature", fixture.baseSha]);
+			const location = await mkdtemp(join(tmpdir(), "nisi-worktree-gone-"));
+			await rm(location, { recursive: true, force: true });
+			await sh(fixture.repo.root, [
+				"worktree",
+				"add",
+				"-q",
+				location,
+				"feature",
+			]);
+
+			// A real removal, not an out-of-band `rm -rf` — deregisters the
+			// worktree entirely rather than leaving a `prunable` entry behind.
+			await sh(fixture.repo.root, ["worktree", "remove", "--force", location]);
+
+			const error = await runFailure(
+				revalidateWorktreePath({
+					path: location,
+					headRef: "feature",
+					number: null,
+					resolveSourceRepoRoot: Effect.succeed(fixture.repo.root),
+				}),
+				dataDir,
+			);
+			expect(error._tag).toBe("WorktreeRelocationFailed");
+		} finally {
+			await cleanupOriginBackedRepo(fixture);
+			await rm(dataDir, { recursive: true, force: true });
+		}
+	});
+
+	test("fails with WorktreeRelocationFailed when there's no source repo to consult at all", async () => {
+		const dataDir = await mkdtemp(join(tmpdir(), "nisi-worktree-data-"));
+		const location = await mkdtemp(join(tmpdir(), "nisi-worktree-gone-"));
+		try {
+			await rm(location, { recursive: true, force: true });
+
+			const error = await runFailure(
+				revalidateWorktreePath({
+					path: location,
+					headRef: "main",
+					number: null,
+					resolveSourceRepoRoot: Effect.succeed(null),
+				}),
+				dataDir,
+			);
+			expect(error._tag).toBe("WorktreeRelocationFailed");
+		} finally {
+			await rm(dataDir, { recursive: true, force: true });
 		}
 	});
 });

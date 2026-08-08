@@ -14,6 +14,7 @@
  * one field (the boolean) that's honest to predict — see that hook's doc
  * comment for the split.
  */
+import { ORPCError } from "@orpc/client";
 import type { Query, UseQueryResult } from "@tanstack/react-query";
 import {
 	useMutation,
@@ -714,7 +715,10 @@ export type PullRequestMergeStatusParams = {
  * `"UNKNOWN"` rather than leaving the button stuck on "Checking
  * mergeability…" until something else happens to trigger a refetch —
  * `false` (TanStack Query's "stop polling") the instant it resolves either
- * way.
+ * way. Once the PR itself is no longer open, GitHub stops computing
+ * `mergeable` at all and it stays `"UNKNOWN"` forever — checking `state`
+ * first is what stops a merged/closed PR from being polled every 2s for the
+ * rest of the session.
  */
 export function usePullRequestMergeStatus(
 	orpc: SidecarQueryUtils,
@@ -723,7 +727,10 @@ export function usePullRequestMergeStatus(
 	return useQuery({
 		...orpc.pullRequests.mergeStatus.queryOptions({ input: params }),
 		refetchInterval: (query) =>
-			query.state.data?.mergeable === "UNKNOWN" ? 2000 : false,
+			query.state.data?.state === "OPEN" &&
+			query.state.data.mergeable === "UNKNOWN"
+				? 2000
+				: false,
 	});
 }
 
@@ -776,4 +783,134 @@ export function useMergePullRequest(orpc: SidecarQueryUtils): {
 	);
 
 	return { merge, isPending: mutation.isPending, error: mutation.error };
+}
+
+export type MarkPullRequestReadyParams = {
+	repoRoot: string;
+	owner: string;
+	repo: string;
+	number: number;
+};
+
+/**
+ * `pullRequests.markReady` — fires `gh pr ready`, flipping a draft PR to
+ * ready for review. `owner`/`repo` aren't part of the wire call itself (`gh
+ * pr ready` only needs `repoRoot`/`number`), but are threaded through so the
+ * success handler can invalidate this PR's own `mergeStatus` — the same
+ * query `useMergePullRequest` invalidates, since `isDraft` drives both the
+ * header's menu-item visibility and the merge button's own draft label, and
+ * both must update without a manual refresh. On failure, surfaces a toast
+ * rather than touching any cached state — there's nothing honest to predict
+ * client-side about draft status before the round trip resolves.
+ */
+export function useMarkPullRequestReady(orpc: SidecarQueryUtils): {
+	markReady: (params: MarkPullRequestReadyParams) => void;
+	isPending: boolean;
+} {
+	const queryClient = useQueryClient();
+	const mutation = useMutation({
+		...orpc.pullRequests.markReady.mutationOptions(),
+		onError: (error) => {
+			toastManager.add({
+				title: "Failed to mark pull request ready for review",
+				description: error instanceof Error ? error.message : String(error),
+				type: "error",
+			});
+		},
+	});
+
+	const markReady = useCallback(
+		(params: MarkPullRequestReadyParams) => {
+			mutation.mutate(
+				{ repoRoot: params.repoRoot, number: params.number },
+				{
+					onSuccess: () => {
+						queryClient.invalidateQueries({
+							queryKey: orpc.pullRequests.mergeStatus.key({
+								input: {
+									repoRoot: params.repoRoot,
+									owner: params.owner,
+									repo: params.repo,
+									number: params.number,
+								},
+							}),
+						});
+					},
+				},
+			);
+		},
+		[mutation, queryClient, orpc],
+	);
+
+	return { markReady, isPending: mutation.isPending };
+}
+
+/**
+ * `pullRequests.unpushedCommits`'s result, collapsed to what the pre-merge
+ * dialog actually branches on. `"unpushed"` is the real "some commits won't
+ * be in this merge" case; `"unverifiable"` folds every failure mode
+ * (`NO_REMOTE_REF` — no `@{upstream}` and no matching `origin/<branch>` to
+ * diff against — and anything undeclared, like the sidecar being
+ * unreachable) into one outcome, since the caller shows the same
+ * confirmation dialog either way, just worded as "couldn't verify" instead
+ * of naming a count. An unverifiable state is exactly what the user needs to
+ * see before merging — silently treating it as clean would defeat the
+ * feature the same way a stale cached count would.
+ */
+export type UnpushedCommitsCheck =
+	| { status: "clean" }
+	| { status: "unpushed"; count: number; remoteRef: string }
+	| { status: "unverifiable"; message: string };
+
+/** `pullRequests.unpushedCommits`'s declared `NO_REMOTE_REF` carries no server-authored message (there's nothing to diff against, not a failure with detail) — named explicitly rather than falling through to `mergeStatusErrorMessage`'s generic copy. Anything else undeclared (sidecar unreachable) still gets that generic fallback. */
+const unpushedCommitsErrorMessage = (error: unknown): string => {
+	if (error instanceof ORPCError && error.code === "NO_REMOTE_REF") {
+		return "This branch has no remote to compare against.";
+	}
+	if (error instanceof ORPCError && typeof error.message === "string") {
+		return error.message;
+	}
+	if (error instanceof Error) return error.message;
+	return "Couldn't check whether every local commit has been pushed.";
+};
+
+/**
+ * `pullRequests.unpushedCommits` fired as a plain mutation rather than a
+ * `useQuery` — the Merge button needs a *fresh* round trip at click time to
+ * catch commits made moments before clicking, and a cached/polled query is
+ * exactly the failure mode that would defeat that (TanStack Query could
+ * serve a click a count that's seconds or minutes stale). `check` resolves
+ * rather than throws on failure — `UnpushedCommitsCheck`'s `"unverifiable"`
+ * branch is a real outcome the caller renders, not an exceptional one.
+ */
+export function useUnpushedCommitsCheck(orpc: SidecarQueryUtils): {
+	check: (repoRoot: string) => Promise<UnpushedCommitsCheck>;
+	isPending: boolean;
+} {
+	const mutation = useMutation(
+		orpc.pullRequests.unpushedCommits.mutationOptions(),
+	);
+
+	const check = useCallback(
+		async (repoRoot: string): Promise<UnpushedCommitsCheck> => {
+			try {
+				const result = await mutation.mutateAsync({ repoRoot });
+				return result.count === 0
+					? { status: "clean" }
+					: {
+							status: "unpushed",
+							count: result.count,
+							remoteRef: result.remoteRef,
+						};
+			} catch (error) {
+				return {
+					status: "unverifiable",
+					message: unpushedCommitsErrorMessage(error),
+				};
+			}
+		},
+		[mutation],
+	);
+
+	return { check, isPending: mutation.isPending };
 }
