@@ -12,8 +12,15 @@ import {
 	DropdownMenu,
 	DropdownMenuContent,
 	DropdownMenuItem,
+	DropdownMenuSub,
+	DropdownMenuSubContent,
+	DropdownMenuSubTrigger,
 	DropdownMenuTrigger,
 } from "#/components/ui/menu";
+import {
+	openInEditor,
+	useAvailableEditors,
+} from "#/hooks/use-available-editors";
 import type { FileChange, FileStatus, ReviewState } from "#/lib/pr-data";
 import { splitPath } from "#/lib/tree-paths";
 import { cn } from "#/lib/utils";
@@ -87,6 +94,8 @@ export function DiffFileHeader({
 	onToggleCollapse,
 }: DiffFileHeaderProps): React.ReactElement {
 	const { dirname, basename } = splitPath(file.path);
+	const { editors, loadEditors } = useAvailableEditors();
+	const absolutePath = `${repoRoot}/${file.path}`;
 
 	return (
 		// biome-ignore lint/a11y/useSemanticElements: can't be a real <button> — it hosts the Reviewed <label>/<Checkbox> and the "…" dropdown trigger, controls a nested <button> would break.
@@ -152,7 +161,11 @@ export function DiffFileHeader({
 				/>
 				Reviewed
 			</label>
-			<DropdownMenu>
+			<DropdownMenu
+				onOpenChange={(open) => {
+					if (open) loadEditors();
+				}}
+			>
 				<DropdownMenuTrigger
 					aria-label="File actions"
 					className={cn(
@@ -175,12 +188,27 @@ export function DiffFileHeader({
 						Copy path
 					</DropdownMenuItem>
 					<DropdownMenuItem
-						onClick={() =>
-							navigator.clipboard.writeText(`${repoRoot}/${file.path}`)
-						}
+						onClick={() => navigator.clipboard.writeText(absolutePath)}
 					>
 						Copy absolute path
 					</DropdownMenuItem>
+					{editors.length > 0 && (
+						<DropdownMenuSub>
+							<DropdownMenuSubTrigger>Open in...</DropdownMenuSubTrigger>
+							<DropdownMenuSubContent>
+								{editors.map((editor) => (
+									<DropdownMenuItem
+										key={editor.id}
+										onClick={() =>
+											openInEditor(editor.id, editor.name, absolutePath)
+										}
+									>
+										{editor.name}
+									</DropdownMenuItem>
+								))}
+							</DropdownMenuSubContent>
+						</DropdownMenuSub>
+					)}
 				</DropdownMenuContent>
 			</DropdownMenu>
 		</div>

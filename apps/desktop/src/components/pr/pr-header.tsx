@@ -1,8 +1,6 @@
 "use client";
 
-import { invoke } from "@tauri-apps/api/core";
 import { MoreHorizontalIcon } from "lucide-react";
-import { useState } from "react";
 import {
 	Breadcrumb,
 	BreadcrumbItem,
@@ -20,7 +18,10 @@ import {
 	DropdownMenuSubTrigger,
 	DropdownMenuTrigger,
 } from "#/components/ui/menu";
-import { toastManager } from "#/components/ui/toast";
+import {
+	openInEditor,
+	useAvailableEditors,
+} from "#/hooks/use-available-editors";
 import type { SidecarQueryUtils } from "#/lib/backend-context";
 import type { SessionTarget } from "#/lib/pr-data";
 import {
@@ -38,34 +39,6 @@ type PrHeaderProps = {
 	stat: { additions: number; deletions: number };
 	onCloseTab: () => void;
 };
-
-/** An editor with a URL scheme registered in macOS Launch Services — see `editors.rs`'s `list_available_editors`. */
-type EditorInfo = {
-	id: string;
-	name: string;
-};
-
-/**
- * Opens `repoRoot` in the editor registered for `scheme` — repo-root only,
- * no file/line targeting. Surfaces a failed `open_in_editor` invoke as a
- * toast rather than swallowing it, matching how failed refetches are
- * surfaced elsewhere (`use-refetch-toasts.ts`).
- */
-function openInEditor(
-	scheme: string,
-	editorName: string,
-	repoRoot: string,
-): void {
-	invoke("open_in_editor", { scheme, path: repoRoot }).catch(
-		(error: unknown) => {
-			toastManager.add({
-				title: `Failed to open in ${editorName}`,
-				description: error instanceof Error ? error.message : String(error),
-				type: "error",
-			});
-		},
-	);
-}
 
 type MarkReadyMenuItemProps = {
 	orpc: SidecarQueryUtils;
@@ -121,7 +94,7 @@ export function PrHeader({
 }: PrHeaderProps): React.ReactElement {
 	const repoNameSegments = repoRoot.split("/");
 	const repoName = repoNameSegments[repoNameSegments.length - 1] || repoRoot;
-	const [editors, setEditors] = useState<EditorInfo[]>([]);
+	const { editors, loadEditors } = useAvailableEditors();
 
 	return (
 		<div className="flex items-center gap-3 border-b px-4 py-2.5">
@@ -179,17 +152,7 @@ export function PrHeader({
 			)}
 			<DropdownMenu
 				onOpenChange={(open) => {
-					if (!open) return;
-					invoke<EditorInfo[]>("list_available_editors")
-						.then(setEditors)
-						.catch((error: unknown) => {
-							toastManager.add({
-								title: "Failed to list available editors",
-								description:
-									error instanceof Error ? error.message : String(error),
-								type: "error",
-							});
-						});
+					if (open) loadEditors();
 				}}
 			>
 				<DropdownMenuTrigger

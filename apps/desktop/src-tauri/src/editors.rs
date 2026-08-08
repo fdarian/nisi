@@ -67,8 +67,9 @@ const PATH_SAFE: &AsciiSet = &NON_ALPHANUMERIC
     .remove(b'~');
 
 /**
- * Opens `path` — a repo root, never a specific file/line — in the editor
- * registered for `scheme`. Built as `<scheme>://file/<percent-encoded-path>`
+ * Opens `path` — a repo root or a specific file, never a line within one —
+ * in the editor registered for `scheme`. Built as
+ * `<scheme>://file/<percent-encoded-path>`
  * and handed to `tauri_plugin_opener`'s Rust `open_url` directly (the plugin
  * already registered in `lib.rs`'s builder; its sibling `tauri_plugin_shell`
  * has an equivalent `open`, but that one is deprecated in favor of this).
