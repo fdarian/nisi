@@ -111,6 +111,40 @@ export const UnpushedCommits = Schema.Struct({
 });
 export type UnpushedCommits = Schema.Schema.Type<typeof UnpushedCommits>;
 
+/** Mirrors `@repo/git`'s `PullRequestCheckStatus` — the 5-state vocabulary `apps/desktop/src/components/pr/ci-status.tsx`'s `CiCheckStatus` renders. */
+export const PullRequestCheckStatus = Schema.Literals([
+	"passing",
+	"failing",
+	"running",
+	"pending",
+	"skipped",
+]);
+export type PullRequestCheckStatus = Schema.Schema.Type<
+	typeof PullRequestCheckStatus
+>;
+
+/**
+ * Mirrors `@repo/git`'s `PullRequestCheck` — one CI check attached to a PR,
+ * GitHub Actions or an external status integration alike. Deliberately
+ * *not* structurally identical to `ci-status.tsx`'s `CiCheck`: `durationMs`
+ * is a fact, not a formatted string — turning it into `CiCheck`'s `detail`
+ * text is `pr-ci-status.tsx`'s job, the one place that actually knows how a
+ * duration should read. Keeping that formatting here would leak a
+ * presentation concern two layers below the UI. `workflowName` is carried
+ * for the same reason: `name` alone isn't guaranteed unique (two different
+ * Actions workflows can both define a job called `test`), and only
+ * `pr-ci-status.tsx` — once it can see the whole fetched set — knows which
+ * names are actually ambiguous and need qualifying.
+ */
+export const PullRequestCheck = Schema.Struct({
+	name: Schema.String,
+	status: PullRequestCheckStatus,
+	durationMs: Schema.optional(Schema.Number),
+	detailsUrl: Schema.optional(Schema.String),
+	workflowName: Schema.optional(Schema.String),
+});
+export type PullRequestCheck = Schema.Schema.Type<typeof PullRequestCheck>;
+
 /**
  * `search` asks GitHub live via `@repo/git`'s `searchPullRequests` — no
  * local index or cache, so every call is a real `gh search prs` round trip.
@@ -169,6 +203,20 @@ export type UnpushedCommits = Schema.Schema.Type<typeof UnpushedCommits>;
  * generic `SERVICE_UNAVAILABLE` a `gh` failure that isn't auth/not-found/
  * not-mergeable falls back to. See `apps/desktop/sidecar/http.ts`'s handlers
  * for the full error mapping.
+ *
+ * `checks` backs the PR header's `CiStatus` ring — `@repo/git`'s
+ * `fetchPullRequestChecks` mapped straight through onto `PullRequestCheck`
+ * above, same input shape as `mergeStatus` (only `repoRoot`/`number`
+ * actually drive the underlying `gh pr view`, but `owner`/`repo` are kept
+ * for consistency with every other per-PR procedure here). Its three error
+ * codes mirror `mergeStatus`'s PR-scoped subset (no
+ * `MERGE_STATUS_UNAVAILABLE` — nothing here needs push access) — see
+ * `apps/desktop/sidecar/http.ts`'s handler for the mapping. A PR with no CI
+ * configured legitimately resolves to an empty array, which `CiStatus`
+ * already renders as nothing rather than an empty ring. Turning
+ * `durationMs` into `CiStatus`'s human-readable `detail` string is left to
+ * `apps/desktop/src/components/pr/pr-ci-status.tsx` — this wire shape
+ * carries the fact, not the formatting.
  *
  * `unpushedCommits` backs the pre-merge "you have local unpushed commits"
  * check — unlike every other procedure here, it's about the *local*
@@ -270,6 +318,22 @@ export const pullRequestsContract = {
 			GH_NOT_AUTHENTICATED: {},
 			NOT_FOUND: {},
 			SERVICE_UNAVAILABLE: {},
+		}),
+	checks: oc
+		.input(
+			Schema.Struct({
+				repoRoot: Schema.String,
+				owner: Schema.String,
+				repo: Schema.String,
+				number: Schema.Number,
+			}),
+		)
+		.output(Schema.Array(PullRequestCheck))
+		.errors({
+			GH_NOT_AUTHENTICATED: {},
+			TOO_MANY_REQUESTS: {},
+			SERVICE_UNAVAILABLE: {},
+			NOT_FOUND: {},
 		}),
 	unpushedCommits: oc
 		.input(Schema.Struct({ repoRoot: Schema.String }))

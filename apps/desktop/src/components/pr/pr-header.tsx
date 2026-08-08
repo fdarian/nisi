@@ -28,6 +28,7 @@ import {
 	usePullRequestMergeStatus,
 } from "#/lib/pr-data";
 import { cn } from "#/lib/utils";
+import { PrCiStatus } from "./pr-ci-status";
 import { PrMergeButton } from "./pr-merge-button";
 
 type PrHeaderProps = {
@@ -159,13 +160,22 @@ export function PrHeader({
 				</div>
 			</div>
 			{target.kind === "pr" && (
-				<PrMergeButton
-					number={target.number}
-					orpc={orpc}
-					owner={target.owner}
-					repo={target.repo}
-					repoRoot={repoRoot}
-				/>
+				<div className='flex items-center gap-1'>
+					<PrCiStatus
+						number={target.number}
+						orpc={orpc}
+						owner={target.owner}
+						repo={target.repo}
+						repoRoot={repoRoot}
+					/>
+					<PrMergeButton
+						number={target.number}
+						orpc={orpc}
+						owner={target.owner}
+						repo={target.repo}
+						repoRoot={repoRoot}
+					/>
+				</div>
 			)}
 			<DropdownMenu
 				onOpenChange={(open) => {

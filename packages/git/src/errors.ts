@@ -352,6 +352,20 @@ export type PullRequestMergeabilityError =
 	| PullRequestMergeStatusUnavailable
 	| PullRequestNotFound;
 
+/**
+ * Every way `fetchPullRequestChecks` (`pull-request-checks.ts`) can fail —
+ * no new tagged errors of its own, since a PR-scoped `gh pr view` call has
+ * exactly the same three failure shapes `fetchPullRequestMergeability`
+ * already has: not authenticated, rate-limited, or the PR itself couldn't be
+ * resolved. `GhOutputDecodeError` covers `statusCheckRollup` not matching the
+ * two check shapes that module decodes.
+ */
+export type PullRequestChecksError =
+	| GhOutputDecodeError
+	| GhNotAuthenticated
+	| GhRateLimited
+	| PullRequestNotFound;
+
 export type RepoMergeMethodsError =
 	| GhOutputDecodeError
 	| GhNotAuthenticated

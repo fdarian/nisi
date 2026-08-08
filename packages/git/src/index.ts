@@ -32,6 +32,7 @@ export {
 	NoOriginRemote,
 	NoRemoteRefToCompare,
 	NotAGitRepository,
+	type PullRequestChecksError,
 	type PullRequestMergeabilityError,
 	type PullRequestMergeError,
 	PullRequestMergeStatusUnavailable,
@@ -67,6 +68,12 @@ export {
 	resolveReviewTargetForPullRequest,
 	searchPullRequests,
 } from "./pull-request.ts";
+export type {
+	FetchPullRequestChecksInput,
+	PullRequestCheck,
+	PullRequestCheckStatus,
+} from "./pull-request-checks.ts";
+export { fetchPullRequestChecks } from "./pull-request-checks.ts";
 export type {
 	MergeMethod,
 	PullRequestMergeability,

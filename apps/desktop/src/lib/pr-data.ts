@@ -845,6 +845,66 @@ export function useMarkPullRequestReady(orpc: SidecarQueryUtils): {
 	return { markReady, isPending: mutation.isPending };
 }
 
+/** Mirrors `PullRequestCheckStatus` (`packages/sidecar-api/src/pull-requests.ts`) — the 5-state vocabulary `ci-status.tsx`'s `CiCheckStatus` renders. */
+export type PullRequestCheckStatus =
+	| "passing"
+	| "failing"
+	| "running"
+	| "pending"
+	| "skipped";
+
+/**
+ * Mirrors `PullRequestCheck` (`packages/sidecar-api/src/pull-requests.ts`).
+ * Deliberately *not* shaped like `ci-status.tsx`'s `CiCheck` — `durationMs`
+ * is a fact, not the formatted `detail` string `CiCheck` wants. Turning one
+ * into the other is `pr-ci-status.tsx`'s job (the wrapper stops being a
+ * pass-through and does that mapping), which is where a presentation
+ * decision like "how does a duration read" belongs — not this data layer.
+ * `workflowName` is the same story for `name`: `gh` reports a `CheckRun`'s
+ * bare job name, which two different workflows can share — only
+ * `pr-ci-status.tsx`, seeing every check in the set at once, can tell which
+ * ones actually need disambiguating.
+ */
+export type PullRequestCheck = {
+	name: string;
+	status: PullRequestCheckStatus;
+	durationMs?: number;
+	detailsUrl?: string;
+	workflowName?: string;
+};
+
+export type PullRequestChecksParams = {
+	repoRoot: string;
+	owner: string;
+	repo: string;
+	number: number;
+};
+
+/**
+ * `pullRequests.checks` — every CI check attached to the PR, backing the
+ * header's `CiStatus` ring. Polls only while something is still unsettled
+ * (any check `"running"`/`"pending"`) — unlike `usePullRequestMergeStatus`'s
+ * 2s cadence, CI is slow (real pipelines run minutes, not seconds), so a
+ * tight poll would just spam the sidecar with `gh pr view` calls for no
+ * visible benefit. `false` (TanStack Query's "stop polling") once every
+ * check has settled, same as a query that never had anything in flight (a PR
+ * with zero checks, or every check already passing/failing/skipped).
+ */
+export function usePullRequestChecks(
+	orpc: SidecarQueryUtils,
+	params: PullRequestChecksParams,
+): UseQueryResult<readonly PullRequestCheck[]> {
+	return useQuery({
+		...orpc.pullRequests.checks.queryOptions({ input: params }),
+		refetchInterval: (query) =>
+			query.state.data?.some(
+				(check) => check.status === "running" || check.status === "pending",
+			) === true
+				? 10000
+				: false,
+	});
+}
+
 /**
  * `pullRequests.unpushedCommits`'s result, collapsed to what the pre-merge
  * dialog actually branches on. `"unpushed"` is the real "some commits won't

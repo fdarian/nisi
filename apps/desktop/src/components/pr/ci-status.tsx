@@ -1,0 +1,180 @@
+"use client";
+
+import type React from "react";
+import {
+	PreviewCard,
+	PreviewCardPopup,
+	PreviewCardTrigger,
+} from "#/components/ui/preview-card";
+import { cn } from "#/lib/utils";
+
+export type CiCheckStatus =
+	| "passing"
+	| "failing"
+	| "running"
+	| "pending"
+	| "skipped";
+
+export type CiCheck = {
+	name: string;
+	status: CiCheckStatus;
+	/** Free-form line shown under the name — a duration, a conclusion, whatever the source has. */
+	detail?: string;
+};
+
+type CiStatusProps = {
+	checks: readonly CiCheck[];
+	className?: string;
+};
+
+const STATUS_LABEL: Record<CiCheckStatus, string> = {
+	passing: "Passing",
+	failing: "Failing",
+	running: "Running",
+	pending: "Queued",
+	skipped: "Skipped",
+};
+
+/** Ring segment + popover dot share one color, so the arc reads as the row. */
+const STATUS_STROKE: Record<CiCheckStatus, string> = {
+	passing: "stroke-success",
+	failing: "stroke-destructive",
+	running: "stroke-warning",
+	pending: "stroke-muted-foreground/40",
+	skipped: "stroke-muted-foreground/25",
+};
+
+const STATUS_DOT: Record<CiCheckStatus, string> = {
+	passing: "bg-success",
+	failing: "bg-destructive",
+	running: "bg-warning",
+	pending: "bg-muted-foreground/40",
+	skipped: "bg-muted-foreground/25",
+};
+
+const VIEWBOX = 24;
+const STROKE_WIDTH = 3;
+const RADIUS = (VIEWBOX - STROKE_WIDTH) / 2;
+const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
+/** Visual breathing room between segments, in viewBox units. Shrinks so it can't eat a segment whole. */
+const MAX_SEGMENT_GAP = 2.5;
+
+/**
+ * Headline the popover leads with. Failures outrank in-flight work, which
+ * outranks everything settled — the reason you'd glance at this at all is to
+ * find out whether the PR is blocked.
+ */
+function summarize(checks: readonly CiCheck[]): string {
+	const failing = checks.filter((check) => check.status === "failing").length;
+	if (failing > 0) return `${failing} failing`;
+
+	const running = checks.filter((check) => check.status === "running").length;
+	if (running > 0) return `${running} running`;
+
+	const pending = checks.filter((check) => check.status === "pending").length;
+	if (pending > 0) return `${pending} queued`;
+
+	const passing = checks.filter((check) => check.status === "passing").length;
+	if (passing === checks.length) return "All checks passed";
+
+	return `${passing} passing`;
+}
+
+/**
+ * One arc per check around a ring labeled "CI", hover for the full list.
+ *
+ * Renders nothing when there are no checks — a PR with no CI configured
+ * shouldn't get an empty ring implying something is still coming.
+ */
+export function CiStatus({
+	checks,
+	className,
+}: CiStatusProps): React.ReactElement | null {
+	if (checks.length === 0) return null;
+
+	const step = CIRCUMFERENCE / checks.length;
+	// A single check gets an unbroken ring — a gap there would read as a second, missing check.
+	const gap = checks.length === 1 ? 0 : Math.min(MAX_SEGMENT_GAP, step * 0.4);
+	const segment = step - gap;
+	const summary = summarize(checks);
+
+	return (
+		<PreviewCard>
+			<PreviewCardTrigger
+				aria-label={`CI: ${summary}`}
+				className={cn(
+					"flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-1",
+					className,
+				)}
+				closeDelay={100}
+				delay={120}
+				render={<button type="button" />}
+			>
+				<svg
+					aria-hidden="true"
+					className="size-5.5"
+					fill="none"
+					viewBox={`0 0 ${VIEWBOX} ${VIEWBOX}`}
+					xmlns="http://www.w3.org/2000/svg"
+				>
+					<g transform={`rotate(-90 ${VIEWBOX / 2} ${VIEWBOX / 2})`}>
+						{checks.map((check, index) => (
+							<circle
+								className={cn(
+									STATUS_STROKE[check.status],
+									check.status === "running" && "animate-pulse",
+								)}
+								cx={VIEWBOX / 2}
+								cy={VIEWBOX / 2}
+								key={check.name}
+								r={RADIUS}
+								strokeDasharray={`${segment} ${CIRCUMFERENCE - segment}`}
+								strokeDashoffset={-index * step}
+								strokeWidth={STROKE_WIDTH}
+							/>
+						))}
+					</g>
+					<text
+						className="fill-foreground font-semibold text-[8px]"
+						dominantBaseline="central"
+						textAnchor="middle"
+						x={VIEWBOX / 2}
+						y={VIEWBOX / 2 + 0.5}
+					>
+						CI
+					</text>
+				</svg>
+			</PreviewCardTrigger>
+			<PreviewCardPopup align="end" className="w-72 flex-col gap-2 p-2">
+				<div className="flex items-baseline justify-between gap-2 px-1">
+					<span className="font-medium text-xs">{summary}</span>
+					<span className="text-muted-foreground text-xs">
+						{checks.length} {checks.length === 1 ? "check" : "checks"}
+					</span>
+				</div>
+				<ul className="flex max-h-64 flex-col overflow-y-auto">
+					{checks.map((check) => (
+						<li
+							className="flex items-center gap-2 rounded-sm px-1 py-1"
+							key={check.name}
+						>
+							<span
+								className={cn(
+									"size-1.5 shrink-0 rounded-full",
+									STATUS_DOT[check.status],
+									check.status === "running" && "animate-pulse",
+								)}
+							/>
+							<span className="min-w-0 flex-1 truncate text-xs">
+								{check.name}
+							</span>
+							<span className="shrink-0 text-muted-foreground text-xs">
+								{check.detail ?? STATUS_LABEL[check.status]}
+							</span>
+						</li>
+					))}
+				</ul>
+			</PreviewCardPopup>
+		</PreviewCard>
+	);
+}

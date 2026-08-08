@@ -8,6 +8,7 @@ import {
 } from "@orpc/server/plugins";
 import { refreshLoginShellPath } from "@repo/bin-resolver";
 import {
+	fetchPullRequestChecks,
 	fetchPullRequestMergeability,
 	fetchRepoMergeMethods,
 	type GitCommandError,
@@ -1077,6 +1078,49 @@ export function attachRouter(
 					repoRoot: input.repoRoot,
 					number: input.number,
 				});
+			}),
+			// Backs the PR header's `CiStatus` ring — `@repo/git`'s
+			// `fetchPullRequestChecks` mapped straight through. Error
+			// classification is the PR-scoped subset of `mergeStatus`'s (no
+			// `MERGE_STATUS_UNAVAILABLE` — nothing here needs push access).
+			checks: authed.pullRequests.checks.effect(function* ({ input, errors }) {
+				return yield* fetchPullRequestChecks(input).pipe(
+					Effect.catchTag("GhNotAuthenticated", (cause) =>
+						Effect.fail(
+							errors.GH_NOT_AUTHENTICATED({
+								message: `gh is not authenticated: ${cause.reason}`,
+							}),
+						),
+					),
+					Effect.catchTag("GhRateLimited", (cause) =>
+						Effect.fail(
+							errors.TOO_MANY_REQUESTS({
+								message: `GitHub's API is rate-limited right now: ${cause.reason}`,
+							}),
+						),
+					),
+					Effect.catchTag("GhOutputDecodeError", (cause) =>
+						Effect.fail(
+							errors.SERVICE_UNAVAILABLE({
+								message: `gh returned output nisi couldn't parse (${cause.command})`,
+							}),
+						),
+					),
+					Effect.catchTag("PullRequestNotFound", (cause) =>
+						Effect.fail(
+							errors.NOT_FOUND({
+								message: `pull request #${cause.number} couldn't be resolved on GitHub for ${cause.repoRoot}: ${cause.reason}`,
+							}),
+						),
+					),
+					Effect.catchTag("GitCommandError", (cause) =>
+						Effect.fail(
+							errors.SERVICE_UNAVAILABLE({
+								message: `${cause.command} could not be run: ${cause.stderr || String(cause.cause)}`,
+							}),
+						),
+					),
+				);
 			}),
 			// The pre-merge "you have local unpushed commits" check — about the
 			// local worktree branch, not the PR, so it only needs `repoRoot`.
