@@ -370,6 +370,17 @@ export function FilesChangedView({
 		selectPath(lastRecord.path);
 	}, [setViewed, selectPath]);
 
+	// Tree view's right-click "Mark as Reviewed"/"Mark Folder as Reviewed" —
+	// no undo stack entry, unlike `handleToggleReviewed`: a folder can resolve
+	// to many paths, and this is a one-way "mark reviewed" action rather than
+	// `r`'s toggle, so there's no single prior state to restore.
+	const handleMarkReviewed = useCallback(
+		(paths: readonly string[]) => {
+			for (const path of paths) setViewed(path, true);
+		},
+		[setViewed],
+	);
+
 	useKeyBindings(
 		{
 			j: () => selectRelative(1),
@@ -404,6 +415,7 @@ export function FilesChangedView({
 				filterQuery={filterQuery}
 				files={queryFilteredFiles}
 				onFilterQueryChange={handleFilterQueryChange}
+				onMarkReviewed={handleMarkReviewed}
 				onQuerySubmit={handleQuerySubmit}
 				onSearchModeChange={handleSearchModeChange}
 				onSelectPath={selectPath}

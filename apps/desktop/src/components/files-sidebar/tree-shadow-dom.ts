@@ -30,6 +30,11 @@ export function buildTreeThemeStyle(): CSSProperties {
 		"--trees-font-family-override": "var(--font-sans)",
 		"--trees-focus-ring-color-override": "var(--ring)",
 		"--trees-border-radius-override": "var(--radius-md)",
+		// The lane only reserves row width so a long filename truncates before
+		// running under the "…" trigger — the trigger itself is an overlay, not
+		// a lane child, so this has to cover its box *and* its inset (see
+		// `buildActionButtonCSS`), not just the 16px glyph the default assumes.
+		"--trees-action-lane-width-override": "28px",
 		height: "100%",
 	} as CSSProperties;
 }
@@ -265,6 +270,73 @@ export function syncDecorationIconStyle(treeHost: HTMLElement | null): boolean {
 		treeHost,
 		DECORATION_ICON_STYLE_ATTRIBUTE,
 		buildDecorationIconCSS(),
+	);
+}
+
+const ACTION_BUTTON_STYLE_ATTRIBUTE = "data-nisi-action-button";
+
+/** The row-actions "…" button `@pierre/trees` reveals on hover/focus. */
+const ACTION_BUTTON_SELECTOR = '[data-type="context-menu-trigger"]';
+
+/**
+ * Gives that button `Button`'s `variant="ghost"` icon treatment. The library
+ * styles it as a bare glyph — `all: unset` plus a `color`-only hover
+ * transition, in a lane exactly as wide as the icon, rounded on its right
+ * corners alone — so on hover it only brightened, with no background and
+ * nothing to read as a hit target.
+ *
+ * Overriding works without fighting specificity: the library's own rules are
+ * wrapped in `@layer base`, and this injected `<style>` is unlayered, so it
+ * wins outright — unlayered CSS always beats layered CSS, whatever the
+ * selector weight or document order.
+ *
+ * `margin-block` is what centers it, and it isn't optional. The button isn't a
+ * child of the row: it lives in one shared `context-menu-anchor` overlay that
+ * `position: absolute`s to the hovered row's `top` and has no height of its
+ * own, so a control shorter than the row hangs from the row's top edge rather
+ * than sitting in its middle. The library sidestepped that by sizing the
+ * button to the full row height (`row - 2 * ring`, plus a `1px` margin);
+ * shrinking it to an inset square means centering it explicitly instead.
+ *
+ * The background is `--sidebar-accent`, the same token the row hover uses.
+ * That reads as a distinct control rather than vanishing into the row it sits
+ * on because the token is a 4% *alpha* overlay, not an opaque fill: the
+ * button's overlay composites on top of the hovered row's, landing at roughly
+ * double the tint.
+ */
+function buildActionButtonCSS(): string {
+	return `
+${ACTION_BUTTON_SELECTOR} {
+	--nisi-action-button-size: 22px;
+	width: var(--nisi-action-button-size);
+	height: var(--nisi-action-button-size);
+	margin-block: calc((var(--trees-row-height) - var(--nisi-action-button-size)) / 2);
+	/* Insets the square from the row's content edge, which is where the
+	   overlay's own \`right\` would otherwise flush it against. */
+	margin-inline: 0 3px;
+	border-radius: var(--radius-md);
+	background-color: transparent;
+	transition: background-color .12s, color .12s;
+}
+
+${ACTION_BUTTON_SELECTOR}:hover,
+${ACTION_BUTTON_SELECTOR}[aria-expanded="true"] {
+	background-color: var(--sidebar-accent);
+	color: var(--sidebar-accent-foreground);
+}
+`;
+}
+
+/**
+ * Appends/updates the action-button `<style>` inside the tree's shadow root.
+ * Returns false when the shadow root doesn't exist yet (tree not mounted), so
+ * the caller can retry on the next frame.
+ */
+export function syncActionButtonStyle(treeHost: HTMLElement | null): boolean {
+	return syncShadowStyle(
+		treeHost,
+		ACTION_BUTTON_STYLE_ATTRIBUTE,
+		buildActionButtonCSS(),
 	);
 }
 

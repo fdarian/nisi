@@ -39,6 +39,9 @@ type FilesSidebarProps = {
 	viewMode: SidebarViewMode;
 	selectedPath: string | null;
 	onSelectPath: (path: string) => void;
+	/** Tree view's right-click "Mark as Reviewed"/"Mark Folder as Reviewed" — a
+	 * folder target resolves to every file path nested under it. */
+	onMarkReviewed: (paths: readonly string[]) => void;
 	/** Owned by `FilesChangedView` — a keyboard `j`/`k` walk needs the same
 	 * filtered list the sidebar renders, not just its own unfiltered `files`. */
 	filterQuery: string;
@@ -62,6 +65,7 @@ export function FilesSidebar({
 	viewMode,
 	selectedPath,
 	onSelectPath,
+	onMarkReviewed,
 	filterQuery,
 	onFilterQueryChange,
 	onQuerySubmit,
@@ -193,6 +197,7 @@ export function FilesSidebar({
 				// of its own, so it keeps the `ScrollArea`.
 				<FileTreeView
 					files={files}
+					onMarkReviewed={onMarkReviewed}
 					onSelectPath={onSelectPath}
 					reviewState={reviewState}
 					selectedPath={selectedPath}

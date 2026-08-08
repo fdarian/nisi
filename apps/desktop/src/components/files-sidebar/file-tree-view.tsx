@@ -1,6 +1,8 @@
 "use client";
 
 import type {
+	ContextMenuItem,
+	ContextMenuOpenContext,
 	FileTreeDirectoryHandle,
 	FileTreeItemHandle,
 } from "@pierre/trees";
@@ -16,11 +18,17 @@ import {
 	buildStatusColorCSS,
 	buildTreeThemeStyle,
 	createRowDecorationRenderer,
+	syncActionButtonStyle,
 	syncDecorationIconStyle,
 	syncFolderIconStyle,
 	syncScrollFadeStyle,
 	syncStatusColorStyle,
 } from "#/components/files-sidebar/tree-shadow-dom";
+import {
+	DropdownMenu,
+	DropdownMenuContent,
+	DropdownMenuItem,
+} from "#/components/ui/menu";
 import type { FileChange, ReviewStateEntry } from "#/lib/pr-data";
 import { collectAncestorDirectoryPaths, comparePaths } from "#/lib/tree-paths";
 
@@ -29,6 +37,8 @@ type FileTreeViewProps = {
 	reviewState: ReadonlyMap<string, ReviewStateEntry>;
 	selectedPath: string | null;
 	onSelectPath: (path: string) => void;
+	/** A folder target resolves to every file path nested under it. */
+	onMarkReviewed: (paths: readonly string[]) => void;
 };
 
 type TreeModel = {
@@ -60,6 +70,74 @@ function buildTreeModel(files: readonly FileChange[]): TreeModel {
 }
 
 /**
+ * The row-actions dropdown `@pierre/trees` opens once its hover-revealed "…"
+ * button (or a right-click) triggers it — the app's own `DropdownMenu`, not a
+ * native Tauri menu, so no `stopPropagation()` dance with `ShellFrame`'s own
+ * `onContextMenu` (`app-shell.tsx`) is needed here, unlike the app's
+ * OS-menu-backed context menus (`pr-merge-button.tsx`, `app-shell.tsx`).
+ *
+ * Anchored to `context.anchorElement` so Base UI's positioner portals and
+ * places it, rather than letting it render where `renderContextMenu` slots it
+ * in: the library only gives that in-place slot `position: fixed` for a
+ * right-click open (anchored at the click point) — a button-triggered open
+ * only sets a bare `top`, leaving the slot's `position: static` in force, so
+ * it inherits the tree's `overflow: hidden` and gets clipped at the sidebar's
+ * edge.
+ *
+ * `data-file-tree-context-menu-root` is required once the popup is portaled
+ * out of that slot: the library's outside-press detection
+ * (`isEventInContextMenu`) scans `composedPath()` for that attribute, the
+ * trigger, or the slot itself, and a portaled popup is none of those — without
+ * it, pressing inside the menu reads as an outside press and closes it. Base
+ * UI is left to own dismissal (its `onOpenChange` drives `context.close()`);
+ * `modal={false}` keeps that dismissal from also locking page scroll and
+ * blocking pointer events over the rest of the app.
+ *
+ * `item.path` carries a trailing slash for a directory (e.g. `"src/utils/"`)
+ * that a real file path never does — that's what makes the plain `startsWith`
+ * below a correct "every file nested under this folder" filter without a
+ * separate separator.
+ */
+function FileTreeRowActionsMenu({
+	item,
+	context,
+	files,
+	onMarkReviewed,
+}: {
+	item: ContextMenuItem;
+	context: ContextMenuOpenContext;
+	files: readonly FileChange[];
+	onMarkReviewed: (paths: readonly string[]) => void;
+}): React.ReactElement {
+	const isFile = item.kind === "file";
+	const paths = isFile
+		? [item.path]
+		: files
+				.map((file) => file.path)
+				.filter((path) => path.startsWith(item.path));
+
+	return (
+		<DropdownMenu
+			modal={false}
+			onOpenChange={(open) => {
+				if (!open) context.close();
+			}}
+			open
+		>
+			<DropdownMenuContent
+				align="end"
+				anchor={context.anchorElement}
+				data-file-tree-context-menu-root="true"
+			>
+				<DropdownMenuItem onClick={() => onMarkReviewed(paths)}>
+					{isFile ? "Mark as Reviewed" : "Mark Folder as Reviewed"}
+				</DropdownMenuItem>
+			</DropdownMenuContent>
+		</DropdownMenu>
+	);
+}
+
+/**
  * The whole sidebar as one `@pierre/trees` instance. One tree rather than
  * many is what lets the library window its rows: it only renders the rows
  * its own scroller can show, and that scroller has to be the sidebar's
@@ -70,6 +148,7 @@ export function FileTreeView({
 	reviewState,
 	selectedPath,
 	onSelectPath,
+	onMarkReviewed,
 }: FileTreeViewProps): React.ReactElement {
 	const treeHostRef = useRef<HTMLDivElement>(null);
 	const treeModel = useMemo(() => buildTreeModel(files), [files]);
@@ -83,6 +162,13 @@ export function FileTreeView({
 	);
 
 	const { model } = useFileTree({
+		// "when-needed" is what reveals the "…" action-lane button only on row
+		// hover/focus, rather than pinning it visible on every row — "both"
+		// keeps right-click as an alternate trigger for the same in-app
+		// dropdown (`renderContextMenu` below), not a native OS menu.
+		composition: {
+			contextMenu: { buttonVisibility: "when-needed", triggerMode: "both" },
+		},
 		density: "compact",
 		// Overrides compact's 24px default. Row height has to be set here
 		// rather than through a `--trees-row-height` CSS override: the
@@ -146,6 +232,14 @@ export function FileTreeView({
 	}, []);
 
 	useEffect(() => {
+		if (syncActionButtonStyle(treeHostRef.current)) return;
+		const frame = requestAnimationFrame(() => {
+			syncActionButtonStyle(treeHostRef.current);
+		});
+		return () => cancelAnimationFrame(frame);
+	}, []);
+
+	useEffect(() => {
 		const currentlySelected = model.getSelectedPaths();
 
 		if (selectedPath === null) {
@@ -201,11 +295,24 @@ export function FileTreeView({
 		[treeModel, onSelectPath, model],
 	);
 
+	const renderContextMenu = useCallback(
+		(item: ContextMenuItem, context: ContextMenuOpenContext) => (
+			<FileTreeRowActionsMenu
+				context={context}
+				files={files}
+				item={item}
+				onMarkReviewed={onMarkReviewed}
+			/>
+		),
+		[files, onMarkReviewed],
+	);
+
 	return (
 		<div className="min-h-0 flex-1" ref={treeHostRef}>
 			<FileTree
 				model={model}
 				onClick={handleClick}
+				renderContextMenu={renderContextMenu}
 				style={buildTreeThemeStyle()}
 			/>
 		</div>
