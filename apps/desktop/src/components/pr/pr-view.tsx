@@ -27,6 +27,7 @@ import {
 	useSessionWatch,
 	useSetFileViewed,
 } from "#/lib/pr-data";
+import { useWalkthroughEnabled } from "#/lib/settings-data";
 
 type PrViewProps = {
 	session: Session;
@@ -56,7 +57,14 @@ export function PrView({
 		session.id,
 	);
 
+	const [walkthroughEnabled] = useWalkthroughEnabled(orpc);
 	const [activeTab, setActiveTab] = useState("files");
+	// The user can flip `walkthroughEnabled` off while sitting on the
+	// Walkthrough tab — its `TabsList`/`TabsContent` stop rendering below, so
+	// the value actually handed to `<Tabs>` must fall back to "files"
+	// regardless of what `activeTab` state still holds, rather than mutating
+	// `activeTab` itself in an effect.
+	const tabsValue = walkthroughEnabled ? activeTab : "files";
 	// Lifted above the tabs, not local to `WalkthroughView` — a block
 	// selection should survive switching away to Files Changed and back, not
 	// reset every time the Walkthrough tab remounts.
@@ -68,7 +76,7 @@ export function PrView({
 	// see `isSelectedTab`'s doc comment) this PR's own tab selected, not some
 	// other open PR's.
 	const windowFocused = useWindowFocused();
-	const isFilesChangedVisible = activeTab === "files" && isSelectedTab;
+	const isFilesChangedVisible = tabsValue === "files" && isSelectedTab;
 	const watched = isFilesChangedVisible && windowFocused;
 	useSessionWatch(orpc, session.id, watched);
 	// The same `watched` rising edge doubles as the refetch trigger for
@@ -80,14 +88,6 @@ export function PrView({
 	// tab, whether or not the window currently has focus.
 	useDevToolScope("files-changed", isFilesChangedVisible);
 	useRefetchToasts(orpc, session.id);
-
-	useKeyBindings(
-		{
-			"1": () => setActiveTab("walkthrough"),
-			"2": () => setActiveTab("files"),
-		},
-		{ enabled: isSelectedTab },
-	);
 
 	const stat = useMemo(
 		() =>
@@ -113,14 +113,14 @@ export function PrView({
 			<Tabs
 				className="flex min-h-0 flex-1 flex-col gap-0"
 				onValueChange={(value) => setActiveTab(value as string)}
-				value={activeTab}
+				value={tabsValue}
 			>
-				<div className="border-b">
-					<TabsList className="mx-4" variant="underline">
-						<TabsTrigger value="walkthrough">Walkthrough</TabsTrigger>
-						<TabsTrigger value="files">Files Changed</TabsTrigger>
-					</TabsList>
-				</div>
+				{walkthroughEnabled && (
+					<WalkthroughTabStrip
+						isSelectedTab={isSelectedTab}
+						setActiveTab={setActiveTab}
+					/>
+				)}
 
 				<TabsContent className="flex min-h-0 flex-1 flex-col" value="files">
 					{error != null ? (
@@ -140,16 +140,51 @@ export function PrView({
 						/>
 					)}
 				</TabsContent>
-				<TabsContent className="flex min-h-0 flex-1" value="walkthrough">
-					<WalkthroughView
-						files={files}
-						onSelectBlock={setSelectedBlockId}
-						orpc={orpc}
-						selectedBlockId={selectedBlockId}
-						session={session}
-					/>
-				</TabsContent>
+				{walkthroughEnabled && (
+					<TabsContent className="flex min-h-0 flex-1" value="walkthrough">
+						<WalkthroughView
+							files={files}
+							onSelectBlock={setSelectedBlockId}
+							orpc={orpc}
+							selectedBlockId={selectedBlockId}
+							session={session}
+						/>
+					</TabsContent>
+				)}
 			</Tabs>
+		</div>
+	);
+}
+
+/**
+ * The Walkthrough/Files Changed tab strip, plus the `1`/`2` shortcuts that
+ * switch between them — co-located because they're the same feature: when
+ * `PrView` doesn't render this component (walkthrough disabled), the
+ * `useKeyBindings` listener underneath unmounts along with the tab strip it
+ * drives, so `1`/`2` become no-ops in one gate instead of a duplicated
+ * `walkthroughEnabled` check on the bindings themselves.
+ */
+function WalkthroughTabStrip({
+	setActiveTab,
+	isSelectedTab,
+}: {
+	setActiveTab: (tab: string) => void;
+	isSelectedTab: boolean;
+}): React.ReactElement {
+	useKeyBindings(
+		{
+			"1": () => setActiveTab("walkthrough"),
+			"2": () => setActiveTab("files"),
+		},
+		{ enabled: isSelectedTab },
+	);
+
+	return (
+		<div className="border-b">
+			<TabsList className="mx-4" variant="underline">
+				<TabsTrigger value="walkthrough">Walkthrough</TabsTrigger>
+				<TabsTrigger value="files">Files Changed</TabsTrigger>
+			</TabsList>
 		</div>
 	);
 }

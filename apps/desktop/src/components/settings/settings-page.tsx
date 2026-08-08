@@ -41,10 +41,11 @@ import {
 	SidebarProvider,
 } from "#/components/ui/sidebar";
 import { Spinner } from "#/components/ui/spinner";
+import { Switch } from "#/components/ui/switch";
 import { ToggleGroup, ToggleGroupItem } from "#/components/ui/toggle-group";
 import type { SidecarQueryUtils } from "#/lib/backend-context";
 import { useBackendContext } from "#/lib/backend-context";
-import { useUpdateSettings } from "#/lib/settings-data";
+import { useUpdateSettings, useWalkthroughEnabled } from "#/lib/settings-data";
 import { type HarnessId, useHarnesses } from "#/lib/walkthrough-data";
 
 /**
@@ -142,11 +143,17 @@ function SettingsContent({
 }: {
 	orpc: SidecarQueryUtils;
 }): React.ReactElement {
+	const [walkthroughEnabled] = useWalkthroughEnabled(orpc);
+
 	return (
 		<div className="mx-auto flex w-full max-w-2xl flex-col gap-6 overflow-y-auto px-8 py-12">
 			<h1 className="font-semibold text-2xl tracking-tight">Settings</h1>
 			<AppearanceSection />
-			<HarnessesSection orpc={orpc} />
+			<WalkthroughSection orpc={orpc} />
+			{/* Harness configuration is meaningless while the feature is off, and
+			mounting it triggers a macOS folder-permission prompt via `useHarnesses`
+			— so it doesn't mount at all until the setting is on. */}
+			{walkthroughEnabled && <HarnessesSection orpc={orpc} />}
 		</div>
 	);
 }
@@ -227,6 +234,36 @@ function AppearanceSection(): React.ReactElement {
 						<MonitorIcon />
 					</ToggleGroupItem>
 				</ToggleGroup>
+			</SettingsRow>
+		</SettingsSection>
+	);
+}
+
+/**
+ * The master toggle for the entire walkthrough feature — currently
+ * unstable, so it defaults to off (see `@repo/settings`'s
+ * `walkthroughEnabled`). Turning it off also unmounts `HarnessesSection`
+ * (see `SettingsContent`) and the PR view's Walkthrough tab/keyboard
+ * shortcuts (`pr-view.tsx`).
+ */
+function WalkthroughSection({
+	orpc,
+}: {
+	orpc: SidecarQueryUtils;
+}): React.ReactElement {
+	const [walkthroughEnabled, setWalkthroughEnabled] =
+		useWalkthroughEnabled(orpc);
+
+	return (
+		<SettingsSection title="Walkthrough">
+			<SettingsRow
+				description="Let an agent narrate this PR, every claim linked to a set of line ranges. Unstable — off by default."
+				title="Enable walkthrough"
+			>
+				<Switch
+					checked={walkthroughEnabled}
+					onCheckedChange={setWalkthroughEnabled}
+				/>
 			</SettingsRow>
 		</SettingsSection>
 	);

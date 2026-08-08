@@ -43,6 +43,8 @@ export const Settings = Schema.Struct({
 	diffStyleMode: DiffStyleMode,
 	hideReviewed: Schema.Boolean,
 	includeUncommitted: Schema.Boolean,
+	/** Gates the entire walkthrough feature — see `@repo/settings`'s `Settings.walkthroughEnabled`. */
+	walkthroughEnabled: Schema.Boolean,
 });
 export type Settings = Schema.Schema.Type<typeof Settings>;
 
@@ -58,6 +60,7 @@ export const SettingsUpdate = Schema.Struct({
 	diffStyleMode: Schema.optional(DiffStyleMode),
 	hideReviewed: Schema.optional(Schema.Boolean),
 	includeUncommitted: Schema.optional(Schema.Boolean),
+	walkthroughEnabled: Schema.optional(Schema.Boolean),
 });
 export type SettingsUpdate = Schema.Schema.Type<typeof SettingsUpdate>;
 

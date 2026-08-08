@@ -32,6 +32,8 @@ export type Settings = {
 	 * `input` (part of the TanStack Query cache key, not just the request).
 	 */
 	includeUncommitted: boolean;
+	/** Gates the entire walkthrough feature — see `@repo/settings`'s `Settings.walkthroughEnabled`. */
+	walkthroughEnabled: boolean;
 };
 
 /**
@@ -47,6 +49,7 @@ const DEFAULT_SETTINGS: Settings = {
 	diffStyleMode: "unified",
 	hideReviewed: false,
 	includeUncommitted: false,
+	walkthroughEnabled: false,
 };
 
 /** `settings.get`, defaulting to the sidecar's own defaults while the first fetch is in flight. */
@@ -138,6 +141,21 @@ export function useHideReviewed(
 	);
 
 	return [settings.hideReviewed, setHideReviewed];
+}
+
+/** Gates the entire walkthrough feature — see `@repo/settings`'s `walkthroughEnabled`. */
+export function useWalkthroughEnabled(
+	orpc: SidecarQueryUtils,
+): [boolean, (walkthroughEnabled: boolean) => void] {
+	const { settings } = useSettings(orpc);
+	const update = useUpdateSettings(orpc);
+
+	const setWalkthroughEnabled = useCallback(
+		(walkthroughEnabled: boolean) => update({ walkthroughEnabled }),
+		[update],
+	);
+
+	return [settings.walkthroughEnabled, setWalkthroughEnabled];
 }
 
 /** "Include uncommitted" preference — see `@repo/settings`'s `includeUncommitted`. */

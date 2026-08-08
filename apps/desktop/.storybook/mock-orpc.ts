@@ -35,6 +35,10 @@ const DEFAULT_SETTINGS: Settings = {
 	diffStyleMode: "unified",
 	hideReviewed: false,
 	includeUncommitted: false,
+	// Stories exercise the walkthrough tab/harness panels, which are gated on
+	// this setting — on by default here so existing stories don't need to
+	// override it just to keep rendering what they already render.
+	walkthroughEnabled: true,
 };
 
 /** A plausible four-harness registry — two enabled+available with fresh models, one enabled but not found on `PATH`, one never turned on. Stories override individual entries (e.g. `EnableHarnessesPanel`'s onboarding gate wants every harness present but nothing enabled yet). */

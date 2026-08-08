@@ -38,6 +38,12 @@ export type Settings = {
 	 * since a walkthrough generation has no frontend request to carry it).
 	 */
 	readonly includeUncommitted: boolean;
+	/**
+	 * Gates the entire walkthrough feature — the tab, its keyboard shortcuts,
+	 * and the harness configuration UI. Defaults to `false`: the feature is
+	 * currently unstable, so existing installs get it off after migration.
+	 */
+	readonly walkthroughEnabled: boolean;
 };
 
 export type SettingsUpdate = Partial<Settings>;
@@ -63,6 +69,7 @@ export const DEFAULT_SETTINGS: Settings = {
 	diffStyleMode: "unified",
 	hideReviewed: false,
 	includeUncommitted: false,
+	walkthroughEnabled: false,
 };
 
 const toSettings = (row: SettingsRow): Settings => ({
@@ -74,6 +81,7 @@ const toSettings = (row: SettingsRow): Settings => ({
 	diffStyleMode: row.diffStyleMode as DiffStyleMode,
 	hideReviewed: row.hideReviewed,
 	includeUncommitted: row.includeUncommitted,
+	walkthroughEnabled: row.walkthroughEnabled,
 });
 
 const toRepoPathMapping = (row: RepoPathRow): RepoPathMapping => ({
@@ -127,6 +135,7 @@ export class SettingsStore extends Context.Service<SettingsStore>()(
 						diffStyleMode: next.diffStyleMode,
 						hideReviewed: next.hideReviewed,
 						includeUncommitted: next.includeUncommitted,
+						walkthroughEnabled: next.walkthroughEnabled,
 						updatedAt: new Date(),
 					};
 

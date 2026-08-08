@@ -1,0 +1,1 @@
+ALTER TABLE `settings` ADD `walkthroughEnabled` integer DEFAULT false NOT NULL;

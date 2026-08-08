@@ -37,6 +37,14 @@ export const settings = sqliteTable("settings", {
 	hideReviewed: integer({ mode: "boolean" }).notNull().default(false),
 	/** Same `ALTER TABLE ADD COLUMN` default story as `hideReviewed` above. */
 	includeUncommitted: integer({ mode: "boolean" }).notNull().default(false),
+	/**
+	 * Gates the entire walkthrough feature (the tab, its keyboard shortcuts,
+	 * and the harness configuration UI). Defaults to `false` — the walkthrough
+	 * feature is currently unstable, so existing installs get it off after
+	 * this migration runs. Same `ALTER TABLE ADD COLUMN` default story as
+	 * `hideReviewed` above.
+	 */
+	walkthroughEnabled: integer({ mode: "boolean" }).notNull().default(false),
 	updatedAt: integer({ mode: "timestamp_ms" })
 		.notNull()
 		.$defaultFn(() => new Date()),

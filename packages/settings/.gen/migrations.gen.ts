@@ -12,6 +12,7 @@ import m0005 from "../drizzle/0005_tan_maggott.sql" with { type: "text" };
 import m0006 from "../drizzle/0006_cheerful_captain_america.sql" with {
 	type: "text",
 };
+import m0007 from "../drizzle/0007_late_deadpool.sql" with { type: "text" };
 import journal from "../drizzle/meta/_journal.json" with { type: "json" };
 
 export default {
@@ -26,5 +27,6 @@ export default {
 		"0004_amusing_toad_men": m0004,
 		"0005_tan_maggott": m0005,
 		"0006_cheerful_captain_america": m0006,
+		"0007_late_deadpool": m0007,
 	} as Record<string, string>,
 };

@@ -61,6 +61,7 @@ const toWireSettings = (settings: {
 	readonly diffStyleMode: WireSettings["diffStyleMode"];
 	readonly hideReviewed: WireSettings["hideReviewed"];
 	readonly includeUncommitted: WireSettings["includeUncommitted"];
+	readonly walkthroughEnabled: WireSettings["walkthroughEnabled"];
 }): WireSettings => ({
 	enabledHarnesses:
 		settings.enabledHarnesses === null
@@ -70,6 +71,7 @@ const toWireSettings = (settings: {
 	diffStyleMode: settings.diffStyleMode,
 	hideReviewed: settings.hideReviewed,
 	includeUncommitted: settings.includeUncommitted,
+	walkthroughEnabled: settings.walkthroughEnabled,
 });
 
 /**
