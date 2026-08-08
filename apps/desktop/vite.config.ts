@@ -3,6 +3,7 @@ import path from "node:path";
 import tailwindcss from "@tailwindcss/vite";
 import { tanstackRouter } from "@tanstack/router-plugin/vite";
 import react from "@vitejs/plugin-react";
+import { agentationSourceLocation } from "agentation/vite";
 import { defineConfig, searchForWorkspaceRoot } from "vite";
 
 // @ts-expect-error process is a nodejs global
@@ -51,6 +52,15 @@ function globalVirtualStoreRoots(): string[] {
 export default defineConfig(async () => ({
 	plugins: [
 		tanstackRouter({ target: "react", autoCodeSplitting: true }),
+		// Stamps JSX host elements with their original file/line as a
+		// data-agentation-source attribute — see agentation/vite's doc comment
+		// for why the toolbar can't recover this from React internals alone in
+		// a bundled build. Dev-only: gated on the same NODE_ENV that
+		// build:frontend:dev already sets to flip Vite's JSX dev/prod mode, so
+		// a normal production build never gets these attributes injected.
+		...(process.env.NODE_ENV === "development"
+			? [agentationSourceLocation()]
+			: []),
 		react(),
 		tailwindcss(),
 	],

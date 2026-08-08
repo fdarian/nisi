@@ -8,7 +8,7 @@ allowBuilds:
   protobufjs: true
   # Hash-pinned: pnpm resolves GitHub specs to codeload tarballs, which have no
   # stable allowBuilds key — bump this alongside any agentation update.
-  agentation@https://codeload.github.com/fdarian/agentation/tar.gz/ad60acffd03c394fc098796c85337d2cc6384783#path:package: true
+  agentation@https://codeload.github.com/fdarian/agentation/tar.gz/0b9691f33976124c0842d24eabab93697f1dae9e#path:package: true
 enableGlobalVirtualStore: true
 minimumReleaseAgeExclude:
   - '@pierre/diffs@1.3.5'
