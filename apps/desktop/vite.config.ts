@@ -71,6 +71,7 @@ export default defineConfig(async () => ({
 		alias: {
 			"#": path.resolve(import.meta.dirname, "./src"),
 		},
+		dedupe: ["react", "react-dom"],
 	},
 
 	// `@pierre/diffs`' worker (src/components/diff-pane/diff-pane.tsx) is a real ES
