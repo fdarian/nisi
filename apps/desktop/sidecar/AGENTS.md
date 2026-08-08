@@ -69,7 +69,13 @@ seam" for the port/token handshake this boots into.
   both (with `oldPath` rename fallback for each — `resolveRangeClaims` re-queries on `oldPath` since
   `ReviewStore.listRangeClaims` is path-scoped, not a whole-session map like `listReviewStates`), reads
   every active claim's snapshot back out of the blob store via `buildReviewClaims`, and hands the whole
-  list to `@repo/review`'s `reconcile()` — one call covers both review types.
+  list to `@repo/review`'s `reconcile()` — one call covers both review types. When that reconciliation
+  comes back with a non-null `reviewedBaseline`, `readFileContents` re-derives `patch`/`oldContent`
+  against it via `@repo/git`'s `diffContentsPatch` instead of leaving `getFileContents`' plain
+  `base → head` pair in place, and reports `baselineKind: "reviewed"` on the wire so the diff pane knows
+  an empty patch means "nothing new since your last pass." Skipped (stays `"base"`) whenever there's no
+  active claim, or the content is size-gated — reconciliation needs the full content a size gate
+  withheld.
 - `http.ts` — `bindHealthCheckServer` binds the real port immediately with a hand-rolled
   `health.check`-only handler (no `AppServices` needed), which `index.ts` records in the lock
   before `AppServices` exists at all; `attachRouter` swaps in the full oRPC router afterward via

@@ -62,7 +62,6 @@ type FilesChangedViewProps = {
 	files: readonly FileChange[];
 	reviewState: ReadonlyMap<string, ReviewStateEntry>;
 	setViewed: (path: string, viewed: boolean) => void;
-	onNavigateToBlock: (blockId: string) => void;
 	hasPendingChanges: boolean;
 	onRefresh: () => void;
 	/** Whether this PR tab is the selected one — `PrView` stays mounted for every
@@ -77,7 +76,6 @@ export function FilesChangedView({
 	files,
 	reviewState,
 	setViewed,
-	onNavigateToBlock,
 	hasPendingChanges,
 	onRefresh,
 	shortcutsEnabled,
@@ -502,7 +500,6 @@ export function FilesChangedView({
 					forcedPaths={forcedPaths}
 					keywordMatchesByPath={keywordMatchesByPath}
 					onForceLoad={handleForceLoad}
-					onNavigateToBlock={onNavigateToBlock}
 					ref={diffPaneRef}
 					repoRoot={session.repoRoot}
 					reviewState={reviewState}

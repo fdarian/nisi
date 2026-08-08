@@ -96,10 +96,18 @@ export type ReviewRange = {
 	reviewedVia: ReviewSource | null;
 };
 
-/** Mirrors `FileContentReview` — present whenever the file has any active review claim, whole-file or block-scoped. */
+/**
+ * Mirrors `FileContentReview` — present whenever the file has any active
+ * review claim, whole-file or block-scoped. `baselineKind` says which file
+ * `FileContent.patch`/`oldContent` are actually diffed against: `"reviewed"`
+ * means the sidecar substituted the synthesized reviewed-state baseline for
+ * the usual merge-base content, so an *empty* patch means "nothing new since
+ * your last pass," not "nothing changed in the PR."
+ */
 export type FileContentReview = {
 	changedSinceReview: boolean;
 	ranges: readonly ReviewRange[];
+	baselineKind: "base" | "reviewed";
 };
 
 export type FileContent = {
@@ -118,21 +126,9 @@ export type FileContentsMap = ReadonlyMap<
 
 export type ReviewState = "unreviewed" | "viewed" | "changed-after-review";
 
-/**
- * `useReviewState`'s per-file entry — `status` is the three-value read
- * described on that hook, `reviewPending` is `true` for exactly the files
- * `status` predicted from an in-flight `review.setViewed` call rather than
- * from `FileChange.review` (i.e. `pendingByPath` had a row for this path).
- * While pending, only the boolean itself is honest to predict —
- * `FileContentReview.ranges` (server-computed reconciliation ranges) hasn't
- * caught up yet, so a consumer that derives a collapse/summary from ranges
- * should skip that derivation for a pending path rather than run it against
- * the stale ranges still sitting in the `diff.fileContents` cache (see
- * `diff-pane.tsx`'s `collapsedDiff`).
- */
+/** `useReviewState`'s per-file entry — `status` is the three-value read described on that hook. */
 export type ReviewStateEntry = {
 	status: ReviewState;
-	reviewPending: boolean;
 };
 
 /** Mirrors `sessions.list()` plus a `sessions.close` mutation, kept live by `events.subscribe`. */
@@ -391,7 +387,6 @@ export function useReviewState(
 			if (pendingViewed !== undefined) {
 				map.set(file.path, {
 					status: pendingViewed ? "viewed" : "unreviewed",
-					reviewPending: true,
 				});
 				continue;
 			}
@@ -400,7 +395,6 @@ export function useReviewState(
 				status: file.review.changedSinceReview
 					? "changed-after-review"
 					: "viewed",
-				reviewPending: false,
 			});
 		}
 		return map;

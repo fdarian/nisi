@@ -93,11 +93,25 @@ export type ReviewRange = Schema.Schema.Type<typeof ReviewRange>;
  * line the `base → head` diff touches; when absent (e.g. content past the
  * size gate, so there's nothing to reconcile against) it's an empty array,
  * not a missing field, so the frontend never needs to branch on "was this
- * even computed."
+ * even computed." Still used by the walkthrough reference pane (grouping a
+ * block's claimed ranges into reviewed/partial/unreviewed) even though the
+ * diff pane itself no longer reads it — see `baselineKind` below for what the
+ * diff pane reads instead.
+ *
+ * `baselineKind` tells the diff pane which file `FileContent.patch`/
+ * `oldContent` are actually diffed against: `"reviewed"` means the sidecar
+ * substituted the synthesized `reviewedBaseline` (see `@repo/review`'s
+ * `reconcile`) for the usual merge-base content, so an *empty* patch here
+ * means "nothing new since your last pass," not "nothing changed in the PR."
+ * `"base"` is the plain `base → head` patch — always true when there's no
+ * active claim at all (`review` itself is `null` then), and also true for a
+ * size-gated file even with an active claim, since reconciliation needs the
+ * full content a size gate withheld.
  */
 export const FileContentReview = Schema.Struct({
 	changedSinceReview: Schema.Boolean,
 	ranges: Schema.Array(ReviewRange),
+	baselineKind: Schema.Literals(["base", "reviewed"]),
 });
 export type FileContentReview = Schema.Schema.Type<typeof FileContentReview>;
 

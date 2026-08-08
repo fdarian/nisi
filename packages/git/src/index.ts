@@ -8,7 +8,7 @@ export {
 	repoChangeSignatureEquals,
 } from "./change-signal.ts";
 export type { FileCategory } from "./classify.ts";
-export { diffContents } from "./content-diff.ts";
+export { diffContents, diffContentsPatch } from "./content-diff.ts";
 export type {
 	FileChange,
 	FileContent,

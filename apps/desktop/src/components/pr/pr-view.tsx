@@ -1,7 +1,7 @@
 "use client";
 
 import { AlertTriangleIcon } from "lucide-react";
-import { useCallback, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useDevToolScope } from "#/components/devtool/dev-tool-context";
 import { useRefetchToasts } from "#/components/devtool/use-refetch-toasts";
 import { FilesChangedView } from "#/components/pr/files-changed-view";
@@ -56,11 +56,10 @@ export function PrView({
 		session.id,
 	);
 
-	// Lifted above both tabs' content — a "reviewed in `<block>`" marker
-	// clicked from Files Changed needs to both select a block in the
-	// Walkthrough tab and switch to it, and `Tabs` here is the one thing both
-	// live under.
 	const [activeTab, setActiveTab] = useState("files");
+	// Lifted above the tabs, not local to `WalkthroughView` — a block
+	// selection should survive switching away to Files Changed and back, not
+	// reset every time the Walkthrough tab remounts.
 	const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);
 
 	// Gates the sidecar's 2s worktree poller (`live-poll.ts`) to exactly the
@@ -81,10 +80,6 @@ export function PrView({
 	// tab, whether or not the window currently has focus.
 	useDevToolScope("files-changed", isFilesChangedVisible);
 	useRefetchToasts(orpc, session.id);
-	const handleNavigateToBlock = useCallback((blockId: string) => {
-		setSelectedBlockId(blockId);
-		setActiveTab("walkthrough");
-	}, []);
 
 	useKeyBindings(
 		{
@@ -136,7 +131,6 @@ export function PrView({
 						<FilesChangedView
 							files={files}
 							hasPendingChanges={hasPendingChanges}
-							onNavigateToBlock={handleNavigateToBlock}
 							onRefresh={refreshFileChanges}
 							orpc={orpc}
 							reviewState={reviewState}

@@ -21,8 +21,9 @@ Three parts, one seam:
   `hideReviewed`, `includeUncommitted`, `enabledHarnesses` for the settings page's checkboxes) — theme is the one exception, staying in
   `localStorage` via `next-themes` (wired in `routes/__root.tsx`) since nothing server-side reads it.
   The diff pane (`src/components/diff-pane/`) renders with `@pierre/diffs`, same shadow-DOM/Worker-pool
-  shape as the `@pierre/trees` sidebar — `src/lib/build-collapsed-diff.ts` slices a file's patch down to
-  `FileContentReview.ranges`' `"new"` spans for Phase 2's collapsed reviewed regions.
+  shape as the `@pierre/trees` sidebar — it renders `diff.fileContents`' `patch`/`oldContent` directly,
+  no client-side slicing; a reviewed file's already-seen spans arrive pre-collapsed into ordinary
+  context by the sidecar (`FileContentReview.baselineKind`, see `@repo/review`'s `reconcile`).
 
 ## The seam
 The sidecar binds an ephemeral port, generates a token, then claims a `sidecar.lock` (`O_EXCL`,

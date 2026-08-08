@@ -1,12 +1,10 @@
 /**
  * Synthesizes a unified diff containing only the hunks (or hunk slices)
- * overlapping a reference block's target locations in one file — the same
- * technique `build-collapsed-diff.ts` uses for reviewed-region collapsing,
- * but with the opposite keep/drop policy: that one drops matched "reviewed"
- * spans and keeps everything else, this one keeps only what's inside a
- * given location and drops everything unmatched. See `diff-hunk-slicing.ts`
- * for why this stays at the unified-diff level instead of slicing file
- * contents directly — the `@@` header is what carries the real numbering.
+ * overlapping a reference block's target locations in one file — keeps only
+ * what's inside a given location and drops everything unmatched. See
+ * `diff-hunk-slicing.ts` for why this stays at the unified-diff level instead
+ * of slicing file contents directly — the `@@` header is what carries the
+ * real numbering.
  */
 import {
 	groupIntoRuns,

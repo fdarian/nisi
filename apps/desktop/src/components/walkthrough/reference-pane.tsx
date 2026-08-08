@@ -6,10 +6,9 @@
  * groups `block.locations` by path and, per path, synthesizes a unified diff
  * containing only the hunks overlapping that path's ranges
  * (`build-location-diff.ts`) before handing it to the shared `DiffCodeView`
- * adapter (`#/components/diff-pane/diff-code-view.tsx`) — the same technique
- * `build-collapsed-diff.ts` uses for Phase 2's collapsed regions, so a claim
- * spanning three files focuses exactly those three ranges with their true
- * line numbers, instead of dumping three whole files.
+ * adapter (`#/components/diff-pane/diff-code-view.tsx`) — so a claim spanning
+ * three files focuses exactly those three ranges with their true line
+ * numbers, instead of dumping three whole files.
  */
 import type {
 	CodeViewItem,

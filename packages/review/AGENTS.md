@@ -16,7 +16,14 @@ default as `apps/desktop/sidecar`). Feeds `packages/sidecar-api`'s `review`/`dif
   Whole-file review is the degenerate case of a claim ranging over the entire file (`ranges: null`), not
   a separate code path — one reconciliation algorithm for both. Depends on `@repo/git`'s
   `diffContents` for the actual diffing — this package owns the reconciliation *algorithm*, git owns
-  diffing as a primitive.
+  diffing as a primitive. Also returns `reviewedBaseline` — the synthetic "before" file for a genuine
+  `reviewedBaseline → head` diff (`null` when `claims` is empty), built by walking the same
+  `base → head` alignment and pulling every still-`"reviewed"` span back to head's text. Reuses
+  `splitRangeByClaims`'s attribution over the whole file rather than a second pass; a deletion is
+  restored unless both lines flanking it are already `"reviewed"` — ambiguous cases err toward
+  restoring it, since showing a deletion twice is recoverable and hiding one isn't. The sidecar
+  (`apps/desktop/sidecar/store.ts`'s `readFileContents`) substitutes this for `base` when computing the
+  diff pane's patch.
 - `src/resolve-review.ts` — `resolveByPath`: looks up a value keyed by a file's current path, falling
   back to its pre-rename path — a rename changes a path-keyed row's key, not what a snapshot applies to.
   `resolveReviewState` is the whole-file-review-shaped wrapper around it; range claims resolve the same

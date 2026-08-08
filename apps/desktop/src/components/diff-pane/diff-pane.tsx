@@ -10,7 +10,7 @@ import type {
 } from "@pierre/diffs";
 import { parsePatchFiles } from "@pierre/diffs";
 import type { CodeViewHandle } from "@pierre/diffs/react";
-import { BookOpenIcon, ChevronsUpDownIcon, FileIcon } from "lucide-react";
+import { FileIcon } from "lucide-react";
 import {
 	useCallback,
 	useEffect,
@@ -37,8 +37,6 @@ import {
 } from "#/components/ui/empty";
 import { Skeleton } from "#/components/ui/skeleton";
 import { useDiffMatchHighlighting } from "#/hooks/use-diff-match-highlighting";
-import type { CollapsedFileDiff } from "#/lib/build-collapsed-diff";
-import { buildCollapsedFileDiff } from "#/lib/build-collapsed-diff";
 import { buildFileDiff } from "#/lib/build-file-diff";
 import type { LineRange } from "#/lib/build-location-diff";
 import { buildLocationFileDiff } from "#/lib/build-location-diff";
@@ -49,7 +47,6 @@ import type {
 	FileChange,
 	FileContent,
 	FileContentsMap,
-	ReviewSource,
 	ReviewState,
 	ReviewStateEntry,
 } from "#/lib/pr-data";
@@ -64,28 +61,16 @@ type DiffAnnotationMetadata =
 	| { type: "error"; message: string }
 	| { type: "load-file"; path: string; stillTooLarge: boolean }
 	| { type: "hidden-file"; path: string; reason: HiddenFileReason }
-	| {
-			type: "reviewed-collapsed";
-			path: string;
-			lineCount: number;
-			source: ReviewSource;
-	  }
-	| {
-			type: "fully-reviewed";
-			path: string;
-			lineCount: number;
-			source: ReviewSource | "mixed";
-	  };
+	| { type: "reviewed-empty" };
 
 /**
- * Noise reduction, not review tracking — distinct from `expandedPaths`
- * below (which un-collapses hunks the user already reviewed).
- * A `"generated"` file's body is always noise regardless of size (lock
- * files land here via `FileChange.category`); a `"large"` one is hidden
- * because `@repo/git`'s size gate already refused to auto-render its full
- * contents (`content.truncated`) — same signal `content.truncated`'s
- * existing "Load full file" affordance uses, just gating the whole body
- * instead of one banner.
+ * Noise reduction, unrelated to review state. A `"generated"` file's body is
+ * always noise regardless of size (lock files land here via
+ * `FileChange.category`); a `"large"` one is hidden because `@repo/git`'s
+ * size gate already refused to auto-render its full contents
+ * (`content.truncated`) — same signal `content.truncated`'s existing "Load
+ * full file" affordance uses, just gating the whole body instead of one
+ * banner.
  */
 function resolveHiddenFileReason(
 	file: FileChange,
@@ -148,8 +133,6 @@ type DiffPaneProps = {
 	reviewState: ReadonlyMap<string, ReviewStateEntry>;
 	setViewed: (path: string, viewed: boolean) => void;
 	diffStyle: DiffStyleMode;
-	/** A "reviewed in `<block>`" marker's click target — switches to the Walkthrough tab with this block selected. */
-	onNavigateToBlock: (blockId: string) => void;
 	ref?: React.Ref<DiffPaneHandle>;
 };
 
@@ -178,6 +161,23 @@ type CachedFileDiff = {
 };
 
 /**
+ * A cheap, always-correct proxy for "this file's `patch`/`oldContent` pair
+ * changed" — hashing `content.patch` itself (bounded by the diff's size, not
+ * the file's) rather than the full `oldContent`. `"base"` needs no such
+ * signal: `file.fingerprint` already incorporates the (unmodified) plain
+ * `base → head` patch text those bytes come from — see `@repo/git`'s
+ * `computeFingerprint`. Only `baselineKind: "reviewed"` substitutes a
+ * *different* `oldContent` (the synthesized reviewed-state baseline, see
+ * `@repo/review`'s `reconcile`) than what produced `file.fingerprint`, so
+ * that's the one case needing an extra signal.
+ */
+function reviewPatchSignature(content: FileContent): string {
+	return content.review?.baselineKind === "reviewed"
+		? `reviewed:${hashItemVersion(content.patch)}`
+		: "base";
+}
+
+/**
  * Parsing a file into `FileDiffMetadata` is the single most expensive thing
  * the pane does — `buildFileDiff`'s non-truncated path runs a full Myers diff
  * (`@pierre/diffs` → `createTwoFilesPatch`) over the file's before/after
@@ -189,43 +189,32 @@ type CachedFileDiff = {
  *
  * The key is exactly what decides the parse's output — `file.fingerprint`
  * (a content hash of status/paths/patch, see `@repo/git`'s `computeFingerprint`)
- * plus which parser tier the content lands in, or the collapse signature for a
- * partially-collapsed patch. It's the same string handed to `@pierre/diffs` as
- * the `cacheKey`, so this cache can't disagree with pierre's own memoization
- * about when two renders are the same diff.
+ * plus which parser tier the content lands in, plus `reviewPatchSignature` for
+ * the one case `file.fingerprint` can't see on its own. It's the same string
+ * handed to `@pierre/diffs` as the `cacheKey`, so this cache can't disagree
+ * with pierre's own memoization about when two renders are the same diff.
  *
- * That collapse-signature suffix is load-bearing, not cosmetic: pierre's worker
- * pool and its `areDiffTargetsEqual`/`areFilesEqual` memoization
+ * That signature suffix is load-bearing, not cosmetic: pierre's worker pool
+ * and its `areDiffTargetsEqual`/`areFilesEqual` memoization
  * (VirtualizedFileDiff.js, WorkerPoolManager.js) treat two `FileDiffMetadata`
  * as identical whenever their `cacheKey`s match, full stop — it never compares
- * the actual hunks. `file.fingerprint` alone identifies the *content* this patch
- * was collapsed from, but not *which* ranges got collapsed — reviewing a file
- * (or a walkthrough block finishing) changes `collapsed.patch`'s hunks without
- * changing `file.fingerprint`. A key that only mirrored the content-only one
- * would collide across two different collapse states of the same file, so pierre
- * would serve the *previous* render's stale hunk layout — rows measured and
- * positioned for the old collapse state, under `renderAnnotation`/line-number
- * data for the new one. That mismatch is what made a file's content "jump out of
- * alignment" right after marking it Reviewed.
+ * the actual hunks. A key that only mirrored `file.fingerprint` would collide
+ * across two different reviewed-baselines of the same file (ticking Reviewed
+ * changes `content.oldContent`/`patch` without changing `file.fingerprint`,
+ * which is computed from the plain `base → head` diff), so pierre would serve
+ * the *previous* render's stale hunk layout — rows measured and positioned for
+ * the old baseline, under `renderAnnotation`/line-number data for the new one.
  */
 function resolveFileDiff(
 	cache: Map<string, CachedFileDiff>,
 	file: FileChange,
 	content: FileContent,
-	collapsed: CollapsedFileDiff | undefined,
-	collapseSignature: string,
 ): FileDiffMetadata | undefined {
-	const key =
-		collapsed?.kind === "partial"
-			? `${file.fingerprint}:collapsed:${hashItemVersion(collapseSignature)}`
-			: `${file.fingerprint}:${content.truncated ? "patch" : "full"}`;
+	const key = `${file.fingerprint}:${content.truncated ? "patch" : "full"}:${reviewPatchSignature(content)}`;
 	const cached = cache.get(file.path);
 	if (cached !== undefined && cached.key === key) return cached.fileDiff;
 
-	const fileDiff =
-		collapsed?.kind === "partial"
-			? parsePatchFiles(collapsed.patch, key)[0]?.files[0]
-			: buildFileDiff(file, content);
+	const fileDiff = buildFileDiff(file, content);
 	cache.set(file.path, { key, fileDiff });
 	return fileDiff;
 }
@@ -242,7 +231,6 @@ export function DiffPane({
 	reviewState,
 	setViewed,
 	diffStyle,
-	onNavigateToBlock,
 	ref,
 }: DiffPaneProps): React.ReactElement {
 	const codeViewRef = useRef<CodeViewHandle<DiffAnnotationMetadata>>(null);
@@ -260,34 +248,18 @@ export function DiffPane({
 		currentMatch,
 	});
 
-	// Files the user clicked "expand" on — collapsing is otherwise the default
-	// whenever a file has reviewed ranges to hide behind a marker.
-	const [expandedPaths, setExpandedPaths] = useState<ReadonlySet<string>>(
-		() => new Set(),
-	);
-	// Separately: files the user clicked "Show diff" on to reveal a body
-	// hidden by default for being generated/large — unrelated to review
-	// state, so its own set rather than folded into `expandedPaths`.
+	// Files the user clicked "Show diff" on to reveal a body hidden by default
+	// for being generated/large — unrelated to review state.
 	const [expandedHiddenPaths, setExpandedHiddenPaths] = useState<
 		ReadonlySet<string>
 	>(() => new Set());
 	// Per-path override on the default (collapsed once `reviewStatus ===
 	// "viewed"`) — a `Map` since it records both directions. Cleared on
 	// checkbox flip (`handleToggleViewed` below), so re-ticking re-collapses
-	// and unticking re-expands. Distinct from `expandedPaths` above, which
-	// un-collapses a marker, not the whole card.
+	// and unticking re-expands.
 	const [fileCollapseOverrides, setFileCollapseOverrides] = useState<
 		ReadonlyMap<string, boolean>
 	>(() => new Map());
-
-	const handleExpandCollapsed = useCallback((path: string) => {
-		setExpandedPaths((current) => {
-			if (current.has(path)) return current;
-			const next = new Set(current);
-			next.add(path);
-			return next;
-		});
-	}, []);
 
 	const handleShowHiddenFile = useCallback((path: string) => {
 		setExpandedHiddenPaths((current) => {
@@ -341,7 +313,6 @@ export function DiffPane({
 		for (const file of files) {
 			const reviewEntry = reviewState.get(file.path);
 			const reviewStatus = reviewEntry?.status ?? "unreviewed";
-			const reviewPending = reviewEntry?.reviewPending ?? false;
 			const viewed = reviewStatus === "viewed";
 			// Defaults to collapsed once the file is "viewed" — overridable in
 			// either direction by clicking the header.
@@ -413,12 +384,11 @@ export function DiffPane({
 			// pass below, including the generated/large "hidden by default"
 			// gate. If a file surfaced in the keyword-filtered list at all, the
 			// user searched for it explicitly; hiding the match behind "Show
-			// diff" (or behind `buildCollapsedFileDiff`/the "fully reviewed"
-			// short-circuit) would defeat the point of searching for it. Only a
-			// file `keywordMatchesByPath` actually has an entry for takes this
+			// diff" would defeat the point of searching for it. Only a file
+			// `keywordMatchesByPath` actually has an entry for takes this
 			// branch — everything else (including keyword mode with no matches
 			// anywhere, or a file whose matches haven't loaded yet) falls
-			// through to the normal review-aware rendering below.
+			// through to the normal rendering below.
 			const keywordMatches = keywordMatchesByPath.get(file.path);
 			if (keywordMatches !== undefined && keywordMatches.length > 0) {
 				const ranges = matchRangesWithContext(keywordMatches);
@@ -486,43 +456,15 @@ export function DiffPane({
 				continue;
 			}
 
-			// Collapsing reviewed *regions* is the default whenever this file has
-			// any to hide — until the user clicks a marker to expand one back,
-			// which wins over collapsing even if the underlying ranges haven't
-			// changed. A "viewed" file (ticked, unchanged) never reaches this at
-			// all: its whole card already collapses via `cardCollapsed` above, so
-			// surgical collapsing would only ever produce the redundant
-			// "fully reviewed" marker this file's checkbox used to hijack —
-			// expanding the card should show the real diff, not that marker.
-			const isExpanded = expandedPaths.has(file.path);
-			// `reviewPending` means the ranges below are still whatever the last
-			// settled fetch produced — stale relative to the `viewed` this render
-			// just predicted optimistically (see `useReviewState`'s doc comment on
-			// `ReviewStateEntry`). Rendering a collapse from them here would
-			// synthesize a placeholder for the state the user just left, not the
-			// one they're in — skip the collapse and show the plain diff until the
-			// refetch settles and `reviewPending` clears.
-			const collapsedDiff =
-				content.review !== null && !isExpanded && !viewed && !reviewPending
-					? buildCollapsedFileDiff(content.patch, content.review.ranges)
-					: undefined;
-			// Prefixed with `reviewPending` so a pending render can never share a
-			// signature (and thus `version`/`resolveFileDiff` cache key) with the
-			// settled render that follows it, even when ranges/viewed/isExpanded
-			// happen to match byte-for-byte — see `ReviewStateEntry` in
-			// `pr-data.ts` for why that collision is real, not hypothetical.
-			const collapseSignature = `${reviewPending ? "pending" : "settled"}:${
-				viewed
-					? "viewed-full"
-					: content.review === null
-						? "no-review"
-						: `${content.review.ranges.map((range) => `${range.startLine}-${range.endLine}-${range.status}-${reviewSourceKey(range.reviewedVia)}`).join(",")}:${isExpanded ? "expanded" : "collapsed"}`
-			}`;
-			const version = hashItemVersion(
-				`${baseVersionInput}:${collapseSignature}`,
-			);
-
-			if (collapsedDiff?.kind === "full") {
+			// The server already diffed reviewed-and-unchanged content back into
+			// ordinary context (or dropped it entirely) before this patch ever
+			// reached the wire — see `@repo/review`'s `reconcile`'s
+			// `reviewedBaseline` and `readFileContents`' `baselineKind` — so an
+			// empty patch here means "nothing new since your last pass," not "this
+			// file has no diff to render." Only reachable when `baselineKind` is
+			// `"reviewed"`: a plain empty `base → head` patch can't happen (a file
+			// only appears in `files` because something changed against base).
+			if (content.review?.baselineKind === "reviewed" && content.patch === "") {
 				nextItems.push({
 					id: file.path,
 					type: "file",
@@ -530,32 +472,18 @@ export function DiffPane({
 						name: file.path,
 						contents: " ",
 						lang: "text",
-						cacheKey: `reviewed:${file.fingerprint}`,
+						cacheKey: `reviewed-empty:${file.fingerprint}`,
 					},
 					annotations: [
-						{
-							lineNumber: 1,
-							metadata: {
-								type: "fully-reviewed",
-								path: file.path,
-								lineCount: collapsedDiff.lineCount,
-								source: collapsedDiff.source,
-							},
-						},
+						{ lineNumber: 1, metadata: { type: "reviewed-empty" } },
 					] satisfies LineAnnotation<DiffAnnotationMetadata>[],
 					collapsed: cardCollapsed,
-					version,
+					version: hashItemVersion(`${baseVersionInput}:reviewed-empty`),
 				});
 				continue;
 			}
 
-			const fileDiff = resolveFileDiff(
-				fileDiffCache.current,
-				file,
-				content,
-				collapsedDiff,
-				collapseSignature,
-			);
+			const fileDiff = resolveFileDiff(fileDiffCache.current, file, content);
 			if (fileDiff === undefined) continue;
 
 			const annotations: DiffLineAnnotation<DiffAnnotationMetadata>[] = [];
@@ -570,20 +498,6 @@ export function DiffPane({
 					},
 				});
 			}
-			if (collapsedDiff?.kind === "partial") {
-				for (const gap of collapsedDiff.gaps) {
-					annotations.push({
-						side: "additions",
-						lineNumber: gap.anchorLine ?? 0,
-						metadata: {
-							type: "reviewed-collapsed",
-							path: file.path,
-							lineCount: gap.lineCount,
-							source: gap.source,
-						},
-					});
-				}
-			}
 
 			nextItems.push({
 				id: file.path,
@@ -591,7 +505,9 @@ export function DiffPane({
 				fileDiff,
 				annotations,
 				collapsed: cardCollapsed,
-				version,
+				version: hashItemVersion(
+					`${baseVersionInput}:${reviewPatchSignature(content)}`,
+				),
 			});
 		}
 
@@ -610,7 +526,6 @@ export function DiffPane({
 		reviewState,
 		diffStyle,
 		forcedPaths,
-		expandedPaths,
 		expandedHiddenPaths,
 		fileCollapseOverrides,
 	]);
@@ -667,40 +582,11 @@ export function DiffPane({
 					/>
 				);
 			}
-			if (metadata.type === "fully-reviewed") {
-				const source = metadata.source === "mixed" ? null : metadata.source;
+			if (metadata.type === "reviewed-empty") {
 				return (
-					<CollapsedMarker
-						description={
-							source?.kind === "range"
-								? `${pluralizeLines(metadata.lineCount)} reviewed in "${source.blockLabel}".`
-								: `Fully reviewed — ${pluralizeLines(metadata.lineCount)} unchanged since your last review.`
-						}
-						navigateTo={
-							source?.kind === "range" ? { blockId: source.blockId } : undefined
-						}
-						onExpand={() => handleExpandCollapsed(metadata.path)}
-						onNavigate={onNavigateToBlock}
-						variant="file"
-					/>
-				);
-			}
-			if (metadata.type === "reviewed-collapsed") {
-				const source = metadata.source;
-				return (
-					<CollapsedMarker
-						description={
-							source.kind === "range"
-								? `${pluralizeLines(metadata.lineCount)} reviewed in "${source.blockLabel}".`
-								: `${pluralizeLines(metadata.lineCount)} already reviewed, unchanged since your last pass.`
-						}
-						navigateTo={
-							source.kind === "range" ? { blockId: source.blockId } : undefined
-						}
-						onExpand={() => handleExpandCollapsed(metadata.path)}
-						onNavigate={onNavigateToBlock}
-						variant="inline"
-					/>
+					<div className="px-3 py-6 text-center text-muted-foreground text-xs">
+						No changes since your last pass.
+					</div>
 				);
 			}
 			if (metadata.stillTooLarge) {
@@ -724,12 +610,7 @@ export function DiffPane({
 				</div>
 			);
 		},
-		[
-			onForceLoad,
-			handleExpandCollapsed,
-			handleShowHiddenFile,
-			onNavigateToBlock,
-		],
+		[onForceLoad, handleShowHiddenFile],
 	);
 
 	const codeViewOptions: CodeViewOptions<DiffAnnotationMetadata> = useMemo(
@@ -914,10 +795,6 @@ export function DiffPane({
 	);
 }
 
-function pluralizeLines(count: number): string {
-	return `${count} ${count === 1 ? "line" : "lines"}`;
-}
-
 /**
  * The placeholder standing in for a whole file body hidden by default
  * (`resolveHiddenFileReason`) — header and its Reviewed checkbox render as
@@ -957,81 +834,5 @@ function HiddenFileBody({
 				<Skeleton className="h-2 w-1/2" />
 			</div>
 		</div>
-	);
-}
-
-/** Serializes a `ReviewRange.reviewedVia` for use in a cache-invalidation-style version signature — same idea as `hashItemVersion`'s inputs, just scoped to one range's attribution. */
-function reviewSourceKey(source: ReviewSource | null): string {
-	if (source === null) return "none";
-	return source.kind === "file" ? "file" : `range:${source.blockId}`;
-}
-
-/**
- * The clickable "reviewed, collapsed" marker `renderAnnotation` swaps in for
- * a run of lines untouched since the file's last review snapshot — this is
- * the whole feature: reviewing a hunk should mean not seeing it again unless
- * it actually changes. `variant="file"` is the whole-file collapse (no diff
- * left to render at all); `variant="inline"` sits between surfaced hunks.
- *
- * A run attributed to a walkthrough block (`navigateTo` set) makes the
- * marker's primary click jump to that block in the Walkthrough tab instead
- * of expanding in place — the code is already visible in the reference pane
- * there, so "go see it" is the more useful default. A small trailing button
- * still offers the plain expand-in-place action.
- */
-function CollapsedMarker({
-	description,
-	navigateTo,
-	onExpand,
-	onNavigate,
-	variant,
-}: {
-	description: string;
-	navigateTo: { blockId: string } | undefined;
-	onExpand: () => void;
-	onNavigate: (blockId: string) => void;
-	variant: "file" | "inline";
-}): React.ReactElement {
-	const rowClassName = cn(
-		"flex w-full items-center gap-2 text-muted-foreground text-xs",
-		variant === "file" ? "justify-center px-3 py-6" : "px-3 py-1.5",
-	);
-
-	if (navigateTo !== undefined) {
-		return (
-			<div className={rowClassName}>
-				<button
-					className="flex min-w-0 flex-1 items-center gap-2 text-left hover:text-foreground"
-					onClick={() => onNavigate(navigateTo.blockId)}
-					type="button"
-				>
-					<BookOpenIcon className="size-3.5 shrink-0" />
-					<span className="truncate">{description}</span>
-				</button>
-				<button
-					aria-label="Show inline instead"
-					className="shrink-0 rounded p-1 hover:bg-accent hover:text-foreground"
-					onClick={onExpand}
-					title="Show inline instead"
-					type="button"
-				>
-					<ChevronsUpDownIcon className="size-3.5" />
-				</button>
-			</div>
-		);
-	}
-
-	return (
-		<button
-			className={cn(
-				rowClassName,
-				"text-left hover:bg-accent hover:text-foreground",
-			)}
-			onClick={onExpand}
-			type="button"
-		>
-			<ChevronsUpDownIcon className="size-3.5 shrink-0" />
-			<span>{description} Click to show.</span>
-		</button>
 	);
 }

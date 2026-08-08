@@ -1,5 +1,6 @@
 import { join } from "node:path";
 import {
+	diffContentsPatch,
 	type FileContentRequest,
 	type GhOutputDecodeError,
 	type GitCommandError,
@@ -773,12 +774,16 @@ export class Store extends Context.Service<Store>()("Store", {
 									path: request.path,
 									content: {
 										...content,
-										review: { changedSinceReview, ranges: [] },
+										review: {
+											changedSinceReview,
+											ranges: [],
+											baselineKind: "base" as const,
+										},
 									},
 								};
 							}
 
-							const review = yield* reconcilePathClaims(
+							const reconciliation = yield* reconcilePathClaims(
 								sessionId,
 								session.repoRoot,
 								request.path,
@@ -788,7 +793,42 @@ export class Store extends Context.Service<Store>()("Store", {
 								content.newContent ?? "",
 							);
 
-							return { path: request.path, content: { ...content, review } };
+							if (
+								reconciliation === null ||
+								reconciliation.reviewedBaseline === null
+							) {
+								return {
+									path: request.path,
+									content: { ...content, review: null },
+								};
+							}
+
+							// Every consumer deriving a diff from the content pair
+							// (`@pierre/diffs`' non-truncated render path parses
+							// `oldContent`/`newContent` directly rather than `patch`
+							// — see `build-file-diff.ts`) needs both sides replaced
+							// together, so the patch and `oldContent` never disagree
+							// about which baseline they're against.
+							const reviewedPatch = yield* diffContentsPatch(
+								session.repoRoot,
+								request.path,
+								reconciliation.reviewedBaseline,
+								content.newContent ?? "",
+							);
+
+							return {
+								path: request.path,
+								content: {
+									...content,
+									patch: reviewedPatch,
+									oldContent: reconciliation.reviewedBaseline,
+									review: {
+										changedSinceReview: reconciliation.changedSinceReview,
+										ranges: reconciliation.ranges,
+										baselineKind: "reviewed" as const,
+									},
+								},
+							};
 						}),
 					{ concurrency: "unbounded" },
 				);

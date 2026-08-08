@@ -44,9 +44,17 @@ Git/review procedures sit alongside `health.check`.
 - Phase 3's range-scoped review added `review.setRangeViewed` (mirrors `setViewed`'s tick/untick
   shape, scoped to one block's claim on a set of ranges within one file) and `diff.ts`'s `ReviewRange`
   gained `reviewedVia: ReviewSource | null` — `{kind: "file"}` or `{kind: "range", blockId,
-  blockLabel}`, attributing each surviving range to the claim currently covering it so Files Changed
-  can render a "reviewed in `<block>`" marker instead of a bare "reviewed" one. `FileContentReview` is
-  now populated whenever a file has *any* active claim, not only once it's been whole-file-ticked.
+  blockLabel}`, attributing each surviving range to the claim currently covering it. `FileContentReview`
+  is now populated whenever a file has *any* active claim, not only once it's been whole-file-ticked.
+  `ranges` itself now only feeds the walkthrough reference pane's per-file reviewed/partial/unreviewed
+  checkbox (`apps/desktop/src/components/walkthrough/reference-pane.tsx`) — the diff pane stopped
+  reading it once `baselineKind` shipped, below.
+- `FileContentReview` gained `baselineKind: "base" | "reviewed"`, telling the diff pane which file
+  `FileContent.patch`/`oldContent` are actually diffed against. `"reviewed"` means the sidecar
+  substituted `@repo/review`'s synthesized `reviewedBaseline` for the usual merge-base content before
+  computing the patch — so an *empty* patch under `"reviewed"` means "nothing new since your last
+  pass," not "nothing changed in the PR." Always `"base"` for a size-gated file even with an active
+  claim, since reconciliation needs content the size gate withheld.
 - `HarnessInfo` gained `available`/`binaryPath` (a live `@repo/bin-resolver` check — see the type's own
   doc for why this is independent of `enabled`), and `walkthrough.harnesses` gained a sibling
   `walkthrough.refreshHarnesses` — same output shape, but bypasses `model-discovery.ts`'s cache. A

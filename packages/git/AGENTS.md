@@ -32,7 +32,10 @@ unit-testable against real temp repos without booting anything. Feeds `packages/
 - `content-diff.ts` — `diffContents`: diffs two arbitrary strings (never real git refs) via
   `git hash-object -w --stdin` + `git diff` on the resulting blobs. What `@repo/review`'s
   reconciliation is built on — a review snapshot isn't a ref, so a ref-based `git diff` can't compare
-  it against head.
+  it against head. `diffContentsPatch` is its human-facing sibling: same bare-blob mechanism, but with
+  real context lines and the header rewritten to name the real path instead of the two blobs' shas —
+  what the sidecar uses to serve a `reviewedBaseline → head` patch (`apps/desktop/sidecar/store.ts`'s
+  `readFileContents`).
 - `change-signal.ts` — `readRepoChangeSignature`: HEAD's sha plus, only when `includeUncommitted` is
   `true`, a content hash (never mtime/size — collides too easily, see the module's doc comment) per
   path `git status --porcelain` reports dirty. `false` (default) skips `status` and hashing

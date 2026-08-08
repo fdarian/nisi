@@ -18,11 +18,7 @@ type WalkthroughViewProps = {
 	orpc: SidecarQueryUtils;
 	session: Session;
 	files: readonly FileChange[];
-	/**
-	 * Lifted to `PrView` rather than local state — a "reviewed in `<block>`"
-	 * marker clicked from the Files Changed tab needs to select a block here
-	 * *and* switch tabs, and `PrView` owns the tab.
-	 */
+	/** Lifted to `PrView` rather than local state, so it survives switching away to Files Changed and back. */
 	selectedBlockId: string | null;
 	onSelectBlock: (blockId: string) => void;
 };

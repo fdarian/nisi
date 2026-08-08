@@ -7,8 +7,7 @@
  * numbering, so the rendered range keeps its true numbers. This is the
  * mechanism behind reference blocks.
  *
- * Both collapsed-reviewed-region rendering (`build-collapsed-diff.ts`) and
- * reference-block rendering (`build-location-diff.ts`) need to keep some
+ * Reference-block rendering (`build-location-diff.ts`) needs to keep some
  * head-file lines of a patch and drop others while preserving each
  * surviving run's real `@@` position — this is the one place that parses a
  * patch into per-line old/new positions and re-serializes a subset of them
@@ -100,21 +99,14 @@ export type LineDisposition = "keep" | "drop";
  * head number in from the nearest known disposition — forward first
  * (deletions anchor to what comes right after them), then backward for a
  * trailing run with nothing after. `fallbackWhenNoHeadLineAnywhere` covers
- * the rare hunk with no head-side line at all — callers pick its direction
- * (Phase 2 never collapses such a hunk; Phase 3 never keeps one, since it
- * can't belong to any head-line range).
- *
- * `D` is generic, not just `LineDisposition` — Phase 3's collapsed-region
- * grouping (`build-collapsed-diff.ts`) needs more than two dispositions (one
- * "drop" variant per claim, so adjacent reviewed runs from different claims
- * don't merge into one collapsed marker), and this primitive doesn't care
- * about the disposition alphabet's shape, only that it's comparable by `===`.
+ * the rare hunk with no head-side line at all (`build-location-diff.ts` never
+ * keeps one, since it can't belong to any head-line range).
  */
-export function resolveLineDispositions<D extends string>(
+export function resolveLineDispositions(
 	hunkLines: readonly AnnotatedLine[],
-	classify: (headLine: number) => D,
-	fallbackWhenNoHeadLineAnywhere: D,
-): readonly D[] {
+	classify: (headLine: number) => LineDisposition,
+	fallbackWhenNoHeadLineAnywhere: LineDisposition,
+): readonly LineDisposition[] {
 	const direct = hunkLines.map((line) =>
 		line.headLine === null ? undefined : classify(line.headLine),
 	);
@@ -136,8 +128,8 @@ export function resolveLineDispositions<D extends string>(
 	});
 }
 
-export type RunSegment<D extends string = LineDisposition> = {
-	disposition: D;
+export type RunSegment = {
+	disposition: LineDisposition;
 	lines: AnnotatedLine[];
 };
 
@@ -149,11 +141,11 @@ export type RunSegment<D extends string = LineDisposition> = {
  * `hunkLines`) — an index miss would mean that invariant broke, so this
  * throws rather than papering over it with a fabricated disposition.
  */
-export function groupIntoRuns<D extends string>(
+export function groupIntoRuns(
 	hunkLines: readonly AnnotatedLine[],
-	dispositions: readonly D[],
-): readonly RunSegment<D>[] {
-	const runs: RunSegment<D>[] = [];
+	dispositions: readonly LineDisposition[],
+): readonly RunSegment[] {
+	const runs: RunSegment[] = [];
 	hunkLines.forEach((line, index) => {
 		const disposition = dispositions[index];
 		if (disposition === undefined) {
@@ -172,7 +164,7 @@ export function groupIntoRuns<D extends string>(
 }
 
 /** Re-serializes one run as a standalone sub-hunk — its first line's old/new position already encodes the correct `@@` offset, so no recalculation is needed. */
-export function serializeSubHunk(run: RunSegment<string>): string {
+export function serializeSubHunk(run: RunSegment): string {
 	const first = run.lines[0];
 	if (first === undefined) return "";
 	const oldCount = run.lines.filter((line) => line.prefix !== "+").length;

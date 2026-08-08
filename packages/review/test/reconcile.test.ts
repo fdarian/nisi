@@ -448,6 +448,154 @@ describe("reconcile — range claims", () => {
 	});
 });
 
+describe("reconcile — reviewedBaseline", () => {
+	test("null when the file has no active claim at all", async () => {
+		await withTempRepo(async (repoRoot) => {
+			const result = await run(
+				reconcile(repoRoot, {
+					baseContent: "line1\nline2\n",
+					headContent: "line1\nline2 EDITED\n",
+					claims: [],
+				}),
+			);
+
+			expect(result.reviewedBaseline).toBeNull();
+		});
+	});
+
+	test("a whole-file claim's baseline keeps its own reviewed edit but reverts a later, unreviewed one", async () => {
+		await withTempRepo(async (repoRoot) => {
+			const base = numbered(10);
+			const reviewed = [...base];
+			reviewed[4] = "line5 REVIEWED"; // reviewed at claim time
+			const head = [...reviewed];
+			head[7] = "line8 EDITED AFTER REVIEW"; // edited again after the claim
+
+			const result = await run(
+				reconcile(repoRoot, {
+					baseContent: `${base.join("\n")}\n`,
+					headContent: `${head.join("\n")}\n`,
+					claims: [fileClaim(`${reviewed.join("\n")}\n`)],
+				}),
+			);
+
+			// The reviewed edit at line5 survives; the unreviewed one at line8
+			// reverts — net result is exactly what the claim's own snapshot was.
+			expect(result.reviewedBaseline).toBe(`${reviewed.join("\n")}\n`);
+		});
+	});
+
+	test("a single range claim's reviewed addition survives; an unreviewed addition elsewhere in the file doesn't", async () => {
+		await withTempRepo(async (repoRoot) => {
+			const base = numbered(10);
+			const snapshot = [...base];
+			snapshot.splice(5, 0, "CLAIMED A", "CLAIMED B"); // pure insertion at (snapshot) lines 6-7
+			const head = [...snapshot, "UNREVIEWED TAIL LINE"]; // a later, unclaimed insertion at EOF
+
+			const result = await run(
+				reconcile(repoRoot, {
+					baseContent: `${base.join("\n")}\n`,
+					headContent: `${head.join("\n")}\n`,
+					claims: [
+						rangeClaim(
+							`${snapshot.join("\n")}\n`,
+							[{ startLine: 6, endLine: 7 }],
+							"b1",
+						),
+					],
+				}),
+			);
+
+			expect(result.reviewedBaseline).toBe(`${snapshot.join("\n")}\n`);
+		});
+	});
+
+	test("two range claims ticked at different times jointly cover a hunk; an edit outside either's coverage still reverts", async () => {
+		await withTempRepo(async (repoRoot) => {
+			const base = numbered(10);
+			const reviewed = [...base];
+			for (let i = 2; i <= 6; i++) reviewed[i] = `line${i + 1} CHANGED`; // lines 3-7 differ from base
+			const head = [...reviewed];
+			head[8] = "line9 EDITED AFTER CLAIMS"; // outside both claims' ranges
+
+			const result = await run(
+				reconcile(repoRoot, {
+					baseContent: `${base.join("\n")}\n`,
+					headContent: `${head.join("\n")}\n`,
+					claims: [
+						// Union of both claims' ranges is [1,7] — wide enough that the
+						// hunk's leading boundary (line 2, right before line 3) is
+						// itself covered too, so the deletion-ambiguity rule doesn't
+						// kick in here (that's covered by its own test below).
+						rangeClaim(
+							`${reviewed.join("\n")}\n`,
+							[{ startLine: 1, endLine: 5 }],
+							"early",
+							100,
+						),
+						rangeClaim(
+							`${reviewed.join("\n")}\n`,
+							[{ startLine: 4, endLine: 7 }],
+							"late",
+							200,
+						),
+					],
+				}),
+			);
+
+			// Lines 3-7 are fully covered by the union of both claims — the
+			// line9 edit neither claim ever asserted anything about reverts.
+			expect(result.reviewedBaseline).toBe(`${reviewed.join("\n")}\n`);
+		});
+	});
+
+	test("a deletion whose surrounding lines are both already reviewed is omitted", async () => {
+		await withTempRepo(async (repoRoot) => {
+			const base = numbered(10);
+			const reviewedAndHead = [...base];
+			reviewedAndHead.splice(4, 2); // lines 5-6 deleted, already reflected in the claim's own snapshot
+
+			const result = await run(
+				reconcile(repoRoot, {
+					baseContent: `${base.join("\n")}\n`,
+					headContent: `${reviewedAndHead.join("\n")}\n`,
+					claims: [fileClaim(`${reviewedAndHead.join("\n")}\n`)],
+				}),
+			);
+
+			expect(result.reviewedBaseline).toBe(`${reviewedAndHead.join("\n")}\n`);
+		});
+	});
+
+	test("a deletion straddling the reviewed/new boundary is restored, not hidden", async () => {
+		await withTempRepo(async (repoRoot) => {
+			const base = numbered(10);
+			const head = [...base];
+			head.splice(4, 2); // lines 5-6 deleted
+
+			const result = await run(
+				reconcile(repoRoot, {
+					baseContent: `${base.join("\n")}\n`,
+					headContent: `${head.join("\n")}\n`,
+					claims: [
+						// Only claims the first 4 lines — never asserts anything about
+						// the line immediately after the deletion's gap.
+						rangeClaim(
+							`${head.join("\n")}\n`,
+							[{ startLine: 1, endLine: 4 }],
+							"b1",
+						),
+					],
+				}),
+			);
+
+			// Ambiguous boundary — err toward showing the deletion, so the
+			// baseline reverts all the way back to base at that point.
+			expect(result.reviewedBaseline).toBe(`${base.join("\n")}\n`);
+		});
+	});
+});
+
 describe("hasUnreviewedRanges", () => {
 	test("false when every range reconciled as reviewed", async () => {
 		await withTempRepo(async (repoRoot) => {

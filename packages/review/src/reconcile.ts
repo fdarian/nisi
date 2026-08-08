@@ -65,6 +65,16 @@ export type Reconciliation = {
 	/** `true` iff at least one range came back `"new"` — the file has content no surviving claim covers. */
 	readonly changedSinceReview: boolean;
 	readonly ranges: ReadonlyArray<ReviewRange>;
+	/**
+	 * The synthetic "before" file a genuine `reviewedBaseline → head` diff can
+	 * be computed against — `null` when the file has no active claim at all
+	 * (`claims` was empty). See `synthesizeReviewedBaseline`'s doc comment for
+	 * how it's built; the short version is it's the `base → head` alignment
+	 * with every still-`"reviewed"` span pulled back to head's text (so it
+	 * reads as unchanged) and every deletion the user has plausibly already
+	 * seen omitted.
+	 */
+	readonly reviewedBaseline: string | null;
 };
 
 /**
@@ -277,6 +287,117 @@ const splitRangeByClaims = (
 	return result;
 };
 
+/** Splits `content` into its lines, dropping the one artifact trailing `"\n"` produces — the same line numbering `Hunk.oldStart`/`newStart` already assume. */
+const splitLines = (content: string): ReadonlyArray<string> => {
+	if (content === "") return [];
+	return content.endsWith("\n")
+		? content.slice(0, -1).split("\n")
+		: content.split("\n");
+};
+
+/**
+ * Synthesizes the "before" side of a `reviewedBaseline → head` diff by
+ * walking the `base → head` alignment (`hunks`, already computed by
+ * `reconcile` for `ranges`) and, at every point the alignment moves off
+ * "unchanged", asking `coverage` (via `splitRangeByClaims`, the same
+ * attribution `ranges` itself is built from — no second pass) whether head's
+ * side of that point is still exactly what some claim vouches for:
+ *
+ * - Context (untouched by any hunk): head's text carries over as-is — it's
+ *   identical to base's, so no claim needs to vouch for it.
+ * - An added head line: carried over only if `"reviewed"` — it's new
+ *   otherwise, and the whole point of the baseline is to not pretend the
+ *   user already saw it.
+ * - A hunk's deleted base lines: restored — unless *both* the head line
+ *   immediately before the hunk and the first head line the hunk resumes at
+ *   (its `added` lines when there are any, otherwise the next context line)
+ *   are `"reviewed"`, in which case the deletion sits entirely inside
+ *   content the user has already looked at since and can stay omitted. Any
+ *   ambiguity (start/end of file, no coverage on one side) resolves to
+ *   restoring the deletion — showing it again is recoverable, hiding a real
+ *   deletion is not.
+ *
+ * `coverage`'s own attribution is re-run once over the *entire* head file
+ * (`{ start: 1, end: MAX_LINE }`, not just the hunks' domain `ranges` uses)
+ * so a query at any head line — including the context lines flanking a pure
+ * deletion, which never appear in `ranges` at all — has an answer. Every
+ * query this function makes lands at a strictly increasing head line, so
+ * that full-file partition only ever needs one forward-moving cursor, not a
+ * lookup per query.
+ */
+const synthesizeReviewedBaseline = (
+	hunks: ReadonlyArray<Hunk>,
+	headContent: string,
+	coverage: ReadonlyArray<AttributedInterval>,
+): string => {
+	const headLines = splitLines(headContent);
+	const fullDomainRuns = splitRangeByClaims(
+		{ start: 1, end: MAX_LINE },
+		coverage,
+	);
+
+	let runCursor = 0;
+	const isReviewedAt = (line: number): boolean => {
+		if (line < 1 || line > headLines.length) return false; // doesn't exist — ambiguous, not reviewed
+		while (
+			runCursor < fullDomainRuns.length - 1 &&
+			(fullDomainRuns[runCursor] as ReviewRange).endLine < line
+		) {
+			runCursor += 1;
+		}
+		const run = fullDomainRuns[runCursor];
+		return run !== undefined && run.status === "reviewed";
+	};
+
+	const sortedHunks = [...hunks].sort((a, b) => a.oldStart - b.oldStart);
+	const output: Array<string> = [];
+	let headCursor = 1;
+
+	for (const hunk of sortedHunks) {
+		const headTouchedStart =
+			hunk.newLines > 0 ? hunk.newStart : hunk.newStart + 1;
+		const headTouchedEnd =
+			hunk.newLines > 0 ? hunk.newStart + hunk.newLines - 1 : hunk.newStart;
+
+		for (let line = headCursor; line < headTouchedStart; line++) {
+			const text = headLines[line - 1];
+			if (text !== undefined) output.push(text);
+		}
+
+		// Unified-diff hunks always list every removed line before every added
+		// one, regardless of how git's own algorithm interleaved them internally.
+		const removed = hunk.lines
+			.filter((line) => line.startsWith("-"))
+			.map((line) => line.slice(1));
+		const added = hunk.lines
+			.filter((line) => line.startsWith("+"))
+			.map((line) => line.slice(1));
+
+		if (removed.length > 0) {
+			const bothReviewed =
+				isReviewedAt(headTouchedStart - 1) && isReviewedAt(headTouchedStart);
+			if (!bothReviewed) output.push(...removed);
+		}
+
+		for (let index = 0; index < added.length; index++) {
+			if (isReviewedAt(headTouchedStart + index)) {
+				output.push(added[index] as string);
+			}
+		}
+
+		headCursor = headTouchedEnd + 1;
+	}
+
+	for (let line = headCursor; line <= headLines.length; line++) {
+		const text = headLines[line - 1];
+		if (text !== undefined) output.push(text);
+	}
+
+	if (output.length === 0) return "";
+	const body = output.join("\n");
+	return headContent.endsWith("\n") ? `${body}\n` : body;
+};
+
 /**
  * Reconciliation over `base` (merge-base content), every currently-active
  * review claim on the file (whole-file and/or block-scoped ranges), and
@@ -339,9 +460,19 @@ export const reconcile = (
 				claim.ranges === null && claim.snapshotContent !== input.headContent,
 		);
 
+		const reviewedBaseline =
+			input.claims.length === 0
+				? null
+				: synthesizeReviewedBaseline(
+						baseHeadHunks,
+						input.headContent,
+						coverage,
+					);
+
 		return {
 			changedSinceReview:
 				fileClaimChanged || ranges.some((r) => r.status === "new"),
 			ranges,
+			reviewedBaseline,
 		};
 	});

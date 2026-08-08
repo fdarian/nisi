@@ -1,54 +1,42 @@
 ---
 type: Constraint
-title: Reverted lines are invisible after review
-description: Content that existed only in a review snapshot has no row in the base → head diff, so nothing renders it.
+title: Content invisible in the base → head diff can't be shown, even reviewed
+description: A line added then reverted away lives only in a review snapshot, never in base or head, so no diff between real file states can render it.
 tags: [review, reconciliation, tracked-changes, diff-pane]
 generated: { by: claude-code/claude-opus-5, at: 2026-08-01T05:48:15Z }
-verified: { by: claude-code/claude-opus-5, at: 2026-08-01 }
+verified: { by: claude-code/claude-sonnet-5, at: 2026-08-08 }
 sources:
   - id: reconcile
     resource: ../packages/review/src/reconcile.ts
-    title: reconcile()
-  - id: review-state
-    resource: ../apps/desktop/src/lib/pr-data.ts
-    title: useReviewState
+    title: reconcile(), synthesizeReviewedBaseline()
 ---
 
-Files Changed renders exactly one diff — `base → head` — and reviewed-ness is an *annotation layer*
-over it, never a second diff. `reconcile()` iterates `baseHeadHunks` and splits each hunk's head-line
-range into `reviewed`/`new` sub-ranges; nothing outside that domain can produce a
-range.[^reconcile]
+The diff pane now renders a genuine `reviewedBaseline → head` diff (`@repo/review`'s `reconcile()`
+synthesizes `reviewedBaseline`; `apps/desktop/sidecar/store.ts`'s `readFileContents` substitutes it
+for `base` when computing the patch) — reviewed-and-unchanged content is ordinary context, not an
+annotation layer over a `base → head` patch. That fixed the common complaint this note used to
+describe: a change already reviewed and then reverted away no longer reads as an untouched diff,
+because the divergence between base and head is still there for `synthesizeReviewedBaseline` to
+walk.
 
-The consequence, which is not obvious from the algorithm: **a line that lived only in the review
-snapshot can never be shown.** Add a line, commit, tick Reviewed, then drop the commit — the line is
-absent from base and absent from head, so `base → head` has no row for it. Git agrees; there is no
-deletion in that diff to render. The reviewed snapshot is the only artifact that ever contained it,
-and the snapshot is not a diff side.
-
-This is not silent. `changedSinceReview` fires anyway, off a separate check — `claim.ranges === null
-&& claim.snapshotContent !== headContent` — which is deliberately independent of whether any range
-survives.[^reconcile] The file gets its "Modified after review" badge and the sidebar's orange
-dot,[^review-state] and the Reviewed tick reads as stale. So the *signal* is correct; only the
-*content* of the change is unrenderable.
+One case survives, structurally: **`synthesizeReviewedBaseline` only ever walks `base → head`'s own
+hunks.**[^reconcile] A line added, reviewed, and reverted *before head ever diverged from base at
+that spot* — i.e. base and head end up byte-identical there — leaves no hunk for the synthesis to
+walk, so the transient content the review snapshot once held is simply not part of the alignment.
+`reviewedBaseline` falls back to copying head's (== base's) text through as context, same as
+untouched content anywhere else, and the diff pane correctly but unhelpfully reports "no changes."
 
 # Who hits this
 
-Anyone who reverts, rebases away, or amends out a change they had already reviewed — common enough
-when a reviewer follows a branch that's still being rewritten. Expect the report to arrive as "the
-detection works but the diff looks untouched," which reads like a bug in the change-detection work
-and isn't.
+Someone who reviews a change, then the branch gets rebased/amended so that specific hunk vanishes
+(not just gets superseded) — round-tripping the file back to what base already had. Rare relative to
+the "reviewed, then further edited" case this feature targets, since it requires the *net* diff
+against base to fully cancel out, not just move.
 
 # What it would take to fix
 
-Rendering `reviewed → head` for diverged files instead of `base → head`. That is a genuinely
-different diff, in different line coordinates, so it is not reachable by extending the annotation
-overlay: the diff pane, the wire shape in `packages/sidecar-api/src/diff.ts`, and every consumer of
-head-coordinate line numbers would all have to accept two coordinate spaces. Nobody has scoped it.
+A direct `diff(anySnapshot, head)` independent of the `base → head` alignment — which is a different,
+heavier computation (which snapshot, of possibly several claims, would even be the one to diff
+against for content `base → head` never touched?) and not what `reviewedBaseline` does. Not scoped.
 
-Note the root `AGENTS.md` describes tracked changes as showing you "`reviewed → head`, not the whole
-file again." That's the user-facing *effect* — achieved by collapsing already-reviewed runs of the
-base → head diff, not by diffing against the snapshot. The distinction is the whole of this
-constraint.
-
-[^reconcile]: reconcile()
-[^review-state]: useReviewState
+[^reconcile]: reconcile(), synthesizeReviewedBaseline()

@@ -72,3 +72,58 @@ export const diffContents = (
 
 		return parseHunks(result.stdout);
 	});
+
+/**
+ * The human-facing counterpart to `diffContents`: same bare-blob mechanism,
+ * but with git's normal context (not `-U0`) and a header naming `path` on
+ * both sides instead of the two blobs' shas — the shape a real file's patch
+ * has, which `@pierre/diffs`' `parsePatchFiles` and
+ * `apps/desktop/src/lib/build-location-diff.ts`'s hunk slicer both expect.
+ * Built for `reviewedBaseline → head`: neither side is a real git ref (the
+ * baseline is synthesized, head may be the worktree), so no ref-based `git
+ * diff` could produce a patch for this pair on its own.
+ *
+ * Rewriting the header is a plain string substitution, not positional line
+ * surgery — the two shas `hashObject` returns are effectively unique within
+ * the diff (they'd only collide with real content by chance), so swapping
+ * every `a/<oldSha>`/`b/<newSha>` occurrence for `a/<path>`/`b/<path>` covers
+ * the `diff --git`/`---`/`+++` lines in one pass without assuming their exact
+ * positions.
+ */
+export const diffContentsPatch = (
+	repoRoot: string,
+	path: string,
+	oldContent: string,
+	newContent: string,
+): Effect.Effect<
+	string,
+	GitCommandError,
+	ChildProcessSpawner.ChildProcessSpawner
+> =>
+	Effect.gen(function* () {
+		if (oldContent === newContent) return "";
+
+		const [oldSha, newSha] = yield* Effect.all(
+			[hashObject(repoRoot, oldContent), hashObject(repoRoot, newContent)],
+			{ concurrency: "unbounded" },
+		);
+
+		const args = ["diff", "--no-color", oldSha, newSha];
+		const result = yield* gitResult(repoRoot, args);
+		if (result.exitCode !== 0 && result.exitCode !== 1) {
+			return yield* new GitCommandError({
+				command: "git",
+				args,
+				cwd: repoRoot,
+				exitCode: result.exitCode,
+				stderr: result.stderr,
+				cause: new Error(
+					`git ${args.join(" ")} exited with code ${result.exitCode}: ${result.stderr}`,
+				),
+			});
+		}
+
+		return result.stdout
+			.replaceAll(`a/${oldSha}`, `a/${path}`)
+			.replaceAll(`b/${newSha}`, `b/${path}`);
+	});
