@@ -13,6 +13,9 @@
 
    </details> 
 - <details><summary> [Soon] Generated walkthrough — Understand changes, not files. Walkthrough will group related changes (per-hunks not just file) so the diff arrives explained and in reading order, every claim linked to the lines it's about.</summary>
+
+
+   > This feature is still unstable, you can enable it in the settings
    
    https://github.com/user-attachments/assets/4ca1be20-891a-4f62-8f2b-9c9468c80e76
 
