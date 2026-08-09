@@ -4,9 +4,12 @@ name: Release
 # the Version Packages PR merge (which deletes them) — never on an ordinary
 # push to main, which would have no pending changeset and nothing new to do.
 on:
+  workflow_dispatch:
   push:
     branches: [main]
     paths: [".changeset/**"]
+
+concurrency: ${{ github.workflow }}-${{ github.ref }}
 
 permissions:
   contents: write
