@@ -2,7 +2,7 @@
 
 **A simpler way to review code.**
 
-<!-- TODO: demo video -->
+https://github.com/user-attachments/assets/774635ec-6e25-4ba6-a492-4946e0ad5999
 
 **What’s unique about nisi**:
 - **Re-review only what changed since you last looked.** — Every other tool resets 400 lines of a reviewed file when you only added one nit. nisi snapshots your review and diffs from there.
