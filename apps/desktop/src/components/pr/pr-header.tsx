@@ -133,7 +133,7 @@ export function PrHeader({
 				</div>
 			</div>
 			{target.kind === "pr" && (
-				<div className='flex items-center gap-1'>
+				<div className="flex items-center gap-1">
 					<PrCiStatus
 						number={target.number}
 						orpc={orpc}
