@@ -2,14 +2,28 @@
 
 **A simpler way to review code.**
 
-https://github.com/user-attachments/assets/1c0d96ec-0e86-4086-bf3a-70a0b5cb1ca3
+<img width="2216" height="1450" alt="CleanShot 2026-08-09 at 18 46 53@2x" src="https://github.com/user-attachments/assets/3f176c9f-4cf0-4619-90b5-c7556b289f5c" />
+
+---
 
 **What’s unique about nisi**:
-- **Re-review only what changed since you last looked.** — Every other tool resets 400 lines of a reviewed file when you only added one nit. nisi snapshots your review and diffs from there.
-- *[Soon]* **Generated walkthrough** — Understand changes, not files. Walkthrough will group related changes (per-hunks not just file) so the diff arrives explained and in reading order, every claim linked to the lines it's about.
+- <details><summary>**Re-review only what changed since you last looked.** — Every other tool resets 400 lines of a reviewed file when you only added one nit. nisi snapshots your review and diffs from there.</summary>
+   
+   https://github.com/user-attachments/assets/8f14be35-15bf-4a83-9e25-9d5bc8caacd0
+
+   </details> 
+- <details><summary>*[Soon]* **Generated walkthrough** — Understand changes, not files. Walkthrough will group related changes (per-hunks not just file) so the diff arrives explained and in reading order, every claim linked to the lines it's about.</summary>
+   
+   https://github.com/user-attachments/assets/4ca1be20-891a-4f62-8f2b-9c9468c80e76
+
+  </details>
 
 **With the essentials**:
-- **Open with CLI** — Run `nisi` anywhere in your repo to **review PR** or **compare diffs**
+- <details><summary>**Open with CLI** — Run `nisi` anywhere in your repo to **review PR** or **compare diffs**</summary>
+   
+   https://github.com/user-attachments/assets/1c0d96ec-0e86-4086-bf3a-70a0b5cb1ca3
+
+  </details>
 - **Fast, and fully local** — Built with [Tauri](https://tauri.app/), `gh`, and SQLite
 - *[Soon]* **Bring your own harness** — Use your existing agents and subscription
 
