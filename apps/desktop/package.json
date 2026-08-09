@@ -13,7 +13,7 @@
 		"preview": "vite preview",
 		"tauri": "tauri",
 		"sidecar": "bun run sidecar/index.ts",
-		"check:type": "tsc --noEmit && tsc --noEmit -p tsconfig.sidecar.json && tsc --noEmit -p tsconfig.scripts.json",
+		"check:type": "tsr generate && tsc --noEmit && tsc --noEmit -p tsconfig.sidecar.json && tsc --noEmit -p tsconfig.scripts.json",
 		"check:lint": "biome lint .",
 		"test": "bun test sidecar",
 		"build:sidecar": "bun build --compile --target=bun-darwin-arm64 sidecar/index.ts --outfile src-tauri/binaries/sidecar-aarch64-apple-darwin",
