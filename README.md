@@ -2,7 +2,7 @@
 
 **A simpler way to review code.**
 
-https://github.com/user-attachments/assets/774635ec-6e25-4ba6-a492-4946e0ad5999
+https://github.com/user-attachments/assets/1c0d96ec-0e86-4086-bf3a-70a0b5cb1ca3
 
 **What’s unique about nisi**:
 - **Re-review only what changed since you last looked.** — Every other tool resets 400 lines of a reviewed file when you only added one nit. nisi snapshots your review and diffs from there.
@@ -12,6 +12,8 @@ https://github.com/user-attachments/assets/774635ec-6e25-4ba6-a492-4946e0ad5999
 - **Open with CLI** — Run `nisi` anywhere in your repo to **review PR** or **compare diffs**
 - **Fast, and fully local** — Built with [Tauri](https://tauri.app/), `gh`, and SQLite
 - *[Soon]* **Bring your own harness** — Use your existing agents and subscription
+
+More on [features section](#features)
 
 <details>
 <summary> A bit about the motivation </summary>
@@ -52,12 +54,26 @@ nisi /path/to/other/repo
 
 You can also open a PR from app directly, you’ll be prompted for the folder where the branch will be cloned (it can reuse existing checkout).
 
-More features:
+## Features
+
 - Handy, vim-like, keymaps:
-  - `j`/`k` to navigate between files
-  - `r` to mark reviewed, `u` to undo last reviewed
-  - `/` to search keyword and `cmd+f` for files. `n`/`N` to focus on the next/previous match
-- Include uncommitted changes, see new diffs in real-time
+   - <details><summary>`j`/`k` to navigate between files;  `r` to mark reviewed, `u` to undo last reviewed</summary>
+     
+     https://github.com/user-attachments/assets/a48f47ca-7b33-45e6-903a-1c1536480035
+   
+    </details>
+    
+   - <details><summary> `/` to search keyword and `cmd+f` for files. `n`/`N` to focus on the next/previous match</summary> 
+     
+     https://github.com/user-attachments/assets/e740fe41-a73b-423d-9ab3-a3369390f278
+   
+    </details>
+    
+- <details><summary>Include uncommitted changes, see new diffs in real-time</summary>
+   
+   https://github.com/user-attachments/assets/1192bbe0-eee3-4260-8d48-ba12ce9ff3df
+  
+   </details>
 
 ## Acknowledgements
 - [pierre diffs](https://diffs.com/) for awesome diff library to make this happen
