@@ -17,6 +17,7 @@
 		"check:lint": "biome lint .",
 		"test": "bun test sidecar",
 		"build:sidecar": "bun build --compile --target=bun-darwin-arm64 sidecar/index.ts --outfile src-tauri/binaries/sidecar-aarch64-apple-darwin",
+		"build:cli": "bun build --compile --target=bun-darwin-arm64 ../../packages/cli/src/index.ts --outfile src-tauri/binaries/nisi-cli-aarch64-apple-darwin",
 		"storybook": "storybook dev -p 6006",
 		"build-storybook": "storybook build"
 	},

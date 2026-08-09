@@ -39,6 +39,34 @@ with the detail — this is only the map.
 There's no `packages/config`: each package extends `@total-typescript/tsconfig` directly. Add one
 once the duplication actually hurts.
 
+## Development
+
+```sh
+pnpm turbo run check:type check:lint
+```
+
+Per-package tests — there's no repo-wide `test` task:
+
+```sh
+cd packages/<name> && bun test
+```
+
+`cd apps/desktop && bun dev` runs an isolated dev sandbox — its own `sidecar.json`, its own SQLite
+file, keyed off `NISI_DATA_DIR` — so it never fights the production app over the same data. A plain
+`nisi` always targets the production install; see `apps/desktop/AGENTS.md`'s "Dev/prod isolation"
+to point it at a dev sandbox instead.
+
+The sidecar keeps a rotating log file at `<data dir>/logs/sidecar.log` (`<data dir>` defaults to
+`~/Library/Application Support/com.nisi.desktop/`). Both the sidecar and the `nisi` CLI honor
+`LOG_LEVEL` (`trace`/`debug`/`info`/`warn`/`error`/`fatal`, default `info`) — see
+`packages/logging/AGENTS.md`.
+
+The walkthrough drives a real coding agent CLI (Claude Code, Codex, OpenCode, or Pi) against your
+own worktree, not a remote sandbox. Enable a harness in Settings (`Cmd+,`) and authenticate that
+CLI yourself first — nisi doesn't install the agent's own credentials. The first run per harness is
+slow (roughly 13–28s) while nisi installs a pinned copy of it; every run after that is warm. See
+`packages/harness-local/AGENTS.md`.
+
 ## Deeper notes
 - [knowledge/](knowledge/index.md) — measurements, testing protocol, and open decisions that fit no single file.
 

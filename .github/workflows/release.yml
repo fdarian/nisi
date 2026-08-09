@@ -1,0 +1,133 @@
+name: Release
+
+# Runs on every push to a changeset file (a release is being described) and on
+# the Version Packages PR merge (which deletes them) — never on an ordinary
+# push to main, which would have no pending changeset and nothing new to do.
+on:
+  push:
+    branches: [main]
+    paths: [".changeset/**"]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  release:
+    name: Release
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
+
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: lts/*
+          cache: pnpm
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: apps/desktop/src-tauri
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Opens/updates the "Version Packages" PR. No `publish:` — every package
+      # is private, so there's nothing to push to a registry; the PR merge is
+      # the release trigger, handled by the gated steps below.
+      - name: Create Version PR
+        id: changesets
+        uses: changesets/action@v1
+        with:
+          version: bun run ci:version
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # `outputs.published` is always "false" here (nothing is ever
+      # published), so it can't signal the release moment, and
+      # `hasChangesets == 'false'` alone isn't enough either — it's also true
+      # for any ordinary push to `.changeset/**` that happens to leave no
+      # pending changesets (e.g. hand-editing config.json on main), not just
+      # the Version PR merge. Resolving the release-or-not decision here,
+      # before the ~10 minute macOS build, means a no-op push can't rebuild
+      # and re-upload the DMG over the existing release (which would briefly
+      # desync the asset's sha256 from what the tap advertises until the cask
+      # push catches up) and can't burn a runner on a config typo.
+      - name: Resolve version and release status
+        id: release-check
+        run: |
+          VERSION=$(node -p "require('./apps/desktop/package.json').version")
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+          should_release=false
+          if [ "${{ steps.changesets.outputs.hasChangesets }}" = "false" ] \
+            && ! gh release view "v$VERSION" >/dev/null 2>&1; then
+            should_release=true
+          fi
+          echo "should_release=$should_release" >> "$GITHUB_OUTPUT"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build app
+        if: steps.release-check.outputs.should_release == 'true'
+        run: bun run --cwd apps/desktop build
+
+      - name: Rename DMG
+        if: steps.release-check.outputs.should_release == 'true'
+        run: |
+          shopt -s nullglob
+          dmgs=(apps/desktop/src-tauri/target/release/bundle/dmg/*.dmg)
+          if [ "${#dmgs[@]}" -ne 1 ]; then
+            echo "::error::expected exactly one dmg in bundle/dmg, found ${#dmgs[@]}: ${dmgs[*]}" >&2
+            exit 1
+          fi
+          mv "${dmgs[0]}" nisi-macos-arm64.dmg
+
+      - name: Create GitHub release
+        if: steps.release-check.outputs.should_release == 'true'
+        run: |
+          VERSION="${{ steps.release-check.outputs.version }}"
+          TAG="v$VERSION"
+          CHANGELOG=apps/desktop/CHANGELOG.md
+
+          if [ ! -f "$CHANGELOG" ]; then
+            echo "::error::$CHANGELOG not found — expected changesets to have generated it" >&2
+            exit 1
+          fi
+
+          awk -v ver="## $VERSION" '
+            $0 == ver { found=1; next }
+            found && /^## / { exit }
+            found { print }
+          ' "$CHANGELOG" > /tmp/release-notes.md
+
+          if [ -s /tmp/release-notes.md ]; then
+            gh release create "$TAG" nisi-macos-arm64.dmg --title "$TAG" --notes-file /tmp/release-notes.md
+          else
+            echo "::warning::no '## $VERSION' entry in $CHANGELOG — falling back to a bare notes line" >&2
+            gh release create "$TAG" nisi-macos-arm64.dmg --title "$TAG" --notes "$TAG"
+          fi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Update Homebrew cask
+        if: steps.release-check.outputs.should_release == 'true'
+        run: bun run scripts/update-homebrew-cask.ts
+        env:
+          VERSION: ${{ steps.release-check.outputs.version }}
+          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}

@@ -1,6 +1,12 @@
 {
 	"$schema": "https://schema.tauri.app/config/2",
+	"build": {
+		"beforeBuildCommand": "bun run build:sidecar && bun run build:cli && bun run build:frontend"
+	},
 	"bundle": {
-		"externalBin": ["binaries/sidecar"]
+		"externalBin": ["binaries/sidecar", "binaries/nisi-cli"],
+		"macOS": {
+			"signingIdentity": "-"
+		}
 	}
 }

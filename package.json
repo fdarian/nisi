@@ -1,11 +1,15 @@
 {
 	"name": "@repo/root",
 	"private": true,
+	"license": "Apache-2.0",
 	"scripts": {
-		"format": "biome check --write"
+		"format": "biome check --write",
+		"sync-version": "bun scripts/sync-version.ts",
+		"ci:version": "changeset version && bun run sync-version"
 	},
 	"devDependencies": {
 		"@biomejs/biome": "2.4.15",
+		"@changesets/cli": "^2.31.1",
 		"turbo": "2.9.14"
 	},
 	"packageManager": "pnpm@11.20.0",
