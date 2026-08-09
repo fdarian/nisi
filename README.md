@@ -7,19 +7,19 @@
 ---
 
 **What’s unique about nisi**:
-- <details><summary>**Re-review only what changed since you last looked.** — Every other tool resets 400 lines of a reviewed file when you only added one nit. nisi snapshots your review and diffs from there.</summary>
+- <details><summary> Re-review only what changed since you last looked. — Every other tool resets 400 lines of a reviewed file when you only added one nit. nisi snapshots your review and diffs from there.</summary>
    
    https://github.com/user-attachments/assets/8f14be35-15bf-4a83-9e25-9d5bc8caacd0
 
    </details> 
-- <details><summary>*[Soon]* **Generated walkthrough** — Understand changes, not files. Walkthrough will group related changes (per-hunks not just file) so the diff arrives explained and in reading order, every claim linked to the lines it's about.</summary>
+- <details><summary> [Soon] Generated walkthrough — Understand changes, not files. Walkthrough will group related changes (per-hunks not just file) so the diff arrives explained and in reading order, every claim linked to the lines it's about.</summary>
    
    https://github.com/user-attachments/assets/4ca1be20-891a-4f62-8f2b-9c9468c80e76
 
   </details>
 
 **With the essentials**:
-- <details><summary>**Open with CLI** — Run `nisi` anywhere in your repo to **review PR** or **compare diffs**</summary>
+- <details><summary> Open with CLI — Run `nisi` anywhere in your repo to **review PR or compare diffs</summary>
    
    https://github.com/user-attachments/assets/1c0d96ec-0e86-4086-bf3a-70a0b5cb1ca3
 
@@ -71,13 +71,13 @@ You can also open a PR from app directly, you’ll be prompted for the folder wh
 ## Features
 
 - Handy, vim-like, keymaps:
-   - <details><summary>`j`/`k` to navigate between files;  `r` to mark reviewed, `u` to undo last reviewed</summary>
+   - <details><summary>j/k to navigate between files;  r to mark reviewed, u to undo last reviewed</summary>
      
      https://github.com/user-attachments/assets/a48f47ca-7b33-45e6-903a-1c1536480035
    
     </details>
     
-   - <details><summary> `/` to search keyword and `cmd+f` for files. `n`/`N` to focus on the next/previous match</summary> 
+   - <details><summary> / to search keyword and ⌘+f for files. n/N to focus on the next/previous match</summary> 
      
      https://github.com/user-attachments/assets/e740fe41-a73b-423d-9ab3-a3369390f278
    
