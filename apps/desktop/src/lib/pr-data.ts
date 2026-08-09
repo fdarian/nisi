@@ -134,7 +134,11 @@ export type ReviewStateEntry = {
 };
 
 /** Mirrors `sessions.list()` plus a `sessions.close` mutation, kept live by `events.subscribe`. */
-export function useSessions(orpc: SidecarQueryUtils): {
+export function useSessions(
+	orpc: SidecarQueryUtils,
+	/** Fires when a `session-opened` event arrives — the caller sets `requestedActiveSessionId` (`app-shell.tsx`) so a CLI-opened tab activates the same way `OpenPullRequestPalette`'s `onSessionOpened` does for the in-app path. */
+	onSessionOpened: (sessionId: string) => void,
+): {
 	sessions: readonly Session[];
 	isLoading: boolean;
 	closeSession: (sessionId: string) => void;
@@ -147,11 +151,16 @@ export function useSessions(orpc: SidecarQueryUtils): {
 	// running app is exactly what `events.subscribe` exists for — a live
 	// query resolves to the latest emitted `SessionEvent`, so any event just
 	// invalidates the list rather than trying to reconcile it by hand.
+	// `session-opened` additionally requests activation, since that's the one
+	// event whose whole point is a tab the user hasn't looked at yet.
 	const eventsQuery = useQuery(orpc.events.subscribe.liveOptions());
 	useEffect(() => {
 		if (eventsQuery.data === undefined) return;
 		queryClient.invalidateQueries({ queryKey: orpc.sessions.list.queryKey() });
-	}, [eventsQuery.data, queryClient, orpc]);
+		if (eventsQuery.data.type === "session-opened") {
+			onSessionOpened(eventsQuery.data.session.id);
+		}
+	}, [eventsQuery.data, queryClient, orpc, onSessionOpened]);
 
 	const closeSession = useCallback(
 		(sessionId: string) => {

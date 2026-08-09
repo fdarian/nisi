@@ -169,6 +169,23 @@ const attempt = (
 		return { _tag: "unreachable" } as const;
 	});
 
+/**
+ * A sidecar that answers means the app is already running — but it's running
+ * behind whatever terminal the user typed `nisi` into, and nothing else on that
+ * path brings it forward. `open -a` on an already-running app is exactly that
+ * activate (see `launchApp`), so the same call that spawns a cold app focuses a
+ * warm one. A failed activate must never downgrade a session that genuinely
+ * opened, so it's logged rather than propagated.
+ */
+const focusRunningApp = launchApp.pipe(
+	Effect.tapError((error) =>
+		Effect.logDebug("could not focus the running app", {
+			reason: error.reason,
+		}),
+	),
+	Effect.ignore,
+);
+
 /** Keeps retrying through either flavor of "no answer yet" — only a conclusive outcome ends the poll early. */
 const pollUntilReachable = (
 	sidecarJsonPath: string,
@@ -186,17 +203,9 @@ const pollUntilReachable = (
 		return yield* pollUntilReachable(sidecarJsonPath, cwd, target, deadline);
 	});
 
-/**
- * The seam (see apps/desktop/AGENTS.md's "The seam" section): read
- * `sidecar.json` and POST; if nothing answers, spawn the app detached, then
- * poll the same file/POST pair until the newly-booted sidecar responds or we
- * give up. Always the same POST either way, so the app has exactly one
- * ingest path rather than one for argv-at-boot and another for a running
- * instance. `target` is the CLI's own `nisi`/`nisi pr`/`nisi diff [<base>]`
- * selection (`packages/cli/src/index.ts`), passed straight through to
- * `sessions.open` — this module doesn't interpret it.
- */
-export const handoff = (
+/** Everything up to "is there a session?" — deliberately says nothing about which window is in front. */
+const openSession = (
+	sidecarJsonPath: string,
 	cwd: string,
 	target: OpenSessionTarget,
 ): Effect.Effect<
@@ -205,14 +214,6 @@ export const handoff = (
 	FileSystem | ChildProcessSpawner.ChildProcessSpawner
 > =>
 	Effect.gen(function* () {
-		const dataDir = yield* dataDirConfig.pipe(Effect.orDie);
-		const sidecarJsonPath = join(dataDir, "sidecar.json");
-		yield* Effect.logDebug("resolved data dir", {
-			dataDir,
-			sidecarJsonPath,
-			logFile: join(dataDir, "logs", "sidecar.log"),
-		});
-
 		const first = yield* attempt(sidecarJsonPath, cwd, target);
 		if (first._tag === "opened" || first._tag === "rejected") {
 			return first;
@@ -247,4 +248,43 @@ export const handoff = (
 			target,
 			Date.now() + pollTimeoutMs,
 		);
+	});
+
+/**
+ * The seam (see apps/desktop/AGENTS.md's "The seam" section): read
+ * `sidecar.json` and POST; if nothing answers, spawn the app detached, then
+ * poll the same file/POST pair until the newly-booted sidecar responds or we
+ * give up. Always the same POST either way, so the app has exactly one
+ * ingest path rather than one for argv-at-boot and another for a running
+ * instance. `target` is the CLI's own `nisi`/`nisi pr`/`nisi diff [<base>]`
+ * selection (`packages/cli/src/index.ts`), passed straight through to
+ * `sessions.open` — this module doesn't interpret it.
+ *
+ * Opening a session and putting the app in front are separate concerns here:
+ * only one of `openSession`'s paths launches the app, but every path that ends
+ * in a session wants that app frontmost, so the focus lives out here where it
+ * covers all of them.
+ */
+export const handoff = (
+	cwd: string,
+	target: OpenSessionTarget,
+): Effect.Effect<
+	HandoffOutcome,
+	never,
+	FileSystem | ChildProcessSpawner.ChildProcessSpawner
+> =>
+	Effect.gen(function* () {
+		const dataDir = yield* dataDirConfig.pipe(Effect.orDie);
+		const sidecarJsonPath = join(dataDir, "sidecar.json");
+		yield* Effect.logDebug("resolved data dir", {
+			dataDir,
+			sidecarJsonPath,
+			logFile: join(dataDir, "logs", "sidecar.log"),
+		});
+
+		const outcome = yield* openSession(sidecarJsonPath, cwd, target);
+		if (outcome._tag === "opened") {
+			yield* focusRunningApp;
+		}
+		return outcome;
 	});

@@ -21,9 +21,12 @@ optional `[<path>]` positional `nisi` always has (`diff` reads it second, after 
   }`) with a short per-attempt timeout, and only spawn the app (`app-launch.ts`) when that POST can't
   reach anything — never on a declared app-level error, which means the sidecar is alive and
   answered. Always the same POST either way; `target` just rides along, uninterpreted by this module.
+  Opening a session and putting the app in front are separate steps (`openSession`, then the focus in
+  `handoff`): only one path spawns the app, but every path that ends in a session wants it frontmost.
 - `src/app-launch.ts` — resolves "the app" (env override, `/Applications`, or a locally-built
-  release bundle — nisi has no install channel yet) and launches it via `open -a`, which hands
-  off to LaunchServices and exits on its own.
+  release bundle — nisi has no install channel yet) and `open -a`s it, which hands off to
+  LaunchServices and exits on its own — a launch when the app is cold, an activate when it's
+  already running.
 
 ## Gotchas
 

@@ -110,10 +110,13 @@ function AppShellReady({
 }: {
 	orpc: SidecarQueryUtils;
 }): React.ReactElement {
-	const { sessions, closeSession } = useSessions(orpc);
 	const [requestedActiveSessionId, setRequestedActiveSessionId] = useState<
 		string | null
 	>(null);
+	const { sessions, closeSession } = useSessions(
+		orpc,
+		setRequestedActiveSessionId,
+	);
 	const [paletteOpen, setPaletteOpen] = useState(false);
 	const openPalette = useCallback(() => setPaletteOpen(true), []);
 	useOpenPrPaletteShortcut(openPalette);
