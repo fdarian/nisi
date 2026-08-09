@@ -13,8 +13,6 @@
 - **Fast, and fully local** — Built with [Tauri](https://tauri.app/), `gh`, and SQLite
 - *[Soon]* **Bring your own harness** — Use your existing agents and subscription
 
-See [the complete features](#complete-features)
-
 <details>
 <summary> A bit about the motivation </summary>
 
@@ -54,8 +52,7 @@ nisi /path/to/other/repo
 
 You can also open a PR from app directly, you’ll be prompted for the folder where the branch will be cloned (it can reuse existing checkout).
 
-## Complete Features
-*Non-exhaustive*
+More features:
 - Handy, vim-like, keymaps:
   - `j`/`k` to navigate between files
   - `r` to mark reviewed, `u` to undo last reviewed
