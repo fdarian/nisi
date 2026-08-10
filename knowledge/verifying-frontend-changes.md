@@ -41,4 +41,20 @@ only cheap way to tell the two apart.
 The same shape of error applies to any "absence" assertion here — no overlap, no jump, no
 misalignment. Absence is only evidence once you have shown the probe can detect presence.
 
+# Measuring heap retention
+
+`performance.memory.usedJSHeapSize` read without forcing a GC first is noise — V8 collects lazily, so
+a reading taken right after closing tabs mixes live retention with garbage not yet swept. Two agents
+independently burned time rediscovering this before landing on a protocol that holds:
+
+- Launch a dedicated Chrome with `--remote-debugging-port` and `--js-flags=--expose-gc`, driven over
+  CDP from Bun — not the app's own dev-harness tab, so nothing else shares the process.
+- Call `HeapProfiler.collectGarbage` **twice** before every reading. One pass is not reliable; V8 can
+  leave a second pass's worth of garbage after the first.
+- Treat RSS as a secondary signal only — it lags GC by minutes, so reading it right after collection
+  under-reports what a few minutes' wait would show.
+
+This is the protocol behind the numbers in
+[the CodeView teardown leak patch](codeview-teardown-leak-patch.md).
+
 [^browser-harness]: Browser dev harness (apps/desktop/AGENTS.md)
