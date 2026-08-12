@@ -1,13 +1,14 @@
 import { SqliteDb } from "@repo/db";
 import { and, eq } from "drizzle-orm";
 import { Context, Effect, Layer } from "effect";
-import { dbUse, runMigrations } from "./db/client.ts";
+import { runMigrations } from "./db/client.ts";
 import {
 	type RepoPathRow,
 	repoPaths as repoPathsTable,
 	type SettingsRow,
 	settings as settingsTable,
 } from "./db/schema.ts";
+import { SettingsStoreError } from "./errors.ts";
 
 export type SidebarViewMode = "tree" | "flat";
 export type DiffStyleMode = "unified" | "split";
@@ -102,13 +103,16 @@ export class SettingsStore extends Context.Service<SettingsStore>()(
 	"SettingsStore",
 	{
 		make: Effect.gen(function* () {
-			const { db } = yield* SqliteDb;
+			const db = yield* SqliteDb;
 			yield* runMigrations(db);
 
-			const readRow = () =>
-				dbUse(db, (client) =>
-					client.select().from(settingsTable).limit(1).all(),
+			/** A drizzle query's own typed failure, re-mapped to this store's `SettingsStoreError` — the effect-native adapter already fails typed, so this is the only wrapping a query needs. */
+			const query = <A, E>(effect: Effect.Effect<A, E>) =>
+				effect.pipe(
+					Effect.mapError((cause) => new SettingsStoreError({ cause })),
 				);
+
+			const readRow = () => query(db.select().from(settingsTable).limit(1));
 
 			const get = () =>
 				readRow().pipe(
@@ -140,16 +144,13 @@ export class SettingsStore extends Context.Service<SettingsStore>()(
 					};
 
 					if (existing === undefined) {
-						yield* dbUse(db, (client) =>
-							client.insert(settingsTable).values(values).run(),
-						);
+						yield* query(db.insert(settingsTable).values(values));
 					} else {
-						yield* dbUse(db, (client) =>
-							client
+						yield* query(
+							db
 								.update(settingsTable)
 								.set(values)
-								.where(eq(settingsTable.id, existing.id))
-								.run(),
+								.where(eq(settingsTable.id, existing.id)),
 						);
 					}
 
@@ -157,8 +158,8 @@ export class SettingsStore extends Context.Service<SettingsStore>()(
 				});
 
 			const repoPathRow = (owner: string, repo: string) =>
-				dbUse(db, (client) =>
-					client
+				query(
+					db
 						.select()
 						.from(repoPathsTable)
 						.where(
@@ -167,8 +168,7 @@ export class SettingsStore extends Context.Service<SettingsStore>()(
 								eq(repoPathsTable.repo, repo),
 							),
 						)
-						.limit(1)
-						.all(),
+						.limit(1),
 				).pipe(Effect.map((rows) => rows.at(0)));
 
 			/** The known local checkout path for `owner/repo`, or `null` when nothing's been recorded for it yet. */
@@ -188,26 +188,24 @@ export class SettingsStore extends Context.Service<SettingsStore>()(
 					const existing = yield* repoPathRow(owner, repo);
 					const updatedAt = new Date();
 					if (existing === undefined) {
-						yield* dbUse(db, (client) =>
-							client
+						yield* query(
+							db
 								.insert(repoPathsTable)
-								.values({ owner, repo, path, updatedAt })
-								.run(),
+								.values({ owner, repo, path, updatedAt }),
 						);
 					} else {
-						yield* dbUse(db, (client) =>
-							client
+						yield* query(
+							db
 								.update(repoPathsTable)
 								.set({ path, updatedAt })
-								.where(eq(repoPathsTable.id, existing.id))
-								.run(),
+								.where(eq(repoPathsTable.id, existing.id)),
 						);
 					}
 				});
 
 			/** Every known `owner/repo` → path mapping — the candidate set `@repo/git`'s `inferRepoPath` guesses a sibling from. */
 			const listRepoPaths = () =>
-				dbUse(db, (client) => client.select().from(repoPathsTable).all()).pipe(
+				query(db.select().from(repoPathsTable)).pipe(
 					Effect.map((rows) => rows.map(toRepoPathMapping)),
 				);
 
