@@ -10,7 +10,7 @@
 		"check:type": "tsc --noEmit",
 		"check:lint": "biome lint .",
 		"test": "bun test",
-		"db:generate": "bun -b drizzle-kit generate && bun run src/db/gen-migrations.ts",
+		"db:generate": "bun -b drizzle-kit generate && bun -b deskkit gen-migrations && bunx biome check --write .gen/migrations.gen.ts",
 		"db:studio": "bun -b drizzle-kit studio"
 	},
 	"dependencies": {
