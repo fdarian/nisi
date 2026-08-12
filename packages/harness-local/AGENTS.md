@@ -82,34 +82,63 @@ internal boundary to put Effect at; contorting it in would just add ceremony aro
   itself does once its session is live happens inside the already-spawned bridge/CLI process
   tree, never routed back through here.
 
+## Two sandbox modes
+
+`createLocalSandbox`'s `LocalSandboxSettings` (`mode: "in-place" | "relocated"`) picks where a
+session's `defaultWorkingDirectory` lands, and returns `{ provider, workDir }` — the paired
+`workDir` string the caller must feed straight into `HarnessAgent`'s `sandboxConfig.workDir`. The
+two can't be resolved independently: the framework composes them as
+`<defaultWorkingDirectory>/<workDir>` (`resolveSessionWorkDir`, `@ai-sdk/harness`'s internal
+`sandbox-bootstrap.ts`), and `workDir` must stay relative — an absolute one throws
+`HarnessAgent: \`sandboxConfig.workDir\` must be relative` (`harness-agent.ts`, validated in both
+the constructor and per `createSession`).
+
+- **`in-place`** — `defaultWorkingDirectory` is the repo's own parent, `workDir` its folder name;
+  the framework's own `mkdir -p` then no-ops on the already-existing directory. Used only by
+  **pi**: it has no bootstrap recipe at all (no `getBootstrap`, no `BOOTSTRAP_DIR`, no pkg-manager
+  install anywhere in its source — it mirrors the workspace into an in-process VFS instead), so
+  there's nothing outside `workDir` to relocate. Pi is also the one harness relocation would
+  actively break: its path-containment check (`pi-remote-ops.ts`) canonicalizes the sandbox side
+  but not `workDir` itself, so a symlinked `workDir` (what `relocated` mode below would produce)
+  fails every read/write with `Pi path escapes the workspace`.
+- **`relocated`** — `defaultWorkingDirectory` is a caller-supplied scratch root, and `workDir` is a
+  path-hash-keyed symlink (`ensureRepoSymlink`, idempotent — created if missing, replaced if it
+  points elsewhere, left alone otherwise, on every `createSession()`) pointing at the real repo.
+  Used by **claude-code/codex/opencode**: each bootstraps a pinned CLI install into
+  `defaultWorkingDirectory` on first use (`.harness-bootstrap/<harness>`, relative — see the
+  gotcha below). Left in-place, that install runs inside whatever pnpm workspace the repo happens
+  to sit in — for nisi reviewing its own worktrees, that's nisi's own workspace, and pnpm's
+  global-store linking (`enableGlobalVirtualStore: true`) disagreeing with the bootstrap's own
+  `--store-dir` makes pnpm try to purge and relink `node_modules`, which a GUI-launched sidecar has
+  no TTY to confirm through (`ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY`).
+  `apps/desktop/sidecar/walkthrough/generate.ts` picks the mode per harness and resolves the
+  scratch root to a fixed `~/.nisi/harness-sandbox` — deliberately *not* `getDataDirConfig()`'s
+  `NISI_DATA_DIR`-derived app-data dir, since `scripts/dev.ts` points that at a per-worktree
+  session dir inside the nisi checkout, i.e. inside a pnpm workspace. `~/.nisi` is outside any
+  checkout regardless of `NISI_DATA_DIR`, and shared across dev/prod/every repo on purpose: it
+  only ever holds the pinned CLI install, keyed by a content-derived bootstrap marker, so there's
+  nothing to split-brain over and dev gets a warm bootstrap for free — same "shared across
+  sessions and repos" reasoning as never making the scratch root per-session.
+
 ## Gotchas
 
-- **Reaching the real worktree**: the harness composes
-  `<defaultWorkingDirectory>/<sandboxConfig.workDir>` (`resolveSessionWorkDir` in
-  `@ai-sdk/harness`'s internal `sandbox-bootstrap.ts`). Callers using this provider against a real
-  repo must set `defaultWorkingDirectory` to the repo's *parent* and `sandboxConfig.workDir` to
-  the repo's folder name — the framework's own `mkdir -p` then no-ops on the already-existing
-  directory. This package does not special-case that; it just doesn't fight it (no assumption
-  anywhere that `defaultWorkingDirectory` is empty or provider-owned).
-- **The claude-code adapter's bootstrap directory is hardcoded to `/tmp/harness/claude-code`** —
-  an absolute path baked into `@ai-sdk/harness-claude-code`'s `claude-code-harness.ts`
-  (`BOOTSTRAP_DIR`), not something `sandboxConfig` or this provider can redirect. Because this
-  provider's file operations are real, persistent disk (not an ephemeral VM overlay), that path is
-  stable across app relaunches on its own — the bootstrap marker
-  (`/tmp/harness/claude-code/.bootstrap-<hash>.ok`) survives without this package needing to
-  relocate anything under `NISI_DATA_DIR`. If a future adapter *does* expose a configurable
-  bootstrap dir, revisit this note.
+- **The bootstrap directory is a relative path under `defaultWorkingDirectory`, not an absolute
+  `/tmp` path.** Verified against `@ai-sdk/harness-claude-code@1.0.55`
+  (`BOOTSTRAP_DIR = '.harness-bootstrap/claude-code'`), `@ai-sdk/harness-codex@1.0.56`
+  (`.harness-bootstrap/codex`), and `@ai-sdk/harness-opencode@1.0.55` (`.harness-bootstrap/opencode`)
+  — each resolved via `posix.resolve(defaultWorkingDirectory, BOOTSTRAP_DIR)`
+  (`bootstrap-recipe.ts`'s `resolveBootstrapPath`), never touching `workDir`. This is exactly why
+  `defaultWorkingDirectory` needs relocating for these three harnesses (see "Two sandbox modes"
+  above) rather than being redirectable through `sandboxConfig` alone. Because this provider's file
+  operations are real, persistent disk (not an ephemeral VM overlay), the bootstrap marker
+  (`.bootstrap-<hash>.ok`) survives across app relaunches on its own, same as it always did — the
+  only thing relocation changes is which persistent directory it lives under.
   - **Cold vs. warm `createSession()`**: measured (live-verification against real `claude`, this
     machine, 2026-07-28) at **~13–28s cold** (fresh clone + `pnpm install` of
     `@anthropic-ai/claude-code` and its deps, plus the CLI's own install step) vs. **~0.3–0.8s
     warm** (marker present, bootstrap is a single file read). The frontend must surface progress
     for the cold path specifically — a bare spinner reads as hung at 13–28s — and should be able
     to say *why* it's slow (first-time CLI install) rather than just that it is.
-  - **"Once ever" is really "once per few days of active use."** macOS periodically reclaims
-    `/tmp` entries untouched for about three days (`/private/tmp`'s periodic cleanup, not a
-    per-reboot wipe). A nisi user who goes a few days without running a harness session will hit
-    the cold path again through no fault of the marker logic — this is expected, not a bug in the
-    bootstrap-skip check.
 - **`sandboxSession.ports` must be non-empty before the claude-code adapter starts** — it reads
   `ports[0]` as the bridge port (`resolveBridgePort` in `claude-code-harness.ts`) and throws
   `HarnessCapabilityUnsupportedError` if empty. `LocalSandboxProvider.createSession` allocates one
