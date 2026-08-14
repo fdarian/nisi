@@ -262,7 +262,70 @@ export function useFileContents(
 		[paths],
 	);
 
-	const results = useQueries({
+	// Plain `useQueries` (no `combine`) hands back a fresh `matches.map(...)`
+	// array on every render — query-core's `QueriesObserver.getOptimisticResult`
+	// only memoizes through `#combineResult`, and that path is skipped
+	// entirely when no `combine` is passed (see
+	// `@tanstack/query-core`'s `queriesObserver.js`). That fresh array used to
+	// flow straight into a `useMemo` building the `FileContentsMap` below, so
+	// the map got a new identity every render of `FilesChangedView` even when
+	// nothing had actually changed — which in turn defeated `DiffPane`'s
+	// `items` memo and the keyword-search memos in `files-changed-view.tsx`
+	// that depend on this map.
+	//
+	// `combine` fixes that at the source: `#combineResult` caches
+	// `#combinedResult` and only recomputes when its *own* tracked
+	// `results`/`queryHashes`/`combine` change — not via `replaceEqualDeep`
+	// (which can't structurally compare a `Map`, so it would just hand back
+	// the new one). That cache is keyed in part on `combine`'s own identity,
+	// so `combine` itself has to be stable across renders — hence
+	// `useCallback`, closing over `chunks` (already memoized on `paths`)
+	// rather than `paths` directly.
+	const combineFileContents = useCallback(
+		(
+			results: readonly {
+				data:
+					| readonly { path: string; content: FileContent | null }[]
+					| undefined;
+				isLoading: boolean;
+				isError: boolean;
+				isSuccess: boolean;
+			}[],
+		): FileContentsMap => {
+			const map = new Map<
+				string,
+				{
+					content: FileContent | undefined;
+					isLoading: boolean;
+					isError: boolean;
+				}
+			>();
+			chunks.forEach((chunk, chunkIndex) => {
+				const result = results[chunkIndex];
+				const contentByPath = new Map(
+					(result?.data ?? []).map(
+						(entry) => [entry.path, entry.content] as const,
+					),
+				);
+				for (const path of chunk) {
+					const content = contentByPath.get(path);
+					// A path the sidecar reported as not part of the diff (`content:
+					// null`) is a fetch-level error the same way a 404 used to be —
+					// distinct from "this chunk hasn't resolved yet" (`undefined`).
+					const pathNotInDiff = result?.isSuccess === true && content === null;
+					map.set(path, {
+						content: content ?? undefined,
+						isLoading: result?.isLoading ?? false,
+						isError: (result?.isError ?? false) || pathNotInDiff,
+					});
+				}
+			});
+			return map;
+		},
+		[chunks],
+	);
+
+	return useQueries({
 		queries: chunks.map((chunk) =>
 			orpc.diff.fileContents.queryOptions({
 				input: {
@@ -274,35 +337,8 @@ export function useFileContents(
 				},
 			}),
 		),
+		combine: combineFileContents,
 	});
-
-	return useMemo(() => {
-		const map = new Map<
-			string,
-			{ content: FileContent | undefined; isLoading: boolean; isError: boolean }
-		>();
-		chunks.forEach((chunk, chunkIndex) => {
-			const result = results[chunkIndex];
-			const contentByPath = new Map(
-				(result?.data ?? []).map(
-					(entry) => [entry.path, entry.content] as const,
-				),
-			);
-			for (const path of chunk) {
-				const content = contentByPath.get(path);
-				// A path the sidecar reported as not part of the diff (`content:
-				// null`) is a fetch-level error the same way a 404 used to be —
-				// distinct from "this chunk hasn't resolved yet" (`undefined`).
-				const pathNotInDiff = result?.isSuccess === true && content === null;
-				map.set(path, {
-					content: content ?? undefined,
-					isLoading: result?.isLoading ?? false,
-					isError: (result?.isError ?? false) || pathNotInDiff,
-				});
-			}
-		});
-		return map;
-	}, [chunks, results]);
 }
 
 /** Narrows `value` to a plain object so a property read off it is type-safe rather than an `unknown`-on-`unknown` cast. */
