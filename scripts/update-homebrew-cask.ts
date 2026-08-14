@@ -42,6 +42,11 @@ function renderCask(version: string, sha256Hash: string): string {
   app "nisi.app"
   binary "#{appdir}/nisi.app/Contents/MacOS/nisi-cli", target: "nisi"
 
+  postflight do
+    system_command "/usr/bin/xattr",
+                   args: ["-dr", "com.apple.quarantine", "#{appdir}/nisi.app"]
+  end
+
   zap trash: [
     "~/Library/Application Support/com.nisi.desktop",
     "~/Library/Caches/com.nisi.desktop",
