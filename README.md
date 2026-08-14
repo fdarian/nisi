@@ -49,11 +49,6 @@ Apple Silicon only, for now — the release build is arm64.
    brew install --cask fdarian/tap/nisi
    ```
 
-   > ⚠️ nisi isn't signed with an Apple Developer ID yet, so Gatekeeper blocks the first 	launch. Clear it once:
-   > ```sh
-   > xattr -dr com.apple.quarantine /Applications/nisi.app
-   > ```
-
 2. **Make sure `gh` CLI is installed and authenticated**
    Check their [site](https://cli.github.com) for the installation, and authenticate with (`gh auth login`).
    nisi shells out to `gh` to find the PR for your branch, and opening one fails without it.
