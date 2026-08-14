@@ -281,6 +281,14 @@ export function useFileContents(
 	// so `combine` itself has to be stable across renders — hence
 	// `useCallback`, closing over `chunks` (already memoized on `paths`)
 	// rather than `paths` directly.
+	// Tried inlining `combine` into the `useQueries` call below so its
+	// `results` parameter's type would flow from `queries` by inference
+	// instead of being hand-written here — but `queries` is a plain
+	// `chunks.map(...)` array, not a tuple, so TS can't carry a per-element
+	// type through `useQueries`' generic into a nested `useCallback`; the
+	// inferred parameter collapsed to `never`. The explicit shape below is a
+	// deliberate duplicate of `diff.fileContents`' result, not a shortcut we
+	// didn't try to avoid.
 	const combineFileContents = useCallback(
 		(
 			results: readonly {
