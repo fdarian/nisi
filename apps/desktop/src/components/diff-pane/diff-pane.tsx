@@ -210,18 +210,16 @@ type CachedFileDiff = {
 /**
  * A cheap, always-correct proxy for "this file's `patch`/`oldContent` pair
  * changed" — hashing `content.patch` itself (bounded by the diff's size, not
- * the file's) rather than the full `oldContent`. `"base"` needs no such
- * signal: `file.fingerprint` already incorporates the (unmodified) plain
- * `base → head` patch text those bytes come from — see `@repo/git`'s
- * `computeFingerprint`. Only `baselineKind: "reviewed"` substitutes a
- * *different* `oldContent` (the synthesized reviewed-state baseline, see
- * `@repo/review`'s `reconcile`) than what produced `file.fingerprint`, so
- * that's the one case needing an extra signal.
+ * the file's) rather than the full `oldContent`. Always derived from
+ * `content`, never from `file`: `content` (`diff.fileContents`) and `file`
+ * (`diff.files`) are two independently fetched queries with no ordering
+ * guarantee between them, so a signature describing `content` has to be
+ * computed from `content` itself to stay trustworthy. `baselineKind` is
+ * folded in too, since ticking Reviewed changes which bytes `content.patch`
+ * holds without necessarily changing their hash on its own.
  */
-function reviewPatchSignature(content: FileContent): string {
-	return content.review?.baselineKind === "reviewed"
-		? `reviewed:${hashItemVersion(content.patch)}`
-		: "base";
+function contentSignature(content: FileContent): string {
+	return `${content.review?.baselineKind ?? "base"}:${hashItemVersion(content.patch)}`;
 }
 
 /**
@@ -234,30 +232,32 @@ function reviewPatchSignature(content: FileContent): string {
  * all of them: ticking Reviewed on a single file in a 221-file session measured
  * ~3300 full-file parses across the memo recomputes that one toggle triggered.
  *
- * The key is exactly what decides the parse's output — `file.fingerprint`
- * (a content hash of status/paths/patch, see `@repo/git`'s `computeFingerprint`)
- * plus which parser tier the content lands in, plus `reviewPatchSignature` for
- * the one case `file.fingerprint` can't see on its own. It's the same string
- * handed to `@pierre/diffs` as the `cacheKey`, so this cache can't disagree
- * with pierre's own memoization about when two renders are the same diff.
+ * The key must be a pure function of `content` — the exact value being
+ * parsed — plus which parser tier it landed in. Nothing derived from `file`
+ * belongs here: `file` (`diff.files`) and `content` (`diff.fileContents`) are
+ * two independently fetched queries that settle at different times, so a key
+ * that mixes in `file.fingerprint` can validate against the wrong query —
+ * matching a stale cache entry against fresh `file` data while still parsing
+ * whatever `content` happened to be on hand. It's the same string handed to
+ * `@pierre/diffs` as the `cacheKey`, so this cache can't disagree with
+ * pierre's own memoization about when two renders are the same diff.
  *
- * That signature suffix is load-bearing, not cosmetic: pierre's worker pool
- * and its `areDiffTargetsEqual`/`areFilesEqual` memoization
- * (VirtualizedFileDiff.js, WorkerPoolManager.js) treat two `FileDiffMetadata`
- * as identical whenever their `cacheKey`s match, full stop — it never compares
- * the actual hunks. A key that only mirrored `file.fingerprint` would collide
- * across two different reviewed-baselines of the same file (ticking Reviewed
- * changes `content.oldContent`/`patch` without changing `file.fingerprint`,
- * which is computed from the plain `base → head` diff), so pierre would serve
- * the *previous* render's stale hunk layout — rows measured and positioned for
- * the old baseline, under `renderAnnotation`/line-number data for the new one.
+ * The signature is load-bearing, not cosmetic: pierre's worker pool and its
+ * `areDiffTargetsEqual`/`areFilesEqual` memoization (VirtualizedFileDiff.js,
+ * WorkerPoolManager.js) treat two `FileDiffMetadata` as identical whenever
+ * their `cacheKey`s match, full stop — it never compares the actual hunks. A
+ * key that only tracked the parser tier would collide across two different
+ * reviewed-baselines of the same file (ticking Reviewed changes
+ * `content.oldContent`/`patch`), so pierre would serve the *previous*
+ * render's stale hunk layout — rows measured and positioned for the old
+ * baseline, under `renderAnnotation`/line-number data for the new one.
  */
 function resolveFileDiff(
 	cache: Map<string, CachedFileDiff>,
 	file: FileChange,
 	content: FileContent,
 ): FileDiffMetadata | undefined {
-	const key = `${file.fingerprint}:${content.truncated ? "patch" : "full"}:${reviewPatchSignature(content)}`;
+	const key = `${content.truncated ? "patch" : "full"}:${contentSignature(content)}`;
 	const cached = cache.get(file.path);
 	if (cached !== undefined && cached.key === key) return cached.fileDiff;
 
@@ -597,7 +597,7 @@ export function DiffPane({
 				annotations,
 				collapsed: cardCollapsed,
 				version: hashItemVersion(
-					`${baseVersionInput}:${reviewPatchSignature(content)}`,
+					`${baseVersionInput}:${contentSignature(content)}`,
 				),
 			});
 		}
