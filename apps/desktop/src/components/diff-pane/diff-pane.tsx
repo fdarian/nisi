@@ -107,7 +107,7 @@ const HIDDEN_FILE_REASON_TEXT: Record<HiddenFileReason, string> = {
  * annotation array — metadata object included — is one module-level
  * constant; `hidden-file`/`load-file` carry per-file data and are cached
  * per path instead (see `resolveHiddenFileAnnotations`/
- * `resolveLoadFileAnnotations` and `placeholderAnnotationCache` below).
+ * `resolveLoadFileAnnotations` and their caches below).
  */
 const BINARY_ANNOTATIONS: LineAnnotation<DiffAnnotationMetadata>[] = [
 	{ lineNumber: 1, metadata: { type: "binary" } },
@@ -266,21 +266,10 @@ function resolveFileDiff(
 	return fileDiff;
 }
 
-/**
- * One file's last built `hidden-file`/`load-file` placeholder annotation
- * array, alongside the key that produced it — same shape as `CachedFileDiff`
- * above, for the same reason: `resolveHiddenFileAnnotations` and
- * `resolveLoadFileAnnotations` below share this one cache (and its prune
- * loop in the `items` memo), since a given path only ever has one of the two
- * placeholders live at a time. `key` carries the variant (`hidden-file:...`
- * vs `load-file:...`) rather than the two ever colliding on a bare boolean
- * or reason string.
- */
-type CachedPlaceholderAnnotation = {
-	key: string;
-	annotations:
-		| LineAnnotation<DiffAnnotationMetadata>[]
-		| DiffLineAnnotation<DiffAnnotationMetadata>[];
+/** One file's last built `hidden-file` annotation, alongside the reason that produced it. */
+type CachedHiddenFileAnnotation = {
+	reason: HiddenFileReason;
+	annotations: LineAnnotation<DiffAnnotationMetadata>[];
 };
 
 /**
@@ -291,15 +280,13 @@ type CachedPlaceholderAnnotation = {
  * card's measured height mid-scroll.
  */
 function resolveHiddenFileAnnotations(
-	cache: Map<string, CachedPlaceholderAnnotation>,
+	cache: Map<string, CachedHiddenFileAnnotation>,
 	file: FileChange,
 	reason: HiddenFileReason,
 ): LineAnnotation<DiffAnnotationMetadata>[] {
-	const key = `hidden-file:${reason}`;
 	const cached = cache.get(file.path);
-	if (cached !== undefined && cached.key === key) {
-		return cached.annotations as LineAnnotation<DiffAnnotationMetadata>[];
-	}
+	if (cached !== undefined && cached.reason === reason)
+		return cached.annotations;
 
 	const annotations: LineAnnotation<DiffAnnotationMetadata>[] = [
 		{
@@ -307,20 +294,25 @@ function resolveHiddenFileAnnotations(
 			metadata: { type: "hidden-file", path: file.path, reason },
 		},
 	];
-	cache.set(file.path, { key, annotations });
+	cache.set(file.path, { reason, annotations });
 	return annotations;
 }
 
+/** One file's last built `load-file` annotation, alongside the `stillTooLarge` value that produced it. */
+type CachedLoadFileAnnotation = {
+	stillTooLarge: boolean;
+	annotations: DiffLineAnnotation<DiffAnnotationMetadata>[];
+};
+
 /** `load-file`'s per-path annotation — same caching reasoning as `resolveHiddenFileAnnotations`. */
 function resolveLoadFileAnnotations(
-	cache: Map<string, CachedPlaceholderAnnotation>,
+	cache: Map<string, CachedLoadFileAnnotation>,
 	file: FileChange,
 	stillTooLarge: boolean,
 ): DiffLineAnnotation<DiffAnnotationMetadata>[] {
-	const key = `load-file:${stillTooLarge}`;
 	const cached = cache.get(file.path);
-	if (cached !== undefined && cached.key === key) {
-		return cached.annotations as DiffLineAnnotation<DiffAnnotationMetadata>[];
+	if (cached !== undefined && cached.stillTooLarge === stillTooLarge) {
+		return cached.annotations;
 	}
 
 	const annotations: DiffLineAnnotation<DiffAnnotationMetadata>[] = [
@@ -330,7 +322,7 @@ function resolveLoadFileAnnotations(
 			metadata: { type: "load-file", path: file.path, stillTooLarge },
 		},
 	];
-	cache.set(file.path, { key, annotations });
+	cache.set(file.path, { stillTooLarge, annotations });
 	return annotations;
 }
 
@@ -350,8 +342,11 @@ export function DiffPane({
 }: DiffPaneProps): React.ReactElement {
 	const codeViewRef = useRef<CodeViewHandle<DiffAnnotationMetadata>>(null);
 	const fileDiffCache = useRef(new Map<string, CachedFileDiff>());
-	const placeholderAnnotationCache = useRef(
-		new Map<string, CachedPlaceholderAnnotation>(),
+	const hiddenFileAnnotationCache = useRef(
+		new Map<string, CachedHiddenFileAnnotation>(),
+	);
+	const loadFileAnnotationCache = useRef(
+		new Map<string, CachedLoadFileAnnotation>(),
 	);
 
 	// Owns the CSS Custom Highlight API registry (two `Highlight`s per
@@ -547,7 +542,7 @@ export function DiffPane({
 						cacheKey: `hidden:${hiddenReason}:${file.fingerprint}`,
 					},
 					annotations: resolveHiddenFileAnnotations(
-						placeholderAnnotationCache.current,
+						hiddenFileAnnotationCache.current,
 						file,
 						hiddenReason,
 					),
@@ -589,7 +584,7 @@ export function DiffPane({
 
 			const annotations = content.truncated
 				? resolveLoadFileAnnotations(
-						placeholderAnnotationCache.current,
+						loadFileAnnotationCache.current,
 						file,
 						forcedPaths.has(file.path),
 					)
@@ -613,9 +608,12 @@ export function DiffPane({
 		for (const path of fileDiffCache.current.keys()) {
 			if (!nextMetadata.has(path)) fileDiffCache.current.delete(path);
 		}
-		for (const path of placeholderAnnotationCache.current.keys()) {
+		for (const path of hiddenFileAnnotationCache.current.keys()) {
 			if (!nextMetadata.has(path))
-				placeholderAnnotationCache.current.delete(path);
+				hiddenFileAnnotationCache.current.delete(path);
+		}
+		for (const path of loadFileAnnotationCache.current.keys()) {
+			if (!nextMetadata.has(path)) loadFileAnnotationCache.current.delete(path);
 		}
 
 		return { items: nextItems, itemMetadata: nextMetadata };
