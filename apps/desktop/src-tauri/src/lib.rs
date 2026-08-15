@@ -7,7 +7,6 @@ use std::time::Duration;
 use editors::{list_available_editors, open_in_editor};
 use serde::{Deserialize, Serialize};
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, Submenu, HELP_SUBMENU_ID, WINDOW_SUBMENU_ID};
-use tauri::window::{Effect, EffectsBuilder};
 use tauri::{Emitter, Manager, Runtime, TitleBarStyle, WebviewUrl, WebviewWindowBuilder};
 use tauri_plugin_shell::process::CommandChild;
 #[cfg(not(debug_assertions))]
@@ -278,20 +277,13 @@ fn build_macos_menu<R: Runtime>(handle: &tauri::AppHandle<R>) -> tauri::Result<M
  *
  * Styled to read as a native panel rather than an app window: fixed
  * ~360x480 (`resizable`/`maximizable`/`minimizable` all `false`, which also
- * greys out the corresponding traffic lights), a transparent macOS
+ * greys out the corresponding traffic lights), and a transparent macOS
  * titlebar overlay so the traffic lights float over the content with no
- * title strip, and the system's own `WindowBackground` material behind it
- * so the background adapts to light/dark like a real panel instead of a
- * flat color.
- *
- * `.transparent(true)` is what lets that material actually show through —
- * without it the webview's own opaque backing paints over it regardless of
- * `.effects()` — and on macOS it only compiles/applies with the
- * `macos-private-api` Cargo feature and `tauri.conf.json`'s matching
- * `macOSPrivateApi` flag, both set for this app. The frontend still has to
- * do its own part: `/about`'s body needs a transparent CSS background too
- * (`useAboutWindowChrome`), or its own painted content hides the material
- * just the same.
+ * title strip. The background itself is a plain opaque one, from the
+ * frontend's own theme tokens (`about-page.tsx`) — no window vibrancy/blur:
+ * the panel this is modeled on doesn't use it either, and a translucent
+ * background here would only be checkable by actually running the packaged
+ * app on macOS, which isn't something either of us can currently do.
  *
  * Built hidden (`.visible(false)`) — `useAboutWindowChrome` calls `show()`
  * itself once the route has actually painted, so this never flashes an
@@ -307,12 +299,32 @@ fn build_about_window<R: Runtime>(handle: &tauri::AppHandle<R>) -> tauri::Result
         .minimizable(false)
         .title_bar_style(TitleBarStyle::Overlay)
         .hidden_title(true)
-        .transparent(true)
-        .effects(EffectsBuilder::new().effect(Effect::WindowBackground).build())
         .center()
         .visible(false)
         .build()?;
     Ok(())
+}
+
+/**
+ * The currently focused webview window, if any. Iterates `webview_windows()`
+ * and checks `is_focused()` rather than the crate's own `get_focused_window`,
+ * which needs the `unstable` Cargo feature — explicitly allowed to break
+ * across Tauri minor releases — for what's otherwise a one-window-in-N
+ * lookup with a stable equivalent. A window whose focus state can't be read
+ * is logged and skipped rather than silently treated as "not focused", so a
+ * lookup failure on one window doesn't hide the one that actually is.
+ */
+fn find_focused_window<R: Runtime>(app: &tauri::AppHandle<R>) -> Option<tauri::WebviewWindow<R>> {
+    app.webview_windows()
+        .into_iter()
+        .find_map(|(label, window)| match window.is_focused() {
+            Ok(true) => Some(window),
+            Ok(false) => None,
+            Err(e) => {
+                eprintln!("failed to read focus state for window '{label}': {e}");
+                None
+            }
+        })
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -328,9 +340,8 @@ pub fn run() {
                 // The focused window, not hardcoded to "main" — now that the
                 // About window (`ABOUT_WINDOW_LABEL`) exists, ⌘⇧W while it's
                 // focused must close it, not the main window sitting behind
-                // it. `get_focused_window` needs the `unstable` cargo feature
-                // (Cargo.toml).
-                if let Some(window) = app.get_focused_window() {
+                // it.
+                if let Some(window) = find_focused_window(app) {
                     if let Err(e) = window.close() {
                         eprintln!("failed to close window: {e}");
                     }
