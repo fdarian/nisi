@@ -2,9 +2,7 @@
 
 import { openUrl } from "@tauri-apps/plugin-opener";
 import icon from "#/assets/icon.png";
-import { Button } from "#/components/ui/button";
 import { useAboutWindowChrome } from "#/hooks/use-about-window";
-import { cn } from "#/lib/utils";
 
 const REPO_URL = "https://github.com/fdarian/nisi";
 
@@ -12,19 +10,16 @@ const MACOS_SYSTEM_FONT =
 	'-apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif';
 
 /**
- * A compact AppKit push button (Ghostty's About window reference: ~13px
- * text, tight padding, ~6px corner radius, near-white face with a hairline
- * border and a faint shadow — nothing like the app's own `Button` sizes).
- * Local overrides on the shared `Button` rather than a variant on it: this
- * exact look belongs to this one window, not the design system.
+ * A compact AppKit push button (Ghostty's About window reference: small
+ * text, tight padding, ~5px corner radius, a soft off-white — not pure
+ * white — face with a faint hairline border). A plain element, not the
+ * shared `Button` component: this exact look belongs to this one window,
+ * not the design system, and layering it over `Button`'s own opinions
+ * (size, gap, hover states) meant half the classes here existed only to
+ * cancel those out rather than say what this button actually looks like.
  */
-const APPKIT_BUTTON_CLASSNAME = cn(
-	"h-auto gap-0 rounded-[6px] border-black/15 bg-white px-2.5 py-[3px]",
-	"font-normal text-[13px] text-neutral-900 shadow-[0_0.5px_1px_rgba(0,0,0,0.15)]",
-	"hover:bg-white active:bg-neutral-100",
-	"dark:border-white/15 dark:bg-neutral-600 dark:text-neutral-50 dark:shadow-none",
-	"dark:hover:bg-neutral-600 dark:active:bg-neutral-500",
-);
+const APPKIT_BUTTON_CLASSNAME =
+	"cursor-pointer whitespace-nowrap rounded-[5px] border border-black/8 bg-neutral-50 px-2 py-[2px] font-normal text-[11px] text-neutral-900 shadow-[0_0.5px_1px_rgba(0,0,0,0.08)] active:bg-neutral-200/70 dark:border-white/10 dark:bg-neutral-600 dark:text-neutral-50 dark:shadow-none dark:active:bg-neutral-500";
 
 /**
  * Content for the About window (`src-tauri/src/lib.rs`'s `build_about_window`)
@@ -60,13 +55,13 @@ export function AboutPage(): React.ReactElement {
 
 	return (
 		<div
-			className="flex h-screen w-screen select-none flex-col items-center justify-center gap-5 bg-sidebar px-10 py-12 text-center"
+			className="flex h-screen w-screen select-none flex-col items-center justify-center gap-4 bg-sidebar px-8 py-8 text-center"
 			data-tauri-drag-region=""
 			style={{ fontFamily: MACOS_SYSTEM_FONT }}
 		>
 			<img
 				alt=""
-				className="pointer-events-none size-32"
+				className="pointer-events-none size-28"
 				src={icon}
 				style={{ filter: "drop-shadow(0 12px 20px rgba(0, 0, 0, 0.25))" }}
 			/>
@@ -91,22 +86,20 @@ export function AboutPage(): React.ReactElement {
 				</dd>
 			</dl>
 			<div className="flex gap-2">
-				<Button
+				<button
 					className={APPKIT_BUTTON_CLASSNAME}
 					onClick={() => void openUrl(REPO_URL)}
-					size="xs"
-					variant="outline"
+					type="button"
 				>
 					GitHub
-				</Button>
-				<Button
+				</button>
+				<button
 					className={APPKIT_BUTTON_CLASSNAME}
 					onClick={() => void openUrl(`${REPO_URL}/issues`)}
-					size="xs"
-					variant="outline"
+					type="button"
 				>
 					Report an Issue
-				</Button>
+				</button>
 			</div>
 		</div>
 	);
