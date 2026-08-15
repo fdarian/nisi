@@ -278,7 +278,7 @@ fn build_macos_menu<R: Runtime>(handle: &tauri::AppHandle<R>) -> tauri::Result<M
  * commit shown as one (see `apps/desktop/src/routes/about.tsx`).
  *
  * Styled to read as a native panel rather than an app window: fixed
- * ~300x440, matching Ghostty's own About window (`resizable`/`maximizable`/
+ * ~310x415, matching Ghostty's own About window (`resizable`/`maximizable`/
  * `minimizable` all `false`, which also greys out the corresponding traffic
  * lights), and a transparent macOS
  * titlebar overlay so the traffic lights float over the content with no
@@ -303,7 +303,7 @@ fn build_macos_menu<R: Runtime>(handle: &tauri::AppHandle<R>) -> tauri::Result<M
 fn build_about_window<R: Runtime>(handle: &tauri::AppHandle<R>) -> tauri::Result<()> {
     WebviewWindowBuilder::new(handle, ABOUT_WINDOW_LABEL, WebviewUrl::App("/about".into()))
         .title("About nisi")
-        .inner_size(300.0, 440.0)
+        .inner_size(310.0, 415.0)
         .resizable(false)
         .maximizable(false)
         .minimizable(false)
