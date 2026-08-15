@@ -1,0 +1,17 @@
+diff --git a/dist/components/CodeView.js b/dist/components/CodeView.js
+index 051e7d0a211c0cdf32badbd4ff836f04df1ff511..a80034fec014f86854ac290912205071ebe4ca9d 100644
+--- a/dist/components/CodeView.js
++++ b/dist/components/CodeView.js
+@@ -457,10 +457,10 @@ var CodeView = class CodeView {
+ 		this.footer.height = 0;
+ 		this.root = void 0;
+ 		this.container = void 0;
++		if (window.__INSTANCE === this) window.__INSTANCE = void 0;
+ 	}
+ 	cleanAllRenderedItems() {
+-		if (this.renderState.firstIndex === -1) return;
+-		for (let index = this.renderState.firstIndex; index <= this.renderState.lastIndex; index++) {
++		for (let index = 0; index < this.items.length; index++) {
+ 			const item = this.items[index];
+ 			if (item == null) throw new Error(`CodeView.cleanAllRenderedItems: Item does not exist at index: ${index}`);
+ 			this.releaseRenderedItem(item);

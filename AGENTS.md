@@ -81,5 +81,7 @@ slow (roughly 13–28s) while nisi installs a pinned copy of it; every run after
     `@ai-sdk/harness-pi`) — see
     [knowledge/compiled-binary-differences.md](knowledge/compiled-binary-differences.md) and
     [knowledge/harness-pi-model-resolver-patch.md](knowledge/harness-pi-model-resolver-patch.md).
+  - `@pierre/diffs` — `CodeView` teardown leak fix; see
+    [knowledge/codeview-teardown-leak-patch.md](knowledge/codeview-teardown-leak-patch.md).
 - Path alias is `#/*` → `src/*` in every package, not `@/*`.
 - `AGENTS.md` is the source of truth in every workspace; `CLAUDE.md` is always a symlink to it.
