@@ -1,10 +1,10 @@
 ---
 type: Decision
 title: Deferred frontend perf work
-description: Two known Files Changed wins not taken, and the correctness risk attached to each.
+description: Known Files Changed wins not taken, and one open symptom not yet bisected — with the reason each is still open.
 tags: [frontend, performance, pierre, deferred]
 status: stable
-generated: { by: claude-code/claude-opus-5, at: 2026-07-30T04:19:29Z }
+generated: { by: human:farreldarian, at: 2026-08-15T00:00:00Z }
 sources:
   - id: budget
     resource: frontend-performance-budget.md
@@ -14,11 +14,13 @@ sources:
     title: useSetFileViewed
 ---
 
-Both were found while fixing the measured regressions in the
+The first two were found while fixing the measured regressions in the
 [performance budget](frontend-performance-budget.md).[^budget] Neither was taken, because
 each trades against correctness in a way that needs its own verification pass rather than a
-drive-by. Recorded so the next person measuring Files Changed doesn't rediscover them from scratch —
-and knows why they're still open.
+drive-by. The third turned up fixing the Files Changed scroll stutter, deferred for the same
+reason — it needs a trace, not a guess. The last entry isn't a fix at all, just an unresolved
+symptom worth recording rather than re-investigating blind. Recorded so the next person working on
+Files Changed doesn't start any of this from scratch.
 
 # Option identity churn defeats `areOptionsEqual`
 
@@ -46,6 +48,33 @@ The unexplored middle is having the mutation return the updated `FileChange` and
 entry into the cache instead of refetching all of them — server-computed, so still honest, but
 without the full-list invalidation. That means a contract change in `review.setViewed`, which is
 why it wasn't done as part of a perf pass.
+
+# `SlotPortals` rebuilds every visible header when one item enters the window
+
+`@pierre/diffs`' `SlotPortals` (`dist/react/CodeView.js`) memoizes its portal-children list on
+`itemKeys` — every rendered item's `id:version:type`, concatenated. One card entering or leaving
+the virtualized window changes that string, so the memo rebuilds portal children for *every*
+visible card, not just the one that changed — and it happens inside `onSnapshotChange`'s
+`flushSync`, synchronously, mid-scroll-frame.
+
+Our `DiffFileHeader` isn't memoized, and `renderCustomHeader` (`diff-pane.tsx`) closes fresh arrow
+functions for `onToggleCollapse`/`onToggleViewed` per item per call, so each rebuild re-renders a
+Base UI dropdown tree for every visible file.
+
+Two fixes, neither taken: memoize `DiffFileHeader` and stabilize its callbacks (app-side, nothing
+to maintain), or patch `SlotPortals` to cache portals per item id instead of the whole list (the
+repo already carries patches, and `@pierre/diffs` is pinned exact). Not done because after the two
+fixes that landed in this pass, this may already sit inside the
+[budget](frontend-performance-budget.md)[^budget] — it needs a CDP trace before it's worth
+touching, not a guess.
+
+# Sticky header flicker in WKWebView — cause unconfirmed
+
+The sticky file header visibly flickers while scrolling, in WKWebView specifically. Three
+candidates, none ruled in or out: the portal churn above; `CodeView.applyStickyPositioning`'s
+`Math.random()` jitter on the sticky container's `top`/`bottom` offsets
+(`dist/components/CodeView.js`); or our own `clip-path` on `<diffs-container>` (`diff-pane.tsx`)
+interacting with the sticky header. Not yet bisected.
 
 [^budget]: Files Changed performance budget
 [^set-viewed]: useSetFileViewed
