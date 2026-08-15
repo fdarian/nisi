@@ -11,15 +11,19 @@ const MACOS_SYSTEM_FONT =
 
 /**
  * A compact AppKit push button (Ghostty's About window reference: small
- * text, tight padding, ~5px corner radius, a soft off-white — not pure
- * white — face with a faint hairline border). A plain element, not the
+ * text, tight padding, ~5px corner radius). SwiftUI's `.bordered` style —
+ * a translucent overlay *on top of* the window background, not a flat
+ * lighter-than-background face with a border. `bg-black/[7%]` in light
+ * mode reads as grey sitting on `bg-sidebar`; `bg-white/[12%]` is the same
+ * idea inverted for dark. No border — the fill alone has to read as a
+ * button, since a lighter-than-background face plus a hairline border
+ * (the previous version) put the contrast in the wrong direction and the
+ * button all but disappeared into the panel. A plain element, not the
  * shared `Button` component: this exact look belongs to this one window,
- * not the design system, and layering it over `Button`'s own opinions
- * (size, gap, hover states) meant half the classes here existed only to
- * cancel those out rather than say what this button actually looks like.
+ * not the design system.
  */
 const APPKIT_BUTTON_CLASSNAME =
-	"cursor-pointer whitespace-nowrap rounded-[5px] border border-black/8 bg-neutral-50 px-2 py-[2px] font-normal text-[11px] text-neutral-900 shadow-[0_0.5px_1px_rgba(0,0,0,0.08)] active:bg-neutral-200/70 dark:border-white/10 dark:bg-neutral-600 dark:text-neutral-50 dark:shadow-none dark:active:bg-neutral-500";
+	"cursor-pointer whitespace-nowrap rounded-[5px] bg-black/[7%] px-2 py-[2px] font-normal text-[11px] text-neutral-900 shadow-[0_0.5px_1px_rgba(0,0,0,0.08)] hover:bg-black/[11%] active:bg-black/[17%] dark:bg-white/[12%] dark:text-neutral-50 dark:shadow-none dark:hover:bg-white/[16%] dark:active:bg-white/[22%]";
 
 /**
  * Content for the About window (`src-tauri/src/lib.rs`'s `build_about_window`)
