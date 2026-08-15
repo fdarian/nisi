@@ -7,7 +7,8 @@ use std::time::Duration;
 use editors::{list_available_editors, open_in_editor};
 use serde::{Deserialize, Serialize};
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, Submenu, HELP_SUBMENU_ID, WINDOW_SUBMENU_ID};
-use tauri::{Emitter, Manager, Runtime};
+use tauri::window::{Effect, EffectsBuilder};
+use tauri::{Emitter, Manager, Runtime, TitleBarStyle, WebviewUrl, WebviewWindowBuilder};
 use tauri_plugin_shell::process::CommandChild;
 #[cfg(not(debug_assertions))]
 use tauri_plugin_shell::ShellExt;
@@ -132,16 +133,18 @@ async fn get_backend(
 /** Id of the File menu's ⌘W item, and the event it emits to the frontend. */
 const CLOSE_TAB_MENU_ID: &str = "close-tab";
 const CLOSE_TAB_EVENT: &str = "menu://close-tab";
-/** Id of the File menu's ⌘⇧W item — closes the app's window, handled entirely in Rust. */
+/** Id of the File menu's ⌘⇧W item — closes the focused window, handled entirely in Rust. */
 const CLOSE_WINDOW_MENU_ID: &str = "close-window";
 /**
- * Id of the app menu's "About nisi" item, and the event it emits to the
- * frontend. Custom rather than `PredefinedMenuItem::about` — see
- * `build_macos_menu`'s doc comment on why the native panel can't show what
- * this app needs (a linked commit sha).
+ * Id of the app menu's "About nisi" item. Custom rather than
+ * `PredefinedMenuItem::about` — see `build_about_window`'s doc comment for
+ * why the native panel can't show what this app needs (a linked commit
+ * sha). Handled entirely in Rust: creates/focuses `ABOUT_WINDOW_LABEL`
+ * directly, no frontend round trip.
  */
 const ABOUT_MENU_ID: &str = "about";
-const ABOUT_EVENT: &str = "menu://about";
+/** Label of the on-demand About window `build_about_window` creates, and the frontend route (`/about`) it loads. */
+const ABOUT_WINDOW_LABEL: &str = "about";
 
 /**
  * Builds the macOS menu bar from scratch rather than patching
@@ -164,8 +167,9 @@ const ABOUT_EVENT: &str = "menu://about";
  * - "Close Tab" (⌘W) emits `CLOSE_TAB_EVENT`; the frontend decides what that
  *   means (close the active tab, or the window when it's the last one — see
  *   `src/hooks/use-tab-shortcuts.ts`).
- * - "Close Window" (⌘⇧W) closes the app's (single, "main"-labeled) window
- *   directly below, no frontend round trip.
+ * - "Close Window" (⌘⇧W) closes whichever window is focused — the About
+ *   window (`build_about_window`) when it's the one in front, the main
+ *   window otherwise — no frontend round trip.
  *
  * The Window submenu (still at the stable `WINDOW_SUBMENU_ID`) keeps only
  * minimize/maximize — both ways to close now live in File.
@@ -181,8 +185,8 @@ fn build_macos_menu<R: Runtime>(handle: &tauri::AppHandle<R>) -> tauri::Result<M
             // Custom, not `PredefinedMenuItem::about` — muda hands AppKit's
             // native about panel an unattributed `NSAttributedString`, which
             // physically cannot render a hyperlink, and this app needs the
-            // build commit shown as one. The frontend owns the real dialog
-            // (`about-dialog.tsx`); this just emits `ABOUT_EVENT` to open it.
+            // build commit shown as one. Opens `build_about_window` via
+            // `on_menu_event` below instead.
             &MenuItem::with_id(handle, ABOUT_MENU_ID, "About nisi", true, None::<&str>)?,
             &PredefinedMenuItem::separator(handle)?,
             &PredefinedMenuItem::services(handle, None)?,
@@ -265,6 +269,52 @@ fn build_macos_menu<R: Runtime>(handle: &tauri::AppHandle<R>) -> tauri::Result<M
     )
 }
 
+/**
+ * Creates the About window on demand (`on_menu_event`'s `ABOUT_MENU_ID`
+ * arm) — a custom replacement for the native macOS About panel, which hands
+ * AppKit's `AboutMetadata.credits` an unattributed `NSAttributedString`
+ * that physically cannot render a hyperlink, and this app needs the build
+ * commit shown as one (see `apps/desktop/src/routes/about.tsx`).
+ *
+ * Styled to read as a native panel rather than an app window: fixed
+ * ~360x480 (`resizable`/`maximizable`/`minimizable` all `false`, which also
+ * greys out the corresponding traffic lights), a transparent macOS
+ * titlebar overlay so the traffic lights float over the content with no
+ * title strip, and the system's own `WindowBackground` material behind it
+ * so the background adapts to light/dark like a real panel instead of a
+ * flat color.
+ *
+ * `.transparent(true)` is what lets that material actually show through —
+ * without it the webview's own opaque backing paints over it regardless of
+ * `.effects()` — and on macOS it only compiles/applies with the
+ * `macos-private-api` Cargo feature and `tauri.conf.json`'s matching
+ * `macOSPrivateApi` flag, both set for this app. The frontend still has to
+ * do its own part: `/about`'s body needs a transparent CSS background too
+ * (`useAboutWindowChrome`), or its own painted content hides the material
+ * just the same.
+ *
+ * Built hidden (`.visible(false)`) — `useAboutWindowChrome` calls `show()`
+ * itself once the route has actually painted, so this never flashes an
+ * unstyled or wrongly-themed first frame the way a visible-from-creation
+ * window would.
+ */
+fn build_about_window<R: Runtime>(handle: &tauri::AppHandle<R>) -> tauri::Result<()> {
+    WebviewWindowBuilder::new(handle, ABOUT_WINDOW_LABEL, WebviewUrl::App("/about".into()))
+        .title("About nisi")
+        .inner_size(360.0, 480.0)
+        .resizable(false)
+        .maximizable(false)
+        .minimizable(false)
+        .title_bar_style(TitleBarStyle::Overlay)
+        .hidden_title(true)
+        .transparent(true)
+        .effects(EffectsBuilder::new().effect(Effect::WindowBackground).build())
+        .center()
+        .visible(false)
+        .build()?;
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let builder = tauri::Builder::default()
@@ -275,23 +325,28 @@ pub fn run() {
                     eprintln!("failed to forward the Close Tab menu event: {e}");
                 }
             } else if event.id() == CLOSE_WINDOW_MENU_ID {
-                // Single-window app (no `label` in `tauri.conf.json`'s `windows`
-                // entry, so it defaults to "main") — `get_focused_window` would
-                // need the `unstable` cargo feature for no benefit here.
-                if let Some(window) = app.get_webview_window("main") {
+                // The focused window, not hardcoded to "main" — now that the
+                // About window (`ABOUT_WINDOW_LABEL`) exists, ⌘⇧W while it's
+                // focused must close it, not the main window sitting behind
+                // it. `get_focused_window` needs the `unstable` cargo feature
+                // (Cargo.toml).
+                if let Some(window) = app.get_focused_window() {
                     if let Err(e) = window.close() {
                         eprintln!("failed to close window: {e}");
                     }
                 } else {
-                    eprintln!("Close Window menu event fired but no window labeled 'main' was found");
+                    eprintln!("Close Window menu event fired but no window is focused");
                 }
             } else if event.id() == ABOUT_MENU_ID {
-                if let Some(window) = app.get_webview_window("main") {
-                    if let Err(e) = window.emit(ABOUT_EVENT, ()) {
-                        eprintln!("failed to forward the About menu event: {e}");
+                if let Some(window) = app.get_webview_window(ABOUT_WINDOW_LABEL) {
+                    if let Err(e) = window.show() {
+                        eprintln!("failed to show the About window: {e}");
                     }
-                } else {
-                    eprintln!("About menu event fired but no window labeled 'main' was found");
+                    if let Err(e) = window.set_focus() {
+                        eprintln!("failed to focus the About window: {e}");
+                    }
+                } else if let Err(e) = build_about_window(app) {
+                    eprintln!("failed to create the About window: {e}");
                 }
             }
         })
