@@ -1,7 +1,6 @@
 "use client";
 
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { useLayoutEffect } from "react";
 import icon from "#/assets/icon.png";
 import { Button } from "#/components/ui/button";
 import { useAboutWindowChrome } from "#/hooks/use-about-window";
@@ -14,10 +13,14 @@ const MACOS_SYSTEM_FONT =
 /**
  * Content for the About window (`src-tauri/src/lib.rs`'s `build_about_window`)
  * — a separate, fixed-size, native-styled window, not an in-app dialog. The
- * window is created hidden and with a transparent macOS vibrancy background
- * so it reads as a real panel; `useAboutWindowChrome` shows it once this has
- * painted, and `useTransparentBody` (below) is what lets that background
- * actually be visible instead of hidden behind the app's usual opaque one.
+ * window is created hidden; `useAboutWindowChrome` shows it once this has
+ * painted, so it never flashes an unstyled or wrongly-themed first frame.
+ *
+ * Background is `bg-sidebar` — an opaque theme token that already adapts to
+ * light/dark everywhere else in the app (`app-shell.tsx`'s own root uses the
+ * same one), not a native macOS vibrancy/blur material: the panel this is
+ * modeled on doesn't use one either, and a translucent window can only be
+ * checked by actually running the packaged app on macOS.
  *
  * The macOS system font stack is set here, on this page's own root element,
  * rather than in `index.css` — the app's own display font (Inter) would read
@@ -26,14 +29,13 @@ const MACOS_SYSTEM_FONT =
  */
 export function AboutPage(): React.ReactElement {
 	useAboutWindowChrome();
-	useTransparentBody();
 
 	const shortSha = __APP_COMMIT_SHA__.slice(0, 7);
 	const commitUrl = `${REPO_URL}/commit/${__APP_COMMIT_SHA__}`;
 
 	return (
 		<div
-			className="flex h-screen w-screen flex-col items-center justify-center gap-5 px-10 py-12 text-center"
+			className="flex h-screen w-screen flex-col items-center justify-center gap-5 bg-sidebar px-10 py-12 text-center"
 			style={{ fontFamily: MACOS_SYSTEM_FONT }}
 		>
 			<img
@@ -80,22 +82,4 @@ export function AboutPage(): React.ReactElement {
 			</div>
 		</div>
 	);
-}
-
-/**
- * Clears `index.css`'s `body { @apply bg-sidebar ...; }` for the lifetime of
- * this page — the macOS vibrancy material `build_about_window` applies sits
- * behind the webview, and an opaque body would paint over it regardless of
- * that native setup. Scoped to this window's own DOM (a separate
- * webview/JS context from the main window — every Tauri window boots the
- * same `main.tsx` fresh), so it never touches the main window's background.
- */
-function useTransparentBody(): void {
-	useLayoutEffect(() => {
-		const previousBackground = document.body.style.backgroundColor;
-		document.body.style.backgroundColor = "transparent";
-		return () => {
-			document.body.style.backgroundColor = previousBackground;
-		};
-	}, []);
 }
