@@ -303,7 +303,7 @@ fn build_macos_menu<R: Runtime>(handle: &tauri::AppHandle<R>) -> tauri::Result<M
 fn build_about_window<R: Runtime>(handle: &tauri::AppHandle<R>) -> tauri::Result<()> {
     WebviewWindowBuilder::new(handle, ABOUT_WINDOW_LABEL, WebviewUrl::App("/about".into()))
         .title("About nisi")
-        .inner_size(310.0, 415.0)
+        .inner_size(310.0, 450.0)
         .resizable(false)
         .maximizable(false)
         .minimizable(false)
