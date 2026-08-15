@@ -32,4 +32,4 @@ importantly, the rules for deciding whether a thing belongs here at all.
 # Performance
 
 * [Files Changed performance budget](frontend-performance-budget.md) - the numbers to hold at ~221 changed files, and what regressing them looks like
-* [Deferred frontend perf work](deferred-frontend-perf-work.md) - two known wins not taken yet, and the risk attached to each
+* [Deferred frontend perf work](deferred-frontend-perf-work.md) - known wins not taken yet, and one open symptom not yet bisected

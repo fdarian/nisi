@@ -87,6 +87,53 @@ const HIDDEN_FILE_REASON_TEXT: Record<HiddenFileReason, string> = {
 };
 
 /**
+ * Every annotation array (and, transitively, every `metadata` object inside
+ * it) handed to `@pierre/diffs` below has to keep a stable identity across
+ * renders that don't actually change what it says — this is completely
+ * non-obvious from the `CodeView` API surface, so it's worth spelling out
+ * once here rather than at each site that relies on it.
+ *
+ * `VirtualizedFile.syncLineAnnotations` compares the incoming array *by
+ * reference* (`lineAnnotations === this.lineAnnotations`) and, failing that,
+ * falls back to `areLineAnnotationsEqual`, which compares each annotation's
+ * `metadata` *by reference* too. Either mismatch calls `resetLayoutCache()`,
+ * which clears the item's measured heights — so it snaps back to its 1-line
+ * estimate, then `reconcileHeights` remeasures and re-anchors the scroll
+ * position. That remeasure-and-re-anchor is the visible jump this file used
+ * to cause on every unrelated render: a fresh `[]` literal (or a fresh
+ * `{ type: ... }` metadata object inside an otherwise-identical array) is
+ * indistinguishable from a real content change as far as pierre is
+ * concerned. The three placeholders below never vary, so their whole
+ * annotation array — metadata object included — is one module-level
+ * constant; `hidden-file`/`load-file` carry per-file data and are cached
+ * per path instead (see `resolveHiddenFileAnnotations`/
+ * `resolveLoadFileAnnotations` and their caches below).
+ */
+const BINARY_ANNOTATIONS: LineAnnotation<DiffAnnotationMetadata>[] = [
+	{ lineNumber: 1, metadata: { type: "binary" } },
+];
+
+const ERROR_ANNOTATIONS: LineAnnotation<DiffAnnotationMetadata>[] = [
+	{
+		lineNumber: 1,
+		metadata: { type: "error", message: "Couldn't load this file's diff." },
+	},
+];
+
+const REVIEWED_EMPTY_ANNOTATIONS: LineAnnotation<DiffAnnotationMetadata>[] = [
+	{ lineNumber: 1, metadata: { type: "reviewed-empty" } },
+];
+
+/**
+ * The bare `annotations: []` on an ordinary (non-placeholder) diff item —
+ * harmless to pierre either way, since it early-returns when both sides are
+ * empty, but sharing one constant costs nothing and keeps every annotation
+ * array on this file's identity-stability rule rather than carving out a
+ * silent exception for "empty is fine."
+ */
+const EMPTY_DIFF_ANNOTATIONS: DiffLineAnnotation<DiffAnnotationMetadata>[] = [];
+
+/**
  * The pane's imperative seam, for the one thing its props can't express:
  * re-selecting the file that's *already* selected. `selectedPath` doesn't
  * change on that click, so nothing keyed on it can react — the caller has to
@@ -219,6 +266,66 @@ function resolveFileDiff(
 	return fileDiff;
 }
 
+/** One file's last built `hidden-file` annotation, alongside the reason that produced it. */
+type CachedHiddenFileAnnotation = {
+	reason: HiddenFileReason;
+	annotations: LineAnnotation<DiffAnnotationMetadata>[];
+};
+
+/**
+ * `hidden-file`'s per-path annotation — see the identity-stability doc
+ * comment above `BINARY_ANNOTATIONS` for *why* this needs to be cached
+ * rather than built fresh: a new `[{ metadata: { path, reason } }]` on every
+ * `items` recompute is exactly the kind of reference change that resets this
+ * card's measured height mid-scroll.
+ */
+function resolveHiddenFileAnnotations(
+	cache: Map<string, CachedHiddenFileAnnotation>,
+	file: FileChange,
+	reason: HiddenFileReason,
+): LineAnnotation<DiffAnnotationMetadata>[] {
+	const cached = cache.get(file.path);
+	if (cached !== undefined && cached.reason === reason)
+		return cached.annotations;
+
+	const annotations: LineAnnotation<DiffAnnotationMetadata>[] = [
+		{
+			lineNumber: 1,
+			metadata: { type: "hidden-file", path: file.path, reason },
+		},
+	];
+	cache.set(file.path, { reason, annotations });
+	return annotations;
+}
+
+/** One file's last built `load-file` annotation, alongside the `stillTooLarge` value that produced it. */
+type CachedLoadFileAnnotation = {
+	stillTooLarge: boolean;
+	annotations: DiffLineAnnotation<DiffAnnotationMetadata>[];
+};
+
+/** `load-file`'s per-path annotation — same caching reasoning as `resolveHiddenFileAnnotations`. */
+function resolveLoadFileAnnotations(
+	cache: Map<string, CachedLoadFileAnnotation>,
+	file: FileChange,
+	stillTooLarge: boolean,
+): DiffLineAnnotation<DiffAnnotationMetadata>[] {
+	const cached = cache.get(file.path);
+	if (cached !== undefined && cached.stillTooLarge === stillTooLarge) {
+		return cached.annotations;
+	}
+
+	const annotations: DiffLineAnnotation<DiffAnnotationMetadata>[] = [
+		{
+			side: "additions",
+			lineNumber: 0,
+			metadata: { type: "load-file", path: file.path, stillTooLarge },
+		},
+	];
+	cache.set(file.path, { stillTooLarge, annotations });
+	return annotations;
+}
+
 export function DiffPane({
 	repoRoot,
 	files,
@@ -235,6 +342,12 @@ export function DiffPane({
 }: DiffPaneProps): React.ReactElement {
 	const codeViewRef = useRef<CodeViewHandle<DiffAnnotationMetadata>>(null);
 	const fileDiffCache = useRef(new Map<string, CachedFileDiff>());
+	const hiddenFileAnnotationCache = useRef(
+		new Map<string, CachedHiddenFileAnnotation>(),
+	);
+	const loadFileAnnotationCache = useRef(
+		new Map<string, CachedLoadFileAnnotation>(),
+	);
 
 	// Owns the CSS Custom Highlight API registry (two `Highlight`s per
 	// instance) and the per-item highlight bookkeeping — see
@@ -341,9 +454,7 @@ export function DiffPane({
 						lang: "text",
 						cacheKey: `binary:${file.fingerprint}`,
 					},
-					annotations: [
-						{ lineNumber: 1, metadata: { type: "binary" } },
-					] satisfies LineAnnotation<DiffAnnotationMetadata>[],
+					annotations: BINARY_ANNOTATIONS,
 					collapsed: cardCollapsed,
 					version: hashItemVersion(`${baseVersionInput}:binary`),
 				});
@@ -361,15 +472,7 @@ export function DiffPane({
 						lang: "text",
 						cacheKey: `error:${file.fingerprint}`,
 					},
-					annotations: [
-						{
-							lineNumber: 1,
-							metadata: {
-								type: "error",
-								message: "Couldn't load this file's diff.",
-							},
-						},
-					] satisfies LineAnnotation<DiffAnnotationMetadata>[],
+					annotations: ERROR_ANNOTATIONS,
 					collapsed: cardCollapsed,
 					version: hashItemVersion(`${baseVersionInput}:error`),
 				});
@@ -408,7 +511,7 @@ export function DiffPane({
 						id: file.path,
 						type: "diff",
 						fileDiff: keywordFileDiff,
-						annotations: [],
+						annotations: EMPTY_DIFF_ANNOTATIONS,
 						collapsed: cardCollapsed,
 						version: hashItemVersion(
 							`${baseVersionInput}:keyword:${matchSignature}`,
@@ -438,16 +541,11 @@ export function DiffPane({
 						lang: "text",
 						cacheKey: `hidden:${hiddenReason}:${file.fingerprint}`,
 					},
-					annotations: [
-						{
-							lineNumber: 1,
-							metadata: {
-								type: "hidden-file",
-								path: file.path,
-								reason: hiddenReason,
-							},
-						},
-					] satisfies LineAnnotation<DiffAnnotationMetadata>[],
+					annotations: resolveHiddenFileAnnotations(
+						hiddenFileAnnotationCache.current,
+						file,
+						hiddenReason,
+					),
 					collapsed: cardCollapsed,
 					version: hashItemVersion(
 						`${baseVersionInput}:hidden:${hiddenReason}`,
@@ -474,9 +572,7 @@ export function DiffPane({
 						lang: "text",
 						cacheKey: `reviewed-empty:${file.fingerprint}`,
 					},
-					annotations: [
-						{ lineNumber: 1, metadata: { type: "reviewed-empty" } },
-					] satisfies LineAnnotation<DiffAnnotationMetadata>[],
+					annotations: REVIEWED_EMPTY_ANNOTATIONS,
 					collapsed: cardCollapsed,
 					version: hashItemVersion(`${baseVersionInput}:reviewed-empty`),
 				});
@@ -486,18 +582,13 @@ export function DiffPane({
 			const fileDiff = resolveFileDiff(fileDiffCache.current, file, content);
 			if (fileDiff === undefined) continue;
 
-			const annotations: DiffLineAnnotation<DiffAnnotationMetadata>[] = [];
-			if (content.truncated) {
-				annotations.push({
-					side: "additions",
-					lineNumber: 0,
-					metadata: {
-						type: "load-file",
-						path: file.path,
-						stillTooLarge: forcedPaths.has(file.path),
-					},
-				});
-			}
+			const annotations = content.truncated
+				? resolveLoadFileAnnotations(
+						loadFileAnnotationCache.current,
+						file,
+						forcedPaths.has(file.path),
+					)
+				: EMPTY_DIFF_ANNOTATIONS;
 
 			nextItems.push({
 				id: file.path,
@@ -516,6 +607,13 @@ export function DiffPane({
 		// pass saw, so anything else is gone.
 		for (const path of fileDiffCache.current.keys()) {
 			if (!nextMetadata.has(path)) fileDiffCache.current.delete(path);
+		}
+		for (const path of hiddenFileAnnotationCache.current.keys()) {
+			if (!nextMetadata.has(path))
+				hiddenFileAnnotationCache.current.delete(path);
+		}
+		for (const path of loadFileAnnotationCache.current.keys()) {
+			if (!nextMetadata.has(path)) loadFileAnnotationCache.current.delete(path);
 		}
 
 		return { items: nextItems, itemMetadata: nextMetadata };
