@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import tailwindcss from "@tailwindcss/vite";
@@ -67,24 +68,30 @@ function resolveAppVersion(): string {
  * `.git` directory supply it directly; every other build reads it straight
  * off the repo. No `"unknown"` fallback — a build that can't identify its
  * own commit should fail loudly instead of shipping a dialog that lies.
+ *
+ * `node:child_process`, not `Bun.spawnSync`: `tauri.conf.json`'s
+ * `beforeDevCommand`/`beforeBuildCommand` run the `vite` binary through
+ * pnpm's `node_modules/.bin/vite` shim, which execs real `node` — `Bun` is
+ * undefined in that process, so this config has to work under plain Node too.
  */
 function resolveCommitSha(): string {
 	// @ts-expect-error process is a nodejs global
 	const envSha = process.env.NISI_COMMIT_SHA;
 	if (envSha) return envSha;
 
-	const result = Bun.spawnSync(["git", "rev-parse", "HEAD"], {
-		cwd: import.meta.dirname,
-	});
-	if (result.exitCode === 0) {
-		return result.stdout.toString().trim();
+	try {
+		return execFileSync("git", ["rev-parse", "HEAD"], {
+			cwd: import.meta.dirname,
+			encoding: "utf-8",
+		}).trim();
+	} catch (cause) {
+		throw new Error(
+			"Could not resolve the build commit: `git rev-parse HEAD` failed and " +
+				"NISI_COMMIT_SHA is unset. Set NISI_COMMIT_SHA when building from a " +
+				"source tarball with no .git directory.",
+			{ cause },
+		);
 	}
-
-	throw new Error(
-		"Could not resolve the build commit: `git rev-parse HEAD` failed and " +
-			"NISI_COMMIT_SHA is unset. Set NISI_COMMIT_SHA when building from a " +
-			"source tarball with no .git directory.",
-	);
 }
 
 // https://vite.dev/config/
