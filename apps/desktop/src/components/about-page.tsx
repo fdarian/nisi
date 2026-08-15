@@ -23,7 +23,7 @@ const MACOS_SYSTEM_FONT =
  * not the design system.
  */
 const APPKIT_BUTTON_CLASSNAME =
-	"cursor-pointer whitespace-nowrap rounded-[5px] bg-black/[7%] px-2 py-[2px] font-normal text-[11px] text-neutral-900 shadow-[0_0.5px_1px_rgba(0,0,0,0.08)] hover:bg-black/[11%] active:bg-black/[17%] dark:bg-white/[12%] dark:text-neutral-50 dark:shadow-none dark:hover:bg-white/[16%] dark:active:bg-white/[22%]";
+	"cursor-pointer whitespace-nowrap rounded-[5px] bg-black/[7%] px-2 py-[1px] font-normal text-[12px] text-neutral-900 shadow-[0_0.5px_1px_rgba(0,0,0,0.08)] hover:bg-black/[11%] active:bg-black/[17%] dark:bg-white/[12%] dark:text-neutral-50 dark:shadow-none dark:hover:bg-white/[16%] dark:active:bg-white/[22%]";
 
 /**
  * Content for the About window (`src-tauri/src/lib.rs`'s `build_about_window`)
@@ -59,7 +59,7 @@ export function AboutPage(): React.ReactElement {
 
 	return (
 		<div
-			className="flex h-screen w-screen select-none flex-col items-center justify-center gap-4 bg-sidebar px-8 py-8 text-center"
+			className="flex h-screen w-screen select-none flex-col items-center justify-center gap-6 bg-sidebar px-8 py-8 text-center"
 			data-tauri-drag-region=""
 			style={{ fontFamily: MACOS_SYSTEM_FONT }}
 		>
@@ -71,11 +71,11 @@ export function AboutPage(): React.ReactElement {
 			/>
 			<div className="pointer-events-none flex flex-col gap-1">
 				<h1 className="font-semibold text-2xl leading-tight">nisi</h1>
-				<p className="text-muted-foreground text-sm">
+				<p className="text-[11px] text-muted-foreground">
 					A simpler way to review code.
 				</p>
 			</div>
-			<dl className="pointer-events-none grid grid-cols-[auto_auto] gap-x-3 gap-y-1 text-sm">
+			<dl className="pointer-events-none grid grid-cols-[auto_auto] gap-x-3 gap-y-0.5 text-[11px]">
 				<dt className="text-right text-muted-foreground">Version</dt>
 				<dd className="text-left font-mono">{__APP_VERSION__}</dd>
 				<dt className="text-right text-muted-foreground">Commit</dt>
