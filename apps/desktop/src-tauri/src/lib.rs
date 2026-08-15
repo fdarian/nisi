@@ -7,6 +7,7 @@ use std::time::Duration;
 use editors::{list_available_editors, open_in_editor};
 use serde::{Deserialize, Serialize};
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, Submenu, HELP_SUBMENU_ID, WINDOW_SUBMENU_ID};
+use tauri::webview::PageLoadEvent;
 use tauri::{Emitter, Manager, Runtime, TitleBarStyle, WebviewUrl, WebviewWindowBuilder};
 use tauri_plugin_shell::process::CommandChild;
 #[cfg(not(debug_assertions))]
@@ -163,12 +164,13 @@ const ABOUT_WINDOW_LABEL: &str = "about";
  * File holds two custom items instead — `MenuItem::with_id`, not
  * `PredefinedMenuItem::close_window`, since only the former can take an
  * accelerator override:
- * - "Close Tab" (⌘W) emits `CLOSE_TAB_EVENT`; the frontend decides what that
+ * - "Close Tab" (⌘W) closes the About window directly when it's focused;
+ *   otherwise it emits `CLOSE_TAB_EVENT` and the frontend decides what that
  *   means (close the active tab, or the window when it's the last one — see
  *   `src/hooks/use-tab-shortcuts.ts`).
- * - "Close Window" (⌘⇧W) closes whichever window is focused — the About
- *   window (`build_about_window`) when it's the one in front, the main
- *   window otherwise — no frontend round trip.
+ * - "Close Window" (⌘⇧W) always closes whichever window is focused — the
+ *   About window (`build_about_window`) when it's the one in front, the
+ *   main window otherwise — no frontend round trip.
  *
  * The Window submenu (still at the stable `WINDOW_SUBMENU_ID`) keeps only
  * minimize/maximize — both ways to close now live in File.
@@ -285,10 +287,17 @@ fn build_macos_menu<R: Runtime>(handle: &tauri::AppHandle<R>) -> tauri::Result<M
  * background here would only be checkable by actually running the packaged
  * app on macOS, which isn't something either of us can currently do.
  *
- * Built hidden (`.visible(false)`) — `useAboutWindowChrome` calls `show()`
- * itself once the route has actually painted, so this never flashes an
- * unstyled or wrongly-themed first frame the way a visible-from-creation
- * window would.
+ * Built hidden (`.visible(false)`) and shown from `on_page_load` once the
+ * page actually finishes loading (`PageLoadEvent::Finished` — which, unlike
+ * the DOM's own `load`, waits on every sub-resource including the icon
+ * image), so it never flashes an unstyled, wrongly-themed, or partially
+ * loaded first frame. Entirely in Rust, deliberately: a frontend-driven
+ * `show()` (a `requestAnimationFrame` after mount, as this used to work)
+ * races against the `on_menu_event` "already exists" branch below, which
+ * also shows/focuses the window — and loses half the time, since both are
+ * plausible depending on exactly when the page's JS gets a chance to run.
+ * That race is what made the first click on "About nisi" do nothing; only
+ * the second click worked, by hitting the already-exists branch instead.
  */
 fn build_about_window<R: Runtime>(handle: &tauri::AppHandle<R>) -> tauri::Result<()> {
     WebviewWindowBuilder::new(handle, ABOUT_WINDOW_LABEL, WebviewUrl::App("/about".into()))
@@ -301,6 +310,13 @@ fn build_about_window<R: Runtime>(handle: &tauri::AppHandle<R>) -> tauri::Result
         .hidden_title(true)
         .center()
         .visible(false)
+        .on_page_load(|window, payload| {
+            if payload.event() == PageLoadEvent::Finished {
+                if let Err(e) = window.show() {
+                    eprintln!("failed to show the About window: {e}");
+                }
+            }
+        })
         .build()?;
     Ok(())
 }
@@ -333,8 +349,22 @@ pub fn run() {
         .menu(build_macos_menu)
         .on_menu_event(|app, event| {
             if event.id() == CLOSE_TAB_MENU_ID {
-                if let Err(e) = app.emit(CLOSE_TAB_EVENT, ()) {
-                    eprintln!("failed to forward the Close Tab menu event: {e}");
+                // The About window has no tabs — ⌘W while it's focused must
+                // close the window itself rather than emitting an event only
+                // the main window's `use-tab-shortcuts.ts` listens for
+                // (which used to leave the About window's ⌘W a dead end).
+                // Anything else focused (or nothing) keeps today's behavior.
+                match find_focused_window(app) {
+                    Some(window) if window.label() == ABOUT_WINDOW_LABEL => {
+                        if let Err(e) = window.close() {
+                            eprintln!("failed to close the About window: {e}");
+                        }
+                    }
+                    _ => {
+                        if let Err(e) = app.emit(CLOSE_TAB_EVENT, ()) {
+                            eprintln!("failed to forward the Close Tab menu event: {e}");
+                        }
+                    }
                 }
             } else if event.id() == CLOSE_WINDOW_MENU_ID {
                 // The focused window, not hardcoded to "main" — now that the
