@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import tailwindcss from "@tailwindcss/vite";
@@ -50,8 +51,59 @@ function globalVirtualStoreRoots(): string[] {
 	return [segments.slice(0, linksIndex + 1).join(path.sep)];
 }
 
+/** `apps/desktop/package.json` is the version source of truth — see `scripts/sync-version.ts`. */
+function resolveAppVersion(): string {
+	const packageJsonPath = path.resolve(import.meta.dirname, "package.json");
+	const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, "utf-8"));
+	const version = packageJson.version;
+	if (typeof version !== "string" || version.length === 0) {
+		throw new Error(`Missing or unparseable "version" in ${packageJsonPath}`);
+	}
+	return version;
+}
+
+/**
+ * The commit the running build was produced from, shown (and linked) in the
+ * About dialog. `NISI_COMMIT_SHA` lets a build from a source tarball with no
+ * `.git` directory supply it directly; every other build reads it straight
+ * off the repo. No `"unknown"` fallback — a build that can't identify its
+ * own commit should fail loudly instead of shipping a dialog that lies.
+ *
+ * `node:child_process`, not `Bun.spawnSync`: `tauri.conf.json`'s
+ * `beforeDevCommand`/`beforeBuildCommand` run the `vite` binary through
+ * pnpm's `node_modules/.bin/vite` shim, which execs real `node` — `Bun` is
+ * undefined in that process, so this config has to work under plain Node too.
+ */
+function resolveCommitSha(): string {
+	// @ts-expect-error process is a nodejs global
+	const envSha = process.env.NISI_COMMIT_SHA;
+	if (envSha) return envSha;
+
+	try {
+		return execFileSync("git", ["rev-parse", "HEAD"], {
+			cwd: import.meta.dirname,
+			encoding: "utf-8",
+		}).trim();
+	} catch (cause) {
+		throw new Error(
+			"Could not resolve the build commit: `git rev-parse HEAD` failed and " +
+				"NISI_COMMIT_SHA is unset. Set NISI_COMMIT_SHA when building from a " +
+				"source tarball with no .git directory.",
+			{ cause },
+		);
+	}
+}
+
 // https://vite.dev/config/
 export default defineConfig(async () => ({
+	// Build-time constants for the custom About dialog (`src/components/about-dialog.tsx`)
+	// — see `src/vite-env.d.ts` for their type declarations. The native AppKit about
+	// panel can't render a hyperlink, so the dialog needs the commit baked in itself.
+	define: {
+		__APP_VERSION__: JSON.stringify(resolveAppVersion()),
+		__APP_COMMIT_SHA__: JSON.stringify(resolveCommitSha()),
+	},
+
 	plugins: [
 		tanstackRouter({ target: "react", autoCodeSplitting: true }),
 		// Stamps JSX host elements with their original file/line as a
