@@ -50,8 +50,53 @@ function globalVirtualStoreRoots(): string[] {
 	return [segments.slice(0, linksIndex + 1).join(path.sep)];
 }
 
+/** `apps/desktop/package.json` is the version source of truth — see `scripts/sync-version.ts`. */
+function resolveAppVersion(): string {
+	const packageJsonPath = path.resolve(import.meta.dirname, "package.json");
+	const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, "utf-8"));
+	const version = packageJson.version;
+	if (typeof version !== "string" || version.length === 0) {
+		throw new Error(`Missing or unparseable "version" in ${packageJsonPath}`);
+	}
+	return version;
+}
+
+/**
+ * The commit the running build was produced from, shown (and linked) in the
+ * About dialog. `NISI_COMMIT_SHA` lets a build from a source tarball with no
+ * `.git` directory supply it directly; every other build reads it straight
+ * off the repo. No `"unknown"` fallback — a build that can't identify its
+ * own commit should fail loudly instead of shipping a dialog that lies.
+ */
+function resolveCommitSha(): string {
+	// @ts-expect-error process is a nodejs global
+	const envSha = process.env.NISI_COMMIT_SHA;
+	if (envSha) return envSha;
+
+	const result = Bun.spawnSync(["git", "rev-parse", "HEAD"], {
+		cwd: import.meta.dirname,
+	});
+	if (result.exitCode === 0) {
+		return result.stdout.toString().trim();
+	}
+
+	throw new Error(
+		"Could not resolve the build commit: `git rev-parse HEAD` failed and " +
+			"NISI_COMMIT_SHA is unset. Set NISI_COMMIT_SHA when building from a " +
+			"source tarball with no .git directory.",
+	);
+}
+
 // https://vite.dev/config/
 export default defineConfig(async () => ({
+	// Build-time constants for the custom About dialog (`src/components/about-dialog.tsx`)
+	// — see `src/vite-env.d.ts` for their type declarations. The native AppKit about
+	// panel can't render a hyperlink, so the dialog needs the commit baked in itself.
+	define: {
+		__APP_VERSION__: JSON.stringify(resolveAppVersion()),
+		__APP_COMMIT_SHA__: JSON.stringify(resolveCommitSha()),
+	},
+
 	plugins: [
 		tanstackRouter({ target: "react", autoCodeSplitting: true }),
 		// Stamps JSX host elements with their original file/line as a
