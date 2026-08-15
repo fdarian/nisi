@@ -6,10 +6,7 @@ use std::time::Duration;
 
 use editors::{list_available_editors, open_in_editor};
 use serde::{Deserialize, Serialize};
-use tauri::menu::{
-    AboutMetadata, Menu, MenuItem, PredefinedMenuItem, Submenu, HELP_SUBMENU_ID,
-    WINDOW_SUBMENU_ID,
-};
+use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, Submenu, HELP_SUBMENU_ID, WINDOW_SUBMENU_ID};
 use tauri::{Emitter, Manager, Runtime};
 use tauri_plugin_shell::process::CommandChild;
 #[cfg(not(debug_assertions))]
@@ -137,6 +134,14 @@ const CLOSE_TAB_MENU_ID: &str = "close-tab";
 const CLOSE_TAB_EVENT: &str = "menu://close-tab";
 /** Id of the File menu's ⌘⇧W item — closes the app's window, handled entirely in Rust. */
 const CLOSE_WINDOW_MENU_ID: &str = "close-window";
+/**
+ * Id of the app menu's "About nisi" item, and the event it emits to the
+ * frontend. Custom rather than `PredefinedMenuItem::about` — see
+ * `build_macos_menu`'s doc comment on why the native panel can't show what
+ * this app needs (a linked commit sha).
+ */
+const ABOUT_MENU_ID: &str = "about";
+const ABOUT_EVENT: &str = "menu://about";
 
 /**
  * Builds the macOS menu bar from scratch rather than patching
@@ -167,21 +172,18 @@ const CLOSE_WINDOW_MENU_ID: &str = "close-window";
  */
 fn build_macos_menu<R: Runtime>(handle: &tauri::AppHandle<R>) -> tauri::Result<Menu<R>> {
     let pkg_info = handle.package_info();
-    let config = handle.config();
-    let about_metadata = AboutMetadata {
-        name: Some(pkg_info.name.clone()),
-        version: Some(pkg_info.version.to_string()),
-        copyright: config.bundle.copyright.clone(),
-        authors: config.bundle.publisher.clone().map(|p| vec![p]),
-        ..Default::default()
-    };
 
     let app_menu = Submenu::with_items(
         handle,
         pkg_info.name.clone(),
         true,
         &[
-            &PredefinedMenuItem::about(handle, None, Some(about_metadata))?,
+            // Custom, not `PredefinedMenuItem::about` — muda hands AppKit's
+            // native about panel an unattributed `NSAttributedString`, which
+            // physically cannot render a hyperlink, and this app needs the
+            // build commit shown as one. The frontend owns the real dialog
+            // (`about-dialog.tsx`); this just emits `ABOUT_EVENT` to open it.
+            &MenuItem::with_id(handle, ABOUT_MENU_ID, "About nisi", true, None::<&str>)?,
             &PredefinedMenuItem::separator(handle)?,
             &PredefinedMenuItem::services(handle, None)?,
             &PredefinedMenuItem::separator(handle)?,
@@ -282,6 +284,14 @@ pub fn run() {
                     }
                 } else {
                     eprintln!("Close Window menu event fired but no window labeled 'main' was found");
+                }
+            } else if event.id() == ABOUT_MENU_ID {
+                if let Some(window) = app.get_webview_window("main") {
+                    if let Err(e) = window.emit(ABOUT_EVENT, ()) {
+                        eprintln!("failed to forward the About menu event: {e}");
+                    }
+                } else {
+                    eprintln!("About menu event fired but no window labeled 'main' was found");
                 }
             }
         })
