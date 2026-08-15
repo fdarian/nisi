@@ -6,33 +6,32 @@ application, nothing domain-specific. Domain tables stay where the domain
 that owns them lives (`@repo/review`'s in `packages/review/src/db/schema.ts`,
 the walkthrough store's in `packages/walkthrough/src/db/schema.ts`), each
 with its own `drizzle-kit generate` and its own embedded migration bundle —
-this package only knows how to open one connection and apply a bundle to it,
-not what any bundle contains.
+this package only knows how to open one connection, not what any bundle
+contains or how to apply one (that's `deskkit/sqlite`'s job now, see below).
 
 - `src/client.ts` — `SqliteDb`, the one shared connection + Drizzle client for
-  the whole sidecar process (`getAppDbPath`'s `app.db`, at `NISI_DATA_DIR`).
-  Every domain store depends on `SqliteDb` instead of opening its own
-  `bun:sqlite` handle; `dbUse` wraps a query, turning a thrown error into
-  `DbError` instead of letting it escape untyped. Every connection sets
-  `busy_timeout` (so a second opener waits out the first's transaction
-  instead of failing immediately with `SQLITE_BUSY`) and `journal_mode =
-  WAL` (readers don't block on a writer, or vice versa, at all) — this is
-  the belt-and-suspenders for *any* concurrent opener of `app.db` a future
-  reader or stray script might be, distinct from `apps/desktop/sidecar/sidecar-lock.ts`'s
-  boot-time lock, which only ever governed `sidecar.json` and one sidecar
-  process racing another.
-- `src/migrations.ts` — `applyEmbeddedMigrations`: ports drizzle's internal
-  `dialect.migrate()` call so a migration bundle (journal + raw SQL, already
-  read into memory) can be applied without touching the filesystem — the
-  technique a `bun build --compile` binary needs, since the source `drizzle/`
-  folder doesn't exist on disk in the compiled binary. Domain packages call
-  this once each, against the same `SqliteDb` connection, during their own
-  store's construction.
+  the whole sidecar process (`getAppDbPath`'s `app.db`, at `NISI_DATA_DIR`),
+  built on `deskkit/sqlite`'s `layerSqliteClient` (an `@effect/sql-sqlite-bun`
+  `SqliteClient` with `PRAGMA foreign_keys = ON` already run) and
+  `drizzle-orm/effect-sqlite-bun`'s `SqliteDrizzle.make()`. `yield* SqliteDb`
+  returns the drizzle db directly — every domain store queries it with
+  `yield* db.select()...` straight, no wrapper of ours: the effect-native
+  adapter's query builders already fail typed
+  (`drizzle-orm/effect-core`'s `EffectDrizzleQueryError`), so each domain
+  store maps that itself onto its own error type instead of this package
+  re-wrapping it into a generic one.
 - `src/paths.ts` — `getDataDirConfig` (`NISI_DATA_DIR`, defaulting to
   `~/Library/Application Support/com.nisi.desktop`) and `getAppDbPath`. The
   sidecar's own handshake file (`sidecar.json`) lives in the same directory,
   computed independently in `apps/desktop/sidecar/index.ts` — that one isn't
   SQLite, so it stays outside this package.
+
+Migration application itself (`applyEmbeddedMigrations`) isn't this
+package's anymore — it's `deskkit/sqlite`'s. Each domain package imports it
+directly from there and calls it once against `SqliteDb`'s connection during
+its own store's construction (see `packages/review/src/db/client.ts`,
+`packages/settings/src/db/client.ts`, and the inline call in
+`apps/desktop/sidecar/walkthrough/store.ts`).
 
 ## Non-obvious decisions
 
@@ -53,29 +52,42 @@ not what any bundle contains.
   JSON document and a map of file fingerprints, both plain `text` columns, no
   binary blob storage at all. Nothing today shares that need, so it wasn't
   pulled into this package; move it here if a second blob consumer shows up.
+- **Nothing here sets `busy_timeout` or `journal_mode` directly anymore.**
+  `@effect/sql-sqlite-bun`'s `SqliteClient.make` (which `deskkit`'s
+  `layerSqliteClient` wraps) already defaults to a 5-second `busy_timeout`
+  and WAL journal mode on its own — the two pragmas the old hand-rolled
+  `bun:sqlite` connection used to set explicitly for exactly this reason
+  (concurrent openers of `app.db` racing a fresh file's first `CREATE
+  TABLE`). `test/client.test.ts` regression-tests both are still in effect
+  on this stack; if a future deskkit/`@effect/sql-sqlite-bun` bump ever drops
+  either default, set it back explicitly here rather than letting the test
+  go red silently.
 - **`SqliteDb.make` needs `FileSystem`** (to `makeDirectory` the data dir
-  before `bun:sqlite`'s `Database` constructor, which doesn't create missing
-  parent directories itself) — callers must have `FileSystem` in context
-  wherever `SqliteDb.layer` is composed, same as `@repo/review`'s
-  `ReviewStore.layer` already required before this extraction.
+  before opening the connection — `SqliteClient.make`'s underlying
+  `bun:sqlite` handle doesn't create missing parent directories itself) —
+  callers must have `FileSystem` in context wherever `SqliteDb.layer` is
+  composed, same as `@repo/review`'s `ReviewStore.layer` already required
+  before this extraction.
 
 ## Gotchas
 
-- **`applyEmbeddedMigrations`'s `migrationsTable` argument is required, never default it back to
-  drizzle's own `__drizzle_migrations`.** Drizzle's migration runner decides "already applied" by
-  comparing each migration's *generation-time* timestamp against the single most recent row in that
-  one table (`ORDER BY created_at DESC LIMIT 1`) — sound for one continuous history, not for two
-  domains sharing it. Caught live: with both domains defaulting to the same table, whichever bundle
-  happened to be generated *later* (by wall-clock `drizzle-kit generate` time), if applied first,
-  made the *other* domain's genuinely-new migration look older than "already applied" and silently
-  skipped it — its tables never got created, first surfacing as `no such table: sessions` at runtime,
-  not at migration time. Every domain passes its own distinct table name
-  (`__drizzle_migrations_review`, `__drizzle_migrations_walkthrough`, …).
-- `dbUse`'s `DrizzleClient` type carries no `schema` type parameter (`drizzle(sqlite)`,
-  not `drizzle(sqlite, { schema })`) — nothing in this codebase uses Drizzle's
-  relational query API (`db.query.*`), only the plain query builder
-  (`.select().from(table)`), which doesn't need the schema type to type a
-  result correctly. If something ever needs `db.query`, revisit this.
+- **`applyEmbeddedMigrations`'s `migrationsTable` argument must always be passed explicitly, never
+  left at deskkit's own default (`'__drizzle_migrations'`).** Drizzle's migration runner decides
+  "already applied" by comparing migration names already recorded in that one bookkeeping table —
+  sound for one continuous history, not for two domains sharing it. Two domains sharing the default
+  table name risks one domain's migration looking "already applied" (a name collision) and being
+  silently skipped — its tables never get created, first surfacing as a missing-table error at query
+  time, not at migration time. Every domain passes its own distinct table name
+  (`__drizzle_migrations_review`, `__drizzle_migrations_settings`, `__drizzle_migrations_walkthrough`).
+- **`effect` stays pinned at `4.0.0-beta.102` monorepo-wide, one version behind what
+  `@effect/sql-sqlite-bun@4.0.0-beta.107` (and `drizzle-orm/effect-sqlite-bun`, transitively) declare
+  as their peer requirement.** `pnpm peers check` reports this as an unmet peer — expected, not a bug
+  to fix by bumping `effect` further. `deskkit` (an unpinned `github:fdarian/deskkit` dependency) has
+  its *own* `effect@4.0.0-beta.102` pin baked into its package.json; bumping this repo's `effect` past
+  that makes TypeScript see two structurally-incompatible `Effect` module instances and `deskkit/sqlite`
+  itself stops typechecking (see its `client.ts`). Matches the shape of the syne repo's own
+  `apps/desktop/package.json` (same deskkit commit, same `effect@4.0.0-beta.102` pin, same
+  `@effect/sql-sqlite-bun@4.0.0-beta.107` addition) — re-check that reference before changing this.
 - Effect Layers are memoized by reference within one layer graph — composing
   `SqliteDb.layer` into two different domain layers (`ReviewStore.layer` and
   the walkthrough store's layer) only opens the connection once, *as long as*

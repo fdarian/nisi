@@ -38,10 +38,11 @@ default as `apps/desktop/sidecar`). Feeds `packages/sidecar-api`'s `review`/`dif
   `reviewed_files`, since a file can carry several simultaneous block claims where the whole-file toggle
   is a single mutable slot; see its own doc comment for why storage stayed split while the
   *reconciliation* did unify).
-- `src/db/client.ts` — `runMigrations`/`dbUse`, thin wrappers around `@repo/db`'s
-  `applyEmbeddedMigrations`/`dbUse` that re-map its generic `DbError` to this package's own
-  `ReviewStoreError`. The connection itself (`SqliteDb`) and the embedded-migrations technique live in
-  `@repo/db` now — this package only owns its own schema and its own generated migration bundle
+- `src/db/client.ts` — `runMigrations`, a thin wrapper around `deskkit/sqlite`'s
+  `applyEmbeddedMigrations` that re-maps its failure to this package's own `ReviewStoreError`. The
+  connection itself (`SqliteDb`) lives in `@repo/db`; the store's own queries map their own
+  `EffectDrizzleQueryError` failures the same way, directly in `store.ts` — see that file's local
+  `query` helper. This package only owns its own schema and its own generated migration bundle
   (`src/db/gen-migrations.ts`, `bun run db:generate` after any schema change; `.gen/migrations.gen.ts`
   and `drizzle/**` are committed, needed at `bun build --compile` time, not just `drizzle-kit`'s).
 

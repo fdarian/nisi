@@ -16,9 +16,10 @@ domain package's tables (`NISI_DATA_DIR`, same default as `@repo/review`/`@repo/
   `HarnessId`, same as `@repo/walkthrough`'s `harness` column does for the same reason. The
   sidecar's wiring layer (`apps/desktop/sidecar/http.ts`) is where "must be one of the four known
   ids" is actually enforced, at the wire boundary.
-- `src/db/client.ts` — `runMigrations`/`dbUse`, thin wrappers around `@repo/db`'s
-  `applyEmbeddedMigrations`/`dbUse` that re-map its generic `DbError` to this package's own
-  `SettingsStoreError`. `src/db/gen-migrations.ts` regenerates `.gen/migrations.gen.ts`
+- `src/db/client.ts` — `runMigrations`, a thin wrapper around `deskkit/sqlite`'s
+  `applyEmbeddedMigrations` that re-maps its failure to this package's own `SettingsStoreError`. The
+  store's own queries map their own `EffectDrizzleQueryError` failures the same way, directly in
+  `store.ts`'s local `query` helper. `src/db/gen-migrations.ts` regenerates `.gen/migrations.gen.ts`
   (`bun run db:generate` after any schema change; `.gen/migrations.gen.ts` and `drizzle/**` are
   committed, needed at `bun build --compile` time, not just `drizzle-kit`'s).
 

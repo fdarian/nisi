@@ -30,13 +30,13 @@ describe("SqliteDb", () => {
 	test("opens with WAL journal mode and a non-zero busy_timeout", async () => {
 		const pragmas = await Effect.runPromise(
 			Effect.gen(function* () {
-				const { sqlite } = yield* SqliteDb;
-				const journalMode = sqlite.query("PRAGMA journal_mode").get() as {
-					journal_mode: string;
-				};
-				const busyTimeout = sqlite.query("PRAGMA busy_timeout").get() as {
-					timeout: number;
-				};
+				const db = yield* SqliteDb;
+				const journalMode = yield* db.get<{ journal_mode: string }>(
+					"PRAGMA journal_mode",
+				);
+				const busyTimeout = yield* db.get<{ timeout: number }>(
+					"PRAGMA busy_timeout",
+				);
 				return {
 					journalMode: journalMode.journal_mode,
 					busyTimeout: busyTimeout.timeout,
@@ -62,8 +62,8 @@ describe("SqliteDb", () => {
 	test("two connections opening the same fresh file concurrently don't throw SQLITE_BUSY", async () => {
 		const write = (table: string) =>
 			Effect.gen(function* () {
-				const { sqlite } = yield* SqliteDb;
-				sqlite.exec(
+				const db = yield* SqliteDb;
+				yield* db.run(
 					`CREATE TABLE IF NOT EXISTS ${table} (id INTEGER PRIMARY KEY)`,
 				);
 			}).pipe(Effect.provide(layerFor(dataDir)));

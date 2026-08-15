@@ -4,7 +4,7 @@ import { Context, Effect, Layer, Option } from "effect";
 import { FileSystem } from "effect/FileSystem";
 import { v7 as uuidv7 } from "uuid";
 import { readBlob, writeBlob } from "./blob-store.ts";
-import { dbUse, runMigrations } from "./db/client.ts";
+import { runMigrations } from "./db/client.ts";
 import {
 	reviewedFiles,
 	reviewRangeClaims,
@@ -127,17 +127,20 @@ export class ReviewStore extends Context.Service<ReviewStore>()("ReviewStore", {
 
 		yield* ensureDir(fs, blobsDir);
 
-		const { db } = yield* SqliteDb;
+		const db = yield* SqliteDb;
 		yield* runMigrations(db);
 
+		/** A drizzle query's own typed failure, re-mapped to this store's `ReviewStoreError` — the effect-native adapter already fails typed, so this is the only wrapping a query needs. */
+		const query = <A, E>(effect: Effect.Effect<A, E>) =>
+			effect.pipe(Effect.mapError((cause) => new ReviewStoreError({ cause })));
+
 		const readSessionRow = (sessionId: string) =>
-			dbUse(db, (client) =>
-				client
+			query(
+				db
 					.select()
 					.from(sessions)
 					.where(eq(sessions.publicId, sessionId))
-					.limit(1)
-					.all(),
+					.limit(1),
 			).pipe(
 				Effect.flatMap((rows) => {
 					const row = rows.at(0);
@@ -159,13 +162,12 @@ export class ReviewStore extends Context.Service<ReviewStore>()("ReviewStore", {
 				);
 				const now = new Date();
 
-				const existingRows = yield* dbUse(db, (client) =>
-					client
+				const existingRows = yield* query(
+					db
 						.select()
 						.from(sessions)
 						.where(eq(sessions.sessionKey, sessionKey))
-						.limit(1)
-						.all(),
+						.limit(1),
 				);
 				const existing = existingRows.at(0);
 
@@ -184,8 +186,8 @@ export class ReviewStore extends Context.Service<ReviewStore>()("ReviewStore", {
 
 				const row =
 					existing === undefined
-						? yield* dbUse(db, (client) =>
-								client
+						? yield* query(
+								db
 									.insert(sessions)
 									.values({
 										...sharedValues,
@@ -195,8 +197,8 @@ export class ReviewStore extends Context.Service<ReviewStore>()("ReviewStore", {
 									.returning()
 									.get(),
 							)
-						: yield* dbUse(db, (client) =>
-								client
+						: yield* query(
+								db
 									.update(sessions)
 									.set(sharedValues)
 									.where(eq(sessions.id, existing.id))
@@ -211,13 +213,12 @@ export class ReviewStore extends Context.Service<ReviewStore>()("ReviewStore", {
 			ReadonlyArray<Session>,
 			ReviewStoreError
 		> =>
-			dbUse(db, (client) =>
-				client
+			query(
+				db
 					.select()
 					.from(sessions)
 					.where(isNull(sessions.closedAt))
-					.orderBy(desc(sessions.updatedAt))
-					.all(),
+					.orderBy(desc(sessions.updatedAt)),
 			).pipe(Effect.map((rows) => rows.map(toSession)));
 
 		const closeSession = (
@@ -225,12 +226,11 @@ export class ReviewStore extends Context.Service<ReviewStore>()("ReviewStore", {
 		): Effect.Effect<void, SessionNotFound | ReviewStoreError> =>
 			Effect.gen(function* () {
 				const row = yield* readSessionRow(sessionId);
-				yield* dbUse(db, (client) =>
-					client
+				yield* query(
+					db
 						.update(sessions)
 						.set({ closedAt: new Date() })
-						.where(eq(sessions.id, row.id))
-						.run(),
+						.where(eq(sessions.id, row.id)),
 				);
 			});
 
@@ -256,12 +256,11 @@ export class ReviewStore extends Context.Service<ReviewStore>()("ReviewStore", {
 		): Effect.Effect<void, SessionNotFound | ReviewStoreError> =>
 			Effect.gen(function* () {
 				const row = yield* readSessionRow(sessionId);
-				yield* dbUse(db, (client) =>
-					client
+				yield* query(
+					db
 						.update(sessions)
 						.set({ repoRoot, updatedAt: new Date() })
-						.where(eq(sessions.id, row.id))
-						.run(),
+						.where(eq(sessions.id, row.id)),
 				);
 			});
 
@@ -285,8 +284,8 @@ export class ReviewStore extends Context.Service<ReviewStore>()("ReviewStore", {
 					? yield* writeBlob(blobsDir, content.value)
 					: null;
 				const now = new Date();
-				yield* dbUse(db, (client) =>
-					client
+				yield* query(
+					db
 						.insert(reviewedFiles)
 						.values({
 							sessionId: session.id,
@@ -298,8 +297,7 @@ export class ReviewStore extends Context.Service<ReviewStore>()("ReviewStore", {
 						.onConflictDoUpdate({
 							target: [reviewedFiles.sessionId, reviewedFiles.path],
 							set: { viewed: true, snapshotHash: hash, viewedAt: now },
-						})
-						.run(),
+						}),
 				);
 			});
 
@@ -310,8 +308,8 @@ export class ReviewStore extends Context.Service<ReviewStore>()("ReviewStore", {
 			Effect.gen(function* () {
 				const session = yield* readSessionRow(sessionId);
 				const now = new Date();
-				yield* dbUse(db, (client) =>
-					client
+				yield* query(
+					db
 						.insert(reviewedFiles)
 						.values({
 							sessionId: session.id,
@@ -323,8 +321,7 @@ export class ReviewStore extends Context.Service<ReviewStore>()("ReviewStore", {
 						.onConflictDoUpdate({
 							target: [reviewedFiles.sessionId, reviewedFiles.path],
 							set: { viewed: false, snapshotHash: null, viewedAt: now },
-						})
-						.run(),
+						}),
 				);
 			});
 
@@ -337,8 +334,8 @@ export class ReviewStore extends Context.Service<ReviewStore>()("ReviewStore", {
 		> =>
 			Effect.gen(function* () {
 				const session = yield* readSessionRow(sessionId);
-				const rows = yield* dbUse(db, (client) =>
-					client
+				const rows = yield* query(
+					db
 						.select()
 						.from(reviewedFiles)
 						.where(
@@ -347,8 +344,7 @@ export class ReviewStore extends Context.Service<ReviewStore>()("ReviewStore", {
 								eq(reviewedFiles.path, path),
 							),
 						)
-						.limit(1)
-						.all(),
+						.limit(1),
 				);
 				const row = rows.at(0);
 				return row === undefined
@@ -374,12 +370,11 @@ export class ReviewStore extends Context.Service<ReviewStore>()("ReviewStore", {
 		> =>
 			Effect.gen(function* () {
 				const session = yield* readSessionRow(sessionId);
-				const rows = yield* dbUse(db, (client) =>
-					client
+				const rows = yield* query(
+					db
 						.select()
 						.from(reviewedFiles)
-						.where(eq(reviewedFiles.sessionId, session.id))
-						.all(),
+						.where(eq(reviewedFiles.sessionId, session.id)),
 				);
 				return new Map(
 					rows.map((row) => [
@@ -419,8 +414,8 @@ export class ReviewStore extends Context.Service<ReviewStore>()("ReviewStore", {
 				const session = yield* readSessionRow(sessionId);
 				const hash = yield* writeBlob(blobsDir, content);
 				const now = new Date();
-				yield* dbUse(db, (client) =>
-					client
+				yield* query(
+					db
 						.insert(reviewRangeClaims)
 						.values({
 							sessionId: session.id,
@@ -443,8 +438,7 @@ export class ReviewStore extends Context.Service<ReviewStore>()("ReviewStore", {
 								snapshotHash: hash,
 								viewedAt: now,
 							},
-						})
-						.run(),
+						}),
 				);
 			});
 
@@ -461,8 +455,8 @@ export class ReviewStore extends Context.Service<ReviewStore>()("ReviewStore", {
 		): Effect.Effect<void, SessionNotFound | ReviewStoreError> =>
 			Effect.gen(function* () {
 				const session = yield* readSessionRow(sessionId);
-				yield* dbUse(db, (client) =>
-					client
+				yield* query(
+					db
 						.delete(reviewRangeClaims)
 						.where(
 							and(
@@ -470,8 +464,7 @@ export class ReviewStore extends Context.Service<ReviewStore>()("ReviewStore", {
 								eq(reviewRangeClaims.path, path),
 								eq(reviewRangeClaims.blockId, blockId),
 							),
-						)
-						.run(),
+						),
 				);
 			});
 
@@ -485,8 +478,8 @@ export class ReviewStore extends Context.Service<ReviewStore>()("ReviewStore", {
 		> =>
 			Effect.gen(function* () {
 				const session = yield* readSessionRow(sessionId);
-				const rows = yield* dbUse(db, (client) =>
-					client
+				const rows = yield* query(
+					db
 						.select()
 						.from(reviewRangeClaims)
 						.where(
@@ -494,8 +487,7 @@ export class ReviewStore extends Context.Service<ReviewStore>()("ReviewStore", {
 								eq(reviewRangeClaims.sessionId, session.id),
 								eq(reviewRangeClaims.path, path),
 							),
-						)
-						.all(),
+						),
 				);
 				return rows.map(
 					(row): RangeReviewClaim => ({

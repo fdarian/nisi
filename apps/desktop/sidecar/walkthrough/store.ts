@@ -1,12 +1,8 @@
-import {
-	applyEmbeddedMigrations,
-	type DrizzleClient,
-	dbUse,
-	SqliteDb,
-} from "@repo/db";
+import { SqliteDb } from "@repo/db";
 import type { HarnessId } from "@repo/sidecar-api";
 import { type WalkthroughRow, walkthroughs } from "@repo/walkthrough/db";
 import migrationBundle from "@repo/walkthrough/db-migrations";
+import { applyEmbeddedMigrations } from "deskkit/sqlite";
 import { eq } from "drizzle-orm";
 import { Context, Effect, Layer, Schema } from "effect";
 
@@ -53,31 +49,31 @@ export class WalkthroughStore extends Context.Service<WalkthroughStore>()(
 	"WalkthroughStore",
 	{
 		make: Effect.gen(function* () {
-			const { db } = yield* SqliteDb;
+			const db = yield* SqliteDb;
 			// Own `migrationsTable`, distinct from `@repo/review`'s — see
-			// `@repo/db`'s `applyEmbeddedMigrations` for why sharing the default
-			// name across two domains silently drops one domain's migration.
+			// `@repo/db`'s AGENTS.md for why sharing the default name across two
+			// domains silently drops one domain's migration.
 			yield* applyEmbeddedMigrations(
 				db,
 				migrationBundle,
 				"__drizzle_migrations_walkthrough",
 			).pipe(Effect.mapError((cause) => new WalkthroughStoreError({ cause })));
 
-			const query = <T>(fn: (client: DrizzleClient) => T) =>
-				dbUse(db, fn).pipe(
+			/** A drizzle query's own typed failure, re-mapped to this store's `WalkthroughStoreError` — the effect-native adapter already fails typed, so this is the only wrapping a query needs. */
+			const query = <A, E>(effect: Effect.Effect<A, E>) =>
+				effect.pipe(
 					Effect.mapError((cause) => new WalkthroughStoreError({ cause })),
 				);
 
 			const get = (
 				sessionId: string,
 			): Effect.Effect<StoredWalkthroughRecord | null, WalkthroughStoreError> =>
-				query((client) =>
-					client
+				query(
+					db
 						.select()
 						.from(walkthroughs)
 						.where(eq(walkthroughs.sessionId, sessionId))
-						.limit(1)
-						.all(),
+						.limit(1),
 				).pipe(
 					Effect.map((rows) =>
 						rows.at(0) === undefined
@@ -99,8 +95,8 @@ export class WalkthroughStore extends Context.Service<WalkthroughStore>()(
 						fingerprints: JSON.stringify(input.fingerprints),
 						updatedAt: now,
 					};
-					const row = yield* query((client) =>
-						client
+					const row = yield* query(
+						db
 							.insert(walkthroughs)
 							.values({ ...values, createdAt: now })
 							.onConflictDoUpdate({
