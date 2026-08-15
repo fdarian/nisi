@@ -1,94 +1,90 @@
 {
-  "dialect": "sqlite",
-  "id": "41114eab-6961-4e8a-911a-21f2635480b1",
-  "prevIds": [
-    "df3262ab-c770-4ffc-bd1d-9638f7051865"
-  ],
-  "version": "7",
-  "ddl": [
-    {
-      "name": "settings",
-      "entityType": "tables"
-    },
-    {
-      "type": "integer",
-      "notNull": false,
-      "autoincrement": true,
-      "default": null,
-      "generated": null,
-      "name": "id",
-      "table": "settings",
-      "entityType": "columns"
-    },
-    {
-      "columns": [
-        "id"
-      ],
-      "nameExplicit": false,
-      "name": "settings_pk",
-      "table": "settings",
-      "entityType": "pks"
-    },
-    {
-      "type": "text",
-      "notNull": false,
-      "autoincrement": false,
-      "default": null,
-      "generated": null,
-      "name": "enabledHarnesses",
-      "table": "settings",
-      "entityType": "columns"
-    },
-    {
-      "type": "text",
-      "notNull": true,
-      "autoincrement": false,
-      "default": null,
-      "generated": null,
-      "name": "sidebarViewMode",
-      "table": "settings",
-      "entityType": "columns"
-    },
-    {
-      "type": "text",
-      "notNull": true,
-      "autoincrement": false,
-      "default": null,
-      "generated": null,
-      "name": "diffStyleMode",
-      "table": "settings",
-      "entityType": "columns"
-    },
-    {
-      "type": "integer",
-      "notNull": true,
-      "autoincrement": false,
-      "default": "false",
-      "generated": null,
-      "name": "hideReviewed",
-      "table": "settings",
-      "entityType": "columns"
-    },
-    {
-      "type": "integer",
-      "notNull": true,
-      "autoincrement": false,
-      "default": "false",
-      "generated": null,
-      "name": "includeUncommitted",
-      "table": "settings",
-      "entityType": "columns"
-    },
-    {
-      "type": "integer",
-      "notNull": true,
-      "autoincrement": false,
-      "default": null,
-      "generated": null,
-      "name": "updatedAt",
-      "table": "settings",
-      "entityType": "columns"
-    }
-  ],
-  "renames": []
+	"dialect": "sqlite",
+	"id": "41114eab-6961-4e8a-911a-21f2635480b1",
+	"prevIds": ["df3262ab-c770-4ffc-bd1d-9638f7051865"],
+	"version": "7",
+	"ddl": [
+		{
+			"name": "settings",
+			"entityType": "tables"
+		},
+		{
+			"type": "integer",
+			"notNull": false,
+			"autoincrement": true,
+			"default": null,
+			"generated": null,
+			"name": "id",
+			"table": "settings",
+			"entityType": "columns"
+		},
+		{
+			"columns": ["id"],
+			"nameExplicit": false,
+			"name": "settings_pk",
+			"table": "settings",
+			"entityType": "pks"
+		},
+		{
+			"type": "text",
+			"notNull": false,
+			"autoincrement": false,
+			"default": null,
+			"generated": null,
+			"name": "enabledHarnesses",
+			"table": "settings",
+			"entityType": "columns"
+		},
+		{
+			"type": "text",
+			"notNull": true,
+			"autoincrement": false,
+			"default": null,
+			"generated": null,
+			"name": "sidebarViewMode",
+			"table": "settings",
+			"entityType": "columns"
+		},
+		{
+			"type": "text",
+			"notNull": true,
+			"autoincrement": false,
+			"default": null,
+			"generated": null,
+			"name": "diffStyleMode",
+			"table": "settings",
+			"entityType": "columns"
+		},
+		{
+			"type": "integer",
+			"notNull": true,
+			"autoincrement": false,
+			"default": "false",
+			"generated": null,
+			"name": "hideReviewed",
+			"table": "settings",
+			"entityType": "columns"
+		},
+		{
+			"type": "integer",
+			"notNull": true,
+			"autoincrement": false,
+			"default": "false",
+			"generated": null,
+			"name": "includeUncommitted",
+			"table": "settings",
+			"entityType": "columns"
+		},
+		{
+			"type": "integer",
+			"notNull": true,
+			"autoincrement": false,
+			"default": null,
+			"generated": null,
+			"name": "updatedAt",
+			"table": "settings",
+			"entityType": "columns"
+		}
+	],
+	"renames": []
 }

@@ -1,118 +1,114 @@
 {
-  "dialect": "sqlite",
-  "id": "714085f6-494c-4dcd-a008-3b0f51f149f7",
-  "prevIds": [
-    "00000000-0000-0000-0000-000000000000"
-  ],
-  "version": "7",
-  "ddl": [
-    {
-      "name": "walkthroughs",
-      "entityType": "tables"
-    },
-    {
-      "type": "integer",
-      "notNull": false,
-      "autoincrement": true,
-      "default": null,
-      "generated": null,
-      "name": "id",
-      "table": "walkthroughs",
-      "entityType": "columns"
-    },
-    {
-      "columns": [
-        "id"
-      ],
-      "nameExplicit": false,
-      "name": "walkthroughs_pk",
-      "table": "walkthroughs",
-      "entityType": "pks"
-    },
-    {
-      "type": "text",
-      "notNull": true,
-      "autoincrement": false,
-      "default": null,
-      "generated": null,
-      "name": "sessionId",
-      "table": "walkthroughs",
-      "entityType": "columns"
-    },
-    {
-      "type": "text",
-      "notNull": true,
-      "autoincrement": false,
-      "default": null,
-      "generated": null,
-      "name": "harness",
-      "table": "walkthroughs",
-      "entityType": "columns"
-    },
-    {
-      "type": "text",
-      "notNull": false,
-      "autoincrement": false,
-      "default": null,
-      "generated": null,
-      "name": "model",
-      "table": "walkthroughs",
-      "entityType": "columns"
-    },
-    {
-      "type": "text",
-      "notNull": true,
-      "autoincrement": false,
-      "default": null,
-      "generated": null,
-      "name": "content",
-      "table": "walkthroughs",
-      "entityType": "columns"
-    },
-    {
-      "type": "text",
-      "notNull": true,
-      "autoincrement": false,
-      "default": null,
-      "generated": null,
-      "name": "fingerprints",
-      "table": "walkthroughs",
-      "entityType": "columns"
-    },
-    {
-      "type": "integer",
-      "notNull": true,
-      "autoincrement": false,
-      "default": null,
-      "generated": null,
-      "name": "createdAt",
-      "table": "walkthroughs",
-      "entityType": "columns"
-    },
-    {
-      "type": "integer",
-      "notNull": true,
-      "autoincrement": false,
-      "default": null,
-      "generated": null,
-      "name": "updatedAt",
-      "table": "walkthroughs",
-      "entityType": "columns"
-    },
-    {
-      "columns": [
-        {
-          "value": "sessionId",
-          "isExpression": false
-        }
-      ],
-      "isUnique": true,
-      "where": null,
-      "origin": "manual",
-      "name": "walkthroughs_sessionId_unique",
-      "table": "walkthroughs",
-      "entityType": "indexes"
-    }
-  ],
-  "renames": []
+	"dialect": "sqlite",
+	"id": "714085f6-494c-4dcd-a008-3b0f51f149f7",
+	"prevIds": ["00000000-0000-0000-0000-000000000000"],
+	"version": "7",
+	"ddl": [
+		{
+			"name": "walkthroughs",
+			"entityType": "tables"
+		},
+		{
+			"type": "integer",
+			"notNull": false,
+			"autoincrement": true,
+			"default": null,
+			"generated": null,
+			"name": "id",
+			"table": "walkthroughs",
+			"entityType": "columns"
+		},
+		{
+			"columns": ["id"],
+			"nameExplicit": false,
+			"name": "walkthroughs_pk",
+			"table": "walkthroughs",
+			"entityType": "pks"
+		},
+		{
+			"type": "text",
+			"notNull": true,
+			"autoincrement": false,
+			"default": null,
+			"generated": null,
+			"name": "sessionId",
+			"table": "walkthroughs",
+			"entityType": "columns"
+		},
+		{
+			"type": "text",
+			"notNull": true,
+			"autoincrement": false,
+			"default": null,
+			"generated": null,
+			"name": "harness",
+			"table": "walkthroughs",
+			"entityType": "columns"
+		},
+		{
+			"type": "text",
+			"notNull": false,
+			"autoincrement": false,
+			"default": null,
+			"generated": null,
+			"name": "model",
+			"table": "walkthroughs",
+			"entityType": "columns"
+		},
+		{
+			"type": "text",
+			"notNull": true,
+			"autoincrement": false,
+			"default": null,
+			"generated": null,
+			"name": "content",
+			"table": "walkthroughs",
+			"entityType": "columns"
+		},
+		{
+			"type": "text",
+			"notNull": true,
+			"autoincrement": false,
+			"default": null,
+			"generated": null,
+			"name": "fingerprints",
+			"table": "walkthroughs",
+			"entityType": "columns"
+		},
+		{
+			"type": "integer",
+			"notNull": true,
+			"autoincrement": false,
+			"default": null,
+			"generated": null,
+			"name": "createdAt",
+			"table": "walkthroughs",
+			"entityType": "columns"
+		},
+		{
+			"type": "integer",
+			"notNull": true,
+			"autoincrement": false,
+			"default": null,
+			"generated": null,
+			"name": "updatedAt",
+			"table": "walkthroughs",
+			"entityType": "columns"
+		},
+		{
+			"columns": [
+				{
+					"value": "sessionId",
+					"isExpression": false
+				}
+			],
+			"isUnique": true,
+			"where": null,
+			"origin": "manual",
+			"name": "walkthroughs_sessionId_unique",
+			"table": "walkthroughs",
+			"entityType": "indexes"
+		}
+	],
+	"renames": []
 }
