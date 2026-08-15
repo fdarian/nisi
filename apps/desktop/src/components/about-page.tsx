@@ -50,6 +50,16 @@ const APPKIT_BUTTON_CLASSNAME =
  * (inherited down) matches a native panel's non-selectable static text and
  * arrow cursor. The commit link and the two buttons opt back in with
  * `pointer-events-auto` — those still need to be clickable, not draggable.
+ *
+ * Bottom-weighted, not centered, matching Ghostty: `pt-[80px]` pins the
+ * icon's top edge a fixed distance below the transparent titlebar's traffic
+ * lights (which occupy roughly the first 20px), and `pb-[12px]` plus
+ * `mt-auto` on the button row pins its bottom edge close to the window's —
+ * the auto margin absorbs whatever's left between the info grid and the
+ * buttons rather than `justify-center` splitting it evenly top and bottom,
+ * which is what made the window read as oversized/floating instead of
+ * filling its frame. The icon-to-name and name-to-grid gaps stay on the
+ * shared `gap-6`, untouched.
  */
 export function AboutPage(): React.ReactElement {
 	useAboutWindowChrome();
@@ -59,7 +69,7 @@ export function AboutPage(): React.ReactElement {
 
 	return (
 		<div
-			className="flex h-screen w-screen select-none flex-col items-center justify-center gap-6 bg-sidebar px-8 py-8 text-center"
+			className="flex h-screen w-screen select-none flex-col items-center gap-6 bg-sidebar px-8 pt-[80px] pb-[12px] text-center"
 			data-tauri-drag-region=""
 			style={{ fontFamily: MACOS_SYSTEM_FONT }}
 		>
@@ -89,7 +99,7 @@ export function AboutPage(): React.ReactElement {
 					</button>
 				</dd>
 			</dl>
-			<div className="flex gap-2">
+			<div className="mt-auto flex gap-2">
 				<button
 					className={APPKIT_BUTTON_CLASSNAME}
 					onClick={() => void openUrl(REPO_URL)}
