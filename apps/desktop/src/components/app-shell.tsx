@@ -174,11 +174,13 @@ function AppShellReady({
 		[sessions, activeSessionId],
 	);
 
-	// Which open tabs have gone idle long enough to unmount — see
-	// `useTabSuspension`'s doc comment for the full policy (never the active
-	// tab, never one with a walkthrough generation running). Read back below
-	// to gate each session's `TabsPrimitive.Panel`'s own `keepMounted`.
-	const suspendedSessionIds = useTabSuspension(sessions, activeSessionId, orpc);
+	// Which open tabs have gone idle long enough to unmount, plus the manual
+	// trigger and generation check `PrTabStrip`'s per-tab context menu needs
+	// — see `useTabSuspension`'s doc comment for the full policy (never the
+	// active tab, never one with a walkthrough generation running).
+	// `suspendedSessionIds` is read back below to gate each session's
+	// `TabsPrimitive.Panel`'s own `keepMounted`.
+	const tabSuspension = useTabSuspension(sessions, activeSessionId, orpc);
 
 	// Base UI's Tabs.Root only *suggests* a fallback value via onValueChange
 	// when the active tab disappears from a controlled root — it doesn't pick
@@ -255,10 +257,13 @@ function AppShellReady({
 			onContextMenu={handleTabStripContextMenu}
 		>
 			<PrTabStrip
+				activeSessionId={activeSessionId}
+				checkGenerationRunning={tabSuspension.isGenerationRunning}
 				onCloseSession={handleCloseSession}
 				onOpenPullRequest={openPalette}
+				onSuspendTab={tabSuspension.suspendNow}
 				sessions={sessions}
-				suspendedSessionIds={suspendedSessionIds}
+				suspendedSessionIds={tabSuspension.suspendedSessionIds}
 			/>
 			<FramePanel className={cn(INSET_PANE_CLASS, "mt-0")}>
 				{sessions.map((session) => (
@@ -274,7 +279,7 @@ function AppShellReady({
 						// comment for why that's safe: this panel's internal `mounted`
 						// state already went false shortly after the tab was last
 						// deselected, well before the suspend timer fires.
-						keepMounted={!suspendedSessionIds.has(session.id)}
+						keepMounted={!tabSuspension.suspendedSessionIds.has(session.id)}
 						value={session.id}
 					>
 						<PrView

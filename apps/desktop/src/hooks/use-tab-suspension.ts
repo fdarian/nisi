@@ -59,11 +59,33 @@ function withMember(ids: ReadonlySet<string>, id: string): ReadonlySet<string> {
  * and reschedules a shorter recheck (`GENERATION_RECHECK_MS`) rather than
  * suspending, whenever that check reports `"running"`.
  */
+export type TabSuspensionControls = {
+	suspendedSessionIds: ReadonlySet<string>;
+	/**
+	 * Suspends a tab immediately, bypassing `TAB_SUSPEND_TIMEOUT_MS` — the
+	 * context menu's "Suspend" item calls this directly rather than
+	 * duplicating `checkAndSuspend`'s walkthrough-generation guard or the
+	 * cache-eviction effect it triggers below. `checkAndSuspend` itself
+	 * cancels whatever timer (idle countdown or generation recheck) is
+	 * already pending for this session, so that timer can't also fire a
+	 * second, redundant check later.
+	 */
+	suspendNow: (sessionId: string) => void;
+	/**
+	 * One-shot check of whether a session currently has a walkthrough
+	 * generation running — same fallback-to-`false`-on-error behavior as
+	 * `checkAndSuspend`'s own guard, exposed so the context menu can decide
+	 * up front whether to disable "Suspend" and explain why, instead of the
+	 * user only finding out after the click did nothing.
+	 */
+	isGenerationRunning: (sessionId: string) => Promise<boolean>;
+};
+
 export function useTabSuspension(
 	sessions: readonly Session[],
 	activeSessionId: string | null,
 	orpc: SidecarQueryUtils,
-): ReadonlySet<string> {
+): TabSuspensionControls {
 	const queryClient = useQueryClient();
 	const [suspendedSessionIds, setSuspendedSessionIds] = useState<
 		ReadonlySet<string>
@@ -76,31 +98,61 @@ export function useTabSuspension(
 	activeSessionIdRef.current = activeSessionId;
 	orpcRef.current = orpc;
 
-	const checkAndSuspend = useCallback((sessionId: string) => {
-		void (async () => {
-			// Same fallback `useWalkthroughGeneration` uses for this call — an
-			// unreachable/erroring check is treated as "nothing running".
-			const activeGeneration =
-				await orpcRef.current.walkthrough.activeGeneration
-					.call({ sessionId })
-					.catch(() => null);
+	// Same fallback `useWalkthroughGeneration` uses for this call — an
+	// unreachable/erroring check is treated as "nothing running". Shared by
+	// `checkAndSuspend`'s own guard and by `isGenerationRunning` below so
+	// neither has to restate it.
+	const isGenerationRunning = useCallback(async (sessionId: string) => {
+		const activeGeneration = await orpcRef.current.walkthrough.activeGeneration
+			.call({ sessionId })
+			.catch(() => null);
+		return activeGeneration?.status === "running";
+	}, []);
 
-			// The tab may have become the active one, or closed outright, while
-			// the check above was in flight.
-			if (activeSessionIdRef.current === sessionId) return;
-
-			if (activeGeneration?.status === "running") {
-				const timer = setTimeout(() => {
-					timers.current.delete(sessionId);
-					checkAndSuspend(sessionId);
-				}, GENERATION_RECHECK_MS);
-				timers.current.set(sessionId, timer);
-				return;
+	// Self-contained with respect to `timers`: clears whatever timer is
+	// already pending for `sessionId` (an idle countdown from
+	// `scheduleSuspend`, or its own previous generation-recheck reschedule)
+	// before doing anything else, so every caller — the idle timeout, the
+	// recheck timeout, and `suspendNow`'s manual trigger below — can call
+	// this directly without first tearing down `timers.current` itself. That
+	// matters most for `suspendNow`: without this, a manual call racing an
+	// already-pending idle timer would have this function's own
+	// `timers.current.set` below silently overwrite (not clear) that timer,
+	// leaking it to fire again later.
+	const checkAndSuspend = useCallback(
+		(sessionId: string) => {
+			const pendingTimer = timers.current.get(sessionId);
+			if (pendingTimer !== undefined) {
+				clearTimeout(pendingTimer);
+				timers.current.delete(sessionId);
 			}
 
-			setSuspendedSessionIds((current) => withMember(current, sessionId));
-		})();
-	}, []);
+			void (async () => {
+				const running = await isGenerationRunning(sessionId);
+
+				// The tab may have become the active one, or closed outright, while
+				// the check above was in flight.
+				if (activeSessionIdRef.current === sessionId) return;
+
+				if (running) {
+					const timer = setTimeout(() => {
+						timers.current.delete(sessionId);
+						checkAndSuspend(sessionId);
+					}, GENERATION_RECHECK_MS);
+					timers.current.set(sessionId, timer);
+					return;
+				}
+
+				setSuspendedSessionIds((current) => withMember(current, sessionId));
+			})();
+		},
+		[isGenerationRunning],
+	);
+
+	// `checkAndSuspend` already clears its own pending timer and applies the
+	// generation guard, so the manual trigger exposed to callers is just that
+	// function under a name that reads right at the call site.
+	const suspendNow = checkAndSuspend;
 
 	const scheduleSuspend = useCallback(
 		(sessionId: string) => {
@@ -188,5 +240,5 @@ export function useTabSuspension(
 		previouslySuspendedRef.current = suspendedSessionIds;
 	}, [suspendedSessionIds, queryClient, orpc]);
 
-	return suspendedSessionIds;
+	return { suspendedSessionIds, suspendNow, isGenerationRunning };
 }
