@@ -6,7 +6,7 @@ import {
 	RowsIcon,
 	SlidersHorizontalIcon,
 } from "lucide-react";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef } from "react";
 import type { DiffPaneHandle } from "#/components/diff-pane/diff-pane";
 import { DiffPane } from "#/components/diff-pane/diff-pane";
 import type { SearchMode } from "#/components/files-sidebar/files-sidebar";
@@ -37,6 +37,14 @@ import type {
 } from "#/lib/pr-data";
 import { useFileContents } from "#/lib/pr-data";
 import {
+	useSessionCurrentMatchIndex,
+	useSessionFilterQuery,
+	useSessionForcedPaths,
+	useSessionSearchMode,
+	useSessionSelectedPath,
+	useSessionUndoStack,
+} from "#/lib/session-ui-store";
+import {
 	useDiffStyleMode,
 	useHideReviewed,
 	useIncludeUncommitted,
@@ -44,12 +52,6 @@ import {
 } from "#/lib/settings-data";
 import { comparePaths } from "#/lib/tree-paths";
 import { cn } from "#/lib/utils";
-
-/** One `r` keypress's undo record — concrete to this one toggle, not a generic action union. */
-type ReviewedToggleRecord = {
-	path: string;
-	previousViewed: boolean;
-};
 
 /** Stable identity for the "keyword mode inactive" case — a fresh `[]`/`Map` every render would defeat `DiffPane`'s `items` memo just as surely as a genuinely different value would. */
 const EMPTY_MATCHES: readonly DiffMatch[] = [];
@@ -80,7 +82,13 @@ export function FilesChangedView({
 	onRefresh,
 	shortcutsEnabled,
 }: FilesChangedViewProps): React.ReactElement {
-	const [selectedPath, setSelectedPath] = useState<string | null>(null);
+	// All of `selectedPath` through `forcedPaths`/the undo stack below live in
+	// the per-session UI store (`session-ui-store.ts`), not local `useState` —
+	// an inactive tab eventually suspends (`app-shell.tsx`'s
+	// `useTabSuspension`), which unmounts this component entirely, and resume
+	// needs to land back on the same selection/filter/search position rather
+	// than resetting it.
+	const [selectedPath, setSelectedPath] = useSessionSelectedPath(session.id);
 	const diffPaneRef = useRef<DiffPaneHandle>(null);
 
 	// Every file click scrolls the diff pane, not just the ones that change
@@ -89,18 +97,21 @@ export function FilesChangedView({
 	// the click happened at all (see `DiffPaneHandle`). `FileTreeGroup` /
 	// `FlatFileGroup` already scroll their own row into view on that same
 	// click for the same reason.
-	const selectPath = useCallback((path: string) => {
-		setSelectedPath(path);
-		diffPaneRef.current?.scrollToPath(path);
-	}, []);
+	const selectPath = useCallback(
+		(path: string) => {
+			setSelectedPath(path);
+			diffPaneRef.current?.scrollToPath(path);
+		},
+		[setSelectedPath],
+	);
 
 	// Lifted from `FilesSidebar` — `j`/`k` need to walk the same filtered
 	// list the sidebar renders, so the filtering itself (not just the query
 	// string) lives here now. `FilesSidebar` still owns grouping.
-	const [filterQuery, setFilterQuery] = useState("");
+	const [filterQuery, setFilterQuery] = useSessionFilterQuery(session.id);
 	// Ephemeral, not a persisted setting — it's tied to the transient query
 	// above, not a standing preference like `viewMode`/`hideReviewed` below.
-	const [searchMode, setSearchMode] = useState<SearchMode>("files");
+	const [searchMode, setSearchMode] = useSessionSearchMode(session.id);
 	// Which match `n`/`N`/Enter last parked on, as an index into
 	// `keywordMatches` below — always read through `currentMatchIndexInBounds`
 	// (safe modulo), not directly, since the match list can shrink out from
@@ -108,7 +119,9 @@ export function FilesChangedView({
 	// there's no effect keeping this in sync. Reset to 0 wherever the query
 	// or mode changes (`handleFilterQueryChange`/`handleSearchModeChange`
 	// below), so "current" always starts back at the first match.
-	const [currentMatchIndex, setCurrentMatchIndex] = useState(0);
+	const [currentMatchIndex, setCurrentMatchIndex] = useSessionCurrentMatchIndex(
+		session.id,
+	);
 	// `setCurrentMatchIndex` alone isn't enough for `navigateMatch` (below) to
 	// stack correctly: React batches state updates, so two `n` keydowns
 	// dispatched before a re-render would both compute "current + 1" off the
@@ -118,11 +131,14 @@ export function FilesChangedView({
 	// every `setCurrentMatchIndex` call (`setCurrentMatchIndexBoth` below),
 	// so `navigateMatch` always computes its next step from the true latest
 	// value regardless of React's render timing.
-	const currentMatchIndexRef = useRef(0);
-	const setCurrentMatchIndexBoth = useCallback((index: number) => {
-		currentMatchIndexRef.current = index;
-		setCurrentMatchIndex(index);
-	}, []);
+	const currentMatchIndexRef = useRef(currentMatchIndex);
+	const setCurrentMatchIndexBoth = useCallback(
+		(index: number) => {
+			currentMatchIndexRef.current = index;
+			setCurrentMatchIndex(index);
+		},
+		[setCurrentMatchIndex],
+	);
 
 	const [viewMode, setViewMode] = useSidebarViewMode(orpc);
 	const [diffStyle, setDiffStyle] = useDiffStyleMode(orpc);
@@ -167,23 +183,13 @@ export function FilesChangedView({
 		() => files.filter((file) => !file.binary).map((file) => file.path),
 		[files],
 	);
-	const [forcedPaths, setForcedPaths] = useState<ReadonlySet<string>>(
-		() => new Set(),
-	);
+	const [forcedPaths, addForcedPath] = useSessionForcedPaths(session.id);
 	const fileContents: FileContentsMap = useFileContents(
 		orpc,
 		session.id,
 		contentPaths,
 		forcedPaths,
 	);
-	const handleForceLoad = useCallback((path: string) => {
-		setForcedPaths((current) => {
-			if (current.has(path)) return current;
-			const next = new Set(current);
-			next.add(path);
-			return next;
-		});
-	}, []);
 
 	// What the sidebar actually renders — `visibleFiles` narrowed by the text
 	// filter. `j`/`k` walk this list; `DiffPane` below keeps receiving the
@@ -257,14 +263,14 @@ export function FilesChangedView({
 			setFilterQuery(value);
 			setCurrentMatchIndexBoth(0);
 		},
-		[setCurrentMatchIndexBoth],
+		[setFilterQuery, setCurrentMatchIndexBoth],
 	);
 	const handleSearchModeChange = useCallback(
 		(mode: SearchMode) => {
 			setSearchMode(mode);
 			setCurrentMatchIndexBoth(0);
 		},
-		[setCurrentMatchIndexBoth],
+		[setSearchMode, setCurrentMatchIndexBoth],
 	);
 
 	// Jumps to an absolute match index: records it as "current", crosses
@@ -281,7 +287,7 @@ export function FilesChangedView({
 			if (match.path !== selectedPath) setSelectedPath(match.path);
 			diffPaneRef.current?.scrollToMatch(match);
 		},
-		[keywordMatches, selectedPath, setCurrentMatchIndexBoth],
+		[keywordMatches, selectedPath, setSelectedPath, setCurrentMatchIndexBoth],
 	);
 
 	// Reads `currentMatchIndexRef`, not the `currentMatchIndexInBounds` state
@@ -313,11 +319,11 @@ export function FilesChangedView({
 		jumpToMatch(0);
 	}, [jumpToMatch]);
 
-	// A ref, not state: nothing renders off the undo stack, and a setState
-	// updater is the wrong place for `setViewed`/`selectPath`'s side effects —
-	// StrictMode double-invokes updaters in dev, which would fire the
-	// mutation twice.
-	const undoStackRef = useRef<ReviewedToggleRecord[]>([]);
+	// Lives in the per-session store too (see the doc comment above
+	// `selectedPath`) — same non-reactive-ref semantics as before (nothing
+	// renders off it), just addressable by session id so it survives this
+	// component unmounting on suspend.
+	const undoStack = useSessionUndoStack(session.id);
 
 	// Mirrors exactly how `DiffPane` derives the `viewed` boolean it passes to
 	// `handleToggleViewed` — the one other place a file's reviewed flag gets
@@ -358,17 +364,17 @@ export function FilesChangedView({
 	const handleToggleReviewed = useCallback(() => {
 		if (selectedPath === null) return;
 		const previousViewed = isViewed(selectedPath);
-		undoStackRef.current.push({ path: selectedPath, previousViewed });
+		undoStack.push({ path: selectedPath, previousViewed });
 		setViewed(selectedPath, !previousViewed);
 		selectRelative(1);
-	}, [selectedPath, isViewed, setViewed, selectRelative]);
+	}, [selectedPath, isViewed, setViewed, selectRelative, undoStack]);
 
 	const handleUndo = useCallback(() => {
-		const lastRecord = undoStackRef.current.pop();
+		const lastRecord = undoStack.pop();
 		if (!lastRecord) return;
 		setViewed(lastRecord.path, lastRecord.previousViewed);
 		selectPath(lastRecord.path);
-	}, [setViewed, selectPath]);
+	}, [undoStack, setViewed, selectPath]);
 
 	// Tree view's right-click "Mark as Reviewed"/"Mark Folder as Reviewed" —
 	// no undo stack entry, unlike `handleToggleReviewed`: a folder can resolve
@@ -511,11 +517,12 @@ export function FilesChangedView({
 					files={diffPaneFiles}
 					forcedPaths={forcedPaths}
 					keywordMatchesByPath={keywordMatchesByPath}
-					onForceLoad={handleForceLoad}
+					onForceLoad={addForcedPath}
 					ref={diffPaneRef}
 					repoRoot={session.repoRoot}
 					reviewState={reviewState}
 					selectedPath={selectedPath}
+					sessionId={session.id}
 					setViewed={setViewed}
 				/>
 				{isKeywordFilterActive && (
