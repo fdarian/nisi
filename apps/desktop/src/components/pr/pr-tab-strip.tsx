@@ -1,6 +1,6 @@
 "use client";
 
-import { GitPullRequestIcon, PlusIcon, XIcon } from "lucide-react";
+import { GitPullRequestIcon, LeafIcon, PlusIcon, XIcon } from "lucide-react";
 import { Kbd } from "#/components/ui/kbd";
 import { TabsPrimitive } from "#/components/ui/tabs";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "#/components/ui/tooltip";
@@ -10,6 +10,10 @@ import { Button } from "../ui/button";
 
 type PrTabStripProps = {
 	sessions: readonly Session[];
+	/** Which open tabs `useTabSuspension` has already idled out — read here
+	 * (not by calling the hook itself, which stays owned by `app-shell.tsx`)
+	 * to swap in the leaf icon for a tab that's suspended. */
+	suspendedSessionIds: ReadonlySet<string>;
 	onCloseSession: (sessionId: string) => void;
 	onOpenPullRequest: () => void;
 	onContextMenu?: (event: React.MouseEvent) => void;
@@ -37,6 +41,7 @@ type PrTabStripProps = {
  */
 export function PrTabStrip({
 	sessions,
+	suspendedSessionIds,
 	onCloseSession,
 	onOpenPullRequest,
 	onContextMenu,
@@ -48,6 +53,7 @@ export function PrTabStrip({
 			<TabsPrimitive.List className="flex min-w-0 flex-1 gap-1 overflow-x-auto py-2 items-center">
 				{sessions.map((session) => (
 					<PrTab
+						isSuspended={suspendedSessionIds.has(session.id)}
 						key={session.id}
 						onClose={() => onCloseSession(session.id)}
 						session={session}
@@ -95,9 +101,11 @@ function OpenPullRequestButton({
 
 function PrTab({
 	session,
+	isSuspended,
 	onClose,
 }: {
 	session: Session;
+	isSuspended: boolean;
 	onClose: () => void;
 }): React.ReactElement {
 	const label =
@@ -118,7 +126,11 @@ function PrTab({
 			render={<div />}
 			value={session.id}
 		>
-			<GitPullRequestIcon className="size-3.5 shrink-0" />
+			{isSuspended ? (
+				<LeafIcon className="size-3.5 shrink-0" />
+			) : (
+				<GitPullRequestIcon className="size-3.5 shrink-0" />
+			)}
 			<span className="min-w-0 flex-1 truncate">{label}</span>
 			<button
 				aria-label="Close tab"

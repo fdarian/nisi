@@ -258,6 +258,7 @@ function AppShellReady({
 				onCloseSession={handleCloseSession}
 				onOpenPullRequest={openPalette}
 				sessions={sessions}
+				suspendedSessionIds={suspendedSessionIds}
 			/>
 			<FramePanel className={cn(INSET_PANE_CLASS, "mt-0")}>
 				{sessions.map((session) => (
