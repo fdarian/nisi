@@ -23,9 +23,14 @@ import { TabsPrimitive } from "#/components/ui/tabs";
 import { useCommandPaletteShortcut } from "#/hooks/use-command-palette-shortcut";
 import { useOpenPrPaletteShortcut } from "#/hooks/use-open-pr-palette-shortcut";
 import { useTabShortcuts } from "#/hooks/use-tab-shortcuts";
+import { useTabSuspension } from "#/hooks/use-tab-suspension";
 import type { SidecarQueryUtils } from "#/lib/backend-context";
 import { useBackendContext } from "#/lib/backend-context";
 import { useSessions } from "#/lib/pr-data";
+import {
+	SessionUiProvider,
+	useClearSessionUiState,
+} from "#/lib/session-ui-store";
 import { cn } from "#/lib/utils";
 
 /**
@@ -81,7 +86,11 @@ export function AppShell(): React.ReactElement {
 		);
 	}
 
-	return <AppShellReady orpc={backend.orpc} />;
+	return (
+		<SessionUiProvider>
+			<AppShellReady orpc={backend.orpc} />
+		</SessionUiProvider>
+	);
 }
 
 function ShellFrame({
@@ -165,19 +174,32 @@ function AppShellReady({
 		[sessions, activeSessionId],
 	);
 
+	// Which open tabs have gone idle long enough to unmount, plus the manual
+	// trigger and generation check `PrTabStrip`'s per-tab context menu needs
+	// — see `useTabSuspension`'s doc comment for the full policy (never the
+	// active tab, never one with a walkthrough generation running).
+	// `suspendedSessionIds` is read back below to gate each session's
+	// `TabsPrimitive.Panel`'s own `keepMounted`.
+	const tabSuspension = useTabSuspension(sessions, activeSessionId, orpc);
+
 	// Base UI's Tabs.Root only *suggests* a fallback value via onValueChange
 	// when the active tab disappears from a controlled root — it doesn't pick
 	// one for us. Closing the active tab picks its neighbor explicitly,
 	// mirroring how browser tab strips behave.
+	const clearSessionUiState = useClearSessionUiState();
 	const handleCloseSession = useCallback(
 		(sessionId: string) => {
 			closeSession(sessionId);
+			// The per-tab UI state store (`session-ui-store.ts`) has no other
+			// signal for "this tab is gone for good" — suspension leaves it
+			// intact on purpose, so only an actual close should drop it.
+			clearSessionUiState(sessionId);
 			if (activeSessionId !== sessionId) return;
 			const index = sessions.findIndex((session) => session.id === sessionId);
 			const neighbor = sessions[index + 1] ?? sessions[index - 1];
 			setRequestedActiveSessionId(neighbor?.id ?? null);
 		},
-		[activeSessionId, closeSession, sessions],
+		[activeSessionId, closeSession, clearSessionUiState, sessions],
 	);
 
 	const sessionIds = useMemo(
@@ -235,24 +257,37 @@ function AppShellReady({
 			onContextMenu={handleTabStripContextMenu}
 		>
 			<PrTabStrip
+				activeSessionId={activeSessionId}
+				checkGenerationRunning={tabSuspension.isGenerationRunning}
 				onCloseSession={handleCloseSession}
 				onOpenPullRequest={openPalette}
+				onSuspendTab={tabSuspension.suspendNow}
 				sessions={sessions}
+				suspendedSessionIds={tabSuspension.suspendedSessionIds}
 			/>
 			<FramePanel className={cn(INSET_PANE_CLASS, "mt-0")}>
 				{sessions.map((session) => (
 					<TabsPrimitive.Panel
 						className="flex min-h-0 flex-1 flex-col outline-none"
 						key={session.id}
-						keepMounted
+						// Every open PR tab's `PrView` stays mounted while its tab isn't
+						// suspended — this (not `isSelectedTab` below) is what tells a
+						// background-but-still-warm tab apart from one idle long enough
+						// to have unmounted (`useTabSuspension`). Dropping `keepMounted`
+						// for a suspended session lets Base UI's own "not the open
+						// panel" behavior actually unmount it — see that hook's doc
+						// comment for why that's safe: this panel's internal `mounted`
+						// state already went false shortly after the tab was last
+						// deselected, well before the suspend timer fires.
+						keepMounted={!tabSuspension.suspendedSessionIds.has(session.id)}
 						value={session.id}
 					>
 						<PrView
-							// `keepMounted` above means every open PR tab's `PrView` stays
-							// mounted at once — this is what tells the visible tab apart
-							// from a background one, both for the sidecar watch gating
-							// below and for keyboard shortcuts (`j`/`k`/`r`/`u`, `1`/`2`),
-							// which must only be live for whichever tab is selected.
+							// `isSelectedTab` (not `keepMounted` above) is what tells the
+							// visible tab apart from a background one for the sidecar
+							// watch gating below and for keyboard shortcuts
+							// (`j`/`k`/`r`/`u`, `1`/`2`), which must only be live for
+							// whichever tab is selected.
 							isSelectedTab={session.id === activeSessionId}
 							onCloseTab={() => handleCloseSession(session.id)}
 							orpc={orpc}

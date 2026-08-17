@@ -17,7 +17,6 @@ import {
 	useImperativeHandle,
 	useMemo,
 	useRef,
-	useState,
 } from "react";
 import {
 	buildDiffCodeViewOptions,
@@ -50,6 +49,10 @@ import type {
 	ReviewState,
 	ReviewStateEntry,
 } from "#/lib/pr-data";
+import {
+	useSessionExpandedHiddenPaths,
+	useSessionFileCollapseOverrides,
+} from "#/lib/session-ui-store";
 import type { DiffStyleMode } from "#/lib/settings-data";
 import { cn } from "#/lib/utils";
 
@@ -149,6 +152,8 @@ export type DiffPaneHandle = {
 };
 
 type DiffPaneProps = {
+	/** Keys this pane's collapse-override state (`expandedHiddenPaths`/`fileCollapseOverrides` below) into the per-session UI store (`session-ui-store.ts`), so it survives this component unmounting when the tab suspends. */
+	sessionId: string;
 	/** The session's repo root — joined with `FileChange.path` for the header dropdown's "Copy absolute path". */
 	repoRoot: string;
 	files: readonly FileChange[];
@@ -327,6 +332,7 @@ function resolveLoadFileAnnotations(
 }
 
 export function DiffPane({
+	sessionId,
 	repoRoot,
 	files,
 	fileContents,
@@ -362,36 +368,29 @@ export function DiffPane({
 	});
 
 	// Files the user clicked "Show diff" on to reveal a body hidden by default
-	// for being generated/large — unrelated to review state.
-	const [expandedHiddenPaths, setExpandedHiddenPaths] = useState<
-		ReadonlySet<string>
-	>(() => new Set());
+	// for being generated/large — unrelated to review state. Lives in the
+	// per-session UI store (`session-ui-store.ts`), not local `useState`, so
+	// it survives this pane unmounting when its tab suspends
+	// (`app-shell.tsx`'s `useTabSuspension`).
+	const [expandedHiddenPaths, addExpandedHiddenPath] =
+		useSessionExpandedHiddenPaths(sessionId);
 	// Per-path override on the default (collapsed once `reviewStatus ===
 	// "viewed"`) — a `Map` since it records both directions. Cleared on
 	// checkbox flip (`handleToggleViewed` below), so re-ticking re-collapses
-	// and unticking re-expands.
-	const [fileCollapseOverrides, setFileCollapseOverrides] = useState<
-		ReadonlyMap<string, boolean>
-	>(() => new Map());
+	// and unticking re-expands. Same store, same reasoning as
+	// `expandedHiddenPaths` above.
+	const fileCollapse = useSessionFileCollapseOverrides(sessionId);
 
-	const handleShowHiddenFile = useCallback((path: string) => {
-		setExpandedHiddenPaths((current) => {
-			if (current.has(path)) return current;
-			const next = new Set(current);
-			next.add(path);
-			return next;
-		});
-	}, []);
+	const handleShowHiddenFile = useCallback(
+		(path: string) => addExpandedHiddenPath(path),
+		[addExpandedHiddenPath],
+	);
 
 	const handleToggleFileCollapse = useCallback(
 		(path: string, nextCollapsed: boolean) => {
-			setFileCollapseOverrides((current) => {
-				const next = new Map(current);
-				next.set(path, nextCollapsed);
-				return next;
-			});
+			fileCollapse.setOverride(path, nextCollapsed);
 		},
-		[],
+		[fileCollapse],
 	);
 
 	// The only caller of `setViewed` in the frontend — the walkthrough pane's
@@ -400,15 +399,10 @@ export function DiffPane({
 	// itself) is what makes re-ticking re-collapse and unticking re-expand.
 	const handleToggleViewed = useCallback(
 		(path: string, nextViewed: boolean) => {
-			setFileCollapseOverrides((current) => {
-				if (!current.has(path)) return current;
-				const next = new Map(current);
-				next.delete(path);
-				return next;
-			});
+			fileCollapse.clearOverride(path);
 			setViewed(path, nextViewed);
 		},
-		[setViewed],
+		[fileCollapse, setViewed],
 	);
 
 	const { items, itemMetadata } = useMemo(() => {
@@ -429,7 +423,7 @@ export function DiffPane({
 			const viewed = reviewStatus === "viewed";
 			// Defaults to collapsed once the file is "viewed" — overridable in
 			// either direction by clicking the header.
-			const cardCollapsed = fileCollapseOverrides.get(file.path) ?? viewed;
+			const cardCollapsed = fileCollapse.overrides.get(file.path) ?? viewed;
 			nextMetadata.set(file.path, {
 				file,
 				viewed,
@@ -625,7 +619,7 @@ export function DiffPane({
 		diffStyle,
 		forcedPaths,
 		expandedHiddenPaths,
-		fileCollapseOverrides,
+		fileCollapse.overrides,
 	]);
 
 	const renderCustomHeader = useCallback(

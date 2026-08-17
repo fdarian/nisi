@@ -1,7 +1,7 @@
 "use client";
 
 import { AlertTriangleIcon } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import { useDevToolScope } from "#/components/devtool/dev-tool-context";
 import { useRefetchToasts } from "#/components/devtool/use-refetch-toasts";
 import { FilesChangedView } from "#/components/pr/files-changed-view";
@@ -27,6 +27,10 @@ import {
 	useSessionWatch,
 	useSetFileViewed,
 } from "#/lib/pr-data";
+import {
+	useSessionActiveTab,
+	useSessionSelectedBlockId,
+} from "#/lib/session-ui-store";
 import { useWalkthroughEnabled } from "#/lib/settings-data";
 
 type PrViewProps = {
@@ -58,7 +62,11 @@ export function PrView({
 	);
 
 	const [walkthroughEnabled] = useWalkthroughEnabled(orpc);
-	const [activeTab, setActiveTab] = useState("files");
+	// Lifted into the per-session UI store (`session-ui-store.ts`), not local
+	// `useState` — a suspended tab's `PrView` unmounts entirely
+	// (`app-shell.tsx`'s `useTabSuspension`), so this has to live somewhere
+	// that survives that to land back on the same sub-tab on resume.
+	const [activeTab, setActiveTab] = useSessionActiveTab(session.id);
 	// The user can flip `walkthroughEnabled` off while sitting on the
 	// Walkthrough tab — its `TabsList`/`TabsContent` stop rendering below, so
 	// the value actually handed to `<Tabs>` must fall back to "files"
@@ -67,8 +75,11 @@ export function PrView({
 	const tabsValue = walkthroughEnabled ? activeTab : "files";
 	// Lifted above the tabs, not local to `WalkthroughView` — a block
 	// selection should survive switching away to Files Changed and back, not
-	// reset every time the Walkthrough tab remounts.
-	const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);
+	// reset every time the Walkthrough tab remounts (and, same as `activeTab`
+	// above, survive the whole tab suspending and resuming).
+	const [selectedBlockId, setSelectedBlockId] = useSessionSelectedBlockId(
+		session.id,
+	);
 
 	// Gates the sidecar's 2s worktree poller (`live-poll.ts`) to exactly the
 	// sessions someone could actually see a result from — window focused,
