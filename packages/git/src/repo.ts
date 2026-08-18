@@ -166,15 +166,17 @@ export const resolveUnpushedCommitCount = (repoRoot: string) =>
 		return { count: Number(raw), remoteRef } satisfies UnpushedCommits;
 	});
 
-/** The commit `HEAD` currently points at. */
-export const resolveHeadSha = (repoRoot: string) =>
-	git(repoRoot, ["rev-parse", "HEAD"]).pipe(
-		Effect.map((stdout) => stdout.trim()),
-	);
+/** The commit `ref` currently points at — defaults to `HEAD`, the actual checked-out commit. */
+export const resolveHeadSha = (repoRoot: string, ref = "HEAD") =>
+	git(repoRoot, ["rev-parse", ref]).pipe(Effect.map((stdout) => stdout.trim()));
 
-/** The commit both `baseRef` and the current `HEAD` descend from. */
-export const resolveMergeBase = (repoRoot: string, baseRef: string) =>
-	git(repoRoot, ["merge-base", baseRef, "HEAD"]).pipe(
+/** The commit both `baseRef` and `headRef` descend from — `headRef` defaults to `HEAD`, the current checkout. */
+export const resolveMergeBase = (
+	repoRoot: string,
+	baseRef: string,
+	headRef = "HEAD",
+) =>
+	git(repoRoot, ["merge-base", baseRef, headRef]).pipe(
 		Effect.map((stdout) => stdout.trim()),
 	);
 

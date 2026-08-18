@@ -4,7 +4,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { BunServices } from "@effect/platform-bun";
 import { Effect } from "effect";
-import { resolveUnpushedCommitCount } from "../src/repo.ts";
+import {
+	resolveHeadSha,
+	resolveMergeBase,
+	resolveUnpushedCommitCount,
+} from "../src/repo.ts";
 import { cleanupTestRepo, makeTestRepo, type TestRepo } from "./fixtures.ts";
 
 const run = <A, E>(effect: Effect.Effect<A, E, BunServices.BunServices>) =>
@@ -119,6 +123,55 @@ describe("resolveUnpushedCommitCount", () => {
 			expect(exit._tag).toBe("Failure");
 		} finally {
 			await cleanupOriginBackedRepo(fixture);
+		}
+	});
+});
+
+describe("resolveHeadSha / resolveMergeBase — explicit ref, not just HEAD", () => {
+	test("resolveHeadSha defaults to HEAD but resolves any other ref given explicitly", async () => {
+		const repo = await makeTestRepo();
+		try {
+			await repo.write("a.ts", "on main\n");
+			const mainSha = await repo.commit("on main");
+
+			await repo.git(["checkout", "-q", "-b", "feature"]);
+			await repo.write("a.ts", "on feature\n");
+			const featureSha = await repo.commit("on feature");
+
+			// HEAD is "feature" right now — the default must follow it.
+			expect(await run(resolveHeadSha(repo.root))).toBe(featureSha);
+			// An explicit ref resolves on its own terms, regardless of HEAD.
+			expect(await run(resolveHeadSha(repo.root, "main"))).toBe(mainSha);
+			expect(await run(resolveHeadSha(repo.root, "feature"))).toBe(featureSha);
+		} finally {
+			await cleanupTestRepo(repo);
+		}
+	});
+
+	test("resolveMergeBase's headRef defaults to HEAD but accepts an explicit second ref", async () => {
+		const repo = await makeTestRepo();
+		try {
+			await repo.write("base.txt", "base\n");
+			const base = await repo.commit("base");
+
+			await repo.git(["checkout", "-q", "-b", "feature-a"]);
+			await repo.write("a.ts", "a content\n");
+			await repo.commit("on feature-a");
+
+			await repo.git(["checkout", "-q", base, "-b", "feature-b"]);
+			await repo.write("b.ts", "b content\n");
+			await repo.commit("on feature-b");
+
+			// HEAD is "feature-b" right now — the default second arg follows it.
+			expect(await run(resolveMergeBase(repo.root, "feature-a"))).toBe(base);
+			// Naming "feature-b" explicitly gives the identical answer here
+			// (both branches share the same merge-base), but exercises the
+			// explicit path rather than relying on it coinciding with HEAD.
+			expect(
+				await run(resolveMergeBase(repo.root, "feature-a", "feature-b")),
+			).toBe(base);
+		} finally {
+			await cleanupTestRepo(repo);
 		}
 	});
 });

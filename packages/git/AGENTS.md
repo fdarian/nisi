@@ -8,9 +8,11 @@ unit-testable against real temp repos without booting anything. Feeds `packages/
 - `exec.ts` — the only place that spawns processes. `git`/`gh` helpers plus a strict (fails on
   non-zero exit) and lenient (reports exit code, for "ran and said no" cases like no PR) variant.
 - `repo.ts` — repo root / current branch / merge-base / HEAD sha / local default branch, pure
-  `git`. Also owns `DiffTarget` and `diffTargetArgs`: the diff's right-hand side (a commit, or the
-  worktree via git's own bare commit-vs-worktree form) and its translation to git args — threaded
-  through `patch.ts` and `diff.ts` instead of each re-deriving it from a boolean.
+  `git`. `resolveHeadSha`/`resolveMergeBase` both default their ref argument to `HEAD` but accept
+  any other ref explicitly — what `diff.ts`'s `headRef` option resolves through. Also owns
+  `DiffTarget` and `diffTargetArgs`: the diff's right-hand side (a commit, or the worktree via
+  git's own bare commit-vs-worktree form) and its translation to git args — threaded through
+  `patch.ts` and `diff.ts` instead of each re-deriving it from a boolean.
 - `pull-request.ts` — `resolveReviewTarget`: what a review is *against*. The GitHub half is
   optional — no remote, a host `gh` doesn't know, or an origin GitHub can't resolve all degrade to
   `github: null` and `repo.ts`'s `resolveLocalDefaultBranch`, since nisi reviews local branches, not
@@ -57,7 +59,11 @@ unit-testable against real temp repos without booting anything. Feeds `packages/
   (`merge-base(baseRef, HEAD)..HEAD`, `includeUncommitted: false`); passing `includeUncommitted:
   true` switches the diff's right-hand side to the worktree — staged, unstaged, and untracked
   changes included too. `getFileContents` resolves `includeUncommitted` once for the whole batch,
-  not per requested path — it's a session-wide setting, not a per-file one.
+  not per requested path — it's a session-wide setting, not a per-file one. Both also take an
+  optional `headRef`, diffing `merge-base(baseRef, headRef)..headRef` instead of `..HEAD` — passing
+  it forces `includeUncommitted` off regardless of what the caller asked for, since an explicit
+  head has no guaranteed relationship to what `repoRoot`'s worktree actually has checked out (see
+  `apps/desktop/sidecar/store.ts`'s `resolveDiffHead`, the caller that decides when this applies).
 - `worktree.ts` — `openPullRequestWorktree`: create-or-reuse a PR's local worktree, resolution keyed
   off `git worktree list --porcelain` (branch, never a path comparison — see the module's doc
   comment for the full reuse order). `revalidateWorktreePath` is the read-path sibling: given a

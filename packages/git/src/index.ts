@@ -87,6 +87,7 @@ export {
 export type { UnpushedCommits } from "./repo.ts";
 export {
 	resolveCurrentBranch,
+	resolveHeadSha,
 	resolveLocalDefaultBranch,
 	resolveMergeBase,
 	resolveRepoRoot,

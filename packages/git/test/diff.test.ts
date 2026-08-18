@@ -431,3 +431,109 @@ describe("getFileContents", () => {
 		}
 	});
 });
+
+/**
+ * Two branches, neither one checked out — the `nisi diff <base>..<head>`
+ * form. `feature-a` and `feature-b` both branch directly off `base`, so
+ * `merge-base(feature-a, feature-b)` is `base` itself; a third branch,
+ * `working`, is what's actually checked out, dirtied on top, so any test
+ * here that saw `working`'s changes leak in would mean `headRef` wasn't
+ * actually driving the diff.
+ */
+const makeTwoArbitraryBranchesScenario = async (): Promise<{
+	repo: TestRepo;
+	base: string;
+}> => {
+	const repo = await makeTestRepo();
+	await repo.write("base.txt", "base\n");
+	const base = await repo.commit("base");
+
+	await repo.git(["checkout", "-q", "-b", "feature-a"]);
+	await repo.write("a.ts", "a content\n");
+	await repo.commit("on feature-a");
+
+	await repo.git(["checkout", "-q", base, "-b", "feature-b"]);
+	await repo.write("b.ts", "b content\n");
+	await repo.commit("on feature-b");
+
+	// The actual checkout is a third branch entirely, dirtied on top of it —
+	// none of this belongs to either side of the feature-a..feature-b diff.
+	await repo.git(["checkout", "-q", base, "-b", "working"]);
+	await repo.write("base.txt", "dirtied on disk, never committed\n");
+	await repo.write("untracked.ts", "not yet added\n");
+
+	return { repo, base };
+};
+
+describe("getChangedFiles — explicit headRef, neither ref checked out", () => {
+	test("diffs merge-base(baseRef, headRef)..headRef, not whatever's actually checked out", async () => {
+		const { repo } = await makeTwoArbitraryBranchesScenario();
+		try {
+			const files = await run(
+				getChangedFiles(repo.root, "feature-a", { headRef: "feature-b" }),
+			);
+			const byPath = new Map(files.map((file) => [file.path, file]));
+
+			expect(byPath.get("b.ts")?.status).toBe("added");
+			expect(byPath.has("a.ts")).toBe(false);
+			expect(byPath.has("base.txt")).toBe(false);
+			expect(byPath.has("untracked.ts")).toBe(false);
+		} finally {
+			await cleanupTestRepo(repo);
+		}
+	});
+
+	test("ignores includeUncommitted entirely when headRef is explicit", async () => {
+		const { repo } = await makeTwoArbitraryBranchesScenario();
+		try {
+			const files = await run(
+				getChangedFiles(repo.root, "feature-a", {
+					headRef: "feature-b",
+					includeUncommitted: true,
+				}),
+			);
+			const byPath = new Map(files.map((file) => [file.path, file]));
+
+			// `working`'s dirtied/untracked files must not leak in even though
+			// `includeUncommitted` was requested — an explicit head forces
+			// committed-vs-committed.
+			expect(byPath.has("untracked.ts")).toBe(false);
+			expect(byPath.has("base.txt")).toBe(false);
+		} finally {
+			await cleanupTestRepo(repo);
+		}
+	});
+});
+
+describe("getFileContents — explicit headRef, neither ref checked out", () => {
+	test("reads headRef's own committed content, not whatever's checked out", async () => {
+		const { repo } = await makeTwoArbitraryBranchesScenario();
+		try {
+			const batched = await run(
+				getFileContents(repo.root, "feature-a", [{ path: "b.ts" }], {
+					headRef: "feature-b",
+				}),
+			);
+			const content = batched.get("b.ts");
+			expect(content?.oldContent).toBeUndefined();
+			expect(content?.newContent).toBe("b content\n");
+		} finally {
+			await cleanupTestRepo(repo);
+		}
+	});
+
+	test("a path only dirtied on the actual checkout is absent from the batch", async () => {
+		const { repo } = await makeTwoArbitraryBranchesScenario();
+		try {
+			const batched = await run(
+				getFileContents(repo.root, "feature-a", [{ path: "untracked.ts" }], {
+					headRef: "feature-b",
+					includeUncommitted: true,
+				}),
+			);
+			expect(batched.has("untracked.ts")).toBe(false);
+		} finally {
+			await cleanupTestRepo(repo);
+		}
+	});
+});

@@ -306,28 +306,50 @@ const readWorktreeGated = (
 	);
 
 /**
- * Every changed file's metadata for `merge-base(baseRef, HEAD)..<target>`.
- * By default (`includeUncommitted: false`, the common case) `<target>` is
- * `HEAD` — staged, unstaged, and untracked changes are excluded. With
- * `includeUncommitted: true`, `<target>` is the worktree itself — git's own
- * bare commit-vs-worktree diff form — and untracked files are enumerated and
- * included too. Cheap by design: no file content is fetched beyond a small
- * classification prefix, so this stays fast regardless of how many files a
- * PR touches.
+ * Every changed file's metadata for `merge-base(baseRef, headRef)..<target>`.
+ * `headRef` defaults to `HEAD` — the current checkout — in which case
+ * `includeUncommitted` behaves as documented below. Passing an explicit
+ * `headRef` is the two-arbitrary-refs form of `nisi diff <base>..<head>`
+ * (`packages/cli`): `<target>` is always that ref's own commit then,
+ * `includeUncommitted` is ignored (forced off) regardless of what the caller
+ * passed, and untracked files are never enumerated — nothing guarantees
+ * `repoRoot`'s worktree is actually sitting on `headRef` (it commonly isn't:
+ * the CLI runs from whatever the user currently has checked out, which may be
+ * neither side of the diff), so overlaying it would silently show the wrong
+ * branch's uncommitted edits.
+ *
+ * With `headRef` left at its default, `includeUncommitted: false` (the
+ * common case) makes `<target>` `HEAD` — staged, unstaged, and untracked
+ * changes are excluded. `includeUncommitted: true` makes `<target>` the
+ * worktree itself — git's own bare commit-vs-worktree diff form — and
+ * untracked files are enumerated and included too. Cheap by design: no file
+ * content is fetched beyond a small classification prefix, so this stays
+ * fast regardless of how many files a PR touches.
  */
 export const getChangedFiles = (
 	repoRoot: string,
 	baseRef: string,
-	options?: { readonly includeUncommitted?: boolean },
+	options?: {
+		readonly includeUncommitted?: boolean;
+		readonly headRef?: string;
+	},
 ): Effect.Effect<ReadonlyArray<FileChange>, GitError, Requirements> =>
 	Effect.gen(function* () {
 		const fs = yield* FileSystem;
-		const includeUncommitted = options?.includeUncommitted ?? false;
+		const includeUncommitted =
+			options?.headRef === undefined && (options?.includeUncommitted ?? false);
 
-		const mergeBase = yield* resolveMergeBase(repoRoot, baseRef);
+		const mergeBase = yield* resolveMergeBase(
+			repoRoot,
+			baseRef,
+			options?.headRef,
+		);
 		const target: DiffTarget = includeUncommitted
 			? { kind: "worktree" }
-			: { kind: "committed", sha: yield* resolveHeadSha(repoRoot) };
+			: {
+					kind: "committed",
+					sha: yield* resolveHeadSha(repoRoot, options?.headRef),
+				};
 
 		const untrackedPathsEffect =
 			target.kind === "worktree"
@@ -516,23 +538,41 @@ export type FileContentRequest = {
  * `name-status` or `status` call to just the requested paths would hide it
  * from git's rename pairing, the same trap `readPatches` avoids via
  * `pathspecFor`.
+ *
+ * `headRef` follows `getChangedFiles`' own doc comment: left at its default
+ * (`HEAD`, the current checkout), `includeUncommitted` behaves as documented
+ * above; passed explicitly, `<target>` is always that ref's own commit and
+ * `includeUncommitted` is ignored (forced off) — an explicit head has no
+ * guaranteed relationship to what `repoRoot`'s worktree actually has checked
+ * out.
  */
 export const getFileContents = (
 	repoRoot: string,
 	baseRef: string,
 	requests: ReadonlyArray<FileContentRequest>,
-	options?: { readonly includeUncommitted?: boolean },
+	options?: {
+		readonly includeUncommitted?: boolean;
+		readonly headRef?: string;
+	},
 ): Effect.Effect<ReadonlyMap<string, FileContent>, GitError, Requirements> =>
 	Effect.gen(function* () {
 		if (requests.length === 0) return new Map();
 
 		const fs = yield* FileSystem;
-		const includeUncommitted = options?.includeUncommitted ?? false;
+		const includeUncommitted =
+			options?.headRef === undefined && (options?.includeUncommitted ?? false);
 
-		const mergeBase = yield* resolveMergeBase(repoRoot, baseRef);
+		const mergeBase = yield* resolveMergeBase(
+			repoRoot,
+			baseRef,
+			options?.headRef,
+		);
 		const target: DiffTarget = includeUncommitted
 			? { kind: "worktree" }
-			: { kind: "committed", sha: yield* resolveHeadSha(repoRoot) };
+			: {
+					kind: "committed",
+					sha: yield* resolveHeadSha(repoRoot, options?.headRef),
+				};
 
 		const statusEffect =
 			target.kind === "worktree"
