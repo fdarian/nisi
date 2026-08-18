@@ -38,6 +38,13 @@ those two packages does I/O or knows about the other — this directory is where
   per-file patches and each file's `ChangedFileFacts.lineCount`. Also reads `@repo/settings`'s
   `includeUncommitted` directly (there's no frontend request here to carry it) and threads it into
   both `@repo/git` calls, so the digest an agent narrates matches what the user sees in Files Changed.
+  Refuses outright (`HeadNotCheckedOut`) for a plain branch session whose `headRef` isn't what
+  `repoRoot` actually has checked out — the harness runs a real coding agent directly against that
+  worktree (`@repo/harness-local`), so an explicit, not-checked-out head would have the agent
+  explore files that don't match the digest it was given. A PR-backed session never trips this,
+  since its `repoRoot` is a worktree nisi created and keeps checked out to exactly that PR's head.
+  `generate.ts`'s `resolveContext` turns this into a specific `failed` event rather than the generic
+  "could not read this session's diff" every other context failure collapses into.
 - `live-sessions.ts` — the in-process `Map<sessionId, LiveWalkthroughSession>` a successful
   `generate` populates, so a regenerate can continue the same harness-agent conversation instead of
   starting cold. Gone on sidecar restart by design (`@repo/harness-local` omits `resumeSession` —

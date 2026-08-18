@@ -3,6 +3,7 @@ import {
 	type GitError,
 	getChangedFiles,
 	getFileContents,
+	resolveCurrentBranch,
 } from "@repo/git";
 import {
 	ReviewStore,
@@ -11,9 +12,31 @@ import {
 } from "@repo/review";
 import { SettingsStore, type SettingsStoreError } from "@repo/settings";
 import type { ChangedFileFacts, DigestFile } from "@repo/walkthrough";
-import { Effect } from "effect";
+import { Effect, Schema } from "effect";
 import type { FileSystem } from "effect/FileSystem";
 import type { ChildProcessSpawner } from "effect/unstable/process";
+
+/**
+ * `gatherGenerationContext`'s session has an explicit, not-checked-out
+ * `headRef` (`nisi diff <base>..<head>` against a plain branch session — see
+ * `apps/desktop/sidecar/store.ts`'s `resolveSessionTarget`/`resolveDiffHead`).
+ * The walkthrough harness runs a real coding agent directly against
+ * `repoRoot`'s worktree (`@repo/harness-local`), not against the diff
+ * content this module gathers — so an agent exploring a checkout that's on
+ * some third branch entirely would narrate files that don't match the
+ * digest it was given. Refused outright rather than silently generating a
+ * walkthrough that describes one diff while the agent read another; a
+ * PR-backed session never trips this, since its `repoRoot` is a worktree
+ * nisi created and keeps checked out to exactly that PR's head.
+ */
+export class HeadNotCheckedOut extends Schema.TaggedErrorClass<HeadNotCheckedOut>()(
+	"HeadNotCheckedOut",
+	{
+		repoRoot: Schema.String,
+		headRef: Schema.String,
+		currentBranch: Schema.String,
+	},
+) {}
 
 export type GenerationContext = {
 	readonly repoRoot: string;
@@ -66,7 +89,8 @@ export const gatherGenerationContext = (
 	| ReviewStoreError
 	| GitError
 	| FileNotChanged
-	| SettingsStoreError,
+	| SettingsStoreError
+	| HeadNotCheckedOut,
 	| ReviewStore
 	| SettingsStore
 	| FileSystem
@@ -76,6 +100,22 @@ export const gatherGenerationContext = (
 		const reviewStore = yield* ReviewStore;
 		const settingsStore = yield* SettingsStore;
 		const session = yield* reviewStore.getSession(sessionId);
+
+		// A PR-backed session's `repoRoot` is a worktree nisi created and
+		// keeps checked out to exactly that PR's head — only a plain branch
+		// session can have drifted from `headRef` at all (an explicit,
+		// not-checked-out head, or the user switching branches mid-session).
+		if (session.pr === null) {
+			const currentBranch = yield* resolveCurrentBranch(session.repoRoot);
+			if (currentBranch !== session.headRef) {
+				return yield* new HeadNotCheckedOut({
+					repoRoot: session.repoRoot,
+					headRef: session.headRef,
+					currentBranch,
+				});
+			}
+		}
+
 		const settings = yield* settingsStore.get();
 		const includeUncommitted = settings.includeUncommitted;
 		const files = yield* getChangedFiles(session.repoRoot, session.baseRef, {
