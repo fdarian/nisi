@@ -15,25 +15,27 @@ export class WalkthroughStoreError extends Schema.TaggedErrorClass<WalkthroughSt
  * The `content` column's on-disk shape: the walkthrough (opaque to this
  * store, never decoded against `@repo/walkthrough`'s schema) plus its
  * derived coverage gaps, nested in one envelope instead of a new column — no
- * migration needed to persist `uncoveredFiles` this way. A row written
- * before this envelope existed has no `walkthrough` key at all (its
- * `content` *is* the bare walkthrough JSON); `parseContent` treats that
- * shape as "zero known gaps" rather than failing to load an otherwise-fine
- * walkthrough.
+ * migration needed to persist `uncoveredFiles` this way.
  */
 type StoredContentEnvelope = {
 	readonly walkthrough: unknown;
 	readonly uncoveredFiles: ReadonlyArray<UncoveredFile>;
 };
 
+/** `parseContent`'s result — `uncoveredFiles` is `undefined`, not `[]`, for a row written before this envelope existed. Its `content` *is* the bare walkthrough JSON (no `walkthrough` key), meaning coverage was never computed for it, not computed-and-empty; collapsing that into `[]` would tell a caller "this walkthrough covers everything" about a row nobody ever checked. Only a genuinely-computed empty array (a new row whose walkthrough really did cover every hunk) may decode as `[]`. */
+type ParsedContent = {
+	readonly walkthrough: unknown;
+	readonly uncoveredFiles: ReadonlyArray<UncoveredFile> | undefined;
+};
+
 const isEnvelope = (value: unknown): value is StoredContentEnvelope =>
 	value !== null && typeof value === "object" && "walkthrough" in value;
 
-const parseContent = (raw: string): StoredContentEnvelope => {
+const parseContent = (raw: string): ParsedContent => {
 	const parsed: unknown = JSON.parse(raw);
 	return isEnvelope(parsed)
 		? { walkthrough: parsed.walkthrough, uncoveredFiles: parsed.uncoveredFiles }
-		: { walkthrough: parsed, uncoveredFiles: [] };
+		: { walkthrough: parsed, uncoveredFiles: undefined };
 };
 
 /** The wire-shape-adjacent record `walkthrough.get`/`generate`'s `done` event hand back — `@repo/sidecar-api`'s `StoredWalkthrough` minus the parsed `walkthrough` field, which the caller decodes from `content`. */
@@ -43,7 +45,8 @@ export type StoredWalkthroughRecord = {
 	readonly model: string | null;
 	/** JSON-encoded `@repo/walkthrough`'s `Walkthrough` — left as text so this store never needs to import that package's schema just to round-trip it. Already unwrapped from `content`'s on-disk envelope. */
 	readonly content: string;
-	readonly uncoveredFiles: ReadonlyArray<UncoveredFile>;
+	/** `undefined` for a row predating this field — coverage was never computed for it, distinct from a real (possibly empty) array meaning it was. */
+	readonly uncoveredFiles: ReadonlyArray<UncoveredFile> | undefined;
 	readonly fingerprints: Record<string, string>;
 	readonly generatedAt: number;
 };
