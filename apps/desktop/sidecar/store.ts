@@ -272,9 +272,15 @@ const toWireSession = (session: ReviewSession): Session => ({
  * for every variant except `"branch"` with an explicit `headRef` — the one
  * case where `repoRoot`'s worktree isn't guaranteed to actually be sitting on
  * `headRef` at all (the CLI runs from whatever the caller currently has
- * checked out, which may be neither side of the diff). Every read against
- * that session (`listChangedFiles`/`readFileContents` below) must account for
- * that — see `resolveDiffHead`.
+ * checked out, which may be neither side of the diff). But even an ordinary
+ * session can drift: `headRef` is resolved once, here, at open time, while
+ * the caller's actual checkout can change for as long as the session stays
+ * open. Every git call against a session — every read
+ * (`listChangedFiles`/`readFileContents`) and every write
+ * (`setFileViewed`/`setRangeViewed`) alike — must re-derive whether the
+ * worktree is still trustworthy rather than assume this function's answer
+ * still holds; see `resolveDiffHead` below, which every one of them
+ * consults independently.
  */
 const resolveSessionTarget = (repoRoot: string, target: OpenSessionTarget) =>
 	Effect.gen(function* () {
@@ -763,6 +769,37 @@ export class Store extends Context.Service<Store>()("Store", {
 						}),
 					);
 
+		/**
+		 * `path`'s content right now, per `diffHead`: worktree bytes when
+		 * eligible (`readWorktreeBlobContent`, same as every write path used
+		 * unconditionally before `resolveDiffHead` existed), or `diffHead
+		 * .headRef`'s own committed blob otherwise (`@repo/git`'s
+		 * `readFileContentsAtRef`) — never the live worktree, which for an
+		 * ineligible session belongs to a different branch entirely. Shared by
+		 * every read (`readCurrentHashes`, inlined there) and write
+		 * (`setFileViewed`/`setRangeViewed`) path that needs "what does this
+		 * path look like right now" rather than a full diff.
+		 */
+		const readCurrentBlobContent = (
+			repoRoot: string,
+			path: string,
+			diffHead: {
+				readonly headRef: string | undefined;
+				readonly worktreeEligible: boolean;
+			},
+		): Effect.Effect<
+			Option.Option<Uint8Array>,
+			WorktreeReadFailed | GitCommandError,
+			ChildProcessSpawner.ChildProcessSpawner
+		> =>
+			diffHead.worktreeEligible
+				? readWorktreeBlobContent(join(repoRoot, path))
+				: readFileContentsAtRef(repoRoot, diffHead.headRef ?? "HEAD", [
+						path,
+					]).pipe(
+						Effect.map((contents) => Option.fromNullishOr(contents.get(path))),
+					);
+
 		const listChangedFiles = (sessionId: string, includeUncommitted: boolean) =>
 			Effect.gen(function* () {
 				const session = yield* reviewStore.getSession(sessionId);
@@ -1072,10 +1109,15 @@ export class Store extends Context.Service<Store>()("Store", {
 
 		/**
 		 * Un-ticking Reviewed just clears the snapshot. Ticking it reads the
-		 * file's *current worktree* content directly — this is a plain read, not
-		 * `@repo/git`'s size-gated `getFileContents`, since a review snapshot's
-		 * whole point is fidelity. A missing file (ticking Reviewed on a
-		 * deletion, or a path that never existed) persists as a `NULL`
+		 * file's *current* content directly via `readCurrentBlobContent` — a
+		 * plain read, not `@repo/git`'s size-gated `getFileContents`, since a
+		 * review snapshot's whole point is fidelity. "Current" follows
+		 * `resolveDiffHead`: the live worktree when the session's head
+		 * is actually what's checked out, otherwise `headRef`'s own committed
+		 * blob — ticking Reviewed while the worktree belongs to a different
+		 * branch must never snapshot that other branch's content. A missing
+		 * file (ticking Reviewed on a deletion, or a path that never existed
+		 * — either on disk or in `headRef`'s tree) persists as a `NULL`
 		 * snapshot hash on a viewed row (`@repo/review`'s `markFileViewed`)
 		 * rather than a `sha256("")` blob — the two are distinct claims: `NULL`
 		 * means "reviewed while absent" (stays reviewed as long as it's still
@@ -1091,32 +1133,44 @@ export class Store extends Context.Service<Store>()("Store", {
 				}
 				const session = yield* reviewStore.getSession(sessionId);
 				const repoRoot = yield* resolveLiveRepoRoot(session);
-				const content = yield* readWorktreeBlobContent(join(repoRoot, path));
+				const diffHead = yield* resolveDiffHead(session, repoRoot);
+				const content = yield* readCurrentBlobContent(repoRoot, path, diffHead);
 				yield* reviewStore.markFileViewed(sessionId, path, content);
 			});
 
 		/**
 		 * `reconcilePathClaims` fed worktree content directly instead of
 		 * `getFileContents`' batched patch: fetches `path`'s content at
-		 * `merge-base(baseRef, HEAD)` — the same old-side commit
+		 * `merge-base(baseRef, diffHead.headRef)` — the same old-side commit
 		 * `getFileContents` diffs against (see its doc comment: "Old-side
 		 * content is always at `mergeBase`"), never `baseRef` directly, so this
 		 * reconciles against the identical base content `readFileContents`
 		 * already showed the user, not a different one that happens to also be
-		 * called "base" — then reconciles it against `headContentBytes` (the
-		 * worktree bytes `setRangeViewed` already read or wrote) plus
-		 * `activeFileClaim`/every other currently active range claim. Used by
-		 * `setRangeViewed` to re-derive, right after a mark/unmark, whether the
-		 * file's whole-file `viewed` flag should follow. Takes `repoRoot`
-		 * separately from `session` — `setRangeViewed` resolves it once (via
-		 * `resolveLiveRepoRoot`) and reuses it across every call this makes,
-		 * rather than each one re-deriving it from `session.repoRoot` directly.
+		 * called "base". `diffHead.headRef` — `undefined` when the session is
+		 * worktree-eligible, `@repo/git`'s own default already means the
+		 * current checkout then; the session's own `headRef` otherwise, the
+		 * same ref `headContentBytes` was actually read from (see
+		 * `readCurrentBlobContent`) — keeps this call agreeing with whichever
+		 * commit produced `headContentBytes` rather than silently falling
+		 * back to `HEAD` regardless. Then reconciles it against
+		 * `headContentBytes` (the content `setRangeViewed` already read or
+		 * wrote) plus `activeFileClaim`/every other currently active range
+		 * claim. Used by `setRangeViewed` to re-derive, right after a
+		 * mark/unmark, whether the file's whole-file `viewed` flag should
+		 * follow. Takes `repoRoot` separately from `session` — `setRangeViewed`
+		 * resolves it once (via `resolveLiveRepoRoot`) and reuses it across
+		 * every call this makes, rather than each one re-deriving it from
+		 * `session.repoRoot` directly.
 		 */
 		const reconcilePathAgainstBase = (
 			sessionId: string,
 			session: ReviewSession,
 			repoRoot: string,
 			path: string,
+			diffHead: {
+				readonly headRef: string | undefined;
+				readonly worktreeEligible: boolean;
+			},
 			activeFileClaim: {
 				readonly snapshotHash: string | null;
 				readonly viewedAt: number;
@@ -1128,7 +1182,11 @@ export class Store extends Context.Service<Store>()("Store", {
 			FileSystem | ChildProcessSpawner.ChildProcessSpawner
 		> =>
 			Effect.gen(function* () {
-				const mergeBase = yield* resolveMergeBase(repoRoot, session.baseRef);
+				const mergeBase = yield* resolveMergeBase(
+					repoRoot,
+					session.baseRef,
+					diffHead.headRef,
+				);
 				const baseContentBytes = yield* readFileContentsAtRef(
 					repoRoot,
 					mergeBase,
@@ -1177,6 +1235,7 @@ export class Store extends Context.Service<Store>()("Store", {
 			Effect.gen(function* () {
 				const session = yield* reviewStore.getSession(sessionId);
 				const repoRoot = yield* resolveLiveRepoRoot(session);
+				const diffHead = yield* resolveDiffHead(session, repoRoot);
 
 				if (!viewed) {
 					yield* reviewStore.unmarkRangeViewed(sessionId, path, blockId);
@@ -1193,8 +1252,10 @@ export class Store extends Context.Service<Store>()("Store", {
 					// (`@repo/review`'s `reconcile.ts`), the same as every other
 					// reconciliation call treats an absent file. A genuine read
 					// failure still propagates.
-					const contentOption = yield* readWorktreeBlobContent(
-						join(repoRoot, path),
+					const contentOption = yield* readCurrentBlobContent(
+						repoRoot,
+						path,
+						diffHead,
 					);
 					const content = Option.getOrElse(
 						contentOption,
@@ -1205,6 +1266,7 @@ export class Store extends Context.Service<Store>()("Store", {
 						session,
 						repoRoot,
 						path,
+						diffHead,
 						activeFileClaim,
 						content,
 					);
@@ -1214,8 +1276,10 @@ export class Store extends Context.Service<Store>()("Store", {
 					return;
 				}
 
-				const contentOption = yield* readWorktreeBlobContent(
-					join(repoRoot, path),
+				const contentOption = yield* readCurrentBlobContent(
+					repoRoot,
+					path,
+					diffHead,
 				);
 				// `review_range_claims.snapshotHash` is `NOT NULL` (unlike
 				// `reviewed_files`', which now distinguishes absence via `NULL` —
@@ -1249,6 +1313,7 @@ export class Store extends Context.Service<Store>()("Store", {
 					session,
 					repoRoot,
 					path,
+					diffHead,
 					activeFileClaim,
 					rangeContent,
 				);

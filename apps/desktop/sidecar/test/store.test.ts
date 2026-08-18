@@ -185,6 +185,207 @@ describe("Store.openSession — branch target with an explicit headRef (two arbi
 	});
 });
 
+/**
+ * Regression coverage for the corruption `resolveDiffHead`
+ * (`apps/desktop/sidecar/diff-head.ts`) exists to prevent: `setFileViewed`/
+ * `setRangeViewed` used to read `readWorktreeBlobContent` unconditionally,
+ * so a session whose head wasn't what `repoRoot` actually had checked out —
+ * an explicit `<base>..<head>` session, or an ordinary session the caller
+ * checked a different branch out from mid-session — would silently
+ * snapshot the wrong branch's content on tick.
+ */
+describe("Store — tracked-changes writes never snapshot the wrong branch's content", () => {
+	test("setFileViewed on an explicit non-checkout head snapshots headRef's content, not the live checkout", async () => {
+		await withTestRepoAndDataDir(async (repoRoot, dataDir) => {
+			await sh(repoRoot, ["checkout", "-q", "-b", "feature"]);
+			await Bun.write(join(repoRoot, "a.ts"), "feature content\n");
+			await sh(repoRoot, ["add", "-A"]);
+			await sh(repoRoot, ["commit", "-q", "-m", "on feature"]);
+
+			// The actual checkout is a third branch, dirtied on top — none of
+			// this may ever leak into a snapshot for a session whose head is
+			// the explicit "feature".
+			await sh(repoRoot, ["checkout", "-q", "-b", "working", "main"]);
+			await Bun.write(
+				join(repoRoot, "a.ts"),
+				"dirtied on working, never committed\n",
+			);
+
+			const snapshotText = await Effect.runPromise(
+				Effect.gen(function* () {
+					const store = yield* Store;
+					const reviewStore = yield* ReviewStore;
+					const session = yield* store.openSession(repoRoot, {
+						kind: "branch",
+						baseRef: "main",
+						headRef: "feature",
+					});
+					yield* store.setFileViewed(session.id, "a.ts", true);
+					const state = yield* reviewStore.getFileReviewState(
+						session.id,
+						"a.ts",
+					);
+					if (state === null || state.snapshotHash === null) {
+						return yield* Effect.die("expected a snapshot hash");
+					}
+					const snapshot = yield* reviewStore.readSnapshot(
+						state.snapshotHash,
+					);
+					return new TextDecoder().decode(snapshot);
+				}).pipe(Effect.provide(makeTestLayer(dataDir))),
+			);
+
+			expect(snapshotText).toBe("feature content\n");
+		});
+	});
+
+	test("setFileViewed on an ordinary session snapshots headRef's content once the caller checks a different branch out mid-session", async () => {
+		await withTestRepoAndDataDir(async (repoRoot, dataDir) => {
+			await sh(repoRoot, ["checkout", "-q", "-b", "feature"]);
+			await Bun.write(join(repoRoot, "a.ts"), "feature content\n");
+			await sh(repoRoot, ["add", "-A"]);
+			await sh(repoRoot, ["commit", "-q", "-m", "on feature"]);
+
+			// Opened while "feature" is checked out — headRef == "feature",
+			// the same as any ordinary `nisi diff` session today.
+			const sessionId = await Effect.runPromise(
+				Effect.gen(function* () {
+					const store = yield* Store;
+					const session = yield* store.openSession(repoRoot, {
+						kind: "branch",
+					});
+					return session.id;
+				}).pipe(Effect.provide(makeTestLayer(dataDir))),
+			);
+
+			// The caller drifts away mid-session, without closing the tab —
+			// before the fix, this alone was enough to corrupt a tick, since
+			// the write path always followed the live checkout.
+			await sh(repoRoot, ["checkout", "-q", "main"]);
+			await Bun.write(
+				join(repoRoot, "a.ts"),
+				"drifted onto main, never committed\n",
+			);
+
+			const snapshotText = await Effect.runPromise(
+				Effect.gen(function* () {
+					const store = yield* Store;
+					const reviewStore = yield* ReviewStore;
+					yield* store.setFileViewed(sessionId, "a.ts", true);
+					const state = yield* reviewStore.getFileReviewState(
+						sessionId,
+						"a.ts",
+					);
+					if (state === null || state.snapshotHash === null) {
+						return yield* Effect.die("expected a snapshot hash");
+					}
+					const snapshot = yield* reviewStore.readSnapshot(
+						state.snapshotHash,
+					);
+					return new TextDecoder().decode(snapshot);
+				}).pipe(Effect.provide(makeTestLayer(dataDir))),
+			);
+
+			expect(snapshotText).toBe("feature content\n");
+		});
+	});
+
+	test("setRangeViewed reconciles against the correct merge-base and headRef content once the caller has drifted", async () => {
+		await withTestRepoAndDataDir(async (repoRoot, dataDir) => {
+			// `main` keeps moving (and touching a.ts) after "feature" branches
+			// off — the merge-base regression only shows up when `main`'s own
+			// tip differs from `merge-base(main, feature)`, in a way that
+			// introduces a *second*, unrelated change to a.ts (a pure trailing
+			// deletion wouldn't be enough — see the range-claim reasoning below).
+			await Bun.write(join(repoRoot, "a.ts"), "line1\nline2\nline3\n");
+			await sh(repoRoot, ["add", "-A"]);
+			await sh(repoRoot, ["commit", "-q", "-m", "three lines on main"]);
+
+			await sh(repoRoot, ["checkout", "-q", "-b", "feature"]);
+			await Bun.write(
+				join(repoRoot, "a.ts"),
+				"line1\nline2 CHANGED\nline3\n",
+			);
+			await sh(repoRoot, ["add", "-A"]);
+			await sh(repoRoot, ["commit", "-q", "-m", "on feature"]);
+
+			await sh(repoRoot, ["checkout", "-q", "main"]);
+			await Bun.write(
+				join(repoRoot, "a.ts"),
+				"line1 CHANGED ON MAIN\nline2\nline3\n",
+			);
+			await sh(repoRoot, ["add", "-A"]);
+			await sh(repoRoot, ["commit", "-q", "-m", "main advanced"]);
+
+			// Session opened while "feature" is checked out.
+			await sh(repoRoot, ["checkout", "-q", "feature"]);
+			const sessionId = await Effect.runPromise(
+				Effect.gen(function* () {
+					const store = yield* Store;
+					const session = yield* store.openSession(repoRoot, {
+						kind: "branch",
+						baseRef: "main",
+					});
+					return session.id;
+				}).pipe(Effect.provide(makeTestLayer(dataDir))),
+			);
+
+			// Drift to "main", which has since moved past the true
+			// merge-base(main, feature) — the case that exposed the bug.
+			await sh(repoRoot, ["checkout", "-q", "main"]);
+
+			const result = await Effect.runPromise(
+				Effect.gen(function* () {
+					const store = yield* Store;
+					const reviewStore = yield* ReviewStore;
+					// Only claims line 2 — feature's one real change relative
+					// to the *correct* merge-base. Against the wrong base
+					// (main's own drifted tip, which also differs from feature
+					// on line 1), reconciliation would find an extra
+					// unreviewed line-1 hunk this claim never covers.
+					yield* store.setRangeViewed(
+						sessionId,
+						"a.ts",
+						"block-1",
+						"Block 1",
+						[{ startLine: 2, endLine: 2 }],
+						true,
+					);
+					const claims = yield* reviewStore.listRangeClaims(
+						sessionId,
+						"a.ts",
+					);
+					const claim = claims.find((c) => c.blockId === "block-1");
+					if (claim === undefined) {
+						return yield* Effect.die("expected a range claim");
+					}
+					const snapshot = yield* reviewStore.readSnapshot(
+						claim.snapshotHash,
+					);
+					const fileState = yield* reviewStore.getFileReviewState(
+						sessionId,
+						"a.ts",
+					);
+					return {
+						rangeSnapshotText: new TextDecoder().decode(snapshot),
+						wholeFileAutoTicked: fileState?.viewed ?? false,
+					};
+				}).pipe(Effect.provide(makeTestLayer(dataDir))),
+			);
+
+			// The range claim itself must snapshot "feature"'s content, not
+			// whatever's dirtied on the live "main" checkout.
+			expect(result.rangeSnapshotText).toBe("line1\nline2 CHANGED\nline3\n");
+			// Claiming just line 2 fully covers merge-base(main,
+			// feature)..feature's one real hunk, so the whole-file claim
+			// should auto-tick — which only happens if reconciliation used
+			// that correct base rather than merge-base(main, HEAD) against a
+			// drifted "main" that also differs from feature on line 1.
+			expect(result.wholeFileAutoTicked).toBe(true);
+		});
+	});
+});
+
 describe("Store.setFileViewed — a committed symlink", () => {
 	test("stays reviewed on the next read instead of immediately reporting changedSinceReview", async () => {
 		await withTestRepoAndDataDir(async (repoRoot, dataDir) => {

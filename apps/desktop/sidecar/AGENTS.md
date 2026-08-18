@@ -61,14 +61,14 @@ seam" for the port/token handshake this boots into.
   alongside it is validated the same way (`InvalidHeadRef`), in place of the current
   checkout. `"pr"` fails with `NoPullRequest` when `resolveReviewTarget` finds none open — the one
   selector that doesn't degrade to a branch diff on its own.
-  `listChangedFiles`/`readFileContents` both take `includeUncommitted` and thread it into their
-  `@repo/git` calls (see that package's AGENTS.md for what the flag does) — but only after gating it
-  through `resolveDiffHead`, which also decides what `@repo/git` should treat as head: `true` (and
-  `headRef` left at its `@repo/git` default) for a PR-backed session or a plain branch session whose
-  `headRef` matches what's actually checked out right now; forced `false` (and `headRef` passed
-  through explicitly) otherwise, since an explicit, not-checked-out head has no guaranteed
-  relationship to `repoRoot`'s worktree. Re-checked on every call rather than decided once at open
-  time, so a session self-heals the moment the caller actually checks `headRef` out.
+  Every method that touches a session's files — `listChangedFiles`/`readFileContents` (read) and
+  `setFileViewed`/`setRangeViewed` (write) alike — resolves the local `resolveDiffHead` before doing
+  anything else, and gates on its result the same way: `includeUncommitted` only applies when
+  `worktreeEligible`, and every `@repo/git` call (or, on the write side, `readCurrentBlobContent`'s
+  worktree-vs-`readFileContentsAtRef` choice) takes the decided `headRef` rather than defaulting to
+  `HEAD`. This is deliberately re-derived on every call rather than decided once when a session
+  opens and reused — the read and write sides must never independently guess whether the worktree
+  still belongs to this session, since that's exactly how they could (and once did) disagree.
   `changedSinceReview` (`attachReviewState`'s sidebar badge, and `readFileContents`'s
   size-gated-content fallback) honors the same gated flag via `readCurrentHashes`, which rehashes a
   ticked file's current content with `@repo/review`'s own `hashContent` — worktree bytes when
