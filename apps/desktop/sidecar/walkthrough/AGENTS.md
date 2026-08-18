@@ -6,11 +6,13 @@ The Phase 3 wiring layer: turns `@repo/walkthrough`'s pure schema/validation/pro
 those two packages does I/O or knows about the other — this directory is where they actually meet.
 
 - `store.ts` — `WalkthroughStore`, persistence for generated walkthroughs (one row per session,
-  regenerating overwrites) plus their derived coverage gaps (`uncoveredFiles` — path and
-  uncovered-line count per file). Both live in the `content` column's own JSON envelope
+  regenerating overwrites) plus their derived coverage gaps (`uncoveredFiles` — path and the
+  uncovered line ranges per file, so the frontend can open the diff pane on exactly the hunks the
+  walkthrough skipped). Both live in the `content` column's own JSON envelope
   (`StoredContentEnvelope`) rather than a column each, so gaining `uncoveredFiles` needed no
-  migration; a row written before that envelope existed decodes as "zero known gaps" instead of
-  failing to load. Lives here rather than in `@repo/walkthrough` because that package is
+  migration; a row written before that envelope existed decodes `uncoveredFiles` as `undefined`
+  ("coverage never computed for this row"), distinct from `[]` ("computed, fully covered") — see
+  `parseContent`'s doc. Lives here rather than in `@repo/walkthrough` because that package is
   deliberately I/O-free — see its AGENTS.md.
 - `harness-bin.ts` — `HARNESS_CLI_BIN`, the one map of harness → CLI binary name + env override var
   (`claude`/`codex`/`opencode`; Pi has no entry, see `availability.ts`). Single source of truth both

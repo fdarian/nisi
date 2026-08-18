@@ -164,16 +164,16 @@ const buildFreshPrompt = (
 const buildContinuationPrompt = (overviewText: string): string =>
 	`The PR has changed since your last turn. Updated change overview:\n\n${overviewText}`;
 
-/** `@repo/walkthrough`'s `CoverageGap` (per-file line *ranges*) collapsed to the wire's per-file *count* — see `StoredWalkthrough.uncoveredFiles`'s doc for why nothing needs the ranges themselves yet. */
+/** `@repo/walkthrough`'s `CoverageGap.missingRanges` renamed onto the wire's `UncoveredFile.ranges` field by field — `sidecar-api` redeclares the range shape rather than importing `CoverageGap` itself (see `UncoveredFile`'s doc), so this is the one place the two line up. */
 const toUncoveredFiles = (
 	gaps: ReadonlyArray<CoverageGap>,
 ): ReadonlyArray<UncoveredFile> =>
 	gaps.map((gap) => ({
 		path: gap.path,
-		uncoveredLineCount: gap.missingRanges.reduce(
-			(total, range) => total + (range.endLine - range.startLine + 1),
-			0,
-		),
+		ranges: gap.missingRanges.map((range) => ({
+			start: range.startLine,
+			end: range.endLine,
+		})),
 	}));
 
 /**
