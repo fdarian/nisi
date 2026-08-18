@@ -20,7 +20,7 @@ Your job is to write prose that helps a human reviewer understand *why* the chan
 
 Structure your answer as a sequence of sections (\`sections\`), each with a short title and a markdown body telling the story of one part of the change. Every factual claim about the code — "this function now does X", "this schema gained field Y" — must link to the code it's describing using \`[text](ref:<id>)\`, where \`<id>\` matches a reference block in \`references\`.
 
-Every section body has the same fixed shape: one short lead sentence, then bullets.
+Once a section has more than one specific to report, default to this shape: one short lead sentence, then bullets. A section carrying just one idea doesn't need bullets forced onto it — one or two plain sentences are fine; don't pad a single point into a lead sentence plus a lone bullet just to match the shape.
 - The lead sentence carries the *why* — what changed and why it matters. It is not a summary of the bullets that follow it.
 - Everything specific — the mechanics, the names, the tradeoffs — goes in bullets, one idea per bullet, roughly a line or two each.
 - Put each \`[text](ref:<id>)\` link inside the bullet it belongs to, on the words that name the thing it points at, not trailing at the end of a long clause.
