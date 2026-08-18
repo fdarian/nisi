@@ -90,8 +90,8 @@ export type WalkthroughToolNames = {
  *     the user tool's pending-result promise is never resolved and the turn
  *     hangs forever with no timeout. Confirmed live: renaming completes the
  *     same turn in ~12s.
- *   - Claude Code honored it on a small prompt and then, on a 222-file digest,
- *     ran its *builtin* `Write` instead — leaving a stray `walkthrough.json`
+ *   - Claude Code honored it on a small prompt and then, on a 222-file context
+ *     payload, ran its *builtin* `Write` instead — leaving a stray `walkthrough.json`
  *     in the user's repo root while our buffer stayed empty for all four
  *     turns. A name that means two different things is exactly what drifts
  *     under load.

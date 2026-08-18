@@ -6,15 +6,9 @@ import {
 	FilePenIcon,
 	FilePlusIcon,
 } from "lucide-react";
-import { useState } from "react";
-import { Button } from "#/components/ui/button";
-import {
-	HarnessModelCombobox,
-	type ModelSelection,
-} from "#/components/walkthrough/harness-model-combobox";
+import { RegenerateControl } from "#/components/walkthrough/regenerate-control";
 import type { SidecarQueryUtils } from "#/lib/backend-context";
 import type { FileDrift, HarnessId } from "#/lib/walkthrough-data";
-import { useHarnesses } from "#/lib/walkthrough-data";
 
 type OutdatedBannerProps = {
 	changedPaths: ReadonlyMap<string, FileDrift>;
@@ -41,10 +35,10 @@ const DRIFT_ICON: Record<FileDrift, typeof FilePlusIcon> = {
  * What's changed in the worktree since this walkthrough was generated —
  * driven by comparing `StoredWalkthrough.fingerprints` against the session's
  * current `diff.files` (`useWalkthroughDrift`). Hidden entirely when nothing
- * has drifted. Regenerate carries the same harness/model picker
- * (`HarnessModelCombobox`) the empty-state Generate flow uses — reused
- * as-is rather than duplicated — defaulting to whatever produced the
- * walkthrough currently on screen.
+ * has drifted. Regenerate is `RegenerateControl` — the same harness/model
+ * picker paired with the button that `NarrativePane`'s persistent footer
+ * also renders — defaulting to whatever produced the walkthrough currently
+ * on screen.
  */
 export function OutdatedBanner({
 	changedPaths,
@@ -53,12 +47,6 @@ export function OutdatedBanner({
 	defaultModel,
 	onRegenerate,
 }: OutdatedBannerProps): React.ReactElement | null {
-	const { harnesses } = useHarnesses(orpc);
-	const [selection, setSelection] = useState<ModelSelection>({
-		harness: defaultHarness,
-		modelId: defaultModel ?? undefined,
-	});
-
 	if (changedPaths.size === 0) return null;
 	const entries = Array.from(changedPaths.entries());
 
@@ -72,22 +60,12 @@ export function OutdatedBanner({
 						changed since this walkthrough was generated
 					</span>
 				</div>
-				<div className="flex shrink-0 items-center gap-2">
-					<div className="w-56">
-						<HarnessModelCombobox
-							harnesses={harnesses}
-							onChange={setSelection}
-							value={selection}
-						/>
-					</div>
-					<Button
-						onClick={() => onRegenerate(selection.harness, selection.modelId)}
-						size="sm"
-						variant="outline"
-					>
-						Regenerate
-					</Button>
-				</div>
+				<RegenerateControl
+					defaultHarness={defaultHarness}
+					defaultModel={defaultModel}
+					onRegenerate={onRegenerate}
+					orpc={orpc}
+				/>
 			</div>
 			<ul className="flex flex-col gap-1">
 				{entries.map(([path, drift]) => {

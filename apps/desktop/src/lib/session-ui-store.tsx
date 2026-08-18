@@ -27,6 +27,7 @@ import {
 } from "react";
 import { createStore, type StoreApi, useStore } from "zustand";
 import type { SearchMode } from "#/components/files-sidebar/files-sidebar";
+import type { WalkthroughSelection } from "#/lib/walkthrough-data";
 
 /** One `r` keypress's undo record — mirrors `files-changed-view.tsx`'s local type of the same name. */
 export type ReviewedToggleRecord = {
@@ -43,7 +44,7 @@ type SessionUiState = {
 	expandedHiddenPaths: ReadonlySet<string>;
 	fileCollapseOverrides: ReadonlyMap<string, boolean>;
 	activeTab: string;
-	selectedBlockId: string | null;
+	walkthroughSelection: WalkthroughSelection | null;
 	/**
 	 * The `r`/`u` undo stack. A plain mutable array, not reactive state —
 	 * nothing renders off it, the same reasoning `files-changed-view.tsx`'s
@@ -67,7 +68,7 @@ function createDefaultSessionUiState(): SessionUiState {
 		expandedHiddenPaths: new Set(),
 		fileCollapseOverrides: new Map(),
 		activeTab: "files",
-		selectedBlockId: null,
+		walkthroughSelection: null,
 		undoStack: [],
 	};
 }
@@ -92,7 +93,10 @@ type SessionUiStore = {
 	) => void;
 	clearFileCollapseOverride: (sessionId: string, path: string) => void;
 	setActiveTab: (sessionId: string, tab: string) => void;
-	setSelectedBlockId: (sessionId: string, blockId: string | null) => void;
+	setWalkthroughSelection: (
+		sessionId: string,
+		selection: WalkthroughSelection | null,
+	) => void;
 	pushUndo: (sessionId: string, record: ReviewedToggleRecord) => void;
 	popUndo: (sessionId: string) => ReviewedToggleRecord | undefined;
 	/** Drops a closed tab's state entirely — call once a session actually closes (`useClearSessionUiState`), or the map grows for the app's whole lifetime. */
@@ -193,11 +197,11 @@ function createSessionUiStore(): StoreApi<SessionUiStore> {
 					activeTab: tab,
 				})),
 			})),
-		setSelectedBlockId: (sessionId, blockId) =>
+		setWalkthroughSelection: (sessionId, selection) =>
 			set((state) => ({
 				sessions: withSession(state.sessions, sessionId, (session) => ({
 					...session,
-					selectedBlockId: blockId,
+					walkthroughSelection: selection,
 				})),
 			})),
 		pushUndo: (sessionId, record) => {
@@ -416,23 +420,27 @@ export function useSessionActiveTab(
 	return [activeTab, setActiveTab] as const;
 }
 
-export function useSessionSelectedBlockId(
+export function useSessionWalkthroughSelection(
 	sessionId: string,
-): readonly [string | null, (blockId: string | null) => void] {
+): readonly [
+	WalkthroughSelection | null,
+	(selection: WalkthroughSelection | null) => void,
+] {
 	const store = useSessionUiStore();
-	const selectedBlockId = useStore(
+	const selection = useStore(
 		store,
-		(state) => state.sessions.get(sessionId)?.selectedBlockId ?? null,
+		(state) => state.sessions.get(sessionId)?.walkthroughSelection ?? null,
 	);
-	const setSelectedBlockIdAction = useStore(
+	const setWalkthroughSelectionAction = useStore(
 		store,
-		(state) => state.setSelectedBlockId,
+		(state) => state.setWalkthroughSelection,
 	);
-	const setSelectedBlockId = useCallback(
-		(blockId: string | null) => setSelectedBlockIdAction(sessionId, blockId),
-		[setSelectedBlockIdAction, sessionId],
+	const setSelection = useCallback(
+		(next: WalkthroughSelection | null) =>
+			setWalkthroughSelectionAction(sessionId, next),
+		[setWalkthroughSelectionAction, sessionId],
 	);
-	return [selectedBlockId, setSelectedBlockId] as const;
+	return [selection, setSelection] as const;
 }
 
 /** The `r`/`u` undo stack — imperative, non-reactive (see `SessionUiState.undoStack`'s doc comment), so this deliberately isn't a `useStore` subscription. */

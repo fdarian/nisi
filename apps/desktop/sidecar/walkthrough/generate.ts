@@ -12,13 +12,11 @@ import type {
 	StoredWalkthrough,
 } from "@repo/sidecar-api";
 import {
-	buildDigest,
+	buildOverview,
 	buildSystemPrompt,
 	createBuffer,
 	createWalkthroughTools,
-	defaultDigestBudget,
 	evaluateWalkthrough,
-	renderDigest,
 	WALKTHROUGH_TOOL_NAMES,
 } from "@repo/walkthrough";
 import { registerTelemetry } from "ai";
@@ -60,17 +58,19 @@ const MAX_TURNS = 4;
  * the whole generation. A walkthrough is prose *about* a diff — nothing here
  * ever needs to modify the worktree, and the worktree is the user's real repo,
  * not a disposable sandbox. Claude Code proved the risk concrete: on a large
- * digest it called its builtin `Write` rather than the walkthrough tool and
- * left a stray `walkthrough.json` in the repo root.
+ * context payload it called its builtin `Write` rather than the walkthrough
+ * tool and left a stray `walkthrough.json` in the repo root.
  *
  * Renaming our own tools out of the way (`WALKTHROUGH_TOOL_NAMES`) stops the
  * model from *confusing* the two; this stops it from reaching a file writer at
  * all, whichever one it reaches for. Codex exposes no file-writing builtin
  * (only `bash`/`webSearch`), hence the empty list.
  *
- * `bash` is deliberately left active — the agent needs it to explore beyond
- * the digest, and it's the one remaining way to touch disk. That's a narrower
- * hole than an editing tool the model reaches for by habit, but it is a hole.
+ * `bash` is deliberately left active — the agent needs it to explore the
+ * worktree (`@repo/walkthrough`'s `buildOverview` briefs it, doesn't hand it
+ * everything), and it's the one remaining way to touch disk. That's a
+ * narrower hole than an editing tool the model reaches for by habit, but it
+ * is a hole.
  */
 const FILE_MUTATING_BUILTINS: Record<HarnessId, ReadonlyArray<string>> = {
 	"claude-code": ["write", "edit", "NotebookEdit"],
@@ -142,11 +142,11 @@ export type GenerateInput = {
 };
 
 const buildFreshPrompt = (
-	digestText: string,
+	overviewText: string,
 	priorContent: string | undefined,
 ): string =>
 	priorContent === undefined
-		? `Diff digest for this pull request:\n\n${digestText}`
+		? `Change overview for this pull request:\n\n${overviewText}`
 		: [
 				"This is a regeneration — the underlying sidecar process restarted since the walkthrough below was written, so the previous conversation is gone, but its result isn't. Use it as your starting point: keep what's still accurate, update what the current diff changed.",
 				"",
@@ -154,13 +154,13 @@ const buildFreshPrompt = (
 				"",
 				priorContent,
 				"",
-				"Current diff digest:",
+				"Current change overview:",
 				"",
-				digestText,
+				overviewText,
 			].join("\n");
 
-const buildContinuationPrompt = (digestText: string): string =>
-	`The PR has changed since your last turn. Updated diff digest:\n\n${digestText}`;
+const buildContinuationPrompt = (overviewText: string): string =>
+	`The PR has changed since your last turn. Updated change overview:\n\n${overviewText}`;
 
 /**
  * `fullStream`'s `error` parts carry whatever the adapter's own transport
@@ -286,7 +286,7 @@ const endCancelled = async (sessionId: string): Promise<GenerateEvent> => {
 /**
  * The generation loop's implementation, streamed as `GenerateEvent`s through
  * the same `eventIterator` mechanism `events.subscribe` uses. Bridges Effect
- * (session/digest lookup, persistence) from plain async code (the harness
+ * (session/context lookup, persistence) from plain async code (the harness
  * agent's own Promise-based API) at exactly two points — gathering context
  * up front, and persisting on success — rather than trying to run the whole
  * multi-turn loop inside one Effect.
@@ -307,8 +307,13 @@ export async function* generateWalkthrough(
 		return;
 	}
 
-	const digestEntries = buildDigest(context.digestFiles, defaultDigestBudget);
-	const digestText = renderDigest(digestEntries);
+	const overviewText = buildOverview({
+		baseRef: context.baseRef,
+		headRef: context.headRef,
+		includeUncommitted: context.includeUncommitted,
+		files: context.files,
+		pullRequestTitle: context.pullRequestTitle,
+	});
 
 	const live = getLiveSession(input.sessionId);
 	const reuseLive =
@@ -332,7 +337,7 @@ export async function* generateWalkthrough(
 		// `buffer.ts`), never replaced, so the map's entry stays current with
 		// every turn regardless of whether it's ever written back here.
 		({ agent, session, buffer } = live);
-		turnPrompt = buildContinuationPrompt(digestText);
+		turnPrompt = buildContinuationPrompt(overviewText);
 	} else {
 		yield { type: "bootstrapping" };
 		const prior = await runEffect(
@@ -388,7 +393,7 @@ export async function* generateWalkthrough(
 			yield await endCancelled(input.sessionId);
 			return;
 		}
-		turnPrompt = buildFreshPrompt(digestText, prior?.content);
+		turnPrompt = buildFreshPrompt(overviewText, prior?.content);
 	}
 
 	for (let turn = 1; turn <= MAX_TURNS; turn++) {
@@ -460,7 +465,14 @@ export async function* generateWalkthrough(
 							sessionId: input.sessionId,
 							harness: input.harness,
 							model: input.model ?? null,
-							content: JSON.stringify(evaluation.walkthrough),
+							walkthrough: evaluation.walkthrough,
+							// `CoverageGap.missingRanges` already carries the wire's
+							// `startLine`/`endLine` field names — only the outer key
+							// (`missingRanges` → `ranges`) needs renaming.
+							uncoveredFiles: evaluation.coverageGaps.map((gap) => ({
+								path: gap.path,
+								ranges: gap.missingRanges,
+							})),
 							fingerprints: context.fingerprints,
 						});
 					}),
@@ -480,6 +492,7 @@ export async function* generateWalkthrough(
 				model: record.model,
 				walkthrough: evaluation.walkthrough,
 				fingerprints: record.fingerprints,
+				uncoveredFiles: record.uncoveredFiles,
 				generatedAt: record.generatedAt,
 			};
 			yield { type: "done", walkthrough: stored };

@@ -1,9 +1,10 @@
 # @repo/walkthrough
 
-Everything about *what* the walkthrough agent is asked and whether its answer is acceptable —
-the output schema, the tools it writes through, and the coverage/reference validation that
-turns a bad answer into feedback instead of an exception. Pure and testable without spawning an
-agent: no SQLite, no process spawning, no network. Depends on `@repo/git` for the diff model
+Everything about *what* the walkthrough agent is asked and whether its answer is acceptable — the
+brief it's given, the output schema, the tools it writes through, and the reference validation
+that turns a broken answer into feedback instead of an exception (coverage rides alongside as
+informational data, never a reason to reject one). Pure and testable without spawning an agent: no
+SQLite, no process spawning, no network. Depends on `@repo/git` for the diff model
 (`Hunk`/`parseHunks`, `FileChange`) but does no I/O of its own — every function here takes
 already-fetched data (a patch string, a line count) rather than reading files or shelling out.
 Feeds `packages/sidecar-api`'s `walkthrough` contract; consumed by the sidecar together with
@@ -19,17 +20,21 @@ Feeds `packages/sidecar-api`'s `walkthrough` contract; consumed by the sidecar t
   that mutate one bound buffer. No file path on either — there's exactly one walkthrough per
   turn.
 - `coverage.ts` — `changedLineRanges` (added-line ranges out of a patch's hunks, in head-file
-  numbering) and `validateCoverage` (every changed line must be claimed by some reference
-  block's locations) — the check that matters most.
+  numbering) and `validateCoverage` (which of those ranges no reference block's locations claim).
+  Informational, not a gate — see `validate.ts`.
 - `references.ts` — reference integrity independent of coverage: unique ids, every
   `[text](ref:<id>)` link resolves to a real block, every location points at a real changed file
   within its actual line count.
 - `validate.ts` — `decodeBuffer` (JSON parse + schema decode, both as data, never thrown) and
-  `evaluateWalkthrough`, the per-turn feedback loop composing decode → references → coverage in
-  that order.
-- `digest.ts` — `buildDigest`: the per-file patch excerpts fed to the agent under a shrinking
-  char budget (a total cap decremented as files consume it, plus a per-file cap), and
-  `renderDigest` to render them as text.
+  `evaluateWalkthrough`, the per-turn feedback loop. Decode and reference-integrity failures block
+  and produce retry feedback; a walkthrough that clears both is `valid` regardless of coverage,
+  which rides along on the result as informational gaps for the caller to persist, not a reason to
+  reject the answer.
+- `overview.ts` — `buildOverview`: the compact brief handed to the agent in place of a patch dump —
+  the base/head refs, a one-line-per-file summary (path, status, category, added/deleted counts,
+  no patch text), and the PR title when the session has one. The agent has `bash` and runs inside
+  the real worktree, so it's expected to read whatever it decides matters rather than work from
+  this text alone.
 - `prompt.ts` — `buildSystemPrompt`, generated instructions plus the embedded JSON Schema.
 - `db/schema.ts` — the `walkthroughs` table (Drizzle), exported via the package's `./db`
   subpath so the sidecar can import it without pulling in this package's agent/validation
@@ -48,19 +53,16 @@ Feeds `packages/sidecar-api`'s `walkthrough` contract; consumed by the sidecar t
   counts `+` lines; a deletion-only patch has none, so it never appears in the coverage map —
   the exemption falls out of the line-range extraction itself rather than being a branch
   somewhere that checks `status === "deleted"`.
-- **Reference integrity is checked before coverage, not concurrently.** A location that
-  hallucinates a path or an out-of-range line is meaningless as "coverage" — validating it first
-  means a coverage gap report is only ever shown once every location is known to point somewhere
-  real, so the agent isn't told to "add more" when what's already there is broken.
+- **Reference integrity is checked before coverage is computed, not concurrently.** A location that
+  hallucinates a path or an out-of-range line is meaningless as "coverage" — checking references
+  first means the coverage gaps a `valid` result carries are only ever computed once every location
+  is known to point somewhere real, rather than being noise mixed in with a broken document's
+  retry feedback.
 - **Excess JSON properties are dropped, not rejected.** The generated JSON Schema still declares
   `additionalProperties: false` (so the model is told not to add one), but Effect's decoder is
   lenient by default — a stray field from the model costs nothing rather than burning a retry
   turn on something harmless. Don't add `{ onExcessProperty: "error" }` without deciding that
   tradeoff is worth it.
-- **Digest budget constants (160k total / 4k per file) mirror codiff's `walkthrough.cjs`**
-  (`MAX_TOTAL_PATCH_CHARS` / `MAX_SECTION_PATCH_CHARS`) — proven values, not guesses. Codiff's
-  prompt orders files for review, a different product; only the budget *mechanic* (shrinking
-  total, decremented per file, capped per file) was worth taking.
 - **`ChangedFileFacts.lineCount` is supplied by the caller, not computed here.** Getting a file's
   true head line count means reading its content — I/O this package deliberately doesn't do. The
   caller (sidecar wiring) already has it from `@repo/git`'s `getFileContents()`' `newContent`; a file

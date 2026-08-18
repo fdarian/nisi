@@ -29,7 +29,7 @@ import {
 } from "#/lib/pr-data";
 import {
 	useSessionActiveTab,
-	useSessionSelectedBlockId,
+	useSessionWalkthroughSelection,
 } from "#/lib/session-ui-store";
 import { useWalkthroughEnabled } from "#/lib/settings-data";
 
@@ -73,13 +73,12 @@ export function PrView({
 	// regardless of what `activeTab` state still holds, rather than mutating
 	// `activeTab` itself in an effect.
 	const tabsValue = walkthroughEnabled ? activeTab : "files";
-	// Lifted above the tabs, not local to `WalkthroughView` — a block
-	// selection should survive switching away to Files Changed and back, not
-	// reset every time the Walkthrough tab remounts (and, same as `activeTab`
-	// above, survive the whole tab suspending and resuming).
-	const [selectedBlockId, setSelectedBlockId] = useSessionSelectedBlockId(
-		session.id,
-	);
+	// Lifted above the tabs, not local to `WalkthroughView` — a reference/
+	// uncovered-file selection should survive switching away to Files Changed
+	// and back, not reset every time the Walkthrough tab remounts (and, same
+	// as `activeTab` above, survive the whole tab suspending and resuming).
+	const [walkthroughSelection, setWalkthroughSelection] =
+		useSessionWalkthroughSelection(session.id);
 
 	// Gates the sidecar's 2s worktree poller (`live-poll.ts`) to exactly the
 	// sessions someone could actually see a result from — window focused,
@@ -155,9 +154,9 @@ export function PrView({
 					<TabsContent className="flex min-h-0 flex-1" value="walkthrough">
 						<WalkthroughView
 							files={files}
-							onSelectBlock={setSelectedBlockId}
+							onSelectionChange={setWalkthroughSelection}
 							orpc={orpc}
-							selectedBlockId={selectedBlockId}
+							selection={walkthroughSelection}
 							session={session}
 						/>
 					</TabsContent>

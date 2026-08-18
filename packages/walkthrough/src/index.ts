@@ -2,14 +2,10 @@ export type { EditFailure, EditOutcome, WalkthroughBuffer } from "./buffer.ts";
 export { applyEdit, createBuffer, describeEditFailure } from "./buffer.ts";
 
 export type { CoverageGap, CoverageResult, LineRange } from "./coverage.ts";
-export {
-	changedLineRanges,
-	formatCoverageFeedback,
-	validateCoverage,
-} from "./coverage.ts";
+export { changedLineRanges, validateCoverage } from "./coverage.ts";
 
-export type { DigestBudget, DigestEntry, DigestFile } from "./digest.ts";
-export { buildDigest, defaultDigestBudget, renderDigest } from "./digest.ts";
+export type { OverviewInput } from "./overview.ts";
+export { buildOverview } from "./overview.ts";
 
 export { buildSystemPrompt } from "./prompt.ts";
 

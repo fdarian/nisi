@@ -12,7 +12,13 @@ export const walkthroughs = sqliteTable("walkthroughs", {
 	sessionId: text().notNull().unique(),
 	harness: text().notNull(),
 	model: text(),
-	/** JSON-serialized `Walkthrough` (`sections` + `references`) — see `../schema.ts`. */
+	/**
+	 * JSON-serialized envelope holding the `Walkthrough` (`sections` +
+	 * `references` — see `../schema.ts`) plus its derived coverage gaps,
+	 * nested here rather than a column of their own so persisting the gaps
+	 * needed no migration — see `apps/desktop/sidecar/walkthrough/store.ts`'s
+	 * `StoredContentEnvelope`, the only reader/writer of this shape.
+	 */
 	content: text().notNull(),
 	/**
 	 * JSON-serialized `Record<path, fingerprint>` — `@repo/git`'s

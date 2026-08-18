@@ -6,7 +6,13 @@ The Phase 3 wiring layer: turns `@repo/walkthrough`'s pure schema/validation/pro
 those two packages does I/O or knows about the other — this directory is where they actually meet.
 
 - `store.ts` — `WalkthroughStore`, persistence for generated walkthroughs (one row per session,
-  regenerating overwrites). Lives here rather than in `@repo/walkthrough` because that package is
+  regenerating overwrites) plus their derived coverage gaps (`uncoveredFiles` — path and the
+  uncovered line ranges per file, so the frontend can open the diff pane on exactly the hunks the
+  walkthrough skipped). Both live in the `content` column's own JSON envelope
+  (`StoredContentEnvelope`) rather than a column each, so gaining `uncoveredFiles` needed no
+  migration; a row written before that envelope existed decodes `uncoveredFiles` as `undefined`
+  ("coverage never computed for this row"), distinct from `[]` ("computed, fully covered") — see
+  `parseContent`'s doc. Lives here rather than in `@repo/walkthrough` because that package is
   deliberately I/O-free — see its AGENTS.md.
 - `harness-bin.ts` — `HARNESS_CLI_BIN`, the one map of harness → CLI binary name + env override var
   (`claude`/`codex`/`opencode`; Pi has no entry, see `availability.ts`). Single source of truth both
@@ -31,20 +37,22 @@ those two packages does I/O or knows about the other — this directory is where
   harness short-circuits to `modelsStatus: "unavailable"` without ever touching the discovery cache,
   so a harness that loses its CLI never reports a misleadingly-reassuring `"stale"`. Also
   `createHarnessAdapter` (harness/model choice → a real `HarnessV1` adapter instance).
-- `context.ts` — `gatherGenerationContext`: resolves a session's `repoRoot`/`baseRef` via
-  `@repo/review`'s `ReviewStore` directly (not through `Store`, which has no raw "get one session"
-  method) and fetches every changed file's patch + head content via `@repo/git`, producing exactly
-  what `@repo/walkthrough`'s pure functions need but can't fetch themselves — the digest's
-  per-file patches and each file's `ChangedFileFacts.lineCount`. Also reads `@repo/settings`'s
-  `includeUncommitted` directly (there's no frontend request here to carry it) and threads it into
-  both `@repo/git` calls, so the digest an agent narrates matches what the user sees in Files Changed.
-  Refuses outright (`HeadNotCheckedOut`) for a plain branch session whose `headRef` isn't what
-  `repoRoot` actually has checked out — the harness runs a real coding agent directly against that
-  worktree (`@repo/harness-local`), so an explicit, not-checked-out head would have the agent
-  explore files that don't match the digest it was given. A PR-backed session never trips this,
-  since its `repoRoot` is a worktree nisi created and keeps checked out to exactly that PR's head.
-  `generate.ts`'s `resolveContext` turns this into a specific `failed` event rather than the generic
-  "could not read this session's diff" every other context failure collapses into.
+- `context.ts` — `gatherGenerationContext`: resolves a session's `repoRoot`/`baseRef`/`headRef`/PR
+  title via `@repo/review`'s `ReviewStore` directly (not through `Store`, which has no raw "get one
+  session" method) and fetches every changed file's patch + head content via `@repo/git`, producing
+  both what `@repo/walkthrough`'s `buildOverview` needs for the agent's brief (the refs, the
+  per-file list, the PR title) and what `evaluateWalkthrough` needs to validate the agent's answer
+  turn by turn (`ChangedFileFacts` — each file's real patch and `lineCount`). Also reads
+  `@repo/settings`'s `includeUncommitted` directly (there's no frontend request here to carry it)
+  and threads it into both `@repo/git` calls, so the diff an agent explores matches what the user
+  sees in Files Changed. Refuses outright (`HeadNotCheckedOut`) for a plain branch session whose
+  `headRef` isn't what `repoRoot` actually has checked out — the harness runs a real coding agent
+  directly against that worktree (`@repo/harness-local`), so an explicit, not-checked-out head
+  would have the agent explore files that don't match the diff it was briefed on. A PR-backed
+  session never trips this, since its `repoRoot` is a worktree nisi created and keeps checked out
+  to exactly that PR's head. `generate.ts`'s `resolveContext` turns this into a specific `failed`
+  event rather than the generic "could not read this session's diff" every other context failure
+  collapses into.
 - `live-sessions.ts` — the in-process `Map<sessionId, LiveWalkthroughSession>` a successful
   `generate` populates, so a regenerate can continue the same harness-agent conversation instead of
   starting cold. Gone on sidecar restart by design (`@repo/harness-local` omits `resumeSession` —
@@ -70,9 +78,10 @@ those two packages does I/O or knows about the other — this directory is where
   (`WALKTHROUGH_TOOL_NAMES`) so they collide with no adapter's builtins, and `inactiveTools`
   (`FILE_MUTATING_BUILTINS`) switches the adapters' own file writers off. Overriding `write`/`edit`
   by key collision was the old design and failed both ways — Pi hung forever on it, Claude Code
-  drifted to its *builtin* `Write` on a large digest and left a stray `walkthrough.json` in the
-  user's repo. `read`/`grep`/`glob`/`bash` stay active so the agent can still explore beyond the
-  digest; `bash` is the one remaining way to touch disk, deliberately accepted.
+  drifted to its *builtin* `Write` on a large context blob and left a stray `walkthrough.json` in
+  the user's repo. `read`/`grep`/`glob`/`bash` stay active so the agent can explore the worktree
+  itself — the point of the brief `@repo/walkthrough`'s `buildOverview` hands it, not a fallback —
+  and `bash` is the one remaining way to touch disk, deliberately accepted.
   `generate.ts` feeds one name pair to *both* `createWalkthroughTools` and `buildSystemPrompt` —
   registering one set while telling the model another is the failure mode to watch for.
 - **Regenerate is the same `generate` call, not a separate procedure.** The sidecar decides what
@@ -85,11 +94,11 @@ those two packages does I/O or knows about the other — this directory is where
   error, a harness/sandbox crash, a validation loop that never converges — yields an in-band
   `{ type: "failed" }` event instead, so the stream ends cleanly rather than dropping the connection.
 - **`gatherGenerationContext` fetches every non-binary file's content with `force: true`**,
-  bypassing `@repo/git`'s load-on-demand size tier — the walkthrough needs every changed file's real
-  line count to validate coverage, not just the ones under 1MB. A file still past the *patch-only*
-  tier (2MB) has no `newContent` even with `force`, and is simply omitted from `ChangedFileFacts`
-  rather than faked with a zero line count — `@repo/walkthrough`'s own documented exemption for
-  files with no head content.
+  bypassing `@repo/git`'s load-on-demand size tier — reference validation needs every changed
+  file's real line count, not just the ones under 1MB, to tell a real `Location` from an
+  out-of-range one. A file still past the *patch-only* tier (2MB) has no `newContent` even with
+  `force`, and is simply omitted from `ChangedFileFacts` rather than faked with a zero line count —
+  `@repo/walkthrough`'s own documented exemption for files with no head content.
 - **`generate` reattaches instead of erroring when a generation is already running for the
   session**, rather than adding a separate "attach" procedure — `http.ts`'s handler checks
   `generation-log.ts`'s `attachToGeneration` first and only calls `beginTrackedGeneration` when

@@ -8,6 +8,12 @@ import { OutdatedBanner } from "#/components/walkthrough/outdated-banner";
 import { ReferencePane } from "#/components/walkthrough/reference-pane";
 import type { SidecarQueryUtils } from "#/lib/backend-context";
 import type { FileChange, Session } from "#/lib/pr-data";
+import type {
+	UncoveredFile,
+	WalkthroughReferenceBlock,
+	Walkthrough as WalkthroughSchema,
+	WalkthroughSelection,
+} from "#/lib/walkthrough-data";
 import {
 	useWalkthrough,
 	useWalkthroughDrift,
@@ -19,9 +25,44 @@ type WalkthroughViewProps = {
 	session: Session;
 	files: readonly FileChange[];
 	/** Lifted to `PrView` rather than local state, so it survives switching away to Files Changed and back. */
-	selectedBlockId: string | null;
-	onSelectBlock: (blockId: string) => void;
+	selection: WalkthroughSelection | null;
+	onSelectionChange: (selection: WalkthroughSelection) => void;
 };
+
+/**
+ * Resolves the reference pane's selection into the `{id, label, locations}`
+ * shape it renders, whichever kind of thing is selected. A `"reference"`
+ * selection looks up a real, agent-authored block. An `"uncovered"`
+ * selection has no such block to look up — nothing in
+ * `walkthrough.references` claims that file — so this builds one locally,
+ * scoped to just that file's skipped ranges, rather than minting a fake
+ * entry inside `walkthrough.references` itself (which would misrepresent it
+ * as something the agent actually narrated). The `uncovered:` id prefix
+ * keeps it from ever colliding with a real reference id.
+ */
+function resolveSelection(
+	selection: WalkthroughSelection | null,
+	walkthrough: WalkthroughSchema,
+	uncoveredFiles: readonly UncoveredFile[] | undefined,
+): WalkthroughReferenceBlock | null {
+	if (selection === null) return null;
+
+	if (selection.kind === "reference") {
+		return (
+			walkthrough.references.find((block) => block.id === selection.id) ?? null
+		);
+	}
+
+	const file = uncoveredFiles?.find((entry) => entry.path === selection.path);
+	if (file === undefined) return null;
+	return {
+		id: `uncovered:${file.path}`,
+		label: "Not covered by this walkthrough",
+		// `range` already carries `startLine`/`endLine` — `UncoveredFile.ranges`
+		// reuses `Location`'s own field names for exactly this straight pass.
+		locations: file.ranges.map((range) => ({ path: file.path, ...range })),
+	};
+}
 
 /**
  * The Walkthrough tab's top-level state machine: loading → generate panel
@@ -35,8 +76,8 @@ export function WalkthroughView({
 	orpc,
 	session,
 	files,
-	selectedBlockId,
-	onSelectBlock,
+	selection,
+	onSelectionChange,
 }: WalkthroughViewProps): React.ReactElement {
 	const { walkthrough, isLoading } = useWalkthrough(orpc, session.id);
 	const generation = useWalkthroughGeneration(orpc, session.id);
@@ -83,10 +124,11 @@ export function WalkthroughView({
 	const knownBlockIds = new Set(
 		walkthrough.walkthrough.references.map((block) => block.id),
 	);
-	const selectedBlock =
-		walkthrough.walkthrough.references.find(
-			(block) => block.id === selectedBlockId,
-		) ?? null;
+	const resolvedBlock = resolveSelection(
+		selection,
+		walkthrough.walkthrough,
+		walkthrough.uncoveredFiles,
+	);
 
 	return (
 		<div className="flex min-h-0 flex-1 flex-col">
@@ -105,16 +147,21 @@ export function WalkthroughView({
 			<div className="flex min-h-0 flex-1">
 				<div className="flex min-h-0 flex-1 flex-col">
 					<NarrativePane
+						defaultHarness={walkthrough.harness}
+						defaultModel={walkthrough.model}
 						knownBlockIds={knownBlockIds}
-						onSelectBlock={onSelectBlock}
+						onRegenerate={generation.generate}
+						onSelectionChange={onSelectionChange}
+						orpc={orpc}
 						outdatedBlockIds={drift.outdatedBlockIds}
 						sections={walkthrough.walkthrough.sections}
-						selectedBlockId={selectedBlockId}
+						selection={selection}
+						uncoveredFiles={walkthrough.uncoveredFiles}
 					/>
 				</div>
 				<div className="flex min-h-0 w-[42%] max-w-2xl flex-col">
 					<ReferencePane
-						block={selectedBlock}
+						block={resolvedBlock}
 						changedPaths={drift.changedPaths}
 						files={files}
 						orpc={orpc}

@@ -604,6 +604,7 @@ export function attachRouter(
 					model: record.model,
 					walkthrough: JSON.parse(record.content),
 					fingerprints: record.fingerprints,
+					uncoveredFiles: record.uncoveredFiles,
 					generatedAt: record.generatedAt,
 				};
 			}),

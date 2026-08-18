@@ -74,13 +74,50 @@ export type Walkthrough = {
 	references: readonly WalkthroughReferenceBlock[];
 };
 
-/** Mirrors `StoredWalkthrough` — `fingerprints` is the file-path → `FileChange.fingerprint` map captured at generation time, compared against the session's *current* fingerprints by `useWalkthroughDrift` below. */
+/**
+ * Mirrors `UncoveredFile` (`packages/sidecar-api/src/walkthrough.ts`) — one
+ * file whose changed lines this walkthrough's reference blocks never claim,
+ * as the actual head-file line ranges (1-based inclusive) rather than just a
+ * count — clicking one in `UncoveredFiles` drives the reference pane to
+ * exactly those skipped hunks. `ranges` reuses `WalkthroughLocation`'s own
+ * `startLine`/`endLine` field names, so `resolveSelection`
+ * (`walkthrough-view.tsx`) can turn one straight into a `WalkthroughLocation`
+ * with no field juggling. Derived, not authored by the agent.
+ */
+export type UncoveredFile = {
+	path: string;
+	ranges: ReadonlyArray<{ startLine: number; endLine: number }>;
+};
+
+/**
+ * What the reference pane is currently showing: either a `[text](ref:<id>)`
+ * link's reference block (`kind: "reference"`, resolved against
+ * `walkthrough.walkthrough.references`), or a file clicked in the
+ * uncovered-files list (`kind: "uncovered"`). Kept as a union rather than
+ * reusing a reference block id for both — an uncovered file is precisely
+ * *not* a reference block, nothing in `walkthrough.walkthrough.references`
+ * claims it, and collapsing the distinction behind one id space would make
+ * that untrue for every future reader of this state.
+ */
+export type WalkthroughSelection =
+	| { kind: "reference"; id: string }
+	| { kind: "uncovered"; path: string };
+
+/**
+ * Mirrors `StoredWalkthrough` — `fingerprints` is the file-path → `FileChange.fingerprint` map
+ * captured at generation time, compared against the session's *current* fingerprints by
+ * `useWalkthroughDrift` below. `uncoveredFiles` is `undefined` for a walkthrough generated before
+ * that field existed (coverage unknown), `[]` when every changed line is covered, non-empty
+ * otherwise — `UncoveredFiles` (`#/components/walkthrough/uncovered-files.tsx`) renders each of
+ * those three states differently.
+ */
 export type StoredWalkthrough = {
 	sessionId: string;
 	harness: HarnessId;
 	model: string | null;
 	walkthrough: Walkthrough;
 	fingerprints: Readonly<Record<string, string>>;
+	uncoveredFiles?: readonly UncoveredFile[];
 	generatedAt: number;
 };
 

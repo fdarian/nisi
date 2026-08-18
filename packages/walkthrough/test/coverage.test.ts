@@ -1,9 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import {
-	changedLineRanges,
-	formatCoverageFeedback,
-	validateCoverage,
-} from "../src/coverage.ts";
+import { changedLineRanges, validateCoverage } from "../src/coverage.ts";
 import type { ReferenceBlock } from "../src/schema.ts";
 
 describe("changedLineRanges", () => {
@@ -152,22 +148,5 @@ describe("validateCoverage", () => {
 		const changed = new Map([["deleted.ts", []]]);
 		const result = validateCoverage(changed, []);
 		expect(result).toEqual({ ok: true });
-	});
-});
-
-describe("formatCoverageFeedback", () => {
-	test("names the file and the missing ranges precisely", () => {
-		const text = formatCoverageFeedback([
-			{
-				path: "src/a.ts",
-				missingRanges: [
-					{ startLine: 5, endLine: 5 },
-					{ startLine: 10, endLine: 20 },
-				],
-			},
-		]);
-		expect(text).toContain("src/a.ts");
-		expect(text).toContain("line 5");
-		expect(text).toContain("lines 10-20");
 	});
 });

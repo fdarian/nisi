@@ -114,10 +114,12 @@ export type CoverageResult =
 	| { readonly ok: false; readonly gaps: ReadonlyArray<CoverageGap> };
 
 /**
- * Every changed line in every changed file must be claimed by at least one
- * reference block's `locations` — the check that matters most: it's what
- * stops a claim-free walkthrough, or one that silently drops a file, from
- * passing.
+ * Every changed line in every changed file that's claimed by at least one
+ * reference block's `locations`, versus not — informational now, not a
+ * pass/fail gate (see `validate.ts`'s `evaluateWalkthrough` and `prompt.ts`:
+ * a walkthrough that skips narrating noise on purpose is a *good* one). The
+ * caller persists `gaps` alongside a valid walkthrough rather than rejecting
+ * it over them.
  */
 export const validateCoverage = (
 	changedLineRangesByPath: ReadonlyMap<string, ReadonlyArray<LineRange>>,
@@ -136,23 +138,3 @@ export const validateCoverage = (
 
 	return gaps.length === 0 ? { ok: true } : { ok: false, gaps };
 };
-
-const formatRange = (range: LineRange): string =>
-	range.startLine === range.endLine
-		? `line ${range.startLine}`
-		: `lines ${range.startLine}-${range.endLine}`;
-
-/** Precisely what's missing — which files, which ranges — so the agent can append a covering block rather than restart. */
-export const formatCoverageFeedback = (
-	gaps: ReadonlyArray<CoverageGap>,
-): string =>
-	[
-		"Coverage is incomplete. Every changed line in every changed file must be claimed by at least one reference block's locations. These changed lines aren't covered yet:",
-		"",
-		...gaps.map(
-			(gap) =>
-				`- ${gap.path}: ${gap.missingRanges.map(formatRange).join(", ")}`,
-		),
-		"",
-		"Add a reference block (or extend an existing one) covering each range above — append, don't restart.",
-	].join("\n");
