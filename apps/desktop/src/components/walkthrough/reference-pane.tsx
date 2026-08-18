@@ -23,7 +23,11 @@ import {
 	buildDiffCodeViewOptions,
 	DiffCodeView,
 } from "#/components/diff-pane/diff-code-view";
-import { DIFF_VIEWED_HOST_CLASS } from "#/components/diff-pane/diff-view-theme";
+import {
+	DIFF_VIEWED_HOST_CLASS,
+	diffCardChromeCSS,
+	diffCardHeaderClassName,
+} from "#/components/diff-pane/diff-view-theme";
 import { Badge } from "#/components/ui/badge";
 import { Checkbox } from "#/components/ui/checkbox";
 import {
@@ -41,6 +45,7 @@ import { hashItemVersion } from "#/lib/item-version";
 import type { FileChange, FileContentReview } from "#/lib/pr-data";
 import { useFileContents, useSetRangeViewed } from "#/lib/pr-data";
 import { splitPath } from "#/lib/tree-paths";
+import { cn } from "#/lib/utils";
 import type {
 	FileDrift,
 	WalkthroughReferenceBlock,
@@ -245,6 +250,7 @@ export function ReferencePane({
 	const codeViewOptions = useMemo(
 		() =>
 			buildDiffCodeViewOptions<ReferenceAnnotationMetadata>({
+				extraCSS: diffCardChromeCSS,
 				onPostRender: (node, _instance, _phase, context) => {
 					const status = statusByItemId.get(context.item.id);
 					node.classList.toggle(DIFF_VIEWED_HOST_CLASS, status === "reviewed");
@@ -288,7 +294,10 @@ export function ReferencePane({
 			 * any other content. Same mechanism (and fix) as `diff-pane.tsx`.
 			 */}
 			<DiffCodeView
-				className="min-h-0 w-full flex-1 overflow-auto overscroll-contain px-3 [contain:strict]"
+				className={cn(
+					"min-h-0 w-full flex-1 overflow-auto overscroll-contain px-3 [contain:strict]",
+					"[&_diffs-container]:[clip-path:inset(0_round_var(--radius-xl))]",
+				)}
 				items={items}
 				options={codeViewOptions}
 				renderAnnotation={renderAnnotation}
@@ -338,7 +347,15 @@ function ReferenceLocationHeader({
 	const domId = checkboxDomId(itemId);
 
 	return (
-		<div className="flex min-w-0 flex-1 items-center gap-3 px-3 py-2">
+		<div
+			className={cn(
+				"flex min-w-0 flex-1 items-center gap-3 px-3",
+				// This row *is* the card's top edge, same as `DiffFileHeader`'s — see
+				// `diffCardHeaderClassName`. Locations here have no collapsed state,
+				// so there's always a body under it: always the expanded form.
+				diffCardHeaderClassName(false),
+			)}
+		>
 			<span className="flex min-w-0 flex-1 items-baseline gap-1.5 truncate font-mono text-xs">
 				{dirname && (
 					<span className="truncate text-muted-foreground">{dirname}/</span>
