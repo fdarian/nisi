@@ -60,11 +60,7 @@ export function UncoveredFiles({
 	if (uncoveredFiles === undefined) return null;
 
 	if (uncoveredFiles.length === 0) {
-		return (
-			<div className="border-t pt-4 text-muted-foreground text-xs">
-				This walkthrough covers every changed line.
-			</div>
-		);
+		return null;
 	}
 
 	const totalLines = uncoveredFiles.reduce(
@@ -73,7 +69,7 @@ export function UncoveredFiles({
 	);
 
 	return (
-		<Collapsible className="border-t pt-4 text-muted-foreground text-xs">
+		<Collapsible className="pt-4 text-muted-foreground text-xs">
 			<CollapsibleTrigger className="group flex w-full cursor-pointer items-center gap-1.5 text-left">
 				<ChevronRightIcon className="size-3 shrink-0 transition-transform duration-200 group-data-panel-open:rotate-90" />
 				<span>

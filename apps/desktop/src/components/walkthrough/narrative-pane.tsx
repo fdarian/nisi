@@ -86,6 +86,7 @@ export function NarrativePane({
 						</div>
 					</section>
 				))}
+
 				<UncoveredFiles
 					onSelectionChange={onSelectionChange}
 					selection={selection}
@@ -100,7 +101,7 @@ export function NarrativePane({
 				 * at the end of a document the reader just finished, not a call to
 				 * fix something wrong.
 				 */}
-				<div className="flex items-center justify-end border-t pt-4">
+				<div className="flex items-center justify-end pt-4">
 					<RegenerateControl
 						buttonVariant="ghost"
 						defaultHarness={defaultHarness}
