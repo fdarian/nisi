@@ -228,9 +228,7 @@ describe("Store — tracked-changes writes never snapshot the wrong branch's con
 					if (state === null || state.snapshotHash === null) {
 						return yield* Effect.die("expected a snapshot hash");
 					}
-					const snapshot = yield* reviewStore.readSnapshot(
-						state.snapshotHash,
-					);
+					const snapshot = yield* reviewStore.readSnapshot(state.snapshotHash);
 					return new TextDecoder().decode(snapshot);
 				}).pipe(Effect.provide(makeTestLayer(dataDir))),
 			);
@@ -279,9 +277,7 @@ describe("Store — tracked-changes writes never snapshot the wrong branch's con
 					if (state === null || state.snapshotHash === null) {
 						return yield* Effect.die("expected a snapshot hash");
 					}
-					const snapshot = yield* reviewStore.readSnapshot(
-						state.snapshotHash,
-					);
+					const snapshot = yield* reviewStore.readSnapshot(state.snapshotHash);
 					return new TextDecoder().decode(snapshot);
 				}).pipe(Effect.provide(makeTestLayer(dataDir))),
 			);
@@ -302,10 +298,7 @@ describe("Store — tracked-changes writes never snapshot the wrong branch's con
 			await sh(repoRoot, ["commit", "-q", "-m", "three lines on main"]);
 
 			await sh(repoRoot, ["checkout", "-q", "-b", "feature"]);
-			await Bun.write(
-				join(repoRoot, "a.ts"),
-				"line1\nline2 CHANGED\nline3\n",
-			);
+			await Bun.write(join(repoRoot, "a.ts"), "line1\nline2 CHANGED\nline3\n");
 			await sh(repoRoot, ["add", "-A"]);
 			await sh(repoRoot, ["commit", "-q", "-m", "on feature"]);
 
@@ -351,17 +344,12 @@ describe("Store — tracked-changes writes never snapshot the wrong branch's con
 						[{ startLine: 2, endLine: 2 }],
 						true,
 					);
-					const claims = yield* reviewStore.listRangeClaims(
-						sessionId,
-						"a.ts",
-					);
+					const claims = yield* reviewStore.listRangeClaims(sessionId, "a.ts");
 					const claim = claims.find((c) => c.blockId === "block-1");
 					if (claim === undefined) {
 						return yield* Effect.die("expected a range claim");
 					}
-					const snapshot = yield* reviewStore.readSnapshot(
-						claim.snapshotHash,
-					);
+					const snapshot = yield* reviewStore.readSnapshot(claim.snapshotHash);
 					const fileState = yield* reviewStore.getFileReviewState(
 						sessionId,
 						"a.ts",

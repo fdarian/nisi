@@ -34,7 +34,9 @@ const makeTestRepo = async (): Promise<string> => {
 const run = <A, E>(effect: Effect.Effect<A, E, BunServices.BunServices>) =>
 	Effect.runPromise(effect.pipe(Effect.provide(BunServices.layer)));
 
-const runResult = <A, E>(effect: Effect.Effect<A, E, BunServices.BunServices>) =>
+const runResult = <A, E>(
+	effect: Effect.Effect<A, E, BunServices.BunServices>,
+) =>
 	Effect.runPromise(
 		Effect.result(effect.pipe(Effect.provide(BunServices.layer))),
 	);

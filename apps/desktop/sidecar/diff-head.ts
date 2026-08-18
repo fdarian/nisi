@@ -1,5 +1,5 @@
-import { resolveCurrentBranch, resolveHeadSha } from "@repo/git";
 import type { GitCommandError } from "@repo/git";
+import { resolveCurrentBranch, resolveHeadSha } from "@repo/git";
 import { Effect, Schema } from "effect";
 import type { ChildProcessSpawner } from "effect/unstable/process";
 

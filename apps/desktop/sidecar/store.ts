@@ -33,12 +33,6 @@ import {
 	type WorktreeRelocationFailed,
 } from "@repo/git";
 import {
-	type DiffHead,
-	type InvalidHeadRef,
-	resolveDiffHead,
-	validateHeadRef,
-} from "./diff-head.ts";
-import {
 	type FileReviewState,
 	hashContent,
 	hasUnreviewedRanges,
@@ -57,6 +51,12 @@ import { SettingsStore, type SettingsStoreError } from "@repo/settings";
 import { Context, Effect, Layer, Option, Schema } from "effect";
 import type { FileSystem } from "effect/FileSystem";
 import type { ChildProcessSpawner } from "effect/unstable/process";
+import {
+	type DiffHead,
+	type InvalidHeadRef,
+	resolveDiffHead,
+	validateHeadRef,
+} from "./diff-head.ts";
 
 /** `sessions.open`'s `cwd` doesn't resolve to a git working tree. */
 export class InvalidCwd extends Schema.TaggedErrorClass<InvalidCwd>()(
@@ -83,7 +83,6 @@ export class InvalidBaseRef extends Schema.TaggedErrorClass<InvalidBaseRef>()(
 		stderr: Schema.String,
 	},
 ) {}
-
 
 /**
  * `sessions.open`'s target selector — mirrors `packages/sidecar-api`'s
