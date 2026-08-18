@@ -28,20 +28,33 @@ describe("buildOverview", () => {
 		expect(text).toContain("`feature/x`");
 	});
 
-	test("tells the agent it can reproduce the diff itself via git", () => {
-		const text = buildOverview(baseInput);
-		expect(text).toContain("git diff main...feature/x");
-		expect(text).toContain("real worktree");
+	test("mentions the real worktree", () => {
+		expect(buildOverview(baseInput)).toContain("real worktree");
 	});
 
-	test("notes when uncommitted changes are folded into the diff", () => {
-		const text = buildOverview({ ...baseInput, includeUncommitted: true });
-		expect(text).toContain("including its uncommitted changes");
-	});
-
-	test("notes when uncommitted changes are excluded", () => {
+	// `git diff base...head` (triple-dot) always diffs against the head
+	// *commit* — it's only a faithful reproduction when the session's own
+	// diff is committed-only too.
+	test("committed-only: reproduces the diff with git's triple-dot range", () => {
 		const text = buildOverview({ ...baseInput, includeUncommitted: false });
-		expect(text).toContain("excluding any uncommitted changes");
+		expect(text).toContain("`git diff main...feature/x`");
+		expect(text).not.toContain("merge-base");
+	});
+
+	// A triple-dot range can't express "diff against the worktree" — `@repo/git`
+	// itself runs a bare `git diff <mergeBase>` (no second revision) for this
+	// case (`diff.ts`'s `diffTargetArgs` for a `{ kind: "worktree" }` target),
+	// so the command handed to the agent must match that, not the triple-dot
+	// form.
+	test("includeUncommitted: reproduces the diff against the merge-base alone, not a triple-dot range", () => {
+		const text = buildOverview({ ...baseInput, includeUncommitted: true });
+		expect(text).toContain("`git diff $(git merge-base main feature/x)`");
+		expect(text).not.toContain("main...feature/x");
+	});
+
+	test("includeUncommitted: warns that untracked added files won't show via git diff", () => {
+		const text = buildOverview({ ...baseInput, includeUncommitted: true });
+		expect(text).toContain("untracked");
 	});
 
 	test("reports no changed files", () => {
