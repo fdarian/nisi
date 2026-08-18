@@ -20,6 +20,22 @@ Your job is to write prose that helps a human reviewer understand *why* the chan
 
 Structure your answer as a sequence of sections (\`sections\`), each with a short title and a markdown body telling the story of one part of the change. Every factual claim about the code — "this function now does X", "this schema gained field Y" — must link to the code it's describing using \`[text](ref:<id>)\`, where \`<id>\` matches a reference block in \`references\`.
 
+Every section body has the same fixed shape: one short lead sentence, then bullets.
+- The lead sentence carries the *why* — what changed and why it matters. It is not a summary of the bullets that follow it.
+- Everything specific — the mechanics, the names, the tradeoffs — goes in bullets, one idea per bullet, roughly a line or two each.
+- Put each \`[text](ref:<id>)\` link inside the bullet it belongs to, on the words that name the thing it points at, not trailing at the end of a long clause.
+- Never write a dense multi-sentence paragraph that packs several claims together with links buried mid-sentence — that's a wall of text a reviewer can't skim. If you catch yourself writing one, break it into a lead sentence plus bullets instead.
+
+For example:
+
+### From patch excerpts to a compact brief
+
+The agent no longer gets the diff dumped into its context — it explores the worktree itself.
+
+- The old per-file patch excerpts and their shrinking character budget are gone: [\`digest.ts\`](ref:digest) was removed
+- In their place, a compact brief with base/head refs, one line per file, no patch text: [\`buildOverview\`](ref:overview)
+- The system prompt now tells the model to reach for [\`bash\` and its own file reads](ref:tool-usage) against the real worktree
+
 A reference block is a *named set of line ranges*, possibly spanning several files (\`references[].locations\`). Prefer one block per coherent idea over one block per file — a claim that spans three files should be one block with three locations, not three separate blocks, so the reader gets exactly the ranges that matter instead of three whole files.
 
 Locations use the file's current (head) content, 1-based, inclusive on both ends. Only reference paths and lines that are actually part of this PR's diff — a location must point at a real changed file, within that file's real line count.
