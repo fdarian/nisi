@@ -274,13 +274,7 @@ export function ReferencePane({
 	}
 
 	return (
-		<div className="flex min-h-0 flex-1 flex-col">
-			<div className="flex h-9 shrink-0 items-center gap-2 border-b px-3 text-muted-foreground text-xs">
-				<span className="font-medium text-foreground">{block.label}</span>
-				<span>
-					· {itemGroups.size} {itemGroups.size === 1 ? "file" : "files"}
-				</span>
-			</div>
+		<div className="flex min-h-0 flex-1 flex-col pt-3">
 			{/*
 			 * The vertical inset is `diffCodeViewLayout`'s `paddingTop`/
 			 * `paddingBottom` (`diff-view-theme.ts`), never `py-*` here. A scroll
