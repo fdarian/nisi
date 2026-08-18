@@ -8,8 +8,8 @@ export {
 	validateCoverage,
 } from "./coverage.ts";
 
-export type { DigestBudget, DigestEntry, DigestFile } from "./digest.ts";
-export { buildDigest, defaultDigestBudget, renderDigest } from "./digest.ts";
+export type { OverviewInput } from "./overview.ts";
+export { buildOverview } from "./overview.ts";
 
 export { buildSystemPrompt } from "./prompt.ts";
 

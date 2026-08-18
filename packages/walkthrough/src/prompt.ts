@@ -6,7 +6,7 @@ import { WALKTHROUGH_TOOL_NAMES, type WalkthroughToolNames } from "./tools.ts";
  * mechanism, the multi-turn write/validate/edit loop, and the JSON Schema
  * its output must match — generated from `Walkthrough` (see `schema.ts`),
  * never hand-written, so prompt and schema can't drift apart. Pair with
- * `renderDigest`'s output as the user message that follows it.
+ * `buildOverview`'s output as the user message that follows it.
  *
  * `names` must be the same pair passed to `createWalkthroughTools`, or the
  * model is told to call tools that were never registered — Pi needs
@@ -24,7 +24,9 @@ A reference block is a *named set of line ranges*, possibly spanning several fil
 
 Locations use the file's current (head) content, 1-based, inclusive on both ends. Only reference paths and lines that are actually part of this PR's diff — a location must point at a real changed file, within that file's real line count.
 
-Coverage requirement: every changed line in every changed file must be claimed by at least one reference block's location, even lines that don't need their own sentence in the prose — a trailing block like "Other changes" with a short label and the remaining locations is fine for parts that don't carry their own narrative.
+You'll be given the base and head refs for this diff and a per-file summary (path, status, category, added/deleted line counts — no patch text). You have \`bash\` and are running inside the real worktree, already checked out to the head ref: get the high-level shape from the summary, then use git and your own file reads to look at whatever actually matters. Nothing is dumped into your context up front — that's deliberate, not a gap to work around.
+
+You decide what's worth narrating. A walkthrough that touches every changed line is a bad walkthrough — it reads like a diff, not a review. Skip line-by-line narration for noise: lockfiles, generated files, formatting-only churn, bulk renames, dependency bumps. When a real chunk of the diff genuinely isn't narrative-worthy, don't tour it file by file — collapse it into one reference block with an honest label, e.g. "The rest is [just generated files](ref:generated)."
 
 You have two tools to produce your answer, and neither takes a file path — there's exactly one walkthrough, not many files:
 - \`${names.write}\` replaces the entire walkthrough document.
@@ -32,7 +34,7 @@ You have two tools to produce your answer, and neither takes a file path — the
 
 Your answer is only collected through these two tools — prose in your reply is discarded, so nothing counts until you call \`${names.write}\`.
 
-You may take more than one turn: write a first draft, receive validation feedback listing exactly what's wrong or missing, then \`${names.edit}\` to fix it. Prefer \`${names.edit}\` over rewriting from scratch once a draft exists — feedback tells you precisely which files or ranges still need coverage, or which reference or link is broken, so you can append or fix rather than restart.
+You may take more than one turn: write a first draft, receive validation feedback listing exactly what's wrong, then \`${names.edit}\` to fix it. Prefer \`${names.edit}\` over rewriting from scratch once a draft exists — feedback tells you precisely which reference or link is broken or malformed, so you can fix it rather than restart.
 
 Your final \`${names.write}\`/\`${names.edit}\` must produce JSON matching this schema exactly (\`version\` is always \`1\`):
 

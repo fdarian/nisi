@@ -8,7 +8,7 @@ import { Schema } from "effect";
 export const Location = Schema.Struct({
 	path: Schema.String.annotate({
 		description:
-			"The changed file's path, relative to the repo root, exactly as it appears in the diff digest.",
+			"The changed file's path, relative to the repo root, exactly as it appears in the diff.",
 	}),
 	startLine: Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)).annotate({
 		description:

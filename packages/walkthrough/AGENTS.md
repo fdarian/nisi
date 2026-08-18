@@ -27,9 +27,11 @@ Feeds `packages/sidecar-api`'s `walkthrough` contract; consumed by the sidecar t
 - `validate.ts` — `decodeBuffer` (JSON parse + schema decode, both as data, never thrown) and
   `evaluateWalkthrough`, the per-turn feedback loop composing decode → references → coverage in
   that order.
-- `digest.ts` — `buildDigest`: the per-file patch excerpts fed to the agent under a shrinking
-  char budget (a total cap decremented as files consume it, plus a per-file cap), and
-  `renderDigest` to render them as text.
+- `overview.ts` — `buildOverview`: the compact brief handed to the agent in place of a patch dump —
+  the base/head refs, a one-line-per-file summary (path, status, category, added/deleted counts,
+  no patch text), and the PR title when the session has one. The agent has `bash` and runs inside
+  the real worktree, so it's expected to read whatever it decides matters rather than work from
+  this text alone.
 - `prompt.ts` — `buildSystemPrompt`, generated instructions plus the embedded JSON Schema.
 - `db/schema.ts` — the `walkthroughs` table (Drizzle), exported via the package's `./db`
   subpath so the sidecar can import it without pulling in this package's agent/validation
@@ -57,10 +59,6 @@ Feeds `packages/sidecar-api`'s `walkthrough` contract; consumed by the sidecar t
   lenient by default — a stray field from the model costs nothing rather than burning a retry
   turn on something harmless. Don't add `{ onExcessProperty: "error" }` without deciding that
   tradeoff is worth it.
-- **Digest budget constants (160k total / 4k per file) mirror codiff's `walkthrough.cjs`**
-  (`MAX_TOTAL_PATCH_CHARS` / `MAX_SECTION_PATCH_CHARS`) — proven values, not guesses. Codiff's
-  prompt orders files for review, a different product; only the budget *mechanic* (shrinking
-  total, decremented per file, capped per file) was worth taking.
 - **`ChangedFileFacts.lineCount` is supplied by the caller, not computed here.** Getting a file's
   true head line count means reading its content — I/O this package deliberately doesn't do. The
   caller (sidecar wiring) already has it from `@repo/git`'s `getFileContents()`' `newContent`; a file

@@ -52,8 +52,8 @@ unit-testable against real temp repos without booting anything. Feeds `packages/
   from `@repo/settings` and passes it in, since this package doesn't read settings itself.
 - `diff.ts` — orchestrates the above into `getChangedFiles` (cheap, all files, metadata only) and
   `getFileContents` (every requested path's patch + gated content in one pass, so opening N files
-  in the diff pane, or gathering a walkthrough's digest, costs a constant handful of spawns rather
-  than N times as many — both `apps/desktop/src/lib/pr-data.ts`'s `useFileContents` and
+  in the diff pane, or gathering a walkthrough's per-turn validation facts, costs a constant handful
+  of spawns rather than N times as many — both `apps/desktop/src/lib/pr-data.ts`'s `useFileContents` and
   `apps/desktop/sidecar/walkthrough/context.ts`'s `gatherGenerationContext` call it, there's no
   remaining per-path `getFileContent`). Both default to committed history only
   (`merge-base(baseRef, HEAD)..HEAD`, `includeUncommitted: false`); passing `includeUncommitted:

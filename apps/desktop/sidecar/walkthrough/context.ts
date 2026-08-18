@@ -1,4 +1,5 @@
 import {
+	type FileChange,
 	FileNotChanged,
 	type GitError,
 	getChangedFiles,
@@ -11,7 +12,7 @@ import {
 	type SessionNotFound,
 } from "@repo/review";
 import { SettingsStore, type SettingsStoreError } from "@repo/settings";
-import type { ChangedFileFacts, DigestFile } from "@repo/walkthrough";
+import type { ChangedFileFacts } from "@repo/walkthrough";
 import { Effect, Schema } from "effect";
 import type { FileSystem } from "effect/FileSystem";
 import type { ChildProcessSpawner } from "effect/unstable/process";
@@ -23,8 +24,8 @@ import type { ChildProcessSpawner } from "effect/unstable/process";
  * The walkthrough harness runs a real coding agent directly against
  * `repoRoot`'s worktree (`@repo/harness-local`), not against the diff
  * content this module gathers — so an agent exploring a checkout that's on
- * some third branch entirely would narrate files that don't match the
- * digest it was given. Refused outright rather than silently generating a
+ * some third branch entirely would narrate files that don't match the diff
+ * it was briefed on. Refused outright rather than silently generating a
  * walkthrough that describes one diff while the agent read another; a
  * PR-backed session never trips this, since its `repoRoot` is a worktree
  * nisi created and keeps checked out to exactly that PR's head.
@@ -40,7 +41,12 @@ export class HeadNotCheckedOut extends Schema.TaggedErrorClass<HeadNotCheckedOut
 
 export type GenerationContext = {
 	readonly repoRoot: string;
-	readonly digestFiles: ReadonlyArray<DigestFile>;
+	readonly baseRef: string;
+	readonly headRef: string;
+	readonly includeUncommitted: boolean;
+	readonly files: ReadonlyArray<FileChange>;
+	/** The PR's own title, when this session has one — `undefined` for a plain branch session. Nothing sources a PR body yet (see `@repo/git`'s `PullRequestRef`/`@repo/review`'s `SessionPullRequest` — neither carries one), so there's no body field to thread through here. */
+	readonly pullRequestTitle: string | undefined;
 	readonly changedFileFacts: ReadonlyArray<ChangedFileFacts>;
 	/** file path -> `@repo/git`'s `FileChange.fingerprint`, persisted alongside the generated walkthrough for staleness detection. */
 	readonly fingerprints: Record<string, string>;
@@ -54,18 +60,22 @@ const countLines = (content: string): number => {
 };
 
 /**
- * Everything `@repo/walkthrough`'s pure functions need but can't fetch
- * themselves: the digest's per-file patches and each file's head line count
- * (`ChangedFileFacts.lineCount` — from `getFileContents()`' `newContent`, per
- * that package's AGENTS.md note that this is deliberately the caller's job).
- * Binary files contribute no patch text and no coverage obligation, but
- * still appear in the digest (as `[binary file]`) so the narrative can
- * mention them.
+ * Everything the sidecar needs to both brief the agent
+ * (`@repo/walkthrough`'s `buildOverview` — the base/head refs, a per-file
+ * summary, the PR title) and validate its answer turn by turn
+ * (`ChangedFileFacts` — each file's real patch and head line count,
+ * `lineCount` from `getFileContents()`' `newContent` per that package's
+ * AGENTS.md note that this is deliberately the caller's job). The brief
+ * itself carries no patch text — the agent has `bash` and runs against this
+ * same worktree, so it reads whatever it decides matters instead of being
+ * handed everything up front — but reference/coverage checking still needs
+ * the real patches, so they're fetched here regardless of what the brief
+ * shows.
  *
  * Reads `includeUncommitted` from `@repo/settings` rather than taking it as a
  * parameter — there's no frontend request driving a walkthrough generation
  * (it's `generate.ts`'s own bounded turn loop), so this is the one call site
- * that has to go straight to the persisted setting to keep the digest scoped
+ * that has to go straight to the persisted setting to keep the diff scoped
  * the same way the user's own Files Changed view currently is.
  *
  * Every non-binary file rides in one `getFileContents` call rather than a
@@ -147,10 +157,6 @@ export const gatherGenerationContext = (
 					}),
 		);
 
-		const digestFiles: ReadonlyArray<DigestFile> = withContent.map(
-			({ file, patch }) => ({ ...file, patch }),
-		);
-
 		// Files with no head content (deletions, or content past the size gate
 		// even with `force`) are omitted rather than faked with a zero line
 		// count — see `@repo/walkthrough`'s AGENTS.md on why that's the correct
@@ -169,7 +175,11 @@ export const gatherGenerationContext = (
 
 		return {
 			repoRoot: session.repoRoot,
-			digestFiles,
+			baseRef: session.baseRef,
+			headRef: session.headRef,
+			includeUncommitted,
+			files,
+			pullRequestTitle: session.pr?.title,
 			changedFileFacts,
 			fingerprints,
 		};
