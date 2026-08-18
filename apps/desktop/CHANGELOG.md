@@ -1,5 +1,15 @@
 # @repo/desktop
 
+## 0.2.3
+
+### Patch Changes
+
+- ec6a4cf: `nisi diff <base>..<head>` reviews two branches against each other, neither of which has to be checked out. `a..b` and `a...b` both mean what `head` added since diverging from `base`.
+- b79671f: The walkthrough tab's diff now renders as bordered cards matching the Files Changed tab.
+- ec6a4cf: Fix ticking Reviewed snapshotting the wrong branch's content when the session's head isn't the checked-out branch. The bad snapshot survived reopens.
+- e68112e: The walkthrough agent narrates only what matters instead of linking every changed hunk, and explores the worktree itself rather than working from a pre-truncated patch dump. Files it skipped are listed under the walkthrough — click one to see its hunks.
+- e68112e: Regenerating a walkthrough no longer requires waiting for the files to drift — the control sits at the bottom of the narrative pane at all times.
+
 ## 0.2.2
 
 ### Patch Changes
