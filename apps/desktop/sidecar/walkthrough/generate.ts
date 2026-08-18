@@ -10,12 +10,10 @@ import type {
 	GenerateEvent,
 	HarnessId,
 	StoredWalkthrough,
-	UncoveredFile,
 } from "@repo/sidecar-api";
 import {
 	buildOverview,
 	buildSystemPrompt,
-	type CoverageGap,
 	createBuffer,
 	createWalkthroughTools,
 	evaluateWalkthrough,
@@ -163,18 +161,6 @@ const buildFreshPrompt = (
 
 const buildContinuationPrompt = (overviewText: string): string =>
 	`The PR has changed since your last turn. Updated change overview:\n\n${overviewText}`;
-
-/** `@repo/walkthrough`'s `CoverageGap.missingRanges` renamed onto the wire's `UncoveredFile.ranges` field by field — `sidecar-api` redeclares the range shape rather than importing `CoverageGap` itself (see `UncoveredFile`'s doc), so this is the one place the two line up. */
-const toUncoveredFiles = (
-	gaps: ReadonlyArray<CoverageGap>,
-): ReadonlyArray<UncoveredFile> =>
-	gaps.map((gap) => ({
-		path: gap.path,
-		ranges: gap.missingRanges.map((range) => ({
-			start: range.startLine,
-			end: range.endLine,
-		})),
-	}));
 
 /**
  * `fullStream`'s `error` parts carry whatever the adapter's own transport
@@ -480,7 +466,13 @@ export async function* generateWalkthrough(
 							harness: input.harness,
 							model: input.model ?? null,
 							walkthrough: evaluation.walkthrough,
-							uncoveredFiles: toUncoveredFiles(evaluation.coverageGaps),
+							// `CoverageGap.missingRanges` already carries the wire's
+							// `startLine`/`endLine` field names — only the outer key
+							// (`missingRanges` → `ranges`) needs renaming.
+							uncoveredFiles: evaluation.coverageGaps.map((gap) => ({
+								path: gap.path,
+								ranges: gap.missingRanges,
+							})),
 							fingerprints: context.fingerprints,
 						});
 					}),

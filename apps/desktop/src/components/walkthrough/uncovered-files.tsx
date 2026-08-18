@@ -30,7 +30,7 @@ function pluralize(count: number, noun: string): string {
 
 function lineCount(file: UncoveredFile): number {
 	return file.ranges.reduce(
-		(sum, range) => sum + (range.end - range.start + 1),
+		(sum, range) => sum + (range.endLine - range.startLine + 1),
 		0,
 	);
 }

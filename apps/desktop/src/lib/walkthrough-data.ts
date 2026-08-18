@@ -79,11 +79,14 @@ export type Walkthrough = {
  * file whose changed lines this walkthrough's reference blocks never claim,
  * as the actual head-file line ranges (1-based inclusive) rather than just a
  * count — clicking one in `UncoveredFiles` drives the reference pane to
- * exactly those skipped hunks. Derived, not authored by the agent.
+ * exactly those skipped hunks. `ranges` reuses `WalkthroughLocation`'s own
+ * `startLine`/`endLine` field names, so `resolveSelection`
+ * (`walkthrough-view.tsx`) can turn one straight into a `WalkthroughLocation`
+ * with no field juggling. Derived, not authored by the agent.
  */
 export type UncoveredFile = {
 	path: string;
-	ranges: ReadonlyArray<{ start: number; end: number }>;
+	ranges: ReadonlyArray<{ startLine: number; endLine: number }>;
 };
 
 /**

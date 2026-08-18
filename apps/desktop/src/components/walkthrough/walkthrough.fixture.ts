@@ -363,19 +363,19 @@ export const FIXTURE_UNCOVERED_FILES: readonly UncoveredFile[] = [
 	{
 		path: TODOS_PATH,
 		ranges: [
-			{ start: 7, end: 7 },
-			{ start: 12, end: 13 },
-			{ start: 16, end: 19 },
+			{ startLine: 7, endLine: 7 },
+			{ startLine: 12, endLine: 13 },
+			{ startLine: 16, endLine: 19 },
 		],
 	},
 	{
 		path: TODO_ITEM_PATH,
 		ranges: [
-			{ start: 1, end: 1 },
-			{ start: 15, end: 15 },
+			{ startLine: 1, endLine: 1 },
+			{ startLine: 15, endLine: 15 },
 		],
 	},
-	{ path: TODO_LIST_PATH, ranges: [{ start: 1, end: 1 }] },
+	{ path: TODO_LIST_PATH, ranges: [{ startLine: 1, endLine: 1 }] },
 ];
 
 /** Same walkthrough, but as if every changed line were claimed by some reference block. */

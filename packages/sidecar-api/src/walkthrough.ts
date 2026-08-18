@@ -113,17 +113,17 @@ export type Walkthrough = Schema.Schema.Type<typeof Walkthrough>;
  * One file whose changed lines the walkthrough didn't fully narrate —
  * `ranges` mirrors `@repo/walkthrough`'s `coverage.ts` `CoverageGap.missingRanges`
  * as-is (redeclared here rather than imported, same dependency-free rule as
- * `Location` above; field names are `start`/`end` rather than
- * `startLine`/`endLine` since this struct has no other line-range field to
- * disambiguate from). Lets the frontend open the diff pane on exactly the
- * hunks the walkthrough skipped, rather than just reporting that some were.
+ * `Location` above), reusing `Location`'s own `startLine`/`endLine` field
+ * names rather than a shorter pair, since the frontend turns one of these
+ * straight into a `Location` (`WalkthroughView`'s `resolveSelection`) to
+ * drive the reference pane on exactly the hunks the walkthrough skipped.
  * Derived metadata about the walkthrough, not part of it — deliberately not
  * a field on `Walkthrough` itself, which is the agent's output contract.
  */
 export const UncoveredFile = Schema.Struct({
 	path: Schema.String,
 	ranges: Schema.Array(
-		Schema.Struct({ start: Schema.Number, end: Schema.Number }),
+		Schema.Struct({ startLine: Schema.Number, endLine: Schema.Number }),
 	),
 });
 export type UncoveredFile = Schema.Schema.Type<typeof UncoveredFile>;

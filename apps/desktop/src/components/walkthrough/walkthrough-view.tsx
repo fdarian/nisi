@@ -58,11 +58,9 @@ function resolveSelection(
 	return {
 		id: `uncovered:${file.path}`,
 		label: "Not covered by this walkthrough",
-		locations: file.ranges.map((range) => ({
-			path: file.path,
-			startLine: range.start,
-			endLine: range.end,
-		})),
+		// `range` already carries `startLine`/`endLine` — `UncoveredFile.ranges`
+		// reuses `Location`'s own field names for exactly this straight pass.
+		locations: file.ranges.map((range) => ({ path: file.path, ...range })),
 	};
 }
 
