@@ -1,21 +1,25 @@
 "use client";
 
 /**
- * The left pane: every section's markdown body, in order, followed by
- * `UncoveredFiles` — what the walkthrough skipped, read as a footnote to the
- * prose rather than a chrome bar across the whole tab, hence the same scroll
- * flow. The one thing that matters in the prose itself is `[text](ref:<id>)`
- * — react-markdown resolves those to plain `<a href="ref:<id>">` elements,
- * which this intercepts via a custom `a` renderer: no navigation, just
- * selecting the block in the right pane. The link renders as an inline
- * `<button>` with all default button chrome stripped, so it reads as part of
- * the prose rather than a UI control.
+ * The left pane: every section's markdown body, in order, followed by two
+ * footnotes to the prose — `UncoveredFiles` (what the walkthrough skipped)
+ * and a persistent `RegenerateControl` (below the reader, not gated on
+ * drift like `OutdatedBanner`) — all in the same scroll flow. The one thing
+ * that matters in the prose itself is `[text](ref:<id>)` — react-markdown
+ * resolves those to plain `<a href="ref:<id>">` elements, which this
+ * intercepts via a custom `a` renderer: no navigation, just selecting the
+ * block in the right pane. The link renders as an inline `<button>` with all
+ * default button chrome stripped, so it reads as part of the prose rather
+ * than a UI control.
  */
 import { useMemo } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
+import { RegenerateControl } from "#/components/walkthrough/regenerate-control";
 import { UncoveredFiles } from "#/components/walkthrough/uncovered-files";
+import type { SidecarQueryUtils } from "#/lib/backend-context";
 import { cn } from "#/lib/utils";
 import type {
+	HarnessId,
 	UncoveredFile,
 	WalkthroughSection,
 	WalkthroughSelection,
@@ -30,6 +34,11 @@ type NarrativePaneProps = {
 	knownBlockIds: ReadonlySet<string>;
 	onSelectionChange: (selection: WalkthroughSelection) => void;
 	uncoveredFiles: readonly UncoveredFile[] | undefined;
+	orpc: SidecarQueryUtils;
+	/** The harness/model the *current* stored walkthrough was generated with — `RegenerateControl`'s default. */
+	defaultHarness: HarnessId;
+	defaultModel: string | null;
+	onRegenerate: (harness: HarnessId, model: string | undefined) => void;
 };
 
 export function NarrativePane({
@@ -39,6 +48,10 @@ export function NarrativePane({
 	knownBlockIds,
 	onSelectionChange,
 	uncoveredFiles,
+	orpc,
+	defaultHarness,
+	defaultModel,
+	onRegenerate,
 }: NarrativePaneProps): React.ReactElement {
 	const components = useMarkdownComponents(
 		selection,
@@ -78,6 +91,24 @@ export function NarrativePane({
 					selection={selection}
 					uncoveredFiles={uncoveredFiles}
 				/>
+				{/*
+				 * A sibling of `UncoveredFiles`, not nested inside it — regeneration
+				 * has to stay available even when `uncoveredFiles` is `undefined`
+				 * (nothing rendered above) or `[]` (a one-line "covers everything"
+				 * note, not a collapsible with room for a trailing action). Styled
+				 * quiet/ghost, not `OutdatedBanner`'s warning treatment: this sits
+				 * at the end of a document the reader just finished, not a call to
+				 * fix something wrong.
+				 */}
+				<div className="flex items-center justify-end border-t pt-4">
+					<RegenerateControl
+						buttonVariant="ghost"
+						defaultHarness={defaultHarness}
+						defaultModel={defaultModel}
+						onRegenerate={onRegenerate}
+						orpc={orpc}
+					/>
+				</div>
 			</div>
 		</div>
 	);

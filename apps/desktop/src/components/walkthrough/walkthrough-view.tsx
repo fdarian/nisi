@@ -149,8 +149,12 @@ export function WalkthroughView({
 			<div className="flex min-h-0 flex-1">
 				<div className="flex min-h-0 flex-1 flex-col">
 					<NarrativePane
+						defaultHarness={walkthrough.harness}
+						defaultModel={walkthrough.model}
 						knownBlockIds={knownBlockIds}
+						onRegenerate={generation.generate}
 						onSelectionChange={onSelectionChange}
+						orpc={orpc}
 						outdatedBlockIds={drift.outdatedBlockIds}
 						sections={walkthrough.walkthrough.sections}
 						selection={selection}
