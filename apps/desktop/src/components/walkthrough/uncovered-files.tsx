@@ -6,7 +6,11 @@ import {
 	CollapsibleContent,
 	CollapsibleTrigger,
 } from "#/components/ui/collapsible";
-import type { UncoveredFile } from "#/lib/walkthrough-data";
+import { cn } from "#/lib/utils";
+import type {
+	UncoveredFile,
+	WalkthroughSelection,
+} from "#/lib/walkthrough-data";
 
 type UncoveredFilesProps = {
 	/**
@@ -16,6 +20,8 @@ type UncoveredFilesProps = {
 	 * claims. See `StoredWalkthrough.uncoveredFiles`'s doc.
 	 */
 	uncoveredFiles: readonly UncoveredFile[] | undefined;
+	selection: WalkthroughSelection | null;
+	onSelectionChange: (selection: WalkthroughSelection) => void;
 };
 
 function pluralize(count: number, noun: string): string {
@@ -39,9 +45,17 @@ function lineCount(file: UncoveredFile): number {
  * summarizes the gap, expanding lists exactly which files and how many
  * lines. Deliberately plain — no icon, no tint — unlike `OutdatedBanner`'s
  * warning treatment, since nothing here is wrong.
+ *
+ * Each listed file is clickable — it drives the reference pane the same way
+ * a `[text](ref:<id>)` link does, just resolved as `{kind: "uncovered"}`
+ * rather than a real reference block (`WalkthroughView`'s selection
+ * resolution). Selected state mirrors a selected `ref:` link's
+ * `bg-accent/60` treatment in `narrative-pane.tsx`.
  */
 export function UncoveredFiles({
 	uncoveredFiles,
+	selection,
+	onSelectionChange,
 }: UncoveredFilesProps): React.ReactElement | null {
 	if (uncoveredFiles === undefined) return null;
 
@@ -69,14 +83,29 @@ export function UncoveredFiles({
 			</CollapsibleTrigger>
 			<CollapsibleContent>
 				<ul className="flex flex-col gap-1 py-2 pl-[18px] font-mono text-[0.6875rem]">
-					{uncoveredFiles.map((file) => (
-						<li className="flex items-center gap-2" key={file.path}>
-							<span className="min-w-0 flex-1 truncate">{file.path}</span>
-							<span className="shrink-0 tabular-nums">
-								{pluralize(lineCount(file), "line")}
-							</span>
-						</li>
-					))}
+					{uncoveredFiles.map((file) => {
+						const isSelected =
+							selection?.kind === "uncovered" && selection.path === file.path;
+						return (
+							<li key={file.path}>
+								<button
+									className={cn(
+										"flex w-full cursor-pointer items-center gap-2 rounded-sm px-1 py-0.5 text-left hover:bg-accent/60",
+										isSelected && "bg-accent/60",
+									)}
+									onClick={() =>
+										onSelectionChange({ kind: "uncovered", path: file.path })
+									}
+									type="button"
+								>
+									<span className="min-w-0 flex-1 truncate">{file.path}</span>
+									<span className="shrink-0 tabular-nums">
+										{pluralize(lineCount(file), "line")}
+									</span>
+								</button>
+							</li>
+						);
+					})}
 				</ul>
 			</CollapsibleContent>
 		</Collapsible>

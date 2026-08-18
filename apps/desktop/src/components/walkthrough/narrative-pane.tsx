@@ -15,32 +15,36 @@ import { useMemo } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import { UncoveredFiles } from "#/components/walkthrough/uncovered-files";
 import { cn } from "#/lib/utils";
-import type { UncoveredFile, WalkthroughSection } from "#/lib/walkthrough-data";
+import type {
+	UncoveredFile,
+	WalkthroughSection,
+	WalkthroughSelection,
+} from "#/lib/walkthrough-data";
 
 const REF_PREFIX = "ref:";
 
 type NarrativePaneProps = {
 	sections: readonly WalkthroughSection[];
-	selectedBlockId: string | null;
+	selection: WalkthroughSelection | null;
 	outdatedBlockIds: ReadonlySet<string>;
 	knownBlockIds: ReadonlySet<string>;
-	onSelectBlock: (blockId: string) => void;
+	onSelectionChange: (selection: WalkthroughSelection) => void;
 	uncoveredFiles: readonly UncoveredFile[] | undefined;
 };
 
 export function NarrativePane({
 	sections,
-	selectedBlockId,
+	selection,
 	outdatedBlockIds,
 	knownBlockIds,
-	onSelectBlock,
+	onSelectionChange,
 	uncoveredFiles,
 }: NarrativePaneProps): React.ReactElement {
 	const components = useMarkdownComponents(
-		selectedBlockId,
+		selection,
 		outdatedBlockIds,
 		knownBlockIds,
-		onSelectBlock,
+		onSelectionChange,
 	);
 
 	return (
@@ -69,17 +73,21 @@ export function NarrativePane({
 						</div>
 					</section>
 				))}
-				<UncoveredFiles uncoveredFiles={uncoveredFiles} />
+				<UncoveredFiles
+					onSelectionChange={onSelectionChange}
+					selection={selection}
+					uncoveredFiles={uncoveredFiles}
+				/>
 			</div>
 		</div>
 	);
 }
 
 function useMarkdownComponents(
-	selectedBlockId: string | null,
+	selection: WalkthroughSelection | null,
 	outdatedBlockIds: ReadonlySet<string>,
 	knownBlockIds: ReadonlySet<string>,
-	onSelectBlock: (blockId: string) => void,
+	onSelectionChange: (selection: WalkthroughSelection) => void,
 ): Components {
 	return useMemo<Components>(
 		() => ({
@@ -115,15 +123,19 @@ function useMarkdownComponents(
 
 				const isKnown = knownBlockIds.has(blockId);
 				const isOutdated = outdatedBlockIds.has(blockId);
+				const isSelected =
+					selection?.kind === "reference" && selection.id === blockId;
 
 				return (
 					<button
 						className={cn(
 							"inline cursor-pointer border-0 bg-transparent p-0 font-medium text-inherit underline decoration-dotted underline-offset-2 hover:decoration-solid disabled:cursor-not-allowed disabled:opacity-64",
-							selectedBlockId === blockId && "rounded-sm bg-accent/60",
+							isSelected && "rounded-sm bg-accent/60",
 						)}
 						disabled={!isKnown}
-						onClick={() => onSelectBlock(blockId)}
+						onClick={() =>
+							onSelectionChange({ kind: "reference", id: blockId })
+						}
 						title={isKnown ? undefined : "This reference no longer exists"}
 						type="button"
 					>
@@ -140,6 +152,6 @@ function useMarkdownComponents(
 				);
 			},
 		}),
-		[knownBlockIds, onSelectBlock, outdatedBlockIds, selectedBlockId],
+		[knownBlockIds, onSelectionChange, outdatedBlockIds, selection],
 	);
 }

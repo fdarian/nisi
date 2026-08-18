@@ -87,6 +87,20 @@ export type UncoveredFile = {
 };
 
 /**
+ * What the reference pane is currently showing: either a `[text](ref:<id>)`
+ * link's reference block (`kind: "reference"`, resolved against
+ * `walkthrough.walkthrough.references`), or a file clicked in the
+ * uncovered-files list (`kind: "uncovered"`). Kept as a union rather than
+ * reusing a reference block id for both — an uncovered file is precisely
+ * *not* a reference block, nothing in `walkthrough.walkthrough.references`
+ * claims it, and collapsing the distinction behind one id space would make
+ * that untrue for every future reader of this state.
+ */
+export type WalkthroughSelection =
+	| { kind: "reference"; id: string }
+	| { kind: "uncovered"; path: string };
+
+/**
  * Mirrors `StoredWalkthrough` — `fingerprints` is the file-path → `FileChange.fingerprint` map
  * captured at generation time, compared against the session's *current* fingerprints by
  * `useWalkthroughDrift` below. `uncoveredFiles` is `undefined` for a walkthrough generated before
