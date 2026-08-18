@@ -76,11 +76,15 @@ export type Walkthrough = {
 
 /**
  * Mirrors `UncoveredFile` (`packages/sidecar-api/src/walkthrough.ts`) — one
- * file whose changed lines this walkthrough's reference blocks never claim.
- * Derived, not authored by the agent; see that type's doc for why it's a
- * count rather than the actual line ranges.
+ * file whose changed lines this walkthrough's reference blocks never claim,
+ * as the actual head-file line ranges (1-based inclusive) rather than just a
+ * count — clicking one in `UncoveredFiles` drives the reference pane to
+ * exactly those skipped hunks. Derived, not authored by the agent.
  */
-export type UncoveredFile = { path: string; uncoveredLineCount: number };
+export type UncoveredFile = {
+	path: string;
+	ranges: ReadonlyArray<{ start: number; end: number }>;
+};
 
 /**
  * Mirrors `StoredWalkthrough` — `fingerprints` is the file-path → `FileChange.fingerprint` map

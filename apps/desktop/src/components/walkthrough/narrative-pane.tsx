@@ -1,17 +1,21 @@
 "use client";
 
 /**
- * The left pane: every section's markdown body, in order. The one thing that
- * matters is `[text](ref:<id>)` — react-markdown resolves those to plain
- * `<a href="ref:<id>">` elements, which this intercepts via a custom `a`
- * renderer: no navigation, just selecting the block in the right pane. The
- * link renders as an inline `<button>` with all default button chrome
- * stripped, so it reads as part of the prose rather than a UI control.
+ * The left pane: every section's markdown body, in order, followed by
+ * `UncoveredFiles` — what the walkthrough skipped, read as a footnote to the
+ * prose rather than a chrome bar across the whole tab, hence the same scroll
+ * flow. The one thing that matters in the prose itself is `[text](ref:<id>)`
+ * — react-markdown resolves those to plain `<a href="ref:<id>">` elements,
+ * which this intercepts via a custom `a` renderer: no navigation, just
+ * selecting the block in the right pane. The link renders as an inline
+ * `<button>` with all default button chrome stripped, so it reads as part of
+ * the prose rather than a UI control.
  */
 import { useMemo } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
+import { UncoveredFiles } from "#/components/walkthrough/uncovered-files";
 import { cn } from "#/lib/utils";
-import type { WalkthroughSection } from "#/lib/walkthrough-data";
+import type { UncoveredFile, WalkthroughSection } from "#/lib/walkthrough-data";
 
 const REF_PREFIX = "ref:";
 
@@ -21,6 +25,7 @@ type NarrativePaneProps = {
 	outdatedBlockIds: ReadonlySet<string>;
 	knownBlockIds: ReadonlySet<string>;
 	onSelectBlock: (blockId: string) => void;
+	uncoveredFiles: readonly UncoveredFile[] | undefined;
 };
 
 export function NarrativePane({
@@ -29,6 +34,7 @@ export function NarrativePane({
 	outdatedBlockIds,
 	knownBlockIds,
 	onSelectBlock,
+	uncoveredFiles,
 }: NarrativePaneProps): React.ReactElement {
 	const components = useMarkdownComponents(
 		selectedBlockId,
@@ -63,6 +69,7 @@ export function NarrativePane({
 						</div>
 					</section>
 				))}
+				<UncoveredFiles uncoveredFiles={uncoveredFiles} />
 			</div>
 		</div>
 	);

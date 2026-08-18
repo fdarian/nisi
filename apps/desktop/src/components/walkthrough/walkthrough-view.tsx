@@ -6,7 +6,6 @@ import { GeneratePanel } from "#/components/walkthrough/generate-panel";
 import { NarrativePane } from "#/components/walkthrough/narrative-pane";
 import { OutdatedBanner } from "#/components/walkthrough/outdated-banner";
 import { ReferencePane } from "#/components/walkthrough/reference-pane";
-import { UncoveredFiles } from "#/components/walkthrough/uncovered-files";
 import type { SidecarQueryUtils } from "#/lib/backend-context";
 import type { FileChange, Session } from "#/lib/pr-data";
 import {
@@ -111,6 +110,7 @@ export function WalkthroughView({
 						outdatedBlockIds={drift.outdatedBlockIds}
 						sections={walkthrough.walkthrough.sections}
 						selectedBlockId={selectedBlockId}
+						uncoveredFiles={walkthrough.uncoveredFiles}
 					/>
 				</div>
 				<div className="flex min-h-0 w-[42%] max-w-2xl flex-col">
@@ -123,7 +123,6 @@ export function WalkthroughView({
 					/>
 				</div>
 			</div>
-			<UncoveredFiles uncoveredFiles={walkthrough.uncoveredFiles} />
 		</div>
 	);
 }

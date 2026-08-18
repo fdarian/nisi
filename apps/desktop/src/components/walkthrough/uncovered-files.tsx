@@ -22,16 +22,23 @@ function pluralize(count: number, noun: string): string {
 	return `${count} ${noun}${count === 1 ? "" : "s"}`;
 }
 
+function lineCount(file: UncoveredFile): number {
+	return file.ranges.reduce(
+		(sum, range) => sum + (range.end - range.start + 1),
+		0,
+	);
+}
+
 /**
- * A quiet footnote under the reader, not a warning — hunk coverage used to be
- * mandatory, forcing every changed line into a reference block; now the agent
- * decides what's worth narrating and is expected to collapse noise into one
- * honestly-labeled block instead (`@repo/walkthrough`'s `coverage.ts` is
- * informational, never a rejection reason). This is where a reviewer finds
- * out what got skipped. Collapsed by default: the trigger summarizes the
- * gap, expanding lists exactly which files and how many lines. Deliberately
- * plain — no icon, no tint — unlike `OutdatedBanner`'s warning treatment,
- * since nothing here is wrong.
+ * A quiet footnote under the reader's prose, not a warning — hunk coverage
+ * used to be mandatory, forcing every changed line into a reference block;
+ * now the agent decides what's worth narrating and is expected to collapse
+ * noise into one honestly-labeled block instead (`@repo/walkthrough`'s
+ * `coverage.ts` is informational, never a rejection reason). This is where a
+ * reviewer finds out what got skipped. Collapsed by default: the trigger
+ * summarizes the gap, expanding lists exactly which files and how many
+ * lines. Deliberately plain — no icon, no tint — unlike `OutdatedBanner`'s
+ * warning treatment, since nothing here is wrong.
  */
 export function UncoveredFiles({
 	uncoveredFiles,
@@ -40,19 +47,19 @@ export function UncoveredFiles({
 
 	if (uncoveredFiles.length === 0) {
 		return (
-			<div className="shrink-0 border-t px-4 py-2 text-muted-foreground text-xs">
+			<div className="border-t pt-4 text-muted-foreground text-xs">
 				This walkthrough covers every changed line.
 			</div>
 		);
 	}
 
 	const totalLines = uncoveredFiles.reduce(
-		(sum, file) => sum + file.uncoveredLineCount,
+		(sum, file) => sum + lineCount(file),
 		0,
 	);
 
 	return (
-		<Collapsible className="shrink-0 border-t px-4 py-2 text-muted-foreground text-xs">
+		<Collapsible className="border-t pt-4 text-muted-foreground text-xs">
 			<CollapsibleTrigger className="group flex w-full cursor-pointer items-center gap-1.5 text-left">
 				<ChevronRightIcon className="size-3 shrink-0 transition-transform duration-200 group-data-panel-open:rotate-90" />
 				<span>
@@ -66,7 +73,7 @@ export function UncoveredFiles({
 						<li className="flex items-center gap-2" key={file.path}>
 							<span className="min-w-0 flex-1 truncate">{file.path}</span>
 							<span className="shrink-0 tabular-nums">
-								{pluralize(file.uncoveredLineCount, "line")}
+								{pluralize(lineCount(file), "line")}
 							</span>
 						</li>
 					))}

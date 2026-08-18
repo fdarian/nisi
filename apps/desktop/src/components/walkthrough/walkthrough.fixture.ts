@@ -352,16 +352,30 @@ Unmounting \`TodoList\` — closing the tab, navigating away — calls [\`flushP
  * The real gaps between `FIXTURE_WALKTHROUGH.walkthrough.references`'
  * `locations` and each patch's own added-line ranges, hand-counted the same
  * way the locations above are: the `pendingSince`/`flushPending` type-shape
- * edits on `TODOS_PATH` (head lines 1-19, none of which any block claims),
- * `TODO_ITEM_PATH`'s import line and `pendingSince` prop destructure, and
- * `TODO_LIST_PATH`'s `useEffect` import — every one a signature/import tweak
- * the walkthrough judged not worth narrating on its own, not something it
- * missed.
+ * edits on `TODOS_PATH` (head lines 7, 12-13, and 16-19 — the added lines
+ * inside the first hunk's 1-19 window that no block claims),
+ * `TODO_ITEM_PATH`'s import line (1) and `pendingSince` prop destructure
+ * (15), and `TODO_LIST_PATH`'s `useEffect` import (1) — every one a
+ * signature/import tweak the walkthrough judged not worth narrating on its
+ * own, not something it missed.
  */
 export const FIXTURE_UNCOVERED_FILES: readonly UncoveredFile[] = [
-	{ path: TODOS_PATH, uncoveredLineCount: 7 },
-	{ path: TODO_ITEM_PATH, uncoveredLineCount: 2 },
-	{ path: TODO_LIST_PATH, uncoveredLineCount: 1 },
+	{
+		path: TODOS_PATH,
+		ranges: [
+			{ start: 7, end: 7 },
+			{ start: 12, end: 13 },
+			{ start: 16, end: 19 },
+		],
+	},
+	{
+		path: TODO_ITEM_PATH,
+		ranges: [
+			{ start: 1, end: 1 },
+			{ start: 15, end: 15 },
+		],
+	},
+	{ path: TODO_LIST_PATH, ranges: [{ start: 1, end: 1 }] },
 ];
 
 /** Same walkthrough, but as if every changed line were claimed by some reference block. */
