@@ -20,7 +20,6 @@ import {
 	readFileContentsAtRef,
 	readWorktreeBlobContent,
 	resolveCurrentBranch,
-	resolveHeadSha,
 	resolveMergeBase,
 	resolvePullRequestHeadRef,
 	resolveRepoRoot,
@@ -33,6 +32,12 @@ import {
 	type WorktreeReadFailed,
 	type WorktreeRelocationFailed,
 } from "@repo/git";
+import {
+	type DiffHead,
+	type InvalidHeadRef,
+	resolveDiffHead,
+	validateHeadRef,
+} from "./diff-head.ts";
 import {
 	type FileReviewState,
 	hashContent,
@@ -75,16 +80,6 @@ export class InvalidBaseRef extends Schema.TaggedErrorClass<InvalidBaseRef>()(
 	{
 		repoRoot: Schema.String,
 		baseRef: Schema.String,
-		stderr: Schema.String,
-	},
-) {}
-
-/** `sessions.open`'s `target: { kind: "branch", headRef }` (the range-spelling form of `nisi diff <base>..<head>`) named a ref `git` couldn't resolve. Mirrors `InvalidBaseRef` — kept as its own tag rather than reusing it so a typo on either side of the range is attributed to the ref that was actually bad. */
-export class InvalidHeadRef extends Schema.TaggedErrorClass<InvalidHeadRef>()(
-	"InvalidHeadRef",
-	{
-		repoRoot: Schema.String,
-		headRef: Schema.String,
 		stderr: Schema.String,
 	},
 ) {}
@@ -279,8 +274,8 @@ const toWireSession = (session: ReviewSession): Session => ({
  * (`listChangedFiles`/`readFileContents`) and every write
  * (`setFileViewed`/`setRangeViewed`) alike — must re-derive whether the
  * worktree is still trustworthy rather than assume this function's answer
- * still holds; see `resolveDiffHead` below, which every one of them
- * consults independently.
+ * still holds; see `diff-head.ts`'s `resolveDiffHead` and this file's
+ * `resolveSessionDiffHead`.
  */
 const resolveSessionTarget = (repoRoot: string, target: OpenSessionTarget) =>
 	Effect.gen(function* () {
@@ -289,17 +284,7 @@ const resolveSessionTarget = (repoRoot: string, target: OpenSessionTarget) =>
 			const explicitHeadRef = target.headRef;
 
 			if (explicitHeadRef !== undefined) {
-				yield* resolveHeadSha(repoRoot, explicitHeadRef).pipe(
-					Effect.catchTag("GitCommandError", (cause) =>
-						Effect.fail(
-							new InvalidHeadRef({
-								repoRoot,
-								headRef: explicitHeadRef,
-								stderr: cause.stderr,
-							}),
-						),
-					),
-				);
+				yield* validateHeadRef(repoRoot, explicitHeadRef);
 			}
 
 			yield* resolveMergeBase(repoRoot, baseRef, explicitHeadRef).pipe(
@@ -715,59 +700,13 @@ export class Store extends Context.Service<Store>()("Store", {
 			});
 
 		/**
-		 * What every git call against `session` should treat as its head, plus
-		 * whether it's safe to overlay `repoRoot`'s worktree on top of it at
-		 * all — consulted by every read (`listChangedFiles`/`readFileContents`)
-		 * and write (`setFileViewed`/`setRangeViewed`) path that touches a
-		 * session's files, so the two can never disagree about which commit
-		 * "head" means right now.
-		 *
-		 * A PR-backed session (`session.pr !== null`) is always worktree-
-		 * eligible without even checking: its `repoRoot` is a worktree nisi
-		 * created and keeps checked out to exactly this PR's head (see
-		 * `@repo/git`'s `worktree.ts`) — and `session.headRef` there is the PR
-		 * author's own branch name, which isn't guaranteed to resolve as a ref
-		 * in that worktree at all (nisi checks the PR out onto its own
-		 * `nisi/pr-<n>/<headRef>` branch), so it must never be passed to
-		 * `getChangedFiles`/`getFileContents` as an explicit `headRef` either
-		 * — literal `HEAD` is already the right target.
-		 *
-		 * A plain branch session (`session.pr === null`) compares
-		 * `session.headRef` against what's actually checked out right now
-		 * (`resolveCurrentBranch`) — not stored once at open time — so a
-		 * session drifts in and out of worktree-eligibility as the caller
-		 * checks different branches out, rather than staying pinned to
-		 * whatever was true when the session opened. This covers both
-		 * directions: an explicit, never-checked-out head (`nisi diff
-		 * <base>..<head>`) starts ineligible and self-heals the moment the
-		 * caller checks it out; an ordinary session (`headRef` equal to the
-		 * checkout at open time) goes ineligible the moment the caller checks
-		 * out something else — every subsequent read *and write* must follow
-		 * that, not keep treating the worktree as if it still belonged to
-		 * this session.
+		 * `session`'s {@link DiffHead} — see `diff-head.ts`'s `resolveDiffHead`
+		 * for the decision itself; this just adapts a `ReviewSession` to that
+		 * function's plain `(repoRoot, headRef, hasPullRequest)` signature, so
+		 * every call site below reads the same way.
 		 */
-		const resolveDiffHead = (
-			session: ReviewSession,
-			repoRoot: string,
-		): Effect.Effect<
-			{
-				readonly headRef: string | undefined;
-				readonly worktreeEligible: boolean;
-			},
-			GitCommandError,
-			ChildProcessSpawner.ChildProcessSpawner
-		> =>
-			session.pr !== null
-				? Effect.succeed({ headRef: undefined, worktreeEligible: true })
-				: resolveCurrentBranch(repoRoot).pipe(
-						Effect.map((currentBranch) => {
-							const worktreeEligible = currentBranch === session.headRef;
-							return {
-								headRef: worktreeEligible ? undefined : session.headRef,
-								worktreeEligible,
-							};
-						}),
-					);
+		const resolveSessionDiffHead = (session: ReviewSession, repoRoot: string) =>
+			resolveDiffHead(repoRoot, session.headRef, session.pr !== null);
 
 		/**
 		 * `path`'s content right now, per `diffHead`: worktree bytes when
@@ -783,10 +722,7 @@ export class Store extends Context.Service<Store>()("Store", {
 		const readCurrentBlobContent = (
 			repoRoot: string,
 			path: string,
-			diffHead: {
-				readonly headRef: string | undefined;
-				readonly worktreeEligible: boolean;
-			},
+			diffHead: DiffHead,
 		): Effect.Effect<
 			Option.Option<Uint8Array>,
 			WorktreeReadFailed | GitCommandError,
@@ -804,7 +740,7 @@ export class Store extends Context.Service<Store>()("Store", {
 			Effect.gen(function* () {
 				const session = yield* reviewStore.getSession(sessionId);
 				const repoRoot = yield* resolveLiveRepoRoot(session);
-				const diffHead = yield* resolveDiffHead(session, repoRoot);
+				const diffHead = yield* resolveSessionDiffHead(session, repoRoot);
 				const effectiveIncludeUncommitted =
 					includeUncommitted && diffHead.worktreeEligible;
 				const files = yield* getChangedFiles(repoRoot, session.baseRef, {
@@ -990,7 +926,7 @@ export class Store extends Context.Service<Store>()("Store", {
 			Effect.gen(function* () {
 				const session = yield* reviewStore.getSession(sessionId);
 				const repoRoot = yield* resolveLiveRepoRoot(session);
-				const diffHead = yield* resolveDiffHead(session, repoRoot);
+				const diffHead = yield* resolveSessionDiffHead(session, repoRoot);
 				const effectiveIncludeUncommitted =
 					includeUncommitted && diffHead.worktreeEligible;
 				const contentByPath = yield* getFileContents(
@@ -1112,7 +1048,7 @@ export class Store extends Context.Service<Store>()("Store", {
 		 * file's *current* content directly via `readCurrentBlobContent` — a
 		 * plain read, not `@repo/git`'s size-gated `getFileContents`, since a
 		 * review snapshot's whole point is fidelity. "Current" follows
-		 * `resolveDiffHead`: the live worktree when the session's head
+		 * `resolveSessionDiffHead`: the live worktree when the session's head
 		 * is actually what's checked out, otherwise `headRef`'s own committed
 		 * blob — ticking Reviewed while the worktree belongs to a different
 		 * branch must never snapshot that other branch's content. A missing
@@ -1133,7 +1069,7 @@ export class Store extends Context.Service<Store>()("Store", {
 				}
 				const session = yield* reviewStore.getSession(sessionId);
 				const repoRoot = yield* resolveLiveRepoRoot(session);
-				const diffHead = yield* resolveDiffHead(session, repoRoot);
+				const diffHead = yield* resolveSessionDiffHead(session, repoRoot);
 				const content = yield* readCurrentBlobContent(repoRoot, path, diffHead);
 				yield* reviewStore.markFileViewed(sessionId, path, content);
 			});
@@ -1167,10 +1103,7 @@ export class Store extends Context.Service<Store>()("Store", {
 			session: ReviewSession,
 			repoRoot: string,
 			path: string,
-			diffHead: {
-				readonly headRef: string | undefined;
-				readonly worktreeEligible: boolean;
-			},
+			diffHead: DiffHead,
 			activeFileClaim: {
 				readonly snapshotHash: string | null;
 				readonly viewedAt: number;
@@ -1235,7 +1168,7 @@ export class Store extends Context.Service<Store>()("Store", {
 			Effect.gen(function* () {
 				const session = yield* reviewStore.getSession(sessionId);
 				const repoRoot = yield* resolveLiveRepoRoot(session);
-				const diffHead = yield* resolveDiffHead(session, repoRoot);
+				const diffHead = yield* resolveSessionDiffHead(session, repoRoot);
 
 				if (!viewed) {
 					yield* reviewStore.unmarkRangeViewed(sessionId, path, blockId);

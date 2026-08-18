@@ -45,7 +45,7 @@ positional `nisi` always has (`diff` reads it second, after `<base>`). See `apps
   distinction. A review tool always wants the merge-base view, matching what the bare-ref form
   already resolves to via `@repo/git`'s `resolveMergeBase`.
 - An explicit `<head>` in the range form is never the current checkout by assumption — the sidecar
-  (`apps/desktop/sidecar/store.ts`'s `resolveDiffHead`) forces committed-only diffing for it and
+  (`apps/desktop/sidecar/diff-head.ts`'s `resolveDiffHead`) forces committed-only diffing for it and
   never overlays worktree/uncommitted changes, even when that setting is on, since `repoRoot`'s
   worktree has no guaranteed relationship to an arbitrary named ref.
 - A stale `sidecar.json` (app was killed) must never hang the CLI, and a live-but-slow sidecar

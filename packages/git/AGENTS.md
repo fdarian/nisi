@@ -63,7 +63,7 @@ unit-testable against real temp repos without booting anything. Feeds `packages/
   optional `headRef`, diffing `merge-base(baseRef, headRef)..headRef` instead of `..HEAD` — passing
   it forces `includeUncommitted` off regardless of what the caller asked for, since an explicit
   head has no guaranteed relationship to what `repoRoot`'s worktree actually has checked out (see
-  `apps/desktop/sidecar/store.ts`'s `resolveDiffHead`, the caller that decides when this applies).
+  `apps/desktop/sidecar/diff-head.ts`'s `resolveDiffHead`, the caller that decides when this applies).
 - `worktree.ts` — `openPullRequestWorktree`: create-or-reuse a PR's local worktree, resolution keyed
   off `git worktree list --porcelain` (branch, never a path comparison — see the module's doc
   comment for the full reuse order). `revalidateWorktreePath` is the read-path sibling: given a
