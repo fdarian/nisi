@@ -103,7 +103,7 @@ export function WalkthroughView({
 				orpc={orpc}
 			/>
 			<div className="flex min-h-0 flex-1">
-				<div className="flex min-h-0 flex-1 flex-col border-r">
+				<div className="flex min-h-0 flex-1 flex-col">
 					<NarrativePane
 						knownBlockIds={knownBlockIds}
 						onSelectBlock={onSelectBlock}

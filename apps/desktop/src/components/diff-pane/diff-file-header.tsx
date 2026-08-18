@@ -4,6 +4,7 @@ import {
 	FileIcon,
 	MoreHorizontalIcon,
 } from "lucide-react";
+import { diffCardHeaderClassName } from "#/components/diff-pane/diff-view-theme";
 import type { BadgeProps } from "#/components/ui/badge";
 import { Badge } from "#/components/ui/badge";
 import { buttonVariants } from "#/components/ui/button";
@@ -55,33 +56,16 @@ type DiffFileHeaderProps = {
  * The `renderCustomHeader` content for one file's diff card — plain light-DOM
  * React, slotted into the `<diffs-container>` custom element that
  * `diff-pane.tsx` styles as a card (see its `[&_diffs-container]` classes).
- * This is that card's header row, so it carries its own opaque background
- * (`stickyHeaders` scrolls content underneath it) and the card's whole top
- * edge — rounded corners included, since it stays pinned at the pane's top
- * long after the container's own corners have scrolled away (see
- * `diffCardChromeCSS`, which draws the other three edges). `bg-background`,
- * not `bg-card`: the whole
- * card tracks the surrounding panel's tone — `--card` is measurably lighter
- * than `--background` in dark mode (index.css) — so the header, the
- * `<diffs-container>` behind it (`diff-pane.tsx`) and the diff body
- * (`diff-view-theme.ts`'s `--diffs-light-bg`/`--diffs-dark-bg`) all resolve
- * to the same surface, and the border here is a seam drawn on it rather than
- * a change of tone.
- *
- * `h-11` (44px) is load-bearing, not a style preference — it must equal
- * `diffItemMetrics.diffHeaderHeight` (`diff-view-theme.ts`). `stickyHeaders`
- * never measures this header's real DOM height; it trusts that config number
- * for the sticky container's own CSS offset and for sizing its virtualized
- * render buffer (`@pierre/diffs`' `CodeView.js` — the sticky wrapper's own
- * `bottom` offset is `itemMetrics.diffHeaderHeight`, literally, not a
- * measurement). Letting this row's real height drift from 44px — e.g. content
- * wrapping, or the "Modified after review" badge making some files' headers
- * taller than others' — feeds pierre a wrong offset: the sticky header stops
- * covering content a few pixels early or late (rows visible through/behind
- * it), and the buffer window sizes itself off the same wrong number (a
- * scroll stutter that stalls a frame then jumps, worse the more scrolling
- * this file needs). `items-center` plus `truncate` on the path spans below
- * keep this a fixed one-line row regardless of path length, so 44px is safe
+ * This is that card's header row, so it carries the card's whole top edge —
+ * rounded corners included, since it stays pinned at the pane's top long
+ * after the container's own corners have scrolled away. The edge itself
+ * (height, border, background, rounding) is `diffCardHeaderClassName`
+ * (`diff-view-theme.ts` — see its doc comment for why the height is
+ * load-bearing rather than a style choice, shared with `diffCardChromeCSS`,
+ * which draws the other three edges); this component owns only the row's
+ * content layout and click-to-collapse behavior. `items-center` plus
+ * `truncate` on the path spans below keep this a fixed one-line row
+ * regardless of path length, which is what makes the shared 44px height safe
  * to hard-code rather than measure.
  */
 export function DiffFileHeader({
@@ -102,10 +86,8 @@ export function DiffFileHeader({
 		<div
 			aria-expanded={!collapsed}
 			className={cn(
-				"flex h-11 min-w-0 flex-1 cursor-pointer items-center gap-3 border bg-background px-3",
-				// This row *is* the card's top edge — see `diffCardChromeCSS`.
-				// Collapsed there's no body under it, so it's the whole card.
-				collapsed ? "rounded-xl" : "rounded-t-xl",
+				"flex min-w-0 flex-1 cursor-pointer items-center gap-3 px-3",
+				diffCardHeaderClassName(collapsed),
 			)}
 			onClick={onToggleCollapse}
 			onKeyDown={(event) => {
