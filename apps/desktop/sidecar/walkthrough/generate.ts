@@ -236,21 +236,38 @@ const runEffect = <A, E>(
  * specific tagged error is exactly the kind of Effect-internals-poking this
  * sidesteps. `SessionNotFound` throws `GenerateSessionNotFound` (see above,
  * for `http.ts` to map to the contract's `NOT_FOUND`); every other failure
- * becomes an in-band `failed` event instead of tearing down the stream.
+ * becomes an in-band `failed` event instead of tearing down the stream —
+ * `HeadNotCheckedOut` (a plain branch session whose explicit `headRef` isn't
+ * what `repoRoot` actually has checked out — see `context.ts`'s doc comment)
+ * gets its own message since it's an expected, actionable outcome rather
+ * than an opaque git/IO failure; every other tag collapses into one generic
+ * message, same as before.
  */
 const resolveContext = async (
 	sessionId: string,
 	mainContext: Context.Context<AppServices>,
-): Promise<GenerationContext | undefined> => {
+): Promise<
+	| { readonly ok: true; readonly context: GenerationContext }
+	| { readonly ok: false; readonly message: string }
+> => {
 	const result = await runEffect(
 		Effect.result(gatherGenerationContext(sessionId)),
 		mainContext,
 	);
-	if (Result.isSuccess(result)) return result.success;
+	if (Result.isSuccess(result)) return { ok: true, context: result.success };
 	if (result.failure._tag === "SessionNotFound") {
 		throw new GenerateSessionNotFound(sessionId);
 	}
-	return undefined;
+	if (result.failure._tag === "HeadNotCheckedOut") {
+		return {
+			ok: false,
+			message: `Can't walk through this session — ${result.failure.headRef} isn't checked out in ${result.failure.repoRoot} (currently on ${result.failure.currentBranch}). A walkthrough narrates the files actually on disk, so check out ${result.failure.headRef} first.`,
+		};
+	}
+	return {
+		ok: false,
+		message: "Could not read this session's diff — see the sidecar log.",
+	};
 };
 
 /**
@@ -279,14 +296,12 @@ export async function* generateWalkthrough(
 	mainContext: Context.Context<AppServices>,
 	abortSignal: AbortSignal,
 ): AsyncGenerator<GenerateEvent> {
-	const context = await resolveContext(input.sessionId, mainContext);
-	if (context === undefined) {
-		yield {
-			type: "failed",
-			message: "Could not read this session's diff — see the sidecar log.",
-		};
+	const resolved = await resolveContext(input.sessionId, mainContext);
+	if (!resolved.ok) {
+		yield { type: "failed", message: resolved.message };
 		return;
 	}
+	const context = resolved.context;
 	if (abortSignal.aborted) {
 		yield await endCancelled(input.sessionId);
 		return;

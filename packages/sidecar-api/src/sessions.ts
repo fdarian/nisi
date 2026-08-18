@@ -32,7 +32,12 @@ export type Session = Schema.Schema.Type<typeof Session>;
  * `nisi diff [<base>]` grammar. Omitted, defaults to `"auto"`, so existing
  * `{ cwd }`-only callers are unaffected. `"pr"` fails rather than silently
  * degrading to a branch diff; `"branch"`'s explicit `baseRef` wins even over
- * an open PR.
+ * an open PR. `"branch"`'s `headRef` is the CLI's range spelling
+ * (`nisi diff <base>..<head>`/`nisi diff <base>...<head>`, both meaning the
+ * same thing — see `packages/cli`'s `parseBaseArgument`): an explicit,
+ * arbitrary ref rather than the current checkout, so the sidecar must never
+ * overlay worktree/uncommitted changes on top of it (see
+ * `apps/desktop/sidecar/store.ts`'s `resolveSessionTarget`).
  */
 export const OpenSessionTarget = Schema.Union([
 	Schema.Struct({ kind: Schema.Literal("auto") }),
@@ -40,6 +45,7 @@ export const OpenSessionTarget = Schema.Union([
 	Schema.Struct({
 		kind: Schema.Literal("branch"),
 		baseRef: Schema.optional(Schema.String),
+		headRef: Schema.optional(Schema.String),
 	}),
 ]);
 export type OpenSessionTarget = Schema.Schema.Type<typeof OpenSessionTarget>;

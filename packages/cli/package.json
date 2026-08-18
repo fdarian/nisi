@@ -11,7 +11,8 @@
 	},
 	"scripts": {
 		"check:type": "tsc --noEmit",
-		"check:lint": "biome lint ."
+		"check:lint": "biome lint .",
+		"test": "bun test"
 	},
 	"dependencies": {
 		"@effect/platform-bun": "4.0.0-beta.102",

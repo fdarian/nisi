@@ -6,6 +6,7 @@ import { MinimumLogLevelLayer } from "@repo/logging";
 import type { OpenSessionTarget } from "@repo/sidecar-api";
 import { Console, Effect, Logger, Option, Schema } from "effect";
 import { Argument, Command } from "effect/unstable/cli";
+import { parseBaseArgument } from "./base-argument.ts";
 import { handoff, logFilePathConfig } from "./handoff.ts";
 
 /** Already printed a message for the user — `BunRuntime.runMain` just needs to see a failure to exit non-zero. */
@@ -53,7 +54,7 @@ const run = (pathArg: Option.Option<string>, target: OpenSessionTarget) =>
 				const sessionTarget = outcome.session.target;
 				if (sessionTarget.kind === "branch") {
 					return yield* Console.log(
-						`Opened Nisi — diffing against ${sessionTarget.baseRef}.`,
+						`Opened Nisi — diffing ${sessionTarget.baseRef}...${sessionTarget.headRef}.`,
 					);
 				}
 				return yield* Console.log(
@@ -101,16 +102,21 @@ const pr = Command.make("pr", { path: pathArgument }, ({ path: pathArg }) =>
 const diff = Command.make(
 	"diff",
 	{ base: Argument.string("base").pipe(Argument.optional), path: pathArgument },
-	({ base, path: pathArg }) =>
-		run(
-			pathArg,
-			Option.isSome(base)
-				? { kind: "branch", baseRef: base.value }
-				: { kind: "branch" },
-		),
+	({ base, path: pathArg }) => {
+		if (Option.isNone(base)) return run(pathArg, { kind: "branch" });
+
+		const parsed = parseBaseArgument(base.value);
+		return run(pathArg, {
+			kind: "branch",
+			baseRef: parsed.baseRef,
+			...(parsed.headRef === undefined ? {} : { headRef: parsed.headRef }),
+		});
+	},
 ).pipe(
 	Command.withDescription(
-		"Diff <base>...HEAD, ignoring any open PR even when one exists. With no <base>, diffs " +
+		"Diff <base>...HEAD, ignoring any open PR even when one exists. <base> may also be a " +
+			"range — <base>..<head> or <base>...<head>, both meaning merge-base(<base>, <head>) " +
+			"to <head> here, not git's own two-dot/three-dot distinction. With no <base>, diffs " +
 			"against the repo's default branch.",
 	),
 );
