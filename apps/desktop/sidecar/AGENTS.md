@@ -50,21 +50,31 @@ seam" for the port/token handshake this boots into.
   has a real base and head to review against; `@repo/review`'s own `Session` keeps `baseRef`/`headRef`
   at the top level and `pr` nullable instead, since those apply whether or not there's a PR —
   `toWireSession` bridges the two. `openSession` takes an `OpenSessionTarget` selector
-  (`"auto"`/`"pr"`/`"branch"`, defaulting to `"auto"`) mirroring the CLI's `nisi`/`nisi pr`/`nisi diff
-  [<base>]` grammar; `resolveSessionTarget` is where that selector turns into the `baseRef`/`headRef`/`pr`
-  triple `ReviewStore.openSession` needs, skipping `resolveReviewTarget` (and its GitHub round trip)
-  entirely when `"branch"` supplies its own `baseRef` — but still validating that ref via
-  `resolveMergeBase`, failing with `InvalidBaseRef` (git's own `stderr` attached) before a session
-  is ever persisted, rather than letting a typo surface later as an opaque failure the first time
-  Files Changed loads. `"pr"` fails with `NoPullRequest` when `resolveReviewTarget` finds none open
-  — the one selector that doesn't degrade to a branch diff on its own.
-  `listChangedFiles`/`readFileContents` both take `includeUncommitted` and thread it straight into
-  their `@repo/git` calls (see that package's AGENTS.md for what the flag does). `changedSinceReview`
-  (`attachReviewState`'s sidebar badge, and `readFileContents`'s size-gated-content fallback) honors
-  the same flag via `readCurrentHashes`, which rehashes a ticked file's current content with
-  `@repo/review`'s own `hashContent` — worktree bytes when `includeUncommitted` is `true`, HEAD's
-  content via `@repo/git`'s `readFileContentsAtRef` (one batched read over just the ticked paths,
-  not the whole diff) when `false`.
+  (`"auto"`/`"pr"`/`{"branch", baseRef?, headRef?}`, defaulting to `"auto"`) mirroring the CLI's
+  `nisi`/`nisi pr`/`nisi diff [<base>]` grammar (`<base>` may be a range, `<base>..<head>` or
+  `<base>...<head>` — see `packages/cli/AGENTS.md`); `resolveSessionTarget` is where that selector
+  turns into the `baseRef`/`headRef`/`pr` triple `ReviewStore.openSession` needs, skipping
+  `resolveReviewTarget` (and its GitHub round trip) entirely when `"branch"` supplies its own
+  `baseRef` — but still validating that ref via `resolveMergeBase`, failing with `InvalidBaseRef`
+  (git's own `stderr` attached) before a session is ever persisted, rather than letting a typo
+  surface later as an opaque failure the first time Files Changed loads. An explicit `headRef`
+  alongside it is validated the same way (`InvalidHeadRef`), in place of the current
+  checkout. `"pr"` fails with `NoPullRequest` when `resolveReviewTarget` finds none open — the one
+  selector that doesn't degrade to a branch diff on its own.
+  `listChangedFiles`/`readFileContents` both take `includeUncommitted` and thread it into their
+  `@repo/git` calls (see that package's AGENTS.md for what the flag does) — but only after gating it
+  through `resolveDiffHead`, which also decides what `@repo/git` should treat as head: `true` (and
+  `headRef` left at its `@repo/git` default) for a PR-backed session or a plain branch session whose
+  `headRef` matches what's actually checked out right now; forced `false` (and `headRef` passed
+  through explicitly) otherwise, since an explicit, not-checked-out head has no guaranteed
+  relationship to `repoRoot`'s worktree. Re-checked on every call rather than decided once at open
+  time, so a session self-heals the moment the caller actually checks `headRef` out.
+  `changedSinceReview` (`attachReviewState`'s sidebar badge, and `readFileContents`'s
+  size-gated-content fallback) honors the same gated flag via `readCurrentHashes`, which rehashes a
+  ticked file's current content with `@repo/review`'s own `hashContent` — worktree bytes when
+  worktree-eligible and `includeUncommitted` is `true`, otherwise `@repo/git`'s
+  `readFileContentsAtRef` (one batched read over just the ticked paths, not the whole diff) against
+  `HEAD` or the session's own `headRef`.
   `readFileContents` is where Phase 3's range claims and Phase 2's whole-file toggle meet: it resolves
   both (with `oldPath` rename fallback for each — `resolveRangeClaims` re-queries on `oldPath` since
   `ReviewStore.listRangeClaims` is path-scoped, not a whole-session map like `listReviewStates`), reads

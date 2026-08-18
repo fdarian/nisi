@@ -243,6 +243,15 @@ export function attachRouter(
 							}),
 						),
 					),
+					// Same as `InvalidBaseRef` above, for the range-spelling form's
+					// `<head>` side (`nisi diff <base>..<head>`).
+					Effect.catchTag("InvalidHeadRef", (cause) =>
+						Effect.fail(
+							errors.BAD_REQUEST({
+								message: `unknown head ref '${cause.headRef}' in ${cause.repoRoot}: ${cause.stderr.trim()}`,
+							}),
+						),
+					),
 					// A repo GitHub doesn't know about reviews against its default
 					// branch instead (see `@repo/git`'s `resolveReviewTarget`) —
 					// these two are the cases where there's genuinely nothing to

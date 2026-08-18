@@ -20,6 +20,7 @@ import {
 	readFileContentsAtRef,
 	readWorktreeBlobContent,
 	resolveCurrentBranch,
+	resolveHeadSha,
 	resolveMergeBase,
 	resolvePullRequestHeadRef,
 	resolveRepoRoot,
@@ -78,6 +79,17 @@ export class InvalidBaseRef extends Schema.TaggedErrorClass<InvalidBaseRef>()(
 	},
 ) {}
 
+/** `sessions.open`'s `target: { kind: "branch", headRef }` (the range-spelling form of `nisi diff <base>..<head>`) named a ref `git` couldn't resolve. Mirrors `InvalidBaseRef` — kept as its own tag rather than reusing it so a typo on either side of the range is attributed to the ref that was actually bad. */
+export class InvalidHeadRef extends Schema.TaggedErrorClass<InvalidHeadRef>()(
+	"InvalidHeadRef",
+	{
+		repoRoot: Schema.String,
+		headRef: Schema.String,
+		stderr: Schema.String,
+	},
+) {}
+
+
 /**
  * `sessions.open`'s target selector — mirrors `packages/sidecar-api`'s
  * `OpenSessionTarget`, plus one variant that never crosses the wire:
@@ -91,7 +103,11 @@ export type OpenSessionTarget =
 	| { readonly kind: "auto" }
 	| { readonly kind: "pr" }
 	| { readonly kind: "specificPullRequest"; readonly number: number }
-	| { readonly kind: "branch"; readonly baseRef?: string };
+	| {
+			readonly kind: "branch";
+			readonly baseRef?: string;
+			readonly headRef?: string;
+	  };
 
 export type SessionTarget =
 	| {
@@ -218,16 +234,23 @@ const toWireSession = (session: ReviewSession): Session => ({
  *
  * - `"branch"` with an explicit `baseRef` is a pure local diff and skips
  *   `resolveReviewTarget` (and therefore any GitHub round trip) entirely —
- *   the caller named its own base, there's nothing to look up. It's still
- *   validated via `resolveMergeBase`, the same resolution `getChangedFiles`/
- *   `getFileContents` would do anyway, just run here so a typo'd ref fails
- *   the request (`InvalidBaseRef`) before a session is ever persisted,
- *   instead of surfacing as an opaque error the first time Files Changed
- *   loads.
+ *   the caller named its own base, there's nothing to look up. `baseRef` is
+ *   still validated via `resolveMergeBase`, the same resolution
+ *   `getChangedFiles`/`getFileContents` would do anyway, just run here so a
+ *   typo'd ref fails the request (`InvalidBaseRef`) before a session is ever
+ *   persisted, instead of surfacing as an opaque error the first time Files
+ *   Changed loads. An explicit `headRef` alongside it — the CLI's range
+ *   spelling, `nisi diff <base>..<head>`/`nisi diff <base>...<head>` (both
+ *   mean the same thing here, see `packages/cli`'s `parseBaseArgument`) — is
+ *   validated the same way (`InvalidHeadRef`) and used as-is, in place of the
+ *   current checkout. See this function's closing paragraph for why an
+ *   explicit head changes more than just which commit gets diffed.
  * - `"branch"` with no `baseRef` falls back to the repo's default branch,
  *   still ignoring any PR open on the current branch — not re-validated,
  *   since `resolveReviewTarget`'s own resolution is git-derived by
- *   construction.
+ *   construction. `headRef` is always the current checkout here (an explicit
+ *   `headRef` with no `baseRef` never happens from the CLI — the two are
+ *   parsed from the same `<base>` argument together, see `packages/cli/src/index.ts`).
  * - `"pr"` requires a PR *for the current branch*: `resolveReviewTarget`
  *   finding none fails with `NoPullRequest` rather than silently degrading
  *   to a branch diff the caller didn't ask for.
@@ -244,22 +267,44 @@ const toWireSession = (session: ReviewSession): Session => ({
  * - `"auto"` is today's behavior — PR if one's open, else the default
  *   branch.
  *
- * Head is always the current checkout (`resolveCurrentBranch`, or the PR's
- * own `headRefName` for any of the PR-resolving variants when a PR is in
- * play) — nisi doesn't support reviewing an arbitrary head.
+ * Head is the current checkout (`resolveCurrentBranch`, or the PR's own
+ * `headRefName` for any of the PR-resolving variants when a PR is in play)
+ * for every variant except `"branch"` with an explicit `headRef` — the one
+ * case where `repoRoot`'s worktree isn't guaranteed to actually be sitting on
+ * `headRef` at all (the CLI runs from whatever the caller currently has
+ * checked out, which may be neither side of the diff). Every read against
+ * that session (`listChangedFiles`/`readFileContents` below) must account for
+ * that — see `resolveDiffHead`.
  */
 const resolveSessionTarget = (repoRoot: string, target: OpenSessionTarget) =>
 	Effect.gen(function* () {
 		if (target.kind === "branch" && target.baseRef !== undefined) {
 			const baseRef = target.baseRef;
-			yield* resolveMergeBase(repoRoot, baseRef).pipe(
+			const explicitHeadRef = target.headRef;
+
+			if (explicitHeadRef !== undefined) {
+				yield* resolveHeadSha(repoRoot, explicitHeadRef).pipe(
+					Effect.catchTag("GitCommandError", (cause) =>
+						Effect.fail(
+							new InvalidHeadRef({
+								repoRoot,
+								headRef: explicitHeadRef,
+								stderr: cause.stderr,
+							}),
+						),
+					),
+				);
+			}
+
+			yield* resolveMergeBase(repoRoot, baseRef, explicitHeadRef).pipe(
 				Effect.catchTag("GitCommandError", (cause) =>
 					Effect.fail(
 						new InvalidBaseRef({ repoRoot, baseRef, stderr: cause.stderr }),
 					),
 				),
 			);
-			const headRef = yield* resolveCurrentBranch(repoRoot);
+			const headRef =
+				explicitHeadRef ?? (yield* resolveCurrentBranch(repoRoot));
 			return { baseRef, headRef, pr: null };
 		}
 
@@ -464,6 +509,7 @@ export class Store extends Context.Service<Store>()("Store", {
 			| GitHubUnreachable
 			| InvalidCwd
 			| InvalidBaseRef
+			| InvalidHeadRef
 			| NoPullRequest
 			| ReviewStoreError
 			| SettingsStoreError,
@@ -558,6 +604,8 @@ export class Store extends Context.Service<Store>()("Store", {
 			repoRoot: string,
 			includeUncommitted: boolean,
 			paths: ReadonlyArray<string>,
+			/** The ref committed-mode hashes against — defaults to `HEAD`, the current checkout. See `resolveDiffHead` for when this needs to be a session's own explicit `headRef` instead. */
+			headRef = "HEAD",
 		): Effect.Effect<
 			ReadonlyMap<string, string>,
 			GitCommandError | WorktreeReadFailed,
@@ -582,7 +630,7 @@ export class Store extends Context.Service<Store>()("Store", {
 					return hashes;
 				}
 
-				const contents = yield* readFileContentsAtRef(repoRoot, "HEAD", paths);
+				const contents = yield* readFileContentsAtRef(repoRoot, headRef, paths);
 				return new Map(
 					[...contents].map(
 						([path, bytes]) => [path, hashContent(bytes)] as const,
@@ -605,6 +653,8 @@ export class Store extends Context.Service<Store>()("Store", {
 			repoRoot: string,
 			includeUncommitted: boolean,
 			files: ReadonlyArray<GitFileChange>,
+			/** See `readCurrentHashes` — threaded through for a session whose `headRef` isn't the current checkout. */
+			headRef?: string,
 		): Effect.Effect<
 			ReadonlyArray<FileChange>,
 			SessionNotFound | ReviewStoreError | GitCommandError | WorktreeReadFailed,
@@ -628,6 +678,7 @@ export class Store extends Context.Service<Store>()("Store", {
 					repoRoot,
 					includeUncommitted,
 					[...claims.keys()],
+					headRef,
 				);
 
 				return files.map((file) => {
@@ -657,18 +708,78 @@ export class Store extends Context.Service<Store>()("Store", {
 				});
 			});
 
+		/**
+		 * What every git call against `session` should treat as its head, plus
+		 * whether it's safe to overlay `repoRoot`'s worktree on top of it at
+		 * all — consulted by every read (`listChangedFiles`/`readFileContents`)
+		 * and write (`setFileViewed`/`setRangeViewed`) path that touches a
+		 * session's files, so the two can never disagree about which commit
+		 * "head" means right now.
+		 *
+		 * A PR-backed session (`session.pr !== null`) is always worktree-
+		 * eligible without even checking: its `repoRoot` is a worktree nisi
+		 * created and keeps checked out to exactly this PR's head (see
+		 * `@repo/git`'s `worktree.ts`) — and `session.headRef` there is the PR
+		 * author's own branch name, which isn't guaranteed to resolve as a ref
+		 * in that worktree at all (nisi checks the PR out onto its own
+		 * `nisi/pr-<n>/<headRef>` branch), so it must never be passed to
+		 * `getChangedFiles`/`getFileContents` as an explicit `headRef` either
+		 * — literal `HEAD` is already the right target.
+		 *
+		 * A plain branch session (`session.pr === null`) compares
+		 * `session.headRef` against what's actually checked out right now
+		 * (`resolveCurrentBranch`) — not stored once at open time — so a
+		 * session drifts in and out of worktree-eligibility as the caller
+		 * checks different branches out, rather than staying pinned to
+		 * whatever was true when the session opened. This covers both
+		 * directions: an explicit, never-checked-out head (`nisi diff
+		 * <base>..<head>`) starts ineligible and self-heals the moment the
+		 * caller checks it out; an ordinary session (`headRef` equal to the
+		 * checkout at open time) goes ineligible the moment the caller checks
+		 * out something else — every subsequent read *and write* must follow
+		 * that, not keep treating the worktree as if it still belonged to
+		 * this session.
+		 */
+		const resolveDiffHead = (
+			session: ReviewSession,
+			repoRoot: string,
+		): Effect.Effect<
+			{
+				readonly headRef: string | undefined;
+				readonly worktreeEligible: boolean;
+			},
+			GitCommandError,
+			ChildProcessSpawner.ChildProcessSpawner
+		> =>
+			session.pr !== null
+				? Effect.succeed({ headRef: undefined, worktreeEligible: true })
+				: resolveCurrentBranch(repoRoot).pipe(
+						Effect.map((currentBranch) => {
+							const worktreeEligible = currentBranch === session.headRef;
+							return {
+								headRef: worktreeEligible ? undefined : session.headRef,
+								worktreeEligible,
+							};
+						}),
+					);
+
 		const listChangedFiles = (sessionId: string, includeUncommitted: boolean) =>
 			Effect.gen(function* () {
 				const session = yield* reviewStore.getSession(sessionId);
 				const repoRoot = yield* resolveLiveRepoRoot(session);
+				const diffHead = yield* resolveDiffHead(session, repoRoot);
+				const effectiveIncludeUncommitted =
+					includeUncommitted && diffHead.worktreeEligible;
 				const files = yield* getChangedFiles(repoRoot, session.baseRef, {
-					includeUncommitted,
+					includeUncommitted: effectiveIncludeUncommitted,
+					headRef: diffHead.headRef,
 				});
 				return yield* attachReviewState(
 					sessionId,
 					repoRoot,
-					includeUncommitted,
+					effectiveIncludeUncommitted,
 					files,
+					diffHead.headRef,
 				);
 			});
 
@@ -814,12 +925,16 @@ export class Store extends Context.Service<Store>()("Store", {
 		 * here as it does in `listChangedFiles`'s `attachReviewState`.
 		 *
 		 * `includeUncommitted` reaches `getFileContent` the same way it reaches
-		 * `listChangedFiles`, so `content.newContent` — and therefore
-		 * `reconcile`'s `changedSinceReview`/`ranges` below — already compares
-		 * against HEAD, not the worktree, in committed-only mode: no extra logic
-		 * needed here, it falls out of threading the flag into the one content
-		 * fetch this function makes. The `content.truncated` fallback just below
-		 * threads the same flag through `readCurrentHashes` instead, since a
+		 * `listChangedFiles` — gated through `resolveDiffHead` into
+		 * `effectiveIncludeUncommitted` first, same as there — so
+		 * `content.newContent` — and therefore `reconcile`'s
+		 * `changedSinceReview`/`ranges` below — already compares against the
+		 * right head (`HEAD`, or `session.headRef`'s own commit when it isn't
+		 * the current checkout), not the worktree, in committed-only mode: no
+		 * extra logic needed here, it falls out of threading the flag into the
+		 * one content fetch this function makes. The `content.truncated`
+		 * fallback just below threads the same gated flag (plus
+		 * `diffHead.headRef`) through `readCurrentHashes` instead, since a
 		 * size-gated file has no `content.newContent` to reuse.
 		 *
 		 * Reconciliation ranges are only computed when the patch content isn't
@@ -838,11 +953,17 @@ export class Store extends Context.Service<Store>()("Store", {
 			Effect.gen(function* () {
 				const session = yield* reviewStore.getSession(sessionId);
 				const repoRoot = yield* resolveLiveRepoRoot(session);
+				const diffHead = yield* resolveDiffHead(session, repoRoot);
+				const effectiveIncludeUncommitted =
+					includeUncommitted && diffHead.worktreeEligible;
 				const contentByPath = yield* getFileContents(
 					repoRoot,
 					session.baseRef,
 					requests satisfies ReadonlyArray<FileContentRequest>,
-					{ includeUncommitted },
+					{
+						includeUncommitted: effectiveIncludeUncommitted,
+						headRef: diffHead.headRef,
+					},
 				);
 				const states = yield* reviewStore.listReviewStates(sessionId);
 
@@ -871,8 +992,9 @@ export class Store extends Context.Service<Store>()("Store", {
 								}
 								const currentHashes = yield* readCurrentHashes(
 									repoRoot,
-									includeUncommitted,
+									effectiveIncludeUncommitted,
 									[request.path],
+									diffHead.headRef,
 								);
 								// Same null-aware comparison as `attachReviewState` —
 								// see its comment: a `null` `snapshotHash` means this

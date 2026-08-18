@@ -102,6 +102,89 @@ describe("Store.openSession — branch target with an explicit baseRef", () => {
 	});
 });
 
+describe("Store.openSession — branch target with an explicit headRef (two arbitrary refs)", () => {
+	test("rejects an unresolvable head with InvalidHeadRef, carrying git's own stderr", async () => {
+		await withTestRepoAndDataDir(async (repoRoot, dataDir) => {
+			const result = await Effect.runPromise(
+				Effect.gen(function* () {
+					const store = yield* Store;
+					return yield* store.openSession(repoRoot, {
+						kind: "branch",
+						baseRef: "main",
+						headRef: "totally-not-a-real-ref",
+					});
+				}).pipe(Effect.result, Effect.provide(makeTestLayer(dataDir))),
+			);
+
+			expect(Result.isFailure(result)).toBe(true);
+			if (!Result.isFailure(result)) return;
+			expect(result.failure._tag).toBe("InvalidHeadRef");
+			if (result.failure._tag !== "InvalidHeadRef") return;
+			expect(result.failure.headRef).toBe("totally-not-a-real-ref");
+			expect(result.failure.stderr.length).toBeGreaterThan(0);
+		});
+	});
+
+	test("opens with the explicit head as-is, regardless of what's actually checked out", async () => {
+		await withTestRepoAndDataDir(async (repoRoot, dataDir) => {
+			await sh(repoRoot, ["checkout", "-q", "-b", "feature"]);
+			await Bun.write(join(repoRoot, "b.ts"), "on feature\n");
+			await sh(repoRoot, ["add", "-A"]);
+			await sh(repoRoot, ["commit", "-q", "-m", "on feature"]);
+			// The actual checkout is a third branch, neither side of the diff.
+			await sh(repoRoot, ["checkout", "-q", "-b", "working", "main"]);
+
+			const session = await Effect.runPromise(
+				Effect.gen(function* () {
+					const store = yield* Store;
+					return yield* store.openSession(repoRoot, {
+						kind: "branch",
+						baseRef: "main",
+						headRef: "feature",
+					});
+				}).pipe(Effect.provide(makeTestLayer(dataDir))),
+			);
+
+			expect(session.target).toEqual({
+				kind: "branch",
+				baseRef: "main",
+				headRef: "feature",
+			});
+		});
+	});
+
+	test("listChangedFiles diffs the named head, never overlaying uncommitted edits on the actual checkout", async () => {
+		await withTestRepoAndDataDir(async (repoRoot, dataDir) => {
+			await sh(repoRoot, ["checkout", "-q", "-b", "feature"]);
+			await Bun.write(join(repoRoot, "b.ts"), "on feature\n");
+			await sh(repoRoot, ["add", "-A"]);
+			await sh(repoRoot, ["commit", "-q", "-m", "on feature"]);
+
+			// The actual checkout is a third branch, dirtied on top — none of
+			// this belongs to the main..feature diff and must never leak in,
+			// even when `includeUncommitted` is requested.
+			await sh(repoRoot, ["checkout", "-q", "-b", "working", "main"]);
+			await Bun.write(join(repoRoot, "a.ts"), "dirtied, never committed\n");
+
+			const files = await Effect.runPromise(
+				Effect.gen(function* () {
+					const store = yield* Store;
+					const session = yield* store.openSession(repoRoot, {
+						kind: "branch",
+						baseRef: "main",
+						headRef: "feature",
+					});
+					return yield* store.listChangedFiles(session.id, true);
+				}).pipe(Effect.provide(makeTestLayer(dataDir))),
+			);
+
+			const byPath = new Map(files.map((file) => [file.path, file]));
+			expect(byPath.get("b.ts")?.status).toBe("added");
+			expect(byPath.has("a.ts")).toBe(false);
+		});
+	});
+});
+
 describe("Store.setFileViewed — a committed symlink", () => {
 	test("stays reviewed on the next read instead of immediately reporting changedSinceReview", async () => {
 		await withTestRepoAndDataDir(async (repoRoot, dataDir) => {
