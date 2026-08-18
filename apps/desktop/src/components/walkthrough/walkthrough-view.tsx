@@ -6,6 +6,7 @@ import { GeneratePanel } from "#/components/walkthrough/generate-panel";
 import { NarrativePane } from "#/components/walkthrough/narrative-pane";
 import { OutdatedBanner } from "#/components/walkthrough/outdated-banner";
 import { ReferencePane } from "#/components/walkthrough/reference-pane";
+import { UncoveredFiles } from "#/components/walkthrough/uncovered-files";
 import type { SidecarQueryUtils } from "#/lib/backend-context";
 import type { FileChange, Session } from "#/lib/pr-data";
 import {
@@ -122,6 +123,7 @@ export function WalkthroughView({
 					/>
 				</div>
 			</div>
+			<UncoveredFiles uncoveredFiles={walkthrough.uncoveredFiles} />
 		</div>
 	);
 }

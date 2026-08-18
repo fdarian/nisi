@@ -74,13 +74,29 @@ export type Walkthrough = {
 	references: readonly WalkthroughReferenceBlock[];
 };
 
-/** Mirrors `StoredWalkthrough` — `fingerprints` is the file-path → `FileChange.fingerprint` map captured at generation time, compared against the session's *current* fingerprints by `useWalkthroughDrift` below. */
+/**
+ * Mirrors `UncoveredFile` (`packages/sidecar-api/src/walkthrough.ts`) — one
+ * file whose changed lines this walkthrough's reference blocks never claim.
+ * Derived, not authored by the agent; see that type's doc for why it's a
+ * count rather than the actual line ranges.
+ */
+export type UncoveredFile = { path: string; uncoveredLineCount: number };
+
+/**
+ * Mirrors `StoredWalkthrough` — `fingerprints` is the file-path → `FileChange.fingerprint` map
+ * captured at generation time, compared against the session's *current* fingerprints by
+ * `useWalkthroughDrift` below. `uncoveredFiles` is `undefined` for a walkthrough generated before
+ * that field existed (coverage unknown), `[]` when every changed line is covered, non-empty
+ * otherwise — `UncoveredFiles` (`#/components/walkthrough/uncovered-files.tsx`) renders each of
+ * those three states differently.
+ */
 export type StoredWalkthrough = {
 	sessionId: string;
 	harness: HarnessId;
 	model: string | null;
 	walkthrough: Walkthrough;
 	fingerprints: Readonly<Record<string, string>>;
+	uncoveredFiles?: readonly UncoveredFile[];
 	generatedAt: number;
 };
 

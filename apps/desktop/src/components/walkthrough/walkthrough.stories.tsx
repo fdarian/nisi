@@ -19,6 +19,8 @@ import {
 	FIXTURE_FILES_WITH_DRIFT,
 	FIXTURE_SESSION,
 	FIXTURE_WALKTHROUGH,
+	FIXTURE_WALKTHROUGH_FULLY_COVERED,
+	FIXTURE_WALKTHROUGH_WITH_GAPS,
 } from "./walkthrough.fixture";
 import { WalkthroughView } from "./walkthrough-view";
 
@@ -61,11 +63,43 @@ export default meta;
 
 type Story = StoryObj<typeof meta>;
 
-/** The main state: a stored walkthrough, no drift, a reference block already selected. */
+/**
+ * The main state: a stored walkthrough, no drift, a reference block already
+ * selected. `FIXTURE_WALKTHROUGH` carries no `uncoveredFiles` at all, so this
+ * doubles as the "coverage unknown" state — a walkthrough generated before
+ * that field existed — for `UncoveredFiles`: nothing renders below the
+ * reader.
+ */
 export const Loaded: Story = {
 	args: {
 		orpc: createMockOrpc({
 			storedWalkthrough: FIXTURE_WALKTHROUGH,
+			fileContents: FIXTURE_FILE_CONTENTS,
+		}),
+		session: FIXTURE_SESSION,
+		files: FIXTURE_FILES,
+		initialSelectedBlockId: "toggle-mutation",
+	},
+};
+
+/** Same walkthrough, but every changed line is claimed by some reference block — `UncoveredFiles` renders its quiet "covers every changed line" line, not a collapsible. */
+export const CoverageComplete: Story = {
+	args: {
+		orpc: createMockOrpc({
+			storedWalkthrough: FIXTURE_WALKTHROUGH_FULLY_COVERED,
+			fileContents: FIXTURE_FILE_CONTENTS,
+		}),
+		session: FIXTURE_SESSION,
+		files: FIXTURE_FILES,
+		initialSelectedBlockId: "toggle-mutation",
+	},
+};
+
+/** Same walkthrough, with real gaps (`FIXTURE_UNCOVERED_FILES`) — `UncoveredFiles` renders its collapsed-by-default footer, expandable into the per-file line counts. */
+export const CoverageGaps: Story = {
+	args: {
+		orpc: createMockOrpc({
+			storedWalkthrough: FIXTURE_WALKTHROUGH_WITH_GAPS,
 			fileContents: FIXTURE_FILE_CONTENTS,
 		}),
 		session: FIXTURE_SESSION,

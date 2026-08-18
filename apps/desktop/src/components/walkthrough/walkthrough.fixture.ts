@@ -15,7 +15,7 @@
  * against the patch string's own line numbers before changing either.
  */
 import type { FileChange, FileContent, Session } from "#/lib/pr-data";
-import type { StoredWalkthrough } from "#/lib/walkthrough-data";
+import type { StoredWalkthrough, UncoveredFile } from "#/lib/walkthrough-data";
 
 export const TODOS_PATH = "src/lib/todos.ts";
 export const TODO_ITEM_PATH = "src/components/todo-item.tsx";
@@ -346,4 +346,32 @@ Unmounting \`TodoList\` — closing the tab, navigating away — calls [\`flushP
 			},
 		],
 	},
+};
+
+/**
+ * The real gaps between `FIXTURE_WALKTHROUGH.walkthrough.references`'
+ * `locations` and each patch's own added-line ranges, hand-counted the same
+ * way the locations above are: the `pendingSince`/`flushPending` type-shape
+ * edits on `TODOS_PATH` (head lines 1-19, none of which any block claims),
+ * `TODO_ITEM_PATH`'s import line and `pendingSince` prop destructure, and
+ * `TODO_LIST_PATH`'s `useEffect` import — every one a signature/import tweak
+ * the walkthrough judged not worth narrating on its own, not something it
+ * missed.
+ */
+export const FIXTURE_UNCOVERED_FILES: readonly UncoveredFile[] = [
+	{ path: TODOS_PATH, uncoveredLineCount: 7 },
+	{ path: TODO_ITEM_PATH, uncoveredLineCount: 2 },
+	{ path: TODO_LIST_PATH, uncoveredLineCount: 1 },
+];
+
+/** Same walkthrough, but as if every changed line were claimed by some reference block. */
+export const FIXTURE_WALKTHROUGH_FULLY_COVERED: StoredWalkthrough = {
+	...FIXTURE_WALKTHROUGH,
+	uncoveredFiles: [],
+};
+
+/** Same walkthrough, with `FIXTURE_UNCOVERED_FILES`' real gaps attached. */
+export const FIXTURE_WALKTHROUGH_WITH_GAPS: StoredWalkthrough = {
+	...FIXTURE_WALKTHROUGH,
+	uncoveredFiles: FIXTURE_UNCOVERED_FILES,
 };
