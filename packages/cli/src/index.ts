@@ -7,6 +7,7 @@ import type { OpenSessionTarget } from "@repo/sidecar-api";
 import { Console, Effect, Logger, Option, Schema } from "effect";
 import { Argument, Command } from "effect/unstable/cli";
 import { parseBaseArgument } from "./base-argument.ts";
+import { zshCompletionScript } from "./completion.ts";
 import { handoff, logFilePathConfig } from "./handoff.ts";
 
 /** Already printed a message for the user — `BunRuntime.runMain` just needs to see a failure to exit non-zero. */
@@ -121,6 +122,24 @@ const diff = Command.make(
 	),
 );
 
+const completionZsh = Command.make("zsh", {}, () =>
+	Console.log(zshCompletionScript),
+).pipe(
+	Command.withDescription(
+		"Print the zsh completion script for nisi — eval it in your shell startup file: " +
+			'eval "$(nisi completion zsh)".',
+	),
+);
+
+const completion = Command.make("completion", {}, () =>
+	Console.error("Specify a shell: nisi completion zsh").pipe(
+		Effect.andThen(fail),
+	),
+).pipe(
+	Command.withDescription("Print a shell completion script."),
+	Command.withSubcommands([completionZsh]),
+);
+
 const nisi = Command.make("nisi", { path: pathArgument }, ({ path: pathArg }) =>
 	run(pathArg, { kind: "auto" }),
 ).pipe(
@@ -130,7 +149,7 @@ const nisi = Command.make("nisi", { path: pathArgument }, ({ path: pathArg }) =>
 			"read, each POST attempt, app resolution); the sidecar itself keeps its own rotating " +
 			"log under NISI_DATA_DIR/logs/.",
 	),
-	Command.withSubcommands([pr, diff]),
+	Command.withSubcommands([pr, diff, completion]),
 );
 
 BunRuntime.runMain(
