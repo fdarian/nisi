@@ -1,7 +1,7 @@
 import { Result, Schema } from "effect";
 import {
+	type CoverageGap,
 	changedLineRanges,
-	formatCoverageFeedback,
 	validateCoverage,
 } from "./coverage.ts";
 import { formatReferenceFeedback, validateReferences } from "./references.ts";
@@ -78,15 +78,28 @@ export const decodeBuffer = (bufferContent: string): DecodeResult => {
 };
 
 export type WalkthroughEvaluation =
-	| { readonly status: "valid"; readonly walkthrough: Walkthrough }
+	| {
+			readonly status: "valid";
+			readonly walkthrough: Walkthrough;
+			/**
+			 * Changed lines no reference block claims — informational, not a
+			 * reason this is `"valid"` rather than `"invalid"` (see this
+			 * function's doc). Empty when the walkthrough happens to cover
+			 * everything.
+			 */
+			readonly coverageGaps: ReadonlyArray<CoverageGap>;
+	  }
 	| { readonly status: "invalid"; readonly feedback: string };
 
 /**
- * The full per-turn feedback loop: decode, then check reference integrity,
- * then check coverage — in that order, since coverage's numbers are only
- * meaningful once every location is known to point somewhere real. Any
- * failure short-circuits with feedback text describing exactly what to fix;
- * only a walkthrough clearing all three is `valid`.
+ * The full per-turn feedback loop: decode, then check reference integrity —
+ * in that order, since a hallucinated path or an out-of-range line makes the
+ * document itself broken, and either failure short-circuits with feedback
+ * text describing exactly what to fix. Coverage is checked too, but no
+ * longer gates validity: an agent that deliberately skipped narrating noise
+ * (see `prompt.ts`) produced a valid walkthrough, not an incomplete one — its
+ * gaps ride along as `coverageGaps` on the `valid` result for the caller to
+ * persist and surface, rather than feeding back into another turn.
  */
 export const evaluateWalkthrough = (
 	bufferContent: string,
@@ -117,12 +130,10 @@ export const evaluateWalkthrough = (
 		changedRangesByPath,
 		decoded.walkthrough.references,
 	);
-	if (!coverage.ok) {
-		return {
-			status: "invalid",
-			feedback: formatCoverageFeedback(coverage.gaps),
-		};
-	}
 
-	return { status: "valid", walkthrough: decoded.walkthrough };
+	return {
+		status: "valid",
+		walkthrough: decoded.walkthrough,
+		coverageGaps: coverage.ok ? [] : coverage.gaps,
+	};
 };

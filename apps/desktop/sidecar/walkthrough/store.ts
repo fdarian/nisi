@@ -1,5 +1,5 @@
 import { SqliteDb } from "@repo/db";
-import type { HarnessId } from "@repo/sidecar-api";
+import type { HarnessId, UncoveredFile } from "@repo/sidecar-api";
 import { type WalkthroughRow, walkthroughs } from "@repo/walkthrough/db";
 import migrationBundle from "@repo/walkthrough/db-migrations";
 import { applyEmbeddedMigrations } from "deskkit/sqlite";
@@ -11,31 +11,63 @@ export class WalkthroughStoreError extends Schema.TaggedErrorClass<WalkthroughSt
 	{ cause: Schema.Defect() },
 ) {}
 
+/**
+ * The `content` column's on-disk shape: the walkthrough (opaque to this
+ * store, never decoded against `@repo/walkthrough`'s schema) plus its
+ * derived coverage gaps, nested in one envelope instead of a new column — no
+ * migration needed to persist `uncoveredFiles` this way. A row written
+ * before this envelope existed has no `walkthrough` key at all (its
+ * `content` *is* the bare walkthrough JSON); `parseContent` treats that
+ * shape as "zero known gaps" rather than failing to load an otherwise-fine
+ * walkthrough.
+ */
+type StoredContentEnvelope = {
+	readonly walkthrough: unknown;
+	readonly uncoveredFiles: ReadonlyArray<UncoveredFile>;
+};
+
+const isEnvelope = (value: unknown): value is StoredContentEnvelope =>
+	value !== null && typeof value === "object" && "walkthrough" in value;
+
+const parseContent = (raw: string): StoredContentEnvelope => {
+	const parsed: unknown = JSON.parse(raw);
+	return isEnvelope(parsed)
+		? { walkthrough: parsed.walkthrough, uncoveredFiles: parsed.uncoveredFiles }
+		: { walkthrough: parsed, uncoveredFiles: [] };
+};
+
 /** The wire-shape-adjacent record `walkthrough.get`/`generate`'s `done` event hand back — `@repo/sidecar-api`'s `StoredWalkthrough` minus the parsed `walkthrough` field, which the caller decodes from `content`. */
 export type StoredWalkthroughRecord = {
 	readonly sessionId: string;
 	readonly harness: HarnessId;
 	readonly model: string | null;
-	/** JSON-encoded `@repo/walkthrough`'s `Walkthrough` — left as text so this store never needs to import that package's schema just to round-trip it. */
+	/** JSON-encoded `@repo/walkthrough`'s `Walkthrough` — left as text so this store never needs to import that package's schema just to round-trip it. Already unwrapped from `content`'s on-disk envelope. */
 	readonly content: string;
+	readonly uncoveredFiles: ReadonlyArray<UncoveredFile>;
 	readonly fingerprints: Record<string, string>;
 	readonly generatedAt: number;
 };
 
-const toRecord = (row: WalkthroughRow): StoredWalkthroughRecord => ({
-	sessionId: row.sessionId,
-	harness: row.harness as HarnessId,
-	model: row.model,
-	content: row.content,
-	fingerprints: JSON.parse(row.fingerprints) as Record<string, string>,
-	generatedAt: row.updatedAt.getTime(),
-});
+const toRecord = (row: WalkthroughRow): StoredWalkthroughRecord => {
+	const envelope = parseContent(row.content);
+	return {
+		sessionId: row.sessionId,
+		harness: row.harness as HarnessId,
+		model: row.model,
+		content: JSON.stringify(envelope.walkthrough),
+		uncoveredFiles: envelope.uncoveredFiles,
+		fingerprints: JSON.parse(row.fingerprints) as Record<string, string>,
+		generatedAt: row.updatedAt.getTime(),
+	};
+};
 
 export type SaveWalkthroughInput = {
 	readonly sessionId: string;
 	readonly harness: HarnessId;
 	readonly model: string | null;
-	readonly content: string;
+	/** The decoded `@repo/walkthrough` `Walkthrough` — this store re-serializes it into `content`'s on-disk envelope but never imports that package's schema to validate it; the caller (already holding a decoded `WalkthroughEvaluation`) is the one source of truth for its shape. */
+	readonly walkthrough: unknown;
+	readonly uncoveredFiles: ReadonlyArray<UncoveredFile>;
 	readonly fingerprints: Record<string, string>;
 };
 
@@ -87,11 +119,15 @@ export class WalkthroughStore extends Context.Service<WalkthroughStore>()(
 			): Effect.Effect<StoredWalkthroughRecord, WalkthroughStoreError> =>
 				Effect.gen(function* () {
 					const now = new Date();
+					const envelope: StoredContentEnvelope = {
+						walkthrough: input.walkthrough,
+						uncoveredFiles: input.uncoveredFiles,
+					};
 					const values = {
 						sessionId: input.sessionId,
 						harness: input.harness,
 						model: input.model,
-						content: input.content,
+						content: JSON.stringify(envelope),
 						fingerprints: JSON.stringify(input.fingerprints),
 						updatedAt: now,
 					};

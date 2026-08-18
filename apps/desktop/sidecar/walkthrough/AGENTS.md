@@ -6,7 +6,11 @@ The Phase 3 wiring layer: turns `@repo/walkthrough`'s pure schema/validation/pro
 those two packages does I/O or knows about the other — this directory is where they actually meet.
 
 - `store.ts` — `WalkthroughStore`, persistence for generated walkthroughs (one row per session,
-  regenerating overwrites). Lives here rather than in `@repo/walkthrough` because that package is
+  regenerating overwrites) plus their derived coverage gaps (`uncoveredFiles` — path and
+  uncovered-line count per file). Both live in the `content` column's own JSON envelope
+  (`StoredContentEnvelope`) rather than a column each, so gaining `uncoveredFiles` needed no
+  migration; a row written before that envelope existed decodes as "zero known gaps" instead of
+  failing to load. Lives here rather than in `@repo/walkthrough` because that package is
   deliberately I/O-free — see its AGENTS.md.
 - `harness-bin.ts` — `HARNESS_CLI_BIN`, the one map of harness → CLI binary name + env override var
   (`claude`/`codex`/`opencode`; Pi has no entry, see `availability.ts`). Single source of truth both
@@ -88,11 +92,11 @@ those two packages does I/O or knows about the other — this directory is where
   error, a harness/sandbox crash, a validation loop that never converges — yields an in-band
   `{ type: "failed" }` event instead, so the stream ends cleanly rather than dropping the connection.
 - **`gatherGenerationContext` fetches every non-binary file's content with `force: true`**,
-  bypassing `@repo/git`'s load-on-demand size tier — the walkthrough needs every changed file's real
-  line count to validate coverage, not just the ones under 1MB. A file still past the *patch-only*
-  tier (2MB) has no `newContent` even with `force`, and is simply omitted from `ChangedFileFacts`
-  rather than faked with a zero line count — `@repo/walkthrough`'s own documented exemption for
-  files with no head content.
+  bypassing `@repo/git`'s load-on-demand size tier — reference validation needs every changed
+  file's real line count, not just the ones under 1MB, to tell a real `Location` from an
+  out-of-range one. A file still past the *patch-only* tier (2MB) has no `newContent` even with
+  `force`, and is simply omitted from `ChangedFileFacts` rather than faked with a zero line count —
+  `@repo/walkthrough`'s own documented exemption for files with no head content.
 - **`generate` reattaches instead of erroring when a generation is already running for the
   session**, rather than adding a separate "attach" procedure — `http.ts`'s handler checks
   `generation-log.ts`'s `attachToGeneration` first and only calls `beginTrackedGeneration` when

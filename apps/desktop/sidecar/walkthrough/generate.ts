@@ -10,10 +10,12 @@ import type {
 	GenerateEvent,
 	HarnessId,
 	StoredWalkthrough,
+	UncoveredFile,
 } from "@repo/sidecar-api";
 import {
 	buildOverview,
 	buildSystemPrompt,
+	type CoverageGap,
 	createBuffer,
 	createWalkthroughTools,
 	evaluateWalkthrough,
@@ -161,6 +163,18 @@ const buildFreshPrompt = (
 
 const buildContinuationPrompt = (overviewText: string): string =>
 	`The PR has changed since your last turn. Updated change overview:\n\n${overviewText}`;
+
+/** `@repo/walkthrough`'s `CoverageGap` (per-file line *ranges*) collapsed to the wire's per-file *count* — see `StoredWalkthrough.uncoveredFiles`'s doc for why nothing needs the ranges themselves yet. */
+const toUncoveredFiles = (
+	gaps: ReadonlyArray<CoverageGap>,
+): ReadonlyArray<UncoveredFile> =>
+	gaps.map((gap) => ({
+		path: gap.path,
+		uncoveredLineCount: gap.missingRanges.reduce(
+			(total, range) => total + (range.endLine - range.startLine + 1),
+			0,
+		),
+	}));
 
 /**
  * `fullStream`'s `error` parts carry whatever the adapter's own transport
@@ -465,7 +479,8 @@ export async function* generateWalkthrough(
 							sessionId: input.sessionId,
 							harness: input.harness,
 							model: input.model ?? null,
-							content: JSON.stringify(evaluation.walkthrough),
+							walkthrough: evaluation.walkthrough,
+							uncoveredFiles: toUncoveredFiles(evaluation.coverageGaps),
 							fingerprints: context.fingerprints,
 						});
 					}),
@@ -485,6 +500,7 @@ export async function* generateWalkthrough(
 				model: record.model,
 				walkthrough: evaluation.walkthrough,
 				fingerprints: record.fingerprints,
+				uncoveredFiles: record.uncoveredFiles,
 				generatedAt: record.generatedAt,
 			};
 			yield { type: "done", walkthrough: stored };

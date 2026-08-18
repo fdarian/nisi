@@ -59,11 +59,36 @@ describe("decodeBuffer", () => {
 });
 
 describe("evaluateWalkthrough", () => {
-	test("accepts a walkthrough that fully covers every changed file", () => {
+	test("accepts a walkthrough that fully covers every changed file, reporting no gaps", () => {
 		const evaluation = evaluateWalkthrough(JSON.stringify(validDoc), [
 			{ path: "a.ts", patch, lineCount: 4 },
 		]);
 		expect(evaluation.status).toBe("valid");
+		if (evaluation.status === "valid") {
+			expect(evaluation.coverageGaps).toEqual([]);
+		}
+	});
+
+	test("accepts a walkthrough with uncovered hunks as valid, reporting the gaps instead of rejecting it", () => {
+		const doc = {
+			...validDoc,
+			references: [
+				{
+					id: "r1",
+					label: "Foo",
+					locations: [{ path: "a.ts", startLine: 2, endLine: 2 }],
+				},
+			],
+		};
+		const evaluation = evaluateWalkthrough(JSON.stringify(doc), [
+			{ path: "a.ts", patch, lineCount: 4 },
+		]);
+		expect(evaluation.status).toBe("valid");
+		if (evaluation.status === "valid") {
+			expect(evaluation.coverageGaps).toEqual([
+				{ path: "a.ts", missingRanges: [{ startLine: 3, endLine: 3 }] },
+			]);
+		}
 	});
 
 	test("returns decode feedback before checking references or coverage", () => {
@@ -93,27 +118,6 @@ describe("evaluateWalkthrough", () => {
 		if (evaluation.status === "invalid") {
 			expect(evaluation.feedback).toContain("ghost.ts");
 			expect(evaluation.feedback).not.toContain("Coverage is incomplete");
-		}
-	});
-
-	test("reports a coverage gap once references are otherwise valid", () => {
-		const doc = {
-			...validDoc,
-			references: [
-				{
-					id: "r1",
-					label: "Foo",
-					locations: [{ path: "a.ts", startLine: 2, endLine: 2 }],
-				},
-			],
-		};
-		const evaluation = evaluateWalkthrough(JSON.stringify(doc), [
-			{ path: "a.ts", patch, lineCount: 4 },
-		]);
-		expect(evaluation.status).toBe("invalid");
-		if (evaluation.status === "invalid") {
-			expect(evaluation.feedback).toContain("Coverage is incomplete");
-			expect(evaluation.feedback).toContain("line 3");
 		}
 	});
 });

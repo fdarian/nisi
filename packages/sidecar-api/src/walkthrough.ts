@@ -110,11 +110,28 @@ export const Walkthrough = Schema.Struct({
 export type Walkthrough = Schema.Schema.Type<typeof Walkthrough>;
 
 /**
+ * One file whose changed lines the walkthrough didn't fully narrate —
+ * `@repo/walkthrough`'s `coverage.ts` computes the gap as line ranges, but
+ * nothing downstream consumes ranges yet, so only the file and how many
+ * lines are uncovered ride over the wire. Derived metadata about the
+ * walkthrough, not part of it — deliberately not a field on `Walkthrough`
+ * itself, which is the agent's output contract.
+ */
+export const UncoveredFile = Schema.Struct({
+	path: Schema.String,
+	uncoveredLineCount: Schema.Number,
+});
+export type UncoveredFile = Schema.Schema.Type<typeof UncoveredFile>;
+
+/**
  * A generated walkthrough as persisted — one per session, regenerating
  * overwrites. `fingerprints` is the file-path → `@repo/git` `FileChange.fingerprint`
  * map captured at generation time; the frontend compares it against a
  * session's *current* `diff.files` fingerprints to mark individual
  * references outdated, rather than the sidecar computing staleness itself.
+ * `uncoveredFiles` is `Schema.optional` only so a row persisted before this
+ * field existed still decodes — every walkthrough generated from here on
+ * always carries a real (possibly empty) array, never an omitted one.
  */
 export const StoredWalkthrough = Schema.Struct({
 	sessionId: Schema.String,
@@ -122,6 +139,7 @@ export const StoredWalkthrough = Schema.Struct({
 	model: Schema.NullOr(Schema.String),
 	walkthrough: Walkthrough,
 	fingerprints: Schema.Record(Schema.String, Schema.String),
+	uncoveredFiles: Schema.optional(Schema.Array(UncoveredFile)),
 	generatedAt: Schema.Number,
 });
 export type StoredWalkthrough = Schema.Schema.Type<typeof StoredWalkthrough>;
