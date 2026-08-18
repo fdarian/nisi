@@ -12,6 +12,7 @@
  * either.
  */
 import type { CodeViewLayout } from "@pierre/diffs";
+import { cn } from "#/lib/utils";
 
 export const DIFF_VIEW_THEME = {
 	dark: "github-dark",
@@ -75,10 +76,50 @@ export function diffSearchHighlightCSS(names: {
 }
 
 /**
- * The card's left/right/bottom edge, appended to `diffViewUnsafeCSS` by the
- * Files Changed pane only (`diff-pane.tsx` — the walkthrough reference pane
- * renders the same items without card chrome). Its top edge is the header's
- * (`diff-file-header.tsx`), and that split is the whole point:
+ * The card's top edge — shared by `DiffFileHeader` (Files Changed,
+ * `diff-file-header.tsx`) and `ReferenceLocationHeader` (the walkthrough
+ * reference pane, `reference-pane.tsx`), the two `renderCustomHeader`
+ * implementations that slot into a `CodeView` item built with
+ * `diffCardChromeCSS` below as its `extraCSS`. Height is not a style choice:
+ * `h-11` (44px) must equal `diffItemMetrics.diffHeaderHeight` above —
+ * `stickyHeaders` (`buildDiffCodeViewOptions`, `diff-code-view.tsx`) never
+ * measures a header's real DOM height, it trusts that config number for the
+ * sticky container's own CSS offset and for sizing its virtualized render
+ * buffer. Letting a header's real height drift from 44px — content
+ * wrapping, a badge some rows have and others don't — feeds pierre a wrong
+ * offset: the sticky header stops covering content a few pixels early or
+ * late, and the buffer window sizes itself off the same wrong number (a
+ * scroll stutter that stalls a frame then jumps). Both consumers keep their
+ * row single-line (`truncate` on the path, `items-center`) so 44px is safe
+ * to hard-code rather than measure.
+ *
+ * `bg-background`, not `bg-card`: the whole card tracks the surrounding
+ * panel's tone — `--card` is measurably lighter than `--background` in dark
+ * mode (index.css) — so the header, the diff body under it
+ * (`diffViewUnsafeCSS`'s `--diffs-*-bg`) and, for Files Changed, the
+ * `<diffs-container>` behind it (`diff-pane.tsx`) all resolve to the same
+ * surface, and `border` reads as a seam drawn on it rather than a change of
+ * tone. It carries its own opaque background because `stickyHeaders` scrolls
+ * the diff body underneath it.
+ *
+ * `collapsed` rounds all four corners when there's no body left under the
+ * header to round off separately — Files Changed's collapsed file card.
+ * Otherwise only the top two, leaving the bottom two to `diffCardChromeCSS`'s
+ * `pre` rule; the reference pane has no collapsed state, so it always passes
+ * `false`.
+ */
+export function diffCardHeaderClassName(collapsed: boolean): string {
+	return cn(
+		"h-11 border bg-background",
+		collapsed ? "rounded-xl" : "rounded-t-xl",
+	);
+}
+
+/**
+ * The card's left/right/bottom edge, appended to `diffViewUnsafeCSS` by
+ * both the Files Changed pane and the walkthrough reference pane
+ * (`diff-pane.tsx` / `reference-pane.tsx`). Its top edge is the header's
+ * (`diffCardHeaderClassName` above), and that split is the whole point:
  * `stickyHeaders: true` pins the header to the *pane's* top while the
  * `<diffs-container>` host keeps scrolling, so any edge drawn on the host runs
  * straight past the pinned header's rounded top corners and the card stops
