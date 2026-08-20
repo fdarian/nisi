@@ -148,14 +148,13 @@ const decodeStoredWalkthrough = Schema.decodeUnknownResult(Walkthrough);
 /**
  * A row that fails to parse or decode falls back to a cold start, same as a
  * missing row (`Effect.orElseSucceed(() => null)` one call up) — the caller
- * logs which of the two happened.
+ * logs `reason`/`message` to say which.
  */
 type PriorContentSerialization =
 	| { readonly ok: true; readonly content: string }
-	| { readonly ok: false; readonly reason: "invalid-json" }
 	| {
 			readonly ok: false;
-			readonly reason: "schema-mismatch";
+			readonly reason: "invalid-json" | "schema-mismatch";
 			readonly message: string;
 	  };
 
@@ -172,8 +171,12 @@ const serializePriorContent = (content: string): PriorContentSerialization => {
 	let parsed: unknown;
 	try {
 		parsed = JSON.parse(content);
-	} catch {
-		return { ok: false, reason: "invalid-json" };
+	} catch (cause) {
+		return {
+			ok: false,
+			reason: "invalid-json",
+			message: cause instanceof Error ? cause.message : String(cause),
+		};
 	}
 	const decoded = decodeStoredWalkthrough(parsed);
 	return Result.isSuccess(decoded)
@@ -187,9 +190,9 @@ const serializePriorContent = (content: string): PriorContentSerialization => {
 
 /**
  * Bridges `serializePriorContent`'s result to `buildFreshPrompt`'s plain
- * `string | undefined`, logging which failure caused the fallback — the
- * function above stays a plain sync helper, so this is where `Effect.logDebug`
- * is actually reachable.
+ * `string | undefined`, logging why on a fallback — the function above stays
+ * a plain sync helper, so this is where `Effect.logDebug` is actually
+ * reachable.
  */
 const resolvePriorContent = async (
 	prior: StoredWalkthroughRecord | null,
@@ -201,12 +204,12 @@ const resolvePriorContent = async (
 	if (serialized.ok) return serialized.content;
 	await runEffect(
 		Effect.logDebug(
-			serialized.reason === "invalid-json"
-				? "stored walkthrough is not valid JSON; regenerating from scratch"
-				: "stored walkthrough failed schema validation; regenerating from scratch",
-			serialized.reason === "invalid-json"
-				? { sessionId }
-				: { sessionId, error: serialized.message },
+			"stored walkthrough did not decode; regenerating from scratch",
+			{
+				sessionId,
+				reason: serialized.reason,
+				error: serialized.message,
+			},
 		),
 		mainContext,
 	);
