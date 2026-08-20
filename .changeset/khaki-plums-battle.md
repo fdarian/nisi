@@ -1,5 +1,4 @@
 ---
-"@repo/walkthrough": patch
 "@repo/desktop": patch
 ---
 
