@@ -4,6 +4,13 @@ export { applyEdit, createBuffer, describeEditFailure } from "./buffer.ts";
 export type { CoverageGap, CoverageResult, LineRange } from "./coverage.ts";
 export { changedLineRanges, validateCoverage } from "./coverage.ts";
 
+export type { DocumentParseError, DocumentParseResult } from "./document.ts";
+export {
+	formatDocumentErrors,
+	parseDocument,
+	serializeDocument,
+} from "./document.ts";
+
 export type { OverviewInput } from "./overview.ts";
 export { buildOverview } from "./overview.ts";
 

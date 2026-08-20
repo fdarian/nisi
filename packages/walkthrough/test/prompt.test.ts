@@ -14,6 +14,13 @@ describe("buildSystemPrompt", () => {
 		expect(prompt).toContain("ref:<id>");
 		expect(prompt).toContain("write");
 		expect(prompt).toContain("edit");
+		expect(prompt).toContain("read");
+	});
+
+	test("documents the markdown document format, not JSON as the write shape", () => {
+		const prompt = buildSystemPrompt();
+		expect(prompt).toContain("```references");
+		expect(prompt).toContain("## ");
 	});
 });
 
@@ -22,18 +29,24 @@ describe("buildSystemPrompt tool names", () => {
 	// registers them under those same names. If the two ever diverge, the model
 	// is told to call a tool that was never registered.
 	test("uses the supplied names throughout", () => {
-		const prompt = buildSystemPrompt({ write: "w_probe", edit: "e_probe" });
+		const prompt = buildSystemPrompt({
+			write: "w_probe",
+			edit: "e_probe",
+			read: "r_probe",
+		});
 		expect(prompt).toContain("w_probe");
 		expect(prompt).toContain("e_probe");
+		expect(prompt).toContain("r_probe");
 	});
 
-	// A bare `write`/`edit` would collide with every adapter's builtin file
-	// tools — the collision that hung Pi and made Claude Code write a stray
-	// walkthrough.json into the user's repo.
+	// A bare `write`/`edit`/`read` would collide with every adapter's builtin
+	// file tools — the collision that hung Pi and made Claude Code write a
+	// stray walkthrough.json into the user's repo.
 	test("never names a tool that collides with a builtin file tool", () => {
 		const prompt = buildSystemPrompt();
 		expect(prompt).toContain(WALKTHROUGH_TOOL_NAMES.write);
 		expect(prompt).not.toContain("`write`");
 		expect(prompt).not.toContain("`edit`");
+		expect(prompt).not.toContain("`read`");
 	});
 });

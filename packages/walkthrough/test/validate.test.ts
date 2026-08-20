@@ -1,4 +1,6 @@
 import { describe, expect, test } from "bun:test";
+import { serializeDocument } from "../src/document.ts";
+import type { Walkthrough } from "../src/schema.ts";
 import { decodeBuffer, evaluateWalkthrough } from "../src/validate.ts";
 
 const patch = [
@@ -13,7 +15,7 @@ const patch = [
 	"",
 ].join("\n");
 
-const validDoc = {
+const validDoc: Walkthrough = {
 	version: 1,
 	sections: [{ title: "Intro", body: "See [x](ref:r1)." }],
 	references: [
@@ -25,34 +27,39 @@ const validDoc = {
 	],
 };
 
+const validDocument = serializeDocument(validDoc);
+
 describe("decodeBuffer", () => {
-	test("reports invalid JSON as feedback, not a thrown error", () => {
-		const result = decodeBuffer("{not json");
+	test("reports parse errors as feedback, not a thrown error", () => {
+		const result = decodeBuffer("no fence, no heading, just prose");
 		expect(result.ok).toBe(false);
-		if (!result.ok) expect(result.message).toContain("isn't valid JSON");
+		if (!result.ok) expect(result.message).toContain("references fenced block");
 	});
 
 	// An agent that never called `write` used to be told the buffer "isn't
 	// valid JSON: Unexpected EOF", which describes parsing nothing and names
 	// no next step — so every retry repeated the same non-move.
-	test("tells an agent that wrote nothing to call `write`, not that JSON is malformed", () => {
+	test("tells an agent that wrote nothing to call `write`, not that the document is malformed", () => {
 		for (const empty of ["", "   \n\t "]) {
 			const result = decodeBuffer(empty);
 			expect(result.ok).toBe(false);
 			if (!result.ok) {
 				expect(result.message).toContain("`write`");
-				expect(result.message).not.toContain("isn't valid JSON");
+				expect(result.message).not.toContain("parse errors");
 			}
 		}
 	});
 
-	test("reports a schema mismatch as feedback", () => {
-		const result = decodeBuffer(JSON.stringify({ version: 2 }));
+	test("reports a malformed reference block as feedback", () => {
+		// Drops the colon from "r1: Foo", so the line no longer matches the
+		// block-header grammar at all.
+		const broken = validDocument.replace("r1: Foo", "r1 Foo");
+		const result = decodeBuffer(broken);
 		expect(result.ok).toBe(false);
 	});
 
-	test("decodes a well-formed buffer", () => {
-		const result = decodeBuffer(JSON.stringify(validDoc));
+	test("decodes a well-formed document", () => {
+		const result = decodeBuffer(validDocument);
 		expect(result.ok).toBe(true);
 		if (result.ok) expect(result.walkthrough.version).toBe(1);
 	});
@@ -60,7 +67,7 @@ describe("decodeBuffer", () => {
 
 describe("evaluateWalkthrough", () => {
 	test("accepts a walkthrough that fully covers every changed file, reporting no gaps", () => {
-		const evaluation = evaluateWalkthrough(JSON.stringify(validDoc), [
+		const evaluation = evaluateWalkthrough(validDocument, [
 			{ path: "a.ts", patch, lineCount: 4 },
 		]);
 		expect(evaluation.status).toBe("valid");
@@ -70,7 +77,7 @@ describe("evaluateWalkthrough", () => {
 	});
 
 	test("accepts a walkthrough with uncovered hunks as valid, reporting the gaps instead of rejecting it", () => {
-		const doc = {
+		const doc: Walkthrough = {
 			...validDoc,
 			references: [
 				{
@@ -80,7 +87,7 @@ describe("evaluateWalkthrough", () => {
 				},
 			],
 		};
-		const evaluation = evaluateWalkthrough(JSON.stringify(doc), [
+		const evaluation = evaluateWalkthrough(serializeDocument(doc), [
 			{ path: "a.ts", patch, lineCount: 4 },
 		]);
 		expect(evaluation.status).toBe("valid");
@@ -92,16 +99,17 @@ describe("evaluateWalkthrough", () => {
 	});
 
 	test("returns decode feedback before checking references or coverage", () => {
-		const evaluation = evaluateWalkthrough("not json at all", [
-			{ path: "a.ts", patch, lineCount: 4 },
-		]);
+		const evaluation = evaluateWalkthrough(
+			"not a walkthrough document at all",
+			[{ path: "a.ts", patch, lineCount: 4 }],
+		);
 		expect(evaluation.status).toBe("invalid");
 		if (evaluation.status === "invalid")
-			expect(evaluation.feedback).toContain("JSON");
+			expect(evaluation.feedback).toContain("references fenced block");
 	});
 
 	test("checks reference integrity before coverage — a hallucinated path is reported as a reference issue, not a coverage gap", () => {
-		const doc = {
+		const doc: Walkthrough = {
 			...validDoc,
 			references: [
 				{
@@ -111,7 +119,7 @@ describe("evaluateWalkthrough", () => {
 				},
 			],
 		};
-		const evaluation = evaluateWalkthrough(JSON.stringify(doc), [
+		const evaluation = evaluateWalkthrough(serializeDocument(doc), [
 			{ path: "a.ts", patch, lineCount: 4 },
 		]);
 		expect(evaluation.status).toBe("invalid");

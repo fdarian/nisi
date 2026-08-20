@@ -17,11 +17,13 @@ import {
 	createBuffer,
 	createWalkthroughTools,
 	evaluateWalkthrough,
+	serializeDocument,
 	WALKTHROUGH_TOOL_NAMES,
+	Walkthrough,
 } from "@repo/walkthrough";
 import { registerTelemetry } from "ai";
 import type { Context } from "effect";
-import { Effect, Result } from "effect";
+import { Effect, Result, Schema } from "effect";
 import type { AppServices } from "../services.ts";
 import { type GenerationContext, gatherGenerationContext } from "./context.ts";
 import {
@@ -141,6 +143,34 @@ export type GenerateInput = {
 	readonly model?: string | undefined;
 };
 
+const decodeStoredWalkthrough = Schema.decodeUnknownResult(Walkthrough);
+
+/**
+ * `WalkthroughStore`'s `content` is that store's own JSON re-encoding of the
+ * previously *decoded* walkthrough (see its doc comment) — it was never the
+ * raw agent buffer, so this has nothing to do with the buffer's own document
+ * format. It still needs to reach the agent in that format, though: the
+ * system prompt now describes the buffer as markdown with a worked example,
+ * and re-showing the prior result as a raw JSON blob under a "keep what's
+ * still accurate" instruction would contradict that framing for no reason.
+ * A row that fails to decode (schema drift, a hand edit) is treated the same
+ * as no prior result — falling back to a cold start is already what an
+ * unreadable or missing row does one call up (`Effect.orElseSucceed(() =>
+ * null)` below), and continuity here is a nice-to-have, not a contract.
+ */
+const serializePriorContent = (content: string): string | undefined => {
+	let parsed: unknown;
+	try {
+		parsed = JSON.parse(content);
+	} catch {
+		return undefined;
+	}
+	const decoded = decodeStoredWalkthrough(parsed);
+	return Result.isSuccess(decoded)
+		? serializeDocument(decoded.success)
+		: undefined;
+};
+
 const buildFreshPrompt = (
 	overviewText: string,
 	priorContent: string | undefined,
@@ -150,7 +180,7 @@ const buildFreshPrompt = (
 		: [
 				"This is a regeneration — the underlying sidecar process restarted since the walkthrough below was written, so the previous conversation is gone, but its result isn't. Use it as your starting point: keep what's still accurate, update what the current diff changed.",
 				"",
-				"Previous walkthrough (JSON):",
+				"Previous walkthrough:",
 				"",
 				priorContent,
 				"",
@@ -216,6 +246,7 @@ const startFreshSession = async (
 		tools: {
 			[toolNames.write]: walkthroughTools.write,
 			[toolNames.edit]: walkthroughTools.edit,
+			[toolNames.read]: walkthroughTools.read,
 		},
 		inactiveTools: FILE_MUTATING_BUILTINS[input.harness],
 		instructions: buildSystemPrompt(toolNames),
@@ -393,7 +424,10 @@ export async function* generateWalkthrough(
 			yield await endCancelled(input.sessionId);
 			return;
 		}
-		turnPrompt = buildFreshPrompt(overviewText, prior?.content);
+		turnPrompt = buildFreshPrompt(
+			overviewText,
+			prior === null ? undefined : serializePriorContent(prior.content),
+		);
 	}
 
 	for (let turn = 1; turn <= MAX_TURNS; turn++) {
