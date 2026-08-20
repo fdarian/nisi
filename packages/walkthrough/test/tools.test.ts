@@ -73,4 +73,23 @@ describe("createWalkthroughTools", () => {
 
 		expect(buffer.content).toBe("cc bb cc");
 	});
+
+	test("read returns the buffer's exact current text, unmodified", async () => {
+		const content = "## Title\n\nBody with  double  spaces preserved.\n";
+		const buffer = createBuffer(content);
+		const tools = createWalkthroughTools(buffer);
+
+		const result = await tools.read.execute?.({}, toolExecutionOptions);
+
+		expect(result).toBe(content);
+	});
+
+	test("read tells the agent the buffer is empty rather than returning an empty string", async () => {
+		const buffer = createBuffer();
+		const tools = createWalkthroughTools(buffer);
+
+		const result = await tools.read.execute?.({}, toolExecutionOptions);
+
+		expect(result).toContain("empty");
+	});
 });

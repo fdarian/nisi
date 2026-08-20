@@ -1,11 +1,11 @@
-import { Result, Schema } from "effect";
 import {
 	type CoverageGap,
 	changedLineRanges,
 	validateCoverage,
 } from "./coverage.ts";
+import { formatDocumentErrors, parseDocument } from "./document.ts";
 import { formatReferenceFeedback, validateReferences } from "./references.ts";
-import { Walkthrough } from "./schema.ts";
+import type { Walkthrough } from "./schema.ts";
 
 export type ChangedFileFacts = {
 	readonly path: string;
@@ -24,28 +24,11 @@ type DecodeResult =
 	| { readonly ok: true; readonly walkthrough: Walkthrough }
 	| { readonly ok: false; readonly message: string };
 
-const parseJson = (
-	text: string,
-):
-	| { readonly ok: true; readonly value: unknown }
-	| { readonly ok: false; readonly message: string } => {
-	try {
-		return { ok: true, value: JSON.parse(text) };
-	} catch (cause) {
-		return {
-			ok: false,
-			message: cause instanceof Error ? cause.message : String(cause),
-		};
-	}
-};
-
-const decodeWalkthrough = Schema.decodeUnknownResult(Walkthrough);
-
 /**
  * Decodes the raw buffer text the `write`/`edit` tools produced. Failures
- * (invalid JSON or a schema mismatch) are returned as data, never thrown —
- * `evaluateWalkthrough` turns them into feedback text for the agent's next
- * turn instead of crashing the caller.
+ * (a malformed document, one that doesn't satisfy the walkthrough schema) are
+ * returned as data, never thrown — `evaluateWalkthrough` turns them into
+ * feedback text for the agent's next turn instead of crashing the caller.
  */
 /**
  * An untouched buffer means the agent never called `write` at all — a
@@ -64,17 +47,11 @@ export const decodeBuffer = (bufferContent: string): DecodeResult => {
 		return { ok: false, message: NOTHING_WRITTEN_FEEDBACK };
 	}
 
-	const parsed = parseJson(bufferContent);
+	const parsed = parseDocument(bufferContent);
 	if (!parsed.ok) {
-		return {
-			ok: false,
-			message: `The buffer isn't valid JSON: ${parsed.message}`,
-		};
+		return { ok: false, message: formatDocumentErrors(parsed.errors) };
 	}
-	return Result.match(decodeWalkthrough(parsed.value), {
-		onSuccess: (walkthrough): DecodeResult => ({ ok: true, walkthrough }),
-		onFailure: (error): DecodeResult => ({ ok: false, message: error.message }),
-	});
+	return { ok: true, walkthrough: parsed.walkthrough };
 };
 
 export type WalkthroughEvaluation =

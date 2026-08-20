@@ -17,11 +17,13 @@ import {
 	createBuffer,
 	createWalkthroughTools,
 	evaluateWalkthrough,
+	serializeDocument,
 	WALKTHROUGH_TOOL_NAMES,
+	Walkthrough,
 } from "@repo/walkthrough";
 import { registerTelemetry } from "ai";
 import type { Context } from "effect";
-import { Effect, Result } from "effect";
+import { Effect, Result, Schema } from "effect";
 import type { AppServices } from "../services.ts";
 import { type GenerationContext, gatherGenerationContext } from "./context.ts";
 import {
@@ -141,6 +143,79 @@ export type GenerateInput = {
 	readonly model?: string | undefined;
 };
 
+const decodeStoredWalkthrough = Schema.decodeUnknownResult(Walkthrough);
+
+/**
+ * A row that fails to parse or decode falls back to a cold start, same as a
+ * missing row (`Effect.orElseSucceed(() => null)` one call up) — the caller
+ * logs `reason`/`message` to say which.
+ */
+type PriorContentSerialization =
+	| { readonly ok: true; readonly content: string }
+	| {
+			readonly ok: false;
+			readonly reason: "invalid-json" | "schema-mismatch";
+			readonly message: string;
+	  };
+
+/**
+ * `WalkthroughStore`'s `content` is that store's own JSON re-encoding of the
+ * previously *decoded* walkthrough (see its doc comment) — it was never the
+ * raw agent buffer, so this has nothing to do with the buffer's own document
+ * format. It still needs to reach the agent in that format, though: the
+ * system prompt now describes the buffer as markdown with a worked example,
+ * and re-showing the prior result as a raw JSON blob under a "keep what's
+ * still accurate" instruction would contradict that framing for no reason.
+ */
+const serializePriorContent = (content: string): PriorContentSerialization => {
+	let parsed: unknown;
+	try {
+		parsed = JSON.parse(content);
+	} catch (cause) {
+		return {
+			ok: false,
+			reason: "invalid-json",
+			message: cause instanceof Error ? cause.message : String(cause),
+		};
+	}
+	const decoded = decodeStoredWalkthrough(parsed);
+	return Result.isSuccess(decoded)
+		? { ok: true, content: serializeDocument(decoded.success) }
+		: {
+				ok: false,
+				reason: "schema-mismatch",
+				message: decoded.failure.message,
+			};
+};
+
+/**
+ * Bridges `serializePriorContent`'s result to `buildFreshPrompt`'s plain
+ * `string | undefined`, logging why on a fallback — the function above stays
+ * a plain sync helper, so this is where `Effect.logDebug` is actually
+ * reachable.
+ */
+const resolvePriorContent = async (
+	prior: StoredWalkthroughRecord | null,
+	sessionId: string,
+	mainContext: Context.Context<AppServices>,
+): Promise<string | undefined> => {
+	if (prior === null) return undefined;
+	const serialized = serializePriorContent(prior.content);
+	if (serialized.ok) return serialized.content;
+	await runEffect(
+		Effect.logDebug(
+			"stored walkthrough did not decode; regenerating from scratch",
+			{
+				sessionId,
+				reason: serialized.reason,
+				error: serialized.message,
+			},
+		),
+		mainContext,
+	);
+	return undefined;
+};
+
 const buildFreshPrompt = (
 	overviewText: string,
 	priorContent: string | undefined,
@@ -150,7 +225,7 @@ const buildFreshPrompt = (
 		: [
 				"This is a regeneration — the underlying sidecar process restarted since the walkthrough below was written, so the previous conversation is gone, but its result isn't. Use it as your starting point: keep what's still accurate, update what the current diff changed.",
 				"",
-				"Previous walkthrough (JSON):",
+				"Previous walkthrough:",
 				"",
 				priorContent,
 				"",
@@ -216,6 +291,7 @@ const startFreshSession = async (
 		tools: {
 			[toolNames.write]: walkthroughTools.write,
 			[toolNames.edit]: walkthroughTools.edit,
+			[toolNames.read]: walkthroughTools.read,
 		},
 		inactiveTools: FILE_MUTATING_BUILTINS[input.harness],
 		instructions: buildSystemPrompt(toolNames),
@@ -393,7 +469,10 @@ export async function* generateWalkthrough(
 			yield await endCancelled(input.sessionId);
 			return;
 		}
-		turnPrompt = buildFreshPrompt(overviewText, prior?.content);
+		turnPrompt = buildFreshPrompt(
+			overviewText,
+			await resolvePriorContent(prior, input.sessionId, mainContext),
+		);
 	}
 
 	for (let turn = 1; turn <= MAX_TURNS; turn++) {
