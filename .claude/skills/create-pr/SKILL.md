@@ -18,6 +18,12 @@ package.
 as the GitHub release notes — the body IS the release note. Say what changed for the user, not what
 changed in the code: no package names, no "refactored X". Two lines max if genuinely needed.
 
+**Cut the mechanism.** One sentence is the limit, and it's easy to obey the letter while stuffing in
+three clauses of how it works — where the button lives, what it polls, how often. A user reading
+release notes wants the capability, not its implementation. Name what they can now do; drop the UI
+location, the interval, the trigger, and the sequence of steps. If a clause would still be true after
+a rewrite of the feature, it probably belongs; if it describes this particular build of it, cut it.
+
 **Skip the changeset entirely** for docs, tests, CI, and internal refactors with no behavior change.
 
 ### Good
@@ -44,6 +50,19 @@ Switched the walkthrough agent's buffer format from JSON to markdown and refacto
 here is what gives it its own bump and changelog section. The body also describes the
 implementation, not what a nisi user sees.
 
+### Bad
+```md
+---
+"@repo/desktop": minor
+---
+
+Add self-update for the Homebrew-cask install: the app checks the tap hourly and shows a pill in the
+tab strip to download and restart into the new version.
+```
+One sentence, but three clauses of mechanism. The hourly poll, the pill, the tab strip, and the
+download-then-restart sequence are all implementation. `nisi can now update itself when it was
+installed via Homebrew.` is the release note.
+
 # PR body
 
 Match the shape already used in this repo's merged PRs: `## Summary`, `## Why`, `## Test plan`. Keep
@@ -61,3 +80,4 @@ it tight — existing PRs run long; don't. Don't repeat the changeset text verba
    gh pr create --title "<title>" --body-file /tmp/<slug>.md
    ```
 4. Return the PR URL.
+
