@@ -17,6 +17,7 @@ import { pullRequestsContract } from "./pull-requests.ts";
 import { reviewContract } from "./review.ts";
 import { sessionsContract } from "./sessions.ts";
 import { settingsContract } from "./settings.ts";
+import { updateContract } from "./update.ts";
 import { walkthroughContract } from "./walkthrough.ts";
 
 export * from "./diff.ts";
@@ -26,6 +27,7 @@ export * from "./pull-requests.ts";
 export * from "./review.ts";
 export * from "./sessions.ts";
 export * from "./settings.ts";
+export * from "./update.ts";
 export * from "./walkthrough.ts";
 
 // `.errors()` here augments *every* procedure in the router below with UNAUTHORIZED,
@@ -40,4 +42,5 @@ export const contract = oc.errors({ UNAUTHORIZED: {} }).router({
 	walkthrough: walkthroughContract,
 	settings: settingsContract,
 	pullRequests: pullRequestsContract,
+	update: updateContract,
 });
