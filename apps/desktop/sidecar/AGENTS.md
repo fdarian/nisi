@@ -155,6 +155,18 @@ seam" for the port/token handshake this boots into.
   retrying it every `POLL_INTERVAL` forever would just re-produce the WARN flood a dead `cwd` used
   to cause on every git spawn. Pruned from that set the same tick a session closes.
 - `walkthrough/` — Phase 3's wiring layer. See its own AGENTS.md.
+- `updater/` — macOS Homebrew-cask auto-update. `service.ts`'s `Updater` owns a `Ref<UpdateState>`
+  and is the only writer of it: `startChecks()` (forked from `index.ts`'s boot program, same shape as
+  `startLivePolling` above) drives `idle ⇄ available` on an hourly `Schedule`, stopping for good the
+  first time it finds this isn't a cask install; `download`/`restart` (the `update.*` oRPC handlers)
+  own every other transition, so the poller can never stomp a download in flight or a cached artifact
+  waiting for a restart. `homebrew.ts` resolves `brew` and shells out to it (`list --cask --versions`,
+  `fetch --cask`); `tap-version.ts` reads the tap's cask file over HTTP and compares semver against
+  the installed version — brew itself, not GitHub's release API, since a release can ship ahead of the
+  tap. `restart-helper.ts` writes a POSIX-sh script to `<data dir>/update/` and spawns it detached
+  (`ChildProcessSpawner`, `detached: true`, every stdio `"ignore"`, `handle.unref` before its own scope
+  closes) so it outlives the sidecar; the script waits for the app to quit, runs
+  `brew upgrade --cask nisi` against the artifact `download` already cached, and relaunches either way.
 
 ## Gotchas
 
