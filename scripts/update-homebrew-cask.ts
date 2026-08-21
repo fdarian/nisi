@@ -47,6 +47,8 @@ function renderCask(version: string, sha256Hash: string): string {
                    args: ["-dr", "com.apple.quarantine", "#{appdir}/nisi.app"]
   end
 
+  uninstall quit: "com.nisi.desktop"
+
   zap trash: [
     "~/Library/Application Support/com.nisi.desktop",
     "~/Library/Caches/com.nisi.desktop",

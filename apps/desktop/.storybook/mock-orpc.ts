@@ -207,6 +207,15 @@ export function createMockOrpc(data: MockOrpcData = {}): SidecarQueryUtils {
 			get: async () => settings,
 			update: async (patch) => Object.assign(settings, patch),
 		},
+		// No story exercises the update pill yet — `unsupported` is what a
+		// non-Homebrew install (i.e. every dev machine building Storybook)
+		// actually reports, so this is the mock's honest default rather than
+		// a placeholder.
+		update: {
+			status: async () => ({ type: "unsupported" }) as const,
+			download: async () => undefined,
+			restart: async () => undefined,
+		},
 		// `search`/`open`/`recordRepoPath` are never referenced by any story
 		// yet — the open-PR palette has no storybook coverage — so those three
 		// stubs exist only to keep `SidecarClient` satisfied, same reasoning as

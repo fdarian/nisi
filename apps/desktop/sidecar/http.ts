@@ -38,6 +38,7 @@ import { checkSessionForChanges } from "./live-poll.ts";
 import type { AppServices } from "./services.ts";
 import { SessionWatch } from "./session-watch.ts";
 import { Store } from "./store.ts";
+import { Updater } from "./updater/service.ts";
 import {
 	beginTrackedGeneration,
 	GenerateSessionNotFound,
@@ -708,6 +709,20 @@ export function attachRouter(
 			update: authed.settings.update.effect(function* ({ input }) {
 				const store = yield* SettingsStore;
 				return toWireSettings(yield* store.update(input));
+			}),
+		},
+		update: {
+			status: authed.update.status.effect(function* () {
+				const updater = yield* Updater;
+				return yield* updater.status;
+			}),
+			download: authed.update.download.effect(function* () {
+				const updater = yield* Updater;
+				yield* updater.download;
+			}),
+			restart: authed.update.restart.effect(function* () {
+				const updater = yield* Updater;
+				yield* updater.restart;
 			}),
 		},
 		pullRequests: {

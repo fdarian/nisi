@@ -14,6 +14,7 @@ import {
 	releaseSidecarLock,
 } from "./sidecar-lock.ts";
 import { Store } from "./store.ts";
+import { Updater } from "./updater/service.ts";
 import { WalkthroughStore } from "./walkthrough/store.ts";
 
 /** Same `NISI_DATA_DIR` default `@repo/db`'s `SqliteDb` resolves — shared so the handshake file and `app.db` always land in the same directory. */
@@ -109,6 +110,12 @@ const program = Effect.scoped(
 				// interrupted instead of an acquireRelease finalizer.
 				yield* startLivePolling();
 
+				// Same shape as `startLivePolling` above, for auto-update's own
+				// background version check (first run ~10s out, then hourly —
+				// see `updater/service.ts`).
+				const updater = yield* Updater;
+				yield* updater.startChecks();
+
 				yield* Effect.never;
 			}),
 			MainLayer,
@@ -127,12 +134,16 @@ const program = Effect.scoped(
 // directly. Provided around only the program's tail above — deliberately
 // *not* around the whole program the way `EarlyLayer` below is — so
 // `SqliteDb`'s connection (and its migrations) never opens until this
-// process is the data dir's confirmed sole owner.
+// process is the data dir's confirmed sole owner. `Updater.layer` doesn't
+// need `SqliteDb` at all (its state is a Ref, not a table — see its own
+// doc), just `FileSystem`/`ChildProcessSpawner` from the same `BunServices`
+// merge everything else here already needs.
 const MainLayer = Layer.mergeAll(
 	Store.layer,
 	WalkthroughStore.layer,
 	SettingsStore.layer,
 	SessionWatch.layer,
+	Updater.layer,
 ).pipe(
 	Layer.provideMerge(SqliteDb.layer),
 	Layer.provideMerge(BunServices.layer),

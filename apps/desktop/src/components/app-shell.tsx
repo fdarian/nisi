@@ -276,6 +276,7 @@ function AppShellReady({
 				onCloseSession={handleCloseSession}
 				onOpenPullRequest={openPalette}
 				onSuspendTab={tabSuspension.suspendNow}
+				orpc={orpc}
 				sessions={sessions}
 				suspendedSessionIds={tabSuspension.suspendedSessionIds}
 			/>
