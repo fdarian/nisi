@@ -39,7 +39,7 @@ function toPillView(
 			return {
 				ariaLabel: "Update available — click to download",
 				collapsed: false,
-				icon: <DownloadIcon className="size-3.5" />,
+				icon: <DownloadIcon />,
 				label: "Update available",
 				onClick: onDownload,
 			};
@@ -47,7 +47,7 @@ function toPillView(
 			return {
 				ariaLabel: "Downloading update…",
 				collapsed: true,
-				icon: <Spinner className="size-3.5" />,
+				icon: <Spinner />,
 				label: "Update available",
 				onClick: null,
 			};
@@ -55,7 +55,7 @@ function toPillView(
 			return {
 				ariaLabel: "Restart to update",
 				collapsed: false,
-				icon: <RotateCcwIcon className="size-3.5" />,
+				icon: <RotateCcwIcon />,
 				label: "Restart to update",
 				onClick: onRestart,
 			};
@@ -65,7 +65,7 @@ function toPillView(
 			return {
 				ariaLabel: "Update failed — click to retry",
 				collapsed: false,
-				icon: <DownloadIcon className="size-3.5" />,
+				icon: <DownloadIcon />,
 				label: "Update available",
 				onClick: onDownload,
 			};
@@ -134,10 +134,11 @@ export function UpdatePill({
 			aria-disabled={view.collapsed || undefined}
 			aria-label={view.ariaLabel}
 			className={cn(
-				"h-7 shrink-0 gap-0 self-center rounded-full p-0 before:rounded-full sm:h-6",
+				"gap-0 self-center rounded-full p-0 before:rounded-full",
 				view.collapsed && "pointer-events-none",
 			)}
 			onClick={view.onClick ?? undefined}
+			size="xs"
 			type="button"
 			variant="info"
 		>
@@ -147,7 +148,7 @@ export function UpdatePill({
 			<span
 				aria-hidden="true"
 				className={cn(
-					"overflow-hidden whitespace-nowrap pr-3 font-medium text-xs transition-[max-width,opacity] duration-300 ease-out",
+					"overflow-hidden whitespace-nowrap pr-3 font-medium transition-[max-width,opacity] duration-300 ease-out",
 					// At max-w-0 this cell contributes nothing to the button's
 					// (auto) width but the button's own 1px-per-side border still
 					// does — auto-width always adds a container's border on top,
