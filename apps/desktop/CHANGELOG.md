@@ -1,5 +1,11 @@
 # @repo/desktop
 
+## 0.2.4
+
+### Patch Changes
+
+- fcd25ba: Switch the walkthrough agent's buffer from a JSON string to a markdown document, and add a `read_walkthrough` tool so the agent can re-sync before editing.
+
 ## 0.2.3
 
 ### Patch Changes
