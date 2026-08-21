@@ -169,23 +169,6 @@ const attempt = (
 		return { _tag: "unreachable" } as const;
 	});
 
-/**
- * A sidecar that answers means the app is already running — but it's running
- * behind whatever terminal the user typed `nisi` into, and nothing else on that
- * path brings it forward. `open -a` on an already-running app is exactly that
- * activate (see `launchApp`), so the same call that spawns a cold app focuses a
- * warm one. A failed activate must never downgrade a session that genuinely
- * opened, so it's logged rather than propagated.
- */
-const focusRunningApp = launchApp.pipe(
-	Effect.tapError((error) =>
-		Effect.logDebug("could not focus the running app", {
-			reason: error.reason,
-		}),
-	),
-	Effect.ignore,
-);
-
 /** Keeps retrying through either flavor of "no answer yet" — only a conclusive outcome ends the poll early. */
 const pollUntilReachable = (
 	sidecarJsonPath: string,
@@ -260,10 +243,12 @@ const openSession = (
  * selection (`packages/cli/src/index.ts`), passed straight through to
  * `sessions.open` — this module doesn't interpret it.
  *
- * Opening a session and putting the app in front are separate concerns here:
- * only one of `openSession`'s paths launches the app, but every path that ends
- * in a session wants that app frontmost, so the focus lives out here where it
- * covers all of them.
+ * Only the cold-start path (`openSession`'s `launchApp` call) brings a window
+ * forward from here — an already-running app focuses itself on receiving the
+ * `session-opened` event it just got POSTed (`pr-data.ts`'s `useSessions`),
+ * since that event, unlike `launchApp`, always names the right app: a second
+ * `open -a` here would have no way to tell a dev sandbox instance from a
+ * production install (see `app-launch.ts`'s doc comment).
  */
 export const handoff = (
 	cwd: string,
@@ -282,9 +267,5 @@ export const handoff = (
 			logFile: join(dataDir, "logs", "sidecar.log"),
 		});
 
-		const outcome = yield* openSession(sidecarJsonPath, cwd, target);
-		if (outcome._tag === "opened") {
-			yield* focusRunningApp;
-		}
-		return outcome;
+		return yield* openSession(sidecarJsonPath, cwd, target);
 	});

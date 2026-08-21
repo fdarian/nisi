@@ -23,6 +23,8 @@ import {
 	useQuery,
 	useQueryClient,
 } from "@tanstack/react-query";
+import { isTauri } from "@tauri-apps/api/core";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toastManager } from "#/components/ui/toast";
 import type { SidecarQueryUtils } from "#/lib/backend-context";
@@ -151,14 +153,19 @@ export function useSessions(
 	// running app is exactly what `events.subscribe` exists for — a live
 	// query resolves to the latest emitted `SessionEvent`, so any event just
 	// invalidates the list rather than trying to reconcile it by hand.
-	// `session-opened` additionally requests activation, since that's the one
-	// event whose whole point is a tab the user hasn't looked at yet.
+	// `session-opened` additionally requests activation and foregrounds this
+	// window: the sidecar this event arrived from is by construction the one
+	// the CLI's `sessions.open` just reached, which is the only signal that
+	// reliably identifies "the right app" when a dev sandbox and a production
+	// install both exist (`packages/cli/src/app-launch.ts` can't tell them
+	// apart by path/bundle id — see that module's doc comment).
 	const eventsQuery = useQuery(orpc.events.subscribe.liveOptions());
 	useEffect(() => {
 		if (eventsQuery.data === undefined) return;
 		queryClient.invalidateQueries({ queryKey: orpc.sessions.list.queryKey() });
 		if (eventsQuery.data.type === "session-opened") {
 			onSessionOpened(eventsQuery.data.session.id);
+			if (isTauri()) void getCurrentWindow().setFocus();
 		}
 	}, [eventsQuery.data, queryClient, orpc, onSessionOpened]);
 
