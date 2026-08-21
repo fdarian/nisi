@@ -19,3 +19,5 @@ routeTree.gen.ts
 # Shared: how an agent starts the dev server / storybook under its own process
 # management, so it can read the logs. See apps/desktop/AGENTS.md.
 !.claude/launch.json
+# Shared: this repo's changeset + PR conventions, loaded as a project skill.
+!.claude/skills

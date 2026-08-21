@@ -28,12 +28,13 @@ type TabShortcutsOptions = {
 	activeTabId: string | null;
 	onActivateTab: (tabId: string) => void;
 	onCloseTab: (tabId: string) => void;
+	onCloseOtherTabs: (tabId: string) => void;
 };
 
 /**
  * Every tab keybinding in one place, mounted where the tab state lives
- * (`app-shell.tsx`): ⌘⇧] / ⌘⇧[ to step (wrapping), ⌘1…⌘9 to jump, and ⌘W to
- * close.
+ * (`app-shell.tsx`): ⌘⇧] / ⌘⇧[ to step (wrapping), ⌘1…⌘9 to jump, ⌘W to
+ * close, and ⌘⌥W to close every tab but the active one.
  *
  * ⌘W arrives as a *menu* event rather than a keystroke: it's a real File
  * menu item ("Close Tab", distinct from "Close Window" on ⌘⇧W) so it shows up
@@ -41,17 +42,28 @@ type TabShortcutsOptions = {
  * consumed before the webview ever sees the key anyway (see
  * `build_macos_menu` in `src-tauri/src/lib.rs`). That also means ⌘W is the
  * one shortcut here with no effect in a plain browser tab — there's no menu to
- * fire it and no window to close.
+ * fire it and no window to close. ⌘⌥W has no menu item, so it's a plain
+ * `keydown` chord instead — nothing in `build_macos_menu` claims that
+ * accelerator, so the webview sees it directly.
  */
 export function useTabShortcuts({
 	tabIds,
 	activeTabId,
 	onActivateTab,
 	onCloseTab,
+	onCloseOtherTabs,
 }: TabShortcutsOptions): void {
 	useEffect(() => {
 		const handleKeyDown = (event: KeyboardEvent) => {
 			if (isTextEntry(event.target)) return;
+
+			if (isCloseOtherTabsChord(event)) {
+				if (activeTabId === null || tabIds.length <= 1) return;
+				event.preventDefault();
+				onCloseOtherTabs(activeTabId);
+				return;
+			}
+
 			const index = resolveTargetIndex(event, tabIds, activeTabId);
 			const targetId = index === undefined ? undefined : tabIds[index];
 			if (targetId === undefined) return;
@@ -77,7 +89,17 @@ export function useTabShortcuts({
 			window.removeEventListener("keydown", handleKeyDown);
 			unlisten?.then((stop) => stop());
 		};
-	}, [tabIds, activeTabId, onActivateTab, onCloseTab]);
+	}, [tabIds, activeTabId, onActivateTab, onCloseTab, onCloseOtherTabs]);
+}
+
+function isCloseOtherTabsChord(event: KeyboardEvent): boolean {
+	return (
+		event.metaKey &&
+		event.altKey &&
+		!event.ctrlKey &&
+		!event.shiftKey &&
+		event.code === "KeyW"
+	);
 }
 
 /**

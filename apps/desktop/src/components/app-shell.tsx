@@ -202,6 +202,18 @@ function AppShellReady({
 		[activeSessionId, closeSession, clearSessionUiState, sessions],
 	);
 
+	const handleCloseOtherSessions = useCallback(
+		(sessionId: string) => {
+			for (const session of sessions) {
+				if (session.id === sessionId) continue;
+				closeSession(session.id);
+				clearSessionUiState(session.id);
+			}
+			setRequestedActiveSessionId(sessionId);
+		},
+		[sessions, closeSession, clearSessionUiState],
+	);
+
 	const sessionIds = useMemo(
 		() => sessions.map((session) => session.id),
 		[sessions],
@@ -209,6 +221,7 @@ function AppShellReady({
 	useTabShortcuts({
 		activeTabId: activeSessionId,
 		onActivateTab: setRequestedActiveSessionId,
+		onCloseOtherTabs: handleCloseOtherSessions,
 		onCloseTab: handleCloseSession,
 		tabIds: sessionIds,
 	});
@@ -259,6 +272,7 @@ function AppShellReady({
 			<PrTabStrip
 				activeSessionId={activeSessionId}
 				checkGenerationRunning={tabSuspension.isGenerationRunning}
+				onCloseOtherSessions={handleCloseOtherSessions}
 				onCloseSession={handleCloseSession}
 				onOpenPullRequest={openPalette}
 				onSuspendTab={tabSuspension.suspendNow}
