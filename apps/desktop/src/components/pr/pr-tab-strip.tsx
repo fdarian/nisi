@@ -13,6 +13,8 @@ import {
 import { Kbd } from "#/components/ui/kbd";
 import { TabsPrimitive } from "#/components/ui/tabs";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "#/components/ui/tooltip";
+import { UpdatePill } from "#/components/update-pill";
+import type { SidecarQueryUtils } from "#/lib/backend-context";
 import type { Session } from "#/lib/pr-data";
 import { cn } from "#/lib/utils";
 import { Button } from "../ui/button";
@@ -42,6 +44,8 @@ type PrTabStripProps = {
 	 * that as the shown reason, instead of the click just doing nothing. */
 	checkGenerationRunning: (sessionId: string) => Promise<boolean>;
 	onContextMenu?: (event: React.MouseEvent) => void;
+	/** Threaded through only for `UpdatePill` — the strip itself talks to no other sidecar procedure. */
+	orpc: SidecarQueryUtils;
 };
 
 /**
@@ -74,6 +78,7 @@ export function PrTabStrip({
 	onSuspendTab,
 	checkGenerationRunning,
 	onContextMenu,
+	orpc,
 }: PrTabStripProps): React.ReactElement {
 	return (
 		// biome-ignore lint/a11y/noStaticElementInteractions: right-click only, opens a native OS menu — nothing here needs keyboard/focus semantics.
@@ -95,6 +100,11 @@ export function PrTabStrip({
 				))}
 				<OpenPullRequestButton onClick={onOpenPullRequest} />
 			</TabsPrimitive.List>
+			{/* Outside the scrollable, `flex-1` tab list — that's what keeps the
+			 * pill pinned at the strip's right edge instead of scrolling with
+			 * the tabs (see this file's top doc comment on why the list gets
+			 * `flex-1` in the first place). */}
+			<UpdatePill orpc={orpc} />
 		</div>
 	);
 }

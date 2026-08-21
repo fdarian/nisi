@@ -45,6 +45,7 @@ export const buttonVariants = cva(
 					"border-transparent bg-secondary text-secondary-foreground hover:bg-secondary/90 data-pressed:bg-secondary/90 *:data-[slot=button-loading-indicator]:text-secondary-foreground [:active,[data-pressed]]:bg-secondary/80",
 				"warning-secondary":
 					"border-transparent bg-warning/8 text-warning-foreground hover:bg-warning/16 data-pressed:bg-warning/16 *:data-[slot=button-loading-indicator]:text-warning-foreground [:active,[data-pressed]]:bg-warning/24 dark:bg-warning/16 dark:hover:bg-warning/24 dark:data-pressed:bg-warning/24 dark:[:active,[data-pressed]]:bg-warning/32",
+				info: "not-disabled:inset-shadow-[0_1px_--theme(--color-white/16%)] border-info bg-info text-white shadow-info/24 shadow-xs hover:bg-info/90 data-pressed:bg-info/90 *:data-[slot=button-loading-indicator]:text-white [:active,[data-pressed]]:inset-shadow-[0_1px_--theme(--color-black/8%)] [:disabled,:active,[data-pressed]]:shadow-none",
 			},
 		},
 	},
