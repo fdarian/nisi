@@ -46,14 +46,16 @@ done
 
 echo "[$(date)] running: HOMEBREW_NO_AUTO_UPDATE=1 $brew_path upgrade --cask ${CASK_TOKEN}"
 HOMEBREW_NO_AUTO_UPDATE=1 "$brew_path" upgrade --cask ${CASK_TOKEN}
-echo "[$(date)] brew upgrade exited with status $?"
+upgrade_status=$?
+echo "[$(date)] brew upgrade exited with status $upgrade_status"
 
 # Relaunch unconditionally, whether or not the upgrade above succeeded -- a
 # failed upgrade must leave the user with a working old app, not nothing.
 # The next background check re-offers the update.
 echo "[$(date)] relaunching: open -a $app_path"
 open -a "$app_path"
-echo "[$(date)] open exited with status $?"
+open_status=$?
+echo "[$(date)] open exited with status $open_status"
 `;
 
 export type RestartHelperParams = {
