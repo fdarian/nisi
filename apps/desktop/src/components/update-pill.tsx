@@ -148,7 +148,15 @@ export function UpdatePill({
 				aria-hidden="true"
 				className={cn(
 					"overflow-hidden whitespace-nowrap pr-3 font-medium text-xs transition-[max-width,opacity] duration-300 ease-out",
-					view.collapsed ? "max-w-0 pr-0 opacity-0" : "max-w-40 opacity-100",
+					// At max-w-0 this cell contributes nothing to the button's
+					// (auto) width but the button's own 1px-per-side border still
+					// does — auto-width always adds a container's border on top,
+					// unlike the pinned h-7/h-6 where box-sizing absorbs it into
+					// the explicit value. -mr-0.5 cancels that 2px so the
+					// collapsed circle measures width === height.
+					view.collapsed
+						? "max-w-0 -mr-0.5 pr-0 opacity-0"
+						: "max-w-40 opacity-100",
 				)}
 			>
 				{view.label}
