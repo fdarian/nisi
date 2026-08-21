@@ -32,16 +32,21 @@ the wire shape this grammar maps to.
   `nisi`, splits a partially-typed `<base>` the same way `base-argument.ts` does (so `main..<TAB>`
   offers head refs while keeping the `main..` prefix on the line via `compadd -P`), and degrades to no
   candidates, silently, outside a git repo.
-- `src/handoff.ts` — the seam itself: read `sidecar.json`, POST `sessions.open` (now `{ cwd, target
-  }`) with a short per-attempt timeout, and only spawn the app (`app-launch.ts`) when that POST can't
+- `src/handoff.ts` — the seam itself: read `sidecar.json`, POST `sessions.open` (`{ cwd, target }`)
+  with a short per-attempt timeout, and only spawn the app (`app-launch.ts`) when that POST can't
   reach anything — never on a declared app-level error, which means the sidecar is alive and
-  answered. Always the same POST either way; `target` just rides along, uninterpreted by this module.
-  Opening a session and putting the app in front are separate steps (`openSession`, then the focus in
-  `handoff`): only one path spawns the app, but every path that ends in a session wants it frontmost.
-- `src/app-launch.ts` — resolves "the app" (env override, `/Applications`, or a locally-built
-  release bundle — nisi has no install channel yet) and `open -a`s it, which hands off to
-  LaunchServices and exits on its own — a launch when the app is cold, an activate when it's
-  already running.
+  answered. Always the same POST either way; `target` just rides along, uninterpreted by this
+  module. Bringing the window forward is not this module's job once a session already exists: the
+  app that received the POST focuses itself on the `session-opened` event it emits
+  (`apps/desktop/src/lib/pr-data.ts`'s `useSessions`), since that's the only reliable way to tell
+  which of several running instances (e.g. a dev sandbox vs. the production install) actually
+  answered — `app-launch.ts` has no way to.
+- `src/app-launch.ts` — resolves "the app" to launch cold (env override, `/Applications`, or a
+  locally-built release bundle — nisi has no install channel yet) and `open -a`s it, which hands off
+  to LaunchServices. Used only for a genuine cold start (`handoff.ts`'s `unreachable` case, no
+  sidecar answered at all) — it always prefers a real `/Applications` install over a local build, so
+  it's not a reliable way to focus one specific already-running instance among several (see
+  `handoff.ts`).
 
 ## Gotchas
 
