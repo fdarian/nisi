@@ -3,6 +3,7 @@ import type { ReviewStore } from "@repo/review";
 import type { SettingsStore } from "@repo/settings";
 import type { SessionWatch } from "./session-watch.ts";
 import type { Store } from "./store.ts";
+import type { Updater } from "./updater/service.ts";
 import type { WalkthroughStore } from "./walkthrough/store.ts";
 
 /**
@@ -18,4 +19,5 @@ export type AppServices =
 	| WalkthroughStore
 	| SettingsStore
 	| SessionWatch
+	| Updater
 	| BunServices.BunServices;
