@@ -6,6 +6,8 @@ import {
 	ContextMenu,
 	ContextMenuItem,
 	ContextMenuPopup,
+	ContextMenuSeparator,
+	ContextMenuShortcut,
 	ContextMenuTrigger,
 } from "#/components/ui/context-menu";
 import { Kbd } from "#/components/ui/kbd";
@@ -27,6 +29,7 @@ type PrTabStripProps = {
 	 * already suspended. */
 	suspendedSessionIds: ReadonlySet<string>;
 	onCloseSession: (sessionId: string) => void;
+	onCloseOtherSessions: (sessionId: string) => void;
 	onOpenPullRequest: () => void;
 	/** Suspends one tab immediately, bypassing the idle timeout — bound to
 	 * `useTabSuspension`'s `suspendNow` so the context menu's Suspend item
@@ -66,6 +69,7 @@ export function PrTabStrip({
 	activeSessionId,
 	suspendedSessionIds,
 	onCloseSession,
+	onCloseOtherSessions,
 	onOpenPullRequest,
 	onSuspendTab,
 	checkGenerationRunning,
@@ -79,10 +83,12 @@ export function PrTabStrip({
 				{sessions.map((session) => (
 					<PrTab
 						checkGenerationRunning={checkGenerationRunning}
+						hasOtherTabs={sessions.length > 1}
 						isActive={session.id === activeSessionId}
 						isSuspended={suspendedSessionIds.has(session.id)}
 						key={session.id}
 						onClose={() => onCloseSession(session.id)}
+						onCloseOthers={() => onCloseOtherSessions(session.id)}
 						onSuspend={() => onSuspendTab(session.id)}
 						session={session}
 					/>
@@ -144,14 +150,18 @@ function PrTab({
 	session,
 	isActive,
 	isSuspended,
+	hasOtherTabs,
 	onClose,
+	onCloseOthers,
 	onSuspend,
 	checkGenerationRunning,
 }: {
 	session: Session;
 	isActive: boolean;
 	isSuspended: boolean;
+	hasOtherTabs: boolean;
 	onClose: () => void;
+	onCloseOthers: () => void;
 	onSuspend: () => void;
 	checkGenerationRunning: (sessionId: string) => Promise<boolean>;
 }): React.ReactElement {
@@ -228,6 +238,15 @@ function PrTab({
 							</span>
 						</div>
 					)}
+				</ContextMenuItem>
+				<ContextMenuSeparator />
+				<ContextMenuItem onClick={onClose}>
+					Close
+					<ContextMenuShortcut>⌘W</ContextMenuShortcut>
+				</ContextMenuItem>
+				<ContextMenuItem disabled={!hasOtherTabs} onClick={onCloseOthers}>
+					Close other tabs
+					<ContextMenuShortcut>⌘⌥W</ContextMenuShortcut>
 				</ContextMenuItem>
 			</ContextMenuPopup>
 		</ContextMenu>
