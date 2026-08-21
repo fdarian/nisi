@@ -11,6 +11,7 @@
 		"core:menu:default",
 		"opener:default",
 		"dialog:allow-open",
+		"process:allow-exit",
 		{
 			"identifier": "shell:allow-spawn",
 			"allow": [{ "name": "binaries/sidecar", "sidecar": true, "args": [] }]

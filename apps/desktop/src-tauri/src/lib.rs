@@ -395,6 +395,7 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_process::init())
         .setup(|app| {
             // NISI_DATA_DIR overrides the app data dir — useful for tests or ad-hoc
             // isolation. Absent in prod (and in the plain `scripts/dev.ts` orchestrator),
