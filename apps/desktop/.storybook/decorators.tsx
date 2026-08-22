@@ -4,17 +4,14 @@
  * never call `invoke("get_backend")`, they pass a `createMockOrpc(...)`
  * result straight to the component under test instead.
  *
- * The light/dark toggle is a small floating button this component renders
- * itself, not Storybook's own toolbar globals mechanism
- * (`globalTypes`/`initialGlobals` in `preview.tsx`) — a custom toolbar global
- * registers correctly (visible on `storyStoreValue.projectAnnotations` in a
- * console check) but this Storybook version never actually renders a
- * toolbar control for it, silently. Self-rendering the toggle sidesteps that
- * entirely rather than chasing a manager-UI bug. `next-themes`'
- * `ThemeProvider` still drives the actual switch via `forcedTheme` —
- * `attribute="class"` sets the same `.dark` Tailwind variant
- * (`src/index.css`) the real app uses, so it's a real rendering difference,
- * not a cosmetic label.
+ * The preview follows the OS `prefers-color-scheme` by default — the same
+ * signal Storybook's own manager theme defaults to (`create()` with no
+ * args) — so stories match the surrounding UI without a bridge. The `theme`
+ * toolbar global (`globalTypes`/`initialGlobals` in `preview.tsx`) exists
+ * only to force one theme for review. `next-themes`' `ThemeProvider` still
+ * drives the actual switch via `forcedTheme` — `attribute="class"` sets the
+ * same `.dark` Tailwind variant (`src/index.css`) the real app uses, so it's
+ * a real rendering difference, not a cosmetic label.
  *
  * A `RouterProvider` is here only so `<Link to="/settings">`
  * (`generate-panel.tsx`) has a router context to call into — its route tree
@@ -33,7 +30,7 @@ import {
 	RouterProvider,
 } from "@tanstack/react-router";
 import { ThemeProvider } from "next-themes";
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 
 // Stories should never actually hit the network — a query that somehow
 // misses `createMockOrpc`'s coverage should surface as a visibly stuck
@@ -65,46 +62,28 @@ function createStoryRouter(content: React.ReactNode) {
 	});
 }
 
-type StoryTheme = "light" | "dark";
-
-function ThemeToggle({
-	theme,
-	onToggle,
-}: {
-	theme: StoryTheme;
-	onToggle: () => void;
-}): React.ReactElement {
-	return (
-		<button
-			className="fixed top-2 right-2 z-50 rounded-md border bg-background px-2 py-1 font-medium text-foreground text-xs shadow-sm"
-			onClick={onToggle}
-			type="button"
-		>
-			{theme === "light" ? "Switch to dark" : "Switch to light"}
-		</button>
-	);
-}
+export type StoryTheme = "system" | "light" | "dark";
 
 export function StoryProviders({
 	children,
+	theme,
 }: {
 	children: React.ReactNode;
+	theme: StoryTheme;
 }): React.ReactElement {
-	const [theme, setTheme] = useState<StoryTheme>("light");
 	// One `QueryClient` per story render — sharing one across stories would
 	// leak a previous story's cached query results into the next.
 	const queryClient = useMemo(() => new QueryClient(STORY_QUERY_CONFIG), []);
 	const router = useMemo(() => createStoryRouter(children), [children]);
 
 	return (
-		<ThemeProvider attribute="class" enableSystem={false} forcedTheme={theme}>
+		<ThemeProvider
+			attribute="class"
+			defaultTheme="system"
+			enableSystem
+			forcedTheme={theme === "system" ? undefined : theme}
+		>
 			<QueryClientProvider client={queryClient}>
-				<ThemeToggle
-					onToggle={() =>
-						setTheme((current) => (current === "light" ? "dark" : "light"))
-					}
-					theme={theme}
-				/>
 				<RouterProvider router={router} />
 			</QueryClientProvider>
 		</ThemeProvider>
