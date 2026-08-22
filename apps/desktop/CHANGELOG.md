@@ -1,5 +1,18 @@
 # @repo/desktop
 
+## 0.3.0
+
+### Minor Changes
+
+- 1bedb06: nisi can now update itself when it was installed via Homebrew.
+
+### Patch Changes
+
+- 7646c91: The CI status dropdown now opens a check's run on GitHub when you click it.
+- 2cec4fc: The PR merge button no longer has a visible border or shadow outline.
+- b63d1bf: Right-clicking a PR tab now offers "Close other tabs" (⌘⌥W), alongside a shortcut hint for the existing "Close" (⌘W).
+- 6afb377: `nisi` no longer brings the production app forward when pointed at a dev sandbox via `NISI_DATA_DIR`.
+
 ## 0.2.4
 
 ### Patch Changes
