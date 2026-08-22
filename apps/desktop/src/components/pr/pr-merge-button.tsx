@@ -232,7 +232,10 @@ export function PrMergeButton({
 		<>
 			<div className="inline-flex">
 				<Button
-					className={cn(showMethodPicker && "rounded-r-none border-r-0")}
+					className={cn(
+						"border-transparent shadow-none! before:shadow-none!",
+						showMethodPicker && "rounded-r-none",
+					)}
 					disabled={disabled || isCheckingUnpushed}
 					onClick={handleClick}
 					size="sm"
@@ -247,7 +250,7 @@ export function PrMergeButton({
 							aria-label="Select merge method"
 							className={cn(
 								buttonVariants({ size: "sm", variant: "outline" }),
-								"w-6 rounded-l-none px-0",
+								"w-6 rounded-l-none border-transparent px-0 shadow-none! before:shadow-none!",
 							)}
 							disabled={disabled || isCheckingUnpushed}
 						>
