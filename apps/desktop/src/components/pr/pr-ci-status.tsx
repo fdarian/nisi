@@ -70,6 +70,7 @@ const toCiChecks = (
 			check.durationMs === undefined
 				? undefined
 				: formatDuration(check.durationMs),
+		detailsUrl: check.detailsUrl,
 	}));
 };
 

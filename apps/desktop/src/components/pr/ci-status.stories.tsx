@@ -12,8 +12,18 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 const CHECKS: readonly CiCheck[] = [
-	{ name: "build", status: "passing", detail: "1m 12s" },
-	{ name: "typecheck", status: "passing", detail: "48s" },
+	{
+		name: "build",
+		status: "passing",
+		detail: "1m 12s",
+		detailsUrl: "https://github.com/risedle/mockingbird/actions/runs/1",
+	},
+	{
+		name: "typecheck",
+		status: "passing",
+		detail: "48s",
+		detailsUrl: "https://github.com/risedle/mockingbird/actions/runs/2",
+	},
 	{ name: "lint", status: "passing", detail: "22s" },
 	{ name: "test (bun)", status: "passing", detail: "3m 04s" },
 ];

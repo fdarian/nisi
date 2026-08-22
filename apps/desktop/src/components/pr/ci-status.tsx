@@ -1,11 +1,14 @@
 "use client";
 
+import { openUrl } from "@tauri-apps/plugin-opener";
 import type React from "react";
 import {
-	PreviewCard,
-	PreviewCardPopup,
-	PreviewCardTrigger,
-} from "#/components/ui/preview-card";
+	DropdownMenu,
+	DropdownMenuContent,
+	DropdownMenuItem,
+	DropdownMenuSeparator,
+	DropdownMenuTrigger,
+} from "#/components/ui/menu";
 import { cn } from "#/lib/utils";
 
 export type CiCheckStatus =
@@ -20,6 +23,8 @@ export type CiCheck = {
 	status: CiCheckStatus;
 	/** Free-form line shown under the name — a duration, a conclusion, whatever the source has. */
 	detail?: string;
+	/** Link to the check run on GitHub — absent for a check the source never supplied one for. */
+	detailsUrl?: string;
 };
 
 type CiStatusProps = {
@@ -81,7 +86,7 @@ function summarize(checks: readonly CiCheck[]): string {
 }
 
 /**
- * One arc per check around a ring labeled "CI", hover for the full list.
+ * One arc per check around a ring labeled "CI", click for the full list.
  *
  * Renders nothing when there are no checks — a PR with no CI configured
  * shouldn't get an empty ring implying something is still coming.
@@ -99,16 +104,13 @@ export function CiStatus({
 	const summary = summarize(checks);
 
 	return (
-		<PreviewCard>
-			<PreviewCardTrigger
+		<DropdownMenu>
+			<DropdownMenuTrigger
 				aria-label={`CI: ${summary}`}
 				className={cn(
-					"flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-1",
+					"flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent data-popup-open:bg-accent focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-1",
 					className,
 				)}
-				closeDelay={100}
-				delay={120}
-				render={<button type="button" />}
 			>
 				<svg
 					aria-hidden="true"
@@ -144,19 +146,26 @@ export function CiStatus({
 						CI
 					</text>
 				</svg>
-			</PreviewCardTrigger>
-			<PreviewCardPopup align="end" className="w-72 flex-col gap-2 p-2">
-				<div className="flex items-baseline justify-between gap-2 px-1">
+			</DropdownMenuTrigger>
+			<DropdownMenuContent align="end" className="w-72">
+				<div className="flex items-baseline justify-between gap-2 px-2 py-1.5">
 					<span className="font-medium text-xs">{summary}</span>
 					<span className="text-muted-foreground text-xs">
 						{checks.length} {checks.length === 1 ? "check" : "checks"}
 					</span>
 				</div>
-				<ul className="flex max-h-64 flex-col overflow-y-auto">
-					{checks.map((check) => (
-						<li
-							className="flex items-center gap-2 rounded-sm px-1 py-1"
+				<DropdownMenuSeparator />
+				{checks.map((check) => {
+					const detailsUrl = check.detailsUrl;
+					return (
+						<DropdownMenuItem
+							disabled={detailsUrl === undefined}
 							key={check.name}
+							onClick={
+								detailsUrl === undefined
+									? undefined
+									: () => void openUrl(detailsUrl)
+							}
 						>
 							<span
 								className={cn(
@@ -165,16 +174,14 @@ export function CiStatus({
 									check.status === "running" && "animate-pulse",
 								)}
 							/>
-							<span className="min-w-0 flex-1 truncate text-xs">
-								{check.name}
-							</span>
+							<span className="min-w-0 flex-1 truncate">{check.name}</span>
 							<span className="shrink-0 text-muted-foreground text-xs">
 								{check.detail ?? STATUS_LABEL[check.status]}
 							</span>
-						</li>
-					))}
-				</ul>
-			</PreviewCardPopup>
-		</PreviewCard>
+						</DropdownMenuItem>
+					);
+				})}
+			</DropdownMenuContent>
+		</DropdownMenu>
 	);
 }
