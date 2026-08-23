@@ -28,6 +28,7 @@ import {
 	DropdownMenu,
 	DropdownMenuContent,
 	DropdownMenuItem,
+	DropdownMenuSeparator,
 } from "#/components/ui/menu";
 import type { FileChange, ReviewStateEntry } from "#/lib/pr-data";
 import { collectAncestorDirectoryPaths, comparePaths } from "#/lib/tree-paths";
@@ -39,6 +40,8 @@ type FileTreeViewProps = {
 	onSelectPath: (path: string) => void;
 	/** A folder target resolves to every file path nested under it. */
 	onMarkReviewed: (paths: readonly string[]) => void;
+	/** Joined with the row path for "Copy absolute path". */
+	repoRoot: string;
 };
 
 type TreeModel = {
@@ -103,11 +106,13 @@ function FileTreeRowActionsMenu({
 	context,
 	files,
 	onMarkReviewed,
+	repoRoot,
 }: {
 	item: ContextMenuItem;
 	context: ContextMenuOpenContext;
 	files: readonly FileChange[];
 	onMarkReviewed: (paths: readonly string[]) => void;
+	repoRoot: string;
 }): React.ReactElement {
 	const isFile = item.kind === "file";
 	const paths = isFile
@@ -115,6 +120,10 @@ function FileTreeRowActionsMenu({
 		: files
 				.map((file) => file.path)
 				.filter((path) => path.startsWith(item.path));
+	// Directory rows are trailing-slash-terminated (`"src/utils/"`); files
+	// never are. Strip that so both copy items match the diff-header paths.
+	const copyPath = item.path.replace(/\/$/, "");
+	const absolutePath = `${repoRoot}/${copyPath}`;
 
 	return (
 		<DropdownMenu
@@ -131,6 +140,17 @@ function FileTreeRowActionsMenu({
 			>
 				<DropdownMenuItem onClick={() => onMarkReviewed(paths)}>
 					{isFile ? "Mark as Reviewed" : "Mark Folder as Reviewed"}
+				</DropdownMenuItem>
+				<DropdownMenuSeparator />
+				<DropdownMenuItem
+					onClick={() => navigator.clipboard.writeText(copyPath)}
+				>
+					Copy path
+				</DropdownMenuItem>
+				<DropdownMenuItem
+					onClick={() => navigator.clipboard.writeText(absolutePath)}
+				>
+					Copy absolute path
 				</DropdownMenuItem>
 			</DropdownMenuContent>
 		</DropdownMenu>
@@ -149,6 +169,7 @@ export function FileTreeView({
 	selectedPath,
 	onSelectPath,
 	onMarkReviewed,
+	repoRoot,
 }: FileTreeViewProps): React.ReactElement {
 	const treeHostRef = useRef<HTMLDivElement>(null);
 	const treeModel = useMemo(() => buildTreeModel(files), [files]);
@@ -302,9 +323,10 @@ export function FileTreeView({
 				files={files}
 				item={item}
 				onMarkReviewed={onMarkReviewed}
+				repoRoot={repoRoot}
 			/>
 		),
-		[files, onMarkReviewed],
+		[files, onMarkReviewed, repoRoot],
 	);
 
 	return (

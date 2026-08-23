@@ -42,6 +42,8 @@ type FilesSidebarProps = {
 	/** Tree view's right-click "Mark as Reviewed"/"Mark Folder as Reviewed" — a
 	 * folder target resolves to every file path nested under it. */
 	onMarkReviewed: (paths: readonly string[]) => void;
+	/** Joined with a tree-row path for "Copy absolute path". */
+	repoRoot: string;
 	/** Owned by `FilesChangedView` — a keyboard `j`/`k` walk needs the same
 	 * filtered list the sidebar renders, not just its own unfiltered `files`. */
 	filterQuery: string;
@@ -66,6 +68,7 @@ export function FilesSidebar({
 	selectedPath,
 	onSelectPath,
 	onMarkReviewed,
+	repoRoot,
 	filterQuery,
 	onFilterQueryChange,
 	onQuerySubmit,
@@ -199,6 +202,7 @@ export function FilesSidebar({
 					files={files}
 					onMarkReviewed={onMarkReviewed}
 					onSelectPath={onSelectPath}
+					repoRoot={repoRoot}
 					reviewState={reviewState}
 					selectedPath={selectedPath}
 				/>
