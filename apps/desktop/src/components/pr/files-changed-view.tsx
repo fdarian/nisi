@@ -425,6 +425,7 @@ export function FilesChangedView({
 				onQuerySubmit={handleQuerySubmit}
 				onSearchModeChange={handleSearchModeChange}
 				onSelectPath={selectPath}
+				repoRoot={session.repoRoot}
 				reviewState={reviewState}
 				searchMode={searchMode}
 				selectedPath={selectedPath}
