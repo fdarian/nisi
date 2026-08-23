@@ -76,7 +76,11 @@ slow (roughly 13–28s) while nisi installs a pinned copy of it; every run after
 - Beta packages (`effect`, `@effect/platform-bun`, `@orpc/*`) are pinned to exact versions, not `^`
   ranges — bump them deliberately.
 - Patches in `patches/` register under `patchedDependencies` in `pnpm-workspace.yaml`, never
-  `package.json` — pnpm 10+ silently ignores that key there with no warning. Current patches:
+  `package.json` — pnpm 10+ silently ignores that key there with no warning. Patch filenames use
+  percent-encoding for the scope slash (`@pierre%2Fdiffs@1.3.5.patch`); on pnpm 12 rc8,
+  `pnpm patch-commit` writes double-underscore names instead (`@pierre__diffs@...`) and rewrites
+  `patchedDependencies` to match — rename the file back and revert the workspace-config diff after
+  committing a patch. Current patches:
   - `@ai-sdk/harness*` (five, across the adapters, `@ai-sdk/harness` itself, and
     `@ai-sdk/harness-pi`) — see
     [knowledge/compiled-binary-differences.md](knowledge/compiled-binary-differences.md) and
