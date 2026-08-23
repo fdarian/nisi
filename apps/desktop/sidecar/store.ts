@@ -568,41 +568,44 @@ export class Store extends Context.Service<Store>()("Store", {
 			reviewStore.closeSession(sessionId);
 
 		/**
-		 * Hashes each of `paths`' *current* content the same way a review
-		 * snapshot is hashed (`@repo/review`'s `hashContent`, SHA-256 of raw
-		 * bytes — not a git object id, which wouldn't compare against a stored
-		 * `snapshotHash` at all), so the caller can tell a ticked file's snapshot
-		 * apart from what's actually there now. What "current" means follows
-		 * `includeUncommitted`: worktree bytes (`@repo/git`'s
+		 * `paths`' current content, all read from the same universe the diff
+		 * itself is displayed from — worktree bytes (`@repo/git`'s
 		 * `readWorktreeBlobContent`, one call per path — cheap enough locally
-		 * that batching buys nothing) when `true`, HEAD's tree (`@repo/git`'s
-		 * `readFileContentsAtRef`, one batched `cat-file --batch` call over
-		 * every path) when `false`. Either way this only ever runs over the
-		 * paths the caller actually asks for — scoped to files with active
-		 * review state by both call sites below, not the diff's total size. A
-		 * path missing either way (deleted since review, or never existed at
-		 * HEAD) is simply absent from the returned map — not a swallowed
-		 * error; both call sites below already apply the "diff against
-		 * /dev/null" `?? hashContent(new Uint8Array())` fallback where an
-		 * absent entry needs to compare as empty content, the same convention
-		 * `setFileViewed`/`@repo/review`'s `reconcile` use. A genuine read
-		 * failure (permissions, a directory in the file's place, ...)
-		 * propagates as `WorktreeReadFailed` instead of collapsing into
+		 * that batching buys nothing) when `includeUncommitted` AND
+		 * `diffHead.worktreeEligible` both hold, otherwise `diffHead.headRef`'s
+		 * own committed tree (`@repo/git`'s `readFileContentsAtRef`, one
+		 * batched `cat-file --batch` call over every path). This is the one
+		 * gate every caller needing "what does this path look like right now"
+		 * goes through — `setFileViewed`/`setRangeViewed`'s snapshot writes and
+		 * `attachReviewState`/`readFileContents`'s changed-since-review reads
+		 * alike — so a ticked file's snapshot and its later comparison can
+		 * never disagree about which universe "current" means. They used to:
+		 * the write side gated on `diffHead.worktreeEligible` alone, ignoring
+		 * `includeUncommitted` entirely, while every read side additionally
+		 * required it — with `includeUncommitted` off, ticking Reviewed
+		 * snapshotted the worktree while the very next read compared against
+		 * HEAD's tree, so a hash mismatch (and the "Modified after review"
+		 * badge) was guaranteed even with nothing actually touched. A path
+		 * missing from that universe (deleted, or never existed) is simply
+		 * absent from the returned map — not a swallowed error, and not stood
+		 * in for with a placeholder value; callers interpret an absent entry
+		 * themselves (see `hasChangedSinceReview`). A genuine read failure
+		 * (permissions, a directory in the file's place, ...) propagates as
+		 * `WorktreeReadFailed`/`GitCommandError` instead of collapsing into
 		 * either case.
 		 */
-		const readCurrentHashes = (
+		const readCurrentContent = (
 			repoRoot: string,
+			diffHead: DiffHead,
 			includeUncommitted: boolean,
 			paths: ReadonlyArray<string>,
-			/** The ref committed-mode hashes against — defaults to `HEAD`, the current checkout. See `resolveDiffHead` for when this needs to be a session's own explicit `headRef` instead. */
-			headRef = "HEAD",
 		): Effect.Effect<
-			ReadonlyMap<string, string>,
+			ReadonlyMap<string, Uint8Array>,
 			GitCommandError | WorktreeReadFailed,
 			ChildProcessSpawner.ChildProcessSpawner
 		> =>
 			Effect.gen(function* () {
-				if (includeUncommitted) {
+				if (includeUncommitted && diffHead.worktreeEligible) {
 					const entries = yield* Effect.forEach(
 						paths,
 						(path) =>
@@ -611,22 +614,76 @@ export class Store extends Context.Service<Store>()("Store", {
 							),
 						{ concurrency: "unbounded" },
 					);
-					const hashes = new Map<string, string>();
+					const contents = new Map<string, Uint8Array>();
 					for (const [path, content] of entries) {
 						if (Option.isSome(content)) {
-							hashes.set(path, hashContent(content.value));
+							contents.set(path, content.value);
 						}
 					}
-					return hashes;
+					return contents;
 				}
 
-				const contents = yield* readFileContentsAtRef(repoRoot, headRef, paths);
+				return yield* readFileContentsAtRef(
+					repoRoot,
+					diffHead.headRef ?? "HEAD",
+					paths,
+				);
+			});
+
+		/**
+		 * `readCurrentContent`, hashed the same way a review snapshot is hashed
+		 * (`@repo/review`'s `hashContent`, SHA-256 of raw bytes — not a git
+		 * object id, which wouldn't compare against a stored `snapshotHash` at
+		 * all), so a caller can tell a ticked file's snapshot apart from what's
+		 * actually there now without holding the full content in memory.
+		 * Scoped to whatever `paths` the caller actually asks for — files with
+		 * active review state, not the diff's total size.
+		 */
+		const readCurrentHashes = (
+			repoRoot: string,
+			diffHead: DiffHead,
+			includeUncommitted: boolean,
+			paths: ReadonlyArray<string>,
+		): Effect.Effect<
+			ReadonlyMap<string, string>,
+			GitCommandError | WorktreeReadFailed,
+			ChildProcessSpawner.ChildProcessSpawner
+		> =>
+			Effect.gen(function* () {
+				const contents = yield* readCurrentContent(
+					repoRoot,
+					diffHead,
+					includeUncommitted,
+					paths,
+				);
 				return new Map(
 					[...contents].map(
 						([path, bytes]) => [path, hashContent(bytes)] as const,
 					),
 				);
 			});
+
+		/**
+		 * Whether a reviewed snapshot differs from what's current now, honoring
+		 * `@repo/review`'s `snapshotHash: null` convention ("reviewed while
+		 * absent" — see `packages/review/src/store.ts`) symmetrically instead
+		 * of standing in a placeholder hash for "absent": `null` snapshot vs.
+		 * absent current is unchanged (still not there), `null` vs. present is
+		 * changed (it showed up), a real snapshot vs. absent current is changed
+		 * (it's gone), and a real snapshot vs. present current is a plain hash
+		 * compare. A placeholder like `hashContent(new Uint8Array())` — a real
+		 * hash, of a real empty file — is never the right stand-in for
+		 * "absent": it collides with an actual empty-file review and, worse,
+		 * can never equal a non-empty snapshot, so a reviewed-then-deleted file
+		 * always reported "changed" even with nothing to compare against.
+		 */
+		const hasChangedSinceReview = (
+			snapshotHash: string | null,
+			currentHash: string | undefined,
+		): boolean =>
+			snapshotHash === null
+				? currentHash !== undefined
+				: currentHash !== snapshotHash;
 
 		/**
 		 * Attaches each file's review state, looked up by its current path with
@@ -636,15 +693,18 @@ export class Store extends Context.Service<Store>()("Store", {
 		 * files that actually have review state — bounded by how many files the
 		 * user has ticked, not by the diff's total size, unlike the live-update
 		 * poller's mtime/size-first discipline (which has to scan every changed
-		 * file on every tick regardless of review state).
+		 * file on every tick regardless of review state). Takes `diffHead` and
+		 * the raw `includeUncommitted` setting rather than an already-gated
+		 * flag — `readCurrentHashes` derives the effective gate itself, so this
+		 * can never disagree with whatever `setFileViewed`/`setRangeViewed`
+		 * used to write the snapshot being compared against.
 		 */
 		const attachReviewState = (
 			sessionId: string,
 			repoRoot: string,
+			diffHead: DiffHead,
 			includeUncommitted: boolean,
 			files: ReadonlyArray<GitFileChange>,
-			/** See `readCurrentHashes` — threaded through for a session whose `headRef` isn't the current checkout. */
-			headRef?: string,
 		): Effect.Effect<
 			ReadonlyArray<FileChange>,
 			SessionNotFound | ReviewStoreError | GitCommandError | WorktreeReadFailed,
@@ -666,34 +726,22 @@ export class Store extends Context.Service<Store>()("Store", {
 
 				const currentHashes = yield* readCurrentHashes(
 					repoRoot,
+					diffHead,
 					includeUncommitted,
 					[...claims.keys()],
-					headRef,
 				);
 
 				return files.map((file) => {
 					const claim = claims.get(file.path);
 					if (claim === undefined) return { ...file, review: null };
-					// `claim.snapshotHash === null` means this file was reviewed
-					// while absent from the working tree — there's no hash to
-					// compare against (`null` isn't `sha256("")`), so "changed"
-					// means "the file exists now" rather than a hash mismatch; a
-					// still-absent file (not in `currentHashes`, see
-					// `readCurrentHashes`) keeps its tick.
-					const review: FileReview =
-						claim.snapshotHash === null
-							? {
-									viewed: true,
-									reviewedHash: null,
-									changedSinceReview: currentHashes.has(file.path),
-								}
-							: {
-									viewed: true,
-									reviewedHash: claim.snapshotHash,
-									changedSinceReview:
-										(currentHashes.get(file.path) ??
-											hashContent(new Uint8Array())) !== claim.snapshotHash,
-								};
+					const review: FileReview = {
+						viewed: true,
+						reviewedHash: claim.snapshotHash,
+						changedSinceReview: hasChangedSinceReview(
+							claim.snapshotHash,
+							currentHashes.get(file.path),
+						),
+					};
 					return { ...file, review };
 				});
 			});
@@ -706,34 +754,6 @@ export class Store extends Context.Service<Store>()("Store", {
 		 */
 		const resolveSessionDiffHead = (session: ReviewSession, repoRoot: string) =>
 			resolveDiffHead(repoRoot, session.headRef, session.pr !== null);
-
-		/**
-		 * `path`'s content right now, per `diffHead`: worktree bytes when
-		 * eligible (`readWorktreeBlobContent`, same as every write path used
-		 * unconditionally before `resolveDiffHead` existed), or `diffHead
-		 * .headRef`'s own committed blob otherwise (`@repo/git`'s
-		 * `readFileContentsAtRef`) — never the live worktree, which for an
-		 * ineligible session belongs to a different branch entirely. Shared by
-		 * every read (`readCurrentHashes`, inlined there) and write
-		 * (`setFileViewed`/`setRangeViewed`) path that needs "what does this
-		 * path look like right now" rather than a full diff.
-		 */
-		const readCurrentBlobContent = (
-			repoRoot: string,
-			path: string,
-			diffHead: DiffHead,
-		): Effect.Effect<
-			Option.Option<Uint8Array>,
-			WorktreeReadFailed | GitCommandError,
-			ChildProcessSpawner.ChildProcessSpawner
-		> =>
-			diffHead.worktreeEligible
-				? readWorktreeBlobContent(join(repoRoot, path))
-				: readFileContentsAtRef(repoRoot, diffHead.headRef ?? "HEAD", [
-						path,
-					]).pipe(
-						Effect.map((contents) => Option.fromNullishOr(contents.get(path))),
-					);
 
 		const listChangedFiles = (sessionId: string, includeUncommitted: boolean) =>
 			Effect.gen(function* () {
@@ -749,9 +769,9 @@ export class Store extends Context.Service<Store>()("Store", {
 				return yield* attachReviewState(
 					sessionId,
 					repoRoot,
-					effectiveIncludeUncommitted,
+					diffHead,
+					includeUncommitted,
 					files,
-					diffHead.headRef,
 				);
 			});
 
@@ -905,9 +925,10 @@ export class Store extends Context.Service<Store>()("Store", {
 		 * the current checkout), not the worktree, in committed-only mode: no
 		 * extra logic needed here, it falls out of threading the flag into the
 		 * one content fetch this function makes. The `content.truncated`
-		 * fallback just below threads the same gated flag (plus
-		 * `diffHead.headRef`) through `readCurrentHashes` instead, since a
-		 * size-gated file has no `content.newContent` to reuse.
+		 * fallback just below threads `diffHead` and the raw `includeUncommitted`
+		 * flag through `readCurrentHashes` instead (which derives the same
+		 * effective gate internally), since a size-gated file has no
+		 * `content.newContent` to reuse.
 		 *
 		 * Reconciliation ranges are only computed when the patch content isn't
 		 * size-gated (`!content.truncated`) — gated content can't be trusted
@@ -964,20 +985,16 @@ export class Store extends Context.Service<Store>()("Store", {
 								}
 								const currentHashes = yield* readCurrentHashes(
 									repoRoot,
-									effectiveIncludeUncommitted,
+									diffHead,
+									includeUncommitted,
 									[request.path],
-									diffHead.headRef,
 								);
-								// Same null-aware comparison as `attachReviewState` —
-								// see its comment: a `null` `snapshotHash` means this
-								// file was reviewed while absent, so "changed" means
-								// "present now" rather than a hash mismatch.
-								const changedSinceReview =
-									activeFileClaim.snapshotHash === null
-										? currentHashes.has(request.path)
-										: (currentHashes.get(request.path) ??
-												hashContent(new Uint8Array())) !==
-											activeFileClaim.snapshotHash;
+								// Same comparison as `attachReviewState` — see
+								// `hasChangedSinceReview`.
+								const changedSinceReview = hasChangedSinceReview(
+									activeFileClaim.snapshotHash,
+									currentHashes.get(request.path),
+								);
 								return {
 									path: request.path,
 									content: {
@@ -1044,18 +1061,21 @@ export class Store extends Context.Service<Store>()("Store", {
 
 		/**
 		 * Un-ticking Reviewed just clears the snapshot. Ticking it reads the
-		 * file's *current* content directly via `readCurrentBlobContent` — a
-		 * plain read, not `@repo/git`'s size-gated `getFileContents`, since a
-		 * review snapshot's whole point is fidelity. "Current" follows
-		 * `resolveSessionDiffHead`: the live worktree when the session's head
-		 * is actually what's checked out, otherwise `headRef`'s own committed
-		 * blob — ticking Reviewed while the worktree belongs to a different
-		 * branch must never snapshot that other branch's content. A missing
-		 * file (ticking Reviewed on a deletion, or a path that never existed
-		 * — either on disk or in `headRef`'s tree) persists as a `NULL`
-		 * snapshot hash on a viewed row (`@repo/review`'s `markFileViewed`)
-		 * rather than a `sha256("")` blob — the two are distinct claims: `NULL`
-		 * means "reviewed while absent" (stays reviewed as long as it's still
+		 * file's *current* content directly via `readCurrentContent` — a plain
+		 * read, not `@repo/git`'s size-gated `getFileContents`, since a review
+		 * snapshot's whole point is fidelity. "Current" follows the exact same
+		 * gate `attachReviewState`'s later comparison uses:
+		 * `resolveSessionDiffHead` plus this session's own `includeUncommitted`
+		 * setting, read fresh from `SettingsStore` since this call carries no
+		 * per-request flag of its own — so the snapshot is captured from
+		 * whichever universe the next read will compare it against, never the
+		 * live worktree while `includeUncommitted` is off or while the
+		 * worktree belongs to a different branch entirely. A missing file
+		 * (ticking Reviewed on a deletion, or a path that never existed —
+		 * either on disk or in `headRef`'s tree) persists as a `NULL` snapshot
+		 * hash on a viewed row (`@repo/review`'s `markFileViewed`) rather than
+		 * a `sha256("")` blob — the two are distinct claims: `NULL` means
+		 * "reviewed while absent" (stays reviewed as long as it's still
 		 * absent), `sha256("")` means "reviewed a genuinely empty file". A
 		 * genuine read failure (permissions, a directory in the file's place)
 		 * propagates instead of collapsing into either.
@@ -1069,8 +1089,18 @@ export class Store extends Context.Service<Store>()("Store", {
 				const session = yield* reviewStore.getSession(sessionId);
 				const repoRoot = yield* resolveLiveRepoRoot(session);
 				const diffHead = yield* resolveSessionDiffHead(session, repoRoot);
-				const content = yield* readCurrentBlobContent(repoRoot, path, diffHead);
-				yield* reviewStore.markFileViewed(sessionId, path, content);
+				const settings = yield* settingsStore.get();
+				const currentContent = yield* readCurrentContent(
+					repoRoot,
+					diffHead,
+					settings.includeUncommitted,
+					[path],
+				);
+				yield* reviewStore.markFileViewed(
+					sessionId,
+					path,
+					Option.fromNullishOr(currentContent.get(path)),
+				);
 			});
 
 		/**
@@ -1085,7 +1115,7 @@ export class Store extends Context.Service<Store>()("Store", {
 		 * worktree-eligible, `@repo/git`'s own default already means the
 		 * current checkout then; the session's own `headRef` otherwise, the
 		 * same ref `headContentBytes` was actually read from (see
-		 * `readCurrentBlobContent`) — keeps this call agreeing with whichever
+		 * `readCurrentContent`) — keeps this call agreeing with whichever
 		 * commit produced `headContentBytes` rather than silently falling
 		 * back to `HEAD` regardless. Then reconciles it against
 		 * `headContentBytes` (the content `setRangeViewed` already read or
@@ -1168,6 +1198,8 @@ export class Store extends Context.Service<Store>()("Store", {
 				const session = yield* reviewStore.getSession(sessionId);
 				const repoRoot = yield* resolveLiveRepoRoot(session);
 				const diffHead = yield* resolveSessionDiffHead(session, repoRoot);
+				const settings = yield* settingsStore.get();
+				const includeUncommitted = settings.includeUncommitted;
 
 				if (!viewed) {
 					yield* reviewStore.unmarkRangeViewed(sessionId, path, blockId);
@@ -1184,11 +1216,13 @@ export class Store extends Context.Service<Store>()("Store", {
 					// (`@repo/review`'s `reconcile.ts`), the same as every other
 					// reconciliation call treats an absent file. A genuine read
 					// failure still propagates.
-					const contentOption = yield* readCurrentBlobContent(
+					const currentContent = yield* readCurrentContent(
 						repoRoot,
-						path,
 						diffHead,
+						includeUncommitted,
+						[path],
 					);
+					const contentOption = Option.fromNullishOr(currentContent.get(path));
 					const content = Option.getOrElse(
 						contentOption,
 						() => new Uint8Array(),
@@ -1208,11 +1242,13 @@ export class Store extends Context.Service<Store>()("Store", {
 					return;
 				}
 
-				const contentOption = yield* readCurrentBlobContent(
+				const currentContent = yield* readCurrentContent(
 					repoRoot,
-					path,
 					diffHead,
+					includeUncommitted,
+					[path],
 				);
+				const contentOption = Option.fromNullishOr(currentContent.get(path));
 				// `review_range_claims.snapshotHash` is `NOT NULL` (unlike
 				// `reviewed_files`', which now distinguishes absence via `NULL` —
 				// see `setFileViewed`) — relaxing that needs a full SQLite table

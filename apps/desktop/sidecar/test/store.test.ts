@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { BunServices } from "@effect/platform-bun";
 import { SqliteDb } from "@repo/db";
 import { ReviewStore } from "@repo/review";
+import { SettingsStore } from "@repo/settings";
 import { ConfigProvider, Effect, Layer, Result } from "effect";
 import { Store } from "../store.ts";
 
@@ -428,6 +429,14 @@ describe("Store.setFileViewed — working-tree read failures", () => {
 				Effect.gen(function* () {
 					const store = yield* Store;
 					const reviewStore = yield* ReviewStore;
+					const settingsStore = yield* SettingsStore;
+					// `includeUncommitted: true` — "current" has to mean the
+					// working tree (still missing the file) for both the write
+					// and the read to exercise the absent-stays-reviewed path;
+					// committed-only mode would read `a.ts` from `feature`'s
+					// committed tree instead, where it still exists.
+					yield* settingsStore.update({ includeUncommitted: true });
+
 					const session = yield* store.openSession(repoRoot, {
 						kind: "branch",
 						baseRef: "main",
@@ -439,10 +448,6 @@ describe("Store.setFileViewed — working-tree read failures", () => {
 						session.id,
 						"a.ts",
 					);
-					// `includeUncommitted: true` — "current" has to mean the
-					// working tree (still missing the file) for this to exercise
-					// the absent-stays-reviewed path; committed-only mode would
-					// compare against HEAD, where `a.ts` still exists.
 					const files = yield* store.listChangedFiles(session.id, true);
 					const file = files.find((f) => f.path === "a.ts");
 					return { state, review: file?.review ?? null };
@@ -469,6 +474,13 @@ describe("Store.setFileViewed — working-tree read failures", () => {
 				Effect.gen(function* () {
 					const store = yield* Store;
 					const reviewStore = yield* ReviewStore;
+					const settingsStore = yield* SettingsStore;
+					// Worktree mode — a directory colliding with the tracked path
+					// is only a read failure when the write actually touches the
+					// worktree; committed-only mode reads the git object instead
+					// and never sees the stray directory on disk.
+					yield* settingsStore.update({ includeUncommitted: true });
+
 					const session = yield* store.openSession(repoRoot, {
 						kind: "branch",
 						baseRef: "main",
@@ -489,6 +501,190 @@ describe("Store.setFileViewed — working-tree read failures", () => {
 			// Never recorded as a claim at all — a swallowed error would have
 			// left a `viewed: true` row (empty-content snapshot) behind.
 			expect(result.state).toBeNull();
+		});
+	});
+});
+
+/**
+ * Regression coverage for the bug `readCurrentContent`'s consolidation
+ * (`apps/desktop/sidecar/store.ts`) fixed: `setFileViewed`/`setRangeViewed`
+ * used to snapshot via a helper that read the worktree whenever the session
+ * was worktree-eligible, regardless of the `includeUncommitted` setting,
+ * while `listChangedFiles`'s `attachReviewState` only read the worktree when
+ * `includeUncommitted` was *also* on. With the setting off (the default),
+ * ticking Reviewed snapshotted the worktree while the very next read
+ * compared against HEAD's committed tree, so a deleted-but-still-present-
+ * on-disk file (e.g. a gitignored leftover at the same path) reported
+ * "Modified after review" immediately, with nothing about the committed
+ * diff actually different. Both the write and the read now derive "current
+ * content" from the same gate, and the changed-since-review comparison
+ * (`hasChangedSinceReview`) treats absence symmetrically instead of
+ * standing in `hashContent(new Uint8Array())` for it — a real hash that
+ * could never equal a real snapshot.
+ */
+describe("Store — setFileViewed and listChangedFiles agree on 'current content'", () => {
+	test("reviewed-then-still-deleted: stays unchanged in committed-only mode even with a stray untracked file at that path", async () => {
+		await withTestRepoAndDataDir(async (repoRoot, dataDir) => {
+			await sh(repoRoot, ["checkout", "-q", "-b", "feature"]);
+			await rm(join(repoRoot, "a.ts"));
+			await sh(repoRoot, ["commit", "-q", "-am", "delete a.ts"]);
+
+			// A leftover, untracked file at the same path (e.g. gitignored) —
+			// physically present on disk despite being deleted from git's
+			// history. `includeUncommitted` defaults to `false`, so neither the
+			// write nor the read below may ever look at this.
+			await Bun.write(join(repoRoot, "a.ts"), "stray untracked content\n");
+
+			const result = await Effect.runPromise(
+				Effect.gen(function* () {
+					const store = yield* Store;
+					const reviewStore = yield* ReviewStore;
+					const session = yield* store.openSession(repoRoot, {
+						kind: "branch",
+						baseRef: "main",
+					});
+
+					yield* store.setFileViewed(session.id, "a.ts", true);
+
+					const state = yield* reviewStore.getFileReviewState(
+						session.id,
+						"a.ts",
+					);
+					const files = yield* store.listChangedFiles(session.id, false);
+					const file = files.find((f) => f.path === "a.ts");
+					return { state, review: file?.review ?? null };
+				}).pipe(Effect.provide(makeTestLayer(dataDir))),
+			);
+
+			expect(result.state?.snapshotHash).toBeNull();
+			expect(result.review).toEqual({
+				viewed: true,
+				reviewedHash: null,
+				changedSinceReview: false,
+			});
+		});
+	});
+
+	test("a committed-only tick never snapshots a dirty uncommitted edit sitting in the worktree", async () => {
+		await withTestRepoAndDataDir(async (repoRoot, dataDir) => {
+			await sh(repoRoot, ["checkout", "-q", "-b", "feature"]);
+			await Bun.write(join(repoRoot, "a.ts"), "feature content\n");
+			await sh(repoRoot, ["commit", "-q", "-am", "change a.ts"]);
+
+			// Dirtied on top, never committed — with `includeUncommitted: false`
+			// this must be invisible to both the write and the read.
+			await Bun.write(join(repoRoot, "a.ts"), "dirtied, never committed\n");
+
+			const result = await Effect.runPromise(
+				Effect.gen(function* () {
+					const store = yield* Store;
+					const reviewStore = yield* ReviewStore;
+					const session = yield* store.openSession(repoRoot, {
+						kind: "branch",
+						baseRef: "main",
+					});
+
+					yield* store.setFileViewed(session.id, "a.ts", true);
+
+					const state = yield* reviewStore.getFileReviewState(
+						session.id,
+						"a.ts",
+					);
+					if (state === null || state.snapshotHash === null) {
+						return yield* Effect.die("expected a snapshot hash");
+					}
+					const snapshot = yield* reviewStore.readSnapshot(state.snapshotHash);
+					const files = yield* store.listChangedFiles(session.id, false);
+					const file = files.find((f) => f.path === "a.ts");
+					return {
+						snapshotText: new TextDecoder().decode(snapshot),
+						changedSinceReview: file?.review?.changedSinceReview ?? null,
+					};
+				}).pipe(Effect.provide(makeTestLayer(dataDir))),
+			);
+
+			// The snapshot must be `feature`'s committed content, not the dirty
+			// worktree edit — and the immediate read must agree.
+			expect(result.snapshotText).toBe("feature content\n");
+			expect(result.changedSinceReview).toBe(false);
+		});
+	});
+
+	test("a file that reappears after being reviewed while absent is reported changed", async () => {
+		await withTestRepoAndDataDir(async (repoRoot, dataDir) => {
+			await sh(repoRoot, ["checkout", "-q", "-b", "feature"]);
+			await Bun.write(join(repoRoot, "a.ts"), "hello\nworld\n");
+			await sh(repoRoot, ["commit", "-q", "-am", "change a.ts"]);
+			await rm(join(repoRoot, "a.ts"));
+
+			const sessionId = await Effect.runPromise(
+				Effect.gen(function* () {
+					const store = yield* Store;
+					const settingsStore = yield* SettingsStore;
+					// Worktree mode, so the write sees the file as genuinely
+					// absent right now (not merely absent from HEAD).
+					yield* settingsStore.update({ includeUncommitted: true });
+					const session = yield* store.openSession(repoRoot, {
+						kind: "branch",
+						baseRef: "main",
+					});
+					yield* store.setFileViewed(session.id, "a.ts", true);
+					return session.id;
+				}).pipe(Effect.provide(makeTestLayer(dataDir))),
+			);
+
+			// The file shows back up on disk, uncommitted.
+			await Bun.write(join(repoRoot, "a.ts"), "back again\n");
+
+			const changedSinceReview = await Effect.runPromise(
+				Effect.gen(function* () {
+					const store = yield* Store;
+					const files = yield* store.listChangedFiles(sessionId, true);
+					return (
+						files.find((f) => f.path === "a.ts")?.review?.changedSinceReview ??
+						null
+					);
+				}).pipe(Effect.provide(makeTestLayer(dataDir))),
+			);
+
+			expect(changedSinceReview).toBe(true);
+		});
+	});
+
+	test("a file deleted after being reviewed while present is reported changed", async () => {
+		await withTestRepoAndDataDir(async (repoRoot, dataDir) => {
+			await sh(repoRoot, ["checkout", "-q", "-b", "feature"]);
+			await Bun.write(join(repoRoot, "a.ts"), "hello\nworld\n");
+			await sh(repoRoot, ["commit", "-q", "-am", "change a.ts"]);
+
+			const sessionId = await Effect.runPromise(
+				Effect.gen(function* () {
+					const store = yield* Store;
+					const settingsStore = yield* SettingsStore;
+					yield* settingsStore.update({ includeUncommitted: true });
+					const session = yield* store.openSession(repoRoot, {
+						kind: "branch",
+						baseRef: "main",
+					});
+					yield* store.setFileViewed(session.id, "a.ts", true);
+					return session.id;
+				}).pipe(Effect.provide(makeTestLayer(dataDir))),
+			);
+
+			await rm(join(repoRoot, "a.ts"));
+
+			const changedSinceReview = await Effect.runPromise(
+				Effect.gen(function* () {
+					const store = yield* Store;
+					const files = yield* store.listChangedFiles(sessionId, true);
+					return (
+						files.find((f) => f.path === "a.ts")?.review?.changedSinceReview ??
+						null
+					);
+				}).pipe(Effect.provide(makeTestLayer(dataDir))),
+			);
+
+			expect(changedSinceReview).toBe(true);
 		});
 	});
 });

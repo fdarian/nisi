@@ -34,3 +34,4 @@ importantly, the rules for deciding whether a thing belongs here at all.
 * [Files Changed performance budget](frontend-performance-budget.md) - the numbers to hold at ~221 changed files, and what regressing them looks like
 * [Deferred frontend perf work](deferred-frontend-perf-work.md) - known wins not taken yet, and one open symptom not yet bisected
 * [The @pierre/diffs CodeView teardown leak patch](codeview-teardown-leak-patch.md) - why `cleanAllRenderedItems()` now sweeps every item instead of just the last virtualization window, and the residual leak still open
+* [The @pierre/diffs CodeView stale pendingScrollTarget patch](codeview-stale-pending-scroll-target-patch.md) - clicking a file then immediately ticking its own Reviewed checkbox collapsed scrollTop to 0 instead of compensating, because the scroll-anchor guard never lifts for a target that got removed mid-flight
