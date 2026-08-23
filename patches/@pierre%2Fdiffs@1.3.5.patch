@@ -1,5 +1,5 @@
 diff --git a/dist/components/CodeView.js b/dist/components/CodeView.js
-index 051e7d0a211c0cdf32badbd4ff836f04df1ff511..a80034fec014f86854ac290912205071ebe4ca9d 100644
+index 051e7d0a211c0cdf32badbd4ff836f04df1ff511..45ff8b8d684a799b1c4ba8c5cb748e20823b9062 100644
 --- a/dist/components/CodeView.js
 +++ b/dist/components/CodeView.js
 @@ -457,10 +457,10 @@ var CodeView = class CodeView {
@@ -15,3 +15,17 @@ index 051e7d0a211c0cdf32badbd4ff836f04df1ff511..a80034fec014f86854ac290912205071
  			const item = this.items[index];
  			if (item == null) throw new Error(`CodeView.cleanAllRenderedItems: Item does not exist at index: ${index}`);
  			this.releaseRenderedItem(item);
+@@ -1590,8 +1590,11 @@ var CodeView = class CodeView {
+ 		this.renderState.stickyTop = stickyTop;
+ 		this.renderState.stickyBottom = stickyBottom;
+ 		this.stickyOffset.style.height = `${stickyTop}px`;
+-		const randomOffset = (Math.random() * itemMetrics.lineHeight >> 0) * -1;
+-		const stickyJitter = -Math.max(stickyContainerHeight + randomOffset, 0) + height;
++		// Upstream drew a random offset here (see @pierre/diffs PR #633) to mask paged-scroll
++		// coordinate rebasing during fast scrollbar drags. That rebasing only kicks in past
++		// SCROLL_REBASE_THRESHOLD (~11M px of scroll height), far beyond any real PR diff, so the
++		// random draw only ever added visible sticky-header jitter on every render. Removed.
++		const stickyJitter = -Math.max(stickyContainerHeight, 0) + height;
+ 		this.stickyContainer.style.top = `${stickyJitter}px`;
+ 		this.stickyContainer.style.bottom = `${stickyJitter + itemMetrics.diffHeaderHeight}px`;
+ 	}

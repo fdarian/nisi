@@ -68,13 +68,28 @@ fixes that landed in this pass, this may already sit inside the
 [budget](frontend-performance-budget.md)[^budget] — it needs a CDP trace before it's worth
 touching, not a guess.
 
-# Sticky header flicker in WKWebView — cause unconfirmed
+# Sticky header flicker in WKWebView — two candidates still unconfirmed
 
-The sticky file header visibly flickers while scrolling, in WKWebView specifically. Three
-candidates, none ruled in or out: the portal churn above; `CodeView.applyStickyPositioning`'s
-`Math.random()` jitter on the sticky container's `top`/`bottom` offsets
-(`dist/components/CodeView.js`); or our own `clip-path` on `<diffs-container>` (`diff-pane.tsx`)
-interacting with the sticky header. Not yet bisected.
+The sticky file header visibly flickers while scrolling, in WKWebView specifically. One of three
+candidates is now confirmed and fixed; the other two remain untested.
+
+**Confirmed and fixed**: `CodeView.applyStickyPositioning` drew a fresh `Math.random()` offset on
+every render pass where sticky bounds changed and wrote it straight into the sticky container's
+inline `top`/`bottom` (`dist/components/CodeView.js`). Upstream source
+(`github.com/pierrecomputer/pierre`, `packages/diffs/src/components/CodeView.ts`, ~line 3423) shows
+this was deliberate: a comment describes it as polish so the laggy scroll view doesn't line up with
+the numbers exactly when the user drags the scrollbar quickly, added in PR #633 ("CodeView:
+unlimited paged scroller"). That polish only matters for the paged-scroll coordinate rebasing, which
+activates only past `SCROLL_REBASE_THRESHOLD` (11,000,000px, `CodeView.js:114-118`) — real PRs in
+nisi run ~400,000px of scroll height, so the rebasing path this was meant to mask never engages,
+while the jitter itself was paid on every render regardless. Removed in
+`patches/@pierre%2Fdiffs@1.3.5.patch`. Verified fixed in the in-app Chromium preview pane, **not**
+in the production Tauri/WKWebView shell — the WKWebView-specific claim in this section's title is
+still unconfirmed for this candidate.
+
+**Still untested**: the `SlotPortals` portal churn described above, and our own `clip-path` on
+`<diffs-container>` (`diff-pane.tsx`) interacting with the sticky header. Either could still explain
+some or all of the WKWebView-specific flicker; neither has been bisected.
 
 [^budget]: Files Changed performance budget
 [^set-viewed]: useSetFileViewed
