@@ -1,5 +1,11 @@
 # @repo/desktop
 
+## 0.3.1
+
+### Patch Changes
+
+- 1f1a77c: Fixed the diff pane's scroll position collapsing to the top when you clicked a file in the sidebar and immediately ticked its Reviewed checkbox with "Hide Reviewed" on.
+
 ## 0.3.0
 
 ### Minor Changes
