@@ -180,6 +180,9 @@ fixture PR lives at `src/components/walkthrough/walkthrough.fixture.ts`.
   contract) — writes to the real app-data dir since `NISI_DATA_DIR` is unset outside a manual override.
 - The compiled `src-tauri/binaries/sidecar-*` is gitignored; `beforeBuildCommand` regenerates it via
   `build:sidecar` (host triple `aarch64-apple-darwin` only — cross-compile is future work).
+- `build:sidecar`/`build:cli` both go through `scripts/build-binary.ts` rather than a bare
+  `bun build --compile` — a `bun build --compile` output with no further step gets `SIGKILL`'d on
+  Apple Silicon, so the script strips and re-applies a clean ad-hoc code signature after compiling.
 - **`externalBin` is not in `tauri.conf.json`** — it lives in `src-tauri/tauri.build.conf.json`, which
   only `bun build` merges in (`tauri build --config …`). `tauri-build` validates every `externalBin`
   path at compile time in *both* modes, so keeping it in the base config made `bun dev` fail on a
