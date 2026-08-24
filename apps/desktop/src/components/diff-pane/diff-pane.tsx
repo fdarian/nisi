@@ -64,7 +64,8 @@ type DiffAnnotationMetadata =
 	| { type: "error"; message: string }
 	| { type: "load-file"; path: string; stillTooLarge: boolean }
 	| { type: "hidden-file"; path: string; reason: HiddenFileReason }
-	| { type: "reviewed-empty" };
+	| { type: "reviewed-empty" }
+	| { type: "loading" };
 
 /**
  * Noise reduction, unrelated to review state. A `"generated"` file's body is
@@ -90,6 +91,23 @@ const HIDDEN_FILE_REASON_TEXT: Record<HiddenFileReason, string> = {
 };
 
 /**
+ * `@pierre/diffs` estimates an unmeasured item's height from its content's
+ * line count (`VirtualFileMetrics.lineHeight`) before it has ever rendered —
+ * that estimate is what a `scrollTo({ type: "item" })` call for a
+ * not-yet-visible file has to work with. `additions`/`deletions` come from
+ * `git diff --numstat` (`packages/git/src/diff.ts`) and resolve well before
+ * `FileContent` does, so they're a real signal for that estimate rather than
+ * an invented constant. It won't be pixel-exact — no context-line or
+ * hunk-count info — and that's fine: the virtualizer replaces the estimate
+ * with a real measurement once the item actually renders, same as every
+ * other placeholder in this file.
+ */
+function loadingPlaceholderContents(file: FileChange): string {
+	const lineCount = Math.max(1, file.additions + file.deletions);
+	return "\n".repeat(lineCount - 1);
+}
+
+/**
  * Every annotation array (and, transitively, every `metadata` object inside
  * it) handed to `@pierre/diffs` below has to keep a stable identity across
  * renders that don't actually change what it says — this is completely
@@ -106,7 +124,7 @@ const HIDDEN_FILE_REASON_TEXT: Record<HiddenFileReason, string> = {
  * to cause on every unrelated render: a fresh `[]` literal (or a fresh
  * `{ type: ... }` metadata object inside an otherwise-identical array) is
  * indistinguishable from a real content change as far as pierre is
- * concerned. The three placeholders below never vary, so their whole
+ * concerned. The four placeholders below never vary, so their whole
  * annotation array — metadata object included — is one module-level
  * constant; `hidden-file`/`load-file` carry per-file data and are cached
  * per path instead (see `resolveHiddenFileAnnotations`/
@@ -125,6 +143,10 @@ const ERROR_ANNOTATIONS: LineAnnotation<DiffAnnotationMetadata>[] = [
 
 const REVIEWED_EMPTY_ANNOTATIONS: LineAnnotation<DiffAnnotationMetadata>[] = [
 	{ lineNumber: 1, metadata: { type: "reviewed-empty" } },
+];
+
+const LOADING_ANNOTATIONS: LineAnnotation<DiffAnnotationMetadata>[] = [
+	{ lineNumber: 1, metadata: { type: "loading" } },
 ];
 
 /**
@@ -474,7 +496,32 @@ export function DiffPane({
 			}
 
 			const content = entry?.content;
-			if (content === undefined) continue; // still loading — appears once resolved
+			if (content === undefined) {
+				// Still loading. This used to just `continue`, dropping the file
+				// from `items` entirely — but `useFileContents` chunks the file
+				// list and resolves chunks out of order (`FILE_CONTENTS_CHUNK_SIZE`,
+				// `pr-data.ts`), so a click on a file whose chunk hadn't resolved
+				// yet jumped to a scroll target computed from a tiny prefix of the
+				// real list, then re-targeted repeatedly as each later chunk
+				// inserted its files mid-array. Giving every file a slot from the
+				// first render — swapped in place once its content resolves —
+				// keeps `items` stable in length and order, so a later chunk only
+				// ever updates a slot instead of inserting into one.
+				nextItems.push({
+					id: file.path,
+					type: "file",
+					file: {
+						name: file.path,
+						contents: loadingPlaceholderContents(file),
+						lang: "text",
+						cacheKey: `loading:${file.fingerprint}`,
+					},
+					annotations: LOADING_ANNOTATIONS,
+					collapsed: cardCollapsed,
+					version: hashItemVersion(`${baseVersionInput}:loading`),
+				});
+				continue;
+			}
 
 			// Keyword mode: a different *view* of the file, not a filter layered
 			// on the review view — takes priority over every other narrowing
@@ -663,6 +710,13 @@ export function DiffPane({
 				return (
 					<div className="px-3 py-6 text-center text-destructive-foreground text-xs">
 						{metadata.message}
+					</div>
+				);
+			}
+			if (metadata.type === "loading") {
+				return (
+					<div className="px-3 py-6 text-center text-muted-foreground text-xs">
+						Loading diff…
 					</div>
 				);
 			}
