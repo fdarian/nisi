@@ -272,6 +272,27 @@ export const diffViewUnsafeCSS = `
 	 * doesn't need to chase its selector specificity either. If a
 	 * @pierre/diffs upgrade changes that markup, this is the one place to
 	 * update — and re-measure.
+	 *
+	 * \`position: sticky; left: 0; width: 100cqw\` keeps the pill centered on
+	 * the *visible* pane instead of the scrollable diff content: without it,
+	 * this row is a grid item inside \`[data-content]\` (\`grid-column: 2\`,
+	 * \`minmax(0, 1fr)\` — see \`@pierre/diffs\`' style.js), which stretches to
+	 * whatever width \`[data-content]\`'s widest line needs, so
+	 * \`justify-content: center\` above centers against that (potentially
+	 * off-screen-wide) box instead of what's on screen. \`cqw\` resolves
+	 * against a container's own *content-box* size — for a query container
+	 * that's also the scrolling element, that's its visible scrollport, not
+	 * its scrollable content — which is exactly the width this needs; see the
+	 * \`[data-content] { container-type: inline-size }\` rule below for why the
+	 * container lives there and not on \`[data-code]\` (the actual
+	 * \`overflow: scroll\` element one level up). \`left: 0\` is what makes that
+	 * width track the pane as the user scrolls \`[data-code]\` horizontally,
+	 * the same way \`@pierre/diffs\`' own stylesheet already pins the line-number
+	 * gutter (\`[data-overflow="scroll"] [data-gutter] { position: sticky; left:
+	 * 0 }\`) — this selector's containing block for that offset is \`[data-code]\`
+	 * regardless of where \`container-type\` is declared, since sticky's
+	 * constraint rectangle always comes from the nearest scrolling ancestor,
+	 * not the query container.
 	 */
 	[data-separator="line-info-basic"] {
 		display: flex;
@@ -279,6 +300,30 @@ export const diffViewUnsafeCSS = `
 		justify-content: center;
 		height: 40px !important;
 		background: transparent !important;
+		position: sticky;
+		left: 0;
+		width: 100cqw;
+	}
+
+	/**
+	 * Query container for the \`100cqw\` above. \`[data-content]\` — not
+	 * \`[data-code]\`, the actual \`overflow: scroll\` element one level up — on
+	 * purpose: \`[data-code]\`'s grid also includes \`[data-gutter]\`
+	 * (\`grid-column: 1\`), so \`cqw\` measured there would overshoot by the
+	 * line-number column's width and the pill would sit off-center by roughly
+	 * half of it. \`[data-content]\` is \`grid-column: 2\`, \`min-width: 0\` in
+	 * \`@pierre/diffs\`' own style.js — that \`min-width: 0\` is what lets this
+	 * containment clamp it to its allotted track width instead of the
+	 * shrink-to-fit default a grid item would otherwise take from its
+	 * content. \`container-type: inline-size\` only changes how *this*
+	 * element's own size is computed (decoupling it from its widest
+	 * descendant line) — it doesn't clip anything, so a long line still
+	 * paints past this box exactly as before and \`[data-code]\`'s horizontal
+	 * scroll is unaffected; only the width this rule's pill measures itself
+	 * against changes.
+	 */
+	[data-content] {
+		container-type: inline-size;
 	}
 
 	/**
