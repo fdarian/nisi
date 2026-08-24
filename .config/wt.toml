@@ -4,3 +4,9 @@
 # ordering cargo's freshness check relies on and forces a near-full rebuild.
 copy_tauri_target = '''cp -Rc {{ repo_path }}/apps/desktop/src-tauri/target ./apps/desktop/src-tauri/target'''
 
+# Same clonefile copy of devsess's session tree (.data/sessions/<slug>/data/...), plus dropping
+# every copied sidecar.json handshake (port/token from the source checkout's sidecar) so each
+# session's own sidecar re-publishes a fresh one instead of a new dev session momentarily reading
+# a dead one.
+copy_desktop_data = '''cp -Rc {{ repo_path }}/apps/desktop/.data ./apps/desktop/.data && fd sidecar.json ./apps/desktop/.data -x rm'''
+
