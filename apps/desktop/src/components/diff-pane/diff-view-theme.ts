@@ -431,6 +431,44 @@ export const diffViewUnsafeCSS = `
 		margin-right: -50cqw;
 	}
 
+	/**
+	 * Neutralizes @pierre/diffs' own split-column divider — confirmed live
+	 * by temporarily painting it red (\`bun dev --browser\`, a real split
+	 * diff) that the vertical line bisecting the composed pill was exactly
+	 * \`[data-diff-type="split"][data-overflow="scroll"] { & [data-deletions]
+	 * { border-right: 1px solid var(--diffs-bg) } & [data-additions] {
+	 * border-left: 1px solid var(--diffs-bg) } }\` in style.js — not a grid
+	 * gap (that rule's \`grid-template-columns: 1fr 1fr\` has no \`gap\`,
+	 * verified live too: the two columns sit edge-to-edge). Removing the
+	 * *color* only (not \`border-right\`/\`-left\` themselves, which would
+	 * change \`border-width\` to \`medium\` and reflow the split grid by a
+	 * couple of px) is enough, and is safe everywhere, not just this row:
+	 * the border's color is \`var(--diffs-bg)\`, the same background color
+	 * every row already sits on, so it was already a no-op in every other
+	 * row before this override — confirmed live that neutralizing it
+	 * changes nothing outside the separator. It only ever showed up here
+	 * because the separator row's own \`background: transparent\` (above)
+	 * removes the one thing that happened to be masking it elsewhere.
+	 *
+	 * This divider could *not* have been fixed by raising the pill's own
+	 * z-index instead: each column's composed pill-half is hard-clipped by
+	 * its own \`[data-code] { overflow: scroll clip }\` at this exact same x
+	 * position (see the "FOUR separator elements" comment above), so
+	 * neither half's content ever geometrically reaches the seam to paint
+	 * over it — z-index only orders paint among things that already
+	 * overlap. \`!important\` because @pierre/diffs never uses it in its own
+	 * stylesheet (verified against its shipped style.js, same reasoning as
+	 * the base rule's \`!important\`s above), so this doesn't need to chase
+	 * its selector's specificity or trust shadow-root injection order.
+	 */
+	[data-deletions] {
+		border-right-color: transparent !important;
+	}
+
+	[data-additions] {
+		border-left-color: transparent !important;
+	}
+
 	[data-separator="line-info-basic"] [data-separator-wrapper] {
 		position: static !important;
 		inset-inline: auto !important;
