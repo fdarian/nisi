@@ -282,6 +282,42 @@ export const diffViewUnsafeCSS = `
 	}
 
 	/**
+	 * The horizontal rule "through" the pill (matching the Linear
+	 * reference), as two flex items rather than a row \`background\`: the row
+	 * above is already \`display: flex; justify-content: center\` with the
+	 * pill as its only child, so a \`::before\`/\`::after\` pair with
+	 * \`flex: 1\` fills exactly the leftover space on each side — "line —
+	 * pill — line" — and stops at the pill's edges automatically at any
+	 * pill width, with no masking needed (a prior version painted this as
+	 * the row's own \`background\`, relying on the pill's \`background:
+	 * var(--secondary)\` (below) to mask the segment directly behind it —
+	 * but \`--secondary\` is a translucent tint, not an opaque fill, so the
+	 * rule showed straight through the pill as an underline; verified live
+	 * that \`--secondary\` resolves to \`color-mix(in oklab, #fff 4%,
+	 * transparent)\`). \`margin-inline\` keeps the line off the pill's own
+	 * edge instead of butting into its border. \`var(--border)\` is
+	 * unchanged from the prior attempt — matches the pill's own border
+	 * color (\`[data-separator-wrapper]\`, below) rather than introducing a
+	 * new token, and is the token the user chose here over a stronger one.
+	 *
+	 * Composes the same way across split's two columns as the pill itself
+	 * does (see the "FOUR separator elements" comment below): each column
+	 * renders its own full-width copy of this row, \`[data-code]\`'s
+	 * \`overflow: scroll clip\` cuts it to that column's own half, and
+	 * because \`::before\`/\`::after\` sit in the same flex flow as the pill
+	 * — not on a separate layer — they get clipped at the exact same
+	 * boundary the pill halves do, with no extra rule needed. Verified live
+	 * in split mode, not just unified.
+	 */
+	[data-separator="line-info-basic"]::before,
+	[data-separator="line-info-basic"]::after {
+		content: "";
+		flex: 1;
+		border-top: 1px solid var(--border);
+		margin-inline: 8px;
+	}
+
+	/**
 	 * Query container for the \`cqw\` values below, on \`<pre>\` rather than
 	 * \`[data-code]\` (the actual \`overflow: scroll\` element one level down):
 	 * \`[data-code]\`'s grid columns (\`var(--diffs-grid-number-column-width)
@@ -381,30 +417,10 @@ export const diffViewUnsafeCSS = `
 	 * deletions'. The next rule pulls it back by exactly that width so both
 	 * copies start at the same pane-absolute x, which is what makes them
 	 * compose instead of duplicate.
-	 *
-	 * \`background\` here is the horizontal rule "through" the pill (matching
-	 * the Linear reference — see the top of this override), not a separate
-	 * element: an element's background always paints behind its children,
-	 * so it sits behind the wrapper pill for free, with no z-index needed,
-	 * and the wrapper's own opaque \`background: var(--secondary)\` (below)
-	 * naturally masks the segment directly behind it. Has to override the
-	 * base rule's \`background: transparent !important\` above, hence
-	 * \`!important\` here too — a higher-specificity selector alone doesn't
-	 * beat an \`!important\` declaration. \`var(--border)\` matches the pill's
-	 * own border color (\`[data-separator-wrapper]\`, below) rather than
-	 * introducing a new token — \`--border\` is a low-opacity value by
-	 * design (6%/8% white/black, \`index.css\`) used the same way for every
-	 * border in the app, not something scoped up for this rule specifically;
-	 * verified live in both themes that the resulting line is genuinely
-	 * faint against a plain background, without any adjacent fill to
-	 * contrast against the way a normal border gets. Spans this row's own
-	 * width (\`100cqw\`, or the composed pane width in split, per the rule
-	 * below), so it appears in both diff styles without a separate rule.
 	 */
 	[data-gutter] [data-separator="line-info-basic"] {
 		width: 100cqw;
 		margin-right: -100cqw;
-		background: linear-gradient(var(--border), var(--border)) center / 100% 1px no-repeat !important;
 	}
 
 	/**
