@@ -1,7 +1,12 @@
 "use client";
 
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { CopyIcon, ExternalLinkIcon, type LucideIcon } from "lucide-react";
+import {
+	CopyIcon,
+	ExternalLinkIcon,
+	GitPullRequestIcon,
+	type LucideIcon,
+} from "lucide-react";
 import { useEffect, useState } from "react";
 import {
 	Command,
@@ -16,7 +21,9 @@ import {
 } from "#/components/ui/command";
 import { Kbd } from "#/components/ui/kbd";
 import { Separator } from "#/components/ui/separator";
+import type { SidecarQueryUtils } from "#/lib/backend-context";
 import type { Session } from "#/lib/pr-data";
+import { useSwitchToPr } from "#/lib/pr-data";
 
 type CommandAction = {
 	id: string;
@@ -29,12 +36,16 @@ type CommandPaletteProps = {
 	open: boolean;
 	onOpenChange: (open: boolean) => void;
 	/**
-	 * The active tab's session. Actions that only make sense for a PR (like
-	 * opening it on GitHub) are omitted from the list entirely when this is
-	 * `null` or its target isn't a `"pr"` — a `nisi diff <base>` session has
-	 * no owner/repo/number to link to.
+	 * The active tab's session. Every action below is scoped to what this
+	 * session's target actually is — `null` (no open tab) offers nothing,
+	 * a `"pr"` target offers PR-only actions (like opening it on GitHub), and
+	 * a `"branch"` target offers branch-only actions (like switching to the
+	 * PR the branch belongs to, once one exists).
 	 */
 	activeSession: Session | null;
+	orpc: SidecarQueryUtils;
+	/** Fires once `sessions.open` resolves for "Switch to PR" — mirrors `OpenPullRequestPalette`'s `onSessionOpened` (`app-shell.tsx`), so the new tab activates the same way. */
+	onSessionOpened: (sessionId: string) => void;
 };
 
 /** Cmd+K, app-wide (`use-command-palette-shortcut.ts`). */
@@ -42,6 +53,8 @@ export function CommandPalette({
 	open,
 	onOpenChange,
 	activeSession,
+	orpc,
+	onSessionOpened,
 }: CommandPaletteProps): React.ReactElement {
 	const [query, setQuery] = useState("");
 
@@ -50,7 +63,8 @@ export function CommandPalette({
 		setQuery("");
 	}, [open]);
 
-	const actions = buildActions(activeSession);
+	const { switchToPr } = useSwitchToPr(orpc, onSessionOpened);
+	const actions = buildActions(activeSession, switchToPr);
 	const filtered = actions.filter((action) =>
 		action.label.toLowerCase().includes(query.toLowerCase()),
 	);
@@ -99,7 +113,10 @@ export function CommandPalette({
 	}
 }
 
-function buildActions(session: Session | null): CommandAction[] {
+function buildActions(
+	session: Session | null,
+	switchToPr: (repoRoot: string) => void,
+): CommandAction[] {
 	if (session === null) return [];
 	const actions: CommandAction[] = [
 		{
@@ -121,6 +138,16 @@ function buildActions(session: Session | null): CommandAction[] {
 			icon: ExternalLinkIcon,
 			run: () => {
 				void openUrl(url);
+			},
+		});
+	} else {
+		const repoRoot = session.repoRoot;
+		actions.push({
+			id: "switch-to-pr",
+			label: "Switch to PR",
+			icon: GitPullRequestIcon,
+			run: () => {
+				switchToPr(repoRoot);
 			},
 		});
 	}

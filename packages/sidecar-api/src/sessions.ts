@@ -59,7 +59,12 @@ export const sessionsContract = {
 	 *
 	 * `SERVICE_UNAVAILABLE` is reserved for not being able to reach GitHub at
 	 * all; a repo GitHub simply doesn't know opens fine as a `"branch"`
-	 * target. `BAD_REQUEST` also covers `target: { kind: "pr" }` with no PR open.
+	 * target. `target: { kind: "pr" }` with no PR open gets its own
+	 * `NOT_FOUND` (matching `close`/`setWatching` below) rather than folding
+	 * into `BAD_REQUEST` — `BAD_REQUEST` already covers three unrelated
+	 * causes (`cwd` not a git repo, an unresolvable `baseRef`/`headRef`), and
+	 * a caller asking "was there no PR?" needs to tell that apart from those
+	 * without parsing the message.
 	 */
 	open: oc
 		.input(
@@ -69,7 +74,7 @@ export const sessionsContract = {
 			}),
 		)
 		.output(Session)
-		.errors({ BAD_REQUEST: {}, SERVICE_UNAVAILABLE: {} }),
+		.errors({ BAD_REQUEST: {}, NOT_FOUND: {}, SERVICE_UNAVAILABLE: {} }),
 	list: oc.output(Schema.Array(Session)),
 	close: oc
 		.input(Schema.Struct({ sessionId: Schema.String }))

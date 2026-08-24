@@ -225,10 +225,13 @@ export function attachRouter(
 					),
 					// `target: { kind: "pr" }` asked for a PR that isn't there —
 					// the one case that refuses to degrade to a branch diff on
-					// its own (see `store.ts`'s `resolveSessionTarget`).
+					// its own (see `store.ts`'s `resolveSessionTarget`). Its own
+					// `NOT_FOUND` code (not `BAD_REQUEST`) so a caller can tell
+					// "no PR" apart from the request itself being malformed —
+					// see the contract's doc comment (`packages/sidecar-api/src/sessions.ts`).
 					Effect.catchTag("NoPullRequest", (cause) =>
 						Effect.fail(
-							errors.BAD_REQUEST({
+							errors.NOT_FOUND({
 								message: `no open pull request for the current branch in ${cause.repoRoot}`,
 							}),
 						),

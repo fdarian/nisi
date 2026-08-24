@@ -254,7 +254,9 @@ function AppShellReady({
 				<CommandPalette
 					activeSession={activeSession}
 					onOpenChange={setCommandPaletteOpen}
+					onSessionOpened={setRequestedActiveSessionId}
 					open={commandPaletteOpen}
+					orpc={orpc}
 				/>
 			</ShellFrame>
 		);
@@ -324,7 +326,9 @@ function AppShellReady({
 			<CommandPalette
 				activeSession={activeSession}
 				onOpenChange={setCommandPaletteOpen}
+				onSessionOpened={setRequestedActiveSessionId}
 				open={commandPaletteOpen}
+				orpc={orpc}
 			/>
 		</TabsPrimitive.Root>
 	);
