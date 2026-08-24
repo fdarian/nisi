@@ -273,26 +273,39 @@ export const diffViewUnsafeCSS = `
 	 * @pierre/diffs upgrade changes that markup, this is the one place to
 	 * update — and re-measure.
 	 *
-	 * \`position: sticky\` plus the \`left\`/\`width\` below keep the pill pinned
-	 * to the visible content column instead of centering against
+	 * \`position: sticky\` plus \`left\`/\`width\` on the more specific
+	 * \`[data-content] [data-separator=...]\` rule further down (not this bare
+	 * selector — see that rule's comment for why) keep the pill pinned to
+	 * the visible pane, gutter included, instead of centering against
 	 * \`[data-content]\`'s own box, which stretches to whatever width the
 	 * widest line in the file needs (a \`minmax(0, 1fr)\` grid track under
 	 * \`[data-code]\`'s \`overflow: scroll\`, per style.js) — for a long line
 	 * wider than the pane, \`justify-content: center\` above was centering
-	 * against that instead of what's on screen. \`--diffs-column-number-width\`/
-	 * \`-content-width\` are @pierre/diffs' own vars for this exact problem:
-	 * \`ResizeManager\` keeps them in sync with \`[data-code]\`'s measured
-	 * visible width minus the gutter's, via \`ResizeObserver\` — not something
-	 * added here, and not optional (\`columnVariables\` defaults to \`"apply"\`
-	 * and isn't exposed on \`CodeViewOptions\`, so it's always on).
-	 * \`[data-annotation-content]\` already uses this identical
-	 * \`position: sticky; left: var(--diffs-column-number-width); width:
-	 * var(--diffs-column-content-width)\` pattern to keep \`renderAnnotation\`
-	 * content aligned the same way — reused here rather than introducing a
-	 * second mechanism (e.g. a CSS container query on \`[data-content]\`, which
-	 * would also hand every descendant — including \`[data-line-annotation]\`,
-	 * z-index 2 — a new stacking context and containing block it doesn't have
-	 * today).
+	 * against that instead of what's on screen.
+	 *
+	 * The query container for that fix's \`cqw\` is \`<pre>\`
+	 * (\`container-type: inline-size\`, below), not \`[data-code]\` despite
+	 * \`[data-code]\` being the actual \`overflow: scroll\` element one level
+	 * down: \`[data-code]\`'s grid columns (\`var(--diffs-grid-number-column
+	 * -width) minmax(0, 1fr)\`, gutter + content) use *intrinsic*
+	 * (min/max-content) sizing, and containing \`[data-code]\` itself was
+	 * verified broken live in \`bun dev --browser\`: both tracks collapsed to
+	 * \`[data-code]\`'s full width instead of their real gutter/content split,
+	 * pushing the pill off-screen entirely. \`<pre>\` isn't a grid (nothing to
+	 * distribute) and already tracks the same width, since \`[data-code]\`'s
+	 * scrollable overflow clips at its own boundary rather than growing
+	 * \`<pre>\`.
+	 *
+	 * Also considered and rejected: \`@pierre/diffs\`' own
+	 * \`--diffs-column-number-width\`/\`-content-width\` vars — what
+	 * \`[data-annotation-content]\` uses for identical positioning.
+	 * \`FileDiff.shouldApplyColumnVariables()\` (dist/components/FileDiff.js)
+	 * only populates them when the file has line annotations or a function
+	 * \`hunkSeparators\`, neither true for an ordinary file with a collapsed
+	 * hunk — so on exactly the files this rule needs, they're unset and
+	 * \`var(..., fallback)\` would have silently degraded back to the
+	 * original bug (confirmed live: \`[data-code]\` carried no inline style
+	 * at all on such a file).
 	 */
 	[data-separator="line-info-basic"] {
 		display: flex;
@@ -300,9 +313,22 @@ export const diffViewUnsafeCSS = `
 		justify-content: center;
 		height: 40px !important;
 		background: transparent !important;
-		position: sticky;
-		left: var(--diffs-column-number-width, 0);
-		width: var(--diffs-column-content-width, auto);
+	}
+
+	/**
+	 * Query container for the \`100cqw\` above, on \`<pre>\` rather than
+	 * \`[data-code]\` — see the comment on that rule for why.
+	 * \`container-type: inline-size\` implies \`contain: layout\`, which makes
+	 * \`<pre>\` a new stacking context for its descendants (everything in the
+	 * diff body). Checked against style.js: none of them need to compete in
+	 * z-order with anything *outside* \`<pre>\` except
+	 * \`[data-diffs-header][data-sticky]\` (z-index 5, bumped by the rule
+	 * above), and that's unaffected — \`<pre>\` itself carries no z-index
+	 * either before or after this change, so it still paints beneath the
+	 * header regardless of what's contained inside it.
+	 */
+	pre {
+		container-type: inline-size;
 	}
 
 	/**
@@ -341,6 +367,62 @@ export const diffViewUnsafeCSS = `
 	[data-gutter] [data-separator="line-info-basic"] [data-separator-wrapper],
 	[data-additions] [data-content] [data-separator="line-info-basic"] [data-separator-wrapper] {
 		display: none !important;
+	}
+
+	/**
+	 * The sticky/\`cqw\` fix belongs only on the one surviving separator
+	 * instance (this file's, or split's deletions-column, content-side
+	 * pill), scoped here through \`[data-content]\` rather than on the bare
+	 * \`[data-separator="line-info-basic"]\` selector above — not a style
+	 * preference. The hide-rule above only \`display: none\`s the *wrapper*
+	 * inside the gutter and split-additions instances; their outer row (that
+	 * bare selector) still lays out as a real grid item regardless. Giving
+	 * *every* instance \`width: 100cqw\` was verified live to feed an
+	 * oversized box into \`[data-gutter]\`'s own column too, inflating its
+	 * \`max-content\` track to match — the same class of corruption as
+	 * containing \`[data-code]\` directly (see the comment above), just
+	 * reached from the opposite direction. The rule right after this one
+	 * undoes it for split's hidden additions-side instance, which matches
+	 * this selector too but must stay an ordinary, non-corrupting grid item.
+	 *
+	 * \`100cqw\` is \`<pre>\`'s full width — correct for unified (\`<pre>\` *is*
+	 * the one column) but wrong for split, where \`<pre>\` spans *both*
+	 * columns (\`[data-diff-type="split"][data-overflow="scroll"]
+	 * { grid-template-columns: 1fr 1fr }\`, style.js). The rule after next
+	 * narrows split's deletions instance to \`50cqw\` instead of a second
+	 * query container scoped to just that column: a real per-column
+	 * container would have to be \`[data-deletions]\`, which is the same
+	 * element as \`[data-code]\` (confirmed live via its attributes) and so
+	 * hits the exact grid-corruption bug above again. \`50cqw\` works because
+	 * split's two columns were verified live to always render exactly
+	 * equal-width (\`1fr 1fr\`, no gap between them).
+	 *
+	 * Known, accepted imprecision: \`left: 0\`'s sticky clamp is relative to
+	 * \`[data-code]\`'s scrollport, but this row's *static* (pre-scroll)
+	 * position is \`[data-content]\`'s own position — one gutter-width right
+	 * of \`[data-code]\`'s edge. At \`scrollLeft: 0\` the pill therefore sits
+	 * off-center by about the gutter's width until the user scrolls past
+	 * that same width, at which point sticky clamps it dead-center and it
+	 * stays there for the rest of the scrollable range — verified live at
+	 * several scroll offsets and two window widths, both diff styles. No
+	 * CSS-only fix for the at-rest case was found that doesn't reintroduce
+	 * the grid-corruption bug above; a few-dozen-pixel offset only in the
+	 * unscrolled state was accepted over adding JS measurement, given the
+	 * bug this replaces was full off-screen placement.
+	 */
+	[data-content] [data-separator="line-info-basic"] {
+		position: sticky;
+		left: 0;
+		width: 100cqw;
+	}
+
+	[data-additions] [data-content] [data-separator="line-info-basic"] {
+		position: static;
+		width: auto;
+	}
+
+	[data-deletions] [data-content] [data-separator="line-info-basic"] {
+		width: 50cqw;
 	}
 
 	[data-separator="line-info-basic"] [data-separator-wrapper] {
