@@ -9,8 +9,6 @@ import {
 	KeyboardSensor,
 	MouseSensor,
 	TouchSensor,
-	defaultDropAnimationSideEffects,
-	type DropAnimation,
 	useSensor,
 	useSensors,
 } from "@dnd-kit/core";
@@ -78,14 +76,6 @@ type PrTabStripProps = {
 	orpc: SidecarQueryUtils;
 };
 
-const dropAnimation: DropAnimation = {
-	sideEffects: defaultDropAnimationSideEffects({
-		styles: {
-			active: { opacity: "0.4" },
-		},
-	}),
-};
-
 /**
  * Browser/Linear-style closable tabs, one per open PR. Renders as a child of
  * the `TabsPrimitive.Root` that also owns the PR panels below (see
@@ -109,7 +99,10 @@ const dropAnimation: DropAnimation = {
  * Reorder uses dnd-kit's sortable preset (same method as Dice UI's Sortable):
  * `DndContext` + `SortableContext` + `useSortable`, horizontal list strategy,
  * closest-center collision, axis/parent modifiers, and a `DragOverlay` so the
- * moving tab isn't clipped by the list's `overflow-x-auto`. Mouse activation
+ * moving tab isn't clipped by the list's `overflow-x-auto`. The sortable node
+ * is a real wrapper around the tab — `ContextMenuTrigger`'s `display: contents`
+ * parent has a zero box, which made `restrictToParentElement` lock leftward
+ * drags and sent the overlay's drop animation to `(0, 0)`. Mouse activation
  * waits 8px so a click still selects the tab.
  */
 export function PrTabStrip({
@@ -199,7 +192,7 @@ export function PrTabStrip({
 						<OpenPullRequestButton onClick={onOpenPullRequest} />
 					</TabsPrimitive.List>
 				</SortableContext>
-				<DragOverlay dropAnimation={dropAnimation}>
+				<DragOverlay dropAnimation={null}>
 					{draggingSession === undefined ? null : (
 						<PrTabPreview
 							isSuspended={suspendedSessionIds.has(draggingSession.id)}
@@ -330,78 +323,79 @@ function PrTab({
 				: null;
 
 	return (
-		<ContextMenu
-			onOpenChange={(open) => {
-				if (!open) return;
-				setGenerationRunning(false);
-				if (isActive || isSuspended) return;
-				void checkGenerationRunning(session.id).then(setGenerationRunning);
+		<div
+			className={cn("shrink self-end", sortable.isDragging && "opacity-0")}
+			ref={sortable.setNodeRef}
+			style={{
+				transform: CSS.Translate.toString(sortable.transform),
+				transition: sortable.transition,
 			}}
+			{...sortable.listeners}
 		>
-			<ContextMenuTrigger render={<div className="contents" />}>
-				<TabsPrimitive.Tab
-					className={cn(
-						PR_TAB_CLASS,
-						hasOtherTabs ? "cursor-grab" : "cursor-pointer",
-						sortable.isDragging && "cursor-grabbing opacity-40",
-					)}
-					nativeButton={false}
-					render={
-						<div
-							ref={sortable.setNodeRef}
-							style={{
-								transform: CSS.Translate.toString(sortable.transform),
-								transition: sortable.transition,
-							}}
-							{...sortable.listeners}
-						/>
-					}
-					value={session.id}
-				>
-					<PrTabIcon isSuspended={isSuspended} />
-					<span className="min-w-0 flex-1 truncate">
-						{sessionLabel(session)}
-					</span>
-					<button
-						aria-label="Close tab"
-						className="shrink-0 rounded p-0.5 opacity-0 hover:bg-accent group-hover:opacity-100 group-data-active:opacity-100"
-						onClick={(event) => {
-							event.stopPropagation();
-							onClose();
-						}}
-						onPointerDown={(event) => {
-							event.stopPropagation();
-						}}
-						type="button"
+			<ContextMenu
+				onOpenChange={(open) => {
+					if (!open) return;
+					setGenerationRunning(false);
+					if (isActive || isSuspended) return;
+					void checkGenerationRunning(session.id).then(setGenerationRunning);
+				}}
+			>
+				<ContextMenuTrigger render={<div className="contents" />}>
+					<TabsPrimitive.Tab
+						className={cn(
+							PR_TAB_CLASS,
+							hasOtherTabs ? "cursor-grab" : "cursor-pointer",
+							sortable.isDragging && "cursor-grabbing",
+						)}
+						nativeButton={false}
+						render={<div />}
+						value={session.id}
 					>
-						<XIcon className="size-3" />
-					</button>
-				</TabsPrimitive.Tab>
-			</ContextMenuTrigger>
-			<ContextMenuPopup align="start">
-				<ContextMenuItem disabled={suspendGuard !== null} onClick={onSuspend}>
-					{suspendGuard === null ? (
-						"Suspend"
-					) : (
-						<div className="flex flex-col gap-0.5 py-0.5">
-							<span>Suspend</span>
-							<span className="text-muted-foreground text-xs">
-								{SUSPEND_GUARD_REASON[suspendGuard]}
-							</span>
-						</div>
-					)}
-				</ContextMenuItem>
-				<ContextMenuSeparator />
-				<ContextMenuItem onClick={onClose}>
-					Close
-					<ContextMenuShortcut>⌘W</ContextMenuShortcut>
-				</ContextMenuItem>
-				<ContextMenuItem disabled={!hasOtherTabs} onClick={onCloseOthers}>
-					Close other tabs
-					<ContextMenuShortcut>⌘⌥W</ContextMenuShortcut>
-				</ContextMenuItem>
-			</ContextMenuPopup>
-		</ContextMenu>
+						<PrTabIcon isSuspended={isSuspended} />
+						<span className="min-w-0 flex-1 truncate">
+							{sessionLabel(session)}
+						</span>
+						<button
+							aria-label="Close tab"
+							className="shrink-0 rounded p-0.5 opacity-0 hover:bg-accent group-hover:opacity-100 group-data-active:opacity-100"
+							onClick={(event) => {
+								event.stopPropagation();
+								onClose();
+							}}
+							onPointerDown={(event) => {
+								event.stopPropagation();
+							}}
+							type="button"
+						>
+							<XIcon className="size-3" />
+						</button>
+					</TabsPrimitive.Tab>
+				</ContextMenuTrigger>
+				<ContextMenuPopup align="start">
+					<ContextMenuItem disabled={suspendGuard !== null} onClick={onSuspend}>
+						{suspendGuard === null ? (
+							"Suspend"
+						) : (
+							<div className="flex flex-col gap-0.5 py-0.5">
+								<span>Suspend</span>
+								<span className="text-muted-foreground text-xs">
+									{SUSPEND_GUARD_REASON[suspendGuard]}
+								</span>
+							</div>
+						)}
+					</ContextMenuItem>
+					<ContextMenuSeparator />
+					<ContextMenuItem onClick={onClose}>
+						Close
+						<ContextMenuShortcut>⌘W</ContextMenuShortcut>
+					</ContextMenuItem>
+					<ContextMenuItem disabled={!hasOtherTabs} onClick={onCloseOthers}>
+						Close other tabs
+						<ContextMenuShortcut>⌘⌥W</ContextMenuShortcut>
+					</ContextMenuItem>
+				</ContextMenuPopup>
+			</ContextMenu>
+		</div>
 	);
 }
 
