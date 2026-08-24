@@ -273,9 +273,11 @@ function AppShellReady({
 			<PrTabStrip
 				activeSessionId={activeSessionId}
 				checkGenerationRunning={tabSuspension.isGenerationRunning}
+				onActivateSession={setRequestedActiveSessionId}
 				onCloseOtherSessions={handleCloseOtherSessions}
 				onCloseSession={handleCloseSession}
 				onOpenPullRequest={openPalette}
+				onReorderSessions={tabOrder.reorder}
 				onSuspendTab={tabSuspension.suspendNow}
 				orpc={orpc}
 				sessions={sessions}

@@ -1,7 +1,33 @@
 "use client";
 
+import {
+	closestCenter,
+	DndContext,
+	type DragEndEvent,
+	type DragStartEvent,
+	DragOverlay,
+	KeyboardSensor,
+	MouseSensor,
+	TouchSensor,
+	defaultDropAnimationSideEffects,
+	type DropAnimation,
+	useSensor,
+	useSensors,
+} from "@dnd-kit/core";
+import {
+	restrictToHorizontalAxis,
+	restrictToParentElement,
+} from "@dnd-kit/modifiers";
+import {
+	arrayMove,
+	horizontalListSortingStrategy,
+	SortableContext,
+	sortableKeyboardCoordinates,
+	useSortable,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import { GitPullRequestIcon, LeafIcon, PlusIcon, XIcon } from "lucide-react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
 	ContextMenu,
 	ContextMenuItem,
@@ -33,6 +59,10 @@ type PrTabStripProps = {
 	onCloseSession: (sessionId: string) => void;
 	onCloseOtherSessions: (sessionId: string) => void;
 	onOpenPullRequest: () => void;
+	/** Persists a drag-reorder. Ids are the strip's visual order after the drop. */
+	onReorderSessions: (sessionIds: readonly string[]) => void;
+	/** Activates the dragged tab on pickup, matching browser tab strips. */
+	onActivateSession: (sessionId: string) => void;
 	/** Suspends one tab immediately, bypassing the idle timeout — bound to
 	 * `useTabSuspension`'s `suspendNow` so the context menu's Suspend item
 	 * goes through the exact same walkthrough-generation guard and cache
@@ -46,6 +76,14 @@ type PrTabStripProps = {
 	onContextMenu?: (event: React.MouseEvent) => void;
 	/** Threaded through only for `UpdatePill` — the strip itself talks to no other sidecar procedure. */
 	orpc: SidecarQueryUtils;
+};
+
+const dropAnimation: DropAnimation = {
+	sideEffects: defaultDropAnimationSideEffects({
+		styles: {
+			active: { opacity: "0.4" },
+		},
+	}),
 };
 
 /**
@@ -67,6 +105,12 @@ type PrTabStripProps = {
  * still opt out on their own: that same script bails on anything with a
  * clickable tag or role, which covers both the tabs (`role="tab"`) and their
  * close `<button>`s — nothing here needs an explicit `="false"`.
+ *
+ * Reorder uses dnd-kit's sortable preset (same method as Dice UI's Sortable):
+ * `DndContext` + `SortableContext` + `useSortable`, horizontal list strategy,
+ * closest-center collision, axis/parent modifiers, and a `DragOverlay` so the
+ * moving tab isn't clipped by the list's `overflow-x-auto`. Mouse activation
+ * waits 8px so a click still selects the tab.
  */
 export function PrTabStrip({
 	sessions,
@@ -75,31 +119,95 @@ export function PrTabStrip({
 	onCloseSession,
 	onCloseOtherSessions,
 	onOpenPullRequest,
+	onReorderSessions,
+	onActivateSession,
 	onSuspendTab,
 	checkGenerationRunning,
 	onContextMenu,
 	orpc,
 }: PrTabStripProps): React.ReactElement {
+	const [draggingId, setDraggingId] = useState<string | null>(null);
+	const sessionIds = useMemo(
+		() => sessions.map((session) => session.id),
+		[sessions],
+	);
+	const sensors = useSensors(
+		useSensor(MouseSensor, {
+			activationConstraint: { distance: 8 },
+		}),
+		useSensor(TouchSensor, {
+			activationConstraint: { delay: 200, tolerance: 5 },
+		}),
+		useSensor(KeyboardSensor, {
+			coordinateGetter: sortableKeyboardCoordinates,
+		}),
+	);
+
+	const draggingSession =
+		draggingId === null
+			? undefined
+			: sessions.find((session) => session.id === draggingId);
+
+	function handleDragStart(event: DragStartEvent) {
+		const sessionId = String(event.active.id);
+		setDraggingId(sessionId);
+		onActivateSession(sessionId);
+	}
+
+	function handleDragEnd(event: DragEndEvent) {
+		setDraggingId(null);
+		if (event.over == null) return;
+		const activeId = String(event.active.id);
+		const overId = String(event.over.id);
+		if (activeId === overId) return;
+		const oldIndex = sessionIds.indexOf(activeId);
+		const newIndex = sessionIds.indexOf(overId);
+		if (oldIndex < 0 || newIndex < 0) return;
+		onReorderSessions(arrayMove([...sessionIds], oldIndex, newIndex));
+	}
+
 	return (
 		// biome-ignore lint/a11y/noStaticElementInteractions: right-click only, opens a native OS menu — nothing here needs keyboard/focus semantics.
 		<div className="flex shrink-0 pr-2" onContextMenu={onContextMenu}>
 			<TrafficLightSpace />
-			<TabsPrimitive.List className="flex min-w-0 flex-1 gap-1 overflow-x-auto py-2 items-center">
-				{sessions.map((session) => (
-					<PrTab
-						checkGenerationRunning={checkGenerationRunning}
-						hasOtherTabs={sessions.length > 1}
-						isActive={session.id === activeSessionId}
-						isSuspended={suspendedSessionIds.has(session.id)}
-						key={session.id}
-						onClose={() => onCloseSession(session.id)}
-						onCloseOthers={() => onCloseOtherSessions(session.id)}
-						onSuspend={() => onSuspendTab(session.id)}
-						session={session}
-					/>
-				))}
-				<OpenPullRequestButton onClick={onOpenPullRequest} />
-			</TabsPrimitive.List>
+			<DndContext
+				collisionDetection={closestCenter}
+				modifiers={[restrictToHorizontalAxis, restrictToParentElement]}
+				onDragCancel={() => setDraggingId(null)}
+				onDragEnd={handleDragEnd}
+				onDragStart={handleDragStart}
+				sensors={sensors}
+			>
+				<SortableContext
+					items={sessionIds}
+					strategy={horizontalListSortingStrategy}
+				>
+					<TabsPrimitive.List className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto py-2">
+						{sessions.map((session) => (
+							<PrTab
+								checkGenerationRunning={checkGenerationRunning}
+								hasOtherTabs={sessions.length > 1}
+								isActive={session.id === activeSessionId}
+								isSuspended={suspendedSessionIds.has(session.id)}
+								key={session.id}
+								onClose={() => onCloseSession(session.id)}
+								onCloseOthers={() => onCloseOtherSessions(session.id)}
+								onSuspend={() => onSuspendTab(session.id)}
+								session={session}
+							/>
+						))}
+						<OpenPullRequestButton onClick={onOpenPullRequest} />
+					</TabsPrimitive.List>
+				</SortableContext>
+				<DragOverlay dropAnimation={dropAnimation}>
+					{draggingSession === undefined ? null : (
+						<PrTabPreview
+							isSuspended={suspendedSessionIds.has(draggingSession.id)}
+							session={draggingSession}
+						/>
+					)}
+				</DragOverlay>
+			</DndContext>
 			{/* Outside the scrollable, `flex-1` tab list — that's what keeps the
 			 * pill pinned at the strip's right edge instead of scrolling with
 			 * the tabs (see this file's top doc comment on why the list gets
@@ -156,6 +264,32 @@ const SUSPEND_GUARD_REASON: Record<Exclude<SuspendGuard, null>, string> = {
 	"generation-running": "Walkthrough generation running",
 };
 
+function sessionLabel(session: Session): string {
+	return session.target.kind === "pr"
+		? `#${session.target.number} ${session.target.title}`
+		: session.target.headRef;
+}
+
+const PR_TAB_CLASS = cn(
+	"group relative flex min-w-32 max-w-56 shrink select-none items-center gap-1.5 self-end rounded-md px-2.5 py-1.5 text-muted-foreground text-xs outline-none",
+	"bg-pane-surface hover:bg-background hover:text-foreground",
+	"before:pointer-events-none before:absolute before:inset-0 before:rounded-[calc(var(--radius-md)-1px)] before:shadow-[0_1px_--theme(--color-black/4%)] dark:before:shadow-[0_-1px_--theme(--color-white/6%)]",
+	"data-active:bg-background data-active:text-foreground data-active:bg-clip-padding data-active:shadow-xs/5",
+	"focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
+);
+
+function PrTabIcon({
+	isSuspended,
+}: {
+	isSuspended: boolean;
+}): React.ReactElement {
+	return isSuspended ? (
+		<LeafIcon className="size-3.5 shrink-0" />
+	) : (
+		<GitPullRequestIcon className="size-3.5 shrink-0" />
+	);
+}
+
 function PrTab({
 	session,
 	isActive,
@@ -175,10 +309,10 @@ function PrTab({
 	onSuspend: () => void;
 	checkGenerationRunning: (sessionId: string) => Promise<boolean>;
 }): React.ReactElement {
-	const label =
-		session.target.kind === "pr"
-			? `#${session.target.number} ${session.target.title}`
-			: session.target.headRef;
+	const sortable = useSortable({
+		id: session.id,
+		disabled: !hasOtherTabs,
+	});
 
 	// Only meaningful while the tab is neither the active one nor already
 	// suspended — those two disable "Suspend" on their own, so there's
@@ -207,28 +341,36 @@ function PrTab({
 			<ContextMenuTrigger render={<div className="contents" />}>
 				<TabsPrimitive.Tab
 					className={cn(
-						"group relative flex min-w-32 max-w-56 shrink cursor-pointer items-center gap-1.5 self-end rounded-md px-2.5 py-1.5 text-muted-foreground text-xs outline-none",
-						"bg-pane-surface hover:bg-background hover:text-foreground",
-						"before:pointer-events-none before:absolute before:inset-0 before:rounded-[calc(var(--radius-md)-1px)] before:shadow-[0_1px_--theme(--color-black/4%)] dark:before:shadow-[0_-1px_--theme(--color-white/6%)]",
-						"data-active:bg-background data-active:text-foreground data-active:bg-clip-padding data-active:shadow-xs/5",
-						"focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
+						PR_TAB_CLASS,
+						hasOtherTabs ? "cursor-grab" : "cursor-pointer",
+						sortable.isDragging && "cursor-grabbing opacity-40",
 					)}
 					nativeButton={false}
-					render={<div />}
+					render={
+						<div
+							ref={sortable.setNodeRef}
+							style={{
+								transform: CSS.Translate.toString(sortable.transform),
+								transition: sortable.transition,
+							}}
+							{...sortable.listeners}
+						/>
+					}
 					value={session.id}
 				>
-					{isSuspended ? (
-						<LeafIcon className="size-3.5 shrink-0" />
-					) : (
-						<GitPullRequestIcon className="size-3.5 shrink-0" />
-					)}
-					<span className="min-w-0 flex-1 truncate">{label}</span>
+					<PrTabIcon isSuspended={isSuspended} />
+					<span className="min-w-0 flex-1 truncate">
+						{sessionLabel(session)}
+					</span>
 					<button
 						aria-label="Close tab"
 						className="shrink-0 rounded p-0.5 opacity-0 hover:bg-accent group-hover:opacity-100 group-data-active:opacity-100"
 						onClick={(event) => {
 							event.stopPropagation();
 							onClose();
+						}}
+						onPointerDown={(event) => {
+							event.stopPropagation();
 						}}
 						type="button"
 					>
@@ -260,6 +402,29 @@ function PrTab({
 				</ContextMenuItem>
 			</ContextMenuPopup>
 		</ContextMenu>
+	);
+}
+
+/** Presentational clone for `DragOverlay` — must not call `useSortable`. */
+function PrTabPreview({
+	session,
+	isSuspended,
+}: {
+	session: Session;
+	isSuspended: boolean;
+}): React.ReactElement {
+	return (
+		<div
+			className={cn(
+				PR_TAB_CLASS,
+				"cursor-grabbing bg-background text-foreground shadow-xs/5",
+			)}
+			data-tauri-drag-region="false"
+		>
+			<PrTabIcon isSuspended={isSuspended} />
+			<span className="min-w-0 flex-1 truncate">{sessionLabel(session)}</span>
+			<span className="size-4 shrink-0" />
+		</div>
 	);
 }
 
