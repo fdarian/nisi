@@ -322,37 +322,46 @@ export const diffViewUnsafeCSS = `
 	 * bug: with nothing else scoping it, both the gutter and content
 	 * instances end up visible in every column.
 	 *
-	 * A single element can't visually span both columns here — each column's
-	 * code area (\`[data-code]\`) clips overflow (\`overflow: scroll clip\`,
-	 * needed for horizontal scrolling of long lines), so nothing painted
-	 * inside one column's DOM subtree can bleed into the other's, even via
-	 * \`position: absolute\`/cqi-width tricks (verified against @pierre/diffs'
-	 * own \`hunkSeparators: "line-info"\` split output, which fakes a
-	 * "continuous" band by tiling two independently-sized same-color pieces
-	 * across the column boundary, not by truly spanning one element across
-	 * it — not reproducible for a rounded pill without visible seams). So
-	 * instead of trying to span both columns, exactly one instance is kept.
+	 * Neither column alone is "the pane" the pill should center on — it's
+	 * both together — so both gutter-side instances stay visible and
+	 * *compose* into one pill spanning the boundary, instead of picking a
+	 * single surviving instance the way the three-of-four duplicates above
+	 * are resolved: each column's code area (\`[data-code]\`) clips overflow
+	 * (\`overflow: scroll clip\`, needed for horizontal scrolling of long
+	 * lines) at its own edge, so a full-pane-width (\`100cqw\`) copy of the
+	 * pill rendered in *each* column, both positioned at the same
+	 * pane-absolute offset, has its left half clipped away by the deletions
+	 * column's own boundary and its right half clipped away by the
+	 * additions column's — leaving exactly one visible half in each column,
+	 * which line up into a single seamless pill because both copies are
+	 * pixel-identical content at a pixel-identical position. (An earlier
+	 * version of this fix rejected spanning both columns, on the reasoning
+	 * that @pierre/diffs' own \`hunkSeparators: "line-info"\` split output
+	 * fakes a "continuous" band by tiling two *independently-sized*
+	 * same-color pieces across the boundary — true for that case, but this
+	 * is two *identically-sized, identically-positioned* copies clipped by
+	 * their own columns instead, which composes without a seam.)
 	 *
-	 * That instance is the gutter-side pill, not content-side: \`[data-gutter]\`
-	 * is already \`position: sticky; left: 0\` in @pierre/diffs' own
-	 * stylesheet, so an ordinary (\`position: static\`) child inside it
-	 * inherits that pinned position for free, in the resting state and while
-	 * scrolling alike. A child of \`[data-content]\` doesn't have that for
-	 * free — its own static position starts one gutter-width to the right of
-	 * \`[data-code]\`'s edge, so making *it* the sticky element instead (an
-	 * earlier version of this fix) only reaches dead-center after the user
-	 * scrolls past that width; before that, which is most files most of the
-	 * time, the pill sits visibly off-center. Verified live at
-	 * \`scrollLeft: 0\` and while scrolling, both diff styles, two window
-	 * widths.
+	 * That pane-absolute offset comes for free from \`[data-gutter]\` already
+	 * being \`position: sticky; left: 0\` in @pierre/diffs' own stylesheet —
+	 * an ordinary (\`position: static\`) child inherits that pinned position,
+	 * in the resting state and while scrolling alike (see the width rule
+	 * below for how the additions-side copy is shifted to line up with the
+	 * deletions-side one despite starting from a different column). A child
+	 * of \`[data-content]\` doesn't get this for free — its own static
+	 * position starts one gutter-width to the right of \`[data-code]\`'s
+	 * edge, so an earlier version of this fix that made \`[data-content]\`'s
+	 * child the sticky element only reached dead-center after the user
+	 * scrolled past that width; before that, which is most files most of
+	 * the time, the pill sat visibly off-center at \`scrollLeft: 0\` — the
+	 * resting state nearly everyone sees. Verified live, both diff styles.
 	 */
-	[data-content] [data-separator="line-info-basic"] [data-separator-wrapper],
-	[data-additions] [data-gutter] [data-separator="line-info-basic"] [data-separator-wrapper] {
+	[data-content] [data-separator="line-info-basic"] [data-separator-wrapper] {
 		display: none !important;
 	}
 
 	/**
-	 * Pane-centering fix, on the one surviving (gutter-side) instance.
+	 * Pane-centering fix, on the surviving (gutter-side) instance(s).
 	 * \`width: 100cqw\` sizes the row to \`<pre>\`'s full width instead of
 	 * \`[data-gutter]\`'s own ~2-4ch column, so \`justify-content: center\`
 	 * above centers on the visible pane. \`margin-right: -100cqw\` cancels
@@ -361,27 +370,64 @@ export const diffViewUnsafeCSS = `
 	 * that \`[data-gutter]\`'s column inflates to match the row's width,
 	 * corrupting the gutter/content split the same way containing
 	 * \`[data-code]\` directly did above. No \`position\` override needed:
-	 * \`[data-gutter]\`'s own stickiness (see the comment two rules up) already
-	 * pins this row's resting position, so it doesn't need one of its own.
+	 * \`[data-gutter]\`'s own stickiness (see the comment above) already pins
+	 * this row's resting position, so it doesn't need one of its own.
+	 *
+	 * In split layout this rule alone gives *both* columns a same-sized,
+	 * same-pane-relative-origin copy for unified/deletions, but the
+	 * additions column's own coordinate space starts at the pane's
+	 * *midpoint*, not its left edge — its \`[data-gutter]\`'s resting
+	 * position (pane-absolute) is already one column-width right of
+	 * deletions'. The next rule pulls it back by exactly that width so both
+	 * copies start at the same pane-absolute x, which is what makes them
+	 * compose instead of duplicate.
+	 *
+	 * \`background\` here is the horizontal rule "through" the pill (matching
+	 * the Linear reference — see the top of this override), not a separate
+	 * element: an element's background always paints behind its children,
+	 * so it sits behind the wrapper pill for free, with no z-index needed,
+	 * and the wrapper's own opaque \`background: var(--secondary)\` (below)
+	 * naturally masks the segment directly behind it. Has to override the
+	 * base rule's \`background: transparent !important\` above, hence
+	 * \`!important\` here too — a higher-specificity selector alone doesn't
+	 * beat an \`!important\` declaration. \`var(--border)\` matches the pill's
+	 * own border color (\`[data-separator-wrapper]\`, below) rather than
+	 * introducing a new token — \`--border\` is a low-opacity value by
+	 * design (6%/8% white/black, \`index.css\`) used the same way for every
+	 * border in the app, not something scoped up for this rule specifically;
+	 * verified live in both themes that the resulting line is genuinely
+	 * faint against a plain background, without any adjacent fill to
+	 * contrast against the way a normal border gets. Spans this row's own
+	 * width (\`100cqw\`, or the composed pane width in split, per the rule
+	 * below), so it appears in both diff styles without a separate rule.
 	 */
 	[data-gutter] [data-separator="line-info-basic"] {
 		width: 100cqw;
 		margin-right: -100cqw;
+		background: linear-gradient(var(--border), var(--border)) center / 100% 1px no-repeat !important;
 	}
 
 	/**
-	 * \`100cqw\` is \`<pre>\`'s full width — right for unified (\`<pre>\` *is* the
-	 * one column) but double the deletions column's own share in split,
-	 * where \`<pre>\` spans *both* columns (\`[data-diff-type="split"]
-	 * [data-overflow="scroll"] { grid-template-columns: 1fr 1fr }\`,
-	 * style.js). Narrowed to half here rather than a second query container
-	 * scoped to just \`[data-deletions]\`: that element *is* \`[data-code]\`
-	 * (confirmed live via its attributes), whose grid columns break the same
-	 * way containing it did above. \`50cqw\` works because split's two
-	 * columns were verified live to always render exactly equal-width.
+	 * \`margin-left: -50cqw\` shifts the additions-side copy left by one
+	 * column-width (split is always exactly \`1fr 1fr\`,
+	 * \`[data-diff-type="split"][data-overflow="scroll"]
+	 * { grid-template-columns: 1fr 1fr }\` in style.js, verified live to
+	 * render the two columns exactly equal-width) so its \`100cqw\` box starts
+	 * at the same pane-absolute x as the deletions copy, instead of at the
+	 * additions column's own left edge (pane-absolute 50%). \`[data-code]\`'s
+	 * \`overflow: scroll clip\` then does the actual compositing: this
+	 * column only has a viewport onto local-x \`[0, 50cqw]\`, which — after
+	 * the shift — corresponds to the *right* half of the shared pill, while
+	 * deletions' own (unshifted) copy shows the left half. \`margin-right\`
+	 * changes from \`-100cqw\` to \`-50cqw\` to match, since the total margin
+	 * still needs to cancel the row's \`100cqw\` content width to keep
+	 * \`[data-gutter]\`'s own track from inflating (see the rule above) —
+	 * \`-50cqw\` left plus \`-50cqw\` right sums to the same \`-100cqw\` the
+	 * unshifted rule uses alone. Verified with screenshots, not just
+	 * measured rects, that the two halves line up without a visible seam.
 	 */
-	[data-deletions] [data-gutter] [data-separator="line-info-basic"] {
-		width: 50cqw;
+	[data-additions] [data-gutter] [data-separator="line-info-basic"] {
+		margin-left: -50cqw;
 		margin-right: -50cqw;
 	}
 
