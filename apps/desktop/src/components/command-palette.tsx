@@ -1,7 +1,7 @@
 "use client";
 
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { ExternalLinkIcon, type LucideIcon } from "lucide-react";
+import { CopyIcon, ExternalLinkIcon, type LucideIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 import {
 	Command,
@@ -100,18 +100,29 @@ export function CommandPalette({
 }
 
 function buildActions(session: Session | null): CommandAction[] {
-	if (session === null || session.target.kind !== "pr") return [];
-	// `Session`/`SessionTarget` (`pr-data.ts`) carry no `url`; hardcodes
-	// github.com — wrong for Enterprise hosts (`packages/git/src/repo-path-mapping.ts:26`).
-	const url = `https://github.com/${session.target.owner}/${session.target.repo}/pull/${session.target.number}`;
-	return [
+	if (session === null) return [];
+	const actions: CommandAction[] = [
 		{
+			id: "copy-branch-name",
+			label: "Copy branch name",
+			icon: CopyIcon,
+			run: () => {
+				void navigator.clipboard.writeText(session.target.headRef);
+			},
+		},
+	];
+	if (session.target.kind === "pr") {
+		// `Session`/`SessionTarget` (`pr-data.ts`) carry no `url`; hardcodes
+		// github.com — wrong for Enterprise hosts (`packages/git/src/repo-path-mapping.ts:26`).
+		const url = `https://github.com/${session.target.owner}/${session.target.repo}/pull/${session.target.number}`;
+		actions.push({
 			id: "open-pr-in-github",
 			label: "Open Pull Request in GitHub",
 			icon: ExternalLinkIcon,
 			run: () => {
 				void openUrl(url);
 			},
-		},
-	];
+		});
+	}
+	return actions;
 }

@@ -172,6 +172,11 @@ export function PrHeader({
 						/>
 					)}
 					<DropdownMenuItem onClick={onCloseTab}>Close tab</DropdownMenuItem>
+					<DropdownMenuItem
+						onClick={() => navigator.clipboard.writeText(target.headRef)}
+					>
+						Copy branch name
+					</DropdownMenuItem>
 					{editors.length > 0 && (
 						<DropdownMenuSub>
 							<DropdownMenuSubTrigger>Open in...</DropdownMenuSubTrigger>
