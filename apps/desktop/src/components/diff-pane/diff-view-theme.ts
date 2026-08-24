@@ -45,6 +45,24 @@ export const diffItemMetrics = {
 export const DIFF_VIEWED_HOST_CLASS = "nisi-diff-viewed";
 
 /**
+ * Host class toggled per item in `onPostRender` while `diff-pane.tsx`'s
+ * loading placeholder stands in for a file whose content hasn't resolved
+ * yet. That placeholder's `file.contents` is real — a blank line per
+ * estimated changed line, so `CodeView` reserves roughly the right height
+ * before ever measuring it (see `loadingPlaceholderContents`) — so unlike
+ * `DIFF_VIEWED_HOST_CLASS` this can't just dim a small, already-rendered
+ * card: for a large file the reserved height can run to thousands of
+ * pixels, and without this class a user who scrolls into the middle of it
+ * would see nothing but blank numbered lines with no indication anything is
+ * loading (the "Loading diff…" annotation only lives at line 1). The rules
+ * below apply uniformly across the card's whole box regardless of scroll
+ * position — no `position: sticky` needed — by dimming the host (same
+ * mechanism as `DIFF_VIEWED_HOST_CLASS`) and hiding the line-number gutter
+ * so the blank lines don't read as an empty file.
+ */
+export const DIFF_LOADING_HOST_CLASS = "nisi-diff-loading";
+
+/**
  * `::highlight()` rules for keyword-search matches, painted via the CSS
  * Custom Highlight API (`CSS.highlights`, `diff-pane.tsx`) instead of
  * wrapping matched text in DOM elements — a `Range` can span whatever
@@ -217,6 +235,20 @@ export const diffViewUnsafeCSS = `
 
 	:host(.${DIFF_VIEWED_HOST_CLASS}:hover) {
 		opacity: 0.85;
+	}
+
+	/** See \`DIFF_LOADING_HOST_CLASS\`'s doc comment for why this needs to hold
+	 * up across a whole (possibly very tall) card, not just a small one. */
+	:host(.${DIFF_LOADING_HOST_CLASS}) {
+		opacity: 0.6;
+	}
+
+	/* The blank placeholder lines have nothing to show, but their line
+	 * numbers still count up to the file's real estimated length — hiding the
+	 * gutter (not the numbers' text color, so no color choice could feel
+	 * "on brand" for pure filler) keeps that from reading as an empty file. */
+	:host(.${DIFF_LOADING_HOST_CLASS}) [data-gutter] {
+		visibility: hidden;
 	}
 
 	/**

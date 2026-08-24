@@ -24,6 +24,7 @@ import {
 } from "#/components/diff-pane/diff-code-view";
 import { DiffFileHeader } from "#/components/diff-pane/diff-file-header";
 import {
+	DIFF_LOADING_HOST_CLASS,
 	DIFF_VIEWED_HOST_CLASS,
 	diffCardChromeCSS,
 } from "#/components/diff-pane/diff-view-theme";
@@ -436,6 +437,8 @@ export function DiffPane({
 				viewed: boolean;
 				reviewStatus: ReviewState;
 				cardCollapsed: boolean;
+				/** Set once, below, for the one branch that pushes a loading placeholder — see `DIFF_LOADING_HOST_CLASS`. */
+				isLoading: boolean;
 			}
 		>();
 
@@ -451,6 +454,7 @@ export function DiffPane({
 				viewed,
 				reviewStatus,
 				cardCollapsed,
+				isLoading: false,
 			});
 			// Deliberately not keyed on selection: nothing an item renders — its
 			// diff, its `renderCustomHeader`, its annotations, `onPostRender`'s
@@ -507,6 +511,13 @@ export function DiffPane({
 				// first render — swapped in place once its content resolves —
 				// keeps `items` stable in length and order, so a later chunk only
 				// ever updates a slot instead of inserting into one.
+				nextMetadata.set(file.path, {
+					file,
+					viewed,
+					reviewStatus,
+					cardCollapsed,
+					isLoading: true,
+				});
 				nextItems.push({
 					id: file.path,
 					type: "file",
@@ -767,6 +778,10 @@ export function DiffPane({
 				onPostRender: (node, _instance, phase, context) => {
 					const meta = itemMetadata.get(context.item.id);
 					node.classList.toggle(DIFF_VIEWED_HOST_CLASS, meta?.viewed === true);
+					node.classList.toggle(
+						DIFF_LOADING_HOST_CLASS,
+						meta?.isLoading === true,
+					);
 					onItemPostRender(
 						context.item.id,
 						phase === "unmount" ? undefined : (node.shadowRoot ?? undefined),
