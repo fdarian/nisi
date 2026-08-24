@@ -22,6 +22,7 @@ import { Spinner } from "#/components/ui/spinner";
 import { TabsPrimitive } from "#/components/ui/tabs";
 import { useCommandPaletteShortcut } from "#/hooks/use-command-palette-shortcut";
 import { useOpenPrPaletteShortcut } from "#/hooks/use-open-pr-palette-shortcut";
+import { useTabOrder } from "#/hooks/use-tab-order";
 import { useTabShortcuts } from "#/hooks/use-tab-shortcuts";
 import { useTabSuspension } from "#/hooks/use-tab-suspension";
 import type { SidecarQueryUtils } from "#/lib/backend-context";
@@ -122,10 +123,10 @@ function AppShellReady({
 	const [requestedActiveSessionId, setRequestedActiveSessionId] = useState<
 		string | null
 	>(null);
-	const { sessions, closeSession } = useSessions(
-		orpc,
-		setRequestedActiveSessionId,
-	);
+	const listed = useSessions(orpc, setRequestedActiveSessionId);
+	const tabOrder = useTabOrder(listed.sessions);
+	const sessions = tabOrder.orderedSessions;
+	const closeSession = listed.closeSession;
 	const [paletteOpen, setPaletteOpen] = useState(false);
 	const openPalette = useCallback(() => setPaletteOpen(true), []);
 	useOpenPrPaletteShortcut(openPalette);
