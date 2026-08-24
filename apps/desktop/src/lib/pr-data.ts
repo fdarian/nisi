@@ -709,6 +709,62 @@ export function useSessionWatch(
 }
 
 /**
+ * `sessions.open`'s `{ target: { kind: "pr" } }` path — the ⌘K "Switch to
+ * PR" command available on a branch-diff session, resolving to whatever PR
+ * GitHub knows about for the branch (`resolveReviewTarget`,
+ * `apps/desktop/sidecar/store.ts`). The branch session this was called from
+ * is left open; this only opens a second, PR-scoped session alongside it,
+ * same "leave what's there, open something new" shape as
+ * `useOpenPullRequest` (`#/lib/pull-requests-data.ts`). `sessions.open`'s
+ * own emitted `session-opened` event (see `useSessions` above) would
+ * eventually invalidate the session list and activate this session too, but
+ * `onOpened` fires straight from the mutation so the tab switch doesn't wait
+ * on that round trip.
+ *
+ * Errors toast rather than return — a command-palette action has no
+ * dedicated place to render an inline error, matching
+ * `useMarkPullRequestReady`. "No PR open" is `sessions.open`'s own
+ * `NOT_FOUND` code (`packages/sidecar-api/src/sessions.ts`) — distinct from
+ * `BAD_REQUEST`, which that contract reserves for the request itself being
+ * malformed (`cwd` not a git repo, an unresolvable `baseRef`/`headRef`, none
+ * of which this call can trigger since it passes no `baseRef`/`headRef`).
+ */
+export function useSwitchToPr(
+	orpc: SidecarQueryUtils,
+	onOpened: (sessionId: string) => void,
+): {
+	switchToPr: (repoRoot: string) => void;
+	isPending: boolean;
+} {
+	const mutation = useMutation({
+		...orpc.sessions.open.mutationOptions(),
+		onSuccess: (session) => onOpened(session.id),
+		onError: (error) => {
+			const isNoPullRequest =
+				error instanceof ORPCError && error.code === "NOT_FOUND";
+			toastManager.add({
+				title: isNoPullRequest
+					? "No pull request found for this branch."
+					: "Failed to switch to pull request",
+				description: isNoPullRequest
+					? undefined
+					: error instanceof Error
+						? error.message
+						: String(error),
+				type: "error",
+			});
+		},
+	});
+
+	return {
+		switchToPr: (repoRoot: string) => {
+			mutation.mutate({ cwd: repoRoot, target: { kind: "pr" } });
+		},
+		isPending: mutation.isPending,
+	};
+}
+
+/**
  * Calls `refresh` on the false→true rising edge of `watched` — in
  * `pr-view.tsx`, `watched` is `windowFocused && isFilesChangedVisible`, so
  * that one edge is exactly the union of the two transitions Files Changed
