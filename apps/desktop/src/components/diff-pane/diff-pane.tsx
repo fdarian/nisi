@@ -142,6 +142,13 @@ const ERROR_ANNOTATIONS: LineAnnotation<DiffAnnotationMetadata>[] = [
 	},
 ];
 
+const PARSE_ERROR_ANNOTATIONS: LineAnnotation<DiffAnnotationMetadata>[] = [
+	{
+		lineNumber: 1,
+		metadata: { type: "error", message: "Couldn't parse this file's diff." },
+	},
+];
+
 const REVIEWED_EMPTY_ANNOTATIONS: LineAnnotation<DiffAnnotationMetadata>[] = [
 	{ lineNumber: 1, metadata: { type: "reviewed-empty" } },
 ];
@@ -632,7 +639,22 @@ export function DiffPane({
 			}
 
 			const fileDiff = resolveFileDiff(fileDiffCache.current, file, content);
-			if (fileDiff === undefined) continue;
+			if (fileDiff === undefined) {
+				nextItems.push({
+					id: file.path,
+					type: "file",
+					file: {
+						name: file.path,
+						contents: " ",
+						lang: "text",
+						cacheKey: `parse-error:${file.fingerprint}`,
+					},
+					annotations: PARSE_ERROR_ANNOTATIONS,
+					collapsed: cardCollapsed,
+					version: hashItemVersion(`${baseVersionInput}:parse-error`),
+				});
+				continue;
+			}
 
 			const annotations = content.truncated
 				? resolveLoadFileAnnotations(
