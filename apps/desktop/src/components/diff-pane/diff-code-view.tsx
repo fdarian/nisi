@@ -11,6 +11,7 @@
  * `onPostRender` — stays a prop, not folded in here.
  */
 import type {
+	CodeView as CodeViewInstance,
 	CodeViewItem,
 	CodeViewOptions,
 	DiffLineAnnotation,
@@ -71,6 +72,8 @@ type DiffCodeViewProps<Metadata> = {
 	className: string;
 	items: readonly CodeViewItem<Metadata>[];
 	options: CodeViewOptions<Metadata>;
+	/** Forwarded straight to `CodeView`'s own `onScroll` — fires for both user-driven and programmatic scrolling; telling the two apart is the caller's job (see `DiffPane`'s scroll-report suppression). */
+	onScroll?: (scrollTop: number, viewer: CodeViewInstance<Metadata>) => void;
 	renderAnnotation: (
 		annotation: LineAnnotation<Metadata> | DiffLineAnnotation<Metadata>,
 	) => React.ReactNode;
@@ -81,6 +84,7 @@ type DiffCodeViewProps<Metadata> = {
 export function DiffCodeView<Metadata>({
 	className,
 	items,
+	onScroll,
 	options,
 	renderAnnotation,
 	renderCustomHeader,
@@ -96,6 +100,7 @@ export function DiffCodeView<Metadata>({
 			<CodeView
 				className={className}
 				items={items}
+				onScroll={onScroll}
 				options={options}
 				ref={ref}
 				renderAnnotation={renderAnnotation}
