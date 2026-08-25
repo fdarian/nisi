@@ -257,7 +257,7 @@ function AppearanceSection({
 				</ToggleGroup>
 			</SettingsRow>
 			<SettingsRow
-				description="Used by the ⌘, o e leader shortcut and each file's 'Open in…' menu default."
+				description="Press o, then e, to open the selected file in this editor."
 				title="Preferred editor"
 			>
 				<Select
