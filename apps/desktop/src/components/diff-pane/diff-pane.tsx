@@ -216,13 +216,10 @@ type DiffPaneProps = {
 	selectedPath: string | null;
 	/**
 	 * Reports the file currently at the top of the diff viewport while the
-	 * user scrolls (see `findTopVisibleItemId`). Wire this straight to the
-	 * *raw* selection setter, not a wrapper that also calls `scrollToPath` —
-	 * routing a scroll-driven update through a scroll-causing setter would
-	 * fight the very scroll that produced it. Never called for a
-	 * programmatic scroll this pane itself just performed, nor with a path
-	 * that hasn't actually changed — see the scroll-report suppression
-	 * around `beginProgrammaticScrollSuppression` below.
+	 * user scrolls (see `findTopVisibleItemId`). Wire this to the *raw*
+	 * selection setter, not a wrapper that also calls `scrollToPath` — that
+	 * would fight the scroll that produced this report. Never fires for this
+	 * pane's own programmatic scrolls — see `suppressVisiblePathReportRef`.
 	 */
 	onVisiblePathChange?: (path: string) => void;
 	reviewState: ReadonlyMap<string, ReviewStateEntry>;
@@ -411,20 +408,22 @@ export function DiffPane({
 		new Map<string, CachedLoadFileAnnotation>(),
 	);
 
-	// The path `onVisiblePathChange` last reported, read by the `selectedPath`
-	// effect below to recognize (and skip re-scrolling for) the very
-	// selection this pane itself just produced — see that effect's doc
-	// comment for why a scroll-driven update would otherwise bounce straight
-	// back as a programmatic scroll.
+	// The path `onVisiblePathChange` last reported. Cleared the moment a new
+	// programmatic scroll begins (`scrollWhenReady` below), so it's only
+	// ever stale for the one bounce-back it exists to catch — see the
+	// `selectedPath` effect below.
 	const lastReportedVisiblePathRef = useRef<string | null>(null);
-	// True for the lifetime of one in-flight programmatic `scrollTo` — its
-	// smooth-scroll spring animation (`scrollWhenReady`'s `behavior:
-	// "smooth"`) emits many intermediate `onScroll` events while settling,
-	// each of which would otherwise read as "the user scrolled to a new
-	// file" and re-target the very animation still in progress. Cleared
-	// either once scrolling goes quiet for `SCROLL_SETTLE_MS` (the animation
-	// finished — see `handleScroll` below) or immediately on real user wheel/
-	// touch input (see the listener effect below), whichever comes first.
+	// Suppresses `onVisiblePathChange` reports for the duration of one
+	// in-flight programmatic `scrollTo`. Its smooth-scroll spring
+	// (`SCROLL_SETTLE_MS`'s doc comment) fires `onScroll` roughly every
+	// frame while settling, and each intermediate event would otherwise read
+	// as "the user scrolled here" and re-target the animation still in
+	// progress — the pre-scroll `pendingPathScrollFrame`/
+	// `pendingMatchScrollFrame` polling only covers getting the scroll
+	// started, not this. Released once scrolling goes quiet for
+	// `SCROLL_SETTLE_MS` (`beginProgrammaticScrollSuppression`/
+	// `handleScroll`), or immediately on real wheel/touch input
+	// (`releaseProgrammaticScrollSuppression`), whichever comes first.
 	const suppressVisiblePathReportRef = useRef(false);
 	const settleTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -435,10 +434,10 @@ export function DiffPane({
 		}
 	}, []);
 
-	// Called right before every programmatic `scrollTo` (`scrollWhenReady`
-	// below) — (re)arms the settle timer regardless of whether suppression
-	// was already active, since a second path/match scroll can land while an
-	// earlier one's animation is still settling.
+	// (Re)arms the settle timer — called on every intermediate `onScroll`
+	// while already suppressed (`handleScroll`), not just once, since a
+	// second path/match scroll can land while an earlier one is still
+	// settling.
 	const beginProgrammaticScrollSuppression = useCallback(() => {
 		suppressVisiblePathReportRef.current = true;
 		clearSettleTimeout();
@@ -449,9 +448,8 @@ export function DiffPane({
 	}, [clearSettleTimeout]);
 
 	// A real wheel/touch during an in-flight programmatic scroll means the
-	// user is actively steering — hand control back immediately rather than
-	// waiting out the settle timer, which the animation's own remaining
-	// frames would otherwise keep re-arming.
+	// user is steering — hand control back immediately instead of waiting
+	// out the settle timer.
 	const releaseProgrammaticScrollSuppression = useCallback(() => {
 		if (!suppressVisiblePathReportRef.current) return;
 		suppressVisiblePathReportRef.current = false;
@@ -906,6 +904,10 @@ export function DiffPane({
 					return false;
 				}
 				beginProgrammaticScrollSuppression();
+				// A programmatic scroll is starting, so any earlier report no
+				// longer describes where the pane is headed — see
+				// `lastReportedVisiblePathRef`'s doc comment.
+				lastReportedVisiblePathRef.current = null;
 				handle.scrollTo(target);
 				return true;
 			}, frameRef);
@@ -979,15 +981,16 @@ export function DiffPane({
 		[],
 	);
 
-	// Real wheel/touch input on the scroller takes back control from an
-	// in-flight programmatic scroll immediately (see
-	// `releaseProgrammaticScrollSuppression`) rather than waiting out the
-	// settle timer. `pollUntilReady` (rather than reading
-	// `getContainerElement()` once inline) covers the pane's own mount
-	// timing: `files` can start out empty (`Empty` renders instead of
-	// `DiffCodeView` below, so `codeViewRef` has nothing to attach to yet)
-	// and only later populate once the PR's file list resolves.
+	// Real wheel/touch input takes back control from an in-flight
+	// programmatic scroll immediately, instead of waiting out the settle
+	// timer (`releaseProgrammaticScrollSuppression`). Polls for the
+	// container rather than reading `getContainerElement()` once inline, and
+	// re-polls whenever `hasRenderableFiles` flips — the same condition that
+	// gates `Empty` vs `DiffCodeView` below — since `codeViewRef` has
+	// nothing to attach to until `DiffCodeView` actually mounts.
+	const hasRenderableFiles = files.length > 0;
 	useEffect(() => {
+		if (!hasRenderableFiles) return;
 		const attachFrame = { current: null as number | null };
 		let attachedContainer: HTMLElement | undefined;
 		pollUntilReady(() => {
@@ -1020,24 +1023,16 @@ export function DiffPane({
 				releaseProgrammaticScrollSuppression,
 			);
 		};
-	}, [releaseProgrammaticScrollSuppression]);
+	}, [releaseProgrammaticScrollSuppression, hasRenderableFiles]);
 
 	// `CodeView`'s own `onScroll` — fires for both user-driven and
-	// programmatic scrolling alike, so this is where the two get told apart.
-	// While a programmatic scroll's animation is still settling
-	// (`suppressVisiblePathReportRef`), every intermediate event just
-	// re-arms the settle timer instead of reporting — see
-	// `beginProgrammaticScrollSuppression`'s doc comment for why the
-	// animation needs a settle *signal* at all, not just the pre-scroll
-	// `pendingPathScrollFrame`/`pendingMatchScrollFrame` polling above.
+	// programmatic scrolling, so this is where the two get told apart. While
+	// suppressed, re-arm the settle timer via the same helper `scrollWhenReady`
+	// uses to start it, instead of reporting.
 	const handleScroll = useCallback(
 		(scrollTop: number, viewer: CodeViewInstance<DiffAnnotationMetadata>) => {
 			if (suppressVisiblePathReportRef.current) {
-				clearSettleTimeout();
-				settleTimeoutRef.current = setTimeout(() => {
-					suppressVisiblePathReportRef.current = false;
-					settleTimeoutRef.current = null;
-				}, SCROLL_SETTLE_MS);
+				beginProgrammaticScrollSuppression();
 				return;
 			}
 			if (onVisiblePathChange === undefined) return;
@@ -1051,7 +1046,7 @@ export function DiffPane({
 			lastReportedVisiblePathRef.current = topPath;
 			onVisiblePathChange(topPath);
 		},
-		[clearSettleTimeout, onVisiblePathChange],
+		[beginProgrammaticScrollSuppression, onVisiblePathChange],
 	);
 
 	// Covers selections this pane can actually see change — the initial one,
@@ -1060,10 +1055,8 @@ export function DiffPane({
 	// can't reach: `selectedPath` stays identical, so the effect never
 	// re-fires. That's what `DiffPaneHandle.scrollToPath` is for.
 	//
-	// Skips the scroll when `selectedPath` is the path this pane itself just
-	// reported via `onVisiblePathChange` — otherwise every scroll-driven
-	// selection update would bounce straight back here as a programmatic
-	// re-scroll onto the file the user is already looking at.
+	// Skips the scroll when `selectedPath` matches `lastReportedVisiblePathRef`
+	// — see that ref's doc comment.
 	useEffect(() => {
 		if (selectedPath == null) return;
 		if (selectedPath === lastReportedVisiblePathRef.current) return;
