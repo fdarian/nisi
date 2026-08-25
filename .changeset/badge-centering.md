@@ -2,4 +2,4 @@
 "@repo/desktop": patch
 ---
 
-The "N unmodified lines" pill between diff hunks now stays centered on the visible pane instead of drifting off-screen on files with long lines.
+The collapsed-hunk control between diff hunks is now a full-width band you can click anywhere to expand, instead of a small button that could sit off-screen on files with long lines.
