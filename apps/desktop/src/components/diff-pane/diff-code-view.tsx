@@ -21,7 +21,7 @@ import {
 	type CodeViewHandle,
 	WorkerPoolContextProvider,
 } from "@pierre/diffs/react";
-import { useMemo } from "react";
+import { useCallback, useMemo, useRef } from "react";
 import {
 	DIFF_VIEW_THEME,
 	diffCodeViewLayout,
@@ -42,6 +42,86 @@ function useDiffWorkerPoolOptions() {
 		}),
 		[],
 	);
+}
+
+/**
+ * @pierre/diffs only resolves a hunk-separator click when the hit lands directly on
+ * `[data-expand-button]` or `[data-unmodified-lines]` (its own
+ * `InteractionManager.resolvePointerTarget`, `managers/InteractionManager.js`) — both small
+ * islands inside the full-width band `diffViewUnsafeCSS` paints as
+ * `[data-separator-wrapper]`. Everywhere else in that band — most of its area, confirmed live by
+ * measuring the rendered rects — a click silently does nothing, on both the deletions and the
+ * additions side, even though the band is styled to look like one uniform clickable strip.
+ *
+ * This forwards such a "dead space" click to the band's own expand control, found via
+ * `.closest`/`.querySelector` within the *same* `[data-separator]` subtree the click landed in —
+ * never a different one, so it can't expand the wrong hunk the way correlating separators across
+ * the deletions/additions columns by ordinal position could. Forwarding is a synthetic
+ * `HTMLElement.click()` on that real control, not a reimplementation of the expand behavior
+ * itself: the resulting click re-enters this same handler (it bubbles through the shadow root the
+ * same as any other click), but its target now carries `data-expand-button`/`data-unmodified-lines`
+ * directly, so the early return below stops it before it forwards again.
+ */
+function forwardDeadSpaceSeparatorClick(event: MouseEvent): void {
+	let wrapper: HTMLElement | undefined;
+	for (const node of event.composedPath()) {
+		if (!(node instanceof HTMLElement)) continue;
+		if (
+			node.hasAttribute("data-expand-button") ||
+			node.hasAttribute("data-unmodified-lines")
+		) {
+			// @pierre/diffs already resolved this click to a real expand control.
+			return;
+		}
+		if (wrapper == null && node.hasAttribute("data-separator-wrapper")) {
+			wrapper = node;
+		}
+	}
+	if (wrapper == null) return; // Click wasn't inside a hunk-separator band at all.
+
+	const separator = wrapper.closest('[data-separator="line-info-basic"]');
+	if (separator == null) {
+		throw new Error(
+			"diff-code-view: [data-separator-wrapper] rendered outside its [data-separator] parent",
+		);
+	}
+
+	const expandTarget =
+		separator.querySelector<HTMLElement>(
+			"[data-expand-button]:not([data-expand-all-button])",
+		) ?? separator.querySelector<HTMLElement>("[data-unmodified-lines]");
+	if (expandTarget == null) {
+		throw new Error(
+			"diff-code-view: hunk-separator band has no expand control to forward a click to",
+		);
+	}
+	expandTarget.click();
+}
+
+/**
+ * Wires `forwardDeadSpaceSeparatorClick` onto `CodeView`'s own container div via its
+ * `containerRef` prop. That prop is invoked imperatively by @pierre/diffs (`react/CodeView.js`'s
+ * `nodeRef`), not attached as a plain React `ref`, so a returned cleanup function wouldn't be
+ * called automatically the way React 19's native ref-cleanup would — the previous node is tracked
+ * and detached by hand instead, mirroring the teardown-leak lesson in
+ * `knowledge/codeview-teardown-leak-patch.md`: nothing here should stay subscribed past the node
+ * it was attached to.
+ */
+function useSeparatorClickForwarding() {
+	const attachedNodeRef = useRef<HTMLDivElement | null>(null);
+	return useCallback((node: HTMLDivElement | null) => {
+		if (attachedNodeRef.current != null) {
+			attachedNodeRef.current.removeEventListener(
+				"click",
+				forwardDeadSpaceSeparatorClick,
+			);
+			attachedNodeRef.current = null;
+		}
+		if (node != null) {
+			node.addEventListener("click", forwardDeadSpaceSeparatorClick);
+			attachedNodeRef.current = node;
+		}
+	}, []);
 }
 
 /** The theme/layout/metrics knobs every `CodeView` instance in the app shares — `diffStyle`, `onPostRender` and `extraCSS` are what vary per pane. */
@@ -87,6 +167,7 @@ export function DiffCodeView<Metadata>({
 	ref,
 }: DiffCodeViewProps<Metadata>): React.ReactElement {
 	const workerPoolOptions = useDiffWorkerPoolOptions();
+	const separatorClickForwardingRef = useSeparatorClickForwarding();
 
 	return (
 		<WorkerPoolContextProvider
@@ -95,6 +176,7 @@ export function DiffCodeView<Metadata>({
 		>
 			<CodeView
 				className={className}
+				containerRef={separatorClickForwardingRef}
 				items={items}
 				options={options}
 				ref={ref}
