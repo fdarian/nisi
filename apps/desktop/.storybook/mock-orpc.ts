@@ -37,6 +37,7 @@ const DEFAULT_SETTINGS: Settings = {
 	enabledHarnesses: ["claude-code", "codex"],
 	sidebarViewMode: "tree",
 	diffStyleMode: "unified",
+	preferredEditor: null,
 	hideReviewed: false,
 	includeUncommitted: false,
 	// Stories exercise the walkthrough tab/harness panels, which are gated on

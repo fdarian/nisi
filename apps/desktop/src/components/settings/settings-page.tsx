@@ -28,6 +28,13 @@ import {
 	EmptyTitle,
 } from "#/components/ui/empty";
 import {
+	Select,
+	SelectContent,
+	SelectItem,
+	SelectTrigger,
+	SelectValue,
+} from "#/components/ui/select";
+import {
 	Sidebar,
 	SidebarContent,
 	SidebarGroup,
@@ -43,9 +50,14 @@ import {
 import { Spinner } from "#/components/ui/spinner";
 import { Switch } from "#/components/ui/switch";
 import { ToggleGroup, ToggleGroupItem } from "#/components/ui/toggle-group";
+import { useAvailableEditors } from "#/hooks/use-available-editors";
 import type { SidecarQueryUtils } from "#/lib/backend-context";
 import { useBackendContext } from "#/lib/backend-context";
-import { useUpdateSettings, useWalkthroughEnabled } from "#/lib/settings-data";
+import {
+	usePreferredEditor,
+	useUpdateSettings,
+	useWalkthroughEnabled,
+} from "#/lib/settings-data";
 import { type HarnessId, useHarnesses } from "#/lib/walkthrough-data";
 
 /**
@@ -148,7 +160,7 @@ function SettingsContent({
 	return (
 		<div className="mx-auto flex w-full max-w-2xl flex-col gap-6 overflow-y-auto px-8 py-12">
 			<h1 className="font-semibold text-2xl tracking-tight">Settings</h1>
-			<AppearanceSection />
+			<AppearanceSection orpc={orpc} />
 			<WalkthroughSection orpc={orpc} />
 			{/* Harness configuration is meaningless while the feature is off, and
 			mounting it triggers a macOS folder-permission prompt via `useHarnesses`
@@ -206,8 +218,17 @@ type ThemePreference = (typeof THEME_PREFERENCES)[number];
 const isThemePreference = (value: string): value is ThemePreference =>
 	(THEME_PREFERENCES as readonly string[]).includes(value);
 
-function AppearanceSection(): React.ReactElement {
+/** Sentinel `Select` value for "no preferred editor chosen" — `preferredEditor` itself stores `null` for that state, but Base UI's `Select` needs a concrete item value to render as selected. */
+const NO_PREFERRED_EDITOR = "none";
+
+function AppearanceSection({
+	orpc,
+}: {
+	orpc: SidecarQueryUtils;
+}): React.ReactElement {
 	const { theme, setTheme } = useTheme();
+	const [preferredEditor, setPreferredEditor] = usePreferredEditor(orpc);
+	const { editors, loadEditors } = useAvailableEditors();
 
 	return (
 		<SettingsSection title="Appearance">
@@ -234,6 +255,41 @@ function AppearanceSection(): React.ReactElement {
 						<MonitorIcon />
 					</ToggleGroupItem>
 				</ToggleGroup>
+			</SettingsRow>
+			<SettingsRow
+				description="Used by the ⌘, o e leader shortcut and each file's 'Open in…' menu default."
+				title="Preferred editor"
+			>
+				<Select
+					items={[
+						{ value: NO_PREFERRED_EDITOR, label: "None" },
+						...editors.map((editor) => ({
+							value: editor.id,
+							label: editor.name,
+						})),
+					]}
+					onOpenChange={(open) => {
+						if (open) loadEditors();
+					}}
+					onValueChange={(value: string | null) =>
+						setPreferredEditor(
+							value === null || value === NO_PREFERRED_EDITOR ? null : value,
+						)
+					}
+					value={preferredEditor ?? NO_PREFERRED_EDITOR}
+				>
+					<SelectTrigger className="w-40" size="sm">
+						<SelectValue />
+					</SelectTrigger>
+					<SelectContent>
+						<SelectItem value={NO_PREFERRED_EDITOR}>None</SelectItem>
+						{editors.map((editor) => (
+							<SelectItem key={editor.id} value={editor.id}>
+								{editor.name}
+							</SelectItem>
+						))}
+					</SelectContent>
+				</Select>
 			</SettingsRow>
 		</SettingsSection>
 	);

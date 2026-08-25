@@ -27,6 +27,14 @@ export const settings = sqliteTable("settings", {
 	sidebarViewMode: text().notNull(),
 	diffStyleMode: text().notNull(),
 	/**
+	 * Scheme string of the user's preferred editor (`vscode`/`cursor`/`zed`/
+	 * `windsurf` — see `apps/desktop/src-tauri/src/editors.rs`'s
+	 * `CANDIDATE_EDITORS`), or `NULL` when never chosen. Plain text, not a
+	 * typed column — same reasoning as `enabledHarnesses` above, this package
+	 * stays independent of the frontend's/Rust's candidate list.
+	 */
+	preferredEditor: text(),
+	/**
 	 * Defaults to `false` at the column level (unlike `sidebarViewMode`/
 	 * `diffStyleMode`, which are `NOT NULL` with no column default) — this
 	 * field was added after those via `ALTER TABLE ADD COLUMN`, and SQLite
