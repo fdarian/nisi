@@ -49,6 +49,19 @@ export type SessionTarget =
 	  }
 	| { kind: "branch"; baseRef: string; headRef: string };
 
+/**
+ * The PR's GitHub page. `Session`/`SessionTarget` carry no `url`, so this
+ * hardcodes `github.com` — wrong for Enterprise hosts (see
+ * `packages/git/src/repo-path-mapping.ts:26`). Shared by the command
+ * palette's "Open in GitHub" action and the "o g" leader shortcut
+ * (`files-changed-view.tsx`) so the URL is built in exactly one place.
+ */
+export function pullRequestUrl(
+	target: Extract<SessionTarget, { kind: "pr" }>,
+): string {
+	return `https://github.com/${target.owner}/${target.repo}/pull/${target.number}`;
+}
+
 export type Session = {
 	id: string;
 	repoRoot: string;

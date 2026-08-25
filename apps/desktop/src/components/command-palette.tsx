@@ -23,7 +23,7 @@ import { Kbd } from "#/components/ui/kbd";
 import { Separator } from "#/components/ui/separator";
 import type { SidecarQueryUtils } from "#/lib/backend-context";
 import type { Session } from "#/lib/pr-data";
-import { useSwitchToPr } from "#/lib/pr-data";
+import { pullRequestUrl, useSwitchToPr } from "#/lib/pr-data";
 
 type CommandAction = {
 	id: string;
@@ -129,9 +129,7 @@ function buildActions(
 		},
 	];
 	if (session.target.kind === "pr") {
-		// `Session`/`SessionTarget` (`pr-data.ts`) carry no `url`; hardcodes
-		// github.com — wrong for Enterprise hosts (`packages/git/src/repo-path-mapping.ts:26`).
-		const url = `https://github.com/${session.target.owner}/${session.target.repo}/pull/${session.target.number}`;
+		const url = pullRequestUrl(session.target);
 		actions.push({
 			id: "open-pr-in-github",
 			label: "Open Pull Request in GitHub",

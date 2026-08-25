@@ -1,5 +1,6 @@
 "use client";
 
+import { openUrl } from "@tauri-apps/plugin-opener";
 import {
 	Columns2Icon,
 	RefreshCwIcon,
@@ -21,7 +22,9 @@ import {
 	DropdownMenuSeparator,
 	DropdownMenuTrigger,
 } from "#/components/ui/menu";
+import { toastManager } from "#/components/ui/toast";
 import { ToggleGroup, ToggleGroupItem } from "#/components/ui/toggle-group";
+import { openInEditor } from "#/hooks/use-available-editors";
 import { useKeyBindings } from "#/hooks/use-key-bindings";
 import type { SidecarQueryUtils } from "#/lib/backend-context";
 import {
@@ -35,7 +38,7 @@ import type {
 	ReviewStateEntry,
 	Session,
 } from "#/lib/pr-data";
-import { useFileContents } from "#/lib/pr-data";
+import { pullRequestUrl, useFileContents } from "#/lib/pr-data";
 import {
 	useSessionCurrentMatchIndex,
 	useSessionFilterQuery,
@@ -48,6 +51,7 @@ import {
 	useDiffStyleMode,
 	useHideReviewed,
 	useIncludeUncommitted,
+	usePreferredEditor,
 	useSidebarViewMode,
 } from "#/lib/settings-data";
 import { comparePaths } from "#/lib/tree-paths";
@@ -145,6 +149,7 @@ export function FilesChangedView({
 	const [hideReviewed, setHideReviewed] = useHideReviewed(orpc);
 	const [includeUncommitted, setIncludeUncommitted] =
 		useIncludeUncommitted(orpc);
+	const [preferredEditor] = usePreferredEditor(orpc);
 
 	const viewedCount = useMemo(
 		() =>
@@ -387,12 +392,44 @@ export function FilesChangedView({
 		[setViewed],
 	);
 
+	// "o e" leader shortcut — opens the selected file in `preferredEditor`
+	// (Settings ⌘,). Mirrors `DiffFileHeader`'s "Open in..." menu entry, but
+	// against the standing preference instead of a picked-per-click editor;
+	// a no-op when nothing's selected, and a nudge toward Settings when no
+	// preference has ever been set (never silently guesses one).
+	const handleOpenInPreferredEditor = useCallback(() => {
+		if (selectedPath === null) return;
+		if (preferredEditor === null) {
+			toastManager.add({
+				title: "No preferred editor set",
+				description: "Choose one in Settings (⌘,) to use this shortcut.",
+				type: "info",
+			});
+			return;
+		}
+		openInEditor(
+			preferredEditor,
+			preferredEditor,
+			`${session.repoRoot}/${selectedPath}`,
+		);
+	}, [selectedPath, preferredEditor, session.repoRoot]);
+
+	// "o g" leader shortcut — same URL, same behavior as the ⌘K palette's
+	// "Open Pull Request in GitHub" action (`command-palette.tsx`); a no-op
+	// for a branch-only session, which has no PR to open.
+	const handleOpenPrInGitHub = useCallback(() => {
+		if (session.target.kind !== "pr") return;
+		void openUrl(pullRequestUrl(session.target));
+	}, [session.target]);
+
 	useKeyBindings(
 		{
 			j: () => selectRelative(1),
 			k: () => selectRelative(-1),
 			r: handleToggleReviewed,
 			u: handleUndo,
+			"o e": handleOpenInPreferredEditor,
+			"o g": handleOpenPrInGitHub,
 			// Suppressed while the filter input has focus (bare-key guard in
 			// `useKeyBindings`), so typing "n" into a query never fires this —
 			// only meaningful once the input's been blurred (Enter, or a click
