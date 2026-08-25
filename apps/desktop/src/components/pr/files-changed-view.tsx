@@ -519,6 +519,7 @@ export function FilesChangedView({
 					forcedPaths={forcedPaths}
 					keywordMatchesByPath={keywordMatchesByPath}
 					onForceLoad={addForcedPath}
+					onVisiblePathChange={setSelectedPath}
 					ref={diffPaneRef}
 					repoRoot={session.repoRoot}
 					reviewState={reviewState}
