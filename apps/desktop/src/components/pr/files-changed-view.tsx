@@ -7,12 +7,12 @@ import {
 	RowsIcon,
 	SlidersHorizontalIcon,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import type { DiffPaneHandle } from "#/components/diff-pane/diff-pane";
 import { DiffPane } from "#/components/diff-pane/diff-pane";
+import { EditorPickerPalette } from "#/components/editor-picker-palette";
 import type { SearchMode } from "#/components/files-sidebar/files-sidebar";
 import { FilesSidebar } from "#/components/files-sidebar/files-sidebar";
-import { EditorPickerPalette } from "#/components/pr/editor-picker-palette";
 import { Button, buttonVariants } from "#/components/ui/button";
 import {
 	DropdownMenu,
@@ -157,16 +157,6 @@ export function FilesChangedView({
 	const [preferredEditor, setPreferredEditor] = usePreferredEditor(orpc);
 	const { editors, loadEditors } = useAvailableEditors();
 	const [editorPickerOpen, setEditorPickerOpen] = useState(false);
-
-	// Probed once on mount, not lazily on the picker's own open — the "o e"
-	// leader shortcut (`handleOpenInPreferredEditor` below) needs to already
-	// know whether *any* editor is installed before it can decide between
-	// opening `EditorPickerPalette` and falling back to a toast, and there's
-	// no first-press moment to trigger a lazy load from.
-	// biome-ignore lint/correctness/useExhaustiveDependencies: `loadEditors` is a fresh closure every render (`useAvailableEditors` doesn't memoize it) — this must still run only once, on mount
-	useEffect(() => {
-		loadEditors();
-	}, []);
 
 	const viewedCount = useMemo(
 		() =>
@@ -417,17 +407,32 @@ export function FilesChangedView({
 	// `handlePickEditor` below persists that pick, so every "o e" after this
 	// one goes straight to `preferredEditor`. A no-op when nothing's
 	// selected; a toast when there's nothing installed to even pick from.
-	const handleOpenInPreferredEditor = useCallback(() => {
+	//
+	// `editors` is only probed lazily, right in the branch that needs it —
+	// this shortcut may never be pressed for a given tab, so there's no
+	// reason to fire a Tauri `invoke` for every open `FilesChangedView` up
+	// front just to support it. The already-set-`preferredEditor` branch
+	// below deliberately skips that probe (and so may show the raw scheme
+	// instead of the editor's display name if this tab never loaded the list
+	// some other way) rather than pay a round trip on every press of an
+	// already-working shortcut.
+	const handleOpenInPreferredEditor = useCallback(async () => {
 		if (selectedPath === null) return;
+
 		if (preferredEditor !== null) {
+			const editorName =
+				editors.find((editor) => editor.id === preferredEditor)?.name ??
+				preferredEditor;
 			openInEditor(
 				preferredEditor,
-				preferredEditor,
+				editorName,
 				`${session.repoRoot}/${selectedPath}`,
 			);
 			return;
 		}
-		if (editors.length === 0) {
+
+		const availableEditors = await loadEditors();
+		if (availableEditors.length === 0) {
 			toastManager.add({
 				title: "No editors found",
 				description:
@@ -437,7 +442,7 @@ export function FilesChangedView({
 			return;
 		}
 		setEditorPickerOpen(true);
-	}, [selectedPath, preferredEditor, editors, session.repoRoot]);
+	}, [selectedPath, preferredEditor, editors, loadEditors, session.repoRoot]);
 
 	const handlePickEditor = useCallback(
 		(editor: EditorInfo) => {

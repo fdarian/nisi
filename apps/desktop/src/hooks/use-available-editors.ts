@@ -12,24 +12,33 @@ export type EditorInfo = {
  * Editors registered to handle `<scheme>://` URLs, refreshed via `loadEditors`
  * rather than eagerly — call it when an "Open in..." submenu opens, so
  * installing/uninstalling an editor is reflected without an app restart.
+ * `loadEditors` resolves with the same list it writes into `editors`, so a
+ * caller that needs the result of *this* probe (not just the next render's
+ * state) — e.g. deciding whether to prompt for one at all — can `await` it
+ * instead of racing a state update. On failure it still surfaces a toast and
+ * resolves to `[]`, the same "nothing to offer" outcome a genuinely empty
+ * probe would produce.
  */
 export function useAvailableEditors(): {
 	editors: EditorInfo[];
-	loadEditors: () => void;
+	loadEditors: () => Promise<EditorInfo[]>;
 } {
 	const [editors, setEditors] = useState<EditorInfo[]>([]);
 
-	const loadEditors = (): void => {
+	const loadEditors = (): Promise<EditorInfo[]> =>
 		invoke<EditorInfo[]>("list_available_editors")
-			.then(setEditors)
+			.then((result) => {
+				setEditors(result);
+				return result;
+			})
 			.catch((error: unknown) => {
 				toastManager.add({
 					title: "Failed to list available editors",
 					description: error instanceof Error ? error.message : String(error),
 					type: "error",
 				});
+				return [];
 			});
-	};
 
 	return { editors, loadEditors };
 }
