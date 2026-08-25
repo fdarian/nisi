@@ -485,4 +485,46 @@ export const diffViewUnsafeCSS = `
 	[data-separator="line-info-basic"] [data-separator-wrapper]:hover [data-expand-all-button] {
 		display: flex !important;
 	}
+
+	/**
+	 * Split-only: collapses the label/chevron duplication described above
+	 * (each column renders its own full copy of "N unmodified lines" and
+	 * the expand chevron) down to what the design reference asks for — the
+	 * label rendered once, in the deletions (left) column, and the expand
+	 * chevron rendered once, pinned to the additions (right) column's far
+	 * right edge, which in split is also the pane's own far right edge.
+	 * Reading across both columns: one label, one chevron, with the
+	 * library's own column divider passing through the middle of what reads
+	 * as a single band.
+	 *
+	 * Hides the *content* (\`[data-separator-content]\`/\`[data-expand-button]\`),
+	 * never \`[data-separator-wrapper]\` itself — the wrapper is what carries
+	 * the fill and the click handler (see its own rule above), so both
+	 * columns stay exactly as clickable and exactly as filled as they were
+	 * before this block; only the redundant text/button inside one column
+	 * disappears.
+	 *
+	 * \`[data-deletions]\`/\`[data-additions]\` don't exist in unified (see the
+	 * comment on the split-halving rule above) — this whole block is
+	 * unreachable there, so unified's single label-left/chevron-right band
+	 * is untouched.
+	 *
+	 * The hover-reveal rule for \`[data-expand-all-button]\` just above
+	 * outspecifies a plain \`[data-deletions] ... [data-expand-button]\`
+	 * selector (four attribute/pseudo selectors vs three), so hiding it in
+	 * the deletions column needs its own \`:hover\`-qualified rule to match —
+	 * otherwise hovering the deletions band would re-reveal a chevron there
+	 * on "chunked" gaps, the one state the plain rule alone doesn't reach.
+	 */
+	[data-deletions] [data-separator="line-info-basic"] [data-expand-button] {
+		display: none !important;
+	}
+
+	[data-deletions] [data-separator="line-info-basic"] [data-separator-wrapper]:hover [data-expand-all-button] {
+		display: none !important;
+	}
+
+	[data-additions] [data-separator="line-info-basic"] [data-separator-content] {
+		display: none !important;
+	}
 `;
