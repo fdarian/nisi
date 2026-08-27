@@ -22,6 +22,8 @@ minimumReleaseAgeExclude:
   - '@ai-sdk/harness-codex@1.0.93'
   - '@ai-sdk/harness-opencode@1.0.92'
   - '@ai-sdk/harness-pi@1.0.93'
+  - '@ai-sdk/mcp@2.0.39'
+  - '@ai-sdk/react@4.0.86'
 packageExtensions:
   bun-types:
     dependencies:
