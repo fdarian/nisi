@@ -28,35 +28,38 @@ Three parts, one seam:
   context by the sidecar (`FileContentReview.baselineKind`, see `@repo/review`'s `reconcile`).
 
 ## The seam
-The sidecar binds a port and mints a token, then claims a `sidecar.lock` (`O_EXCL`, see
-`sidecar/sidecar-lock.ts`) before it's allowed to publish `{ port, token }` to `sidecar.json`
-(mode 0600, temp file + `rename()` — atomic on one filesystem) in the app-data dir — macOS
-`~/Library/Application Support/com.nisi.desktop/` (override with `NISI_DATA_DIR`). In production
-(and a standalone `bun run sidecar`) that's an ephemeral `port: 0` bind and a fresh
-`crypto.randomUUID()` token every boot; in dev, `scripts/dev.ts` pins both instead, passed down via
+The sidecar binds a port and mints a token, then claims and publishes `{ port, token }` to
+`sidecar.json` in one atomic act — `deskkit/sidecar`'s `acquireSidecar`, wired up in
+`sidecar/index.ts` — in the app-data dir — macOS `~/Library/Application Support/com.nisi.desktop/`
+(override with `NISI_DATA_DIR`). `acquireSidecar` creates `sidecar.json` via a single `wx`
+(`O_EXCL`) open-and-write, not a temp-file + `rename()`, so a concurrent reader can briefly observe
+an empty or partial file between the create and the write landing. In production (and a standalone
+`bun run sidecar`) that's an ephemeral `port: 0` bind and a fresh `crypto.randomUUID()` token every
+boot; in dev, `scripts/dev.ts` pins both instead, passed down via
 `NISI_DEV_SIDECAR_PORT`/`NISI_DEV_SIDECAR_TOKEN` (see [Dev/prod isolation](#devprod-isolation)) —
 the port is a second devsess sticky port on the session, so it survives across separate `bun dev`
 runs the same way the vite port does; the token has no sticky equivalent, so it's minted fresh each
 run and held for that run's whole lifetime. Both matter because the sidecar runs under `bun --watch`
 there, and a per-boot-random pair would otherwise rotate on every restart out from under a frontend
-that already froze `{ port, token }` into its own env at its own boot. The lock is what makes two
-sidecars booting at the same instant against the same data dir resolve to exactly one owner
-instead of a split brain — see `sidecar/AGENTS.md`'s `sidecar-lock.ts` entry for the full
-mechanism (atomic create, liveness-checked recovery from a dead owner — skipped in favor of an
-immediate takeover when the recorded port is the one this process is already listening on, bounded
-retries). Rust's `get_backend` (`src-tauri/src/lib.rs`) polls for that file **asynchronously** — it
-must never block the main thread, or the frontend's one-shot `invoke('get_backend')` wedges on a
-cold start — and health-checks the port it finds before trusting it, since a stale `sidecar.json`
-left behind by a `SIGKILL`'d sidecar would otherwise wedge `get_backend`'s `OnceCell` cache on a
-dead port for the app's whole lifetime. Regression-tested by the `#[tokio::test]`s in `lib.rs` —
-keep them if you touch that file.
+that already froze `{ port, token }` into its own env at its own boot. `acquireSidecar`'s atomic
+create is what makes two sidecars booting at the same instant against the same data dir resolve to
+exactly one owner instead of a split brain — see `sidecar/AGENTS.md`'s `index.ts` entry for the
+full mechanism (liveness-checked recovery from a dead owner — skipped in favor of an immediate
+takeover when the recorded port is the one this process is already listening on, bounded retries).
 
-`scripts/dev.ts` and the CLI's `handoff.ts` (`packages/cli`) both poll `sidecar.json` through
-`deskkit/sidecar`'s `awaitSidecarHandshake`/`readSidecarJson` rather than a hand-rolled reader.
-Claiming and publishing stays on this side, in `sidecar/sidecar-lock.ts` — not deskkit's own
-`acquireSidecar` — because that function writes `sidecar.json` directly via `wx` with no rename,
-which Rust's fail-fast-on-parse-error `wait_for_sidecar_json` can't tolerate; see
-`publishSidecarJson`'s doc comment for the full reasoning.
+Rust's `get_backend` (`src-tauri/src/lib.rs`) polls `sidecar.json` **asynchronously** — it must
+never block the main thread, or the frontend's one-shot `invoke('get_backend')` wedges on a cold
+start — and health-checks the port it finds before trusting it, since a stale `sidecar.json` left
+behind by a `SIGKILL`'d sidecar would otherwise wedge `get_backend`'s `OnceCell` cache on a dead
+port for the app's whole lifetime. It also treats a read or parse failure on `sidecar.json` the
+same as "file not there yet" and keeps polling rather than surfacing a hard error — the
+correctness-critical counterpart to `acquireSidecar`'s single-syscall write above, since nothing on
+the frontend side retries a failed `get_backend` call. Regression-tested by the `#[tokio::test]`s
+in `lib.rs` — keep them if you touch that file.
+
+`scripts/dev.ts` and the CLI's `handoff.ts` (`packages/cli`) poll `sidecar.json` through
+`deskkit/sidecar`'s `awaitSidecarHandshake`/`readSidecarJson` — the same package `sidecar/index.ts`
+claims and publishes it with, so both ends of the handshake share one dependency.
 
 - **Dev**: `bun dev` runs `scripts/dev.ts`, a [devsess](https://devsess.fdarian.com/) orchestrator
   (see below) that races the sidecar (`bun --watch sidecar/index.ts`) against `tauri dev`
@@ -67,11 +70,11 @@ which Rust's fail-fast-on-parse-error `wait_for_sidecar_json` can't tolerate; se
 - **Prod**: Rust spawns the compiled `binaries/sidecar` (`externalBin`, `shell:allow-spawn`) from
   `.setup()` — fire-and-forget.
 - Sidecar boot (`sidecar/index.ts`) is one Effect program run via `BunRuntime.runMain`: the HTTP
-  server and the `sidecar.lock` are each acquired/released with `Effect.acquireRelease` inside
-  `Effect.scoped`, so SIGINT/SIGTERM (which `runMain` already listens for) interrupts the fiber
-  and the releases run — no manual `process.on()` needed. A `SIGKILL`'d process skips both
-  releases; the lock's own liveness check (not this scope) is what recovers from that on the next
-  boot.
+  server and `deskkit/sidecar`'s `acquireSidecar` claim are each acquired/released with
+  `Effect.acquireRelease` inside `Effect.scoped`, so SIGINT/SIGTERM (which `runMain` already listens
+  for) interrupts the fiber and the releases run — no manual `process.on()` needed. A `SIGKILL`'d
+  process skips both releases; `acquireSidecar`'s own liveness check (not this scope) is what
+  recovers from that on the next boot.
 
 ## Dev/prod isolation
 Dev and prod both resolve their data dir (`sidecar.json` + `app.db`, see [The seam](#the-seam))
@@ -104,7 +107,7 @@ picks it up automatically.
 
 Going the other way — a dev sidecar against the *real* app-data dir instead of a session's —
 is `bun dev --prod-data-dir`. Safe to run even while the packaged app is open: it resolves the
-same `NISI_DATA_DIR` default prod does, and `sidecar-lock.ts`'s `acquireSidecarLock` health-checks
+same `NISI_DATA_DIR` default prod does, and `deskkit/sidecar`'s `acquireSidecar` health-checks
 any existing owner and refuses to boot (loudly) rather than splitting the data dir between two
 sidecars.
 
