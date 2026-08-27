@@ -252,8 +252,8 @@ importers:
         specifier: ^2.3.1
         version: 2.3.1
       ai:
-        specifier: 7.0.48
-        version: 7.0.48(zod@4.4.3)
+        specifier: 7.0.83
+        version: 7.0.83(zod@4.4.3)
       class-variance-authority:
         specifier: ^0.7.1
         version: 0.7.1
@@ -454,8 +454,8 @@ importers:
         specifier: 1.0.91
         version: 1.0.91(patch_hash=7fe99bf0c691e923a900a46e9c06da2e69a22167bf0ccae94efc7e7c6d6f414d)(ws@8.21.1)(zod@4.4.3)
       '@ai-sdk/provider-utils':
-        specifier: 5.0.18
-        version: 5.0.18(zod@4.4.3)
+        specifier: 5.0.32
+        version: 5.0.32(zod@4.4.3)
       '@repo/bin-resolver':
         specifier: workspace:*
         version: link:../bin-resolver
@@ -473,8 +473,8 @@ importers:
         specifier: ^8.5.13
         version: 8.18.1
       ai:
-        specifier: 7.0.48
-        version: 7.0.48(zod@4.4.3)
+        specifier: 7.0.83
+        version: 7.0.83(zod@4.4.3)
       typescript:
         specifier: 7.0.2
         version: 7.0.2
@@ -600,17 +600,17 @@ importers:
   packages/walkthrough:
     dependencies:
       '@ai-sdk/provider':
-        specifier: 4.0.4
-        version: 4.0.4
+        specifier: 4.0.8
+        version: 4.0.8
       '@ai-sdk/provider-utils':
-        specifier: 5.0.18
-        version: 5.0.18(zod@4.4.3)
+        specifier: 5.0.32
+        version: 5.0.32(zod@4.4.3)
       '@repo/git':
         specifier: workspace:*
         version: link:../git
       ai:
-        specifier: 7.0.48
-        version: 7.0.48(zod@4.4.3)
+        specifier: 7.0.83
+        version: 7.0.83(zod@4.4.3)
       deskkit:
         specifier: github:fdarian/deskkit
         version: https://codeload.github.com/fdarian/deskkit/tar.gz/99b874e4095e211efa7dc6cfe92b256cdc9d039b(@opentelemetry/api@1.9.0)(bun-types@1.3.14)(ioredis@5.11.1)(typebox@1.3.8)(zod@4.4.3)

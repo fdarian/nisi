@@ -61,7 +61,7 @@
 		"@tauri-apps/plugin-dialog": "^2.7.2",
 		"@tauri-apps/plugin-opener": "^2.5.4",
 		"@tauri-apps/plugin-process": "^2.3.1",
-		"ai": "7.0.48",
+		"ai": "7.0.83",
 		"class-variance-authority": "^0.7.1",
 		"clsx": "^2.1.1",
 		"deskkit": "github:fdarian/deskkit",
