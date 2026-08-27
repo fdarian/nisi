@@ -1154,9 +1154,7 @@ export function DiffPane({
 				selectedLines={diffSelection.selectedLines}
 			/>
 			<DiffSelectionPopover
-				onOpenChange={(open) => {
-					if (!open) diffSelection.clearSelection();
-				}}
+				onDismiss={diffSelection.clearSelection}
 				reference={diffSelection.reference}
 			/>
 		</>

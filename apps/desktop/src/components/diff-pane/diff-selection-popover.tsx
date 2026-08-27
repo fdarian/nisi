@@ -20,13 +20,31 @@ const COPIED_CONFIRMATION_MS = 1500;
 
 type DiffSelectionPopoverProps = {
 	reference: DiffSelectionReference | null;
-	/** Called once the user dismisses the popover without copying (`Escape`, clicking outside) — the selection itself stays; `DiffPane`'s own scroll/selection-clear handling is what actually clears it. */
-	onOpenChange: (open: boolean) => void;
+	/**
+	 * Called only when the user presses Escape to dismiss without copying —
+	 * the selection itself stays; `DiffPane`'s own scroll/selection-clear
+	 * handling is what actually clears it.
+	 *
+	 * Deliberately NOT called for an outside-press dismissal. Base UI's
+	 * `Popover` treats any pointerdown outside the popup as a dismiss
+	 * request, and that includes the very pointerdown that starts a *new*
+	 * gutter or text selection elsewhere in the pane. Reacting to that by
+	 * clearing here raced with `@pierre/diffs`' own in-progress pointer
+	 * session for the new drag: this component's `open` is hardcoded to
+	 * `true` while a `reference` exists, so nothing here needed to close on
+	 * outside-press in the first place, and a fresh selection already
+	 * supersedes the old one on its own via `use-diff-selection.ts`.
+	 * Confirmed live — an outside-press-driven clear here made a second
+	 * gutter drag silently produce zero selected lines while an earlier
+	 * popover was still open, because the controlled `selectedLines` prop's
+	 * sync effect called `instance.setSelectedLines(null, …)` mid-gesture.
+	 */
+	onDismiss: () => void;
 };
 
 export function DiffSelectionPopover({
 	reference,
-	onOpenChange,
+	onDismiss,
 }: DiffSelectionPopoverProps): React.ReactElement | null {
 	const [copied, setCopied] = useState(false);
 
@@ -51,7 +69,12 @@ export function DiffSelectionPopover({
 	const virtualAnchor = { getBoundingClientRect: () => reference.rect };
 
 	return (
-		<Popover open={true} onOpenChange={onOpenChange}>
+		<Popover
+			onOpenChange={(_open, eventDetails) => {
+				if (eventDetails.reason === "escape-key") onDismiss();
+			}}
+			open={true}
+		>
 			<PopoverPopup
 				align="center"
 				anchor={virtualAnchor}
