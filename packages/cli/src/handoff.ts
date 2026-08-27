@@ -6,8 +6,9 @@ import {
 	type OpenSessionTarget,
 	type Session,
 } from "@repo/sidecar-api";
-import { Config, Effect, Schema } from "effect";
-import { FileSystem } from "effect/FileSystem";
+import { readSidecarJson } from "deskkit/sidecar";
+import { Config, Effect } from "effect";
+import type { FileSystem } from "effect/FileSystem";
 import type { ChildProcessSpawner } from "effect/unstable/process";
 import { launchApp } from "./app-launch.ts";
 
@@ -37,11 +38,6 @@ const POLL_INTERVAL_MS = 300;
 const pollTimeoutConfig = Config.number("NISI_LAUNCH_TIMEOUT_MS").pipe(
 	Config.withDefault(15_000),
 );
-
-const SidecarHandshake = Schema.Struct({
-	port: Schema.Number,
-	token: Schema.String,
-});
 
 /** Same default as the sidecar's own handshake file — see `apps/desktop/sidecar/index.ts`. */
 const dataDirConfig = Config.string("NISI_DATA_DIR").pipe(
@@ -77,33 +73,26 @@ export type HandoffOutcome =
 const isOwnTimeout = (error: unknown): boolean =>
 	error instanceof DOMException && error.name === "TimeoutError";
 
-/** A missing or mid-write `sidecar.json` is worth one more poll, not a hard failure — mirrors Rust's `wait_for_sidecar_json`. */
-const readHandshake = (sidecarJsonPath: string) =>
-	Effect.gen(function* () {
-		const fs = yield* FileSystem;
-		const exists = yield* fs.exists(sidecarJsonPath);
-		if (!exists) {
-			yield* Effect.logDebug("sidecar.json not found", { sidecarJsonPath });
-			return undefined;
-		}
-		const raw = yield* fs.readFileString(sidecarJsonPath);
-		const handshake = yield* Effect.try({
-			try: () => Schema.decodeUnknownSync(SidecarHandshake)(JSON.parse(raw)),
-			catch: () => undefined,
-		});
-		yield* Effect.logDebug("read sidecar.json", {
-			sidecarJsonPath,
-			port: handshake?.port,
-		});
-		return handshake;
-	}).pipe(
-		Effect.tapError((cause) =>
-			Effect.logDebug("sidecar.json unreadable/malformed", {
-				sidecarJsonPath,
-				cause,
-			}),
+/**
+ * A missing or mid-write `sidecar.json` is worth one more poll, not a hard
+ * failure — never a fatal error the way Rust's `wait_for_sidecar_json`
+ * treats a malformed (as opposed to missing) file; this CLI has no
+ * equivalent short-circuit, since it's fine to just wait out `dataDir`'s
+ * next poll either way. deskkit's `readSidecarJson` covers both cases the
+ * same way already (`undefined` for "not there" and for "read but didn't
+ * parse, even after its own short retry against the create-then-write
+ * window"), so this only adds the debug logging `attempt` below relies on.
+ */
+const readHandshake = (dataDir: string) =>
+	readSidecarJson(dataDir).pipe(
+		Effect.tap((handshake) =>
+			Effect.logDebug(
+				handshake === undefined
+					? "sidecar.json not found"
+					: "read sidecar.json",
+				{ dataDir, port: handshake?.port },
+			),
 		),
-		Effect.orElseSucceed(() => undefined),
 	);
 
 /**
@@ -116,12 +105,12 @@ const readHandshake = (sidecarJsonPath: string) =>
  * yet, which a second app instance would do nothing to fix.
  */
 const attempt = (
-	sidecarJsonPath: string,
+	dataDir: string,
 	cwd: string,
 	target: OpenSessionTarget,
 ): Effect.Effect<HandoffOutcome, never, FileSystem> =>
 	Effect.gen(function* () {
-		const handshake = yield* readHandshake(sidecarJsonPath);
+		const handshake = yield* readHandshake(dataDir);
 		if (handshake === undefined) {
 			return { _tag: "unreachable" } as const;
 		}
@@ -171,24 +160,24 @@ const attempt = (
 
 /** Keeps retrying through either flavor of "no answer yet" — only a conclusive outcome ends the poll early. */
 const pollUntilReachable = (
-	sidecarJsonPath: string,
+	dataDir: string,
 	cwd: string,
 	target: OpenSessionTarget,
 	deadline: number,
 ): Effect.Effect<HandoffOutcome, never, FileSystem> =>
 	Effect.gen(function* () {
-		const outcome = yield* attempt(sidecarJsonPath, cwd, target);
+		const outcome = yield* attempt(dataDir, cwd, target);
 		const conclusive = outcome._tag === "opened" || outcome._tag === "rejected";
 		if (conclusive || Date.now() >= deadline) {
 			return outcome;
 		}
 		yield* Effect.sleep(`${POLL_INTERVAL_MS} millis`);
-		return yield* pollUntilReachable(sidecarJsonPath, cwd, target, deadline);
+		return yield* pollUntilReachable(dataDir, cwd, target, deadline);
 	});
 
 /** Everything up to "is there a session?" — deliberately says nothing about which window is in front. */
 const openSession = (
-	sidecarJsonPath: string,
+	dataDir: string,
 	cwd: string,
 	target: OpenSessionTarget,
 ): Effect.Effect<
@@ -197,7 +186,7 @@ const openSession = (
 	FileSystem | ChildProcessSpawner.ChildProcessSpawner
 > =>
 	Effect.gen(function* () {
-		const first = yield* attempt(sidecarJsonPath, cwd, target);
+		const first = yield* attempt(dataDir, cwd, target);
 		if (first._tag === "opened" || first._tag === "rejected") {
 			return first;
 		}
@@ -209,7 +198,7 @@ const openSession = (
 		// straight to polling the same one instead of `launchApp`.
 		if (first._tag === "unresponsive") {
 			return yield* pollUntilReachable(
-				sidecarJsonPath,
+				dataDir,
 				cwd,
 				target,
 				Date.now() + pollTimeoutMs,
@@ -226,7 +215,7 @@ const openSession = (
 		}
 
 		return yield* pollUntilReachable(
-			sidecarJsonPath,
+			dataDir,
 			cwd,
 			target,
 			Date.now() + pollTimeoutMs,
@@ -260,12 +249,10 @@ export const handoff = (
 > =>
 	Effect.gen(function* () {
 		const dataDir = yield* dataDirConfig.pipe(Effect.orDie);
-		const sidecarJsonPath = join(dataDir, "sidecar.json");
 		yield* Effect.logDebug("resolved data dir", {
 			dataDir,
-			sidecarJsonPath,
 			logFile: join(dataDir, "logs", "sidecar.log"),
 		});
 
-		return yield* openSession(sidecarJsonPath, cwd, target);
+		return yield* openSession(dataDir, cwd, target);
 	});
