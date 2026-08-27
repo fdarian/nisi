@@ -37,7 +37,7 @@ const dev = Command.make(
 		// Escape hatch out of devsess's per-session data dir, onto the same
 		// `NISI_DATA_DIR` prod (and a plain `nisi`) resolve to — see
 		// apps/desktop/AGENTS.md's "Dev/prod isolation". Safe to point at a
-		// live production app: `sidecar-lock.ts`'s `acquireSidecarLock` health-
+		// live production app: `deskkit/sidecar`'s `acquireSidecar` health-
 		// checks any existing owner and refuses to boot (loudly) rather than
 		// splitting the data dir between two sidecars.
 		prodDataDir: Flag.boolean("prod-data-dir").pipe(Flag.withDefault(false)),
@@ -93,9 +93,10 @@ const dev = Command.make(
 			// across separate `bun dev` runs of this session (not just restarts
 			// within one), so a sidecar left behind by a killed run and this run's
 			// sidecar bind the very same port even before either one has published
-			// anything to `sidecar.json`. That's what lets `sidecar-lock.ts`'s
-			// same-port takeover recognize a previous run's dead sidecar reliably,
-			// rather than only within one run's own `bun --watch` restarts.
+			// anything to `sidecar.json`. That's what lets `deskkit/sidecar`'s
+			// `acquireSidecar` recognize a previous run's dead sidecar reliably
+			// via its same-port takeover, rather than only within one run's own
+			// `bun --watch` restarts.
 			//
 			// The token has no sticky equivalent — it's minted fresh every run —
 			// but still needs to be pinned *for* that run's whole lifetime:

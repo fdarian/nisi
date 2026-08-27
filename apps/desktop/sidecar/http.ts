@@ -165,9 +165,9 @@ type ServerContext = WithEffectContext<AppServices> &
  * to the exact wire shape `attachRouter`'s oRPC router below produces
  * (verified against `makeSidecarClient` and Rust's `is_backend_alive`),
  * deliberately *before* `AppServices` exists at all. `index.ts` needs this
- * port already listening to record it in `sidecar-lock.ts`'s lock — a
- * liveness check against a port nothing answers on yet would make a
- * concurrent sidecar wrongly think this one is dead — and `SqliteDb`'s
+ * port already listening to record it in `deskkit/sidecar`'s `acquireSidecar`
+ * claim — a liveness check against a port nothing answers on yet would make
+ * a concurrent sidecar wrongly think this one is dead — and `SqliteDb`'s
  * connection must not open until this process has already won that lock,
  * otherwise two cold boots race on Drizzle's migration step the same way
  * they used to race on `sidecar.json`. `attachRouter` swaps in the full
@@ -199,8 +199,8 @@ export function bindHealthCheckServer(token: string, port?: number) {
  * Swaps `server`'s handler for the full oRPC router via `server.reload` —
  * same port, no restart, so a concurrent liveness check never observes a gap
  * where nothing's listening. Called once `AppServices` is ready, after
- * `index.ts` has already won `sidecar-lock.ts`'s lock and published
- * `sidecar.json`.
+ * `index.ts` has already won `deskkit/sidecar`'s `acquireSidecar` claim,
+ * which publishes `sidecar.json` as part of that same claim.
  */
 export function attachRouter(
 	server: ReturnType<typeof Bun.serve>,

@@ -1,6 +1,13 @@
 import { BunRuntime, BunServices } from "@effect/platform-bun";
+import { safe } from "@orpc/client";
 import { getDataDirConfig, SqliteDb } from "@repo/db";
 import { SettingsStore } from "@repo/settings";
+import { makeSidecarClient } from "@repo/sidecar-api";
+import {
+	acquireSidecar,
+	releaseSidecar,
+	type SidecarLivenessCheck,
+} from "deskkit/sidecar";
 import { Config, Effect, Layer, Option } from "effect";
 import { FileSystem } from "effect/FileSystem";
 import { ChatSessions } from "./chat/sessions.ts";
@@ -9,17 +16,32 @@ import { startLivePolling } from "./live-poll.ts";
 import { LoggingLive } from "./logging.ts";
 import type { AppServices } from "./services.ts";
 import { SessionWatch } from "./session-watch.ts";
-import {
-	acquireSidecarLock,
-	publishSidecarJson,
-	releaseSidecarLock,
-} from "./sidecar-lock.ts";
 import { Store } from "./store.ts";
 import { Updater } from "./updater/service.ts";
 import { WalkthroughStore } from "./walkthrough/store.ts";
 
 /** Same `NISI_DATA_DIR` default `@repo/db`'s `SqliteDb` resolves — shared so the handshake file and `app.db` always land in the same directory. */
 const dataDirConfig = getDataDirConfig();
+
+/** How long to wait for a liveness check against a recorded owner before treating it as dead. Loopback, so both outcomes resolve fast — this only needs to outlast a live sidecar under momentary load. */
+const LIVENESS_CHECK_TIMEOUT_MS = 1_000;
+
+/**
+ * True if `owner`'s sidecar answers `health.check` over the same authed oRPC
+ * channel the frontend and CLI use. This — never a staleness heuristic (a
+ * lock file's age, a PID that might have been reused) — is the only way to
+ * tell "the process that made this handshake crashed" apart from "it's
+ * genuinely still running," which is exactly what `acquireSidecar`
+ * (`deskkit/sidecar`) needs this callback for.
+ */
+const isSidecarAlive: SidecarLivenessCheck = (owner) =>
+	Effect.promise(() =>
+		safe(
+			makeSidecarClient(owner).health.check(undefined, {
+				signal: AbortSignal.timeout(LIVENESS_CHECK_TIMEOUT_MS),
+			}),
+		),
+	).pipe(Effect.map((result) => result.isSuccess));
 
 const program = Effect.scoped(
 	Effect.gen(function* () {
@@ -77,40 +99,46 @@ const program = Effect.scoped(
 			);
 		}
 
-		// Atomic ownership before this process is allowed to touch
-		// sidecar.json — see sidecar-lock.ts for why the old file-based
-		// check-then-act (asking a pre-existing sidecar.json's own sidecar
-		// whether it was alive, then unconditionally overwriting) wasn't
-		// enough on its own: two sidecars booting at the same instant could
-		// both find nothing live, both proceed, and both write — whichever
-		// wrote last "won." The lock closes that window; its release (below)
-		// runs on the same SIGINT/SIGTERM path as the server's above, and a
-		// `SIGKILL`'d owner's stale lock is recovered by the liveness check
-		// inside `acquireSidecarLock` itself on the next boot, not by this
-		// release ever running.
+		// Atomic ownership *and* handshake publish, in the same act — deskkit's
+		// `acquireSidecar` (`deskkit/sidecar`) writes `sidecar.json` the
+		// moment its `wx` (`O_EXCL`) create succeeds, so there's no separate
+		// "claim now, publish later" step the way this file's own
+		// `sidecar-lock.ts` used to have. Without the exclusivity half, two
+		// sidecars booting at the same instant could both find nothing live,
+		// both proceed, and both write — whichever wrote last "won," silently
+		// splitting the app window and the CLI onto different sidecars and
+		// two different SQLite writers.
+		//
+		// `acquireSidecar` writes directly, not via a temp file + rename, so
+		// a reader can briefly observe an empty or partial `sidecar.json`
+		// between the create and the write landing — Rust's
+		// `wait_for_sidecar_json` (`src-tauri/src/lib.rs`) treats a read or
+		// parse failure there the same as "file not there yet" and retries,
+		// exactly per `deskkit/sidecar`'s README ("For non-deskkit readers of
+		// `sidecar.json`"). A `SIGKILL`'d owner's stale `sidecar.json` is
+		// recovered by `isSidecarAlive` inside `acquireSidecar` on the next
+		// boot — or, when the recorded port is the one this process is
+		// already listening on (a pinned-port dev restart under
+		// `bun --watch`, or a `SIGKILL`'d sidecar whose ephemeral port got
+		// reassigned), taken over without a liveness check at all; see
+		// `acquireSidecar`'s own doc comment — not by this release ever
+		// running.
 		yield* Effect.acquireRelease(
-			acquireSidecarLock(dataDir, { port, token }),
+			acquireSidecar(dataDir, { port, token }, isSidecarAlive),
 			() =>
 				Effect.logInfo("releasing sidecar lock").pipe(
-					Effect.andThen(releaseSidecarLock(dataDir)),
+					Effect.andThen(releaseSidecar(dataDir)),
 				),
 		);
 
-		// Safe to publish unconditionally: the lock above already proved this
-		// process is the data dir's sole legitimate sidecar, so there's
-		// nothing to check before overwriting whatever sidecar.json currently
-		// holds. Written via temp file + rename (see publishSidecarJson) so
-		// Rust's wait_for_sidecar_json and the CLI's readHandshake never
-		// observe a partial file.
-		yield* publishSidecarJson(dataDir, { port, token });
-
-		// Only now — lock held, sidecar.json published — does AppServices
-		// get built, which is what actually opens SqliteDb's connection and
-		// runs Drizzle's migrations. Scoping MainLayer to just this
-		// remaining tail of the program (rather than the whole program, the
-		// way it used to be provided) is what keeps a second process from
-		// ever reaching this point concurrently: it's refused, or made to
-		// wait out acquireSidecarLock's dead-owner recovery, before it can.
+		// Only now — sidecar.json claimed and published in the one act above
+		// — does AppServices get built, which is what actually opens
+		// SqliteDb's connection and runs Drizzle's migrations. Scoping
+		// MainLayer to just this remaining tail of the program (rather than
+		// the whole program, the way it used to be provided) is what keeps a
+		// second process from ever reaching this point concurrently: it's
+		// refused, or made to wait out `acquireSidecar`'s dead-owner
+		// recovery, before it can.
 		yield* Effect.provide(
 			Effect.gen(function* () {
 				// Captures the ambient context (every service in `AppServices`) so
