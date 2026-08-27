@@ -41,6 +41,14 @@ export const Settings = Schema.Struct({
 	enabledHarnesses: Schema.NullOr(Schema.Array(HarnessId)),
 	sidebarViewMode: SidebarViewMode,
 	diffStyleMode: DiffStyleMode,
+	/**
+	 * Scheme string of the user's preferred editor (`vscode`/`cursor`/`zed`/
+	 * `windsurf`), or `null` when never chosen. Loose `Schema.String`, not a
+	 * literal union — mirrors `@repo/settings`'s `Settings.preferredEditor`,
+	 * which stays independent of the frontend's/Rust's candidate list for the
+	 * same reason `enabledHarnesses` does.
+	 */
+	preferredEditor: Schema.NullOr(Schema.String),
 	hideReviewed: Schema.Boolean,
 	includeUncommitted: Schema.Boolean,
 	/** Gates the entire walkthrough feature — see `@repo/settings`'s `Settings.walkthroughEnabled`. */
@@ -58,6 +66,7 @@ export const SettingsUpdate = Schema.Struct({
 	enabledHarnesses: Schema.optional(Schema.NullOr(Schema.Array(HarnessId))),
 	sidebarViewMode: Schema.optional(SidebarViewMode),
 	diffStyleMode: Schema.optional(DiffStyleMode),
+	preferredEditor: Schema.optional(Schema.NullOr(Schema.String)),
 	hideReviewed: Schema.optional(Schema.Boolean),
 	includeUncommitted: Schema.optional(Schema.Boolean),
 	walkthroughEnabled: Schema.optional(Schema.Boolean),

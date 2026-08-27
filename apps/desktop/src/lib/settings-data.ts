@@ -23,6 +23,13 @@ export type Settings = {
 	enabledHarnesses: readonly HarnessId[] | null;
 	sidebarViewMode: SidebarViewMode;
 	diffStyleMode: DiffStyleMode;
+	/**
+	 * Scheme string of the user's preferred editor (`vscode`/`cursor`/`zed`/
+	 * `windsurf` — see `use-available-editors.ts`'s `EditorInfo.id`), or
+	 * `null` when never chosen. See `@repo/settings`'s `Settings.preferredEditor`
+	 * doc for why this stays a loose `string` rather than a literal union.
+	 */
+	preferredEditor: string | null;
 	/** When true, files already marked reviewed are hidden from the files sidebar and the Files Changed list. */
 	hideReviewed: boolean;
 	/**
@@ -47,6 +54,7 @@ const DEFAULT_SETTINGS: Settings = {
 	enabledHarnesses: null,
 	sidebarViewMode: "tree",
 	diffStyleMode: "unified",
+	preferredEditor: null,
 	hideReviewed: false,
 	includeUncommitted: false,
 	walkthroughEnabled: false,
@@ -126,6 +134,21 @@ export function useDiffStyleMode(
 	);
 
 	return [settings.diffStyleMode, setMode];
+}
+
+/** Preferred editor scheme for the "Open in editor" leader shortcut and Settings picker — see `@repo/settings`'s `preferredEditor`. */
+export function usePreferredEditor(
+	orpc: SidecarQueryUtils,
+): [string | null, (preferredEditor: string | null) => void] {
+	const { settings } = useSettings(orpc);
+	const update = useUpdateSettings(orpc);
+
+	const setPreferredEditor = useCallback(
+		(preferredEditor: string | null) => update({ preferredEditor }),
+		[update],
+	);
+
+	return [settings.preferredEditor, setPreferredEditor];
 }
 
 /** "Hide reviewed" preference for the files sidebar/Files Changed list — see `@repo/settings`'s `hideReviewed`. */

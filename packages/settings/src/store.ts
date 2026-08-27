@@ -29,6 +29,14 @@ export type Settings = {
 	readonly enabledHarnesses: ReadonlyArray<string> | null;
 	readonly sidebarViewMode: SidebarViewMode;
 	readonly diffStyleMode: DiffStyleMode;
+	/**
+	 * Scheme string of the user's preferred editor (`vscode`/`cursor`/`zed`/
+	 * `windsurf` — see `apps/desktop/src-tauri/src/editors.rs`'s
+	 * `CANDIDATE_EDITORS`), or `null` when never chosen. Loose `string`, not a
+	 * literal union — this package stays independent of the frontend's/Rust's
+	 * candidate list, same reasoning as `enabledHarnesses` above.
+	 */
+	readonly preferredEditor: string | null;
 	/** When true, files already marked reviewed are hidden from the files sidebar and the Files Changed list. */
 	readonly hideReviewed: boolean;
 	/**
@@ -68,6 +76,7 @@ export const DEFAULT_SETTINGS: Settings = {
 	enabledHarnesses: null,
 	sidebarViewMode: "tree",
 	diffStyleMode: "unified",
+	preferredEditor: null,
 	hideReviewed: false,
 	includeUncommitted: false,
 	walkthroughEnabled: false,
@@ -80,6 +89,7 @@ const toSettings = (row: SettingsRow): Settings => ({
 			: (JSON.parse(row.enabledHarnesses) as ReadonlyArray<string>),
 	sidebarViewMode: row.sidebarViewMode as SidebarViewMode,
 	diffStyleMode: row.diffStyleMode as DiffStyleMode,
+	preferredEditor: row.preferredEditor,
 	hideReviewed: row.hideReviewed,
 	includeUncommitted: row.includeUncommitted,
 	walkthroughEnabled: row.walkthroughEnabled,
@@ -137,6 +147,7 @@ export class SettingsStore extends Context.Service<SettingsStore>()(
 								: JSON.stringify(next.enabledHarnesses),
 						sidebarViewMode: next.sidebarViewMode,
 						diffStyleMode: next.diffStyleMode,
+						preferredEditor: next.preferredEditor,
 						hideReviewed: next.hideReviewed,
 						includeUncommitted: next.includeUncommitted,
 						walkthroughEnabled: next.walkthroughEnabled,

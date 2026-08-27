@@ -64,6 +64,7 @@ const toWireSettings = (settings: {
 	readonly enabledHarnesses: ReadonlyArray<string> | null;
 	readonly sidebarViewMode: WireSettings["sidebarViewMode"];
 	readonly diffStyleMode: WireSettings["diffStyleMode"];
+	readonly preferredEditor: WireSettings["preferredEditor"];
 	readonly hideReviewed: WireSettings["hideReviewed"];
 	readonly includeUncommitted: WireSettings["includeUncommitted"];
 	readonly walkthroughEnabled: WireSettings["walkthroughEnabled"];
@@ -74,6 +75,7 @@ const toWireSettings = (settings: {
 			: (settings.enabledHarnesses as ReadonlyArray<HarnessId>),
 	sidebarViewMode: settings.sidebarViewMode,
 	diffStyleMode: settings.diffStyleMode,
+	preferredEditor: settings.preferredEditor,
 	hideReviewed: settings.hideReviewed,
 	includeUncommitted: settings.includeUncommitted,
 	walkthroughEnabled: settings.walkthroughEnabled,
