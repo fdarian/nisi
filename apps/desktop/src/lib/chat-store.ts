@@ -1,16 +1,32 @@
 "use client";
 
 /**
- * Client-only state for the quick-chat dock (⌘J) — threads, their messages,
- * and dock UI (which thread is active, popup open/minimized), keyed by
- * `sessionId` the same way `session-ui-store.tsx` keys per-tab UI state.
- * Threads are ephemeral by design (see the plan's "Decisions already
- * made"): this store is the frontend half of that, in-memory only, gone on
- * reload. Network orchestration — calling `chat.send`, translating
- * `ChatEvent`s into the actions below — lives in `chat-data.ts`, not here;
- * this file only knows how to hold and mutate state, the same split
- * `session-ui-store.tsx`/`walkthrough-data.ts` already draw.
+ * Client-only state for the quick-chat dock (⌘J) — the thread list and dock
+ * UI (which thread is active, popup open/minimized), keyed by `sessionId`
+ * the same way `session-ui-store.tsx` keys per-tab UI state, plus the
+ * module-scope `Map<threadId, Chat>` every thread's messages and streaming
+ * status actually live on now.
+ *
+ * Revision: this used to also own a `messages` array and an
+ * `"idle"/"streaming"/"error"` status per thread, hand-appended delta-by-delta
+ * by a `chat-data.ts` streaming loop mirroring `walkthrough-data.ts`'s raw
+ * `for await` shape. Both are gone, and `chat-data.ts` with them — AI SDK's
+ * `Chat` class (`@ai-sdk/react`) already does that job (message assembly,
+ * `status`, the tool-part state machine), and does it better than a
+ * hand-rolled projection ever would. `getOrCreateChat` below is what
+ * replaces `chat-data.ts`'s old `threadControllers` map: a `Chat` instance
+ * keeps streaming with no subscriber mounted the same way an
+ * `AbortController` did, so it's the correct module-scope home for "the
+ * thing that must survive an unmount" — switching threads, minimizing the
+ * popup, or switching PR tabs must never cut off a reply.
+ *
+ * What's left here is genuinely just state: which threads exist, which is
+ * active/open, and — since AI SDK's `Chat` has no concept of them —
+ * `harness`/`model`, locked in on a thread's first message and reused
+ * (server-side too, see `chatContract.send`'s doc) for every one after.
  */
+import { Chat } from "@ai-sdk/react";
+import type { UIMessage } from "ai";
 import {
 	createContext,
 	createElement,
@@ -22,26 +38,12 @@ import {
 	useState,
 } from "react";
 import { createStore, type StoreApi, useStore } from "zustand";
+import type { SidecarQueryUtils } from "#/lib/backend-context";
+import { createOrpcChatTransport, messageText } from "#/lib/chat-transport";
 import type { HarnessId } from "#/lib/walkthrough-data";
 
-/** `id` is stable per part instance (a continuing text part keeps its id across deltas) — React keys for `chat-panel.tsx`'s per-part rendering need something other than array index, since biome's `noArrayIndexKey` rightly rejects that. */
-export type ChatMessagePart =
-	| { id: string; type: "text"; text: string }
-	| { id: string; type: "tool-call"; toolName: string; input: unknown };
-
-export type ChatMessageRole = "user" | "assistant";
-
-export type ChatMessage = {
+export type ChatThreadMeta = {
 	id: string;
-	role: ChatMessageRole;
-	parts: readonly ChatMessagePart[];
-};
-
-export type ChatThreadStatus = "idle" | "streaming" | "error";
-
-export type ChatThread = {
-	id: string;
-	title: string;
 	/**
 	 * Set from the composer's harness/model picker on the thread's first
 	 * message, then reused (and ignored server-side) for every later one —
@@ -51,13 +53,10 @@ export type ChatThread = {
 	 */
 	harness: HarnessId | null;
 	model: string | undefined;
-	messages: readonly ChatMessage[];
-	status: ChatThreadStatus;
-	errorMessage: string | null;
 };
 
 type SessionChatState = {
-	threads: readonly ChatThread[];
+	threads: readonly ChatThreadMeta[];
 	activeThreadId: string | null;
 	popupOpen: boolean;
 	popupMinimized: boolean;
@@ -72,14 +71,22 @@ function createDefaultSessionChatState(): SessionChatState {
 	};
 }
 
-const EMPTY_THREADS: readonly ChatThread[] = [];
+const EMPTY_THREADS: readonly ChatThreadMeta[] = [];
 
 const NEW_THREAD_TITLE = "New chat";
 const TITLE_MAX_LENGTH = 40;
 
-/** First ~40 chars of the user's first message, single-lined — mirrors how most chat apps title a new thread. */
-function deriveTitle(message: string): string {
-	const singleLine = message.replace(/\s+/g, " ").trim();
+/**
+ * First ~40 chars of the thread's first user message, single-lined —
+ * mirrors how most chat apps title a new thread. Derived live from AI SDK's
+ * own `messages` on every render rather than stored, now that this file
+ * doesn't own message content at all — there's nowhere left to cache it
+ * that wouldn't just be a second, driftable copy.
+ */
+export function deriveThreadTitle(messages: readonly UIMessage[]): string {
+	const firstUserMessage = messages.find((message) => message.role === "user");
+	if (firstUserMessage === undefined) return NEW_THREAD_TITLE;
+	const singleLine = messageText(firstUserMessage).replace(/\s+/g, " ").trim();
 	if (singleLine.length <= TITLE_MAX_LENGTH)
 		return singleLine || NEW_THREAD_TITLE;
 	return `${singleLine.slice(0, TITLE_MAX_LENGTH).trimEnd()}…`;
@@ -102,117 +109,83 @@ function withSession(
 }
 
 function mapThread(
-	threads: readonly ChatThread[],
+	threads: readonly ChatThreadMeta[],
 	threadId: string,
-	update: (thread: ChatThread) => ChatThread,
-): readonly ChatThread[] {
+	update: (thread: ChatThreadMeta) => ChatThreadMeta,
+): readonly ChatThreadMeta[] {
 	return threads.map((thread) =>
 		thread.id === threadId ? update(thread) : thread,
 	);
 }
 
-/** Appends `delta` onto `messageId`'s last text part, creating both the message and its first part if this is the turn's first delta. */
-function appendAssistantText(
-	thread: ChatThread,
-	messageId: string,
-	delta: string,
-): ChatThread {
-	const existing = thread.messages.find((message) => message.id === messageId);
-	if (existing === undefined) {
-		const message: ChatMessage = {
-			id: messageId,
-			role: "assistant",
-			parts: [{ id: crypto.randomUUID(), type: "text", text: delta }],
-		};
-		return { ...thread, messages: [...thread.messages, message] };
-	}
-	const lastPart = existing.parts[existing.parts.length - 1];
-	const nextParts: readonly ChatMessagePart[] =
-		lastPart !== undefined && lastPart.type === "text"
-			? [
-					...existing.parts.slice(0, -1),
-					{ id: lastPart.id, type: "text", text: lastPart.text + delta },
-				]
-			: [
-					...existing.parts,
-					{ id: crypto.randomUUID(), type: "text", text: delta },
-				];
-	return {
-		...thread,
-		messages: thread.messages.map((message) =>
-			message.id === messageId ? { ...message, parts: nextParts } : message,
-		),
-	};
-}
+/**
+ * The live `Chat` instances backing every thread that's ever sent a message
+ * — module scope, not component state, for the same reason the old
+ * `threadControllers` map was (see this file's header doc): the dock, the
+ * popup, and individual thread tabs all mount/unmount independently of
+ * whether a turn is still streaming, and a `Chat` instance only keeps
+ * streaming for as long as something holds a reference to it. Keyed by
+ * `threadId`, same as the sidecar's own live-session map
+ * (`sidecar/chat/sessions.ts`) — a thread's `Chat` and its sidecar-side
+ * `HarnessAgentSession` are meant to have the same lifetime, and
+ * `closeThread`/`clearSession` below are what keep that true on the
+ * frontend's side of it.
+ */
+const chatInstances = new Map<string, Chat<UIMessage>>();
 
-/** Pushes a `tool-call` part onto `messageId`, creating the message if this is the turn's first part. */
-function appendAssistantToolCallPart(
-	thread: ChatThread,
-	messageId: string,
-	toolName: string,
-	input: unknown,
-): ChatThread {
-	const part: ChatMessagePart = {
-		id: crypto.randomUUID(),
-		type: "tool-call",
-		toolName,
-		input,
-	};
-	const existing = thread.messages.find((message) => message.id === messageId);
-	if (existing === undefined) {
-		const message: ChatMessage = {
-			id: messageId,
-			role: "assistant",
-			parts: [part],
-		};
-		return { ...thread, messages: [...thread.messages, message] };
-	}
-	return {
-		...thread,
-		messages: thread.messages.map((message) =>
-			message.id === messageId
-				? { ...message, parts: [...message.parts, part] }
-				: message,
-		),
-	};
+/**
+ * Returns `threadId`'s live `Chat` instance, constructing one — wired to
+ * `chat.send` via `createOrpcChatTransport` — on first use, and reusing it
+ * on every later call for the same thread. Safe to call on every render
+ * (the common case is just a `Map.get`); the identity only changes when a
+ * thread is actually new, which is exactly what `useChat({ chat })` needs
+ * to key its own subscription off of.
+ */
+export function getOrCreateChat(
+	orpc: SidecarQueryUtils,
+	sessionId: string,
+	threadId: string,
+): Chat<UIMessage> {
+	const existing = chatInstances.get(threadId);
+	if (existing !== undefined) return existing;
+	const chat = new Chat<UIMessage>({
+		id: threadId,
+		transport: createOrpcChatTransport(orpc, sessionId, threadId),
+	});
+	chatInstances.set(threadId, chat);
+	return chat;
 }
 
 type ChatStore = {
 	sessions: ReadonlyMap<string, SessionChatState>;
 	/** Creates `threadId`, makes it the active thread, and opens the popup on it — the effect of both ⌘J-with-no-threads and an explicit "new thread" action. */
 	openNewThread: (sessionId: string, threadId: string) => void;
-	/** Drops the thread. Closes the popup too if it was the last one. Does not call `chat.closeThread` — that's `chat-data.ts`'s job, since disposing the live harness session is a network effect. */
+	/**
+	 * Drops the thread's metadata, stops and drops its `Chat` instance from
+	 * `chatInstances`. Does not call `chat.closeThread` — that's a network
+	 * effect that needs `orpc`, which this store doesn't have; it's
+	 * `useChatDockActions`' job, below.
+	 */
 	closeThread: (sessionId: string, threadId: string) => void;
 	setActiveThread: (sessionId: string, threadId: string) => void;
 	setPopupOpen: (sessionId: string, open: boolean) => void;
 	setPopupMinimized: (sessionId: string, minimized: boolean) => void;
-	/** Appends the user's turn, locking in `harness`/`model` if this is the thread's first message, and marks the thread `"streaming"`. */
-	appendUserMessage: (
+	/** Locks in `harness`/`model` the first time a thread sends a message — a no-op on every later call for the same thread, mirroring the sidecar's own "first send wins" reattach posture. */
+	lockThreadHarness: (
 		sessionId: string,
 		threadId: string,
-		messageId: string,
-		text: string,
 		harness: HarnessId,
 		model: string | undefined,
 	) => void;
-	appendAssistantDelta: (
-		sessionId: string,
-		threadId: string,
-		messageId: string,
-		delta: string,
-	) => void;
-	appendAssistantToolCall: (
-		sessionId: string,
-		threadId: string,
-		messageId: string,
-		toolName: string,
-		input: unknown,
-	) => void;
-	completeThread: (sessionId: string, threadId: string) => void;
-	failThread: (sessionId: string, threadId: string, message: string) => void;
-	/** Drops a closed PR tab's chat state entirely — call from wherever a session actually closes, mirroring `session-ui-store.tsx`'s `clearSession`. */
+	/** Drops a closed PR tab's chat state entirely, including every one of its threads' `Chat` instances — call from wherever a session actually closes, mirroring `session-ui-store.tsx`'s `clearSession`. */
 	clearSession: (sessionId: string) => void;
 };
+
+/** Stops (best-effort) and forgets `threadId`'s live `Chat` instance, if any. */
+function disposeChatInstance(threadId: string): void {
+	void chatInstances.get(threadId)?.stop();
+	chatInstances.delete(threadId);
+}
 
 function createChatStore(): StoreApi<ChatStore> {
 	return createStore<ChatStore>((set) => ({
@@ -220,14 +193,10 @@ function createChatStore(): StoreApi<ChatStore> {
 		openNewThread: (sessionId, threadId) =>
 			set((state) => ({
 				sessions: withSession(state.sessions, sessionId, (session) => {
-					const thread: ChatThread = {
+					const thread: ChatThreadMeta = {
 						id: threadId,
-						title: NEW_THREAD_TITLE,
 						harness: null,
 						model: undefined,
-						messages: [],
-						status: "idle",
-						errorMessage: null,
 					};
 					return {
 						...session,
@@ -238,7 +207,8 @@ function createChatStore(): StoreApi<ChatStore> {
 					};
 				}),
 			})),
-		closeThread: (sessionId, threadId) =>
+		closeThread: (sessionId, threadId) => {
+			disposeChatInstance(threadId);
 			set((state) => ({
 				sessions: withSession(state.sessions, sessionId, (session) => {
 					const threads = session.threads.filter(
@@ -255,7 +225,8 @@ function createChatStore(): StoreApi<ChatStore> {
 						popupOpen: threads.length === 0 ? false : session.popupOpen,
 					};
 				}),
-			})),
+			}));
+		},
 		setActiveThread: (sessionId, threadId) =>
 			set((state) => ({
 				sessions: withSession(state.sessions, sessionId, (session) => ({
@@ -279,77 +250,20 @@ function createChatStore(): StoreApi<ChatStore> {
 					popupMinimized: minimized,
 				})),
 			})),
-		appendUserMessage: (sessionId, threadId, messageId, text, harness, model) =>
-			set((state) => ({
-				sessions: withSession(state.sessions, sessionId, (session) => ({
-					...session,
-					threads: mapThread(session.threads, threadId, (thread) => {
-						const message: ChatMessage = {
-							id: messageId,
-							role: "user",
-							parts: [{ id: crypto.randomUUID(), type: "text", text }],
-						};
-						const isFirstMessage = thread.messages.length === 0;
-						return {
-							...thread,
-							title: isFirstMessage ? deriveTitle(text) : thread.title,
-							harness: thread.harness ?? harness,
-							model: thread.harness === null ? model : thread.model,
-							messages: [...thread.messages, message],
-							status: "streaming",
-							errorMessage: null,
-						};
-					}),
-				})),
-			})),
-		appendAssistantDelta: (sessionId, threadId, messageId, delta) =>
+		lockThreadHarness: (sessionId, threadId, harness, model) =>
 			set((state) => ({
 				sessions: withSession(state.sessions, sessionId, (session) => ({
 					...session,
 					threads: mapThread(session.threads, threadId, (thread) =>
-						appendAssistantText(thread, messageId, delta),
+						thread.harness === null ? { ...thread, harness, model } : thread,
 					),
-				})),
-			})),
-		appendAssistantToolCall: (
-			sessionId,
-			threadId,
-			messageId,
-			toolName,
-			input,
-		) =>
-			set((state) => ({
-				sessions: withSession(state.sessions, sessionId, (session) => ({
-					...session,
-					threads: mapThread(session.threads, threadId, (thread) =>
-						appendAssistantToolCallPart(thread, messageId, toolName, input),
-					),
-				})),
-			})),
-		completeThread: (sessionId, threadId) =>
-			set((state) => ({
-				sessions: withSession(state.sessions, sessionId, (session) => ({
-					...session,
-					threads: mapThread(session.threads, threadId, (thread) => ({
-						...thread,
-						status: "idle",
-					})),
-				})),
-			})),
-		failThread: (sessionId, threadId, message) =>
-			set((state) => ({
-				sessions: withSession(state.sessions, sessionId, (session) => ({
-					...session,
-					threads: mapThread(session.threads, threadId, (thread) => ({
-						...thread,
-						status: "error",
-						errorMessage: message,
-					})),
 				})),
 			})),
 		clearSession: (sessionId) =>
 			set((state) => {
-				if (!state.sessions.has(sessionId)) return state;
+				const session = state.sessions.get(sessionId);
+				if (session === undefined) return state;
+				for (const thread of session.threads) disposeChatInstance(thread.id);
 				const next = new Map(state.sessions);
 				next.delete(sessionId);
 				return { sessions: next };
@@ -359,7 +273,7 @@ function createChatStore(): StoreApi<ChatStore> {
 
 const ChatStoreContext = createContext<StoreApi<ChatStore> | null>(null);
 
-/** Raw store handle, for `chat-data.ts`'s streaming loop to dispatch several actions imperatively (`store.getState().appendAssistantDelta(...)`) without subscribing a component to every intermediate state — same pattern as `session-ui-store.tsx`'s `useSessionUndoStack`. UI components should prefer the granular selector hooks below instead. */
+/** Raw store handle for imperative dispatch outside a selector hook. UI components should prefer the granular selector hooks below instead. */
 export function useChatStore(): StoreApi<ChatStore> {
 	const store = useContext(ChatStoreContext);
 	if (store === null) {
@@ -378,7 +292,7 @@ export function ChatProvider({
 	return createElement(ChatStoreContext.Provider, { value: store }, children);
 }
 
-export function useChatThreads(sessionId: string): readonly ChatThread[] {
+export function useChatThreads(sessionId: string): readonly ChatThreadMeta[] {
 	const store = useChatStore();
 	return useStore(
 		store,
@@ -410,13 +324,29 @@ export function useChatPopupMinimized(sessionId: string): boolean {
 	);
 }
 
-/** The dock-control actions UI components dispatch directly (as opposed to the network-driven message-appending actions, which only `chat-data.ts` calls) — bundled behind one hook since every dock component needs several of them together. */
-export function useChatDockActions(sessionId: string): {
+/**
+ * The dock-control actions UI components dispatch directly — bundled behind
+ * one hook since every dock component needs several of them together.
+ * `closeThread` here (unlike the store's own action of the same name) also
+ * fires the `chat.closeThread` RPC, which is why this hook takes `orpc`:
+ * the store can drop local state and dispose the `Chat` instance on its
+ * own, but telling the sidecar to release the underlying harness
+ * session/sandbox needs the network.
+ */
+export function useChatDockActions(
+	sessionId: string,
+	orpc: SidecarQueryUtils,
+): {
 	openNewThread: () => string;
 	closeThread: (threadId: string) => void;
 	setActiveThread: (threadId: string) => void;
 	setPopupOpen: (open: boolean) => void;
 	setPopupMinimized: (minimized: boolean) => void;
+	lockThreadHarness: (
+		threadId: string,
+		harness: HarnessId,
+		model: string | undefined,
+	) => void;
 } {
 	const store = useChatStore();
 	const openNewThreadAction = useStore(store, (state) => state.openNewThread);
@@ -430,6 +360,10 @@ export function useChatDockActions(sessionId: string): {
 		store,
 		(state) => state.setPopupMinimized,
 	);
+	const lockThreadHarnessAction = useStore(
+		store,
+		(state) => state.lockThreadHarness,
+	);
 
 	const openNewThread = useCallback(() => {
 		const threadId = crypto.randomUUID();
@@ -437,8 +371,14 @@ export function useChatDockActions(sessionId: string): {
 		return threadId;
 	}, [openNewThreadAction, sessionId]);
 	const closeThread = useCallback(
-		(threadId: string) => closeThreadAction(sessionId, threadId),
-		[closeThreadAction, sessionId],
+		(threadId: string) => {
+			// Best-effort: an already-gone thread (its owning PR session closed
+			// and the sidecar disposed it first) is a harmless no-op server-side,
+			// nothing here needs to react to a failed call.
+			void orpc.chat.closeThread.call({ threadId }).catch(() => {});
+			closeThreadAction(sessionId, threadId);
+		},
+		[orpc, closeThreadAction, sessionId],
 	);
 	const setActiveThread = useCallback(
 		(threadId: string) => setActiveThreadAction(sessionId, threadId),
@@ -452,6 +392,11 @@ export function useChatDockActions(sessionId: string): {
 		(minimized: boolean) => setPopupMinimizedAction(sessionId, minimized),
 		[setPopupMinimizedAction, sessionId],
 	);
+	const lockThreadHarness = useCallback(
+		(threadId: string, harness: HarnessId, model: string | undefined) =>
+			lockThreadHarnessAction(sessionId, threadId, harness, model),
+		[lockThreadHarnessAction, sessionId],
+	);
 
 	return useMemo(
 		() => ({
@@ -460,6 +405,7 @@ export function useChatDockActions(sessionId: string): {
 			setActiveThread,
 			setPopupOpen,
 			setPopupMinimized,
+			lockThreadHarness,
 		}),
 		[
 			openNewThread,
@@ -467,6 +413,7 @@ export function useChatDockActions(sessionId: string): {
 			setActiveThread,
 			setPopupOpen,
 			setPopupMinimized,
+			lockThreadHarness,
 		],
 	);
 }

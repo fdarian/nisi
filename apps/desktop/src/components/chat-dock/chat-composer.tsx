@@ -27,6 +27,7 @@ import { LexicalErrorBoundary } from "@lexical/react/LexicalErrorBoundary";
 import { OnChangePlugin } from "@lexical/react/LexicalOnChangePlugin";
 import { PlainTextPlugin } from "@lexical/react/LexicalPlainTextPlugin";
 import { Link } from "@tanstack/react-router";
+import type { ChatStatus } from "ai";
 import {
 	$createParagraphNode,
 	$getRoot,
@@ -41,12 +42,15 @@ import {
 	type ModelSelection,
 } from "#/components/walkthrough/harness-model-combobox";
 import type { SidecarQueryUtils } from "#/lib/backend-context";
-import type { ChatThread } from "#/lib/chat-store";
 import { cn } from "#/lib/utils";
 import { type HarnessId, useHarnesses } from "#/lib/walkthrough-data";
 
 type ChatComposerProps = {
-	thread: ChatThread;
+	/** `null` until the thread's first message locks it in — see `chat-store.ts`'s `ChatThreadMeta` doc. */
+	threadHarness: HarnessId | null;
+	threadModel: string | undefined;
+	/** From `useChat({ chat })` — `"submitted"`/`"streaming"` both count as busy for this composer's own send/stop toggle, same as the old `thread.status === "streaming"` check covered both phases at once. */
+	status: ChatStatus;
 	orpc: SidecarQueryUtils;
 	onSend: (text: string, harness: HarnessId, model: string | undefined) => void;
 	onStop: () => void;
@@ -69,7 +73,9 @@ export function ChatComposer(props: ChatComposerProps): React.ReactElement {
 }
 
 function ComposerBody({
-	thread,
+	threadHarness,
+	threadModel,
+	status,
 	orpc,
 	onSend,
 	onStop,
@@ -79,20 +85,20 @@ function ComposerBody({
 	const [selection, setSelection] = useState<ModelSelection | null>(null);
 	const { harnesses } = useHarnesses(orpc);
 
-	const isStreaming = thread.status === "streaming";
+	const isBusy = status === "submitted" || status === "streaming";
 	// The picker only matters before the thread's live harness session
 	// exists — `chatContract.send`'s doc: harness/model are ignored server
 	// side once a thread's first message picked them.
-	const needsPicker = thread.harness === null;
+	const needsPicker = threadHarness === null;
 	const hasEnabledHarness = harnesses.some((harness) => harness.enabled);
 
 	const submit = useCallback(() => {
-		if (isStreaming) return;
+		if (isBusy) return;
 		const text = editor.read(() => $getRoot().getTextContent());
 		if (text.trim().length === 0) return;
-		const harness = thread.harness ?? selection?.harness ?? null;
+		const harness = threadHarness ?? selection?.harness ?? null;
 		if (harness === null) return;
-		const model = needsPicker ? selection?.modelId : thread.model;
+		const model = needsPicker ? selection?.modelId : threadModel;
 		onSend(text, harness, model);
 		editor.update(() => {
 			const root = $getRoot();
@@ -103,10 +109,10 @@ function ComposerBody({
 		});
 	}, [
 		editor,
-		isStreaming,
+		isBusy,
 		needsPicker,
-		thread.harness,
-		thread.model,
+		threadHarness,
+		threadModel,
 		selection,
 		onSend,
 	]);
@@ -124,7 +130,7 @@ function ComposerBody({
 		);
 	}, [editor, submit]);
 
-	const canSubmit = hasText && (thread.harness !== null || selection !== null);
+	const canSubmit = hasText && (threadHarness !== null || selection !== null);
 
 	return (
 		<div className="flex flex-col gap-2 border-t p-2">
@@ -174,7 +180,7 @@ function ComposerBody({
 						}
 					/>
 				</div>
-				{isStreaming ? (
+				{isBusy ? (
 					<Button
 						aria-label="Stop"
 						onClick={onStop}

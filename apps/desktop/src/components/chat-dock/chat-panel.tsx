@@ -9,7 +9,16 @@
  * one level up, in `chat-dock.tsx`; this component only owns the popup's
  * own open→closed transition and the separate collapse/expand of its body
  * when minimized.
+ *
+ * `useChat({ chat })` (`@ai-sdk/react`), not a bespoke message/status
+ * reducer — `messages`/`status`/`sendMessage`/`stop` all come straight off
+ * the thread's own `Chat` instance (`chat-store.ts`'s `getOrCreateChat`),
+ * which is what keeps streaming even while this component is unmounted
+ * (popup closed, thread switched away from). See that file's header doc
+ * for the fuller rationale.
  */
+import { useChat } from "@ai-sdk/react";
+import { getToolName, isTextUIPart, isToolUIPart, type UIMessage } from "ai";
 import {
 	ChevronDownIcon,
 	ChevronUpIcon,
@@ -22,10 +31,10 @@ import { ChatComposer } from "#/components/chat-dock/chat-composer";
 import { Button } from "#/components/ui/button";
 import { ScrollArea } from "#/components/ui/scroll-area";
 import type { SidecarQueryUtils } from "#/lib/backend-context";
-import { useChatSend } from "#/lib/chat-data";
 import {
-	type ChatMessage,
-	type ChatThread,
+	type ChatThreadMeta,
+	deriveThreadTitle,
+	getOrCreateChat,
 	useChatActiveThreadId,
 	useChatDockActions,
 	useChatPopupMinimized,
@@ -59,7 +68,7 @@ const markdownComponents: Components = {
 function MessageBubble({
 	message,
 }: {
-	message: ChatMessage;
+	message: UIMessage;
 }): React.ReactElement {
 	const isUser = message.role === "user";
 	return (
@@ -69,56 +78,54 @@ function MessageBubble({
 				isUser ? "items-end" : "items-start",
 			)}
 		>
-			{message.parts.map((part) =>
-				part.type === "text" ? (
-					<div
-						className={cn(
-							"max-w-[85%] rounded-2xl px-3 py-1.5 text-sm",
-							isUser
-								? "bg-primary text-primary-foreground"
-								: "bg-muted text-foreground",
-						)}
-						key={part.id}
-					>
-						{isUser ? (
-							<span className="whitespace-pre-wrap">{part.text}</span>
-						) : (
-							<ReactMarkdown components={markdownComponents}>
-								{part.text}
-							</ReactMarkdown>
-						)}
-					</div>
-				) : (
-					<div
-						className="rounded-md bg-muted/60 px-2 py-1 text-muted-foreground text-xs"
-						key={part.id}
-					>
-						{part.toolName}
-					</div>
-				),
-			)}
+			{message.parts.map((part, index) => {
+				if (isTextUIPart(part)) {
+					return (
+						<div
+							className={cn(
+								"max-w-[85%] rounded-2xl px-3 py-1.5 text-sm",
+								isUser
+									? "bg-primary text-primary-foreground"
+									: "bg-muted text-foreground",
+							)}
+							// biome-ignore lint/suspicious/noArrayIndexKey: AI SDK's `TextUIPart`/`ToolUIPart` carry no id of their own (a tool part's `toolCallId` isn't stable across a thread's other tool calls' array position, and text parts have no id at all — see `process-ui-message-stream.ts`, which drops the wire chunk's `id` once a part is assembled). `parts` is append-only for a message's whole streamed lifetime, so index is a safe identity here: nothing ever reorders or is removed out from under it.
+							key={index}
+						>
+							{isUser ? (
+								<span className="whitespace-pre-wrap">{part.text}</span>
+							) : (
+								<ReactMarkdown components={markdownComponents}>
+									{part.text}
+								</ReactMarkdown>
+							)}
+						</div>
+					);
+				}
+				if (isToolUIPart(part)) {
+					return (
+						<div
+							className="rounded-md bg-muted/60 px-2 py-1 text-muted-foreground text-xs"
+							// biome-ignore lint/suspicious/noArrayIndexKey: see the text-part branch above.
+							key={index}
+						>
+							{getToolName(part)}
+						</div>
+					);
+				}
+				return null;
+			})}
 		</div>
 	);
 }
 
-/**
- * True in the gap between sending a turn and its first `text-delta`/`tool-call`
- * — the sidecar boots the harness CLI in front of that first event, so this
- * window can run a few seconds, same reasoning as `walkthrough-data.ts`'s
- * `"starting"` phase. Without an indicator here, the only sign of life is
- * the spinner on the thread's pill in the strip below.
- */
-function isWaitingForFirstReply(thread: {
-	status: ChatThread["status"];
-	messages: readonly ChatMessage[];
-}): boolean {
-	if (thread.status !== "streaming") return false;
-	const lastMessage = thread.messages[thread.messages.length - 1];
-	return lastMessage?.role === "user";
-}
-
-function MessageList({ thread }: { thread: ChatThread }): React.ReactElement {
-	if (thread.messages.length === 0) {
+function MessageList({
+	messages,
+	isWaitingForFirstReply,
+}: {
+	messages: readonly UIMessage[];
+	isWaitingForFirstReply: boolean;
+}): React.ReactElement {
+	if (messages.length === 0) {
 		return (
 			<div className="flex h-full items-center justify-center px-6 py-8 text-center text-muted-foreground text-sm">
 				Ask anything about this PR — the agent can read the worktree but won't
@@ -129,10 +136,10 @@ function MessageList({ thread }: { thread: ChatThread }): React.ReactElement {
 
 	return (
 		<div className="flex flex-col gap-3 px-3 py-3">
-			{thread.messages.map((message) => (
+			{messages.map((message) => (
 				<MessageBubble key={message.id} message={message} />
 			))}
-			{isWaitingForFirstReply(thread) && (
+			{isWaitingForFirstReply && (
 				<div className="flex items-center gap-1.5 text-muted-foreground text-xs">
 					<LoaderCircleIcon className="size-3 animate-spin" />
 					Thinking…
@@ -153,17 +160,42 @@ export function ChatPanel({
 }: ChatPanelProps): React.ReactElement | null {
 	const threads = useChatThreads(sessionId);
 	const activeThreadId = useChatActiveThreadId(sessionId);
-	const minimized = useChatPopupMinimized(sessionId);
-	const dock = useChatDockActions(sessionId);
-	const chat = useChatSend(orpc);
 
 	const thread =
 		threads.find((candidate) => candidate.id === activeThreadId) ?? null;
 	// The strip only renders a popup at all when a thread is active
 	// (`chat-dock.tsx`) — this is a defensive fallback for the render in
 	// between a thread closing and the store settling on its neighbor, not a
-	// reachable steady state.
+	// reachable steady state. Returned before `ChatPanelBody` mounts, since
+	// its `useChat` call needs a real thread to bind to — hooks can't be
+	// called conditionally, so the null-thread branch lives in a component
+	// boundary instead of an early return further down.
 	if (thread === null) return null;
+
+	return <ChatPanelBody orpc={orpc} sessionId={sessionId} thread={thread} />;
+}
+
+function ChatPanelBody({
+	sessionId,
+	orpc,
+	thread,
+}: {
+	sessionId: string;
+	orpc: SidecarQueryUtils;
+	thread: ChatThreadMeta;
+}): React.ReactElement {
+	const minimized = useChatPopupMinimized(sessionId);
+	const dock = useChatDockActions(sessionId, orpc);
+	const { messages, status, error, sendMessage, stop } = useChat({
+		chat: getOrCreateChat(orpc, sessionId, thread.id),
+	});
+
+	const title = deriveThreadTitle(messages);
+	// `"submitted"`: the turn has been sent but no chunk of the reply has
+	// landed yet — AI SDK's own status expresses exactly the gap the old
+	// hand-rolled indicator used to infer from `thread.status === "streaming"
+	// && lastMessage.role === "user"`.
+	const isWaitingForFirstReply = status === "submitted";
 
 	return (
 		<motion.div
@@ -174,7 +206,7 @@ export function ChatPanel({
 			transition={{ duration: 0.15, ease: "easeOut" }}
 		>
 			<div className="flex shrink-0 items-center justify-between gap-2 border-b px-3 py-2">
-				<span className="truncate font-medium text-sm">{thread.title}</span>
+				<span className="truncate font-medium text-sm">{title}</span>
 				<div className="flex shrink-0 items-center gap-1">
 					<Button
 						aria-label={minimized ? "Expand" : "Minimize"}
@@ -207,21 +239,27 @@ export function ChatPanel({
 						transition={{ duration: 0.15, ease: "easeOut" }}
 					>
 						<ScrollArea className="h-80" scrollFade>
-							<MessageList thread={thread} />
+							<MessageList
+								isWaitingForFirstReply={isWaitingForFirstReply}
+								messages={messages}
+							/>
 						</ScrollArea>
-						{thread.status === "error" && thread.errorMessage !== null && (
+						{status === "error" && error !== undefined && (
 							<p className="border-t px-3 py-2 text-destructive-foreground text-xs">
-								{thread.errorMessage}
+								{error.message}
 							</p>
 						)}
 						<ChatComposer
 							key={thread.id}
-							onSend={(text, harness, model) =>
-								chat.sendMessage(sessionId, thread.id, text, harness, model)
-							}
-							onStop={() => chat.stopMessage(thread.id)}
+							onSend={(text, harness, model) => {
+								dock.lockThreadHarness(thread.id, harness, model);
+								void sendMessage({ text }, { body: { harness, model } });
+							}}
+							onStop={() => void stop()}
 							orpc={orpc}
-							thread={thread}
+							status={status}
+							threadHarness={thread.harness}
+							threadModel={thread.model}
 						/>
 					</motion.div>
 				)}

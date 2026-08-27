@@ -7,9 +7,9 @@
  * column `app-shell.tsx`'s "ready with sessions" branch renders — not an
  * overlay. Mounted once for the whole shell (not per PR tab): switching the
  * active PR tab just changes which session's threads this renders, it never
- * unmounts on its own. See `chat-data.ts`'s doc comment for why that
- * matters — an in-flight turn must survive that kind of incidental
- * re-render.
+ * unmounts on its own. See `chat-store.ts`'s header doc comment for why
+ * that matters — a thread's `Chat` instance (and any turn it's mid-stream
+ * on) must survive that kind of incidental re-render.
  *
  * `mx-2` mirrors `FramePanel`'s own `m-2` (`app-shell.tsx`'s
  * `INSET_PANE_CLASS`) so the strip's left/right edges line up with the
@@ -28,7 +28,6 @@ import { ChatTab } from "#/components/chat-dock/chat-tab";
 import { Button } from "#/components/ui/button";
 import { useChatShortcut } from "#/hooks/use-chat-shortcut";
 import type { SidecarQueryUtils } from "#/lib/backend-context";
-import { useChatSend } from "#/lib/chat-data";
 import {
 	useChatActiveThreadId,
 	useChatDockActions,
@@ -48,8 +47,7 @@ export function ChatDock({
 	const threads = useChatThreads(sessionId);
 	const activeThreadId = useChatActiveThreadId(sessionId);
 	const popupOpen = useChatPopupOpen(sessionId);
-	const dock = useChatDockActions(sessionId);
-	const chat = useChatSend(orpc);
+	const dock = useChatDockActions(sessionId, orpc);
 
 	// ⌘J: no threads yet starts the first one (which opens the popup on it
 	// as a side effect of `openNewThread`); otherwise it's a plain
@@ -91,7 +89,7 @@ export function ChatDock({
 					<ChatTab
 						isActive={thread.id === activeThreadId && popupOpen}
 						key={thread.id}
-						onClose={() => chat.closeThread(sessionId, thread.id)}
+						onClose={() => dock.closeThread(thread.id)}
 						onSelect={() => {
 							if (thread.id === activeThreadId && popupOpen) {
 								dock.setPopupOpen(false);
@@ -99,6 +97,8 @@ export function ChatDock({
 							}
 							dock.setActiveThread(thread.id);
 						}}
+						orpc={orpc}
+						sessionId={sessionId}
 						thread={thread}
 					/>
 				))}

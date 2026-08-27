@@ -1,11 +1,19 @@
 "use client";
 
+import { useChat } from "@ai-sdk/react";
 import { LoaderCircleIcon, XIcon } from "lucide-react";
-import type { ChatThread } from "#/lib/chat-store";
+import type { SidecarQueryUtils } from "#/lib/backend-context";
+import {
+	type ChatThreadMeta,
+	deriveThreadTitle,
+	getOrCreateChat,
+} from "#/lib/chat-store";
 import { cn } from "#/lib/utils";
 
 type ChatTabProps = {
-	thread: ChatThread;
+	sessionId: string;
+	orpc: SidecarQueryUtils;
+	thread: ChatThreadMeta;
 	isActive: boolean;
 	onSelect: () => void;
 	onClose: () => void;
@@ -18,13 +26,29 @@ type ChatTabProps = {
  * `<button>` (no nested interactive elements), so both the select area and
  * the close button are plain elements styled to match ghost-button chrome
  * instead.
+ *
+ * Calls `useChat` itself, one instance per rendered tab, rather than
+ * receiving `title`/`isStreaming` as props — every thread's pill (not just
+ * the active one) needs its own live status/title, and `chat-store.ts`
+ * doesn't cache either anymore (see its header doc). This is the standard
+ * "list of components, each its own hook" shape: legal because each
+ * `<ChatTab>` is its own component instance, not a hook called inside the
+ * parent's `.map()` callback.
  */
 export function ChatTab({
+	sessionId,
+	orpc,
 	thread,
 	isActive,
 	onSelect,
 	onClose,
 }: ChatTabProps): React.ReactElement {
+	const { messages, status } = useChat({
+		chat: getOrCreateChat(orpc, sessionId, thread.id),
+	});
+	const title = deriveThreadTitle(messages);
+	const isStreaming = status === "submitted" || status === "streaming";
+
 	return (
 		<div
 			className={cn(
@@ -39,13 +63,13 @@ export function ChatTab({
 				onClick={onSelect}
 				type="button"
 			>
-				{thread.status === "streaming" && (
+				{isStreaming && (
 					<LoaderCircleIcon className="size-3 shrink-0 animate-spin opacity-70" />
 				)}
-				<span className="max-w-32 truncate">{thread.title}</span>
+				<span className="max-w-32 truncate">{title}</span>
 			</button>
 			<button
-				aria-label={`Close ${thread.title}`}
+				aria-label={`Close ${title}`}
 				className="ml-1 shrink-0 cursor-pointer rounded-full p-0.5 opacity-0 hover:bg-accent focus-visible:opacity-100 group-hover:opacity-100"
 				onClick={(event) => {
 					event.stopPropagation();
