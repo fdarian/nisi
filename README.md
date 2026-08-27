@@ -75,6 +75,8 @@ You can also open a PR from app directly, you’ll be prompted for the folder wh
    
     </details>
     
+   - ⌘+[ / ⌘+] to go back/forward through your file focus history, browser-style
+    
    - <details><summary> / to search keyword and ⌘+f for files. n/N to focus on the next/previous match</summary> 
      
      https://github.com/user-attachments/assets/e740fe41-a73b-423d-9ab3-a3369390f278

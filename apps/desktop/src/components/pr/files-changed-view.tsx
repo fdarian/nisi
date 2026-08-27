@@ -46,6 +46,7 @@ import type {
 import { pullRequestUrl, useFileContents } from "#/lib/pr-data";
 import {
 	useSessionCurrentMatchIndex,
+	useSessionFileHistory,
 	useSessionFilterQuery,
 	useSessionForcedPaths,
 	useSessionSearchMode,
@@ -100,18 +101,29 @@ export function FilesChangedView({
 	const [selectedPath, setSelectedPath] = useSessionSelectedPath(session.id);
 	const diffPaneRef = useRef<DiffPaneHandle>(null);
 
+	// ⌘[/⌘] back/forward history over `selectedPath` — see
+	// `session-ui-store.tsx`'s `useSessionFileHistory` doc comment for why
+	// this is imperative rather than a `useStore` subscription.
+	const fileHistory = useSessionFileHistory(session.id);
+
 	// Every file click scrolls the diff pane, not just the ones that change
 	// the selection: re-clicking the already-selected file leaves
 	// `selectedPath` identical, so nothing downstream of this state can tell
 	// the click happened at all (see `DiffPaneHandle`). `FileTreeGroup` /
 	// `FlatFileGroup` already scroll their own row into view on that same
 	// click for the same reason.
+	//
+	// This is also the app's one explicit-selection site — sidebar clicks,
+	// `j`/`k` (`selectRelative` below), and undo landing on a file
+	// (`handleUndo`) all funnel through here — so it's also where a
+	// deliberate jump gets pushed onto the ⌘[/⌘] history stack.
 	const selectPath = useCallback(
 		(path: string) => {
 			setSelectedPath(path);
+			fileHistory.push(path);
 			diffPaneRef.current?.scrollToPath(path);
 		},
-		[setSelectedPath],
+		[setSelectedPath, fileHistory],
 	);
 
 	// Lifted from `FilesSidebar` — `j`/`k` need to walk the same filtered
@@ -399,6 +411,53 @@ export function FilesChangedView({
 		[setViewed],
 	);
 
+	// What "stale" means for ⌘[/⌘]: `files` is the current PR's full,
+	// unfiltered file list — a history entry whose path has dropped out of
+	// it was removed by a PR update, not merely hidden by "Hide reviewed" or
+	// the search box, so back/forward should still land on a filtered-out
+	// file but skip one a PR update actually dropped.
+	const filePathSet = useMemo(
+		() => new Set(files.map((file) => file.path)),
+		[files],
+	);
+	const isValidHistoryPath = useCallback(
+		(path: string) => filePathSet.has(path),
+		[filePathSet],
+	);
+
+	// Mirror `selectPath`'s set-and-scroll, but move the history cursor
+	// instead of pushing to it — back/forward must never push or truncate
+	// (see `useSessionFileHistory`). Silently a no-op when nothing valid
+	// remains in that direction.
+	const handleHistoryBack = useCallback(() => {
+		const path = fileHistory.back(isValidHistoryPath);
+		if (path === undefined) return;
+		setSelectedPath(path);
+		diffPaneRef.current?.scrollToPath(path);
+	}, [fileHistory, isValidHistoryPath, setSelectedPath]);
+
+	const handleHistoryForward = useCallback(() => {
+		const path = fileHistory.forward(isValidHistoryPath);
+		if (path === undefined) return;
+		setSelectedPath(path);
+		diffPaneRef.current?.scrollToPath(path);
+	}, [fileHistory, isValidHistoryPath, setSelectedPath]);
+
+	// The diff pane's scroll-driven focus report (`DiffPane`'s
+	// `onVisiblePathChange`) — replaces the entry at the history cursor in
+	// place rather than pushing (scroll drift is never a deliberate jump),
+	// and stays wired to the *raw* `setSelectedPath` rather than `selectPath`
+	// for the same anti-feedback-loop reason `DiffPane`'s own prop doc
+	// comment gives: calling `scrollToPath` here would fight the scroll that
+	// produced this report.
+	const handleVisiblePathChange = useCallback(
+		(path: string) => {
+			setSelectedPath(path);
+			fileHistory.replaceAtCursor(path);
+		},
+		[setSelectedPath, fileHistory],
+	);
+
 	// "o e" leader shortcut — opens the selected file in `preferredEditor`
 	// (Settings ⌘,), same as `DiffFileHeader`'s "Open in..." menu entry but
 	// against the standing preference instead of a picked-per-click editor.
@@ -472,6 +531,8 @@ export function FilesChangedView({
 			k: () => selectRelative(-1),
 			r: handleToggleReviewed,
 			u: handleUndo,
+			"mod+[": handleHistoryBack,
+			"mod+]": handleHistoryForward,
 			"o e": handleOpenInPreferredEditor,
 			"o g": handleOpenPrInGitHub,
 			// Suppressed while the filter input has focus (bare-key guard in
@@ -606,7 +667,7 @@ export function FilesChangedView({
 						forcedPaths={forcedPaths}
 						keywordMatchesByPath={keywordMatchesByPath}
 						onForceLoad={addForcedPath}
-						onVisiblePathChange={setSelectedPath}
+						onVisiblePathChange={handleVisiblePathChange}
 						ref={diffPaneRef}
 						repoRoot={session.repoRoot}
 						reviewState={reviewState}

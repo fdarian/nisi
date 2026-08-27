@@ -27,6 +27,13 @@ import {
 } from "react";
 import { createStore, type StoreApi, useStore } from "zustand";
 import type { SearchMode } from "#/components/files-sidebar/files-sidebar";
+import {
+	EMPTY_FILE_HISTORY,
+	type FileHistoryState,
+	pushFileHistory,
+	replaceFileHistoryAtCursor,
+	stepFileHistory,
+} from "#/lib/file-history";
 import type { WalkthroughSelection } from "#/lib/walkthrough-data";
 
 /** One `r` keypress's undo record — mirrors `files-changed-view.tsx`'s local type of the same name. */
@@ -45,6 +52,8 @@ type SessionUiState = {
 	fileCollapseOverrides: ReadonlyMap<string, boolean>;
 	activeTab: string;
 	walkthroughSelection: WalkthroughSelection | null;
+	/** Browser-style back/forward history (⌘[/⌘]) over `selectedPath` — see `#/lib/file-history.ts` for the transition semantics. Always a fresh, immutable value from that module's pure functions, never mutated in place. */
+	fileHistory: FileHistoryState;
 	/**
 	 * The `r`/`u` undo stack. A plain mutable array, not reactive state —
 	 * nothing renders off it, the same reasoning `files-changed-view.tsx`'s
@@ -70,6 +79,7 @@ function createDefaultSessionUiState(): SessionUiState {
 		activeTab: "files",
 		walkthroughSelection: null,
 		undoStack: [],
+		fileHistory: EMPTY_FILE_HISTORY,
 	};
 }
 
@@ -99,6 +109,16 @@ type SessionUiStore = {
 	) => void;
 	pushUndo: (sessionId: string, record: ReviewedToggleRecord) => void;
 	popUndo: (sessionId: string) => ReviewedToggleRecord | undefined;
+	/** Explicit-selection push (see `pushFileHistory`) — the site for any deliberate jump: sidebar click, `j`/`k`, undo landing on a file. */
+	pushHistoryPath: (sessionId: string, path: string) => void;
+	/** Scroll-drift replace (see `replaceFileHistoryAtCursor`) — overwrites the entry at the cursor, never truncates. */
+	replaceHistoryPathAtCursor: (sessionId: string, path: string) => void;
+	/** Moves the history cursor one step (see `stepFileHistory`), skipping stale paths. Returns the path landed on, or `undefined` for a no-op. */
+	stepHistoryPath: (
+		sessionId: string,
+		direction: 1 | -1,
+		isValidPath: (path: string) => boolean,
+	) => string | undefined;
 	/** Drops a closed tab's state entirely — call once a session actually closes (`useClearSessionUiState`), or the map grows for the app's whole lifetime. */
 	clearSession: (sessionId: string) => void;
 };
@@ -219,6 +239,37 @@ function createSessionUiStore(): StoreApi<SessionUiStore> {
 			});
 		},
 		popUndo: (sessionId) => get().sessions.get(sessionId)?.undoStack.pop(),
+		pushHistoryPath: (sessionId, path) =>
+			set((state) => ({
+				sessions: withSession(state.sessions, sessionId, (session) => ({
+					...session,
+					fileHistory: pushFileHistory(session.fileHistory, path),
+				})),
+			})),
+		replaceHistoryPathAtCursor: (sessionId, path) =>
+			set((state) => ({
+				sessions: withSession(state.sessions, sessionId, (session) => ({
+					...session,
+					fileHistory: replaceFileHistoryAtCursor(session.fileHistory, path),
+				})),
+			})),
+		stepHistoryPath: (sessionId, direction, isValidPath) => {
+			const session = get().sessions.get(sessionId);
+			if (session === undefined) return undefined;
+			const result = stepFileHistory(
+				session.fileHistory,
+				direction,
+				isValidPath,
+			);
+			if (result === undefined) return undefined;
+			set((state) => ({
+				sessions: withSession(state.sessions, sessionId, (s) => ({
+					...s,
+					fileHistory: result.state,
+				})),
+			}));
+			return result.path;
+		},
 		clearSession: (sessionId) =>
 			set((state) => {
 				if (!state.sessions.has(sessionId)) return state;
@@ -459,6 +510,46 @@ export function useSessionUndoStack(sessionId: string): {
 		[store, sessionId],
 	);
 	return useMemo(() => ({ push, pop }), [push, pop]);
+}
+
+/**
+ * ⌘[/⌘] back/forward history over `selectedPath` — imperative, non-reactive
+ * (mirrors `useSessionUndoStack` above), since nothing renders off the
+ * history stack itself; only its effects (`selectedPath` changing) do.
+ * `back`/`forward` take `isValidPath` so the caller decides what "stale"
+ * means (see `stepFileHistory`) without this hook depending on the current
+ * file list.
+ */
+export function useSessionFileHistory(sessionId: string): {
+	push: (path: string) => void;
+	replaceAtCursor: (path: string) => void;
+	back: (isValidPath: (path: string) => boolean) => string | undefined;
+	forward: (isValidPath: (path: string) => boolean) => string | undefined;
+} {
+	const store = useSessionUiStore();
+	const push = useCallback(
+		(path: string) => store.getState().pushHistoryPath(sessionId, path),
+		[store, sessionId],
+	);
+	const replaceAtCursor = useCallback(
+		(path: string) =>
+			store.getState().replaceHistoryPathAtCursor(sessionId, path),
+		[store, sessionId],
+	);
+	const back = useCallback(
+		(isValidPath: (path: string) => boolean) =>
+			store.getState().stepHistoryPath(sessionId, -1, isValidPath),
+		[store, sessionId],
+	);
+	const forward = useCallback(
+		(isValidPath: (path: string) => boolean) =>
+			store.getState().stepHistoryPath(sessionId, 1, isValidPath),
+		[store, sessionId],
+	);
+	return useMemo(
+		() => ({ push, replaceAtCursor, back, forward }),
+		[push, replaceAtCursor, back, forward],
+	);
 }
 
 /** Drops a closed tab's UI state — call from wherever a session actually closes (`app-shell.tsx`'s `handleCloseSession`), not on suspend: suspension must leave this state intact for resume. */
