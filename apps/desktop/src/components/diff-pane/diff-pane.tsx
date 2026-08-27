@@ -448,21 +448,37 @@ export function DiffPane({
 		path: string;
 		target: CodeViewScrollTarget;
 	} | null>(null);
-	// Whether real wheel/touch input has happened since the last deliberate
-	// `scrollToPath`/`scrollToMatch` — the actual gate `handleScroll` trusts
-	// before ever calling `onVisiblePathChange`, below. Time-based
-	// suppression, even with the landed-on-target retry below, can't fully
-	// close this gap on its own: React runs a child's effects (the library
-	// applying a freshly resolved file's real content in place of its
-	// `loading` placeholder, see `loadingPlaceholderContents`'s doc comment)
-	// *before* this component's own, so a content-driven reflow can in
-	// principle fire its `onScroll` in the gap before suppression re-arms,
-	// no matter how the timing windows are tuned. Grounding trust in "did
-	// the user's hand actually touch the wheel/trackpad" instead of "has
-	// enough time passed" makes that race irrelevant: a reflow alone can
-	// never flip this on. Reset to `false` by every `scrollToPath`/
-	// `scrollToMatch` call, set `true` only by real input
-	// (`releaseProgrammaticScrollSuppression`).
+	// Whether input that could plausibly have scrolled this pane has happened
+	// since the last deliberate `scrollToPath`/`scrollToMatch` — the actual
+	// gate `handleScroll` trusts before ever calling `onVisiblePathChange`,
+	// below. Time-based suppression, even with the landed-on-target retry
+	// below, can't fully close this gap on its own: React runs a child's
+	// effects (the library applying a freshly resolved file's real content in
+	// place of its `loading` placeholder, see `loadingPlaceholderContents`'s
+	// doc comment) *before* this component's own, so a content-driven reflow
+	// can in principle fire its `onScroll` in the gap before suppression
+	// re-arms, no matter how the timing windows are tuned. Grounding trust in
+	// "did the user actually supply input" instead of "has enough time
+	// passed" makes that race irrelevant: a reflow alone can never flip this
+	// on. Reset to `false` by every `scrollToPath`/`scrollToMatch` call, set
+	// `true` by four listeners on the container, covering every input method
+	// that can move this pane's scroll position: `wheel`/`touchstart`
+	// (`releaseProgrammaticScrollSuppression`, which also releases an
+	// in-flight suppression — see its own doc comment) and `mousedown`/
+	// `keydown` (`markRealScrollInput`, which only sets this flag — covers
+	// grabbing the scrollbar thumb and arrow/Page/space keyboard scrolling,
+	// neither of which fires `wheel` or `touchstart`).
+	//
+	// Tradeoff: `mousedown` also fires for an ordinary click inside the diff
+	// content (e.g. to place a text-selection caret), not just a scrollbar
+	// grab. If that click lands inside the ~1.2s window right after a jump
+	// (`SCROLL_SETTLE_MS` × `MAX_SETTLE_RECHECKS`), it flips this flag early
+	// and re-opens a narrow version of the race this ref exists to close — a
+	// content-driven reflow's report getting through mid-jump. Accepted
+	// deliberately: losing scrollbar-drag and keyboard focus-sync entirely
+	// (the pane never reporting the visible file back to the sidebar/`r`
+	// shortcut for those input methods) is a worse, always-on regression than
+	// a narrow race that needs a click landing inside a short window.
 	const hasRealScrollInputRef = useRef(false);
 
 	const clearSettleTimeout = useCallback(() => {
@@ -520,8 +536,9 @@ export function DiffPane({
 
 	// A real wheel/touch during an in-flight programmatic scroll means the
 	// user is steering — hand control back immediately instead of waiting
-	// out the settle timer. Also the one place `hasRealScrollInputRef` is
-	// ever set `true` — see its own doc comment.
+	// out the settle timer. Also flips `hasRealScrollInputRef` — see its own
+	// doc comment for the other listener (`markRealScrollInput`, below) that
+	// flips the same flag without releasing an in-flight suppression.
 	const releaseProgrammaticScrollSuppression = useCallback(() => {
 		hasRealScrollInputRef.current = true;
 		if (!suppressVisiblePathReportRef.current) return;
@@ -981,8 +998,8 @@ export function DiffPane({
 				// to verify landing and, if needed, re-issue it.
 				suppressedScrollRef.current = { path, target };
 				// A fresh deliberate scroll means no report can be trusted as
-				// genuine drift again until the user's hand actually touches the
-				// wheel/trackpad — see `hasRealScrollInputRef`'s doc comment.
+				// genuine drift again until the user actually supplies input that
+				// could have caused it — see `hasRealScrollInputRef`'s doc comment.
 				hasRealScrollInputRef.current = false;
 				beginProgrammaticScrollSuppression();
 				// A programmatic scroll is starting, so any earlier report no
@@ -1064,12 +1081,24 @@ export function DiffPane({
 
 	// Real wheel/touch input takes back control from an in-flight
 	// programmatic scroll immediately, instead of waiting out the settle
-	// timer (`releaseProgrammaticScrollSuppression`). Polls for the
-	// container rather than reading `getContainerElement()` once inline, and
-	// re-polls whenever `hasRenderableFiles` flips — the same condition that
-	// gates `Empty` vs `DiffCodeView` below — since `codeViewRef` has
-	// nothing to attach to until `DiffCodeView` actually mounts.
+	// timer (`releaseProgrammaticScrollSuppression`). `mousedown`/`keydown`
+	// deliberately do *not* release an in-flight suppression — a plain click
+	// to place a text-selection caret, or an unrelated keypress, shouldn't be
+	// able to interrupt a jump already underway — but they still count as
+	// real scroll input (`markRealScrollInput`, which only flips
+	// `hasRealScrollInputRef`): dragging the scrollbar thumb starts with
+	// `mousedown` and keyboard scrolling (arrows/Page/space) starts with
+	// `keydown`, and neither of those fires `wheel` or `touchstart`. See
+	// `hasRealScrollInputRef`'s doc comment for what this covers and the
+	// tradeoff it accepts. Polls for the container rather than reading
+	// `getContainerElement()` once inline, and re-polls whenever
+	// `hasRenderableFiles` flips — the same condition that gates `Empty` vs
+	// `DiffCodeView` below — since `codeViewRef` has nothing to attach to
+	// until `DiffCodeView` actually mounts.
 	const hasRenderableFiles = files.length > 0;
+	const markRealScrollInput = useCallback(() => {
+		hasRealScrollInputRef.current = true;
+	}, []);
 	useEffect(() => {
 		if (!hasRenderableFiles) return;
 		const attachFrame = { current: null as number | null };
@@ -1089,6 +1118,12 @@ export function DiffPane({
 				releaseProgrammaticScrollSuppression,
 				{ passive: true },
 			);
+			container.addEventListener("mousedown", markRealScrollInput, {
+				passive: true,
+			});
+			container.addEventListener("keydown", markRealScrollInput, {
+				passive: true,
+			});
 			attachedContainer = container;
 			return true;
 		}, attachFrame);
@@ -1103,8 +1138,14 @@ export function DiffPane({
 				"touchstart",
 				releaseProgrammaticScrollSuppression,
 			);
+			attachedContainer?.removeEventListener("mousedown", markRealScrollInput);
+			attachedContainer?.removeEventListener("keydown", markRealScrollInput);
 		};
-	}, [releaseProgrammaticScrollSuppression, hasRenderableFiles]);
+	}, [
+		releaseProgrammaticScrollSuppression,
+		markRealScrollInput,
+		hasRenderableFiles,
+	]);
 
 	// `CodeView`'s own `onScroll` — fires for both user-driven and
 	// programmatic scrolling, so this is where the two get told apart. While
