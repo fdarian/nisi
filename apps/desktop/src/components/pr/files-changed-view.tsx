@@ -1,14 +1,16 @@
 "use client";
 
+import { openUrl } from "@tauri-apps/plugin-opener";
 import {
 	Columns2Icon,
 	RefreshCwIcon,
 	RowsIcon,
 	SlidersHorizontalIcon,
 } from "lucide-react";
-import { useCallback, useMemo, useRef } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import type { DiffPaneHandle } from "#/components/diff-pane/diff-pane";
 import { DiffPane } from "#/components/diff-pane/diff-pane";
+import { EditorPickerPalette } from "#/components/editor-picker-palette";
 import type { SearchMode } from "#/components/files-sidebar/files-sidebar";
 import { FilesSidebar } from "#/components/files-sidebar/files-sidebar";
 import { Button, buttonVariants } from "#/components/ui/button";
@@ -21,7 +23,13 @@ import {
 	DropdownMenuSeparator,
 	DropdownMenuTrigger,
 } from "#/components/ui/menu";
+import { toastManager } from "#/components/ui/toast";
 import { ToggleGroup, ToggleGroupItem } from "#/components/ui/toggle-group";
+import type { EditorInfo } from "#/hooks/use-available-editors";
+import {
+	openInEditor,
+	useAvailableEditors,
+} from "#/hooks/use-available-editors";
 import { useKeyBindings } from "#/hooks/use-key-bindings";
 import type { SidecarQueryUtils } from "#/lib/backend-context";
 import {
@@ -35,7 +43,7 @@ import type {
 	ReviewStateEntry,
 	Session,
 } from "#/lib/pr-data";
-import { useFileContents } from "#/lib/pr-data";
+import { pullRequestUrl, useFileContents } from "#/lib/pr-data";
 import {
 	useSessionCurrentMatchIndex,
 	useSessionFileHistory,
@@ -49,6 +57,7 @@ import {
 	useDiffStyleMode,
 	useHideReviewed,
 	useIncludeUncommitted,
+	usePreferredEditor,
 	useSidebarViewMode,
 } from "#/lib/settings-data";
 import { comparePaths } from "#/lib/tree-paths";
@@ -157,6 +166,9 @@ export function FilesChangedView({
 	const [hideReviewed, setHideReviewed] = useHideReviewed(orpc);
 	const [includeUncommitted, setIncludeUncommitted] =
 		useIncludeUncommitted(orpc);
+	const [preferredEditor, setPreferredEditor] = usePreferredEditor(orpc);
+	const { editors, loadEditors } = useAvailableEditors();
+	const [editorPickerOpen, setEditorPickerOpen] = useState(false);
 
 	const viewedCount = useMemo(
 		() =>
@@ -446,6 +458,73 @@ export function FilesChangedView({
 		[setSelectedPath, fileHistory],
 	);
 
+	// "o e" leader shortcut — opens the selected file in `preferredEditor`
+	// (Settings ⌘,), same as `DiffFileHeader`'s "Open in..." menu entry but
+	// against the standing preference instead of a picked-per-click editor.
+	// The first time, before any preference exists, it opens
+	// `EditorPickerPalette` to choose one instead of silently guessing —
+	// `handlePickEditor` below persists that pick, so every "o e" after this
+	// one goes straight to `preferredEditor`. A no-op when nothing's
+	// selected; a toast when there's nothing installed to even pick from.
+	//
+	// `editors` is only probed lazily, right in the branch that needs it —
+	// this shortcut may never be pressed for a given tab, so there's no
+	// reason to fire a Tauri `invoke` for every open `FilesChangedView` up
+	// front just to support it. The already-set-`preferredEditor` branch
+	// below deliberately skips that probe (and so may show the raw scheme
+	// instead of the editor's display name if this tab never loaded the list
+	// some other way) rather than pay a round trip on every press of an
+	// already-working shortcut.
+	const handleOpenInPreferredEditor = useCallback(async () => {
+		if (selectedPath === null) return;
+
+		if (preferredEditor !== null) {
+			const editorName =
+				editors.find((editor) => editor.id === preferredEditor)?.name ??
+				preferredEditor;
+			openInEditor(
+				preferredEditor,
+				editorName,
+				`${session.repoRoot}/${selectedPath}`,
+			);
+			return;
+		}
+
+		const availableEditors = await loadEditors();
+		if (availableEditors.length === 0) {
+			toastManager.add({
+				title: "No editors found",
+				description:
+					"Install VS Code, Cursor, Zed, or Windsurf to use this shortcut.",
+				type: "info",
+			});
+			return;
+		}
+		setEditorPickerOpen(true);
+	}, [selectedPath, preferredEditor, editors, loadEditors, session.repoRoot]);
+
+	const handlePickEditor = useCallback(
+		(editor: EditorInfo) => {
+			setEditorPickerOpen(false);
+			setPreferredEditor(editor.id);
+			if (selectedPath === null) return;
+			openInEditor(
+				editor.id,
+				editor.name,
+				`${session.repoRoot}/${selectedPath}`,
+			);
+		},
+		[selectedPath, setPreferredEditor, session.repoRoot],
+	);
+
+	// "o g" leader shortcut — same URL, same behavior as the ⌘K palette's
+	// "Open Pull Request in GitHub" action (`command-palette.tsx`); a no-op
+	// for a branch-only session, which has no PR to open.
+	const handleOpenPrInGitHub = useCallback(() => {
+		if (session.target.kind !== "pr") return;
+		void openUrl(pullRequestUrl(session.target));
+	}, [session.target]);
+
 	useKeyBindings(
 		{
 			j: () => selectRelative(1),
@@ -454,6 +533,8 @@ export function FilesChangedView({
 			u: handleUndo,
 			"mod+[": handleHistoryBack,
 			"mod+]": handleHistoryForward,
+			"o e": handleOpenInPreferredEditor,
+			"o g": handleOpenPrInGitHub,
 			// Suppressed while the filter input has focus (bare-key guard in
 			// `useKeyBindings`), so typing "n" into a query never fires this —
 			// only meaningful once the input's been blurred (Enter, or a click
@@ -476,138 +557,151 @@ export function FilesChangedView({
 	);
 
 	return (
-		<div className="flex min-h-0 flex-1">
-			<FilesSidebar
-				shortcutsEnabled={shortcutsEnabled}
-				filterQuery={filterQuery}
-				files={queryFilteredFiles}
-				onFilterQueryChange={handleFilterQueryChange}
-				onMarkReviewed={handleMarkReviewed}
-				onQuerySubmit={handleQuerySubmit}
-				onSearchModeChange={handleSearchModeChange}
-				onSelectPath={selectPath}
-				repoRoot={session.repoRoot}
-				reviewState={reviewState}
-				searchMode={searchMode}
-				selectedPath={selectedPath}
-				viewMode={viewMode}
-			/>
-
-			<div className="flex min-h-0 flex-1 flex-col pt-2 gap-2">
-				<div className="rounded-xl bg-background px-3 py-2 flex shrink-0 items-center justify-between mx-3 text-muted-foreground text-xs">
-					<span className="flex items-center gap-2">
-						<ProgressCircle total={files.length} value={viewedCount} />
-						<span>
-							<span className="font-medium text-foreground tabular-nums">
-								{viewedCount}
-							</span>{" "}
-							of{" "}
-							<span className="font-medium text-foreground tabular-nums">
-								{files.length}
-							</span>{" "}
-							viewed
-						</span>
-					</span>
-
-					<div className="flex items-center gap-2">
-						{hasPendingChanges && (
-							<Button onClick={onRefresh} size="xs" variant="warning-secondary">
-								<RefreshCwIcon />
-								Refresh
-							</Button>
-						)}
-						<ToggleGroup
-							onValueChange={(value) => {
-								const next = value[0];
-								if (next === "unified" || next === "split") setDiffStyle(next);
-							}}
-							size="sm"
-							value={[diffStyle]}
-							variant="outline"
-						>
-							<ToggleGroupItem aria-label="Unified diff" value="unified">
-								<RowsIcon />
-							</ToggleGroupItem>
-							<ToggleGroupItem aria-label="Split diff" value="split">
-								<Columns2Icon />
-							</ToggleGroupItem>
-						</ToggleGroup>
-						<DropdownMenu>
-							<DropdownMenuTrigger
-								aria-label="Files sidebar display options"
-								className={cn(
-									buttonVariants({ variant: "ghost", size: "icon-sm" }),
-								)}
-							>
-								<SlidersHorizontalIcon />
-							</DropdownMenuTrigger>
-							<DropdownMenuContent align="end">
-								<DropdownMenuRadioGroup
-									onValueChange={(value) =>
-										setViewMode(value as "tree" | "flat")
-									}
-									value={viewMode}
-								>
-									<DropdownMenuRadioItem closeOnClick value="tree">
-										Tree
-									</DropdownMenuRadioItem>
-									<DropdownMenuRadioItem closeOnClick value="flat">
-										Flat
-									</DropdownMenuRadioItem>
-								</DropdownMenuRadioGroup>
-								<DropdownMenuSeparator />
-								<DropdownMenuCheckboxItem
-									checked={hideReviewed}
-									onCheckedChange={setHideReviewed}
-								>
-									Hide reviewed
-								</DropdownMenuCheckboxItem>
-								<DropdownMenuCheckboxItem
-									checked={includeUncommitted}
-									onCheckedChange={setIncludeUncommitted}
-								>
-									Include uncommitted
-								</DropdownMenuCheckboxItem>
-							</DropdownMenuContent>
-						</DropdownMenu>
-					</div>
-				</div>
-				<DiffPane
-					currentMatch={currentMatch}
-					diffStyle={diffStyle}
-					fileContents={fileContents}
-					files={diffPaneFiles}
-					forcedPaths={forcedPaths}
-					keywordMatchesByPath={keywordMatchesByPath}
-					onForceLoad={addForcedPath}
-					onVisiblePathChange={handleVisiblePathChange}
-					ref={diffPaneRef}
+		<>
+			<div className="flex min-h-0 flex-1">
+				<FilesSidebar
+					shortcutsEnabled={shortcutsEnabled}
+					filterQuery={filterQuery}
+					files={queryFilteredFiles}
+					onFilterQueryChange={handleFilterQueryChange}
+					onMarkReviewed={handleMarkReviewed}
+					onQuerySubmit={handleQuerySubmit}
+					onSearchModeChange={handleSearchModeChange}
+					onSelectPath={selectPath}
 					repoRoot={session.repoRoot}
 					reviewState={reviewState}
+					searchMode={searchMode}
 					selectedPath={selectedPath}
-					sessionId={session.id}
-					setViewed={setViewed}
+					viewMode={viewMode}
 				/>
-				{isKeywordFilterActive && (
-					<div className="mx-3 flex shrink-0 items-center justify-center rounded-xl bg-background px-3 py-1.5 text-muted-foreground text-xs">
-						{keywordMatches.length === 0 ? (
-							<span>No matches</span>
-						) : (
+
+				<div className="flex min-h-0 flex-1 flex-col pt-2 gap-2">
+					<div className="rounded-xl bg-background px-3 py-2 flex shrink-0 items-center justify-between mx-3 text-muted-foreground text-xs">
+						<span className="flex items-center gap-2">
+							<ProgressCircle total={files.length} value={viewedCount} />
 							<span>
 								<span className="font-medium text-foreground tabular-nums">
-									{currentMatchIndexInBounds + 1}
+									{viewedCount}
 								</span>{" "}
 								of{" "}
 								<span className="font-medium text-foreground tabular-nums">
-									{keywordMatches.length}
+									{files.length}
 								</span>{" "}
-								matches
+								viewed
 							</span>
-						)}
+						</span>
+
+						<div className="flex items-center gap-2">
+							{hasPendingChanges && (
+								<Button
+									onClick={onRefresh}
+									size="xs"
+									variant="warning-secondary"
+								>
+									<RefreshCwIcon />
+									Refresh
+								</Button>
+							)}
+							<ToggleGroup
+								onValueChange={(value) => {
+									const next = value[0];
+									if (next === "unified" || next === "split")
+										setDiffStyle(next);
+								}}
+								size="sm"
+								value={[diffStyle]}
+								variant="outline"
+							>
+								<ToggleGroupItem aria-label="Unified diff" value="unified">
+									<RowsIcon />
+								</ToggleGroupItem>
+								<ToggleGroupItem aria-label="Split diff" value="split">
+									<Columns2Icon />
+								</ToggleGroupItem>
+							</ToggleGroup>
+							<DropdownMenu>
+								<DropdownMenuTrigger
+									aria-label="Files sidebar display options"
+									className={cn(
+										buttonVariants({ variant: "ghost", size: "icon-sm" }),
+									)}
+								>
+									<SlidersHorizontalIcon />
+								</DropdownMenuTrigger>
+								<DropdownMenuContent align="end">
+									<DropdownMenuRadioGroup
+										onValueChange={(value) =>
+											setViewMode(value as "tree" | "flat")
+										}
+										value={viewMode}
+									>
+										<DropdownMenuRadioItem closeOnClick value="tree">
+											Tree
+										</DropdownMenuRadioItem>
+										<DropdownMenuRadioItem closeOnClick value="flat">
+											Flat
+										</DropdownMenuRadioItem>
+									</DropdownMenuRadioGroup>
+									<DropdownMenuSeparator />
+									<DropdownMenuCheckboxItem
+										checked={hideReviewed}
+										onCheckedChange={setHideReviewed}
+									>
+										Hide reviewed
+									</DropdownMenuCheckboxItem>
+									<DropdownMenuCheckboxItem
+										checked={includeUncommitted}
+										onCheckedChange={setIncludeUncommitted}
+									>
+										Include uncommitted
+									</DropdownMenuCheckboxItem>
+								</DropdownMenuContent>
+							</DropdownMenu>
+						</div>
 					</div>
-				)}
+					<DiffPane
+						currentMatch={currentMatch}
+						diffStyle={diffStyle}
+						fileContents={fileContents}
+						files={diffPaneFiles}
+						forcedPaths={forcedPaths}
+						keywordMatchesByPath={keywordMatchesByPath}
+						onForceLoad={addForcedPath}
+						onVisiblePathChange={handleVisiblePathChange}
+						ref={diffPaneRef}
+						repoRoot={session.repoRoot}
+						reviewState={reviewState}
+						selectedPath={selectedPath}
+						sessionId={session.id}
+						setViewed={setViewed}
+					/>
+					{isKeywordFilterActive && (
+						<div className="mx-3 flex shrink-0 items-center justify-center rounded-xl bg-background px-3 py-1.5 text-muted-foreground text-xs">
+							{keywordMatches.length === 0 ? (
+								<span>No matches</span>
+							) : (
+								<span>
+									<span className="font-medium text-foreground tabular-nums">
+										{currentMatchIndexInBounds + 1}
+									</span>{" "}
+									of{" "}
+									<span className="font-medium text-foreground tabular-nums">
+										{keywordMatches.length}
+									</span>{" "}
+									matches
+								</span>
+							)}
+						</div>
+					)}
+				</div>
 			</div>
-		</div>
+			<EditorPickerPalette
+				editors={editors}
+				onOpenChange={setEditorPickerOpen}
+				onSelect={handlePickEditor}
+				open={editorPickerOpen}
+			/>
+		</>
 	);
 }
 

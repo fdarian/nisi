@@ -25,6 +25,9 @@ import m0006 from "../drizzle/20260802040324_cheerful_captain_america/migration.
 import m0007 from "../drizzle/20260808091904_late_deadpool/migration.sql" with {
 	type: "text",
 };
+import m0008 from "../drizzle/20260825083833_quiet_nick_fury/migration.sql" with {
+	type: "text",
+};
 
 export default {
 	migrations: [
@@ -36,5 +39,6 @@ export default {
 		{ name: "20260802032914_tan_maggott", sql: m0005 },
 		{ name: "20260802040324_cheerful_captain_america", sql: m0006 },
 		{ name: "20260808091904_late_deadpool", sql: m0007 },
+		{ name: "20260825083833_quiet_nick_fury", sql: m0008 },
 	],
 };
