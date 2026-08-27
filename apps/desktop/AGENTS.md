@@ -33,11 +33,13 @@ The sidecar binds a port and mints a token, then claims a `sidecar.lock` (`O_EXC
 (mode 0600, temp file + `rename()` — atomic on one filesystem) in the app-data dir — macOS
 `~/Library/Application Support/com.nisi.desktop/` (override with `NISI_DATA_DIR`). In production
 (and a standalone `bun run sidecar`) that's an ephemeral `port: 0` bind and a fresh
-`crypto.randomUUID()` token every boot; in dev, `scripts/dev.ts` pins both for the whole `bun dev`
-session instead, via `NISI_DEV_SIDECAR_PORT`/`NISI_DEV_SIDECAR_TOKEN` (see
-[Dev/prod isolation](#devprod-isolation)) — the sidecar runs under `bun --watch` there, and a
-per-boot-random pair would otherwise rotate on every restart out from under a frontend that
-already froze `{ port, token }` into its own env at its own boot. The lock is what makes two
+`crypto.randomUUID()` token every boot; in dev, `scripts/dev.ts` pins both instead, passed down via
+`NISI_DEV_SIDECAR_PORT`/`NISI_DEV_SIDECAR_TOKEN` (see [Dev/prod isolation](#devprod-isolation)) —
+the port is a second devsess sticky port on the session, so it survives across separate `bun dev`
+runs the same way the vite port does; the token has no sticky equivalent, so it's minted fresh each
+run and held for that run's whole lifetime. Both matter because the sidecar runs under `bun --watch`
+there, and a per-boot-random pair would otherwise rotate on every restart out from under a frontend
+that already froze `{ port, token }` into its own env at its own boot. The lock is what makes two
 sidecars booting at the same instant against the same data dir resolve to exactly one owner
 instead of a split brain — see `sidecar/AGENTS.md`'s `sidecar-lock.ts` entry for the full
 mechanism (atomic create, liveness-checked recovery from a dead owner — skipped in favor of an
@@ -79,9 +81,9 @@ that session's own `data/` subdirectory before starting the sidecar and `tauri d
 worktree resolves its own `apps/desktop/.data/sessions/` tree, so two worktrees' dev sessions never
 share one either. `dev.ts` also reads a sticky vite port from the session (`getStickyPort`) and
 passes it to `tauri dev` via `-c '{"build":{"devUrl":...}}'`, so the frontend port stays stable
-across restarts of the same session too. The sidecar's own `{ port, token }` is pinned separately —
-minted fresh each time you run `bun dev`, then held for that run's whole lifetime rather than
-persisted per session — see [The seam](#the-seam).
+across restarts of the same session too. The sidecar gets a second, separately-named sticky port
+from the same session the same way, so it's stable across restarts too — only its token is minted
+fresh each `bun dev` run, since there's no sticky equivalent for it — see [The seam](#the-seam).
 
 `dev.ts` prints `NISI_DATA_DIR=<path>` on startup — that line is deliberately copy-pasteable.
 Since prod keeps the untouched default, a plain `nisi` from a terminal always reaches the

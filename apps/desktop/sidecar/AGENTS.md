@@ -29,16 +29,18 @@ seam" for the port/token handshake this boots into.
   when it recorded the *same port* this process is already listening on, it's taken over without a
   health check — a TCP port has exactly one owner, and this process is demonstrably it (`index.ts`
   binds before acquiring the lock), so that owner can only be this process's own previous
-  incarnation (a pinned-port dev restart under `bun --watch`, see root `AGENTS.md`'s "The seam") or
-  a `SIGKILL`'d sidecar whose ephemeral port the OS reassigned — never a live rival. Any other
-  recorded owner is health-checked over the same authed `health.check` channel the frontend and CLI
-  use — never a staleness heuristic (file age, a reused PID) — and cleared+retried once confirmed
-  dead, bounded so a persistently-dead lock fails loudly instead of spinning forever. A `SIGKILL`'d
-  owner skips the release effect entirely, but that's exactly the case the liveness check exists
-  for: the next boot finds the lock, gets no answer from the dead port, and recovers the same way.
-  `sidecar.json` itself is published via a temp file + `rename()` in the same directory — atomic on
-  one filesystem, so Rust's `wait_for_sidecar_json` and the CLI's `readHandshake` never observe a
-  partial write.
+  incarnation — the common case in dev, where `scripts/dev.ts` pins the sidecar port to a devsess
+  sticky port for the whole session (see root `AGENTS.md`'s "The seam"), so this covers a fresh
+  `bun dev` of the same session finding a previous one's dead sidecar, not just a `bun --watch`
+  restart mid-run — or, in prod, a `SIGKILL`'d sidecar whose ephemeral port the OS reassigned. Never
+  a live rival. Any other recorded owner is health-checked over the same authed `health.check`
+  channel the frontend and CLI use — never a staleness heuristic (file age, a reused PID) — and
+  cleared+retried once confirmed dead, bounded so a persistently-dead lock fails loudly instead of
+  spinning forever. A `SIGKILL`'d owner skips the release effect entirely, but that's exactly the
+  case the liveness check exists for: the next boot finds the lock, gets no answer from the dead
+  port, and recovers the same way. `sidecar.json` itself is published via a temp file + `rename()`
+  in the same directory — atomic on one filesystem, so Rust's `wait_for_sidecar_json` and the CLI's
+  `readHandshake` never observe a partial write.
 - `logging.ts` — `LoggingLive`: console (`Logger.consolePretty`, stderr) plus a
   `@repo/logging`-backed rotating file logger at `<dataDir>/logs/sidecar.log`, both gated by the
   same `LOG_LEVEL`-derived minimum level. This is the only place stdout-in-production's "goes
