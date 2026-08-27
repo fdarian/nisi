@@ -272,16 +272,21 @@ export const diffViewUnsafeCSS = `
 	}
 
 	/**
-	 * Hunk-separator pill override, against the library's own stable
+	 * Hunk-separator band override, against the library's own stable
 	 * "data-separator" and "data-expand" attribute hooks (not CSS classes, so
 	 * this survives minor version bumps better than most escape hatches
 	 * would). With \`hunkSeparators: "line-info-basic"\` (see
-	 * diff-code-view.tsx) @pierre/diffs renders the "N unchanged lines"
-	 * control as a 32px band spanning the full diff width by default — see
+	 * diff-code-view.tsx) @pierre/diffs already renders the "N unchanged
+	 * lines" control as a full-width, left-aligned band by default — see
 	 * createSeparator.js and the \`[data-separator="line-info-basic"]\` rules
-	 * in @pierre/diffs' style.js. The Linear reference this is matching
-	 * renders that control as a small centered pill floating between hunks
-	 * instead, so the shape is overridden here.
+	 * in @pierre/diffs' style.js — so this override only reshapes its fill
+	 * and repositions its expand affordance; it does not need to fight the
+	 * library's own layout the way a centered-pill shape would (an earlier
+	 * version of this file did exactly that — see git history — and hit a
+	 * cascade of composing/alignment problems specific to forcing a
+	 * pane-centered shape out of per-column markup; a design reference
+	 * settled on matching that per-column markup instead, band per column,
+	 * left-aligned, so most of that machinery is gone here).
 	 *
 	 * The height below is deliberately a fixed pixel value, not \`auto\` — and
 	 * it is NOT a free choice: \`CodeView\` never measures a rendered item, it
@@ -295,7 +300,7 @@ export const diffViewUnsafeCSS = `
 	 * the virtualizer's scroll anchor mid-gesture. So this height and
 	 * \`hunkSeparatorHeight\` in \`diffItemMetrics\` are a matched pair — change
 	 * one, change the other — and the value itself must be measured from the
-	 * live rendered pill (\`[data-separator="line-info-basic"]\`
+	 * live rendered band (\`[data-separator="line-info-basic"]\`
 	 * \`.getBoundingClientRect().height\` in a browser), not computed from the
 	 * padding/font-size below, since flex/line-height rounding doesn't
 	 * reliably match hand arithmetic. \`!important\` is deliberate and
@@ -307,10 +312,36 @@ export const diffViewUnsafeCSS = `
 	 */
 	[data-separator="line-info-basic"] {
 		display: flex;
-		align-items: center;
-		justify-content: center;
 		height: 40px !important;
 		background: transparent !important;
+	}
+
+	/**
+	 * Query container for the \`cqw\` values below, on \`<pre>\` rather than
+	 * \`[data-code]\` (the actual \`overflow: scroll\` element one level down):
+	 * \`[data-code]\`'s grid columns (\`var(--diffs-grid-number-column-width)
+	 * minmax(0, 1fr)\`, gutter + content) use *intrinsic* (min/max-content)
+	 * sizing, and containing \`[data-code]\` itself was verified broken live
+	 * in \`bun dev --browser\` — both tracks collapsed to \`[data-code]\`'s full
+	 * width instead of their real split. \`<pre>\` isn't a grid (nothing to
+	 * distribute) and already tracks the same width, since \`[data-code]\`'s
+	 * scrollable overflow clips at its own boundary rather than growing
+	 * \`<pre>\`. \`container-type: inline-size\` implies \`contain: layout\`,
+	 * which makes \`<pre>\` a new stacking context for its descendants —
+	 * checked against style.js that none of them need to compete in z-order
+	 * with anything *outside* \`<pre>\` except
+	 * \`[data-diffs-header][data-sticky]\` (z-index 5, bumped by the rule
+	 * above), and that's unaffected since \`<pre>\` itself carries no z-index
+	 * either before or after this change.
+	 *
+	 * In split, \`<pre>\` is the *pane's* container (it wraps both columns —
+	 * confirmed live: its width equals the deletions and additions columns'
+	 * widths summed), not either column's individually, so \`cqw\` values
+	 * below need a fraction of it per column rather than \`100cqw\` — see the
+	 * split-specific rule further down.
+	 */
+	pre {
+		container-type: inline-size;
 	}
 
 	/**
@@ -324,46 +355,125 @@ export const diffViewUnsafeCSS = `
 	 * \`[data-deletions]\`/\`[data-additions]\` columns). @pierre/diffs' own
 	 * stylesheet hides the content-side pair by default
 	 * (\`[data-content] [data-separator-wrapper] { display: none }\`) and the
-	 * additions-side gutter pair too, leaving only the deletions-side gutter
-	 * one visible — but the wrapper override two rules up sets
-	 * \`display: inline-flex !important\`, which (being !important) wins over
-	 * those non-important native rules regardless of selector specificity and
-	 * un-hides all four. That's the duplicate-pill bug: with nothing else
-	 * scoping it, both the gutter and content instances end up visible in
-	 * every column.
+	 * additions-side gutter pair too, leaving only the deletions-side (or
+	 * unified's single) gutter band visible — but the wrapper override further
+	 * down sets \`display: flex !important\`, which (being !important) wins
+	 * over those non-important native rules regardless of selector
+	 * specificity and un-hides all four.
 	 *
-	 * A single element can't visually span both columns here — each column's
-	 * code area (\`[data-code]\`) clips overflow (\`overflow: scroll clip\`,
-	 * needed for horizontal scrolling of long lines), so nothing painted
-	 * inside one column's DOM subtree can bleed into the other's, even via
-	 * \`position: absolute\`/cqi-width tricks (verified against @pierre/diffs'
-	 * own \`hunkSeparators: "line-info"\` split output, which fakes a
-	 * "continuous" band by tiling two independently-sized same-color pieces
-	 * across the column boundary, not by truly spanning one element across
-	 * it — not reproducible for a rounded pill without visible seams). So
-	 * instead of trying to span both columns, exactly one instance is kept —
-	 * the deletions (left) column's content-side pill, since content is the
-	 * meaningful width to center against, not the narrow number gutter — and
-	 * the other three are hidden outright.
+	 * The gutter/content duplication is a genuine duplicate — same text,
+	 * same gap — so the content-side pair stays suppressed below, same as
+	 * before. The deletions/additions duplication is not: each column wants
+	 * its *own* band now (a design reference settled on two independent
+	 * full-width bands, left-aligned, rather than one pane-centered pill
+	 * straddling both — see the base rule's comment above), so both
+	 * gutter-side instances stay visible and are sized independently to
+	 * their own column's width by the split-specific rule below, with no
+	 * composing or cross-column alignment needed.
 	 */
-	[data-gutter] [data-separator="line-info-basic"] [data-separator-wrapper],
-	[data-additions] [data-content] [data-separator="line-info-basic"] [data-separator-wrapper] {
+	[data-content] [data-separator="line-info-basic"] [data-separator-wrapper] {
 		display: none !important;
 	}
 
+	/**
+	 * Sizes the band to the *column's* visible width, not \`[data-gutter]\`'s
+	 * own ~2-4ch track. \`width: 100cqw\` sizes the row to \`<pre>\`'s full
+	 * width; \`margin-right: -100cqw\` cancels that same width's contribution
+	 * back out of \`[data-gutter]\`'s own \`minmax(min-content, max-content)\`
+	 * track — without it, verified live that \`[data-gutter]\`'s column
+	 * inflates to match the row's width, corrupting the gutter/content split
+	 * the same way containing \`[data-code]\` directly did above. No
+	 * \`position\` override needed: \`[data-gutter]\` is already \`position:
+	 * sticky; left: 0\` in @pierre/diffs' own stylesheet, so an ordinary
+	 * (\`position: static\`) child inherits that pinned position for free —
+	 * the band stays put against the column's visible left edge while the
+	 * user scrolls a long line horizontally, instead of scrolling away with
+	 * the content.
+	 *
+	 * \`100cqw\` is correct as the default because in unified \`<pre>\` *is*
+	 * the one column (no \`[data-deletions]\`/\`[data-additions]\` wrapper
+	 * exists there at all — confirmed live). Split overrides it below.
+	 */
+	[data-gutter] [data-separator="line-info-basic"] {
+		width: 100cqw;
+		margin-right: -100cqw;
+	}
+
+	/**
+	 * Split halves that \`100cqw\` box to \`50cqw\` — split is always exactly
+	 * \`1fr 1fr\` (\`[data-diff-type="split"][data-overflow="scroll"]
+	 * { grid-template-columns: 1fr 1fr }\` in style.js, verified live to
+	 * render the two columns exactly equal-width), so half of \`<pre>\`'s
+	 * width is one column's width. \`margin-right\` follows the same \`50cqw\`
+	 * to keep canceling the row's own width contribution (see the rule
+	 * above). Unlike the pane-centered version this replaced, neither column
+	 * needs an x-shift to line up with the other — each one independently
+	 * fills its own column, full stop.
+	 */
+	[data-deletions] [data-gutter] [data-separator="line-info-basic"],
+	[data-additions] [data-gutter] [data-separator="line-info-basic"] {
+		width: 50cqw;
+		margin-right: -50cqw;
+	}
+
+	/**
+	 * The band itself: fills the sized-and-anchored row above edge to edge
+	 * (\`width\`/\`height: 100%\`, no border/radius/shadow — a flush full-width
+	 * fill, not a floating pill) with a subtle background, per the design
+	 * reference. \`position: static\`/\`inset-inline: auto\` cancel
+	 * @pierre/diffs' own absolute positioning of this element (its native
+	 * layout assumes it's *not* meant to fill an outer row the way this
+	 * override uses it); \`grid-template-columns: none\` cancels a
+	 * \`display: grid\` variant the library applies in some configurations,
+	 * neither of which this flex-based layout needs. \`!important\` for the
+	 * same reason as the base rule above — @pierre/diffs' own non-important
+	 * rules for this element shouldn't need chasing on specificity or
+	 * injection order.
+	 *
+	 * \`[data-separator-wrapper]\` is @pierre/diffs' own interactive element —
+	 * the one it wires click/hover handlers to — so making *it* the
+	 * full-width band, rather than a small pill centered inside a wider row,
+	 * is what makes the whole band clickable and hoverable natively, with no
+	 * extra JS: verified live that clicking anywhere across the band's width
+	 * (not just on the expand icon) expands the gap, in both diff styles.
+	 */
 	[data-separator="line-info-basic"] [data-separator-wrapper] {
 		position: static !important;
 		inset-inline: auto !important;
-		width: auto !important;
-		height: auto !important;
-		display: inline-flex !important;
+		width: 100% !important;
+		height: 100% !important;
+		display: flex !important;
 		grid-template-columns: none !important;
-		align-items: stretch;
-		border-radius: 999px;
-		border: 1px solid var(--border);
+		align-items: center;
 		background: var(--secondary);
-		box-shadow: 0 1px 2px color-mix(in srgb, var(--color-black) 8%, transparent);
-		overflow: clip;
+	}
+
+	/**
+	 * Left-aligned text, expand icon pinned to the band's far right end —
+	 * the reference this matches puts the primary (always-visible) expand
+	 * affordance at the end of the band, not immediately after the text the
+	 * way @pierre/diffs' own DOM order has it (\`[data-expand-button]\` first,
+	 * confirmed live). \`order\` re-sequences the three children visually
+	 * without touching that DOM order: text, then the hover-only "expand
+	 * all" button, then the primary up/down/both chevron last.
+	 * \`margin-left: auto\` on that last item absorbs all remaining flex
+	 * space *before* it specifically, pushing it (and only it, being last)
+	 * flush against the band's right edge regardless of how much text
+	 * precedes it — applying the same margin to the first-ordered item
+	 * instead would right-align the whole row's content, which isn't what's
+	 * wanted here.
+	 *
+	 * \`:not([data-expand-all-button])\` excludes the "expand all" button,
+	 * which also carries \`[data-expand-button]\` (confirmed live) but needs
+	 * its own, earlier \`order\` — see below.
+	 */
+	[data-separator="line-info-basic"] [data-separator-content] {
+		order: 1;
+	}
+
+	[data-separator="line-info-basic"] [data-expand-button]:not([data-expand-all-button]) {
+		order: 3;
+		margin-left: auto;
 	}
 
 	[data-separator="line-info-basic"] [data-expand-button],
@@ -392,15 +502,61 @@ export const diffViewUnsafeCSS = `
 	}
 
 	/* Hidden by default (@pierre/diffs already ships \`display: none\` for
-	   this), revealed on hover of the pill — the "secondary affordance"
+	   this), revealed on hover of the band — the "secondary affordance"
 	   from the reference. Only renders at all when @pierre/diffs decides a
 	   gap is "chunked" (large enough for separate up/down expand buttons),
-	   so it won't appear on every pill — see createSeparator.js. */
+	   so it won't appear on every band — see createSeparator.js.
+	   \`order: 2\` (base rule two above) keeps it between the text and the
+	   primary chevron rather than @pierre/diffs' own DOM-order position
+	   right after the text. */
 	[data-separator="line-info-basic"] [data-expand-all-button] {
+		order: 2;
 		border-left: 1px solid var(--border);
 	}
 
 	[data-separator="line-info-basic"] [data-separator-wrapper]:hover [data-expand-all-button] {
 		display: flex !important;
+	}
+
+	/**
+	 * Split-only: collapses the label/chevron duplication described above
+	 * (each column renders its own full copy of "N unmodified lines" and
+	 * the expand chevron) down to what the design reference asks for — the
+	 * label rendered once, in the deletions (left) column, and the expand
+	 * chevron rendered once, pinned to the additions (right) column's far
+	 * right edge, which in split is also the pane's own far right edge.
+	 * Reading across both columns: one label, one chevron, with the
+	 * library's own column divider passing through the middle of what reads
+	 * as a single band.
+	 *
+	 * Hides the *content* (\`[data-separator-content]\`/\`[data-expand-button]\`),
+	 * never \`[data-separator-wrapper]\` itself — the wrapper is what carries
+	 * the fill and the click handler (see its own rule above), so both
+	 * columns stay exactly as clickable and exactly as filled as they were
+	 * before this block; only the redundant text/button inside one column
+	 * disappears.
+	 *
+	 * \`[data-deletions]\`/\`[data-additions]\` don't exist in unified (see the
+	 * comment on the split-halving rule above) — this whole block is
+	 * unreachable there, so unified's single label-left/chevron-right band
+	 * is untouched.
+	 *
+	 * The hover-reveal rule for \`[data-expand-all-button]\` just above
+	 * outspecifies a plain \`[data-deletions] ... [data-expand-button]\`
+	 * selector (four attribute/pseudo selectors vs three), so hiding it in
+	 * the deletions column needs its own \`:hover\`-qualified rule to match —
+	 * otherwise hovering the deletions band would re-reveal a chevron there
+	 * on "chunked" gaps, the one state the plain rule alone doesn't reach.
+	 */
+	[data-deletions] [data-separator="line-info-basic"] [data-expand-button] {
+		display: none !important;
+	}
+
+	[data-deletions] [data-separator="line-info-basic"] [data-separator-wrapper]:hover [data-expand-all-button] {
+		display: none !important;
+	}
+
+	[data-additions] [data-separator="line-info-basic"] [data-separator-content] {
+		display: none !important;
 	}
 `;
