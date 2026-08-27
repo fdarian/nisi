@@ -79,36 +79,37 @@ async fn is_backend_alive(port: u16, token: &str) -> bool {
  * into this async command means `.setup()` returns immediately and the
  * invoke always gets serviced, success or timeout.
  *
+ * `sidecar.json` is written by `deskkit/sidecar`'s `acquireSidecar` (wired up
+ * in `apps/desktop/sidecar/index.ts`) via a single `wx` (`O_EXCL`)
+ * open-and-write, not a temp-file + `rename()` — the create and the write
+ * land as two separate syscalls, so a concurrent reader can briefly observe
+ * an empty or partial file in between. A read or parse failure here is
+ * therefore treated the same as "file not there yet" and retried, never a
+ * hard error — see `deskkit/sidecar`'s README, "For non-deskkit readers of
+ * `sidecar.json`", and this file's own `keeps_polling_past_a_malformed_file_*`
+ * test.
+ *
  * The file alone was never enough to trust — `get_backend` caches whatever
  * this returns into a `OnceCell` for the app's whole lifetime, so believing
  * a `sidecar.json` left behind by a sidecar that has since died (a `SIGKILL`
- * skips its cleanup — see `apps/desktop/sidecar/sidecar-lock.ts`) would wedge
- * every `get_backend` call for the rest of the session on a port nothing is
- * listening on. A dead recorded owner is treated the same as "file not
- * there yet" and retried, since a fresh sidecar may be about to republish it
- * (see the same file's `acquireSidecarLock`/`publishSidecarJson`).
+ * skips its cleanup) would wedge every `get_backend` call for the rest of
+ * the session on a port nothing is listening on. A dead recorded owner is
+ * treated the same as "file not there yet" and retried, since a fresh
+ * sidecar may be about to republish it (see `deskkit/sidecar`'s
+ * `acquireSidecar`).
  */
 async fn wait_for_sidecar_json(path: &Path) -> Result<BackendState, String> {
     for _ in 0..16 {
         if path.exists() {
-            let raw = tokio::fs::read_to_string(path)
-                .await
-                .map_err(|e| format!("failed to read sidecar.json: {e}"))?;
-            // `sidecar.json` is published via a temp file + `rename()` in the
-            // same directory (see `publishSidecarJson`) — rename is atomic on
-            // one filesystem, so a reader here can only ever observe the old
-            // content or the new content, never a partial write in between.
-            // A parse failure is therefore a genuine error (corruption, an
-            // incompatible format from some other source), not a transient
-            // race to retry past — surfaced immediately instead of spending
-            // the rest of the 8 s budget masking it as "not found."
-            let parsed: SidecarJson = serde_json::from_str(&raw)
-                .map_err(|e| format!("sidecar.json exists but failed to parse: {e}"))?;
-            if is_backend_alive(parsed.port, &parsed.token).await {
-                return Ok(BackendState {
-                    port: parsed.port,
-                    token: parsed.token,
-                });
+            if let Ok(raw) = tokio::fs::read_to_string(path).await {
+                if let Ok(parsed) = serde_json::from_str::<SidecarJson>(&raw) {
+                    if is_backend_alive(parsed.port, &parsed.token).await {
+                        return Ok(BackendState {
+                            port: parsed.port,
+                            token: parsed.token,
+                        });
+                    }
+                }
             }
         }
         tokio::time::sleep(Duration::from_millis(500)).await;
@@ -587,26 +588,39 @@ mod tests {
     }
 
     /**
-     * `sidecar.json` is published via a temp file + `rename()` (see
-     * `publishSidecarJson`), which is atomic on one filesystem — a reader
-     * can only ever observe the old content or the new content, never a
-     * partial write. So a malformed file is no longer a transient mid-write
-     * race worth retrying past; it's surfaced immediately.
+     * `sidecar.json` is created via a single `wx` (`O_EXCL`) open-and-write
+     * (deskkit's `acquireSidecar`), not a temp-file + `rename()`, so a
+     * concurrent reader can briefly observe an empty or partial file
+     * mid-write (simulated here by writing garbage first). A parse failure
+     * must be treated as "not ready yet" and polled past, not surfaced as a
+     * hard error — see `deskkit/sidecar`'s README, "For non-deskkit readers
+     * of `sidecar.json`", and `apps/desktop/AGENTS.md`'s "The seam".
      */
     #[tokio::test]
-    async fn fails_fast_on_a_malformed_file_instead_of_retrying_for_8s() {
+    async fn keeps_polling_past_a_malformed_file_until_a_valid_one_is_published() {
         let dir = temp_dir("malformed");
         let path = dir.join("sidecar.json");
         std::fs::write(&path, "not valid json").unwrap();
 
+        let write_path = path.clone();
+        std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_millis(700));
+            let port = spawn_fake_sidecar("tok-valid");
+            std::fs::write(
+                &write_path,
+                format!(r#"{{"port":{port},"token":"tok-valid"}}"#),
+            )
+            .unwrap();
+        });
+
         let start = std::time::Instant::now();
-        let result = wait_for_sidecar_json(&path).await;
+        let result = wait_for_sidecar_json(&path).await.unwrap();
         let elapsed = start.elapsed();
 
-        assert!(result.is_err(), "expected a parse failure, got {result:?}");
+        assert_eq!(result.token, "tok-valid");
         assert!(
-            elapsed < Duration::from_millis(500),
-            "should fail fast, not retry for up to 8s: took {elapsed:?}"
+            elapsed >= Duration::from_millis(500),
+            "resolved suspiciously early — did it treat the malformed file as a hard error? {elapsed:?}"
         );
 
         let _ = std::fs::remove_dir_all(&dir);
@@ -614,7 +628,7 @@ mod tests {
 
     /**
      * A `sidecar.json` whose recorded port doesn't answer (e.g. left behind
-     * by a `SIGKILL`'d sidecar — see `apps/desktop/sidecar/sidecar-lock.ts`)
+     * by a `SIGKILL`'d sidecar — see `deskkit/sidecar`'s `acquireSidecar`)
      * must not be trusted just because the file parses. This is what
      * `get_backend`'s `OnceCell` caching depends on: a wrong answer here
      * would wedge every `get_backend` call for the app's whole lifetime.
