@@ -1,7 +1,7 @@
 "use client";
 
 import { Code2Icon } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import {
 	Command,
 	CommandDialog,
@@ -42,48 +42,11 @@ export function EditorPickerPalette({
 	editors,
 	onSelect,
 }: EditorPickerPaletteProps): React.ReactElement {
-	const [query, setQuery] = useState("");
-
-	// Resets to a blank query every time the dialog opens — reopening a
-	// stale palette should feel the same as opening it cold, same as
-	// `OpenPullRequestPalette`'s identical reset effect.
-	useEffect(() => {
-		if (!open) return;
-		setQuery("");
-	}, [open]);
-
-	const filtered = editors.filter((editor) =>
-		editor.name.toLowerCase().includes(query.toLowerCase()),
-	);
-
 	return (
 		<CommandDialog onOpenChange={onOpenChange} open={open}>
 			<CommandDialogPopup>
 				<CommandPanel>
-					<Command
-						filter={null}
-						items={filtered}
-						onValueChange={setQuery}
-						value={query}
-					>
-						<CommandInput placeholder="Open in…" />
-						<Separator />
-						<CommandEmpty>No matching editors.</CommandEmpty>
-						<CommandList>
-							{(editor: EditorInfo) => (
-								<CommandItem
-									key={editor.id}
-									onClick={() => onSelect(editor)}
-									value={editor}
-								>
-									<div className="flex min-w-0 flex-1 items-center gap-2 pl-1">
-										<Code2Icon className="size-4 shrink-0 text-muted-foreground" />
-										{editor.name}
-									</div>
-								</CommandItem>
-							)}
-						</CommandList>
-					</Command>
+					<EditorPickerCommand editors={editors} onSelect={onSelect} />
 				</CommandPanel>
 				<CommandFooter>
 					<span className="flex items-center gap-1.5">
@@ -92,5 +55,58 @@ export function EditorPickerPalette({
 				</CommandFooter>
 			</CommandDialogPopup>
 		</CommandDialog>
+	);
+}
+
+type EditorPickerCommandProps = {
+	editors: readonly EditorInfo[];
+	onSelect: (editor: EditorInfo) => void;
+};
+
+/**
+ * `query` lives here rather than in `EditorPickerPalette` so that reopening
+ * the palette resets it for free: `CommandDialogPopup` sits inside Base
+ * UI's `Dialog.Portal`, which unmounts everything nested in it once the
+ * dialog's close transition finishes (no `keepMounted` set here), so this
+ * component's `useState("")` genuinely reinitializes on every open — no
+ * imperative reset effect required, unlike `OpenPullRequestPalette`'s
+ * (which has other state a remount can't reset for it, namely the in-flight
+ * `openPr` mutation).
+ */
+function EditorPickerCommand({
+	editors,
+	onSelect,
+}: EditorPickerCommandProps): React.ReactElement {
+	const [query, setQuery] = useState("");
+
+	const filtered = editors.filter((editor) =>
+		editor.name.toLowerCase().includes(query.toLowerCase()),
+	);
+
+	return (
+		<Command
+			filter={null}
+			items={filtered}
+			onValueChange={setQuery}
+			value={query}
+		>
+			<CommandInput placeholder="Open in…" />
+			<Separator />
+			<CommandEmpty>No matching editors.</CommandEmpty>
+			<CommandList>
+				{(editor: EditorInfo) => (
+					<CommandItem
+						key={editor.id}
+						onClick={() => onSelect(editor)}
+						value={editor}
+					>
+						<div className="flex min-w-0 flex-1 items-center gap-2 pl-1">
+							<Code2Icon className="size-4 shrink-0 text-muted-foreground" />
+							{editor.name}
+						</div>
+					</CommandItem>
+				)}
+			</CommandList>
+		</Command>
 	);
 }
