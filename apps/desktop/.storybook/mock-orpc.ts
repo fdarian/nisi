@@ -192,6 +192,13 @@ export function createMockOrpc(data: MockOrpcData = {}): SidecarQueryUtils {
 			// Never referenced by the walkthrough tree's hooks.
 			subscribe: async () => neverIterator(),
 		},
+		// No story exercises the chat dock yet (Phase 3/4 frontend work) — these
+		// stubs exist only to keep `SidecarClient` satisfied, same reasoning as
+		// `events.subscribe` above.
+		chat: {
+			send: async () => neverIterator(),
+			closeThread: async () => undefined,
+		},
 		diff: {
 			files: async () => [],
 			fileContents: async ({ paths }) =>

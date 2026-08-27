@@ -38,6 +38,12 @@ against a review session imports from this directory rather than reaching into a
   filesystem, fed to `HarnessAgent`'s `inactiveTools` so an agent stays read-only against the user's
   real worktree. `bash` is deliberately left active in every case — an agent needs it to explore, and
   it's the one remaining way to touch disk regardless of this list.
+- `stream-errors.ts` — `describeStreamError`: normalizes `fullStream`'s `error` part payload into a
+  message, or `undefined` for one with no real content (OpenCode's bridge emits a bare
+  `{ type: "error" }` mid-session that must not fail an otherwise-healthy turn — see the function's
+  own doc). Every caller that reads a `HarnessAgent` turn's `fullStream` reads this on its `"error"`
+  parts rather than only watching `"tool-call"`/`"text-delta"`, since a transport failure ends the
+  stream normally instead of throwing.
 
 ## Gotchas
 

@@ -155,6 +155,8 @@ seam" for the port/token handshake this boots into.
   retrying it every `POLL_INTERVAL` forever would just re-produce the WARN flood a dead `cwd` used
   to cause on every git spawn. Pruned from that set the same tick a session closes.
 - `walkthrough/` — Phase 3's wiring layer. See its own AGENTS.md.
+- `chat/` — the quick-chat popup's read-only `HarnessAgent` conversations, one per thread. See its
+  own AGENTS.md.
 - `updater/` — macOS Homebrew-cask auto-update. `service.ts`'s `Updater` owns a `Ref<UpdateState>`
   and is the only writer of it: `startChecks()` (forked from `index.ts`'s boot program, same shape as
   `startLivePolling` above) drives `idle ⇄ available` on an hourly `Schedule`, stopping for good the

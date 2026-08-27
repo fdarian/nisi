@@ -98,6 +98,6 @@ discovery, sandbox mode, read-only tool gating) lives one level up in
   `WALKTHROUGH_TOOL_NAMES` name-collision override above is a no-op for codex specifically; the
   custom tools are still reachable as plain user-defined tools regardless, which is what actually
   matters.
-- **A harness's transport failure arrives as a `fullStream` `error` part, not a thrown error** —
-  the stream still ends normally afterwards. `generate.ts` reads those parts explicitly; a loop
-  that only watches `tool-call` sees a silent no-op turn and misattributes it to validation.
+- `generate.ts` reads `fullStream`'s `error` parts via `sidecar/harness`'s `describeStreamError` — a
+  loop that only watches `tool-call` sees a silent no-op turn on a transport failure and
+  misattributes it to validation instead.

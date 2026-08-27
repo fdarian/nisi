@@ -22,6 +22,7 @@ import { Effect, Result, Schema } from "effect";
 import { createHarnessAdapter } from "../harness/harnesses.ts";
 import { FILE_MUTATING_BUILTINS } from "../harness/inactive-tools.ts";
 import { resolveSandboxSettings } from "../harness/sandbox.ts";
+import { describeStreamError } from "../harness/stream-errors.ts";
 import type { AppServices } from "../services.ts";
 import { type GenerationContext, gatherGenerationContext } from "./context.ts";
 import {
@@ -158,37 +159,6 @@ const buildFreshPrompt = (
 
 const buildContinuationPrompt = (overviewText: string): string =>
 	`The PR has changed since your last turn. Updated change overview:\n\n${overviewText}`;
-
-/**
- * `fullStream`'s `error` parts carry whatever the adapter's own transport
- * failed with — an unconfigured provider ("No API key found for the selected
- * model. Use /login…"), a revoked token, a model the CLI rejects. The stream
- * still ends *normally* after one, so nothing throws and the turn simply
- * produces no tool calls; before this was read, that surfaced as an empty
- * buffer, four identical "you haven't written the walkthrough yet" retries,
- * and a final message blaming coverage validation for what was really an auth
- * failure the harness had already described precisely.
- *
- * Returns `undefined` for a part carrying no payload at all. OpenCode's bridge
- * emits a bare `{ type: "error" }` partway through a busy session (see
- * `patches/@ai-sdk%2Fharness@1.0.46.patch`, which is what lets it decode
- * rather than tear the stream down); it says nothing, arrives on runs that are
- * otherwise fine, and must not abort a generation that is about to succeed.
- * Anything with real content still fails the turn.
- */
-const describeStreamError = (error: unknown): string | undefined => {
-	if (error === undefined || error === null) return undefined;
-	if (error instanceof Error) return error.message;
-	if (typeof error === "string") return error.length === 0 ? undefined : error;
-	if (
-		typeof error === "object" &&
-		"message" in error &&
-		typeof error.message === "string"
-	) {
-		return error.message;
-	}
-	return JSON.stringify(error);
-};
 
 const startFreshSession = async (
 	input: GenerateInput,
