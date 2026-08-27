@@ -10,7 +10,12 @@
  * own open→closed transition and the separate collapse/expand of its body
  * when minimized.
  */
-import { ChevronDownIcon, ChevronUpIcon, XIcon } from "lucide-react";
+import {
+	ChevronDownIcon,
+	ChevronUpIcon,
+	LoaderCircleIcon,
+	XIcon,
+} from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import { ChatComposer } from "#/components/chat-dock/chat-composer";
@@ -20,6 +25,7 @@ import type { SidecarQueryUtils } from "#/lib/backend-context";
 import { useChatSend } from "#/lib/chat-data";
 import {
 	type ChatMessage,
+	type ChatThread,
 	useChatActiveThreadId,
 	useChatDockActions,
 	useChatPopupMinimized,
@@ -95,12 +101,24 @@ function MessageBubble({
 	);
 }
 
-function MessageList({
-	messages,
-}: {
+/**
+ * True in the gap between sending a turn and its first `text-delta`/`tool-call`
+ * — the sidecar boots the harness CLI in front of that first event, so this
+ * window can run a few seconds, same reasoning as `walkthrough-data.ts`'s
+ * `"starting"` phase. Without an indicator here, the only sign of life is
+ * the spinner on the thread's pill in the strip below.
+ */
+function isWaitingForFirstReply(thread: {
+	status: ChatThread["status"];
 	messages: readonly ChatMessage[];
-}): React.ReactElement {
-	if (messages.length === 0) {
+}): boolean {
+	if (thread.status !== "streaming") return false;
+	const lastMessage = thread.messages[thread.messages.length - 1];
+	return lastMessage?.role === "user";
+}
+
+function MessageList({ thread }: { thread: ChatThread }): React.ReactElement {
+	if (thread.messages.length === 0) {
 		return (
 			<div className="flex h-full items-center justify-center px-6 py-8 text-center text-muted-foreground text-sm">
 				Ask anything about this PR — the agent can read the worktree but won't
@@ -111,9 +129,15 @@ function MessageList({
 
 	return (
 		<div className="flex flex-col gap-3 px-3 py-3">
-			{messages.map((message) => (
+			{thread.messages.map((message) => (
 				<MessageBubble key={message.id} message={message} />
 			))}
+			{isWaitingForFirstReply(thread) && (
+				<div className="flex items-center gap-1.5 text-muted-foreground text-xs">
+					<LoaderCircleIcon className="size-3 animate-spin" />
+					Thinking…
+				</div>
+			)}
 		</div>
 	);
 }
@@ -183,7 +207,7 @@ export function ChatPanel({
 						transition={{ duration: 0.15, ease: "easeOut" }}
 					>
 						<ScrollArea className="h-80" scrollFade>
-							<MessageList messages={thread.messages} />
+							<MessageList thread={thread} />
 						</ScrollArea>
 						{thread.status === "error" && thread.errorMessage !== null && (
 							<p className="border-t px-3 py-2 text-destructive-foreground text-xs">
