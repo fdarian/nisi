@@ -77,14 +77,18 @@ slow (roughly 13–28s) while nisi installs a pinned copy of it; every run after
   ranges — bump them deliberately.
 - Patches in `patches/` register under `patchedDependencies` in `pnpm-workspace.yaml`, never
   `package.json` — pnpm 10+ silently ignores that key there with no warning. Patch filenames use
-  percent-encoding for the scope slash (`@pierre%2Fdiffs@1.3.5.patch`); on pnpm 12 rc8,
+  percent-encoding for the scope slash (`@pierre%2Fdiffs@1.3.6.patch`); on pnpm 12 rc8,
   `pnpm patch-commit` writes double-underscore names instead (`@pierre__diffs@...`) and rewrites
   `patchedDependencies` to match — rename the file back and revert the workspace-config diff after
-  committing a patch. Current patches:
-  - `@ai-sdk/harness*` (five, across the adapters, `@ai-sdk/harness` itself, and
-    `@ai-sdk/harness-pi`) — see
-    [knowledge/compiled-binary-differences.md](knowledge/compiled-binary-differences.md) and
-    [knowledge/harness-pi-model-resolver-patch.md](knowledge/harness-pi-model-resolver-patch.md).
+  committing a patch. On the same pnpm 12 rc8, `pnpm patch-commit` can also corrupt the generated
+  diff into a bogus "delete `dist/bridge/pnpm-lock.yaml`" hunk when that file is present in the
+  patched package, which then fails `pnpm install` with `ERR_PNPM_PATCH_FAILED` — work around it by
+  hand-building the patch file (`git diff --no-index` between a pristine `npm pack` extraction and
+  a hand-edited copy) and registering it in `pnpm-workspace.yaml` directly instead of trusting
+  `patch-commit`. Current patches:
+  - `@ai-sdk/harness*` (four, across the adapters and `@ai-sdk/harness` itself — `@ai-sdk/harness-pi`
+    carries no patch; upstream's own model resolver is provider-aware now) — see
+    [knowledge/compiled-binary-differences.md](knowledge/compiled-binary-differences.md).
   - `@pierre/diffs` — `CodeView` teardown leak fix; see
     [knowledge/codeview-teardown-leak-patch.md](knowledge/codeview-teardown-leak-patch.md).
 - Path alias is `#/*` → `src/*` in every package, not `@/*`.

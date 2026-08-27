@@ -26,7 +26,6 @@ importantly, the rules for deciding whether a thing belongs here at all.
 
 * [What breaks only in the compiled binary](compiled-binary-differences.md) - the four ways `bun build --compile` differs from `bun run`, and when you must test against it
 * [Why the walkthrough runs on HarnessAgent](why-harness-agent-not-direct-sdks.md) - driving the four CLIs directly is the obvious approach and the wrong one
-* [The @ai-sdk/harness-pi model resolver patch](harness-pi-model-resolver-patch.md) - why it exists, the proxy-entry trap that broke two fixes, and how to tell whether upstream has actually fixed it (the version number can't)
 * [Content invisible in the base → head diff can't be shown, even reviewed](reverted-lines-invisible-after-review.md) - a line added then reverted away lives only in a review snapshot, never in base or head, so no diff between real file states can render it
 
 # Performance
