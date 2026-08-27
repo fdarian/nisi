@@ -24,9 +24,10 @@ import {
 import { createStore, type StoreApi, useStore } from "zustand";
 import type { HarnessId } from "#/lib/walkthrough-data";
 
+/** `id` is stable per part instance (a continuing text part keeps its id across deltas) — React keys for `chat-panel.tsx`'s per-part rendering need something other than array index, since biome's `noArrayIndexKey` rightly rejects that. */
 export type ChatMessagePart =
-	| { type: "text"; text: string }
-	| { type: "tool-call"; toolName: string; input: unknown };
+	| { id: string; type: "text"; text: string }
+	| { id: string; type: "tool-call"; toolName: string; input: unknown };
 
 export type ChatMessageRole = "user" | "assistant";
 
@@ -121,7 +122,7 @@ function appendAssistantText(
 		const message: ChatMessage = {
 			id: messageId,
 			role: "assistant",
-			parts: [{ type: "text", text: delta }],
+			parts: [{ id: crypto.randomUUID(), type: "text", text: delta }],
 		};
 		return { ...thread, messages: [...thread.messages, message] };
 	}
@@ -130,9 +131,12 @@ function appendAssistantText(
 		lastPart !== undefined && lastPart.type === "text"
 			? [
 					...existing.parts.slice(0, -1),
-					{ type: "text", text: lastPart.text + delta },
+					{ id: lastPart.id, type: "text", text: lastPart.text + delta },
 				]
-			: [...existing.parts, { type: "text", text: delta }];
+			: [
+					...existing.parts,
+					{ id: crypto.randomUUID(), type: "text", text: delta },
+				];
 	return {
 		...thread,
 		messages: thread.messages.map((message) =>
@@ -148,7 +152,12 @@ function appendAssistantToolCallPart(
 	toolName: string,
 	input: unknown,
 ): ChatThread {
-	const part: ChatMessagePart = { type: "tool-call", toolName, input };
+	const part: ChatMessagePart = {
+		id: crypto.randomUUID(),
+		type: "tool-call",
+		toolName,
+		input,
+	};
 	const existing = thread.messages.find((message) => message.id === messageId);
 	if (existing === undefined) {
 		const message: ChatMessage = {
@@ -278,7 +287,7 @@ function createChatStore(): StoreApi<ChatStore> {
 						const message: ChatMessage = {
 							id: messageId,
 							role: "user",
-							parts: [{ type: "text", text }],
+							parts: [{ id: crypto.randomUUID(), type: "text", text }],
 						};
 						const isFirstMessage = thread.messages.length === 0;
 						return {
