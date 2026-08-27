@@ -1,12 +1,12 @@
 diff --git a/dist/index.js b/dist/index.js
-index f70943aea9561d5a1df2cb099e182ff8cd14aeb9..c1544bf3fb02a757210e0e1285337515053c774f 100644
+index e9bd415..58f81b0 100644
 --- a/dist/index.js
 +++ b/dist/index.js
-@@ -3,6 +3,19 @@ import { randomBytes } from "crypto";
+@@ -35,6 +35,20 @@ import { z as z2 } from "zod/v4";
+ // src/claude-code-bootstrap.ts
  import { readFile } from "fs/promises";
- import { posix } from "path";
  import { fileURLToPath } from "url";
-+// nisi patch: `readBridgeAsset` originally resolved these three files at
++// nisi patch: `readBridgeAsset` originally resolved these four files at
 +// runtime via `new URL(`./bridge/${name}`, import.meta.url)`. Bun's compiler
 +// only embeds assets referenced through a *static* specifier — a dynamic
 +// template literal like that one is invisible to it, yet `import.meta.url`
@@ -18,12 +18,13 @@ index f70943aea9561d5a1df2cb099e182ff8cd14aeb9..c1544bf3fb02a757210e0e1285337515
 +// apps/desktop/AGENTS.md's "Gotchas" for the nisi-side note on this.
 +import bridgePackageJsonText from "./bridge/package.json" with { type: "text" };
 +import bridgePnpmLockText from "./bridge/pnpm-lock.yaml" with { type: "text" };
++import bridgePnpmWorkspaceText from "./bridge/pnpm-workspace.yaml" with { type: "text" };
 +import bridgeIndexMjsText from "./bridge/index.mjs" with { type: "text" };
- import {
-   commonTool,
-   harnessV1DiagnosticFromBridgeFrame,
-@@ -695,21 +708,18 @@ async function writeClaudeCodeSkills({
-   });
+ var CLAUDE_CODE_BOOTSTRAP_DIR = ".harness-bootstrap/claude-code";
+ var cachedBootstrap;
+ async function getClaudeCodeBootstrap() {
+@@ -69,21 +83,20 @@ async function getClaudeCodeBootstrap() {
+   return cachedBootstrap;
  }
  async function readBridgeAsset(name) {
 -  const candidates = [
@@ -46,6 +47,8 @@ index f70943aea9561d5a1df2cb099e182ff8cd14aeb9..c1544bf3fb02a757210e0e1285337515
 +      return bridgePackageJsonText;
 +    case "pnpm-lock.yaml":
 +      return bridgePnpmLockText;
++    case "pnpm-workspace.yaml":
++      return bridgePnpmWorkspaceText;
 +    case "index.mjs":
 +      return bridgeIndexMjsText;
 +    default:
@@ -53,5 +56,5 @@ index f70943aea9561d5a1df2cb099e182ff8cd14aeb9..c1544bf3fb02a757210e0e1285337515
    }
 -  throw lastErr ?? new Error(`bridge asset not found: ${name}`);
  }
- async function waitForBridgeHello({
-   ws,
+ 
+ // src/claude-code-auth.ts

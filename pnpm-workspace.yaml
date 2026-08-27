@@ -34,7 +34,7 @@ packageExtensions:
       drizzle-orm: "*"
 patchedDependencies:
   "@ai-sdk/harness@1.0.91": patches/@ai-sdk%2Fharness@1.0.91.patch
-  "@ai-sdk/harness-claude-code@1.0.55": patches/@ai-sdk%2Fharness-claude-code@1.0.55.patch
+  "@ai-sdk/harness-claude-code@1.0.94": patches/@ai-sdk%2Fharness-claude-code@1.0.94.patch
   "@ai-sdk/harness-codex@1.0.56": patches/@ai-sdk%2Fharness-codex@1.0.56.patch
   "@ai-sdk/harness-opencode@1.0.55": patches/@ai-sdk%2Fharness-opencode@1.0.55.patch
   "@ai-sdk/harness-pi@1.0.54": patches/@ai-sdk%2Fharness-pi@1.0.54.patch
