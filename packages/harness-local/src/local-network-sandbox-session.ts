@@ -11,6 +11,9 @@ type SpawnOptions = Parameters<Experimental_SandboxSession["spawn"]>[0];
 type GetPortUrlOptions = Parameters<
 	HarnessV1NetworkSandboxSession["getPortUrl"]
 >[0];
+type GetPortEndpointOptions = Parameters<
+	HarnessV1NetworkSandboxSession["getPortEndpoint"]
+>[0];
 
 /**
  * `HarnessV1NetworkSandboxSession` over a real directory on disk. There is no
@@ -19,10 +22,10 @@ type GetPortUrlOptions = Parameters<
  * session spawned; they never touch the directory itself, since it's the
  * user's actual git worktree, not disposable sandbox state.
  *
- * `getPortUrl` resolves to a bare loopback URL. There is no network
- * namespace to publish a port into — bridge-backed adapters connect straight
- * to the port a bridge process (spawned via `spawn()`) binds on this same
- * host.
+ * `getPortUrl`/`getPortEndpoint` resolve to a bare loopback URL. There is no
+ * network namespace to publish a port into — bridge-backed adapters connect
+ * straight to the port a bridge process (spawned via `spawn()`) binds on this
+ * same host.
  */
 export class LocalNetworkSandboxSession
 	extends LocalSandboxSession
@@ -65,6 +68,12 @@ export class LocalNetworkSandboxSession
 	getPortUrl = async (options: GetPortUrlOptions): Promise<string> => {
 		const protocol = options.protocol ?? "http";
 		return `${protocol}://127.0.0.1:${options.port}`;
+	};
+
+	getPortEndpoint = async (
+		options: GetPortEndpointOptions,
+	): Promise<{ readonly url: string }> => {
+		return { url: await this.getPortUrl(options) };
 	};
 
 	stop = async (): Promise<void> => {

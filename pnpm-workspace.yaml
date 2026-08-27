@@ -14,6 +14,14 @@ minimumReleaseAgeExclude:
   - '@pierre/diffs@1.3.5'
   - '@tanstack/router-core@1.171.19'
   - '@tanstack/router-generator@1.167.25'
+  - '@ai-sdk/gateway@4.0.67'
+  - '@ai-sdk/harness@1.0.91'
+  - '@ai-sdk/provider-utils@5.0.32'
+  - ai@7.0.83
+  - '@ai-sdk/harness-claude-code@1.0.94'
+  - '@ai-sdk/harness-codex@1.0.93'
+  - '@ai-sdk/harness-opencode@1.0.92'
+  - '@ai-sdk/harness-pi@1.0.93'
 packageExtensions:
   bun-types:
     dependencies:
@@ -25,9 +33,8 @@ packageExtensions:
     peerDependencies:
       drizzle-orm: "*"
 patchedDependencies:
-  "@ai-sdk/harness@1.0.54": patches/@ai-sdk%2Fharness@1.0.54.patch
-  "@ai-sdk/harness-claude-code@1.0.55": patches/@ai-sdk%2Fharness-claude-code@1.0.55.patch
-  "@ai-sdk/harness-codex@1.0.56": patches/@ai-sdk%2Fharness-codex@1.0.56.patch
-  "@ai-sdk/harness-opencode@1.0.55": patches/@ai-sdk%2Fharness-opencode@1.0.55.patch
-  "@ai-sdk/harness-pi@1.0.54": patches/@ai-sdk%2Fharness-pi@1.0.54.patch
-  "@pierre/diffs@1.3.5": patches/@pierre%2Fdiffs@1.3.5.patch
+  "@ai-sdk/harness@1.0.91": patches/@ai-sdk%2Fharness@1.0.91.patch
+  "@ai-sdk/harness-claude-code@1.0.94": patches/@ai-sdk%2Fharness-claude-code@1.0.94.patch
+  "@ai-sdk/harness-codex@1.0.93": patches/@ai-sdk%2Fharness-codex@1.0.93.patch
+  "@ai-sdk/harness-opencode@1.0.92": patches/@ai-sdk%2Fharness-opencode@1.0.92.patch
+  "@pierre/diffs@1.3.6": patches/@pierre%2Fdiffs@1.3.6.patch

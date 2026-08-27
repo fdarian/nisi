@@ -16,10 +16,10 @@
 		"db:studio": "bun -b drizzle-kit studio"
 	},
 	"dependencies": {
-		"@ai-sdk/provider": "4.0.4",
-		"@ai-sdk/provider-utils": "5.0.18",
+		"@ai-sdk/provider": "4.0.8",
+		"@ai-sdk/provider-utils": "5.0.32",
 		"@repo/git": "workspace:*",
-		"ai": "7.0.48",
+		"ai": "7.0.83",
 		"deskkit": "github:fdarian/deskkit",
 		"drizzle-orm": "1.0.0-rc.4",
 		"effect": "4.0.0-beta.102"

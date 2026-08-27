@@ -15,7 +15,7 @@ package mirrors its structure and swaps in real primitives.
   file I/O via `node:fs/promises`, `run`/`spawn` via `node:child_process.spawn('/bin/bash', ['-c', command])`.
   This is what `restricted()` hands back — no infra members.
 - `src/local-network-sandbox-session.ts` — `LocalNetworkSandboxSession extends LocalSandboxSession`,
-  adding `id`/`defaultWorkingDirectory`/`ports`/`getPortUrl`/`stop`/`destroy`/`restricted`. `stop`
+  adding `id`/`defaultWorkingDirectory`/`ports`/`getPortUrl`/`getPortEndpoint`/`stop`/`destroy`/`restricted`. `stop`
   kills processes this session `spawn`ed and releases its leased port; it never touches the
   directory itself, since that directory is the user's real worktree, not disposable sandbox state.
 - `src/local-sandbox-provider.ts` — `LocalSandboxProvider`/`createLocalSandbox`. One instance per
@@ -61,8 +61,9 @@ internal boundary to put Effect at; contorting it in would just add ceremony aro
 - **`setNetworkPolicy`/`setPorts` are omitted.** There's no local enforcement primitive for
   outbound network policy, and every port this provider hands out is already leased per-session
   by `allocatePort` — nothing to replace. Matches `just-bash`'s reasoning for the same omissions.
-- **`getPortUrl` ignores whether the port is actually bound to anything.** It always resolves to
-  `${protocol}://127.0.0.1:<port>` — this package only reserves the *number*; the bridge adapter's
+- **`getPortUrl`/`getPortEndpoint` ignore whether the port is actually bound to anything.** Both
+  always resolve to `${protocol}://127.0.0.1:<port>` — `getPortEndpoint` just wraps `getPortUrl`'s
+  result in `{ url }` — this package only reserves the *number*; the bridge adapter's
   own spawned process (via `spawn()`) is what binds it.
 - **`run`/`spawn` unconditionally inject pnpm's `dangerouslyAllowAllBuilds` env override** (all
   three spellings — see `PNPM_BUILD_APPROVAL_ENV` in `local-sandbox-session.ts`). pnpm ≥10 blocks

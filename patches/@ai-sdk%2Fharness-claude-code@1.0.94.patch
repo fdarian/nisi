@@ -1,24 +1,30 @@
 diff --git a/dist/index.js b/dist/index.js
-index b3500a5a2333ea4a276d194d8602f03e3a824257..b412b15a8fb168d4096d68c1670ea43493359f7e 100644
+index e9bd415..58f81b0 100644
 --- a/dist/index.js
 +++ b/dist/index.js
-@@ -3,6 +3,14 @@ import { randomBytes } from "crypto";
+@@ -35,6 +35,20 @@ import { z as z2 } from "zod/v4";
+ // src/claude-code-bootstrap.ts
  import { readFile } from "fs/promises";
- import path from "path";
  import { fileURLToPath } from "url";
-+// nisi patch: same fix as @ai-sdk/harness-claude-code's patch — see
-+// patches/@ai-sdk%2Fharness-claude-code@1.0.55.patch and
-+// knowledge/compiled-binary-differences.md for why `readBridgeAsset`'s
-+// dynamic `new URL(`./bridge/${name}`, import.meta.url)` reads break under
-+// `bun build --compile`, and why static `with { type: "text" }` imports fix it.
++// nisi patch: `readBridgeAsset` originally resolved these four files at
++// runtime via `new URL(`./bridge/${name}`, import.meta.url)`. Bun's compiler
++// only embeds assets referenced through a *static* specifier — a dynamic
++// template literal like that one is invisible to it, yet `import.meta.url`
++// still gets rewritten to a virtual `/$bunfs/...` path inside a
++// `bun build --compile` binary, so the computed path resolves to nothing on
++// real disk (`ENOENT: /$bunfs/bridge/package.json`). Static `with { type:
++// "text" }` imports, by contrast, Bun inlines as string literals at compile
++// time, so they survive being embedded in nisi's compiled sidecar. See
++// apps/desktop/AGENTS.md's "Gotchas" for the nisi-side note on this.
 +import bridgePackageJsonText from "./bridge/package.json" with { type: "text" };
 +import bridgePnpmLockText from "./bridge/pnpm-lock.yaml" with { type: "text" };
++import bridgePnpmWorkspaceText from "./bridge/pnpm-workspace.yaml" with { type: "text" };
 +import bridgeIndexMjsText from "./bridge/index.mjs" with { type: "text" };
- import {
-   commonTool,
-   HarnessCapabilityUnsupportedError,
-@@ -389,21 +397,18 @@ function resolveBridgePort(sandboxSession, override) {
-   });
+ var CLAUDE_CODE_BOOTSTRAP_DIR = ".harness-bootstrap/claude-code";
+ var cachedBootstrap;
+ async function getClaudeCodeBootstrap() {
+@@ -69,21 +83,20 @@ async function getClaudeCodeBootstrap() {
+   return cachedBootstrap;
  }
  async function readBridgeAsset(name) {
 -  const candidates = [
@@ -41,6 +47,8 @@ index b3500a5a2333ea4a276d194d8602f03e3a824257..b412b15a8fb168d4096d68c1670ea434
 +      return bridgePackageJsonText;
 +    case "pnpm-lock.yaml":
 +      return bridgePnpmLockText;
++    case "pnpm-workspace.yaml":
++      return bridgePnpmWorkspaceText;
 +    case "index.mjs":
 +      return bridgeIndexMjsText;
 +    default:
@@ -48,5 +56,5 @@ index b3500a5a2333ea4a276d194d8602f03e3a824257..b412b15a8fb168d4096d68c1670ea434
    }
 -  throw lastErr ?? new Error(`bridge asset not found: ${name}`);
  }
- async function writeCodexSkills({
-   sandbox,
+ 
+ // src/claude-code-auth.ts
