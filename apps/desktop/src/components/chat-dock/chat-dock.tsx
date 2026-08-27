@@ -10,6 +10,15 @@
  * unmounts on its own. See `chat-data.ts`'s doc comment for why that
  * matters — an in-flight turn must survive that kind of incidental
  * re-render.
+ *
+ * `mx-2` mirrors `FramePanel`'s own `m-2` (`app-shell.tsx`'s
+ * `INSET_PANE_CLASS`) so the strip's left/right edges line up with the
+ * card's rather than running full-bleed to the window edge past its rounded
+ * corners — a plain sibling with its own margin, not a child of
+ * `FramePanel`, is enough to read as "part of the surface" once it shares
+ * that inset and drops the heavy `border-t` a full-width divider would put
+ * against the page background (the pills are ghost buttons; they don't
+ * need one).
  */
 import { PlusIcon } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
@@ -63,8 +72,18 @@ export function ChatDock({
 				)}
 			</AnimatePresence>
 			<motion.div
-				animate={{ height: threads.length > 0 ? 40 : 0 }}
-				className="flex shrink-0 items-center gap-1.5 overflow-hidden overflow-x-auto border-t px-2"
+				// `marginBottom` animates in lockstep with `height` rather than
+				// sitting in `className` as a static `mb-2` — a static bottom
+				// margin would still reserve 8px of dead space at the window edge
+				// even while the strip is collapsed to zero height (flex siblings'
+				// margins don't collapse into each other the way block siblings'
+				// do). `mx-2` has no such phantom-space problem (it never adds
+				// height), so it stays a plain class.
+				animate={{
+					height: threads.length > 0 ? 40 : 0,
+					marginBottom: threads.length > 0 ? 8 : 0,
+				}}
+				className="mx-2 flex shrink-0 items-center gap-1.5 overflow-hidden overflow-x-auto px-2"
 				initial={false}
 				transition={{ duration: 0.15, ease: "easeOut" }}
 			>
