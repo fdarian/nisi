@@ -41,9 +41,11 @@ against a review session imports from this directory rather than reaching into a
 - `stream-errors.ts` — `describeStreamError`: normalizes `fullStream`'s `error` part payload into a
   message, or `undefined` for one with no real content (OpenCode's bridge emits a bare
   `{ type: "error" }` mid-session that must not fail an otherwise-healthy turn — see the function's
-  own doc). Every caller that reads a `HarnessAgent` turn's `fullStream` reads this on its `"error"`
-  parts rather than only watching `"tool-call"`/`"text-delta"`, since a transport failure ends the
-  stream normally instead of throwing.
+  own doc). `walkthrough/generate.ts` reads this on its turn loop's `"error"` parts rather than only
+  watching `"tool-call"`, since a transport failure ends `fullStream` normally instead of throwing —
+  `sidecar/chat` has no need for it, since it forwards AI SDK's own `toUIMessageStream()` rather than
+  reading `fullStream` by hand (see `chat/stream.ts`), and that helper already turns a transport
+  failure into its own `{ type: "error" }` chunk.
 
 ## Gotchas
 

@@ -1,65 +1,44 @@
 import type { HarnessAgent, HarnessAgentSession } from "@ai-sdk/harness/agent";
-import type { ChatEvent } from "@repo/sidecar-api";
-import { describeStreamError } from "../harness/stream-errors.ts";
+import type { UIMessageChunk } from "ai";
 
 /**
- * Runs one user turn and projects `agent.stream()`'s `fullStream` into
- * `ChatEvent`s — the chat counterpart to walkthrough's turn loop
- * (`generate.ts`'s `for await (const part of result.fullStream)`), except
- * this forwards `text-delta` (the part walkthrough deliberately drops, since
- * its answer arrives via tool calls) and has no validate/retry loop: one
- * message in, one streamed answer out.
+ * Runs one user turn and forwards the result's own UI-message-chunk stream.
+ * `HarnessAgent.stream()` is declared as returning AI SDK's `StreamTextResult`,
+ * but the real runtime value is `@ai-sdk/harness`'s `HarnessStreamTextResult`,
+ * which implements `toUIMessageStream()` for real — there's no hand-rolled
+ * `fullStream` projection here the way walkthrough's turn loop
+ * (`generate.ts`) has one; AI SDK already owns turning a turn into the exact
+ * chunk protocol `packages/sidecar-api/src/chat.ts`'s `ChatStreamChunk`
+ * passes through untyped.
+ *
+ * Every other stream-exit surface on `HarnessStreamTextResult` throws
+ * `notSupportedYet` — `pipeUIMessageStreamToResponse`,
+ * `pipeTextStreamToResponse`, `toTextStreamResponse`, and the
+ * structured-output accessors (`partialOutputStream`/`elementStream`/
+ * `output`) — verified against `@ai-sdk/harness@1.0.54`'s compiled
+ * `HarnessStreamTextResult`. `toUIMessageStream`/`toUIMessageStreamResponse`
+ * are the only working stream exits, which is why this reaches for the
+ * former specifically rather than a more familiar-looking helper.
+ *
+ * No `try`/`catch` here, deliberately: a construction failure
+ * (`agent.stream()` itself rejecting) or a transport failure surfaced
+ * through the chunk stream both propagate as-is — a thrown error tears the
+ * generator down the same way any other unhandled `chat.send` failure does,
+ * and AI SDK's own `toUIMessageStream` already turns an in-stream transport
+ * failure into a `{ type: "error" }` chunk on its own.
  */
 export async function* streamChatTurn(options: {
-	// biome-ignore lint/suspicious/noExplicitAny: same reason as `LiveChatSession.agent` — only the untyped `stream()` surface is ever called here.
+	// biome-ignore lint/suspicious/noExplicitAny: the agent's tool-set/runtime-context type params aren't known statically here — only the untyped agent.stream() surface is ever called.
 	readonly agent: HarnessAgent<any, any>;
 	readonly session: HarnessAgentSession;
 	readonly message: string;
-	/** oRPC's own request `signal` — aborts when the client disconnects, e.g. the chat popup closes mid-stream. */
+	/** oRPC's own request `signal` — aborts when the client disconnects, e.g. the chat popup closing mid-stream. */
 	readonly abortSignal: AbortSignal | undefined;
-}): AsyncGenerator<ChatEvent> {
-	yield { type: "started" };
-
-	try {
-		const result = await options.agent.stream({
-			session: options.session,
-			prompt: options.message,
-			abortSignal: options.abortSignal,
-		});
-
-		for await (const part of result.fullStream) {
-			if (options.abortSignal?.aborted === true) return;
-			if (part.type === "text-delta") {
-				yield { type: "text-delta", delta: part.text };
-				continue;
-			}
-			if (part.type === "tool-call") {
-				yield {
-					type: "tool-call",
-					toolName: part.toolName,
-					input: part.input,
-				};
-				continue;
-			}
-			if (part.type === "error") {
-				const message = describeStreamError(part.error);
-				if (message !== undefined) {
-					yield { type: "error", message };
-					return;
-				}
-			}
-		}
-
-		if (options.abortSignal?.aborted === true) return;
-		yield { type: "done" };
-	} catch (error) {
-		// An abort tears the stream down the same way a real transport failure
-		// would — checked here so an abort-triggered throw is never misreported
-		// as an `error` event.
-		if (options.abortSignal?.aborted === true) return;
-		yield {
-			type: "error",
-			message: describeStreamError(error) ?? "The harness stream failed.",
-		};
-	}
+}): AsyncGenerator<UIMessageChunk> {
+	const result = await options.agent.stream({
+		session: options.session,
+		prompt: options.message,
+		abortSignal: options.abortSignal,
+	});
+	yield* result.toUIMessageStream();
 }

@@ -2,10 +2,10 @@
 
 Wires `packages/sidecar-api`'s `chat` contract to a read-only `HarnessAgent` conversation per
 thread. Reuses `sidecar/harness`'s adapter/sandbox/inactive-tools plumbing — nothing here builds a
-harness adapter itself. Unlike `sidecar/walkthrough`, a thread's answer is prose streamed live
-(`text-delta`), not a structured document validated turn by turn, so there's no coverage loop, no
-persistence, and no reattach/pub-sub: `http.ts`'s `chat.send` handler drives one turn directly
-against the request's own connection.
+harness adapter itself. Unlike `sidecar/walkthrough`, a thread's answer is AI SDK's own
+`UIMessageChunk` stream forwarded as-is, not a structured document validated turn by turn, so
+there's no coverage loop, no persistence, and no reattach/pub-sub: `http.ts`'s `chat.send` handler
+drives one turn directly against the request's own connection.
 
 - `context.ts` — `resolveChatPromptContext`: `sessionId` → the live, worktree-relocation-healed
   `repoRoot` (`Store.resolveSessionRepoRoot`) plus enough of the review session (`baseRef`/`headRef`/
@@ -27,9 +27,11 @@ against the request's own connection.
   brand-new thread both await the same construction instead of each starting (and leaking) their own
   sandbox. Gone on sidecar restart, same posture as `walkthrough/live-sessions.ts` — chat threads are
   ephemeral by design (`packages/sidecar-api/src/chat.ts`'s doc), no stored fallback to reattach to.
-- `stream.ts` — `streamChatTurn`: runs one turn and projects `agent.stream()`'s `fullStream` into
-  `ChatEvent`s, forwarding `text-delta` — the one part `walkthrough/generate.ts` deliberately drops,
-  since its answer arrives via tool calls instead of prose.
+- `stream.ts` — `streamChatTurn`: runs one turn and forwards `agent.stream()`'s own
+  `toUIMessageStream()` output verbatim — `@ai-sdk/harness`'s `HarnessStreamTextResult` (what
+  `HarnessAgent.stream()` actually resolves to) implements this directly, so there's no hand-rolled
+  `fullStream` projection the way `walkthrough/generate.ts`'s turn loop has one. See the function's
+  own doc for which of that result type's other stream-exit methods throw `notSupportedYet`.
 
 ## Non-obvious decisions
 
@@ -45,3 +47,10 @@ against the request's own connection.
   stop — `entry.pending.catch(() => undefined)` drops that case rather than letting it reject the
   caller, which matters for `closeChatThreadsForSession`: one broken thread must not stop
   `sessions.close` from disposing the rest, or from succeeding at all.
+- **`chat.send`'s wire payload is untyped on purpose.** `packages/sidecar-api/src/chat.ts`'s
+  `ChatStreamChunk` is `Schema.Unknown` — AI SDK's `UIMessageChunk` protocol passed through as
+  opaque JSON rather than transcribed into Effect Schema, since a hand-maintained copy would drift
+  on every `ai` bump. `stream.ts` doesn't need `sidecar/harness`'s `describeStreamError` the way
+  `walkthrough/generate.ts` does: `toUIMessageStream()` already turns an in-stream transport
+  failure into its own `{ type: "error" }` chunk, so there's no `fullStream` `error` part for chat
+  to interpret by hand anymore.
