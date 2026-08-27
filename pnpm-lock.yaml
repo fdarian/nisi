@@ -109,7 +109,7 @@ packageExtensionsChecksum: sha256-/uEQyyopQQgaDgi9VCyPI1DkHURKOZvr1eqH/L7v4JU=
 
 patchedDependencies:
   '@ai-sdk/harness-claude-code@1.0.94': 19be27a44d7e5dfeb3c0ca1a61ff5f5cb8dcf407f87dd44ac77dfab69d95e63a
-  '@ai-sdk/harness-codex@1.0.56': f52d5e6ae7ad77720f43ed7bc04d3fdb18ff6463e9b3a2043de274dced4f54ba
+  '@ai-sdk/harness-codex@1.0.93': 3b003d1c9402d196b62e8ec2dc9734e7116ab4585321f1c3f096512aeddd1c51
   '@ai-sdk/harness-opencode@1.0.55': 1a7397bad1e2a1fa0b780ec8ac7127bb4d3b56a79357a65a00c3ac6305d72300
   '@ai-sdk/harness-pi@1.0.54': 67c54f34840833a63f4f5b28176c0039ccc56fe2abcb948f855de36740f75252
   '@ai-sdk/harness@1.0.91': 7fe99bf0c691e923a900a46e9c06da2e69a22167bf0ccae94efc7e7c6d6f414d
@@ -141,8 +141,8 @@ importers:
         specifier: 1.0.94
         version: 1.0.94(patch_hash=19be27a44d7e5dfeb3c0ca1a61ff5f5cb8dcf407f87dd44ac77dfab69d95e63a)(zod@4.4.3)
       '@ai-sdk/harness-codex':
-        specifier: 1.0.56
-        version: 1.0.56(patch_hash=f52d5e6ae7ad77720f43ed7bc04d3fdb18ff6463e9b3a2043de274dced4f54ba)(zod@4.4.3)
+        specifier: 1.0.93
+        version: 1.0.93(patch_hash=3b003d1c9402d196b62e8ec2dc9734e7116ab4585321f1c3f096512aeddd1c51)(zod@4.4.3)
       '@ai-sdk/harness-opencode':
         specifier: 1.0.55
         version: 1.0.55(patch_hash=1a7397bad1e2a1fa0b780ec8ac7127bb4d3b56a79357a65a00c3ac6305d72300)(zod@4.4.3)
@@ -662,8 +662,8 @@ packages:
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
 
-  '@ai-sdk/harness-codex@1.0.56':
-    resolution: {integrity: sha512-sOXKN+XFoVy4Xr5NYNV33pjjOoQ0YIMXHasIVME4gZmH1/z3WQByfT41sczL+TSmIWWAi1u3iQsFW7Wn7tEeIw==}
+  '@ai-sdk/harness-codex@1.0.93':
+    resolution: {integrity: sha512-witYAiali/NLukZ6EUXrRvzagHdXyxOC06v+H2u1C0D1QqxmatBr+qGHka2/iRAbCMObNxNdU9Lcmx65RfUZOA==}
     engines: {node: '>=22'}
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
@@ -5465,10 +5465,10 @@ snapshots:
       - bufferutil
       - utf-8-validate
 
-  '@ai-sdk/harness-codex@1.0.56(patch_hash=f52d5e6ae7ad77720f43ed7bc04d3fdb18ff6463e9b3a2043de274dced4f54ba)(zod@4.4.3)':
+  '@ai-sdk/harness-codex@1.0.93(patch_hash=3b003d1c9402d196b62e8ec2dc9734e7116ab4585321f1c3f096512aeddd1c51)(zod@4.4.3)':
     dependencies:
-      '@ai-sdk/harness': 1.0.54(ws@8.21.1)(zod@4.4.3)
-      '@ai-sdk/provider-utils': 5.0.18(zod@4.4.3)
+      '@ai-sdk/harness': 1.0.91(patch_hash=7fe99bf0c691e923a900a46e9c06da2e69a22167bf0ccae94efc7e7c6d6f414d)(ws@8.21.1)(zod@4.4.3)
+      '@ai-sdk/provider-utils': 5.0.32(zod@4.4.3)
       ws: 8.21.1
       zod: 4.4.3
     transitivePeerDependencies:
@@ -5507,15 +5507,6 @@ snapshots:
       zod: 4.4.3
     optionalDependencies:
       ws: 8.21.0
-
-  '@ai-sdk/harness@1.0.54(ws@8.21.1)(zod@4.4.3)':
-    dependencies:
-      '@ai-sdk/provider': 4.0.4
-      '@ai-sdk/provider-utils': 5.0.18(zod@4.4.3)
-      ai: 7.0.48(zod@4.4.3)
-      zod: 4.4.3
-    optionalDependencies:
-      ws: 8.21.1
 
   '@ai-sdk/harness@1.0.91(patch_hash=7fe99bf0c691e923a900a46e9c06da2e69a22167bf0ccae94efc7e7c6d6f414d)(ws@8.21.0)(zod@4.4.3)':
     dependencies:

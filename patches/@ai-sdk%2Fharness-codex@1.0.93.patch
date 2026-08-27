@@ -1,24 +1,24 @@
 diff --git a/dist/index.js b/dist/index.js
-index b3500a5a2333ea4a276d194d8602f03e3a824257..b412b15a8fb168d4096d68c1670ea43493359f7e 100644
+index 92d5471..253f3d9 100644
 --- a/dist/index.js
 +++ b/dist/index.js
-@@ -3,6 +3,14 @@ import { randomBytes } from "crypto";
+@@ -30,6 +30,14 @@ import { z as z2 } from "zod/v4";
+ // src/codex-bootstrap.ts
  import { readFile } from "fs/promises";
- import path from "path";
  import { fileURLToPath } from "url";
 +// nisi patch: same fix as @ai-sdk/harness-claude-code's patch — see
-+// patches/@ai-sdk%2Fharness-claude-code@1.0.55.patch and
++// patches/@ai-sdk%2Fharness-claude-code@1.0.94.patch and
 +// knowledge/compiled-binary-differences.md for why `readBridgeAsset`'s
 +// dynamic `new URL(`./bridge/${name}`, import.meta.url)` reads break under
 +// `bun build --compile`, and why static `with { type: "text" }` imports fix it.
 +import bridgePackageJsonText from "./bridge/package.json" with { type: "text" };
 +import bridgePnpmLockText from "./bridge/pnpm-lock.yaml" with { type: "text" };
 +import bridgeIndexMjsText from "./bridge/index.mjs" with { type: "text" };
- import {
-   commonTool,
-   HarnessCapabilityUnsupportedError,
-@@ -389,21 +397,18 @@ function resolveBridgePort(sandboxSession, override) {
-   });
+ var CODEX_BOOTSTRAP_DIR = ".harness-bootstrap/codex";
+ var cachedBootstrap;
+ async function getCodexBootstrap() {
+@@ -56,21 +64,18 @@ async function getCodexBootstrap() {
+   return cachedBootstrap;
  }
  async function readBridgeAsset(name) {
 -  const candidates = [
@@ -48,5 +48,5 @@ index b3500a5a2333ea4a276d194d8602f03e3a824257..b412b15a8fb168d4096d68c1670ea434
    }
 -  throw lastErr ?? new Error(`bridge asset not found: ${name}`);
  }
- async function writeCodexSkills({
-   sandbox,
+ 
+ // src/codex-auth.ts
