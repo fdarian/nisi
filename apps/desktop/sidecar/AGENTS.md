@@ -40,7 +40,10 @@ seam" for the port/token handshake this boots into.
   case the liveness check exists for: the next boot finds the lock, gets no answer from the dead
   port, and recovers the same way. `sidecar.json` itself is published via a temp file + `rename()`
   in the same directory — atomic on one filesystem, so Rust's `wait_for_sidecar_json` and the CLI's
-  `readHandshake` never observe a partial write.
+  `readHandshake` never observe a partial write. Deliberately not `deskkit/sidecar`'s
+  `acquireSidecar`, even though `scripts/dev.ts`/the CLI now read `sidecar.json` through that same
+  package's `awaitSidecarHandshake`/`readSidecarJson` — see `publishSidecarJson`'s doc comment for
+  why the write side stays here.
 - `logging.ts` — `LoggingLive`: console (`Logger.consolePretty`, stderr) plus a
   `@repo/logging`-backed rotating file logger at `<dataDir>/logs/sidecar.log`, both gated by the
   same `LOG_LEVEL`-derived minimum level. This is the only place stdout-in-production's "goes

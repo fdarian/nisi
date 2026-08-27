@@ -51,6 +51,13 @@ left behind by a `SIGKILL`'d sidecar would otherwise wedge `get_backend`'s `Once
 dead port for the app's whole lifetime. Regression-tested by the `#[tokio::test]`s in `lib.rs` —
 keep them if you touch that file.
 
+`scripts/dev.ts` and the CLI's `handoff.ts` (`packages/cli`) both poll `sidecar.json` through
+`deskkit/sidecar`'s `awaitSidecarHandshake`/`readSidecarJson` rather than a hand-rolled reader.
+Claiming and publishing stays on this side, in `sidecar/sidecar-lock.ts` — not deskkit's own
+`acquireSidecar` — because that function writes `sidecar.json` directly via `wx` with no rename,
+which Rust's fail-fast-on-parse-error `wait_for_sidecar_json` can't tolerate; see
+`publishSidecarJson`'s doc comment for the full reasoning.
+
 - **Dev**: `bun dev` runs `scripts/dev.ts`, a [devsess](https://devsess.fdarian.com/) orchestrator
   (see below) that races the sidecar (`bun --watch sidecar/index.ts`) against `tauri dev`
   (`Effect.raceAll` — either exiting kills the other, via each process's Effect `Scope`).
