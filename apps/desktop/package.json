@@ -22,7 +22,7 @@
 		"build-storybook": "storybook build"
 	},
 	"dependencies": {
-		"@ai-sdk/harness": "1.0.54",
+		"@ai-sdk/harness": "1.0.91",
 		"@ai-sdk/harness-claude-code": "1.0.55",
 		"@ai-sdk/harness-codex": "1.0.56",
 		"@ai-sdk/harness-opencode": "1.0.55",

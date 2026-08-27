@@ -1,8 +1,8 @@
 diff --git a/dist/index.js b/dist/index.js
-index 71b299fd3089ed0bef9af69cc1510b16062c6dc7..939342896d12f9cd416f47706ea7c6c4f828e113 100644
+index 3061a2ce6d5f485b79fddc38cfac940168e863c4..fe5ed89dd7d46689774b77c9ee770728c3200a1a 100644
 --- a/dist/index.js
 +++ b/dist/index.js
-@@ -211,7 +211,17 @@ var harnessV1CompactionPartSchema = z2.object({
+@@ -212,7 +212,17 @@ var harnessV1CompactionPartSchema = z2.object({
  });
  var harnessV1ErrorPartSchema = z2.object({
    type: z2.literal("error"),
@@ -22,10 +22,10 @@ index 71b299fd3089ed0bef9af69cc1510b16062c6dc7..939342896d12f9cd416f47706ea7c6c4
  var harnessV1RawPartSchema = z2.object({
    type: z2.literal("raw"),
 diff --git a/dist/utils/index.js b/dist/utils/index.js
-index e220b86359db2bba91c6898a824d1b3930237be1..954b20f2906bf3b867acfe3e8cfd4469ad9e94e0 100644
+index 01251a8f6eca2919b004e8a6cf3d6e30b013299e..f72f83d5c5406f9ec68b3759bb997ae47d595893 100644
 --- a/dist/utils/index.js
 +++ b/dist/utils/index.js
-@@ -669,7 +669,17 @@ var harnessV1CompactionPartSchema = z2.object({
+@@ -826,7 +826,17 @@ var harnessV1CompactionPartSchema = z2.object({
  });
  var harnessV1ErrorPartSchema = z2.object({
    type: z2.literal("error"),
