@@ -131,7 +131,27 @@ const acquire = (
 		}
 
 		const existingOwner = yield* readOwner(path, READ_RETRY_ATTEMPTS);
-		if (existingOwner !== undefined) {
+		if (existingOwner !== undefined && existingOwner.port === owner.port) {
+			// A TCP port has exactly one owner, and the acquiring process is
+			// demonstrably it — it bound `owner.port` before ever calling
+			// `acquireSidecarLock` (see index.ts's boot order). So a lock file
+			// recording that same port cannot belong to a live *other* process:
+			// it's either this process's own previous incarnation (a pinned-port
+			// dev restart under `bun --watch` — see `scripts/dev.ts` and the root
+			// AGENTS.md's "The seam") or a `SIGKILL`'d sidecar whose ephemeral port
+			// the OS happened to hand back. Both are ours to take over, and
+			// health-checking one would just be this process interrogating
+			// itself — it's already listening on `owner.port` by the time this
+			// runs, so `isOwnerAlive` would always answer `true`, even for a
+			// pinned-port restart that has no other owner at all. Skip the check
+			// entirely and fall into the same clear-and-retry path a confirmed-dead
+			// owner takes. Safe for the `port: 0` case too: an ephemeral rebind
+			// onto a port some *other* live process already holds is exceedingly
+			// rare, so this branch simply doesn't fire then.
+			yield* Effect.logDebug(
+				`existing sidecar lock (port ${existingOwner.port}) matches the port this process is already listening on — taking it over without a liveness check`,
+			);
+		} else if (existingOwner !== undefined) {
 			const alive = yield* isOwnerAlive(existingOwner);
 			if (alive) {
 				yield* Effect.logFatal(
@@ -162,11 +182,16 @@ const acquire = (
  * `sidecar.json`, both proceed, and both write — whichever wrote last "won,"
  * silently splitting the app window and the CLI onto different sidecars.
  *
- * A losing process reads the lock's recorded owner and health-checks it —
- * never a staleness heuristic (file age, a PID that might have been reused)
- * — and, once confirmed dead, clears it and retries. Bounded by
- * `MAX_ACQUIRE_ATTEMPTS` so a lock that keeps coming back dead fails loudly
- * instead of spinning forever.
+ * A losing process reads the lock's recorded owner. When it recorded the same
+ * port `owner` is claiming, it's taken over without a health check — a TCP
+ * port has exactly one owner, and the acquiring process is demonstrably it
+ * (see `acquire`'s same-port branch above), so the only way this happens is a
+ * dev restart under a pinned port (`scripts/dev.ts`'s `bun --watch`) or a
+ * `SIGKILL`'d sidecar whose ephemeral port got reassigned — never a live
+ * rival. Any other recorded owner is health-checked — never a staleness
+ * heuristic (file age, a PID that might have been reused) — and, once
+ * confirmed dead, cleared and retried. Bounded by `MAX_ACQUIRE_ATTEMPTS` so a
+ * lock that keeps coming back dead fails loudly instead of spinning forever.
  *
  * A `SIGKILL`'d owner never runs its release effect (see `releaseSidecarLock`
  * below), so its lock file survives on disk — but that's exactly the case

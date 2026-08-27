@@ -172,10 +172,16 @@ type ServerContext = WithEffectContext<AppServices> &
  * otherwise two cold boots race on Drizzle's migration step the same way
  * they used to race on `sidecar.json`. `attachRouter` swaps in the full
  * router once `AppServices` is ready, on this same already-bound port.
+ *
+ * `port` is `undefined` in every real boot (prod, `bun run sidecar`
+ * standalone) — Bun picks an ephemeral one, same as before. `index.ts` passes
+ * an explicit one when `NISI_DEV_SIDECAR_PORT` is set, so the port survives a
+ * `bun --watch` restart instead of rotating under it — see that file and the
+ * root `AGENTS.md`'s "The seam".
  */
-export function bindHealthCheckServer(token: string) {
+export function bindHealthCheckServer(token: string, port?: number) {
 	return Bun.serve({
-		port: 0,
+		port: port ?? 0,
 		idleTimeout: 0,
 		fetch(req) {
 			if (new URL(req.url).pathname !== "/api/health/check") {

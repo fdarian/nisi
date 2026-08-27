@@ -1,7 +1,7 @@
 import { BunRuntime, BunServices } from "@effect/platform-bun";
 import { getDataDirConfig, SqliteDb } from "@repo/db";
 import { SettingsStore } from "@repo/settings";
-import { Effect, Layer } from "effect";
+import { Config, Effect, Layer, Option } from "effect";
 import { FileSystem } from "effect/FileSystem";
 import { ChatSessions } from "./chat/sessions.ts";
 import { attachRouter, bindHealthCheckServer } from "./http.ts";
@@ -29,7 +29,23 @@ const program = Effect.scoped(
 		yield* Effect.logInfo("starting up", { dataDir });
 		yield* fs.makeDirectory(dataDir, { recursive: true });
 
-		const token = crypto.randomUUID();
+		// `NISI_DEV_SIDECAR_PORT`/`NISI_DEV_SIDECAR_TOKEN` are only ever set by
+		// `scripts/dev.ts`, which mints both once per `bun dev` run and pins them
+		// for its whole lifetime — this file runs under `bun --watch` in dev, and
+		// a per-boot `crypto.randomUUID()`/ephemeral `port: 0` would otherwise
+		// rotate on every restart out from under a frontend that froze `{ port,
+		// token }` into its own build-time env at its own boot (vite's
+		// `VITE_DEV_BACKEND_*`, Rust's `get_backend` `OnceCell` cache). Unset in
+		// every other boot (prod, `bun run sidecar` standalone) — falls back to
+		// exactly the old per-boot-random behavior. See deskkit's sidecar README,
+		// "Running the sidecar under a file watcher".
+		const pinnedPort = yield* Config.number("NISI_DEV_SIDECAR_PORT").pipe(
+			Config.option,
+		);
+		const pinnedToken = yield* Config.string("NISI_DEV_SIDECAR_TOKEN").pipe(
+			Config.option,
+		);
+		const token = Option.getOrElse(pinnedToken, () => crypto.randomUUID());
 
 		// Bound immediately, answering only health.check — deliberately
 		// before AppServices/SqliteDb exist at all. Two concerns force this
@@ -42,7 +58,9 @@ const program = Effect.scoped(
 		// step the same way they used to race on sidecar.json. See
 		// http.ts's `bindHealthCheckServer`/`attachRouter`.
 		const server = yield* Effect.acquireRelease(
-			Effect.sync(() => bindHealthCheckServer(token)),
+			Effect.sync(() =>
+				bindHealthCheckServer(token, Option.getOrUndefined(pinnedPort)),
+			),
 			(server) =>
 				Effect.logInfo("shutting down").pipe(
 					Effect.andThen(Effect.sync(() => server.stop())),

@@ -19,7 +19,6 @@ const SidecarHandshake = Schema.Struct({
 	port: Schema.Number,
 	token: Schema.String,
 });
-type SidecarHandshake = typeof SidecarHandshake.Type;
 
 /** Fails when `sidecar.json` is missing or doesn't parse — both just mean "no handshake to read (yet)". */
 const readHandshake = (dataDir: string) =>
@@ -32,36 +31,31 @@ const readHandshake = (dataDir: string) =>
 	});
 
 /**
- * Polls `sidecar.json` until the sidecar publishes a handshake that isn't
- * `previous` — the one already on disk before this run spawned anything.
- * Mirrors Rust's `wait_for_sidecar_json`/the CLI's `readHandshake`, but with no
- * bounded timeout, since this only ever runs raced against the sidecar
- * subprocess itself: if the sidecar dies before publishing (or refuses to boot
- * because another one holds the lock), `Effect.raceAll` interrupts this poll
- * along with it.
+ * Polls `sidecar.json` until it publishes the handshake carrying `token` —
+ * the exact value this run minted and handed the sidecar via
+ * `NISI_DEV_SIDECAR_TOKEN` (see `env` below). Mirrors deskkit's
+ * `awaitSidecarHandshake` (`deskkit/sidecar`'s README, "Running the sidecar
+ * under a file watcher"): the token is pinned for the whole dev session
+ * rather than freshly minted per boot, so a plain "is there a handshake at
+ * all" check would false-positive on a stale one already on disk from a
+ * previous run. Comparing against this exact token rules that out, and also
+ * means a `--watch` restart — which republishes the same `{ port, token }` —
+ * satisfies the wait again immediately instead of needing a change to detect.
  *
- * The `previous` comparison is what makes this actually *wait*. A sidecar
- * removes its `sidecar.lock` on shutdown but leaves `sidecar.json` behind, so
- * the last run's `{ port, token }` is still sitting there when this one starts
- * — and that port is stale, since every boot binds a fresh ephemeral one.
- * Without the check, the very first read succeeds against the dead handshake
- * and vite gets pointed at a port nothing is listening on. Compared by `token`,
- * not `port`: it's a fresh `crypto.randomUUID()` per boot, so it can't collide
- * the way a recycled ephemeral port can.
+ * No bounded timeout, same reasoning as the old `awaitFreshHandshake` this
+ * replaces: this only ever runs raced against the sidecar subprocess itself
+ * (`Effect.raceAll` below), so a sidecar that dies before publishing — or
+ * refuses to boot because another one holds the lock — interrupts this poll
+ * along with it, rather than this function needing its own giving-up logic.
  */
-const awaitFreshHandshake = (
-	dataDir: string,
-	previous: SidecarHandshake | undefined,
-) =>
-	Effect.gen(function* () {
-		const handshake = yield* readHandshake(dataDir);
-		if (handshake.token === previous?.token) {
-			return yield* Effect.fail(
-				new Error("sidecar.json still holds the pre-boot handshake"),
-			);
-		}
-		return handshake;
-	}).pipe(Effect.retry(Schedule.spaced("300 millis")));
+const awaitHandshake = (dataDir: string, token: string) =>
+	readHandshake(dataDir).pipe(
+		Effect.filterOrFail(
+			(handshake) => handshake.token === token,
+			() => new Error("sidecar.json doesn't carry this run's token yet"),
+		),
+		Effect.retry(Schedule.spaced("300 millis")),
+	);
 
 /**
  * Per-devsess-session dev orchestrator. Replaces the plain two-process
@@ -106,17 +100,6 @@ const dev = Command.make(
 			const fs = yield* FileSystem;
 			yield* fs.makeDirectory(dataDir, { recursive: true });
 
-			// Snapshotted before anything is spawned: whatever's on disk now
-			// belongs to a previous sidecar (or a live production one under
-			// `--prod-data-dir`), and it's what `awaitFreshHandshake` measures
-			// our own sidecar's handshake against. Read rather than deleted —
-			// deleting would rip the handshake out from under a running
-			// production app, and this run's sidecar refuses to boot against a
-			// live one anyway (`sidecar-lock.ts`).
-			const previousHandshake = yield* readHandshake(dataDir).pipe(
-				Effect.orElseSucceed(() => undefined),
-			);
-
 			// Printed as `KEY=value` so it's directly copy-pasteable in front of
 			// `nisi` — a plain `nisi` targets the production data dir (the default
 			// when `NISI_DATA_DIR` is unset); pointing it at this session instead is
@@ -148,37 +131,78 @@ const dev = Command.make(
 				? pinnedPort.value
 				: yield* getStickyPort(session);
 
+			// Minted once per `bun dev` run, then pinned for its whole lifetime —
+			// not left for the sidecar to generate on every boot. `sidecar/index.ts`
+			// runs under `bun --watch` below, which restarts the process cleanly on
+			// every save; a per-boot `crypto.randomUUID()` token (and a `port: 0`
+			// ephemeral bind) would rotate under that restart, and this orchestrator
+			// froze `{ port, token }` into vite/Tauri's env at its own boot — so
+			// every request after a restart would 401 silently. See deskkit's
+			// sidecar README, "Running the sidecar under a file watcher".
+			//
+			// devsess's `getStickyPort` only resolves one port per session (vite's,
+			// above) — it has no second named slot for the sidecar — so the port is
+			// chosen by hand: bind `port: 0`, read what the OS assigned, close it,
+			// and hand that number to the sidecar to rebind. The brief gap between
+			// closing this probe and the sidecar rebinding is the same "exceedingly
+			// rare" race `port: 0` already carries in production; a stale
+			// `sidecar.lock` recording this exact port is handled without a
+			// liveness check on the sidecar side instead (`sidecar-lock.ts`'s
+			// `acquireSidecarLock`).
+			const sidecarToken = crypto.randomUUID();
+			const sidecarPort = yield* Effect.sync(() => {
+				const probe = Bun.serve({ port: 0, fetch: () => new Response("ok") });
+				const assignedPort = probe.port;
+				probe.stop();
+				return assignedPort;
+			});
+			if (sidecarPort === undefined) {
+				return yield* Effect.die(
+					new Error(
+						"couldn't pick a sidecar port: Bun.serve({ port: 0 }) returned none",
+					),
+				);
+			}
+
 			const env = {
 				NISI_DATA_DIR: dataDir,
 				VITE_PORT: String(vitePort),
 				VITE_HOST: String(host),
+				NISI_DEV_SIDECAR_PORT: String(sidecarPort),
+				NISI_DEV_SIDECAR_TOKEN: sidecarToken,
 			};
 
+			// `--watch`, not `--hot`: `--hot` re-runs the entry module in the same
+			// process without ever unwinding the previous evaluation, so every
+			// background loop (`startLivePolling`, `Updater.startChecks`) and the
+			// SQLite connection from every prior boot keeps running alongside the
+			// new one. `--watch` tears the process down and restarts it cleanly, so
+			// exactly one instance is ever live — see deskkit's sidecar README.
 			const sidecarProcess = runManagedSubprocess(
 				"bun",
-				["run", "--hot", "sidecar/index.ts"],
+				["run", "--watch", "sidecar/index.ts"],
 				{ env },
 			);
 
 			// `--browser`: skip the Tauri webview entirely and open a plain
 			// `vite dev` tab against the sidecar instead, via the dev-only escape
 			// hatch in `src/lib/backend.ts` (see apps/desktop/AGENTS.md's "Browser
-			// dev harness"). Vite can't start with those env vars until the
-			// sidecar has actually published its handshake, so this sequences
-			// (await, then spawn vite) rather than starting both at once — still
-			// raced against the sidecar itself below, so a sidecar crash before
-			// publishing interrupts the wait instead of hanging forever.
+			// dev harness"). Vite can't start until the sidecar has actually
+			// published its handshake, so this sequences (await, then spawn vite)
+			// rather than starting both at once — still raced against the sidecar
+			// itself below, so a sidecar crash before publishing interrupts the
+			// wait instead of hanging forever. `sidecarPort`/`sidecarToken` are
+			// handed to vite directly rather than read back off the handshake —
+			// this run already minted both, so re-deriving them from the file
+			// `awaitHandshake` just finished polling would be a needless roundabout.
 			const frontendProcess = browser
 				? Effect.gen(function* () {
-						const handshake = yield* awaitFreshHandshake(
-							dataDir,
-							previousHandshake,
-						);
+						yield* awaitHandshake(dataDir, sidecarToken);
 						return yield* runManagedSubprocess("bun", ["run", "dev:vite"], {
 							env: {
 								...env,
-								VITE_DEV_BACKEND_PORT: String(handshake.port),
-								VITE_DEV_BACKEND_TOKEN: handshake.token,
+								VITE_DEV_BACKEND_PORT: String(sidecarPort),
+								VITE_DEV_BACKEND_TOKEN: sidecarToken,
 							},
 						});
 					})
