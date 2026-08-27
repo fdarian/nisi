@@ -27,11 +27,15 @@ drives one turn directly against the request's own connection.
   brand-new thread both await the same construction instead of each starting (and leaking) their own
   sandbox. Gone on sidecar restart, same posture as `walkthrough/live-sessions.ts` — chat threads are
   ephemeral by design (`packages/sidecar-api/src/chat.ts`'s doc), no stored fallback to reattach to.
-- `stream.ts` — `streamChatTurn`: runs one turn and forwards `agent.stream()`'s own
-  `toUIMessageStream()` output verbatim — `@ai-sdk/harness`'s `HarnessStreamTextResult` (what
-  `HarnessAgent.stream()` actually resolves to) implements this directly, so there's no hand-rolled
-  `fullStream` projection the way `walkthrough/generate.ts`'s turn loop has one. See the function's
-  own doc for which of that result type's other stream-exit methods throw `notSupportedYet`.
+- `stream.ts` — `streamChatTurn`: runs one turn and forwards it as AI SDK's own `UIMessageChunk`
+  stream — no hand-rolled `fullStream` projection the way `walkthrough/generate.ts`'s turn loop has
+  one. Calls the *standalone* `toUIMessageStream({ stream, tools })` helper from `ai`, not
+  `result`'s own (deprecated) instance method of the same name: the instance method always turns
+  *every* `fullStream` `"error"` part into a visible chunk, including `sidecar/harness`'s
+  `describeStreamError`-classified meaningless ones, and `onError` can't suppress a chunk, only its
+  message. `filterMeaninglessStreamErrors` drops that part first, on the raw `TextStreamPart`
+  stream, before AI SDK ever sees it. See the function's own doc for which of
+  `HarnessStreamTextResult`'s other stream-exit methods throw `notSupportedYet`.
 
 ## Non-obvious decisions
 
@@ -50,7 +54,10 @@ drives one turn directly against the request's own connection.
 - **`chat.send`'s wire payload is untyped on purpose.** `packages/sidecar-api/src/chat.ts`'s
   `ChatStreamChunk` is `Schema.Unknown` — AI SDK's `UIMessageChunk` protocol passed through as
   opaque JSON rather than transcribed into Effect Schema, since a hand-maintained copy would drift
-  on every `ai` bump. `stream.ts` doesn't need `sidecar/harness`'s `describeStreamError` the way
-  `walkthrough/generate.ts` does: `toUIMessageStream()` already turns an in-stream transport
-  failure into its own `{ type: "error" }` chunk, so there's no `fullStream` `error` part for chat
-  to interpret by hand anymore.
+  on every `ai` bump.
+- **`stream.ts` reuses `sidecar/harness`'s `describeStreamError` for filtering, not describing.**
+  Chat never reads a `fullStream` `error` part's message by hand the way `walkthrough/generate.ts`
+  does — AI SDK's own `toUIMessageStream` already turns a real transport failure into its own
+  `{ type: "error" }` chunk. What chat still needs from `describeStreamError` is its "is this error
+  part meaningful at all" judgment, via `filterMeaninglessStreamErrors` — see `stream.ts`'s own
+  doc.

@@ -41,11 +41,14 @@ against a review session imports from this directory rather than reaching into a
 - `stream-errors.ts` — `describeStreamError`: normalizes `fullStream`'s `error` part payload into a
   message, or `undefined` for one with no real content (OpenCode's bridge emits a bare
   `{ type: "error" }` mid-session that must not fail an otherwise-healthy turn — see the function's
-  own doc). `walkthrough/generate.ts` reads this on its turn loop's `"error"` parts rather than only
-  watching `"tool-call"`, since a transport failure ends `fullStream` normally instead of throwing —
-  `sidecar/chat` has no need for it, since it forwards AI SDK's own `toUIMessageStream()` rather than
-  reading `fullStream` by hand (see `chat/stream.ts`), and that helper already turns a transport
-  failure into its own `{ type: "error" }` chunk.
+  own doc). `walkthrough/generate.ts` reads this directly on its turn loop's `"error"` parts rather
+  than only watching `"tool-call"`, since a transport failure ends `fullStream` normally instead of
+  throwing. `filterMeaninglessStreamErrors` reuses the same judgment (`describeStreamError(error)
+  === undefined`) for a different job: dropping a meaningless `error` part from a `TextStreamPart`
+  stream entirely, for a caller — `sidecar/chat`'s `stream.ts` — that hands the stream to AI SDK's
+  `toUIMessageStream`, which turns *every* `error` part into a visible chunk unconditionally and
+  offers no way to suppress one via its `onError` option (that only controls the chunk's message
+  text).
 
 ## Gotchas
 

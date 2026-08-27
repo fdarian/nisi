@@ -1,3 +1,5 @@
+import type { TextStreamPart, ToolSet } from "ai";
+
 /**
  * `fullStream`'s `error` parts carry whatever a harness adapter's own
  * transport failed with — an unconfigured provider ("No API key found for
@@ -27,3 +29,35 @@ export const describeStreamError = (error: unknown): string | undefined => {
 	}
 	return JSON.stringify(error);
 };
+
+/**
+ * Drops a meaningless `error` part (`describeStreamError` returning
+ * `undefined` for it — OpenCode's bare `{ type: "error" }` artifact, see its
+ * doc above) from a turn's part stream, leaving every other part — including
+ * a *real* error part — untouched.
+ *
+ * Exists for a consumer that, unlike `walkthrough/generate.ts`'s own turn
+ * loop, doesn't get to inspect `error` parts itself before they become a
+ * visible artifact: `sidecar/chat/stream.ts` hands the part stream to AI
+ * SDK's `toUIMessageStream`, which turns *every* `error` part into a
+ * `{ type: "error" }` chunk unconditionally — `onError` only controls that
+ * chunk's message text, not whether it's emitted — so the only place left to
+ * keep the bogus OpenCode artifact from reaching the client is here, before
+ * conversion.
+ */
+export const filterMeaninglessStreamErrors = (
+	stream: ReadableStream<TextStreamPart<ToolSet>>,
+): ReadableStream<TextStreamPart<ToolSet>> =>
+	stream.pipeThrough(
+		new TransformStream<TextStreamPart<ToolSet>, TextStreamPart<ToolSet>>({
+			transform(part, controller) {
+				if (
+					part.type === "error" &&
+					describeStreamError(part.error) === undefined
+				) {
+					return;
+				}
+				controller.enqueue(part);
+			},
+		}),
+	);
