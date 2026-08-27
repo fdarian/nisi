@@ -22,7 +22,7 @@ export type Settings = {
 	 *
 	 * `null` means "never configured" — distinct from `[]`, which is a
 	 * deliberate choice to disable every harness. Callers that spawn off this
-	 * value (see `apps/desktop/sidecar/walkthrough/harnesses.ts`) treat `null`
+	 * value (see `apps/desktop/sidecar/harness/harnesses.ts`) treat `null`
 	 * as "every harness allowed," since the user hasn't restricted anything
 	 * yet.
 	 */

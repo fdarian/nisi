@@ -88,7 +88,7 @@ export const probeLoginShellDirs = (): ReadonlyArray<string> => {
 /**
  * Memoizes `probe` for the process's lifetime with an explicit `refresh`
  * escape hatch — the same discover-once-then-refresh shape
- * `sidecar/walkthrough/model-discovery.ts`'s `createModelDiscoveryCache`
+ * `sidecar/harness/model-discovery.ts`'s `createModelDiscoveryCache`
  * uses, and for the same reason: the probe is a subprocess whose answer is
  * stable while the app runs (a user's shell startup files don't change under
  * a running app), but a user who installs Node *while* nisi is open needs

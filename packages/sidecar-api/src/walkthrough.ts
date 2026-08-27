@@ -15,7 +15,7 @@ export const HarnessId = Schema.Literals([
 ]);
 export type HarnessId = Schema.Schema.Type<typeof HarnessId>;
 
-/** One selectable model for a harness. All four harnesses discover these live — see `apps/desktop/sidecar/walkthrough/model-discovery.ts`. */
+/** One selectable model for a harness. All four harnesses discover these live — see `apps/desktop/sidecar/harness/model-discovery.ts`. */
 export const HarnessModel = Schema.Struct({
 	id: Schema.String,
 	label: Schema.String,
@@ -41,7 +41,7 @@ export type ModelsStatus = Schema.Schema.Type<typeof ModelsStatus>;
  * harness:
  * - **`available`** — is the harness's CLI actually present on this machine
  *   right now? A live, cheap filesystem check via `@repo/bin-resolver`
- *   (`apps/desktop/sidecar/walkthrough/availability.ts`), never cached
+ *   (`apps/desktop/sidecar/harness/availability.ts`), never cached
  *   itself (unlike `models`, which is real subprocess I/O) — so every
  *   `harnesses()` call reflects the current install state with no
  *   staleness of its own. Pi has no CLI (a bundled library dependency, not

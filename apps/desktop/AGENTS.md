@@ -191,7 +191,7 @@ fixture PR lives at `src/components/walkthrough/walkthrough.fixture.ts`.
   [Dev/prod isolation](#devprod-isolation)). The cost of the split: a rename of the binary or its
   triple suffix now only breaks `bun build`, never dev.
 - **`HarnessInfo.available` and `.enabled` are independent, both always present.** `available` is a
-  live `@repo/bin-resolver` binary-presence check (`sidecar/walkthrough/availability.ts`), never
+  live `@repo/bin-resolver` binary-presence check (`sidecar/harness/availability.ts`), never
   cached; `enabled` is `@repo/settings`'s `enabledHarnesses`, a user declaration. A harness can be
   enabled but currently unavailable (its checkbox in `EnableHarnessesPanel`/`SettingsPage` stays
   checked but disabled, with an inline reason — it isn't dropped from `enabledHarnesses`) or

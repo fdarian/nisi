@@ -34,6 +34,7 @@ import {
 	type SidecarEvent,
 	subscribe as subscribeToSidecarEvents,
 } from "./events.ts";
+import { listHarnesses } from "./harness/harnesses.ts";
 import { checkSessionForChanges } from "./live-poll.ts";
 import type { AppServices } from "./services.ts";
 import { SessionWatch } from "./session-watch.ts";
@@ -49,7 +50,6 @@ import {
 	clearGeneration,
 	getGeneration,
 } from "./walkthrough/generation-log.ts";
-import { listHarnesses } from "./walkthrough/harnesses.ts";
 import { stopLiveSession } from "./walkthrough/live-sessions.ts";
 import { WalkthroughStore } from "./walkthrough/store.ts";
 
