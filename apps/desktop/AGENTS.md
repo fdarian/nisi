@@ -28,25 +28,33 @@ Three parts, one seam:
   context by the sidecar (`FileContentReview.baselineKind`, see `@repo/review`'s `reconcile`).
 
 ## The seam
-The sidecar binds an ephemeral port, generates a token, then claims a `sidecar.lock` (`O_EXCL`,
-see `sidecar/sidecar-lock.ts`) before it's allowed to publish `{ port, token }` to `sidecar.json`
+The sidecar binds a port and mints a token, then claims a `sidecar.lock` (`O_EXCL`, see
+`sidecar/sidecar-lock.ts`) before it's allowed to publish `{ port, token }` to `sidecar.json`
 (mode 0600, temp file + `rename()` — atomic on one filesystem) in the app-data dir — macOS
-`~/Library/Application Support/com.nisi.desktop/` (override with `NISI_DATA_DIR`). The lock is
-what makes two sidecars booting at the same instant against the same data dir resolve to exactly
-one owner instead of a split brain — see `sidecar/AGENTS.md`'s `sidecar-lock.ts` entry for the
-full mechanism (atomic create, liveness-checked recovery from a dead owner, bounded retries).
-Rust's `get_backend` (`src-tauri/src/lib.rs`) polls for that file **asynchronously** — it must
-never block the main thread, or the frontend's one-shot `invoke('get_backend')` wedges on a cold
-start — and health-checks the port it finds before trusting it, since a stale `sidecar.json` left
-behind by a `SIGKILL`'d sidecar would otherwise wedge `get_backend`'s `OnceCell` cache on a dead
-port for the app's whole lifetime. Regression-tested by the `#[tokio::test]`s in `lib.rs` — keep
-them if you touch that file.
+`~/Library/Application Support/com.nisi.desktop/` (override with `NISI_DATA_DIR`). In production
+(and a standalone `bun run sidecar`) that's an ephemeral `port: 0` bind and a fresh
+`crypto.randomUUID()` token every boot; in dev, `scripts/dev.ts` pins both for the whole `bun dev`
+session instead, via `NISI_DEV_SIDECAR_PORT`/`NISI_DEV_SIDECAR_TOKEN` (see
+[Dev/prod isolation](#devprod-isolation)) — the sidecar runs under `bun --watch` there, and a
+per-boot-random pair would otherwise rotate on every restart out from under a frontend that
+already froze `{ port, token }` into its own env at its own boot. The lock is what makes two
+sidecars booting at the same instant against the same data dir resolve to exactly one owner
+instead of a split brain — see `sidecar/AGENTS.md`'s `sidecar-lock.ts` entry for the full
+mechanism (atomic create, liveness-checked recovery from a dead owner — skipped in favor of an
+immediate takeover when the recorded port is the one this process is already listening on, bounded
+retries). Rust's `get_backend` (`src-tauri/src/lib.rs`) polls for that file **asynchronously** — it
+must never block the main thread, or the frontend's one-shot `invoke('get_backend')` wedges on a
+cold start — and health-checks the port it finds before trusting it, since a stale `sidecar.json`
+left behind by a `SIGKILL`'d sidecar would otherwise wedge `get_backend`'s `OnceCell` cache on a
+dead port for the app's whole lifetime. Regression-tested by the `#[tokio::test]`s in `lib.rs` —
+keep them if you touch that file.
 
 - **Dev**: `bun dev` runs `scripts/dev.ts`, a [devsess](https://devsess.fdarian.com/) orchestrator
-  (see below) that races the sidecar against `tauri dev` (`Effect.raceAll` — either exiting kills
-  the other, via each process's Effect `Scope`). `beforeDevCommand` only runs `vite`; the sidecar
-  is started by `dev.ts`, not by Tauri. `bun dev --browser` swaps `tauri dev` for a plain `vite dev`
-  against the same sidecar instead — see [Browser dev harness](#browser-dev-harness).
+  (see below) that races the sidecar (`bun --watch sidecar/index.ts`) against `tauri dev`
+  (`Effect.raceAll` — either exiting kills the other, via each process's Effect `Scope`).
+  `beforeDevCommand` only runs `vite`; the sidecar is started by `dev.ts`, not by Tauri. `bun dev
+  --browser` swaps `tauri dev` for a plain `vite dev` against the same sidecar instead — see
+  [Browser dev harness](#browser-dev-harness).
 - **Prod**: Rust spawns the compiled `binaries/sidecar` (`externalBin`, `shell:allow-spawn`) from
   `.setup()` — fire-and-forget.
 - Sidecar boot (`sidecar/index.ts`) is one Effect program run via `BunRuntime.runMain`: the HTTP
@@ -71,7 +79,9 @@ that session's own `data/` subdirectory before starting the sidecar and `tauri d
 worktree resolves its own `apps/desktop/.data/sessions/` tree, so two worktrees' dev sessions never
 share one either. `dev.ts` also reads a sticky vite port from the session (`getStickyPort`) and
 passes it to `tauri dev` via `-c '{"build":{"devUrl":...}}'`, so the frontend port stays stable
-across restarts of the same session too.
+across restarts of the same session too. The sidecar's own `{ port, token }` is pinned separately —
+minted fresh each time you run `bun dev`, then held for that run's whole lifetime rather than
+persisted per session — see [The seam](#the-seam).
 
 `dev.ts` prints `NISI_DATA_DIR=<path>` on startup — that line is deliberately copy-pasteable.
 Since prod keeps the untouched default, a plain `nisi` from a terminal always reaches the
