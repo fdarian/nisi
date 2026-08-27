@@ -124,27 +124,6 @@ const listUntrackedFiles = (repoRoot: string) =>
 		Effect.map((raw) => raw.split("\0").filter((path) => path.length > 0)),
 	);
 
-/**
- * Parses `git status --porcelain=v1 -z`'s NUL-separated output down to just
- * the untracked (`"??"`) paths — the one signal `getFileContents` needs from
- * it, without a per-path `-- <path>` restriction the way `getFileContent`
- * uses it for a single file. A rename/copy entry carries an extra orig-path
- * token after it; skipped so the next token is read as a fresh status entry.
- */
-const parseUntrackedPaths = (raw: string): ReadonlySet<string> => {
-	const tokens = raw.split("\0").filter((token) => token.length > 0);
-	const paths = new Set<string>();
-	let index = 0;
-	while (index < tokens.length) {
-		const token = tokens[index++];
-		if (token === undefined) break;
-		const code = token.slice(0, 2);
-		if (code === "??") paths.add(token.slice(3));
-		if (code[0] === "R" || code[0] === "C") index++;
-	}
-	return paths;
-};
-
 const countLines = (content: string): number => {
 	if (content.length === 0) return 0;
 	const trimmed = content.endsWith("\n") ? content.slice(0, -1) : content;
@@ -504,14 +483,15 @@ export type FileContentRequest = {
  * any single call faster.
  *
  * The merge base and `name-status` are resolved once for the whole batch,
- * against `target`. Worktree `status` is resolved once too, but only when
+ * against `target`. Untracked paths are resolved once too, but only when
  * `target.kind === "worktree"` — a committed target has no untracked files
  * by definition, so skipping it there isn't just an optimization, it also
  * keeps a worktree-only untracked file from leaking into a committed-mode
- * result. When it does run, `status` is deliberately unrestricted (not
- * `-- <path>` for one path) and `parseUntrackedPaths` picks the requested
- * paths back out of it, the batched equivalent of restricting a single-path
- * lookup.
+ * result. When it does run, it's the same `listUntrackedFiles` (`git
+ * ls-files --others --exclude-standard -z`) call `getChangedFiles` uses —
+ * not `git status --porcelain`, whose default mode collapses a fully
+ * untracked directory into one `?? <dir>/` line instead of one per file,
+ * which would silently drop every file inside it from the result below.
  *
  * Old-side content is always at `mergeBase`, so it goes through one
  * `readBlobsAtRef` call regardless of `target`. New-side content follows
@@ -534,10 +514,9 @@ export type FileContentRequest = {
  * for a caller that turns a missing entry back into a thrown
  * `FileNotChanged`, matching what a per-path fetch would have failed with).
  *
- * A rename's deletion side lives at the *old* path — restricting either the
- * `name-status` or `status` call to just the requested paths would hide it
- * from git's rename pairing, the same trap `readPatches` avoids via
- * `pathspecFor`.
+ * A rename's deletion side lives at the *old* path — restricting the
+ * `name-status` call to just the requested paths would hide it from git's
+ * rename pairing, the same trap `readPatches` avoids via `pathspecFor`.
  *
  * `headRef` follows `getChangedFiles`' own doc comment: left at its default
  * (`HEAD`, the current checkout), `includeUncommitted` behaves as documented
@@ -574,14 +553,14 @@ export const getFileContents = (
 					sha: yield* resolveHeadSha(repoRoot, options?.headRef),
 				};
 
-		const statusEffect =
+		const untrackedPathsEffect =
 			target.kind === "worktree"
-				? git(repoRoot, ["status", "--porcelain=v1", "-z"])
-				: Effect.succeed("");
+				? listUntrackedFiles(repoRoot)
+				: Effect.succeed<ReadonlyArray<string>>([]);
 
 		// Not pathspec-restricted, for the same rename-pairing reason
 		// `getChangedFiles` leaves `name-status` unrestricted.
-		const [nameStatusRaw, statusRaw] = yield* Effect.all(
+		const [nameStatusRaw, untrackedPathsList] = yield* Effect.all(
 			[
 				git(repoRoot, [
 					"diff",
@@ -591,7 +570,7 @@ export const getFileContents = (
 					mergeBase,
 					...diffTargetArgs(target),
 				]),
-				statusEffect,
+				untrackedPathsEffect,
 			],
 			{ concurrency: "unbounded" },
 		);
@@ -600,7 +579,7 @@ export const getFileContents = (
 				(entry) => [entry.path, entry] as const,
 			),
 		);
-		const untrackedPaths = parseUntrackedPaths(statusRaw);
+		const untrackedPaths = new Set(untrackedPathsList);
 
 		type ResolvedRequest = {
 			readonly request: FileContentRequest;
