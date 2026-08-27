@@ -13,6 +13,7 @@
 import type {
 	CodeView as CodeViewInstance,
 	CodeViewItem,
+	CodeViewLineSelection,
 	CodeViewOptions,
 	DiffLineAnnotation,
 	LineAnnotation,
@@ -131,11 +132,20 @@ export function buildDiffCodeViewOptions<Metadata>(overrides: {
 	onPostRender?: CodeViewOptions<Metadata>["onPostRender"];
 	/** Appended to `diffViewUnsafeCSS` inside each item's shadow root — for styling only one pane's items, e.g. `diffCardChromeCSS`. */
 	extraCSS?: string;
+	/**
+	 * Turns on `@pierre/diffs`' own line-lane (gutter) drag-to-select — off by
+	 * default so a pane opts in explicitly. `ReferencePane` doesn't set this:
+	 * enabling selection with no `selectedLines`/`onSelectedLinesChange` (and
+	 * no floating "Copy reference" button reacting to it) would let a user
+	 * paint a highlight that never does anything.
+	 */
+	enableLineSelection?: boolean;
 }): CodeViewOptions<Metadata> {
 	return {
 		diffIndicators: "bars",
 		diffStyle: overrides.diffStyle ?? "unified",
 		enableGutterUtility: false,
+		enableLineSelection: overrides.enableLineSelection ?? false,
 		hunkSeparators: "line-info-basic",
 		itemMetrics: diffItemMetrics,
 		layout: diffCodeViewLayout,
@@ -158,6 +168,15 @@ type DiffCodeViewProps<Metadata> = {
 		annotation: LineAnnotation<Metadata> | DiffLineAnnotation<Metadata>,
 	) => React.ReactNode;
 	renderCustomHeader?: (item: CodeViewItem<Metadata>) => React.ReactNode;
+	/**
+	 * The line-lane (gutter) selection to render, and its change callback —
+	 * both forwarded straight to `CodeView`. Passing either turns `CodeView`
+	 * into controlled-selection mode, so a caller that wants
+	 * `enableLineSelection` (`buildDiffCodeViewOptions`) must supply both;
+	 * `ReferencePane` supplies neither and stays uncontrolled/off.
+	 */
+	selectedLines?: CodeViewLineSelection | null;
+	onSelectedLinesChange?: (selection: CodeViewLineSelection | null) => void;
 	ref?: React.Ref<CodeViewHandle<Metadata>>;
 };
 
@@ -165,9 +184,11 @@ export function DiffCodeView<Metadata>({
 	className,
 	items,
 	onScroll,
+	onSelectedLinesChange,
 	options,
 	renderAnnotation,
 	renderCustomHeader,
+	selectedLines,
 	ref,
 }: DiffCodeViewProps<Metadata>): React.ReactElement {
 	const workerPoolOptions = useDiffWorkerPoolOptions();
@@ -183,10 +204,12 @@ export function DiffCodeView<Metadata>({
 				containerRef={separatorClickForwardingRef}
 				items={items}
 				onScroll={onScroll}
+				onSelectedLinesChange={onSelectedLinesChange}
 				options={options}
 				ref={ref}
 				renderAnnotation={renderAnnotation}
 				renderCustomHeader={renderCustomHeader}
+				selectedLines={selectedLines}
 			/>
 		</WorkerPoolContextProvider>
 	);
