@@ -31,10 +31,9 @@ export type DiffSelectionReference = {
 export function formatSelectionReference(
 	reference: DiffSelectionReference,
 ): string {
-	const { path, startLine, endLine } = reference;
-	return startLine === endLine
-		? `${path}#L${startLine}`
-		: `${path}#L${startLine}-${endLine}`;
+	return reference.startLine === reference.endLine
+		? `${reference.path}#L${reference.startLine}`
+		: `${reference.path}#L${reference.startLine}-${reference.endLine}`;
 }
 
 type UseDiffSelectionOptions<Metadata> = {
@@ -213,7 +212,7 @@ export function useDiffSelection<Metadata>({
 				setReference(null);
 				return;
 			}
-			const { startLine, endLine } = resolveHeadRange(
+			const headRange = resolveHeadRange(
 				{
 					line: selection.range.start,
 					side: selection.range.side ?? "additions",
@@ -238,7 +237,12 @@ export function useDiffSelection<Metadata>({
 					rect = rect === undefined ? rowRect : unionRect(rect, rowRect);
 				}
 				if (rect === undefined) return false;
-				setReference({ path, startLine, endLine, rect });
+				setReference({
+					path,
+					startLine: headRange.startLine,
+					endLine: headRange.endLine,
+					rect,
+				});
 				return true;
 			}, pendingGutterRectFrame);
 		},
@@ -276,11 +280,11 @@ export function useDiffSelection<Metadata>({
 			if (!start || !end) return;
 			// A live text selection supersedes any gutter selection.
 			if (gutterSelection !== null) setGutterSelection(null);
-			const { startLine, endLine } = resolveHeadRange(start, end);
+			const headRange = resolveHeadRange(start, end);
 			setReference({
 				path,
-				startLine,
-				endLine,
+				startLine: headRange.startLine,
+				endLine: headRange.endLine,
 				rect: active.range.getBoundingClientRect(),
 			});
 		};
