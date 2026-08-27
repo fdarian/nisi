@@ -20,19 +20,56 @@ export type LiveChatSession = {
 };
 
 /**
+ * One tracked thread: the review session it's scoped to (chat threads are
+ * scoped per PR tab — see `sessionsBySession` below) alongside the in-flight
+ * construction promise.
+ *
+ * `pending`, not a resolved value — `getOrCreateChatSession` sets this into
+ * `liveThreads` *before* awaiting `agent.createSession()`, so two `chat.send`
+ * calls racing on a brand-new `threadId` both observe the same pending
+ * construction instead of each starting (and leaking) their own
+ * sandbox/session.
+ */
+type ThreadEntry = {
+	readonly sessionId: string;
+	readonly pending: Promise<LiveChatSession>;
+};
+
+/**
  * Keyed by `threadId` rather than `sessionId`: a review session can host
  * several chat threads at once (one ghost-button tab each), each its own
  * independent `HarnessAgent` conversation.
- *
- * Values are promises, not resolved entries — `getOrCreateChatSession` sets
- * the in-flight construction promise into the map *before* awaiting
- * `agent.createSession()`, so two `chat.send` calls racing on a brand-new
- * `threadId` both observe the same pending construction instead of each
- * starting (and leaking) their own sandbox/session.
  */
-const liveThreads = new Map<string, Promise<LiveChatSession>>();
+const liveThreads = new Map<string, ThreadEntry>();
+
+/**
+ * `sessionId -> Set<threadId>` — the reverse index `closeChatThreadsForSession`
+ * walks when a review session (a PR tab) closes. Every thread a review
+ * session ever started stays reachable from here until it's disposed, kept
+ * in sync with `liveThreads` solely by `trackThread`/`untrackThread` below —
+ * closing a PR tab must dispose every thread scoped to it, or its harness
+ * subprocess/sandbox leaks for the rest of the sidecar's lifetime.
+ */
+const threadsBySession = new Map<string, Set<string>>();
+
+const trackThread = (sessionId: string, threadId: string): void => {
+	const threads = threadsBySession.get(sessionId);
+	if (threads === undefined) {
+		threadsBySession.set(sessionId, new Set([threadId]));
+	} else {
+		threads.add(threadId);
+	}
+};
+
+const untrackThread = (sessionId: string, threadId: string): void => {
+	const threads = threadsBySession.get(sessionId);
+	if (threads === undefined) return;
+	threads.delete(threadId);
+	if (threads.size === 0) threadsBySession.delete(sessionId);
+};
 
 export type ChatSessionParams = {
+	readonly sessionId: string;
 	readonly threadId: string;
 	readonly harness: HarnessId;
 	readonly model: string | undefined;
@@ -65,28 +102,55 @@ const startChatSession = async (
  * lives on one session rather than starting cold per message.
  * `params.harness`/`params.model`/`params.instructions` only matter for that
  * first construction; a later call against an already-live thread ignores
- * them, same as `walkthrough.generate`'s reattach.
+ * them, same as `walkthrough.generate`'s reattach. `params.sessionId` is
+ * tracked on every call (including a reuse) so `closeChatThreadsForSession`
+ * can find this thread regardless of which call happened to create it.
  */
 export const getOrCreateChatSession = (
 	params: ChatSessionParams,
 ): Promise<LiveChatSession> => {
 	const existing = liveThreads.get(params.threadId);
-	if (existing !== undefined) return existing;
+	if (existing !== undefined) return existing.pending;
 
 	const pending = startChatSession(params);
-	liveThreads.set(params.threadId, pending);
+	liveThreads.set(params.threadId, { sessionId: params.sessionId, pending });
+	trackThread(params.sessionId, params.threadId);
 	return pending;
 };
 
 /**
  * Stops the underlying harness session (releasing its sandbox/port/processes)
- * and forgets it — called on `chat.closeThread`. A no-op when nothing's live
- * for `threadId`.
+ * and forgets it — called on `chat.closeThread` and, for every thread scoped
+ * to a review session, on `sessions.close` (`closeChatThreadsForSession`
+ * below). A no-op when nothing's live for `threadId`. Tolerates a
+ * construction that never finished (`agent.createSession()` failed, or is
+ * still in flight when disposed) — there's nothing live to stop in that
+ * case, so it's dropped rather than left to reject a caller that's only
+ * trying to clean up.
  */
 export const closeChatThread = async (threadId: string): Promise<void> => {
-	const pending = liveThreads.get(threadId);
-	if (pending === undefined) return;
+	const entry = liveThreads.get(threadId);
+	if (entry === undefined) return;
 	liveThreads.delete(threadId);
-	const entry = await pending;
-	await entry.session.stop();
+	untrackThread(entry.sessionId, threadId);
+	const live = await entry.pending.catch(() => undefined);
+	if (live === undefined) return;
+	await live.session.stop();
+};
+
+/**
+ * Disposes every thread scoped to `sessionId` — `http.ts`'s `sessions.close`
+ * handler calls this the same way it already stops `walkthrough`'s live
+ * session, since a closed PR tab's chat threads have no other owner left to
+ * release their harness subprocess/sandbox. A no-op when the session never
+ * had any live threads.
+ */
+export const closeChatThreadsForSession = async (
+	sessionId: string,
+): Promise<void> => {
+	const threadIds = threadsBySession.get(sessionId);
+	if (threadIds === undefined) return;
+	await Promise.all(
+		[...threadIds].map((threadId) => closeChatThread(threadId)),
+	);
 };

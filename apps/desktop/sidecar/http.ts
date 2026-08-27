@@ -34,7 +34,11 @@ import {
 	resolveChatPromptContext,
 } from "./chat/context.ts";
 import { buildChatInstructions } from "./chat/prompt.ts";
-import { closeChatThread, getOrCreateChatSession } from "./chat/sessions.ts";
+import {
+	closeChatThread,
+	closeChatThreadsForSession,
+	getOrCreateChatSession,
+} from "./chat/sessions.ts";
 import { streamChatTurn } from "./chat/stream.ts";
 import {
 	emit,
@@ -314,6 +318,12 @@ export function attachRouter(
 				// it — nothing left to reattach to once the session itself is gone.
 				yield* Effect.promise(() => stopLiveSession(input.sessionId));
 				clearGeneration(input.sessionId);
+				// Chat threads are scoped per PR tab (see `chat/sessions.ts`) — a
+				// closed tab's threads have no other owner either, same reasoning
+				// as `stopLiveSession` above.
+				yield* Effect.promise(() =>
+					closeChatThreadsForSession(input.sessionId),
+				);
 				// Otherwise a closed session's id lingers in the watch registry
 				// forever — nothing else ever removes it, since the frontend's own
 				// unmount-time `setWatching(false)` races this close and isn't
@@ -738,6 +748,7 @@ export function attachRouter(
 				});
 
 				const live = await getOrCreateChatSession({
+					sessionId: input.sessionId,
 					threadId: input.threadId,
 					harness: input.harness,
 					model: input.model,

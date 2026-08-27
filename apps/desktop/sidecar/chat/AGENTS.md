@@ -15,9 +15,14 @@ against the request's own connection.
   tells the agent its tools are read-only — nothing else. The agent has the same `bash`/`read`/`grep`/
   `glob` builtins walkthrough's does and can explore the worktree itself, so this never grows into a
   second `gatherGenerationContext` diff briefing.
-- `sessions.ts` — `getOrCreateChatSession`/`closeChatThread`: an in-process `Map<threadId,
-  Promise<LiveChatSession>>`. Keyed by `threadId`, not `sessionId` — one review session can host
-  several concurrent chat threads, each its own `HarnessAgent` conversation. The map holds the
+- `sessions.ts` — `getOrCreateChatSession`/`closeChatThread`/`closeChatThreadsForSession`: an
+  in-process `Map<threadId, ThreadEntry>` plus a `Map<sessionId, Set<threadId>>` reverse index.
+  Keyed by `threadId`, not `sessionId` — one review session can host several concurrent chat
+  threads, each its own `HarnessAgent` conversation — but every thread still records the
+  `sessionId` (PR tab) it's scoped to, since **chat threads are scoped per PR tab**: closing a tab
+  must dispose every thread it owns, or that thread's harness subprocess/sandbox leaks for the rest
+  of the sidecar's lifetime. `http.ts`'s `sessions.close` handler calls `closeChatThreadsForSession`
+  the same way it already stops `walkthrough`'s live session. A thread's `pending` field is the
   in-flight construction *promise*, not the resolved session, so two `chat.send` calls racing on a
   brand-new thread both await the same construction instead of each starting (and leaking) their own
   sandbox. Gone on sidecar restart, same posture as `walkthrough/live-sessions.ts` — chat threads are
@@ -35,3 +40,8 @@ against the request's own connection.
 - **`harness`/`model` only matter for a thread's first `chat.send`.** Once a thread's session is
   live, `getOrCreateChatSession` reuses it and ignores whatever `harness`/`model` a later call
   supplies — same reattach posture as `walkthrough.generate`'s "whatever's already running wins."
+- **`closeChatThread` tolerates a construction that never resolved.** A thread whose
+  `agent.createSession()` is still in flight (or failed) when it's disposed has nothing live to
+  stop — `entry.pending.catch(() => undefined)` drops that case rather than letting it reject the
+  caller, which matters for `closeChatThreadsForSession`: one broken thread must not stop
+  `sessions.close` from disposing the rest, or from succeeding at all.
