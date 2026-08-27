@@ -136,18 +136,21 @@ const acquire = (
 			// demonstrably it — it bound `owner.port` before ever calling
 			// `acquireSidecarLock` (see index.ts's boot order). So a lock file
 			// recording that same port cannot belong to a live *other* process:
-			// it's either this process's own previous incarnation (a pinned-port
-			// dev restart under `bun --watch` — see `scripts/dev.ts` and the root
-			// AGENTS.md's "The seam") or a `SIGKILL`'d sidecar whose ephemeral port
-			// the OS happened to hand back. Both are ours to take over, and
-			// health-checking one would just be this process interrogating
-			// itself — it's already listening on `owner.port` by the time this
-			// runs, so `isOwnerAlive` would always answer `true`, even for a
-			// pinned-port restart that has no other owner at all. Skip the check
-			// entirely and fall into the same clear-and-retry path a confirmed-dead
-			// owner takes. Safe for the `port: 0` case too: an ephemeral rebind
-			// onto a port some *other* live process already holds is exceedingly
-			// rare, so this branch simply doesn't fire then.
+			// it's either this process's own previous incarnation, or a
+			// `SIGKILL`'d sidecar whose ephemeral port the OS happened to hand
+			// back. The former is the common case in dev — `scripts/dev.ts` pins
+			// the sidecar port to a devsess sticky port for the whole session (see
+			// root `AGENTS.md`'s "The seam"), so this branch fires not just for a
+			// `bun --watch` restart mid-run, but for a fresh `bun dev` of the same
+			// session after a previous one died without releasing its lock. Either
+			// way, health-checking the recorded owner would just be this process
+			// interrogating itself — it's already listening on `owner.port` by the
+			// time this runs, so `isOwnerAlive` would always answer `true`, even
+			// when there's no other owner at all. Skip the check entirely and fall
+			// into the same clear-and-retry path a confirmed-dead owner takes.
+			// Safe for the `port: 0` case too: an ephemeral rebind onto a port
+			// some *other* live process already holds is exceedingly rare, so
+			// this branch simply doesn't fire then.
 			yield* Effect.logDebug(
 				`existing sidecar lock (port ${existingOwner.port}) matches the port this process is already listening on — taking it over without a liveness check`,
 			);
@@ -186,12 +189,14 @@ const acquire = (
  * port `owner` is claiming, it's taken over without a health check — a TCP
  * port has exactly one owner, and the acquiring process is demonstrably it
  * (see `acquire`'s same-port branch above), so the only way this happens is a
- * dev restart under a pinned port (`scripts/dev.ts`'s `bun --watch`) or a
- * `SIGKILL`'d sidecar whose ephemeral port got reassigned — never a live
- * rival. Any other recorded owner is health-checked — never a staleness
- * heuristic (file age, a PID that might have been reused) — and, once
- * confirmed dead, cleared and retried. Bounded by `MAX_ACQUIRE_ATTEMPTS` so a
- * lock that keeps coming back dead fails loudly instead of spinning forever.
+ * dev restart against `scripts/dev.ts`'s pinned sticky port (common: it
+ * persists across separate `bun dev` runs of one session, not just a
+ * `bun --watch` restart mid-run) or, in prod, a `SIGKILL`'d sidecar whose
+ * ephemeral port got reassigned — never a live rival. Any other recorded
+ * owner is health-checked — never a staleness heuristic (file age, a PID
+ * that might have been reused) — and, once confirmed dead, cleared and
+ * retried. Bounded by `MAX_ACQUIRE_ATTEMPTS` so a lock that keeps coming back
+ * dead fails loudly instead of spinning forever.
  *
  * A `SIGKILL`'d owner never runs its release effect (see `releaseSidecarLock`
  * below), so its lock file survives on disk — but that's exactly the case

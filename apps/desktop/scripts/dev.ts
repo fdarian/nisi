@@ -131,38 +131,24 @@ const dev = Command.make(
 				? pinnedPort.value
 				: yield* getStickyPort(session);
 
-			// Minted once per `bun dev` run, then pinned for its whole lifetime —
-			// not left for the sidecar to generate on every boot. `sidecar/index.ts`
-			// runs under `bun --watch` below, which restarts the process cleanly on
-			// every save; a per-boot `crypto.randomUUID()` token (and a `port: 0`
-			// ephemeral bind) would rotate under that restart, and this orchestrator
-			// froze `{ port, token }` into vite/Tauri's env at its own boot — so
-			// every request after a restart would 401 silently. See deskkit's
-			// sidecar README, "Running the sidecar under a file watcher".
+			// A second named sticky port, distinct from vite's above — persists
+			// across separate `bun dev` runs of this session (not just restarts
+			// within one), so a sidecar left behind by a killed run and this run's
+			// sidecar bind the very same port even before either one has published
+			// anything to `sidecar.json`. That's what lets `sidecar-lock.ts`'s
+			// same-port takeover recognize a previous run's dead sidecar reliably,
+			// rather than only within one run's own `bun --watch` restarts.
 			//
-			// devsess's `getStickyPort` only resolves one port per session (vite's,
-			// above) — it has no second named slot for the sidecar — so the port is
-			// chosen by hand: bind `port: 0`, read what the OS assigned, close it,
-			// and hand that number to the sidecar to rebind. The brief gap between
-			// closing this probe and the sidecar rebinding is the same "exceedingly
-			// rare" race `port: 0` already carries in production; a stale
-			// `sidecar.lock` recording this exact port is handled without a
-			// liveness check on the sidecar side instead (`sidecar-lock.ts`'s
-			// `acquireSidecarLock`).
+			// The token has no sticky equivalent — it's minted fresh every run —
+			// but still needs to be pinned *for* that run's whole lifetime:
+			// `sidecar/index.ts` runs under `bun --watch` below, which restarts the
+			// process cleanly on every save, and a per-boot `crypto.randomUUID()`
+			// token would rotate under that restart out from under a frontend that
+			// froze `{ port, token }` into its own env at its own boot — so every
+			// request after a restart would 401 silently. See deskkit's sidecar
+			// README, "Running the sidecar under a file watcher".
 			const sidecarToken = crypto.randomUUID();
-			const sidecarPort = yield* Effect.sync(() => {
-				const probe = Bun.serve({ port: 0, fetch: () => new Response("ok") });
-				const assignedPort = probe.port;
-				probe.stop();
-				return assignedPort;
-			});
-			if (sidecarPort === undefined) {
-				return yield* Effect.die(
-					new Error(
-						"couldn't pick a sidecar port: Bun.serve({ port: 0 }) returned none",
-					),
-				);
-			}
+			const sidecarPort = yield* getStickyPort(session, { name: "sidecar" });
 
 			const env = {
 				NISI_DATA_DIR: dataDir,

@@ -281,8 +281,8 @@ importers:
         specifier: github:fdarian/deskkit
         version: https://codeload.github.com/fdarian/deskkit/tar.gz/e102596ef69da78fefe4ba6cfb0f27a9a376cdc4(@effect/platform-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(@effect/sql-sqlite-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(drizzle-orm@1.0.0-rc.5-169397b(@effect/sql-sqlite-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(effect@4.0.0-rc.112))(effect@4.0.0-rc.112)
       devsess:
-        specifier: ^0.2.0
-        version: 0.2.0(drizzle-orm@1.0.0-rc.5-169397b(@effect/sql-sqlite-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(@opentelemetry/api@1.9.0)(bun-types@1.4.0)(effect@4.0.0-rc.112)(typebox@1.3.20)(zod@4.5.2))(effect@4.0.0-rc.112)
+        specifier: ^0.3.0
+        version: 0.3.0(drizzle-orm@1.0.0-rc.5-169397b(@effect/sql-sqlite-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(@opentelemetry/api@1.9.0)(bun-types@1.4.0)(effect@4.0.0-rc.112)(typebox@1.3.20)(zod@4.5.2))(effect@4.0.0-rc.112)
       drizzle-orm:
         specifier: 1.0.0-rc.5-169397b
         version: 1.0.0-rc.5-169397b(@effect/sql-sqlite-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(@opentelemetry/api@1.9.0)(bun-types@1.4.0)(effect@4.0.0-rc.112)(typebox@1.3.20)(zod@4.5.2)
@@ -3743,8 +3743,8 @@ packages:
   devlop@1.1.0:
     resolution: {integrity: sha512-RWmIqhcFf1lRYBvNmr7qTNuyCt/7/ns2jbpp1+PalgE/rDQcBT0fioSMUpJ93irlUhC5hrg4cYqe6U+0ImW0rA==}
 
-  devsess@0.2.0:
-    resolution: {integrity: sha512-aMMvXWhyDKGFoHh6wtCPRiTRbFMPcuwbfPXc32AuCJTYD3ro56zyxxZrxKFfRDgcxbugGHs4l6LdXWfqIqLwaQ==}
+  devsess@0.3.0:
+    resolution: {integrity: sha512-SIzKsezVUOdm6L9CsXTXE7Rv2lMrIXNUmyfTII4BGw6huVMplzUarjONUuzziLb6JpWDORY3VtbKMShHyMJh/A==}
     peerDependencies:
       '@electric-sql/pglite': '>=0.2.0'
       drizzle-orm: '>=0.30.0'
@@ -8703,7 +8703,7 @@ snapshots:
     dependencies:
       dequal: 2.0.3
 
-  devsess@0.2.0(drizzle-orm@1.0.0-rc.5-169397b(@effect/sql-sqlite-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(@opentelemetry/api@1.9.0)(bun-types@1.4.0)(effect@4.0.0-rc.112)(typebox@1.3.20)(zod@4.5.2))(effect@4.0.0-rc.112):
+  devsess@0.3.0(drizzle-orm@1.0.0-rc.5-169397b(@effect/sql-sqlite-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(@opentelemetry/api@1.9.0)(bun-types@1.4.0)(effect@4.0.0-rc.112)(typebox@1.3.20)(zod@4.5.2))(effect@4.0.0-rc.112):
     dependencies:
       effect: 4.0.0-rc.112
       get-port: 7.2.0
