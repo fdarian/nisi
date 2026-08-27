@@ -251,6 +251,18 @@ const MATCH_CONTEXT_LINES = 3;
  */
 const SCROLL_SETTLE_MS = 120;
 
+/**
+ * How many extra `SCROLL_SETTLE_MS` re-checks `beginProgrammaticScrollSuppression`
+ * will spend re-issuing a scroll that hasn't actually landed on its target
+ * once the animation itself goes quiet, before giving up and releasing
+ * suppression anyway. 10 × 120ms = 1.2s comfortably covers a `loading`
+ * placeholder's real content arriving and pierre re-anchoring the scroll in
+ * response, without suppressing forever for a target that can never land
+ * exactly on top (e.g. the last file, already scrolled as far as the pane
+ * goes).
+ */
+const MAX_SETTLE_RECHECKS = 10;
+
 function matchRangesWithContext(matches: readonly DiffMatch[]): LineRange[] {
 	return matches.map((match) => ({
 		startLine: Math.max(1, match.headLine - MATCH_CONTEXT_LINES),
@@ -426,6 +438,32 @@ export function DiffPane({
 	// (`releaseProgrammaticScrollSuppression`), whichever comes first.
 	const suppressVisiblePathReportRef = useRef(false);
 	const settleTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+	// The in-flight programmatic scroll's own path + `CodeView.scrollTo`
+	// target — read by `beginProgrammaticScrollSuppression`'s settle check so
+	// it can verify the pane actually landed there and, if it hasn't,
+	// re-issue it. Set alongside every `scrollToPath`/`scrollToMatch` call
+	// (in `scrollWhenReady`'s success branch), left stale (harmlessly)
+	// between scrolls otherwise.
+	const suppressedScrollRef = useRef<{
+		path: string;
+		target: CodeViewScrollTarget;
+	} | null>(null);
+	// Whether real wheel/touch input has happened since the last deliberate
+	// `scrollToPath`/`scrollToMatch` — the actual gate `handleScroll` trusts
+	// before ever calling `onVisiblePathChange`, below. Time-based
+	// suppression, even with the landed-on-target retry below, can't fully
+	// close this gap on its own: React runs a child's effects (the library
+	// applying a freshly resolved file's real content in place of its
+	// `loading` placeholder, see `loadingPlaceholderContents`'s doc comment)
+	// *before* this component's own, so a content-driven reflow can in
+	// principle fire its `onScroll` in the gap before suppression re-arms,
+	// no matter how the timing windows are tuned. Grounding trust in "did
+	// the user's hand actually touch the wheel/trackpad" instead of "has
+	// enough time passed" makes that race irrelevant: a reflow alone can
+	// never flip this on. Reset to `false` by every `scrollToPath`/
+	// `scrollToMatch` call, set `true` only by real input
+	// (`releaseProgrammaticScrollSuppression`).
+	const hasRealScrollInputRef = useRef(false);
 
 	const clearSettleTimeout = useCallback(() => {
 		if (settleTimeoutRef.current !== null) {
@@ -437,20 +475,55 @@ export function DiffPane({
 	// (Re)arms the settle timer — called on every intermediate `onScroll`
 	// while already suppressed (`handleScroll`), not just once, since a
 	// second path/match scroll can land while an earlier one is still
-	// settling.
+	// settling. Once the animation itself has gone quiet, verifies the pane
+	// actually landed on `suppressedScrollRef`'s path before releasing —
+	// a `loading` placeholder's card is only sized from an estimate (see
+	// `loadingPlaceholderContents`'s doc comment) until its real content
+	// arrives, and pierre remeasures and re-anchors the scroll once it does
+	// (`CodeView`'s own `getScrollAnchor`/`resolveAnchoredScrollTop`), which
+	// can happen well after this pane's own animation already went quiet.
+	// Re-issuing the same scroll and checking again, instead of just waiting
+	// longer, self-heals that — bounded by `MAX_SETTLE_RECHECKS` so a target
+	// that can never land exactly on top (e.g. the last file, already
+	// scrolled as far as the pane goes) can't suppress forever. This is a
+	// best-effort visual correction, not the load-bearing fix for
+	// `onVisiblePathChange` misreports — `hasRealScrollInputRef` above is.
 	const beginProgrammaticScrollSuppression = useCallback(() => {
 		suppressVisiblePathReportRef.current = true;
 		clearSettleTimeout();
-		settleTimeoutRef.current = setTimeout(() => {
-			suppressVisiblePathReportRef.current = false;
-			settleTimeoutRef.current = null;
-		}, SCROLL_SETTLE_MS);
+		const checkLandedOnTarget = (retriesRemaining: number) => {
+			const pending = suppressedScrollRef.current;
+			const handle = codeViewRef.current;
+			const viewer = handle?.getInstance();
+			if (pending === null || !handle || !viewer) {
+				suppressVisiblePathReportRef.current = false;
+				settleTimeoutRef.current = null;
+				return;
+			}
+			const topPath = findTopVisibleItemId(viewer, viewer.getScrollTop());
+			if (topPath === pending.path || retriesRemaining <= 0) {
+				suppressVisiblePathReportRef.current = false;
+				settleTimeoutRef.current = null;
+				return;
+			}
+			handle.scrollTo(pending.target);
+			settleTimeoutRef.current = setTimeout(
+				() => checkLandedOnTarget(retriesRemaining - 1),
+				SCROLL_SETTLE_MS,
+			);
+		};
+		settleTimeoutRef.current = setTimeout(
+			() => checkLandedOnTarget(MAX_SETTLE_RECHECKS),
+			SCROLL_SETTLE_MS,
+		);
 	}, [clearSettleTimeout]);
 
 	// A real wheel/touch during an in-flight programmatic scroll means the
 	// user is steering — hand control back immediately instead of waiting
-	// out the settle timer.
+	// out the settle timer. Also the one place `hasRealScrollInputRef` is
+	// ever set `true` — see its own doc comment.
 	const releaseProgrammaticScrollSuppression = useCallback(() => {
+		hasRealScrollInputRef.current = true;
 		if (!suppressVisiblePathReportRef.current) return;
 		suppressVisiblePathReportRef.current = false;
 		clearSettleTimeout();
@@ -903,6 +976,14 @@ export function DiffPane({
 				if (!handle || !viewer || viewer.getTopForItem(path) === undefined) {
 					return false;
 				}
+				// Record what this scroll is headed to *before* arming suppression
+				// — `beginProgrammaticScrollSuppression`'s settle check reads it
+				// to verify landing and, if needed, re-issue it.
+				suppressedScrollRef.current = { path, target };
+				// A fresh deliberate scroll means no report can be trusted as
+				// genuine drift again until the user's hand actually touches the
+				// wheel/trackpad — see `hasRealScrollInputRef`'s doc comment.
+				hasRealScrollInputRef.current = false;
 				beginProgrammaticScrollSuppression();
 				// A programmatic scroll is starting, so any earlier report no
 				// longer describes where the pane is headed — see
@@ -1036,6 +1117,10 @@ export function DiffPane({
 				return;
 			}
 			if (onVisiblePathChange === undefined) return;
+			// Not suppressed doesn't yet mean genuine — see
+			// `hasRealScrollInputRef`'s doc comment for why a content-driven
+			// reflow can still reach here unsuppressed.
+			if (!hasRealScrollInputRef.current) return;
 			const topPath = findTopVisibleItemId(viewer, scrollTop);
 			if (
 				topPath === undefined ||
