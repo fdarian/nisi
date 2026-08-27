@@ -2,60 +2,18 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { BunRuntime, BunServices } from "@effect/platform-bun";
 import { getDataDirConfig } from "@repo/db";
+import { awaitSidecarHandshake } from "deskkit/sidecar";
 import {
 	CurrentSession,
 	DevSessions,
 	getStickyPort,
 	runManagedSubprocess,
 } from "devsess";
-import { Config, Effect, Option, Schedule, Schema } from "effect";
+import { Config, Effect, Option } from "effect";
 import { FileSystem } from "effect/FileSystem";
 import { Command, Flag } from "effect/unstable/cli";
 
 const appDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-
-/** Same shape the sidecar publishes to `sidecar.json` — see `sidecar/sidecar-lock.ts`. */
-const SidecarHandshake = Schema.Struct({
-	port: Schema.Number,
-	token: Schema.String,
-});
-
-/** Fails when `sidecar.json` is missing or doesn't parse — both just mean "no handshake to read (yet)". */
-const readHandshake = (dataDir: string) =>
-	Effect.gen(function* () {
-		const fs = yield* FileSystem;
-		const raw = yield* fs.readFileString(path.join(dataDir, "sidecar.json"));
-		return yield* Effect.try(() =>
-			Schema.decodeUnknownSync(SidecarHandshake)(JSON.parse(raw)),
-		);
-	});
-
-/**
- * Polls `sidecar.json` until it publishes the handshake carrying `token` —
- * the exact value this run minted and handed the sidecar via
- * `NISI_DEV_SIDECAR_TOKEN` (see `env` below). Mirrors deskkit's
- * `awaitSidecarHandshake` (`deskkit/sidecar`'s README, "Running the sidecar
- * under a file watcher"): the token is pinned for the whole dev session
- * rather than freshly minted per boot, so a plain "is there a handshake at
- * all" check would false-positive on a stale one already on disk from a
- * previous run. Comparing against this exact token rules that out, and also
- * means a `--watch` restart — which republishes the same `{ port, token }` —
- * satisfies the wait again immediately instead of needing a change to detect.
- *
- * No bounded timeout, same reasoning as the old `awaitFreshHandshake` this
- * replaces: this only ever runs raced against the sidecar subprocess itself
- * (`Effect.raceAll` below), so a sidecar that dies before publishing — or
- * refuses to boot because another one holds the lock — interrupts this poll
- * along with it, rather than this function needing its own giving-up logic.
- */
-const awaitHandshake = (dataDir: string, token: string) =>
-	readHandshake(dataDir).pipe(
-		Effect.filterOrFail(
-			(handshake) => handshake.token === token,
-			() => new Error("sidecar.json doesn't carry this run's token yet"),
-		),
-		Effect.retry(Schedule.spaced("300 millis")),
-	);
 
 /**
  * Per-devsess-session dev orchestrator. Replaces the plain two-process
@@ -180,10 +138,11 @@ const dev = Command.make(
 			// wait instead of hanging forever. `sidecarPort`/`sidecarToken` are
 			// handed to vite directly rather than read back off the handshake —
 			// this run already minted both, so re-deriving them from the file
-			// `awaitHandshake` just finished polling would be a needless roundabout.
+			// `awaitSidecarHandshake` just finished polling would be a needless
+			// roundabout.
 			const frontendProcess = browser
 				? Effect.gen(function* () {
-						yield* awaitHandshake(dataDir, sidecarToken);
+						yield* awaitSidecarHandshake(dataDir, { token: sidecarToken });
 						return yield* runManagedSubprocess("bun", ["run", "dev:vite"], {
 							env: {
 								...env,

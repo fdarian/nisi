@@ -228,6 +228,23 @@ export const releaseSidecarLock = (
  * `wait_for_sidecar_json`, the CLI's `readHandshake`) can only ever observe
  * the old content or the new content, never a partial write in between.
  *
+ * This is deliberately not deskkit's `acquireSidecar` (`deskkit/sidecar`),
+ * even though `scripts/dev.ts` and the CLI's `handoff.ts` now read
+ * `sidecar.json` via that same package's `awaitSidecarHandshake`/
+ * `readSidecarJson`. deskkit's `acquireSidecar` folds the exclusivity claim
+ * and the published handshake into one file, written directly via `wx` — no
+ * rename — so a concurrent reader can observe a briefly empty or partial
+ * `sidecar.json` (deskkit's own reader retries past this; its README says any
+ * other reader must too). Rust's `wait_for_sidecar_json` doesn't: a parse
+ * failure there is treated as fatal, not "keep polling," and that's
+ * deliberate and tested (`fails_fast_on_a_malformed_file_instead_of_retrying_for_8s`
+ * in `src-tauri/src/lib.rs`) — with no automatic retry on the frontend's
+ * `get_backend` call above it, a single unlucky poll during that window would
+ * surface as a permanent, unrecoverable error screen. Keeping `sidecar.json`
+ * on this file's own atomic-rename write, separate from `sidecar.lock`'s
+ * `wx`-only claim (which nothing outside this file reads), is what avoids
+ * that.
+ *
  * Safe to call unconditionally, with no existence/staleness check first: a
  * successful `acquireSidecarLock` already proved this process is the data
  * dir's sole legitimate sidecar, so there's nothing to check before
