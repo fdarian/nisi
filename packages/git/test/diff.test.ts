@@ -415,6 +415,43 @@ describe("getFileContents", () => {
 		}
 	});
 
+	test("includes every file of a brand-new untracked directory when includeUncommitted is true", async () => {
+		// Regression test: `git status --porcelain`'s default
+		// `--untracked-files=normal` mode collapses an entirely-untracked
+		// directory into one `?? <dir>/` line instead of one line per file
+		// inside it. `getFileContents` used to detect untracked paths by
+		// parsing that output directly, so every file in a brand-new
+		// untracked directory silently dropped out of its result even
+		// though `getChangedFiles` (on `git ls-files`, which never
+		// collapses) reported them fine.
+		const { repo, base } = await makeScenario();
+		try {
+			await repo.write("src/secrets/in-memory.ts", "in-memory store\n");
+			await repo.write("src/secrets/service.ts", "secrets service\n");
+
+			const batched = await run(
+				getFileContents(
+					repo.root,
+					base,
+					[
+						{ path: "src/secrets/in-memory.ts" },
+						{ path: "src/secrets/service.ts" },
+					],
+					{ includeUncommitted: true },
+				),
+			);
+
+			expect(batched.get("src/secrets/in-memory.ts")?.newContent).toBe(
+				"in-memory store\n",
+			);
+			expect(batched.get("src/secrets/service.ts")?.newContent).toBe(
+				"secrets service\n",
+			);
+		} finally {
+			await cleanupTestRepo(repo);
+		}
+	});
+
 	test("succeeds for a path dirtied only on disk when includeUncommitted is true", async () => {
 		const { repo, base } = await makeScenario();
 		try {
