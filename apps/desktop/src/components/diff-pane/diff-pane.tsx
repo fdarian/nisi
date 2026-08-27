@@ -777,10 +777,22 @@ export function DiffPane({
 
 	// Item ids are the file path directly (`id: file.path` above) — resolving
 	// one back to a path is just checking it's a path this render actually
-	// produced an item for.
+	// produced an item for. Reads `itemMetadata` through a ref rather than
+	// closing over it directly, so this callback's own identity never
+	// changes — `itemMetadata`'s `useMemo` above recomputes on effectively
+	// every render (its dependency list includes `fileContents`/
+	// `reviewState`, which this app refreshes in the background), and an
+	// unstable `resolveItemPath` was tearing down and re-registering
+	// `use-diff-selection.ts`'s own `document`-level listeners on the same
+	// cadence — confirmed live via instrumented logging, two listener
+	// generations briefly overlapping produced duplicate, out-of-order
+	// `pointerdown`/`pointerup` handling for a single real click.
+	const itemMetadataRef = useRef(itemMetadata);
+	itemMetadataRef.current = itemMetadata;
 	const resolveSelectionItemPath = useCallback(
-		(itemId: string) => (itemMetadata.has(itemId) ? itemId : undefined),
-		[itemMetadata],
+		(itemId: string) =>
+			itemMetadataRef.current.has(itemId) ? itemId : undefined,
+		[],
 	);
 	const diffSelection = useDiffSelection({
 		codeViewRef,

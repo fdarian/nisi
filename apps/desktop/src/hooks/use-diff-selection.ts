@@ -111,13 +111,14 @@ function rowToBoundary(
 
 /**
  * Finds the one active, non-collapsed selection across every rendered
- * item's shadow root, feature-detecting between the two engines this app
- * ships on rather than assuming one: WebKit (Tauri's engine on macOS) gives
- * each shadow root its own `getSelection()`, so `document.getSelection()`
- * alone would retarget into the host and miss the real range entirely;
- * Chromium has no such per-root API, so `document.getSelection()` is the
- * only source there, and it happens to resolve into an open shadow tree's
- * nodes directly when the whole selection lives inside one.
+ * item's shadow root, feature-detecting rather than assuming one engine's
+ * behavior: this app has observed both a per-shadow-root `getSelection()`
+ * (checked first, per item) and a plain `document.getSelection()` that
+ * resolves directly into an open shadow tree's nodes when the whole
+ * selection lives inside one (checked as the fallback). Which of the two
+ * a given engine actually takes hasn't been confirmed on WKWebView
+ * specifically — only that both codepaths exist and this function doesn't
+ * assume in advance which one will fire.
  *
  * A selection whose two boundaries resolve to different items (a drag that
  * crossed a file boundary) returns `undefined` rather than a reference
@@ -148,6 +149,38 @@ function resolveActiveTextSelection(
 	return item ? { itemId: item.id, range } : undefined;
 }
 
+/**
+ * Whether `event`'s *true* origin (not its retargeted `.target`) was the
+ * line-number gutter or the floating popup itself. `event.target`, read
+ * from a `document`-level listener, is retargeted to the shadow host for
+ * anything that happened inside `@pierre/diffs`' open shadow roots — so a
+ * click deep in the gutter would otherwise look identical to a click
+ * anywhere else on that file's card. `event.composedPath()` isn't
+ * retargeted this way; it carries the real path from the deepest element
+ * outward, open-shadow-boundary or not, so this checks that instead.
+ *
+ * Used by `recomputeTextSelection` to decide whether "no active text
+ * selection right now" also means "the gutter selection is stale, clear
+ * it" — `@pierre/diffs`' own gutter-selection lifecycle (start, extend,
+ * commit) is a separate, multi-callback process this function has no
+ * visibility into moment-to-moment, so anything that could plausibly be
+ * part of it (on the gutter) or is `Copy reference` itself must be left
+ * alone entirely, not raced against.
+ */
+function isEventOriginOnGutterOrPopup(event: Event): boolean {
+	for (const node of event.composedPath()) {
+		if (!(node instanceof Element)) continue;
+		if (
+			node.hasAttribute("data-column-number") ||
+			node.hasAttribute("data-gutter")
+		) {
+			return true;
+		}
+		if (node.getAttribute("data-slot") === "popover-popup") return true;
+	}
+	return false;
+}
+
 /** Union of two `DOMRect`s — used to grow the gutter selection's anchor rect across every `[data-selected-line]` row `@pierre/diffs` paints for the range. */
 function unionRect(a: DOMRect, b: DOMRect): DOMRect {
 	const left = Math.min(a.left, b.left);
@@ -163,12 +196,28 @@ export function useDiffSelection<Metadata>({
 }: UseDiffSelectionOptions<Metadata>): UseDiffSelectionResult {
 	const [gutterSelection, setGutterSelection] =
 		useState<CodeViewLineSelection | null>(null);
+	// Mirrors `gutterSelection`, updated synchronously alongside every
+	// `setGutterSelection` call — `recomputeTextSelection` below reads this,
+	// not the state variable, because it runs from a plain
+	// `document.addEventListener` callback that can fire (via `pointerup`)
+	// *within the same synchronous gesture* that `handleSelectedLinesChange`
+	// already called `setGutterSelection` from, before React has re-rendered
+	// and handed this effect a closure over the new value. Confirmed live:
+	// a single click on the gutter logged `handleSelectedLinesChange` first,
+	// then `recomputeTextSelection` observed `gutterSelection` still `null`
+	// on the very same pointerup — reading the stale closure made this
+	// module's own "clear a stale gutter selection" branch (below) fire for
+	// every brand-new gutter click too, cancelling the reference before
+	// `handleSelectedLinesChange`'s `pollUntilReady` ever got to set the
+	// real one.
+	const gutterSelectionRef = useRef<CodeViewLineSelection | null>(null);
 	const [reference, setReference] = useState<DiffSelectionReference | null>(
 		null,
 	);
 	const pendingGutterRectFrame = useRef<number | null>(null);
 
 	const clearSelection = useCallback(() => {
+		gutterSelectionRef.current = null;
 		setGutterSelection(null);
 		setReference(null);
 		if (pendingGutterRectFrame.current !== null) {
@@ -198,6 +247,7 @@ export function useDiffSelection<Metadata>({
 	// reading the DOM inline.
 	const handleSelectedLinesChange = useCallback(
 		(selection: CodeViewLineSelection | null) => {
+			gutterSelectionRef.current = selection;
 			setGutterSelection(selection);
 			if (selection === null) {
 				setReference(null);
@@ -260,15 +310,42 @@ export function useDiffSelection<Metadata>({
 	// engine's Selection quirks apply, so those are the primary trigger here
 	// and `selectionchange` only a secondary one (e.g. Cmd+A "Select All").
 	useEffect(() => {
-		const recomputeTextSelection = () => {
+		const recomputeTextSelection = (event: Event) => {
 			const items =
 				codeViewRef.current?.getInstance()?.getRenderedItems() ?? [];
 			const active = resolveActiveTextSelection(items);
 			if (active === undefined) {
-				// Only clear a *text* reference — an in-progress gutter drag
-				// reports through `handleSelectedLinesChange`, not here, and a
-				// stray collapsed-selection event mid-drag shouldn't cancel it.
-				if (gutterSelection === null) setReference(null);
+				// No active text selection right now — but that alone
+				// doesn't mean "clear everything": `@pierre/diffs`' own
+				// gutter-selection lifecycle (start, extend, commit) is a
+				// separate, multi-callback process this function has no
+				// visibility into moment-to-moment, and this same
+				// `pointerup` fires *during* it. Gate on where the event
+				// actually originated instead of trying to track that
+				// lifecycle's timing: a `pointerup` whose real origin (see
+				// `isEventOriginOnGutterOrPopup`'s doc comment on why
+				// `event.target` itself isn't trustworthy here) is the
+				// gutter or the popup itself is either part of a gutter
+				// selection in progress or `Copy reference` being clicked —
+				// leave those alone. Anything else — code text (places a
+				// caret, no selection), or truly outside the CodeView
+				// (the sidebar, the PR header, a tab) — proves this gesture
+				// isn't and can't become part of that lifecycle, so any
+				// gutter selection still showing is provably stale.
+				// `selectionchange`/`keyup` have no equally reliable origin
+				// signal (`selectionchange`'s target is `document`; a
+				// gutter selection never has focus to begin with), so they
+				// keep trusting `gutterSelectionRef` instead — safe here
+				// since these aren't the events racing `@pierre/diffs`' own
+				// multi-stage gutter callbacks the way `pointerup` is.
+				if (event.type === "pointerup") {
+					if (isEventOriginOnGutterOrPopup(event)) return;
+					gutterSelectionRef.current = null;
+					setGutterSelection(null);
+					setReference(null);
+					return;
+				}
+				if (gutterSelectionRef.current === null) setReference(null);
 				return;
 			}
 			const path = resolveItemPath(active.itemId);
@@ -279,7 +356,10 @@ export function useDiffSelection<Metadata>({
 			const end = endRow && rowToBoundary(endRow);
 			if (!start || !end) return;
 			// A live text selection supersedes any gutter selection.
-			if (gutterSelection !== null) setGutterSelection(null);
+			if (gutterSelectionRef.current !== null) {
+				gutterSelectionRef.current = null;
+				setGutterSelection(null);
+			}
 			const headRange = resolveHeadRange(start, end);
 			setReference({
 				path,
@@ -296,7 +376,7 @@ export function useDiffSelection<Metadata>({
 			document.removeEventListener("pointerup", recomputeTextSelection);
 			document.removeEventListener("keyup", recomputeTextSelection);
 		};
-	}, [codeViewRef, resolveItemPath, gutterSelection]);
+	}, [codeViewRef, resolveItemPath]);
 
 	useEffect(
 		() => () => {
