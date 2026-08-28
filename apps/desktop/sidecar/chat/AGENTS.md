@@ -1,20 +1,22 @@
 # sidecar/chat
 
-Wires `packages/sidecar-api`'s `chat` contract to a read-only `HarnessAgent` conversation per
-thread. Reuses `sidecar/harness`'s adapter/sandbox/inactive-tools plumbing — nothing here builds a
-harness adapter itself. Unlike `sidecar/walkthrough`, a thread's answer is AI SDK's own
-`UIMessageChunk` stream forwarded as-is, not a structured document validated turn by turn, so
-there's no coverage loop, no persistence, and no reattach/pub-sub: `http.ts`'s `chat.send` handler
-drives one turn directly against the request's own connection.
+Wires `packages/sidecar-api`'s `chat` contract to a `HarnessAgent` conversation per thread — a
+normal conversation with the coding agent, with its full builtin tool set (write, edit, bash, all
+of it), the same as a standalone `claude`/`codex`/`opencode` session would have. Reuses
+`sidecar/harness`'s adapter/sandbox plumbing — nothing here builds a harness adapter itself, and
+unlike `sidecar/walkthrough`, nothing here restricts one either (see `sessions.ts`'s
+`startChatSession`). A thread's answer is AI SDK's own `UIMessageChunk` stream forwarded as-is, not
+a structured document validated turn by turn, so there's no coverage loop, no persistence, and no
+reattach/pub-sub: `http.ts`'s `chat.send` handler drives one turn directly against the request's
+own connection.
 
 - `context.ts` — `resolveChatPromptContext`: `sessionId` → the live, worktree-relocation-healed
   `repoRoot` (`Store.resolveSessionRepoRoot`) plus enough of the review session (`baseRef`/`headRef`/
   `pr`) to name in the system prompt. Throws `ChatSessionNotFound` for an unknown `sessionId`, same
   treatment `http.ts` gives `walkthrough.generate`'s `GenerateSessionNotFound`.
-- `prompt.ts` — `buildChatInstructions`: deliberately thin. Names the repo/branch/PR under review and
-  tells the agent its tools are read-only — nothing else. The agent has the same `bash`/`read`/`grep`/
-  `glob` builtins walkthrough's does and can explore the worktree itself, so this never grows into a
-  second `gatherGenerationContext` diff briefing.
+- `prompt.ts` — `buildChatInstructions`: deliberately thin. Names the repo/branch/PR under review,
+  nothing else. The agent has its full tool set against the same real worktree and can look (or act)
+  for itself, so this never grows into a second `gatherGenerationContext` diff briefing.
 - `sessions.ts` — `getOrCreateChatSession`/`closeChatThread`/`closeChatThreadsForSession`: an
   in-process `Map<threadId, ThreadEntry>` plus a `Map<sessionId, Set<threadId>>` reverse index.
   Keyed by `threadId`, not `sessionId` — one review session can host several concurrent chat
@@ -39,6 +41,12 @@ drives one turn directly against the request's own connection.
 
 ## Non-obvious decisions
 
+- **Chat is not read-only, unlike walkthrough.** `sessions.ts`'s `startChatSession` builds its
+  `HarnessAgent` with no `inactiveTools` — the point of chat is a normal conversation with the
+  coding agent, capable of actually doing things, not just narrating a diff. Don't reach for
+  `sidecar/harness`'s `FILE_MUTATING_BUILTINS` here by analogy with `walkthrough/generate.ts`; that
+  constant stays walkthrough-only, since a generated walkthrough must never touch the worktree it's
+  describing — chat has no such guarantee to keep.
 - **No `chat.stop` procedure.** `chat.send`'s handler passes oRPC's own request `signal` straight
   into `agent.stream({ abortSignal })` — a client disconnect (the chat popup closing mid-stream, a
   dropped connection) aborts the in-flight turn on its own, so there's nothing a separate cancel

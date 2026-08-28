@@ -24,6 +24,10 @@ class FakeHarnessAgentSession {
 
 class FakeHarnessAgent {
 	readonly lastSession = new FakeHarnessAgentSession();
+	readonly settings: Record<string, unknown>;
+	constructor(settings: Record<string, unknown>) {
+		this.settings = settings;
+	}
 	async createSession(): Promise<FakeHarnessAgentSession> {
 		if (nextCreateSessionShouldFail) {
 			throw new Error("simulated createSession failure");
@@ -65,6 +69,16 @@ describe("getOrCreateChatSession", () => {
 		const second = await getOrCreateChatSession(paramsFor(sessionId, threadId));
 
 		expect(second.session).toBe(first.session);
+	});
+
+	test("builds the HarnessAgent with no inactiveTools — chat gets the full builtin tool set, unlike walkthrough", async () => {
+		const sessionId = uniqueId("session");
+		const threadId = uniqueId("thread");
+
+		const live = await getOrCreateChatSession(paramsFor(sessionId, threadId));
+
+		const fakeAgent = live.agent as unknown as FakeHarnessAgent;
+		expect(fakeAgent.settings.inactiveTools).toBeUndefined();
 	});
 });
 

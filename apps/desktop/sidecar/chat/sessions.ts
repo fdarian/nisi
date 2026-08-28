@@ -2,7 +2,6 @@ import { HarnessAgent, type HarnessAgentSession } from "@ai-sdk/harness/agent";
 import { createLocalSandbox } from "@repo/harness-local";
 import type { HarnessId } from "@repo/sidecar-api";
 import { createHarnessAdapter } from "../harness/harnesses.ts";
-import { FILE_MUTATING_BUILTINS } from "../harness/inactive-tools.ts";
 import { resolveSandboxSettings } from "../harness/sandbox.ts";
 
 /**
@@ -83,11 +82,16 @@ const startChatSession = async (
 	const sandbox = createLocalSandbox(
 		resolveSandboxSettings(params.harness, params.repoRoot),
 	);
+	// No `inactiveTools` — chat gets every adapter builtin (write, edit, bash,
+	// all of it). Unlike `walkthrough/generate.ts`, which passes
+	// `sidecar/harness`'s `FILE_MUTATING_BUILTINS` to keep a walkthrough from
+	// ever touching the worktree it's narrating, chat is a normal
+	// conversation with the coding agent — the point is that it can actually
+	// do things, not just look.
 	const agent = new HarnessAgent({
 		harness: createHarnessAdapter(params.harness, params.model),
 		sandbox: sandbox.provider,
 		sandboxConfig: { workDir: sandbox.workDir },
-		inactiveTools: FILE_MUTATING_BUILTINS[params.harness],
 		instructions: params.instructions,
 		telemetry: {},
 	});

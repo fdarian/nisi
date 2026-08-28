@@ -20,8 +20,10 @@ export const chatContract = {
 	/**
 	 * Sends one user message on `threadId`'s conversation and streams the
 	 * agent's reply as `ChatStreamChunk`s. The first `send` for a `threadId`
-	 * starts a fresh, read-only `HarnessAgent` session against `sessionId`'s
-	 * review worktree; every later `send` for the same thread reuses it, so
+	 * starts a fresh `HarnessAgent` session against `sessionId`'s review
+	 * worktree, with its full builtin tool set — the same conversation you'd
+	 * get from a standalone `claude`/`codex`/`opencode` session, not a
+	 * restricted one; every later `send` for the same thread reuses it, so
 	 * multi-turn context carries across messages — `harness`/`model` only
 	 * matter for that first call and are ignored once a thread's session is
 	 * live, same as `walkthrough.generate`'s reattach. Threads are in-memory
