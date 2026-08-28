@@ -126,9 +126,17 @@ function useSeparatorClickForwarding() {
 	}, []);
 }
 
-/** The theme/layout/metrics knobs every `CodeView` instance in the app shares — `diffStyle`, `onPostRender` and `extraCSS` are what vary per pane. */
+/** The theme/layout/metrics knobs every `CodeView` instance in the app shares — `diffStyle`, `overflow`, `onPostRender` and `extraCSS` are what vary per pane. */
 export function buildDiffCodeViewOptions<Metadata>(overrides: {
 	diffStyle?: DiffStyleMode;
+	/**
+	 * `'wrap'` wraps long lines instead of letting them scroll horizontally —
+	 * a top-level `CodeViewOptions` key (`CODE_VIEW_DIFF_OPTION_KEYS`), so
+	 * `CodeView` re-applies it to already-mounted items via its own options
+	 * revision when this changes, no remount needed. Defaults to `'scroll'`,
+	 * `@pierre/diffs`' own default.
+	 */
+	overflow?: CodeViewOptions<Metadata>["overflow"];
 	onPostRender?: CodeViewOptions<Metadata>["onPostRender"];
 	/** Appended to `diffViewUnsafeCSS` inside each item's shadow root — for styling only one pane's items, e.g. `diffCardChromeCSS`. */
 	extraCSS?: string;
@@ -150,6 +158,7 @@ export function buildDiffCodeViewOptions<Metadata>(overrides: {
 		itemMetrics: diffItemMetrics,
 		layout: diffCodeViewLayout,
 		onPostRender: overrides.onPostRender,
+		overflow: overrides.overflow ?? "scroll",
 		stickyHeaders: true,
 		theme: DIFF_VIEW_THEME,
 		themeType: "system",

@@ -227,6 +227,8 @@ type DiffPaneProps = {
 	reviewState: ReadonlyMap<string, ReviewStateEntry>;
 	setViewed: (path: string, viewed: boolean) => void;
 	diffStyle: DiffStyleMode;
+	/** Wraps long diff lines instead of letting them scroll horizontally — see `@repo/settings`'s `wrapLines`. */
+	wrapLines: boolean;
 	ref?: React.Ref<DiffPaneHandle>;
 };
 
@@ -411,6 +413,7 @@ export function DiffPane({
 	reviewState,
 	setViewed,
 	diffStyle,
+	wrapLines,
 	ref,
 }: DiffPaneProps): React.ReactElement {
 	const codeViewRef = useRef<CodeViewHandle<DiffAnnotationMetadata>>(null);
@@ -985,6 +988,7 @@ export function DiffPane({
 				diffStyle,
 				enableLineSelection: true,
 				extraCSS: diffCardChromeCSS + highlightCSS,
+				overflow: wrapLines ? "wrap" : "scroll",
 				onPostRender: (node, _instance, phase, context) => {
 					const meta = itemMetadata.get(context.item.id);
 					node.classList.toggle(DIFF_VIEWED_HOST_CLASS, meta?.viewed === true);
@@ -998,7 +1002,7 @@ export function DiffPane({
 					);
 				},
 			}),
-		[diffStyle, itemMetadata, highlightCSS, onItemPostRender],
+		[diffStyle, wrapLines, itemMetadata, highlightCSS, onItemPostRender],
 	);
 
 	// Scrolls the pane to a target inside one item, retrying across frames
