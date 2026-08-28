@@ -385,13 +385,31 @@ export function FilesChangedView({
 		[queryFilteredFiles, selectedPath, selectPath],
 	);
 
+	// `r`'s post-toggle selection: advance to the next file in
+	// `queryFilteredFiles`, falling back to the previous one when there isn't
+	// a next file — same no-wrap edges as `selectRelative` itself, so a
+	// single-file list leaves the selection alone. Reads `queryFilteredFiles`
+	// from this render's closure, the same pre-toggle snapshot `selectRelative`
+	// itself reads.
 	const handleToggleReviewed = useCallback(() => {
 		if (selectedPath === null) return;
 		const previousViewed = isViewed(selectedPath);
 		undoStack.push({ path: selectedPath, previousViewed });
 		setViewed(selectedPath, !previousViewed);
-		selectRelative(1);
-	}, [selectedPath, isViewed, setViewed, selectRelative, undoStack]);
+		const currentIndex = queryFilteredFiles.findIndex(
+			(file) => file.path === selectedPath,
+		);
+		const hasNextFile =
+			currentIndex !== -1 && currentIndex + 1 < queryFilteredFiles.length;
+		selectRelative(hasNextFile ? 1 : -1);
+	}, [
+		selectedPath,
+		isViewed,
+		setViewed,
+		selectRelative,
+		undoStack,
+		queryFilteredFiles,
+	]);
 
 	const handleUndo = useCallback(() => {
 		const lastRecord = undoStack.pop();
