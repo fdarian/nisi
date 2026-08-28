@@ -385,13 +385,41 @@ export function FilesChangedView({
 		[queryFilteredFiles, selectedPath, selectPath],
 	);
 
+	// `r`'s post-toggle selection. Advancing to the next file is the common
+	// case and matches `selectRelative(1)` exactly. There's a wrinkle at the
+	// last file: if this toggle is about to make it disappear (hide-reviewed
+	// is on and the toggle just marked it reviewed), staying put would leave
+	// `selectedPath` pointing at a path `visibleFiles` no longer contains — so
+	// step back to the previous file instead. Otherwise (hide-reviewed off,
+	// or the toggle un-reviewed it) the file's still right there, and jumping
+	// away would be surprising — leave the selection alone. Reads
+	// `queryFilteredFiles` from this render's closure, the same pre-toggle
+	// snapshot `selectRelative` itself reads.
+	const selectAfterToggleReviewed = useCallback(
+		(togglingToViewed: boolean) => {
+			if (selectedPath === null) return;
+			const currentIndex = queryFilteredFiles.findIndex(
+				(file) => file.path === selectedPath,
+			);
+			const hasNextFile =
+				currentIndex !== -1 && currentIndex + 1 < queryFilteredFiles.length;
+			if (hasNextFile) {
+				selectRelative(1);
+				return;
+			}
+			const willDisappearFromList = hideReviewed && togglingToViewed;
+			if (willDisappearFromList) selectRelative(-1);
+		},
+		[selectedPath, queryFilteredFiles, hideReviewed, selectRelative],
+	);
+
 	const handleToggleReviewed = useCallback(() => {
 		if (selectedPath === null) return;
 		const previousViewed = isViewed(selectedPath);
 		undoStack.push({ path: selectedPath, previousViewed });
 		setViewed(selectedPath, !previousViewed);
-		selectRelative(1);
-	}, [selectedPath, isViewed, setViewed, selectRelative, undoStack]);
+		selectAfterToggleReviewed(!previousViewed);
+	}, [selectedPath, isViewed, setViewed, selectAfterToggleReviewed, undoStack]);
 
 	const handleUndo = useCallback(() => {
 		const lastRecord = undoStack.pop();
