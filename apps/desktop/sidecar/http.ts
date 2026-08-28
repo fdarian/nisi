@@ -79,6 +79,7 @@ const toWireSettings = (settings: {
 	readonly hideReviewed: WireSettings["hideReviewed"];
 	readonly includeUncommitted: WireSettings["includeUncommitted"];
 	readonly walkthroughEnabled: WireSettings["walkthroughEnabled"];
+	readonly wrapLines: WireSettings["wrapLines"];
 }): WireSettings => ({
 	enabledHarnesses:
 		settings.enabledHarnesses === null
@@ -90,6 +91,7 @@ const toWireSettings = (settings: {
 	hideReviewed: settings.hideReviewed,
 	includeUncommitted: settings.includeUncommitted,
 	walkthroughEnabled: settings.walkthroughEnabled,
+	wrapLines: settings.wrapLines,
 });
 
 /**
