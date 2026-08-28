@@ -41,6 +41,8 @@ export type Settings = {
 	includeUncommitted: boolean;
 	/** Gates the entire walkthrough feature — see `@repo/settings`'s `Settings.walkthroughEnabled`. */
 	walkthroughEnabled: boolean;
+	/** When true, long diff lines wrap instead of scrolling horizontally. */
+	wrapLines: boolean;
 };
 
 /**
@@ -58,6 +60,7 @@ const DEFAULT_SETTINGS: Settings = {
 	hideReviewed: false,
 	includeUncommitted: false,
 	walkthroughEnabled: false,
+	wrapLines: false,
 };
 
 /** `settings.get`, defaulting to the sidecar's own defaults while the first fetch is in flight. */
@@ -164,6 +167,21 @@ export function useHideReviewed(
 	);
 
 	return [settings.hideReviewed, setHideReviewed];
+}
+
+/** "Wrap lines" preference for the diff pane — see `@repo/settings`'s `wrapLines`. */
+export function useWrapLines(
+	orpc: SidecarQueryUtils,
+): [boolean, (wrapLines: boolean) => void] {
+	const { settings } = useSettings(orpc);
+	const update = useUpdateSettings(orpc);
+
+	const setWrapLines = useCallback(
+		(wrapLines: boolean) => update({ wrapLines }),
+		[update],
+	);
+
+	return [settings.wrapLines, setWrapLines];
 }
 
 /** Gates the entire walkthrough feature — see `@repo/settings`'s `walkthroughEnabled`. */
