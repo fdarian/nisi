@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
+import { Effect } from "effect";
 
 /**
  * `sessions.ts`'s `startChatSession` constructs a real `@ai-sdk/harness/agent`
@@ -6,7 +7,7 @@ import { beforeEach, describe, expect, mock, test } from "bun:test";
  * that's a CLI subprocess bootstrap (13-28s cold, per `@repo/harness-local`'s
  * AGENTS.md) or a real network call, neither of which belongs in a unit
  * test. `HarnessAgent` is mocked at the module boundary so every test below
- * exercises `sessions.ts`'s own bookkeeping — the `threadId -> sessionId`
+ * exercises `ChatSessions`'s own bookkeeping — the `threadId -> sessionId`
  * tracking and the `sessionId -> Set<threadId>` reverse index
  * `closeChatThreadsForSession` walks — against a fake session whose `stop()`
  * is directly observable, instead of a real one.
@@ -40,11 +41,10 @@ mock.module("@ai-sdk/harness/agent", () => ({
 	HarnessAgent: FakeHarnessAgent,
 }));
 
-const { closeChatThread, closeChatThreadsForSession, getOrCreateChatSession } =
-	await import("../sessions.ts");
+const { ChatSessions } = await import("../sessions.ts");
 
 let counter = 0;
-/** Fresh, never-before-seen ids per test — the module's maps are process-lifetime state, not reset between tests. */
+/** Fresh, never-before-seen ids per test — a `ChatSessions` instance is built fresh per test (see `beforeEach`) but ids stay unique anyway for clearer failure output. */
 const uniqueId = (label: string): string => `${label}-${++counter}`;
 
 const paramsFor = (sessionId: string, threadId: string) => ({
@@ -56,8 +56,16 @@ const paramsFor = (sessionId: string, threadId: string) => ({
 	instructions: "test instructions",
 });
 
+/**
+ * A fresh service instance per test — `ChatSessions.make` is a plain
+ * `Effect.sync`, so running it synchronously is enough to get a real
+ * instance with its own closed-over `Map`s, no layer/runtime wiring needed.
+ */
+let chatSessions: InstanceType<typeof ChatSessions>;
+
 beforeEach(() => {
 	nextCreateSessionShouldFail = false;
+	chatSessions = Effect.runSync(ChatSessions.make);
 });
 
 describe("getOrCreateChatSession", () => {
@@ -65,8 +73,12 @@ describe("getOrCreateChatSession", () => {
 		const sessionId = uniqueId("session");
 		const threadId = uniqueId("thread");
 
-		const first = await getOrCreateChatSession(paramsFor(sessionId, threadId));
-		const second = await getOrCreateChatSession(paramsFor(sessionId, threadId));
+		const first = await chatSessions.getOrCreateChatSession(
+			paramsFor(sessionId, threadId),
+		);
+		const second = await chatSessions.getOrCreateChatSession(
+			paramsFor(sessionId, threadId),
+		);
 
 		expect(second.session).toBe(first.session);
 	});
@@ -75,7 +87,9 @@ describe("getOrCreateChatSession", () => {
 		const sessionId = uniqueId("session");
 		const threadId = uniqueId("thread");
 
-		const live = await getOrCreateChatSession(paramsFor(sessionId, threadId));
+		const live = await chatSessions.getOrCreateChatSession(
+			paramsFor(sessionId, threadId),
+		);
 
 		const fakeAgent = live.agent as unknown as FakeHarnessAgent;
 		expect(fakeAgent.settings.inactiveTools).toBeUndefined();
@@ -90,13 +104,17 @@ describe("closeChatThreadsForSession", () => {
 		const threadB = uniqueId("thread");
 		const otherThread = uniqueId("thread");
 
-		const liveA = await getOrCreateChatSession(paramsFor(sessionId, threadA));
-		const liveB = await getOrCreateChatSession(paramsFor(sessionId, threadB));
-		const liveOther = await getOrCreateChatSession(
+		const liveA = await chatSessions.getOrCreateChatSession(
+			paramsFor(sessionId, threadA),
+		);
+		const liveB = await chatSessions.getOrCreateChatSession(
+			paramsFor(sessionId, threadB),
+		);
+		const liveOther = await chatSessions.getOrCreateChatSession(
 			paramsFor(otherSessionId, otherThread),
 		);
 
-		await closeChatThreadsForSession(sessionId);
+		await chatSessions.closeChatThreadsForSession(sessionId);
 
 		expect(liveA.session.stop).toHaveBeenCalledTimes(1);
 		expect(liveB.session.stop).toHaveBeenCalledTimes(1);
@@ -105,13 +123,15 @@ describe("closeChatThreadsForSession", () => {
 		// The session was disposed, not just marked — a later call for the same
 		// threadId must construct a fresh one rather than handing back the
 		// stopped instance.
-		const revived = await getOrCreateChatSession(paramsFor(sessionId, threadA));
+		const revived = await chatSessions.getOrCreateChatSession(
+			paramsFor(sessionId, threadA),
+		);
 		expect(revived.session).not.toBe(liveA.session);
 	});
 
 	test("is a no-op for a session with no live threads", async () => {
 		await expect(
-			closeChatThreadsForSession(uniqueId("session")),
+			chatSessions.closeChatThreadsForSession(uniqueId("session")),
 		).resolves.toBeUndefined();
 	});
 
@@ -124,30 +144,32 @@ describe("closeChatThreadsForSession", () => {
 		// a real `chat.send` handler would let this reject up to its own
 		// try/catch; the thread is still tracked in the meantime.
 		await expect(
-			getOrCreateChatSession(paramsFor(sessionId, threadId)),
+			chatSessions.getOrCreateChatSession(paramsFor(sessionId, threadId)),
 		).rejects.toThrow();
 
 		await expect(
-			closeChatThreadsForSession(sessionId),
+			chatSessions.closeChatThreadsForSession(sessionId),
 		).resolves.toBeUndefined();
 	});
 });
 
 describe("closeChatThread", () => {
 	test("is a no-op for an unknown threadId", async () => {
-		await expect(closeChatThread(uniqueId("thread"))).resolves.toBeUndefined();
+		await expect(
+			chatSessions.closeChatThread(uniqueId("thread")),
+		).resolves.toBeUndefined();
 	});
 
 	test("removes the thread from its session's index", async () => {
 		const sessionId = uniqueId("session");
 		const threadId = uniqueId("thread");
 
-		await getOrCreateChatSession(paramsFor(sessionId, threadId));
-		await closeChatThread(threadId);
+		await chatSessions.getOrCreateChatSession(paramsFor(sessionId, threadId));
+		await chatSessions.closeChatThread(threadId);
 
 		// Nothing left under `sessionId` to dispose a second time.
 		await expect(
-			closeChatThreadsForSession(sessionId),
+			chatSessions.closeChatThreadsForSession(sessionId),
 		).resolves.toBeUndefined();
 	});
 });

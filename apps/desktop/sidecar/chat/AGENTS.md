@@ -17,18 +17,25 @@ own connection.
 - `prompt.ts` — `buildChatInstructions`: deliberately thin. Names the repo/branch/PR under review,
   nothing else. The agent has its full tool set against the same real worktree and can look (or act)
   for itself, so this never grows into a second `gatherGenerationContext` diff briefing.
-- `sessions.ts` — `getOrCreateChatSession`/`closeChatThread`/`closeChatThreadsForSession`: an
-  in-process `Map<threadId, ThreadEntry>` plus a `Map<sessionId, Set<threadId>>` reverse index.
-  Keyed by `threadId`, not `sessionId` — one review session can host several concurrent chat
-  threads, each its own `HarnessAgent` conversation — but every thread still records the
-  `sessionId` (PR tab) it's scoped to, since **chat threads are scoped per PR tab**: closing a tab
-  must dispose every thread it owns, or that thread's harness subprocess/sandbox leaks for the rest
-  of the sidecar's lifetime. `http.ts`'s `sessions.close` handler calls `closeChatThreadsForSession`
-  the same way it already stops `walkthrough`'s live session. A thread's `pending` field is the
-  in-flight construction *promise*, not the resolved session, so two `chat.send` calls racing on a
-  brand-new thread both await the same construction instead of each starting (and leaking) their own
-  sandbox. Gone on sidecar restart, same posture as `walkthrough/live-sessions.ts` — chat threads are
-  ephemeral by design (`packages/sidecar-api/src/chat.ts`'s doc), no stored fallback to reattach to.
+- `sessions.ts` — `ChatSessions`, a `Context.Service` holding the popup's live thread registry:
+  `threadId -> ThreadEntry` plus a `sessionId -> Set<threadId>` reverse index, both `Map`s closed
+  over inside the service rather than module-scope globals — wired into `AppServices`/`mainContext`
+  via `index.ts`'s `MainLayer`, same as every other stateful sidecar service. Keyed by `threadId`,
+  not `sessionId` — one review session can host several concurrent chat threads, each its own
+  `HarnessAgent` conversation — but every thread still records the `sessionId` (PR tab) it's scoped
+  to, since **chat threads are scoped per PR tab**: closing a tab must dispose every thread it owns,
+  or that thread's harness subprocess/sandbox leaks for the rest of the sidecar's lifetime.
+  `http.ts`'s `sessions.close` handler calls `closeChatThreadsForSession` the same way it already
+  stops `walkthrough`'s live session. A thread's `pending` field is the in-flight construction
+  *promise*, not the resolved session, so two `chat.send` calls racing on a brand-new thread both
+  await the same construction instead of each starting (and leaking) their own sandbox. The three
+  module-level `getOrCreateChatSession`/`closeChatThread`/`closeChatThreadsForSession` exports are
+  the promise-returning bridge `chat.send`'s plain `async function*` handler calls — it can't
+  `yield*` the service directly (see that handler's own comment in `http.ts`) — pulling
+  `ChatSessions` out of the same captured `mainContext` every `.effect()` handler gets implicitly,
+  the same bridge `context.ts`'s `resolveChatPromptContext` and `walkthrough/generate.ts` use. Gone
+  on sidecar restart, same posture as `walkthrough/live-sessions.ts` — chat threads are ephemeral by
+  design (`packages/sidecar-api/src/chat.ts`'s doc), no stored fallback to reattach to.
 - `stream.ts` — `streamChatTurn`: runs one turn and forwards it as AI SDK's own `UIMessageChunk`
   stream — no hand-rolled `fullStream` projection the way `walkthrough/generate.ts`'s turn loop has
   one. Calls the *standalone* `toUIMessageStream({ stream, tools })` helper from `ai`, not

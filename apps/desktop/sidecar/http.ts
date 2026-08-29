@@ -322,7 +322,7 @@ export function attachRouter(
 				// closed tab's threads have no other owner either, same reasoning
 				// as `stopLiveSession` above.
 				yield* Effect.promise(() =>
-					closeChatThreadsForSession(input.sessionId),
+					closeChatThreadsForSession(input.sessionId, mainContext),
 				);
 				// Otherwise a closed session's id lingers in the watch registry
 				// forever — nothing else ever removes it, since the frontend's own
@@ -747,14 +747,17 @@ export function attachRouter(
 					throw error;
 				});
 
-				const live = await getOrCreateChatSession({
-					sessionId: input.sessionId,
-					threadId: input.threadId,
-					harness: input.harness,
-					model: input.model,
-					repoRoot: promptContext.repoRoot,
-					instructions: buildChatInstructions(promptContext),
-				});
+				const live = await getOrCreateChatSession(
+					{
+						sessionId: input.sessionId,
+						threadId: input.threadId,
+						harness: input.harness,
+						model: input.model,
+						repoRoot: promptContext.repoRoot,
+						instructions: buildChatInstructions(promptContext),
+					},
+					mainContext,
+				);
 
 				yield* streamChatTurn({
 					agent: live.agent,
@@ -764,7 +767,9 @@ export function attachRouter(
 				});
 			}),
 			closeThread: authed.chat.closeThread.effect(function* ({ input }) {
-				yield* Effect.promise(() => closeChatThread(input.threadId));
+				yield* Effect.promise(() =>
+					closeChatThread(input.threadId, mainContext),
+				);
 			}),
 		},
 		settings: {
