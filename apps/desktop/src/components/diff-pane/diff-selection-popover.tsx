@@ -119,10 +119,10 @@ export function DiffSelectionPopover({
 		>
 			<PopoverPrimitive.Portal>
 				<PopoverPrimitive.Positioner
-					align="center"
+					align="start"
 					anchor={virtualAnchor}
 					className="z-50 outline-none"
-					side="top"
+					side="bottom"
 					sideOffset={8}
 				>
 					<PopoverPrimitive.Popup className="outline-none">
@@ -134,7 +134,7 @@ export function DiffSelectionPopover({
 								setCopied(true);
 							}}
 							size="xs"
-							variant="ghost"
+							variant="default"
 						>
 							{copied ? <CheckIcon /> : <CopyIcon />}
 							{copied ? "Copied" : "Copy reference"}
