@@ -70,16 +70,16 @@ export function ChatDock({
 				)}
 			</AnimatePresence>
 			<motion.div
-				// `marginBottom` animates in lockstep with `height` rather than
-				// sitting in `className` as a static `mb-2` — a static bottom
-				// margin would still reserve 8px of dead space at the window edge
-				// even while the strip is collapsed to zero height (flex siblings'
-				// margins don't collapse into each other the way block siblings'
-				// do). `mx-2` has no such phantom-space problem (it never adds
+				// Only `height` animates, and there's deliberately no bottom
+				// margin: a static `mb-2` would still reserve 8px of dead space
+				// at the window edge even while the strip is collapsed to zero
+				// height (flex siblings' margins don't collapse into each other
+				// the way block siblings' do), and animating one in lockstep with
+				// `height` to dodge that costs a second animated property for
+				// 8px. `mx-2` has no such phantom-space problem (it never adds
 				// height), so it stays a plain class.
 				animate={{
-					height: threads.length > 0 ? 40 : 0,
-					marginBottom: threads.length > 0 ? 8 : 0,
+					height: threads.length > 0 ? 36 : 0,
 				}}
 				className="mx-2 flex shrink-0 items-center gap-1.5 overflow-hidden overflow-x-auto px-2"
 				initial={false}
