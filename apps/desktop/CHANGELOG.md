@@ -1,5 +1,22 @@
 # @repo/desktop
 
+## 0.3.2
+
+### Patch Changes
+
+- a91cf41: The collapsed-hunk control between diff hunks is now a full-width band you can click anywhere to expand, instead of a small button that could sit off-screen on files with long lines.
+- dff44cb: Copy the current branch name from the ⌘K command palette or the PR header's more menu.
+- 57a01b4: PR tabs can now be dragged to reorder them.
+- 16d364d: Step back and forward through recently focused files in the Files Changed pane with ⌘[ and ⌘].
+- 0a440e2: Fix jumping to a file while its diff is still streaming in landing at the wrong scroll position and jittering on subsequent scrolls.
+- 261d00e: Marking the last file as reviewed no longer clears the selection — focus falls back to the previous file.
+- a2740db: Add `o` then `e` to open the selected file in your preferred editor, and `o` then `g` to open the pull request in GitHub — set a preferred editor from Settings (⌘,) or the first press of `o e` will offer to pick one.
+- ffca752: Sync the selected file to the diff pane's scroll position, so the tree highlight and `r` (mark reviewed) follow whichever file is on screen while scrolling, not just `j`/`k`/click.
+- e4ef8b5: Switch a branch diff session to its pull request from the ⌘K command palette.
+- 9064cd8: Show a placeholder instead of silently dropping a file from the diff pane when its diff fails to parse.
+- 8ffaa47: Copy a changed file or folder's relative or absolute path.
+- e8eadb7: Fix files in a brand-new, entirely untracked folder showing "Couldn't load this file's diff." instead of their content, with "Include uncommitted" on.
+
 ## 0.3.1
 
 ### Patch Changes
