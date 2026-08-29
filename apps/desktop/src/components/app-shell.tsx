@@ -301,7 +301,7 @@ function AppShellReady({
 				sessions={sessions}
 				suspendedSessionIds={tabSuspension.suspendedSessionIds}
 			/>
-			<FramePanel className={cn(INSET_PANE_CLASS, "mt-0")}>
+			<FramePanel className={cn(INSET_PANE_CLASS, "my-0")}>
 				{sessions.map((session) => (
 					<TabsPrimitive.Panel
 						className="flex min-h-0 flex-1 flex-col outline-none"
@@ -332,10 +332,14 @@ function AppShellReady({
 					</TabsPrimitive.Panel>
 				))}
 			</FramePanel>
-			{activeSessionId !== null && (
-				<ChatDock orpc={orpc} sessionId={activeSessionId} />
-			)}
-			<DevTool />
+
+			<div className="relative flex justify-between min-h-2 items-center">
+				<DevTool />
+				{activeSessionId !== null && (
+					<ChatDock orpc={orpc} sessionId={activeSessionId} />
+				)}
+			</div>
+
 			<OpenPullRequestPalette
 				onOpenChange={setPaletteOpen}
 				onSessionOpened={setRequestedActiveSessionId}
@@ -357,8 +361,6 @@ function DevTool() {
 	const [devToolVisible] = useDevToolVisible();
 
 	return import.meta.env.DEV === true || devToolVisible ? (
-		<div className="absolute -bottom-1 left-3">
-			<DevToolButton />
-		</div>
+		<DevToolButton />
 	) : null;
 }
