@@ -37,7 +37,7 @@ function renderCask(version: string, sha256Hash: string): string {
   homepage "https://github.com/fdarian/nisi"
 
   depends_on arch: :arm64
-  depends_on macos: ">= :catalina"
+  depends_on macos: :catalina
 
   app "nisi.app"
   binary "#{appdir}/nisi.app/Contents/MacOS/nisi-cli", target: "nisi"
