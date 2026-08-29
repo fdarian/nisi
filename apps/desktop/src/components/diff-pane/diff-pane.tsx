@@ -1058,14 +1058,18 @@ export function DiffPane({
 	// uses to start it, instead of reporting.
 	const handleScroll = useCallback(
 		(scrollTop: number, viewer: CodeViewInstance<DiffAnnotationMetadata>) => {
+			// A selection (and its floating "Copy reference" button) survives
+			// a scroll — the button just needs to keep tracking the selected
+			// rows' current position, or hide while they're scrolled out of
+			// `@pierre/diffs`' virtualized render window. Re-measuring here,
+			// on both user-driven and programmatic scrolls, is what makes
+			// that tracking happen — see `refreshAnchorRect`'s doc comment
+			// for why a snapshotted rect can't do this on its own.
+			diffSelection.refreshAnchorRect();
 			if (suppressVisiblePathReportRef.current) {
 				beginProgrammaticScrollSuppression();
 				return;
 			}
-			// A real (non-programmatic) scroll invalidates the floating "Copy
-			// reference" button's anchor rect — dismiss rather than leave it
-			// pointing at wherever the selection used to be on screen.
-			diffSelection.clearSelection();
 			if (onVisiblePathChange === undefined) return;
 			const topPath = findTopVisibleItemId(viewer, scrollTop);
 			if (
@@ -1080,7 +1084,7 @@ export function DiffPane({
 		[
 			beginProgrammaticScrollSuppression,
 			onVisiblePathChange,
-			diffSelection.clearSelection,
+			diffSelection.refreshAnchorRect,
 		],
 	);
 
@@ -1166,6 +1170,7 @@ export function DiffPane({
 				selectedLines={diffSelection.selectedLines}
 			/>
 			<DiffSelectionPopover
+				anchorRect={diffSelection.anchorRect}
 				onDismiss={diffSelection.clearSelection}
 				reference={diffSelection.reference}
 			/>

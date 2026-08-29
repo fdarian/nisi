@@ -28,6 +28,15 @@ const COPIED_CONFIRMATION_MS = 1500;
 type DiffSelectionPopoverProps = {
 	reference: DiffSelectionReference | null;
 	/**
+	 * Where to anchor the button right now, or `null` when the selected rows
+	 * aren't currently resolvable (scrolled out of `@pierre/diffs`'
+	 * virtualized render window, or a text selection's `Range` collapsed).
+	 * Hides the button without dropping `reference` — see
+	 * `use-diff-selection.ts`'s own doc comment on this field for why the
+	 * two are separate.
+	 */
+	anchorRect: DOMRect | null;
+	/**
 	 * Called only when the user presses Escape to dismiss without copying —
 	 * the selection itself stays; `DiffPane`'s own scroll/selection-clear
 	 * handling is what actually clears it.
@@ -52,6 +61,7 @@ type DiffSelectionPopoverProps = {
 
 export function DiffSelectionPopover({
 	reference,
+	anchorRect,
 	onDismiss,
 }: DiffSelectionPopoverProps): React.ReactElement | null {
 	const [copied, setCopied] = useState(false);
@@ -108,14 +118,23 @@ export function DiffSelectionPopover({
 
 	if (reference === null) return null;
 
-	const virtualAnchor = { getBoundingClientRect: () => reference.rect };
+	// `anchorRect` re-measures live (see `use-diff-selection.ts`'s
+	// `measureGutterAnchorRect`/`refreshAnchorRect`), so this closure never
+	// captures a stale position — it just reads whatever `anchorRect`
+	// currently is on each call. The `new DOMRect()` fallback only exists to
+	// satisfy `getBoundingClientRect`'s non-nullable return type; it's never
+	// actually read, since `open` below already gates on `anchorRect` being
+	// non-null before Base UI would ask.
+	const virtualAnchor = {
+		getBoundingClientRect: () => anchorRect ?? new DOMRect(),
+	};
 
 	return (
 		<Popover
 			onOpenChange={(_open, eventDetails) => {
 				if (eventDetails.reason === "escape-key") onDismiss();
 			}}
-			open={open}
+			open={open && anchorRect !== null}
 		>
 			<PopoverPrimitive.Portal>
 				<PopoverPrimitive.Positioner
