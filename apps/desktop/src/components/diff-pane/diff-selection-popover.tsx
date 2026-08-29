@@ -6,11 +6,18 @@
  * drag or text drag) is currently active via a virtual anchor rather than a
  * real trigger element, since neither selection mechanism has one DOM node
  * that's "the trigger" the way a normal popover menu does.
+ *
+ * Builds directly on `PopoverPrimitive` (re-exported by `#/components/ui/popover`)
+ * instead of that module's `PopoverPopup` wrapper — this needs a bare button with
+ * no panel chrome and no enter animation, and `PopoverPopup`'s classes are tuned
+ * for a normal padded/bordered/shadowed popup that every *other* consumer relies
+ * on, so they're not something to change there. `PopoverPrimitive.Positioner` is
+ * still what does the actual anchor math (collision detection, flipping).
  */
 import { CheckIcon, CopyIcon } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useState } from "react";
 import { Button } from "#/components/ui/button";
-import { Popover, PopoverPopup } from "#/components/ui/popover";
+import { Popover, PopoverPrimitive } from "#/components/ui/popover";
 import {
 	type DiffSelectionReference,
 	formatSelectionReference,
@@ -30,14 +37,15 @@ type DiffSelectionPopoverProps = {
 	 * request, and that includes the very pointerdown that starts a *new*
 	 * gutter or text selection elsewhere in the pane. Reacting to that by
 	 * clearing here raced with `@pierre/diffs`' own in-progress pointer
-	 * session for the new drag: this component's `open` is hardcoded to
-	 * `true` while a `reference` exists, so nothing here needed to close on
-	 * outside-press in the first place, and a fresh selection already
-	 * supersedes the old one on its own via `use-diff-selection.ts`.
-	 * Confirmed live — an outside-press-driven clear here made a second
-	 * gutter drag silently produce zero selected lines while an earlier
-	 * popover was still open, because the controlled `selectedLines` prop's
-	 * sync effect called `instance.setSelectedLines(null, …)` mid-gesture.
+	 * session for the new drag: this component's `open` stays `true` for as
+	 * long as a `reference` exists (see the `open` state below), so nothing
+	 * here needed to close on outside-press in the first place, and a fresh
+	 * selection already supersedes the old one on its own via
+	 * `use-diff-selection.ts`. Confirmed live — an outside-press-driven
+	 * clear here made a second gutter drag silently produce zero selected
+	 * lines while an earlier popover was still open, because the controlled
+	 * `selectedLines` prop's sync effect called
+	 * `instance.setSelectedLines(null, …)` mid-gesture.
 	 */
 	onDismiss: () => void;
 };
@@ -64,6 +72,40 @@ export function DiffSelectionPopover({
 		return () => clearTimeout(timeout);
 	}, [copied]);
 
+	// Base UI's `useTransitionStatus` only opens its "wait a frame for
+	// position to settle before revealing" concealment window when it
+	// observes a genuine `open: false -> true` edge (`mounted` seeds
+	// straight from `open`'s value on first render, so mounting already
+	// `open` skips that window entirely). A *virtual* anchor — unlike a
+	// real `PopoverTrigger` DOM node, wired up synchronously at commit —
+	// only registers with Floating UI a render later, inside its own layout
+	// effect. Without the concealment window, the popup could paint once at
+	// whatever position Floating UI resolved before that registration, then
+	// visibly jump to the true position on the next commit — which, with
+	// the `Positioner`'s position transition active, read as a slide in
+	// from the left. `previousReference` + the effect below reproduce a
+	// real edge: start closed, flip open only after mount, so the popup
+	// never paints before it's positioned against the real anchor.
+	//
+	// `previousReference` is state (React's own "adjusting state during
+	// render" pattern), not a ref, so the comparison survives Strict Mode's
+	// double-render. It only resets `open` on a `null -> non-null`
+	// transition — a brand-new selection appearing — not on every
+	// intermediate reference update while a drag is still extending the
+	// *same* live selection (each extension already replaces `reference`
+	// with a fresh object; resetting `open` on those too would flicker the
+	// popup on every drag frame instead of just tracking the anchor).
+	const [previousReference, setPreviousReference] =
+		useState<DiffSelectionReference | null>(null);
+	const [open, setOpen] = useState(false);
+	if (reference !== previousReference) {
+		setPreviousReference(reference);
+		if (reference !== null && previousReference === null) setOpen(false);
+	}
+	useLayoutEffect(() => {
+		if (reference !== null) setOpen(true);
+	}, [reference]);
+
 	if (reference === null) return null;
 
 	const virtualAnchor = { getBoundingClientRect: () => reference.rect };
@@ -73,27 +115,33 @@ export function DiffSelectionPopover({
 			onOpenChange={(_open, eventDetails) => {
 				if (eventDetails.reason === "escape-key") onDismiss();
 			}}
-			open={true}
+			open={open}
 		>
-			<PopoverPopup
-				align="center"
-				anchor={virtualAnchor}
-				className="w-fit p-1"
-				side="top"
-				sideOffset={8}
-			>
-				<Button
-					onClick={() => {
-						navigator.clipboard.writeText(formatSelectionReference(reference));
-						setCopied(true);
-					}}
-					size="sm"
-					variant="secondary"
+			<PopoverPrimitive.Portal>
+				<PopoverPrimitive.Positioner
+					align="center"
+					anchor={virtualAnchor}
+					className="z-50 outline-none"
+					side="top"
+					sideOffset={8}
 				>
-					{copied ? <CheckIcon /> : <CopyIcon />}
-					{copied ? "Copied" : "Copy reference"}
-				</Button>
-			</PopoverPopup>
+					<PopoverPrimitive.Popup className="outline-none">
+						<Button
+							onClick={() => {
+								navigator.clipboard.writeText(
+									formatSelectionReference(reference),
+								);
+								setCopied(true);
+							}}
+							size="xs"
+							variant="ghost"
+						>
+							{copied ? <CheckIcon /> : <CopyIcon />}
+							{copied ? "Copied" : "Copy reference"}
+						</Button>
+					</PopoverPrimitive.Popup>
+				</PopoverPrimitive.Positioner>
+			</PopoverPrimitive.Portal>
 		</Popover>
 	);
 }
