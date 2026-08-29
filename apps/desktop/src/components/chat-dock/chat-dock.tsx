@@ -34,6 +34,7 @@ import {
 	useChatPopupOpen,
 	useChatThreads,
 } from "#/lib/chat-store";
+import { spring } from "#/lib/springs";
 
 type ChatDockProps = {
 	sessionId: string;
@@ -83,7 +84,7 @@ export function ChatDock({
 				}}
 				className="mx-2 flex shrink-0 items-center gap-1.5 overflow-hidden overflow-x-auto px-2"
 				initial={false}
-				transition={{ duration: 0.15, ease: "easeOut" }}
+				transition={spring.slow}
 			>
 				{threads.map((thread) => (
 					<ChatTab
