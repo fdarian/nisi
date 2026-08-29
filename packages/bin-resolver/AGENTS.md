@@ -34,7 +34,7 @@ The shell subprocess is the only expensive step here, and callers reach it uneve
   running* visible. It reaches every per-call consumer, but not `@repo/git`'s `GIT_BIN`/`GH_BIN`,
   which resolve once at module load and stay pinned.
 
-`HarnessInfo.available` is live for a different reason: `sidecar/walkthrough/availability.ts`
+`HarnessInfo.available` is live for a different reason: `sidecar/harness/availability.ts`
 never caches `checkBinAvailability` at all (unlike the model lists next to it), so every
 `listHarnesses` call re-checks the disk. The refresh above only drops the *probe's* memo.
 

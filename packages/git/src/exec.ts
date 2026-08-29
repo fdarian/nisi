@@ -205,7 +205,7 @@ export const runBytes = (
  * on every `git`/`gh` invocation.
  *
  * Both go through `@repo/bin-resolver` rather than the bare command name for
- * the same reason as `sidecar/walkthrough/model-discovery.ts`'s harness
+ * the same reason as `sidecar/harness/model-discovery.ts`'s harness
  * CLIs: a macOS `.app` launched from Finder/`open` inherits a minimal `PATH`
  * (no login shell startup files ever run), so a bare `"gh"` — commonly
  * installed via Homebrew at `/opt/homebrew/bin`, not on that minimal `PATH`

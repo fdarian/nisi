@@ -43,7 +43,7 @@ internal boundary to put Effect at; contorting it in would just add ceremony aro
   claude-code adapters spawn their bridges with, included. `resolvedPath()` must stay a per-call
   lookup rather than a module-level constant, or `walkthrough.refreshHarnesses`' path refresh can
   never take effect for the life of the process. See the comment at `spawnEnv`'s definition for
-  the full reasoning; `sidecar/walkthrough/model-discovery.ts` (apps/desktop) hits the identical
+  the full reasoning; `sidecar/harness/model-discovery.ts` (apps/desktop) hits the identical
   exposure for the harness CLIs' model-discovery spawns.
 - **Dev hides this whole class of bug**: `bun run` prepends its own `node`-shim directory to a
   child's `PATH`, so a terminal-launched sidecar resolves `node` even with an otherwise bare
@@ -112,8 +112,8 @@ the constructor and per `createSession`).
   global-store linking (`enableGlobalVirtualStore: true`) disagreeing with the bootstrap's own
   `--store-dir` makes pnpm try to purge and relink `node_modules`, which a GUI-launched sidecar has
   no TTY to confirm through (`ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY`).
-  `apps/desktop/sidecar/walkthrough/generate.ts` picks the mode per harness and resolves the
-  scratch root to a fixed `~/.nisi/harness-sandbox` — deliberately *not* `getDataDirConfig()`'s
+  `apps/desktop/sidecar/harness/sandbox.ts`'s `resolveSandboxSettings` picks the mode per harness
+  and resolves the scratch root to a fixed `~/.nisi/harness-sandbox` — deliberately *not* `getDataDirConfig()`'s
   `NISI_DATA_DIR`-derived app-data dir, since `scripts/dev.ts` points that at a per-worktree
   session dir inside the nisi checkout, i.e. inside a pnpm workspace. `~/.nisi` is outside any
   checkout regardless of `NISI_DATA_DIR`, and shared across dev/prod/every repo on purpose: it

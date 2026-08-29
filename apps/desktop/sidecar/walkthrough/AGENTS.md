@@ -4,6 +4,9 @@ The Phase 3 wiring layer: turns `@repo/walkthrough`'s pure schema/validation/pro
 `@repo/harness-local`'s sandbox provider into the sidecar's `walkthrough.harnesses` /
 `walkthrough.get` / `walkthrough.activeGeneration` / `walkthrough.generate` procedures. Neither of
 those two packages does I/O or knows about the other — this directory is where they actually meet.
+Harness-adapter plumbing that isn't walkthrough-specific (which CLI backs a harness, model
+discovery, sandbox mode, read-only tool gating) lives one level up in
+[sidecar/harness](../harness/AGENTS.md), shared by every caller that drives a `HarnessAgent`.
 
 - `store.ts` — `WalkthroughStore`, persistence for generated walkthroughs (one row per session,
   regenerating overwrites) plus their derived coverage gaps (`uncoveredFiles` — path and the
@@ -14,29 +17,6 @@ those two packages does I/O or knows about the other — this directory is where
   ("coverage never computed for this row"), distinct from `[]` ("computed, fully covered") — see
   `parseContent`'s doc. Lives here rather than in `@repo/walkthrough` because that package is
   deliberately I/O-free — see its AGENTS.md.
-- `harness-bin.ts` — `HARNESS_CLI_BIN`, the one map of harness → CLI binary name + env override var
-  (`claude`/`codex`/`opencode`; Pi has no entry, see `availability.ts`). Single source of truth both
-  `model-discovery.ts` (spawning it) and `availability.ts` (checking it's present) resolve through
-  `@repo/bin-resolver`.
-- `availability.ts` — `checkHarnessAvailability`, a live per-harness binary-presence check
-  (`@repo/bin-resolver`'s `checkBinAvailability`) — cheap enough to run on every `listHarnesses` call
-  with no caching of its own. This is `HarnessInfo.available`, distinct from `enabled`
-  (`@repo/settings`'s user declaration) — see `packages/sidecar-api/src/walkthrough.ts`'s doc.
-- `model-discovery.ts` — `discover*Models` (one real live-discovery function per harness — CLI
-  subprocess for codex/opencode, `@anthropic-ai/claude-agent-sdk`'s `query()` for claude-code,
-  `@earendil-works/pi-coding-agent`'s `ModelRegistry` for Pi, each timeout-bounded) and
-  `createModelDiscoveryCache` (the fresh/stale/unavailable TTL cache in front of them, with a `force`
-  option to bypass a cache hit — see the file's own comments for the fallback rules; follows oagent's
-  `services/engine/src/model-catalog.ts`).
-- `harnesses.ts` — `listHarnesses` (the registry `walkthrough.harnesses`/`walkthrough.refreshHarnesses`
-  return — always all four, each carrying an `enabled` flag against the caller-supplied
-  `enabledHarnesses` set, `available`/`binaryPath` from `availability.ts`, and a `modelsStatus` from
-  `model-discovery.ts`, so the onboarding picker and the settings page can render every harness as a
-  row; `http.ts` reads `enabledHarnesses` from `@repo/settings`'s `SettingsStore` before calling in).
-  Model discovery only runs for a harness that's both `enabled` *and* `available` — an unavailable
-  harness short-circuits to `modelsStatus: "unavailable"` without ever touching the discovery cache,
-  so a harness that loses its CLI never reports a misleadingly-reassuring `"stale"`. Also
-  `createHarnessAdapter` (harness/model choice → a real `HarnessV1` adapter instance).
 - `context.ts` — `gatherGenerationContext`: resolves a session's `repoRoot`/`baseRef`/`headRef`/PR
   title via `@repo/review`'s `ReviewStore` directly (not through `Store`, which has no raw "get one
   session" method) and fetches every changed file's patch + head content via `@repo/git`, producing
@@ -73,17 +53,17 @@ those two packages does I/O or knows about the other — this directory is where
 
 ## Non-obvious decisions
 
-- **Nothing a walkthrough generation can call writes to the worktree.** Two independent halves, both
-  in `generate.ts`: the output tools are named `write_walkthrough`/`edit_walkthrough`
-  (`WALKTHROUGH_TOOL_NAMES`) so they collide with no adapter's builtins, and `inactiveTools`
-  (`FILE_MUTATING_BUILTINS`) switches the adapters' own file writers off. Overriding `write`/`edit`
-  by key collision was the old design and failed both ways — Pi hung forever on it, Claude Code
-  drifted to its *builtin* `Write` on a large context blob and left a stray `walkthrough.json` in
-  the user's repo. `read`/`grep`/`glob`/`bash` stay active so the agent can explore the worktree
-  itself — the point of the brief `@repo/walkthrough`'s `buildOverview` hands it, not a fallback —
-  and `bash` is the one remaining way to touch disk, deliberately accepted.
-  `generate.ts` feeds one name pair to *both* `createWalkthroughTools` and `buildSystemPrompt` —
-  registering one set while telling the model another is the failure mode to watch for.
+- **Nothing a walkthrough generation can call writes to the worktree.** Two independent halves: the
+  output tools are named `write_walkthrough`/`edit_walkthrough` (`WALKTHROUGH_TOOL_NAMES`) so they
+  collide with no adapter's builtins, and `generate.ts` passes `sidecar/harness`'s
+  `FILE_MUTATING_BUILTINS` as `inactiveTools` to switch the adapters' own file writers off.
+  Overriding `write`/`edit` by key collision was the old design and failed both ways — Pi hung
+  forever on it, Claude Code drifted to its *builtin* `Write` on a large context blob and left a
+  stray `walkthrough.json` in the user's repo. `read`/`grep`/`glob`/`bash` stay active so the agent
+  can explore the worktree itself — the point of the brief `@repo/walkthrough`'s `buildOverview`
+  hands it, not a fallback. `generate.ts` feeds one name pair to *both* `createWalkthroughTools` and
+  `buildSystemPrompt` — registering one set while telling the model another is the failure mode to
+  watch for.
 - **Regenerate is the same `generate` call, not a separate procedure.** The sidecar decides what
   "regenerate" means by what it finds: a matching live session (continue the conversation), else a
   stored walkthrough (fresh session, seeded with the prior result as context), else nothing (cold
@@ -114,20 +94,10 @@ those two packages does I/O or knows about the other — this directory is where
 - `Effect.result` (not `Effect.either`, and not inspecting `Effect.runPromise`'s rejection by hand)
   is how `generate.ts`'s `resolveContext` distinguishes `SessionNotFound` from every other context-
   gathering failure — see the comment there before changing this pattern.
-- Codex's adapter exposes no `write`/`edit` builtins at all (only `bash`/`webSearch` — its own
-  patch-apply mechanism isn't surfaced as an AI-SDK tool), so the name-collision override described
-  above is a no-op for codex specifically; the custom tools are still reachable as plain
-  user-defined tools regardless, which is what actually matters.
-- Model discovery can still hand back an id that no longer works by the time `generate` actually
-  runs (a CLI update between the cache's TTL window and the call) — `available` only means the CLI
-  binary is present, and discovery only validates that a model id exists, neither checks that
-  auth/access for it is configured. A stale id still only ever fails at `generate` time.
-- **Pi discovery and Pi execution must read the same agent directory.** `discoverPiModels` uses
-  `ModelRuntime.create()`'s defaults (which resolve under Pi's own `getAgentDir()`), and
-  `createHarnessAdapter` passes that same `getAgentDir()` to `createPi`. Omit it and
-  `@ai-sdk/harness-pi` mints a private agent dir with an empty `auth.json`, so every model
-  discovery just listed as available fails at generate time with "No API key found for the
-  selected model."
-- **A harness's transport failure arrives as a `fullStream` `error` part, not a thrown error** —
-  the stream still ends normally afterwards. `generate.ts` reads those parts explicitly; a loop
-  that only watches `tool-call` sees a silent no-op turn and misattributes it to validation.
+- `sidecar/harness`'s `FILE_MUTATING_BUILTINS.codex` is empty (see its own AGENTS.md), so the
+  `WALKTHROUGH_TOOL_NAMES` name-collision override above is a no-op for codex specifically; the
+  custom tools are still reachable as plain user-defined tools regardless, which is what actually
+  matters.
+- `generate.ts` reads `fullStream`'s `error` parts via `sidecar/harness`'s `describeStreamError` — a
+  loop that only watches `tool-call` sees a silent no-op turn on a transport failure and
+  misattributes it to validation instead.

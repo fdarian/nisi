@@ -10,6 +10,7 @@ import "@orpc/experimental-effect/extensions/effect";
 import "@orpc/experimental-effect/extensions/input-output";
 
 import { oc } from "@orpc/contract";
+import { chatContract } from "./chat.ts";
 import { diffContract } from "./diff.ts";
 import { eventsContract } from "./events.ts";
 import { healthContract } from "./health.ts";
@@ -20,6 +21,7 @@ import { settingsContract } from "./settings.ts";
 import { updateContract } from "./update.ts";
 import { walkthroughContract } from "./walkthrough.ts";
 
+export * from "./chat.ts";
 export * from "./diff.ts";
 export * from "./events.ts";
 export * from "./health.ts";
@@ -40,6 +42,7 @@ export const contract = oc.errors({ UNAUTHORIZED: {} }).router({
 	review: reviewContract,
 	events: eventsContract,
 	walkthrough: walkthroughContract,
+	chat: chatContract,
 	settings: settingsContract,
 	pullRequests: pullRequestsContract,
 	update: updateContract,

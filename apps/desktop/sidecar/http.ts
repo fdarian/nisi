@@ -30,10 +30,22 @@ import { contract } from "@repo/sidecar-api";
 import type { Context } from "effect";
 import { Effect } from "effect";
 import {
+	ChatSessionNotFound,
+	resolveChatPromptContext,
+} from "./chat/context.ts";
+import { buildChatInstructions } from "./chat/prompt.ts";
+import {
+	closeChatThread,
+	closeChatThreadsForSession,
+	getOrCreateChatSession,
+} from "./chat/sessions.ts";
+import { streamChatTurn } from "./chat/stream.ts";
+import {
 	emit,
 	type SidecarEvent,
 	subscribe as subscribeToSidecarEvents,
 } from "./events.ts";
+import { listHarnesses } from "./harness/harnesses.ts";
 import { checkSessionForChanges } from "./live-poll.ts";
 import type { AppServices } from "./services.ts";
 import { SessionWatch } from "./session-watch.ts";
@@ -49,7 +61,6 @@ import {
 	clearGeneration,
 	getGeneration,
 } from "./walkthrough/generation-log.ts";
-import { listHarnesses } from "./walkthrough/harnesses.ts";
 import { stopLiveSession } from "./walkthrough/live-sessions.ts";
 import { WalkthroughStore } from "./walkthrough/store.ts";
 
@@ -307,6 +318,12 @@ export function attachRouter(
 				// it — nothing left to reattach to once the session itself is gone.
 				yield* Effect.promise(() => stopLiveSession(input.sessionId));
 				clearGeneration(input.sessionId);
+				// Chat threads are scoped per PR tab (see `chat/sessions.ts`) — a
+				// closed tab's threads have no other owner either, same reasoning
+				// as `stopLiveSession` above.
+				yield* Effect.promise(() =>
+					closeChatThreadsForSession(input.sessionId, mainContext),
+				);
 				// Otherwise a closed session's id lingers in the watch registry
 				// forever — nothing else ever removes it, since the frontend's own
 				// unmount-time `setWatching(false)` races this close and isn't
@@ -704,6 +721,55 @@ export function attachRouter(
 					),
 				);
 				abortGeneration(input.sessionId);
+			}),
+		},
+		chat: {
+			// Plain async-generator handler, same reason as `events.subscribe` and
+			// `walkthrough.generate` above — one turn streams live progress,
+			// including prose (`text-delta`), which `.effect()`'s
+			// single-resolved-value model can't. Simpler than
+			// `walkthrough.generate`: no reattach/pub-sub, since a chat turn is
+			// short-lived and threads are ephemeral — the request's own `signal`
+			// is what a client disconnect (e.g. the chat popup closing mid-stream)
+			// aborts on, and there's no separate `stop` procedure.
+			send: authed.chat.send.handler(async function* ({
+				input,
+				errors,
+				signal,
+			}) {
+				const promptContext = await resolveChatPromptContext(
+					input.sessionId,
+					mainContext,
+				).catch((error) => {
+					if (error instanceof ChatSessionNotFound) {
+						throw errors.NOT_FOUND({ message: error.message });
+					}
+					throw error;
+				});
+
+				const live = await getOrCreateChatSession(
+					{
+						sessionId: input.sessionId,
+						threadId: input.threadId,
+						harness: input.harness,
+						model: input.model,
+						repoRoot: promptContext.repoRoot,
+						instructions: buildChatInstructions(promptContext),
+					},
+					mainContext,
+				);
+
+				yield* streamChatTurn({
+					agent: live.agent,
+					session: live.session,
+					message: input.message,
+					abortSignal: signal,
+				});
+			}),
+			closeThread: authed.chat.closeThread.effect(function* ({ input }) {
+				yield* Effect.promise(() =>
+					closeChatThread(input.threadId, mainContext),
+				);
 			}),
 		},
 		settings: {

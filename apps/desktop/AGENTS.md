@@ -173,6 +173,21 @@ fixture PR lives at `src/components/walkthrough/walkthrough.fixture.ts`.
 - `biome.jsonc` here (`root: false`, extends the repo root) exists only to exempt
   `src/components/ui/**` from a11y lint rules — that directory is vendored from the `@coss` registry
   (`bunx --bun shadcn@latest add @coss/<name>`), not hand-authored.
+- **The chat dock's transport (`src/lib/chat-transport.ts`) implements `ChatTransport` by hand
+  instead of using `ai`'s `DefaultChatTransport`.** `chat.send` speaks oRPC's `eventIterator`, not
+  an HTTP route — there's no fetch endpoint for `DefaultChatTransport` to point at, so
+  `sendMessages` opens the oRPC async iterator itself and pumps it into the
+  `ReadableStream<UIMessageChunk>` `ChatTransport` expects.
+- **That transport sends only the newest user message, not the full `messages` array `useChat`
+  keeps client-side.** Read cold, this looks like a bug — a chat that only sends the latest turn
+  should forget everything before it. It doesn't: `chat.send`'s thread-scoped `HarnessAgentSession`
+  (`sidecar/chat/sessions.ts`) already holds the conversation server-side, so resending the
+  client's own history on every turn would hand the agent its own past turns twice.
+- **`chat-store.ts`'s `chatInstances: Map<threadId, Chat>` lives at module scope, not in a
+  component or a `useRef`.** A thread's turn keeps streaming with no chat panel mounted (closing
+  the popup, switching threads, switching PR tabs) only because something outside React holds the
+  `Chat` instance; `useChat({ chat })` just re-attaches to whatever state that instance already has
+  whenever a component renders against it again.
 
 ## Gotchas
 - `bun dev:vite` is vite-only — no Tauri IPC, so `invoke('get_backend')` throws. Useful only for
@@ -191,7 +206,7 @@ fixture PR lives at `src/components/walkthrough/walkthrough.fixture.ts`.
   [Dev/prod isolation](#devprod-isolation)). The cost of the split: a rename of the binary or its
   triple suffix now only breaks `bun build`, never dev.
 - **`HarnessInfo.available` and `.enabled` are independent, both always present.** `available` is a
-  live `@repo/bin-resolver` binary-presence check (`sidecar/walkthrough/availability.ts`), never
+  live `@repo/bin-resolver` binary-presence check (`sidecar/harness/availability.ts`), never
   cached; `enabled` is `@repo/settings`'s `enabledHarnesses`, a user declaration. A harness can be
   enabled but currently unavailable (its checkbox in `EnableHarnessesPanel`/`SettingsPage` stays
   checked but disabled, with an inline reason — it isn't dropped from `enabledHarnesses`) or
@@ -206,3 +221,9 @@ fixture PR lives at `src/components/walkthrough/walkthrough.fixture.ts`.
   in more than one default submenu (`Menu::default()` seeded a `close_window` in both Window and
   File) — `build_macos_menu` builds the whole tree explicitly instead of patching the default.
 - `#/*` → `src/*`, not `@/*`.
+- **`@ai-sdk/react` is pinned to an exact version, not the default caret range.** Its own
+  `package.json` depends on an exact `ai` version too, one that moves in lockstep with
+  `@ai-sdk/react`'s own patch number — letting the range float can resolve an `@ai-sdk/react`
+  release pinned to a different exact `ai` version than this repo's own pin, installing a second
+  copy of `ai` in the module graph instead of deduping to one. Bump both together, deliberately,
+  and check `pnpm-lock.yaml` for a duplicate `ai@` entry afterward.

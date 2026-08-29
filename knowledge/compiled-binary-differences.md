@@ -39,7 +39,7 @@ Same class, different library: `@earendil-works/pi-ai` loads its OAuth flows thr
 from and every OAuth-backed pi provider (e.g. xai) throws at the `resolve.js` "OAuth auth derivation
 failed" site. Fixed the same way the library fixes it for its own CLI: statically import and call
 `registerBunOAuthFlows()` from `@earendil-works/pi-ai/bun-oauth`
-(`apps/desktop/sidecar/walkthrough/harnesses.ts`) so bun embeds the flow modules instead of reaching
+(`apps/desktop/sidecar/harness/harnesses.ts`) so bun embeds the flow modules instead of reaching
 for them at runtime.
 
 **`PATH` is narrower.** `bun run` prepends its own node-shim directory to a child's `PATH`; the

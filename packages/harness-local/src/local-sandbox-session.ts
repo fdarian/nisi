@@ -50,7 +50,7 @@ const PNPM_BUILD_APPROVAL_ENV = {
  * `run`/`spawn`'s `command` is an arbitrary shell string composed by the
  * harness adapter (`pnpm --dir ... install`, `node .../bridge.mjs`, the
  * bootstrapped CLI itself, ...) — there's no single binary to resolve up
- * front the way `sidecar/walkthrough/model-discovery.ts` resolves one for
+ * front the way `sidecar/harness/model-discovery.ts` resolves one for
  * each harness CLI, so the fix here is widening `PATH` itself rather than
  * one `@repo/bin-resolver#resolveBin` call. Same underlying GUI-`PATH`
  * exposure as the harness CLIs — a macOS `.app` launched from Finder/`open`

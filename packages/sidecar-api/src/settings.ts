@@ -35,7 +35,7 @@ export type DiffStyleMode = Schema.Schema.Type<typeof DiffStyleMode>;
  * gotcha, now resolved): a fresh install reports unset, not "all four
  * chosen". Everything that spawns off `enabledHarnesses` treats `null` as
  * "every harness allowed" rather than "none" — see
- * `apps/desktop/sidecar/walkthrough/harnesses.ts`'s `listHarnesses`.
+ * `apps/desktop/sidecar/harness/harnesses.ts`'s `listHarnesses`.
  */
 export const Settings = Schema.Struct({
 	enabledHarnesses: Schema.NullOr(Schema.Array(HarnessId)),

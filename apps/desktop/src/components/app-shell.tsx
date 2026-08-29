@@ -3,6 +3,7 @@
 import { Menu } from "@tauri-apps/api/menu";
 import { AlertTriangleIcon, InboxIcon } from "lucide-react";
 import { type ComponentProps, useCallback, useMemo, useState } from "react";
+import { ChatDock } from "#/components/chat-dock/chat-dock";
 import { CommandPalette } from "#/components/command-palette";
 import { DevToolButton } from "#/components/devtool/dev-tool";
 import { useDevToolVisible } from "#/components/devtool/dev-tool-context";
@@ -27,6 +28,7 @@ import { useTabShortcuts } from "#/hooks/use-tab-shortcuts";
 import { useTabSuspension } from "#/hooks/use-tab-suspension";
 import type { SidecarQueryUtils } from "#/lib/backend-context";
 import { useBackendContext } from "#/lib/backend-context";
+import { ChatProvider, useClearChatSession } from "#/lib/chat-store";
 import { useSessions } from "#/lib/pr-data";
 import {
 	SessionUiProvider,
@@ -89,7 +91,9 @@ export function AppShell(): React.ReactElement {
 
 	return (
 		<SessionUiProvider>
-			<AppShellReady orpc={backend.orpc} />
+			<ChatProvider>
+				<AppShellReady orpc={backend.orpc} />
+			</ChatProvider>
 		</SessionUiProvider>
 	);
 }
@@ -188,6 +192,11 @@ function AppShellReady({
 	// one for us. Closing the active tab picks its neighbor explicitly,
 	// mirroring how browser tab strips behave.
 	const clearSessionUiState = useClearSessionUiState();
+	// Chat threads are already disposed server-side when their owning PR
+	// session closes (the sidecar walks its own reverse index) — this just
+	// drops the frontend's now-stale copy of them, same reasoning as
+	// `clearSessionUiState` below.
+	const clearChatSession = useClearChatSession();
 	const handleCloseSession = useCallback(
 		(sessionId: string) => {
 			closeSession(sessionId);
@@ -195,12 +204,19 @@ function AppShellReady({
 			// signal for "this tab is gone for good" — suspension leaves it
 			// intact on purpose, so only an actual close should drop it.
 			clearSessionUiState(sessionId);
+			clearChatSession(sessionId);
 			if (activeSessionId !== sessionId) return;
 			const index = sessions.findIndex((session) => session.id === sessionId);
 			const neighbor = sessions[index + 1] ?? sessions[index - 1];
 			setRequestedActiveSessionId(neighbor?.id ?? null);
 		},
-		[activeSessionId, closeSession, clearSessionUiState, sessions],
+		[
+			activeSessionId,
+			closeSession,
+			clearSessionUiState,
+			clearChatSession,
+			sessions,
+		],
 	);
 
 	const handleCloseOtherSessions = useCallback(
@@ -285,7 +301,7 @@ function AppShellReady({
 				sessions={sessions}
 				suspendedSessionIds={tabSuspension.suspendedSessionIds}
 			/>
-			<FramePanel className={cn(INSET_PANE_CLASS, "mt-0")}>
+			<FramePanel className={cn(INSET_PANE_CLASS, "my-0")}>
 				{sessions.map((session) => (
 					<TabsPrimitive.Panel
 						className="flex min-h-0 flex-1 flex-col outline-none"
@@ -316,7 +332,14 @@ function AppShellReady({
 					</TabsPrimitive.Panel>
 				))}
 			</FramePanel>
-			<DevTool />
+
+			<div className="relative flex justify-between min-h-2 items-center">
+				<DevTool />
+				{activeSessionId !== null && (
+					<ChatDock orpc={orpc} sessionId={activeSessionId} />
+				)}
+			</div>
+
 			<OpenPullRequestPalette
 				onOpenChange={setPaletteOpen}
 				onSessionOpened={setRequestedActiveSessionId}
@@ -338,8 +361,6 @@ function DevTool() {
 	const [devToolVisible] = useDevToolVisible();
 
 	return import.meta.env.DEV === true || devToolVisible ? (
-		<div className="absolute -bottom-1 left-3">
-			<DevToolButton />
-		</div>
+		<DevToolButton />
 	) : null;
 }

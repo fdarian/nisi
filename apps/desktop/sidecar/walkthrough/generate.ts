@@ -1,11 +1,6 @@
-import { homedir } from "node:os";
-import { join } from "node:path";
 import { DevToolsTelemetry } from "@ai-sdk/devtools";
 import { HarnessAgent } from "@ai-sdk/harness/agent";
-import {
-	createLocalSandbox,
-	type LocalSandboxSettings,
-} from "@repo/harness-local";
+import { createLocalSandbox } from "@repo/harness-local";
 import type {
 	GenerateEvent,
 	HarnessId,
@@ -24,6 +19,10 @@ import {
 import { registerTelemetry } from "ai";
 import type { Context } from "effect";
 import { Effect, Result, Schema } from "effect";
+import { createHarnessAdapter } from "../harness/harnesses.ts";
+import { FILE_MUTATING_BUILTINS } from "../harness/inactive-tools.ts";
+import { resolveSandboxSettings } from "../harness/sandbox.ts";
+import { describeStreamError } from "../harness/stream-errors.ts";
 import type { AppServices } from "../services.ts";
 import { type GenerationContext, gatherGenerationContext } from "./context.ts";
 import {
@@ -31,7 +30,6 @@ import {
 	clearGeneration,
 	recordGenerationEvent,
 } from "./generation-log.ts";
-import { createHarnessAdapter } from "./harnesses.ts";
 import {
 	getLiveSession,
 	type LiveWalkthroughSession,
@@ -54,81 +52,6 @@ if (process.env.AI_SDK_DEVTOOLS === "1") {
 
 /** Bounded write → validate → feedback → edit loop. Never infinite: an agent that can't converge fails loudly instead of burning turns forever. */
 const MAX_TURNS = 4;
-
-/**
- * Each adapter's builtin tools that write to the filesystem, switched off for
- * the whole generation. A walkthrough is prose *about* a diff — nothing here
- * ever needs to modify the worktree, and the worktree is the user's real repo,
- * not a disposable sandbox. Claude Code proved the risk concrete: on a large
- * context payload it called its builtin `Write` rather than the walkthrough
- * tool and left a stray `walkthrough.json` in the repo root.
- *
- * Renaming our own tools out of the way (`WALKTHROUGH_TOOL_NAMES`) stops the
- * model from *confusing* the two; this stops it from reaching a file writer at
- * all, whichever one it reaches for. Codex exposes no file-writing builtin
- * (only `bash`/`webSearch`), hence the empty list.
- *
- * `bash` is deliberately left active — the agent needs it to explore the
- * worktree (`@repo/walkthrough`'s `buildOverview` briefs it, doesn't hand it
- * everything), and it's the one remaining way to touch disk. That's a
- * narrower hole than an editing tool the model reaches for by habit, but it
- * is a hole.
- */
-const FILE_MUTATING_BUILTINS: Record<HarnessId, ReadonlyArray<string>> = {
-	"claude-code": ["write", "edit", "NotebookEdit"],
-	codex: [],
-	opencode: ["write", "edit"],
-	pi: ["write", "edit"],
-};
-
-/**
- * claude-code/codex/opencode each bootstrap a pinned CLI install into
- * `defaultWorkingDirectory` on first use (`.harness-bootstrap/<harness>` —
- * see `@repo/harness-local`'s AGENTS.md). Left in-place, that install runs
- * `pnpm install` inside whatever pnpm workspace the repo under review
- * happens to sit in — for a nisi worktree, that's nisi's own workspace,
- * and pnpm's own `node_modules` linking disagreeing with the bootstrap's
- * `--store-dir` makes it try to purge and reinstall it. Relocated mode
- * moves the bootstrap to a nisi-owned scratch root outside any pnpm
- * workspace instead.
- *
- * Pi is the one harness excluded: it has no bootstrap recipe at all (writes
- * nothing outside `workDir`), and it's also the one harness relocation would
- * actively break — its path-containment check canonicalizes the sandbox
- * side but not `workDir` itself, so a symlinked `workDir` fails every
- * read/write with "Pi path escapes the workspace".
- */
-const HARNESSES_NEEDING_RELOCATION: ReadonlySet<HarnessId> = new Set([
-	"claude-code",
-	"codex",
-	"opencode",
-]);
-
-/**
- * Deliberately *not* `NISI_DATA_DIR`-derived. `scripts/dev.ts` points
- * `NISI_DATA_DIR` at `apps/desktop/.data/sessions/<slug>/data` — inside the
- * nisi checkout, i.e. inside the same pnpm workspace this relocation exists
- * to escape (see `HARNESSES_NEEDING_RELOCATION`'s comment). `~/.nisi` is
- * outside any checkout regardless of `NISI_DATA_DIR`/dev session, which is
- * the one property this path needs.
- *
- * Shared between dev and every worktree/session on purpose, not a
- * dev/prod-isolation gap: this directory only ever holds a pinned CLI
- * install keyed by a content-derived bootstrap marker
- * (`@repo/harness-local`'s AGENTS.md), never app state — nothing to
- * split-brain over, and dev gets a warm bootstrap for free. Same "shared
- * across sessions and repos" reasoning `@repo/harness-local`'s AGENTS.md
- * already gives for not making this per-session.
- */
-const HARNESS_SANDBOX_ROOT = join(homedir(), ".nisi", "harness-sandbox");
-
-const resolveSandboxSettings = (
-	harness: HarnessId,
-	repoRoot: string,
-): LocalSandboxSettings =>
-	HARNESSES_NEEDING_RELOCATION.has(harness)
-		? { mode: "relocated", repoRoot, scratchRoot: HARNESS_SANDBOX_ROOT }
-		: { mode: "in-place", repoRoot };
 
 /** Thrown (not yielded) so `http.ts`'s handler can map it to the contract's declared `NOT_FOUND`, the same treatment `diff.files`/`diff.fileContents` give an unknown session — everything else that can go wrong mid-generation yields an in-band `failed` event instead of tearing down the stream. */
 export class GenerateSessionNotFound extends Error {
@@ -236,37 +159,6 @@ const buildFreshPrompt = (
 
 const buildContinuationPrompt = (overviewText: string): string =>
 	`The PR has changed since your last turn. Updated change overview:\n\n${overviewText}`;
-
-/**
- * `fullStream`'s `error` parts carry whatever the adapter's own transport
- * failed with — an unconfigured provider ("No API key found for the selected
- * model. Use /login…"), a revoked token, a model the CLI rejects. The stream
- * still ends *normally* after one, so nothing throws and the turn simply
- * produces no tool calls; before this was read, that surfaced as an empty
- * buffer, four identical "you haven't written the walkthrough yet" retries,
- * and a final message blaming coverage validation for what was really an auth
- * failure the harness had already described precisely.
- *
- * Returns `undefined` for a part carrying no payload at all. OpenCode's bridge
- * emits a bare `{ type: "error" }` partway through a busy session (see
- * `patches/@ai-sdk%2Fharness@1.0.46.patch`, which is what lets it decode
- * rather than tear the stream down); it says nothing, arrives on runs that are
- * otherwise fine, and must not abort a generation that is about to succeed.
- * Anything with real content still fails the turn.
- */
-const describeStreamError = (error: unknown): string | undefined => {
-	if (error === undefined || error === null) return undefined;
-	if (error instanceof Error) return error.message;
-	if (typeof error === "string") return error.length === 0 ? undefined : error;
-	if (
-		typeof error === "object" &&
-		"message" in error &&
-		typeof error.message === "string"
-	) {
-		return error.message;
-	}
-	return JSON.stringify(error);
-};
 
 const startFreshSession = async (
 	input: GenerateInput,

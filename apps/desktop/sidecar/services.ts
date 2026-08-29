@@ -1,6 +1,7 @@
 import type { BunServices } from "@effect/platform-bun";
 import type { ReviewStore } from "@repo/review";
 import type { SettingsStore } from "@repo/settings";
+import type { ChatSessions } from "./chat/sessions.ts";
 import type { SessionWatch } from "./session-watch.ts";
 import type { Store } from "./store.ts";
 import type { Updater } from "./updater/service.ts";
@@ -20,4 +21,5 @@ export type AppServices =
 	| SettingsStore
 	| SessionWatch
 	| Updater
+	| ChatSessions
 	| BunServices.BunServices;

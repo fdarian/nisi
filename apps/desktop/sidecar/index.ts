@@ -3,6 +3,7 @@ import { getDataDirConfig, SqliteDb } from "@repo/db";
 import { SettingsStore } from "@repo/settings";
 import { Effect, Layer } from "effect";
 import { FileSystem } from "effect/FileSystem";
+import { ChatSessions } from "./chat/sessions.ts";
 import { attachRouter, bindHealthCheckServer } from "./http.ts";
 import { startLivePolling } from "./live-poll.ts";
 import { LoggingLive } from "./logging.ts";
@@ -144,6 +145,7 @@ const MainLayer = Layer.mergeAll(
 	SettingsStore.layer,
 	SessionWatch.layer,
 	Updater.layer,
+	ChatSessions.layer,
 ).pipe(
 	Layer.provideMerge(SqliteDb.layer),
 	Layer.provideMerge(BunServices.layer),
