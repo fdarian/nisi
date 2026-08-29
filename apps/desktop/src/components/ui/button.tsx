@@ -18,6 +18,8 @@ export const buttonVariants = cva(
 			size: {
 				default: "h-9 px-[calc(--spacing(3)-1px)] sm:h-8",
 				icon: "size-9 sm:size-8",
+				"icon-2xs":
+					"size-6 rounded-md before:rounded-[calc(var(--radius-md)-1px)] sm:size-5 [&_svg:not([class*='size-'])]:size-3.5 sm:[&_svg:not([class*='size-'])]:size-3",
 				"icon-lg": "size-10 sm:size-9",
 				"icon-sm": "size-8 sm:size-7",
 				"icon-xl":
