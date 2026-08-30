@@ -13,7 +13,7 @@ import { CASK_TOKEN } from "./constants.ts";
  */
 export const BREW_BIN = resolveBin("brew", "NISI_BREW_BIN");
 
-type BrewResult = {
+export type BrewResult = {
 	readonly stdout: string;
 	readonly stderr: string;
 	readonly exitCode: number;
@@ -144,3 +144,22 @@ export const fetchCaskArtifact: Effect.Effect<
 	PlatformError,
 	ChildProcessSpawner.ChildProcessSpawner
 > = runBrew(["fetch", "--cask", CASK_TOKEN]);
+
+/**
+ * Explicit `brew update` — the only thing that ever refreshes the local git
+ * clone of a third-party tap like `fdarian/homebrew-tap`. Every other brew
+ * invocation here sets `HOMEBREW_NO_AUTO_UPDATE=1` (see `runBrew`'s doc), so
+ * without this, `brew fetch`/`brew upgrade` keep reading a frozen tap clone
+ * forever — `brew upgrade --cask nisi` in particular then finds nothing to
+ * do and exits 0 having upgraded nothing (`Warning: Not upgrading nisi, the
+ * latest version is already installed`), which is the whole bug this file
+ * exists to close. Kept as its own explicit step rather than relying on
+ * brew's implicit, time-throttled auto-update — a caller needs to know
+ * exactly when the refresh ran and be able to react to it failing, not have
+ * it silently skipped because brew last ran one on its own 20 minutes ago.
+ */
+export const refreshTap: Effect.Effect<
+	BrewResult,
+	PlatformError,
+	ChildProcessSpawner.ChildProcessSpawner
+> = runBrew(["update"]);

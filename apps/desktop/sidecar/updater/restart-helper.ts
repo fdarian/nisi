@@ -4,12 +4,13 @@ import { Effect } from "effect";
 import { FileSystem } from "effect/FileSystem";
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
 import { CASK_TOKEN } from "./constants.ts";
+import { restartOutcomePathFor } from "./restart-outcome.ts";
 
 /**
  * The app can't upgrade its own bundle while running, so the upgrade has to
  * happen in the gap between quit and relaunch — this script is that gap.
  * POSIX `sh`, not bash (macOS ships `/bin/sh`, nothing more is assumed).
- * Every input arrives as `$1..$4`, never baked into the script text itself:
+ * Every input arrives as `$1..$5`, never baked into the script text itself:
  * `ChildProcess.make` hands argv straight to `execve`, no shell
  * interpolation involved, so there's nothing here to quote.
  *
@@ -24,6 +25,7 @@ brew_path="$1"
 app_pid="$2"
 app_path="$3"
 log_path="$4"
+outcome_path="$5"
 
 exec >> "$log_path" 2>&1
 echo "[$(date)] restart helper started -- brew=$brew_path pid=$app_pid app=$app_path"
@@ -44,10 +46,33 @@ while kill -0 "$app_pid" 2>/dev/null; do
   waited=$((waited + 1))
 done
 
+version_before=$("$brew_path" list --cask --versions ${CASK_TOKEN} 2>/dev/null | awk '{print $2}')
+echo "[$(date)] installed version before upgrade: \${version_before:-unknown}"
+
+# Explicit refresh, same reasoning as homebrew.ts's refreshTap: every brew
+# invocation here (including "upgrade" below) sets HOMEBREW_NO_AUTO_UPDATE=1,
+# which suppresses the only thing that ever refreshes the local clone of a
+# third-party tap like fdarian/homebrew-tap. Without this, "brew upgrade"
+# reads a frozen cask and exits 0 having upgraded nothing.
+echo "[$(date)] running: HOMEBREW_NO_AUTO_UPDATE=1 $brew_path update"
+HOMEBREW_NO_AUTO_UPDATE=1 "$brew_path" update
+update_status=$?
+echo "[$(date)] brew update exited with status $update_status"
+
 echo "[$(date)] running: HOMEBREW_NO_AUTO_UPDATE=1 $brew_path upgrade --cask ${CASK_TOKEN}"
 HOMEBREW_NO_AUTO_UPDATE=1 "$brew_path" upgrade --cask ${CASK_TOKEN}
 upgrade_status=$?
 echo "[$(date)] brew upgrade exited with status $upgrade_status"
+
+version_after=$("$brew_path" list --cask --versions ${CASK_TOKEN} 2>/dev/null | awk '{print $2}')
+echo "[$(date)] installed version after upgrade: \${version_after:-unknown}"
+
+# Recorded so the sidecar can reconcile this attempt on its next boot (see
+# restart-outcome.ts) -- this script's own stdout/stderr lands in
+# restart.log, which nothing ever reads back on its own.
+printf '{"versionBefore":"%s","versionAfter":"%s","exitCode":%s}' \\
+  "\${version_before:-unknown}" "\${version_after:-unknown}" "$upgrade_status" > "$outcome_path"
+echo "[$(date)] wrote upgrade outcome to $outcome_path"
 
 # Relaunch unconditionally, whether or not the upgrade above succeeded -- a
 # failed upgrade must leave the user with a working old app, not nothing.
@@ -91,6 +116,7 @@ export const spawnRestartHelper = (params: RestartHelperParams) =>
 
 		const scriptPath = join(updateDir, "restart.sh");
 		const logPath = join(updateDir, "restart.log");
+		const outcomePath = restartOutcomePathFor(dataDir);
 		yield* fs.writeFileString(scriptPath, RESTART_SCRIPT, { mode: 0o755 });
 
 		yield* Effect.logInfo("spawning detached restart helper", {
@@ -98,6 +124,7 @@ export const spawnRestartHelper = (params: RestartHelperParams) =>
 			appPid: params.appPid,
 			appPath: params.appPath,
 			logPath,
+			outcomePath,
 		});
 
 		yield* Effect.scoped(
@@ -112,6 +139,7 @@ export const spawnRestartHelper = (params: RestartHelperParams) =>
 							String(params.appPid),
 							params.appPath,
 							logPath,
+							outcomePath,
 						],
 						{
 							detached: true,
