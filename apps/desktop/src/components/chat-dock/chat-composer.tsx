@@ -138,6 +138,23 @@ function ComposerBody({
 	const { harnesses } = useHarnesses(orpc);
 	const [lastChatModel] = useLastChatModel(orpc);
 
+	// Focuses on mount (opening the popup, expanding from minimized, or a
+	// brand-new thread) and again whenever a reference gets attached to an
+	// already-mounted composer — the "Ask" button's case, since attaching to
+	// the active thread only changes `references` rather than remounting this
+	// component (`chat-panel.tsx` keys `ChatComposer` by `thread.id`). Only
+	// sticks because `DiffSelectionPopover` disables Base UI's default
+	// focus-restore-on-close (`finalFocus={false}`) — that would otherwise
+	// return focus to wherever the drag gesture landed it a tick after this
+	// runs.
+	useEffect(() => {
+		editor.focus();
+	}, [editor]);
+	useEffect(() => {
+		if (references.length === 0) return;
+		editor.focus();
+	}, [editor, references]);
+
 	const isBusy = status === "submitted" || status === "streaming";
 	// The picker only matters before the thread's live harness session
 	// exists — `chatContract.send`'s doc: harness/model are ignored server
