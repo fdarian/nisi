@@ -234,13 +234,13 @@ const GraphQLPullRequestOverviewResponse = Schema.Struct({
 });
 
 const decodeOverviewResponse = (command: string, raw: string) =>
-	Effect.try({
-		try: () =>
-			Schema.decodeUnknownSync(GraphQLPullRequestOverviewResponse)(
-				JSON.parse(raw),
-			),
-		catch: (cause) => new GhOutputDecodeError({ command, raw, cause }),
-	});
+	Schema.decodeUnknownEffect(
+		Schema.fromJsonString(GraphQLPullRequestOverviewResponse),
+	)(raw).pipe(
+		Effect.mapError(
+			(cause) => new GhOutputDecodeError({ command, raw, cause }),
+		),
+	);
 
 /**
  * `PullRequest.commits(last: 100)` orders its connection oldest-first —
