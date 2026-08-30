@@ -76,6 +76,40 @@ export const sessionsContract = {
 		.output(Session)
 		.errors({ BAD_REQUEST: {}, NOT_FOUND: {}, SERVICE_UNAVAILABLE: {} }),
 	list: oc.output(Schema.Array(Session)),
+	/**
+	 * "Switch to PR": retargets `sessionId`'s row onto the pull request open
+	 * for its current branch *in place* — same `id`, so tracked-changes state
+	 * and a generated walkthrough (both keyed by this session's `id`) carry
+	 * over untouched. Unlike `open`'s `{ target: { kind: "pr" } }`, which
+	 * always mints a session under the PR's own key and leaves the caller's
+	 * tab exactly where it was, this transforms the one tab the caller named —
+	 * see `@repo/review`'s `retargetToPullRequest` for the mechanics. The
+	 * command palette's "Switch to PR" action, shown only on a `"branch"`
+	 * session, is this procedure's only caller.
+	 *
+	 * When some other session already holds that PR's key — reviewed from a
+	 * second worktree, or a previous switch that was never closed — this
+	 * closes `sessionId`'s row instead and answers with that pre-existing
+	 * session, under its own `id`. The caller tells the two outcomes apart by
+	 * comparing the response's `id` against the `sessionId` it sent, rather
+	 * than a separate status field, since that's the one thing that actually
+	 * differs between them from the caller's side.
+	 *
+	 * Error mapping mirrors `open`: `NOT_FOUND` covers both `sessionId` not
+	 * resolving to an open session and there being no open pull request for
+	 * its branch (never degrades to a branch diff, same as `open`'s own
+	 * `target: { kind: "pr" }`); `BAD_REQUEST`/`SERVICE_UNAVAILABLE` are the
+	 * same GitHub-resolution failures `open` can hit resolving that PR.
+	 */
+	switchToPr: oc
+		.input(Schema.Struct({ sessionId: Schema.String }))
+		.output(Session)
+		.errors({
+			NOT_FOUND: {},
+			BAD_REQUEST: {},
+			SERVICE_UNAVAILABLE: {},
+			INTERNAL_SERVER_ERROR: {},
+		}),
 	close: oc
 		.input(Schema.Struct({ sessionId: Schema.String }))
 		.output(Schema.Void)

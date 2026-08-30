@@ -460,6 +460,58 @@ export class Store extends Context.Service<Store>()("Store", {
 			});
 
 		/**
+		 * The command palette's "Switch to PR" action — transforms `sessionId`'s
+		 * row from a `"branch"` target onto the PR open for its current branch,
+		 * in place. Resolves the target the same way `openSession`'s own
+		 * `"pr"` selector does (`resolveSessionTarget`, so `NoPullRequest`
+		 * behaves identically — it never degrades to a branch diff here
+		 * either), then hands the resolved PR to `@repo/review`'s
+		 * `retargetToPullRequest` instead of `openSession`, since there's an
+		 * existing row to transform rather than get-or-create.
+		 *
+		 * `resolved.pr` is only ever `null` from `resolveSessionTarget`'s
+		 * `"branch"` variant — unreachable here since this always asks for
+		 * `"pr"` — so a `null` is an invariant violation, not a real case to
+		 * handle.
+		 *
+		 * On the collision outcome (some other session already held that PR's
+		 * key), the source session is genuinely done — this closes it
+		 * (`closeSession`, the domain-level state; the sidecar-wide cleanup
+		 * for its live walkthrough/chat/watch state is `http.ts`'s job, same
+		 * as `sessions.close`'s own handler) and returns the pre-existing PR
+		 * session in its place. The caller tells the two outcomes apart by
+		 * comparing the returned session's `id` against `sessionId`.
+		 */
+		const switchToPr = (sessionId: string) =>
+			Effect.gen(function* () {
+				const session = yield* reviewStore.getSession(sessionId);
+				const repoRoot = yield* resolveLiveRepoRoot(session);
+				const resolved = yield* resolveSessionTarget(repoRoot, {
+					kind: "pr",
+				});
+				if (resolved.pr === null) {
+					return yield* Effect.die(
+						new Error(
+							"resolveSessionTarget({ kind: 'pr' }) resolved with no pr",
+						),
+					);
+				}
+
+				const outcome = yield* reviewStore.retargetToPullRequest(
+					sessionId,
+					resolved.pr,
+					resolved.baseRef,
+					resolved.headRef,
+				);
+
+				if (outcome.kind === "existing") {
+					yield* reviewStore.closeSession(sessionId);
+				}
+
+				return toWireSession(outcome.session);
+			});
+
+		/**
 		 * The palette's "open this PR" action. Resolves `owner/repo` to a local
 		 * checkout first (`resolveRepoPath` above) — the palette never knows a
 		 * path itself, only `owner/repo#number` (`gh search prs` can't return
@@ -1293,6 +1345,7 @@ export class Store extends Context.Service<Store>()("Store", {
 
 		return {
 			openSession,
+			switchToPr,
 			openPullRequestSession,
 			recordRepoPath,
 			listSessions,

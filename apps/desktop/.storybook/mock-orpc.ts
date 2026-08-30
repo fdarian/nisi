@@ -187,6 +187,21 @@ export function createMockOrpc(data: MockOrpcData = {}): SidecarQueryUtils {
 				repoRoot: cwd,
 				target: { kind: "branch", baseRef: "main", headRef: "HEAD" },
 			}),
+			// No story exercises "Switch to PR" yet — same reasoning as
+			// `chat.send`/`chat.closeThread` below.
+			switchToPr: async ({ sessionId }) => ({
+				id: sessionId,
+				repoRoot: "/storybook",
+				target: {
+					kind: "pr",
+					number: 1,
+					title: "Storybook PR",
+					baseRef: "main",
+					headRef: "HEAD",
+					owner: "storybook",
+					repo: "storybook",
+				},
+			}),
 			list: async () => [],
 			close: async () => undefined,
 			setWatching: async () => undefined,
