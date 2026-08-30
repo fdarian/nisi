@@ -59,6 +59,7 @@ import {
 	useIncludeUncommitted,
 	usePreferredEditor,
 	useSidebarViewMode,
+	useWrapLines,
 } from "#/lib/settings-data";
 import { comparePaths } from "#/lib/tree-paths";
 import { cn } from "#/lib/utils";
@@ -166,6 +167,7 @@ export function FilesChangedView({
 	const [hideReviewed, setHideReviewed] = useHideReviewed(orpc);
 	const [includeUncommitted, setIncludeUncommitted] =
 		useIncludeUncommitted(orpc);
+	const [wrapLines, setWrapLines] = useWrapLines(orpc);
 	const [preferredEditor, setPreferredEditor] = usePreferredEditor(orpc);
 	const { editors, loadEditors } = useAvailableEditors();
 	const [editorPickerOpen, setEditorPickerOpen] = useState(false);
@@ -668,6 +670,12 @@ export function FilesChangedView({
 										Hide reviewed
 									</DropdownMenuCheckboxItem>
 									<DropdownMenuCheckboxItem
+										checked={wrapLines}
+										onCheckedChange={setWrapLines}
+									>
+										Wrap lines
+									</DropdownMenuCheckboxItem>
+									<DropdownMenuCheckboxItem
 										checked={includeUncommitted}
 										onCheckedChange={setIncludeUncommitted}
 									>
@@ -692,6 +700,7 @@ export function FilesChangedView({
 						selectedPath={selectedPath}
 						sessionId={session.id}
 						setViewed={setViewed}
+						wrapLines={wrapLines}
 					/>
 					{isKeywordFilterActive && (
 						<div className="mx-3 flex shrink-0 items-center justify-center rounded-xl bg-background px-3 py-1.5 text-muted-foreground text-xs">

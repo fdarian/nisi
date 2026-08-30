@@ -53,6 +53,8 @@ export const Settings = Schema.Struct({
 	includeUncommitted: Schema.Boolean,
 	/** Gates the entire walkthrough feature — see `@repo/settings`'s `Settings.walkthroughEnabled`. */
 	walkthroughEnabled: Schema.Boolean,
+	/** See `@repo/settings`'s `Settings.wrapLines`. */
+	wrapLines: Schema.Boolean,
 });
 export type Settings = Schema.Schema.Type<typeof Settings>;
 
@@ -70,6 +72,7 @@ export const SettingsUpdate = Schema.Struct({
 	hideReviewed: Schema.optional(Schema.Boolean),
 	includeUncommitted: Schema.optional(Schema.Boolean),
 	walkthroughEnabled: Schema.optional(Schema.Boolean),
+	wrapLines: Schema.optional(Schema.Boolean),
 });
 export type SettingsUpdate = Schema.Schema.Type<typeof SettingsUpdate>;
 

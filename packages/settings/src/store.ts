@@ -53,6 +53,8 @@ export type Settings = {
 	 * currently unstable, so existing installs get it off after migration.
 	 */
 	readonly walkthroughEnabled: boolean;
+	/** When true, long diff lines wrap instead of scrolling horizontally. */
+	readonly wrapLines: boolean;
 };
 
 export type SettingsUpdate = Partial<Settings>;
@@ -80,6 +82,7 @@ export const DEFAULT_SETTINGS: Settings = {
 	hideReviewed: false,
 	includeUncommitted: false,
 	walkthroughEnabled: false,
+	wrapLines: false,
 };
 
 const toSettings = (row: SettingsRow): Settings => ({
@@ -93,6 +96,7 @@ const toSettings = (row: SettingsRow): Settings => ({
 	hideReviewed: row.hideReviewed,
 	includeUncommitted: row.includeUncommitted,
 	walkthroughEnabled: row.walkthroughEnabled,
+	wrapLines: row.wrapLines,
 });
 
 const toRepoPathMapping = (row: RepoPathRow): RepoPathMapping => ({
@@ -151,6 +155,7 @@ export class SettingsStore extends Context.Service<SettingsStore>()(
 						hideReviewed: next.hideReviewed,
 						includeUncommitted: next.includeUncommitted,
 						walkthroughEnabled: next.walkthroughEnabled,
+						wrapLines: next.wrapLines,
 						updatedAt: new Date(),
 					};
 
