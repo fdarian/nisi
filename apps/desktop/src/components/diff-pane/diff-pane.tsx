@@ -24,6 +24,7 @@ import {
 	DiffCodeView,
 } from "#/components/diff-pane/diff-code-view";
 import { DiffFileHeader } from "#/components/diff-pane/diff-file-header";
+import { DiffSelectionPopover } from "#/components/diff-pane/diff-selection-popover";
 import {
 	DIFF_LOADING_HOST_CLASS,
 	DIFF_VIEWED_HOST_CLASS,
@@ -38,6 +39,7 @@ import {
 } from "#/components/ui/empty";
 import { Skeleton } from "#/components/ui/skeleton";
 import { useDiffMatchHighlighting } from "#/hooks/use-diff-match-highlighting";
+import { useDiffSelection } from "#/hooks/use-diff-selection";
 import { buildFileDiff } from "#/lib/build-file-diff";
 import type { LineRange } from "#/lib/build-location-diff";
 import { buildLocationFileDiff } from "#/lib/build-location-diff";
@@ -863,6 +865,30 @@ export function DiffPane({
 		fileCollapse.overrides,
 	]);
 
+	// Item ids are the file path directly (`id: file.path` above) — resolving
+	// one back to a path is just checking it's a path this render actually
+	// produced an item for. Reads `itemMetadata` through a ref rather than
+	// closing over it directly, so this callback's own identity never
+	// changes — `itemMetadata`'s `useMemo` above recomputes on effectively
+	// every render (its dependency list includes `fileContents`/
+	// `reviewState`, which this app refreshes in the background), and an
+	// unstable `resolveItemPath` was tearing down and re-registering
+	// `use-diff-selection.ts`'s own `document`-level listeners on the same
+	// cadence — confirmed live via instrumented logging, two listener
+	// generations briefly overlapping produced duplicate, out-of-order
+	// `pointerdown`/`pointerup` handling for a single real click.
+	const itemMetadataRef = useRef(itemMetadata);
+	itemMetadataRef.current = itemMetadata;
+	const resolveSelectionItemPath = useCallback(
+		(itemId: string) =>
+			itemMetadataRef.current.has(itemId) ? itemId : undefined,
+		[],
+	);
+	const diffSelection = useDiffSelection({
+		codeViewRef,
+		resolveItemPath: resolveSelectionItemPath,
+	});
+
 	const renderCustomHeader = useCallback(
 		(item: CodeViewItem<DiffAnnotationMetadata>) => {
 			const meta = itemMetadata.get(item.id);
@@ -957,6 +983,7 @@ export function DiffPane({
 		() =>
 			buildDiffCodeViewOptions({
 				diffStyle,
+				enableLineSelection: true,
 				extraCSS: diffCardChromeCSS + highlightCSS,
 				onPostRender: (node, _instance, phase, context) => {
 					const meta = itemMetadata.get(context.item.id);
@@ -1153,6 +1180,14 @@ export function DiffPane({
 	// uses to start it, instead of reporting.
 	const handleScroll = useCallback(
 		(scrollTop: number, viewer: CodeViewInstance<DiffAnnotationMetadata>) => {
+			// A selection (and its floating "Copy reference" button) survives
+			// a scroll — the button just needs to keep tracking the selected
+			// rows' current position, or hide while they're scrolled out of
+			// `@pierre/diffs`' virtualized render window. Re-measuring here,
+			// on both user-driven and programmatic scrolls, is what makes
+			// that tracking happen — see `refreshAnchorRect`'s doc comment
+			// for why a snapshotted rect can't do this on its own.
+			diffSelection.refreshAnchorRect();
 			if (suppressVisiblePathReportRef.current) {
 				beginProgrammaticScrollSuppression();
 				return;
@@ -1172,7 +1207,11 @@ export function DiffPane({
 			lastReportedVisiblePathRef.current = topPath;
 			onVisiblePathChange(topPath);
 		},
-		[beginProgrammaticScrollSuppression, onVisiblePathChange],
+		[
+			beginProgrammaticScrollSuppression,
+			onVisiblePathChange,
+			diffSelection.refreshAnchorRect,
+		],
 	);
 
 	// Covers selections this pane can actually see change — the initial one,
@@ -1202,57 +1241,66 @@ export function DiffPane({
 	}
 
 	return (
-		<DiffCodeView
-			// Each file's `<diffs-container>` (the custom element `@pierre/diffs`
-			// creates per virtualized item, see its own `constants.js` —
-			// `DIFFS_TAG_NAME`) is the card's *box*, clipped so the diff body's
-			// square shadow-DOM background respects the rounded corners — but
-			// not its outline. The card's four edges are drawn inside the shadow
-			// root instead, split between the header and the `<pre>`
-			// (`diffCardChromeCSS`), because a border on this host would keep
-			// painting a straight edge alongside the sticky header once the
-			// host's own corners have scrolled past the top of the pane. It
-			// carries no background for the same reason — the header and the
-			// `<pre>` tile it completely, so a background here would only ever
-			// show as a square behind those pinned rounded corners.
-			//
-			// The card's surface is `--background` (the header's `bg-background`
-			// and `diff-view-theme.ts`'s `--diffs-*-bg`), not `bg-card`: the two
-			// are the same white in light mode but `--card` is a measurably
-			// lighter tone than `--background` in dark mode (index.css), which
-			// made every card read as a raised slab. Clipping uses `clip-path`,
-			// not `overflow-hidden` — `overflow` (any value but `visible`) makes
-			// an element a scroll container, which becomes the containing block
-			// for any `position: sticky` descendant; `stickyHeaders: true`
-			// relies on the header sticking to the *outer* scrollable pane
-			// (this className's own `overflow-auto`), and `overflow-hidden` here
-			// would have quietly confined it to sticking within its own file
-			// instead. `clip-path` clips paint only, so it doesn't affect that.
-			//
-			// The vertical inset is `diffCodeViewLayout`'s `paddingTop`/
-			// `paddingBottom` (`diff-view-theme.ts`), never `py-*` here, and that
-			// is load-bearing. A scroll container's own padding still belongs to
-			// the scrollport — content scrolls through it and `contain: strict`
-			// clips at the padding box, so it paints there — but Chrome pins a
-			// `position: sticky` descendant to the container's *content* box. Top
-			// padding therefore carves out a strip the sticky file header can
-			// never cover while the diff body scrolls through it in plain sight:
-			// with `py-3` the header stuck 12px below the pane's top edge and the
-			// first rows of the file (or a "N unmodified lines" separator) stayed
-			// visible above it. `@pierre/diffs` applies its own layout padding as
-			// margins on the inner scrolled container instead, which scrolls away
-			// like any other content and leaves the header flush with the top.
-			className={cn(
-				"min-h-0 w-full flex-1 overflow-auto overscroll-contain px-3 [contain:strict]",
-				"[&_diffs-container]:[clip-path:inset(0_round_var(--radius-xl))]",
-			)}
-			items={items}
-			onScroll={handleScroll}
-			options={codeViewOptions}
-			ref={codeViewRef}
-			renderAnnotation={renderAnnotation}
-			renderCustomHeader={renderCustomHeader}
-		/>
+		<>
+			<DiffCodeView
+				// Each file's `<diffs-container>` (the custom element `@pierre/diffs`
+				// creates per virtualized item, see its own `constants.js` —
+				// `DIFFS_TAG_NAME`) is the card's *box*, clipped so the diff body's
+				// square shadow-DOM background respects the rounded corners — but
+				// not its outline. The card's four edges are drawn inside the shadow
+				// root instead, split between the header and the `<pre>`
+				// (`diffCardChromeCSS`), because a border on this host would keep
+				// painting a straight edge alongside the sticky header once the
+				// host's own corners have scrolled past the top of the pane. It
+				// carries no background for the same reason — the header and the
+				// `<pre>` tile it completely, so a background here would only ever
+				// show as a square behind those pinned rounded corners.
+				//
+				// The card's surface is `--background` (the header's `bg-background`
+				// and `diff-view-theme.ts`'s `--diffs-*-bg`), not `bg-card`: the two
+				// are the same white in light mode but `--card` is a measurably
+				// lighter tone than `--background` in dark mode (index.css), which
+				// made every card read as a raised slab. Clipping uses `clip-path`,
+				// not `overflow-hidden` — `overflow` (any value but `visible`) makes
+				// an element a scroll container, which becomes the containing block
+				// for any `position: sticky` descendant; `stickyHeaders: true`
+				// relies on the header sticking to the *outer* scrollable pane
+				// (this className's own `overflow-auto`), and `overflow-hidden` here
+				// would have quietly confined it to sticking within its own file
+				// instead. `clip-path` clips paint only, so it doesn't affect that.
+				//
+				// The vertical inset is `diffCodeViewLayout`'s `paddingTop`/
+				// `paddingBottom` (`diff-view-theme.ts`), never `py-*` here, and that
+				// is load-bearing. A scroll container's own padding still belongs to
+				// the scrollport — content scrolls through it and `contain: strict`
+				// clips at the padding box, so it paints there — but Chrome pins a
+				// `position: sticky` descendant to the container's *content* box. Top
+				// padding therefore carves out a strip the sticky file header can
+				// never cover while the diff body scrolls through it in plain sight:
+				// with `py-3` the header stuck 12px below the pane's top edge and the
+				// first rows of the file (or a "N unmodified lines" separator) stayed
+				// visible above it. `@pierre/diffs` applies its own layout padding as
+				// margins on the inner scrolled container instead, which scrolls away
+				// like any other content and leaves the header flush with the top.
+				className={cn(
+					"min-h-0 w-full flex-1 overflow-auto overscroll-contain px-3 [contain:strict]",
+					"[&_diffs-container]:[clip-path:inset(0_round_var(--radius-xl))]",
+				)}
+				items={items}
+				onScroll={handleScroll}
+				onSelectedLinesChange={diffSelection.onSelectedLinesChange}
+				options={codeViewOptions}
+				ref={codeViewRef}
+				renderAnnotation={renderAnnotation}
+				renderCustomHeader={renderCustomHeader}
+				selectedLines={diffSelection.selectedLines}
+			/>
+			<DiffSelectionPopover
+				anchorRect={diffSelection.anchorRect}
+				onDismiss={diffSelection.clearSelection}
+				reference={diffSelection.reference}
+			/>
+		</>
 	);
 }
 
