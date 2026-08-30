@@ -1008,77 +1008,93 @@ export function attachRouter(
 				input,
 				errors,
 			}) {
+				// A local SQLite read, not a `gh` call — kept out of the
+				// `Effect.all` below so it shares none of that group's
+				// concurrency or failure mapping. A remembered-preference read
+				// failing is not a reason to fail the whole request (that would
+				// turn a perfectly mergeable PR into an error in the UI): it
+				// degrades to `null`, the same as "never recorded", and
+				// `allowedMethods[0]` below covers it.
 				const repoMergeMethodStore = yield* RepoMergeMethodStore;
-				const [mergeability, allowedMethods, rememberedMethod] =
-					yield* Effect.all(
-						[
-							fetchPullRequestMergeability(input.repoRoot, input.number),
-							fetchRepoMergeMethods(input.repoRoot, input.owner, input.repo),
-							repoMergeMethodStore.get(input.owner, input.repo),
-						],
-						{ concurrency: "unbounded" },
-					).pipe(
-						Effect.catchTag("GhNotAuthenticated", (cause) =>
-							Effect.fail(
-								errors.GH_NOT_AUTHENTICATED({
-									message: `gh is not authenticated: ${cause.reason}`,
-								}),
-							),
-						),
-						Effect.catchTag("GhRateLimited", (cause) =>
-							Effect.fail(
-								errors.TOO_MANY_REQUESTS({
-									message: `GitHub's API is rate-limited right now: ${cause.reason}`,
-								}),
-							),
-						),
-						Effect.catchTag("GhOutputDecodeError", (cause) =>
-							Effect.fail(
-								errors.SERVICE_UNAVAILABLE({
-									message: `gh returned output nisi couldn't parse (${cause.command})`,
-								}),
-							),
-						),
-						Effect.catchTag("GitHubUnreachable", (cause) =>
-							Effect.fail(
-								errors.SERVICE_UNAVAILABLE({
-									message: `could not reach GitHub for ${cause.repoRoot}: ${cause.reason}`,
-								}),
-							),
-						),
-						Effect.catchTag("GitCommandError", (cause) =>
-							Effect.fail(
-								errors.SERVICE_UNAVAILABLE({
-									message: `${cause.command} could not be run: ${cause.stderr || String(cause.cause)}`,
-								}),
-							),
-						),
-						Effect.catchTag("PullRequestNotFound", (cause) =>
-							Effect.fail(
-								errors.NOT_FOUND({
-									message: `pull request #${cause.number} couldn't be resolved on GitHub for ${cause.repoRoot}: ${cause.reason}`,
-								}),
-							),
-						),
-						// `mergeStateStatus` specifically requires push access to the
-						// repo — deliberately not folded into `SERVICE_UNAVAILABLE`, so
-						// the button can say "merge status unavailable" rather than a
-						// generic connectivity failure.
-						Effect.catchTag("PullRequestMergeStatusUnavailable", (cause) =>
-							Effect.fail(
-								errors.MERGE_STATUS_UNAVAILABLE({
-									message: `couldn't determine merge status for pull request #${cause.number} in ${cause.repoRoot} — this usually means nisi doesn't have push access to the repo: ${cause.reason}`,
-								}),
-							),
-						),
-						Effect.catchTag("NoMergeMethodsEnabled", (cause) =>
-							Effect.fail(
-								errors.SERVICE_UNAVAILABLE({
-									message: `${cause.owner}/${cause.repo} has every merge method disabled`,
-								}),
-							),
+				const rememberedMethod = yield* repoMergeMethodStore
+					.get(input.owner, input.repo)
+					.pipe(
+						Effect.catchTag("SettingsStoreError", (cause) =>
+							Effect.logWarning(
+								"failed to read remembered merge method, falling back to allowedMethods[0]",
+								{ owner: input.owner, repo: input.repo, cause },
+							).pipe(Effect.as(null)),
 						),
 					);
+
+				const [mergeability, allowedMethods] = yield* Effect.all(
+					[
+						fetchPullRequestMergeability(input.repoRoot, input.number),
+						fetchRepoMergeMethods(input.repoRoot, input.owner, input.repo),
+					],
+					{ concurrency: "unbounded" },
+				).pipe(
+					Effect.catchTag("GhNotAuthenticated", (cause) =>
+						Effect.fail(
+							errors.GH_NOT_AUTHENTICATED({
+								message: `gh is not authenticated: ${cause.reason}`,
+							}),
+						),
+					),
+					Effect.catchTag("GhRateLimited", (cause) =>
+						Effect.fail(
+							errors.TOO_MANY_REQUESTS({
+								message: `GitHub's API is rate-limited right now: ${cause.reason}`,
+							}),
+						),
+					),
+					Effect.catchTag("GhOutputDecodeError", (cause) =>
+						Effect.fail(
+							errors.SERVICE_UNAVAILABLE({
+								message: `gh returned output nisi couldn't parse (${cause.command})`,
+							}),
+						),
+					),
+					Effect.catchTag("GitHubUnreachable", (cause) =>
+						Effect.fail(
+							errors.SERVICE_UNAVAILABLE({
+								message: `could not reach GitHub for ${cause.repoRoot}: ${cause.reason}`,
+							}),
+						),
+					),
+					Effect.catchTag("GitCommandError", (cause) =>
+						Effect.fail(
+							errors.SERVICE_UNAVAILABLE({
+								message: `${cause.command} could not be run: ${cause.stderr || String(cause.cause)}`,
+							}),
+						),
+					),
+					Effect.catchTag("PullRequestNotFound", (cause) =>
+						Effect.fail(
+							errors.NOT_FOUND({
+								message: `pull request #${cause.number} couldn't be resolved on GitHub for ${cause.repoRoot}: ${cause.reason}`,
+							}),
+						),
+					),
+					// `mergeStateStatus` specifically requires push access to the
+					// repo — deliberately not folded into `SERVICE_UNAVAILABLE`, so
+					// the button can say "merge status unavailable" rather than a
+					// generic connectivity failure.
+					Effect.catchTag("PullRequestMergeStatusUnavailable", (cause) =>
+						Effect.fail(
+							errors.MERGE_STATUS_UNAVAILABLE({
+								message: `couldn't determine merge status for pull request #${cause.number} in ${cause.repoRoot} — this usually means nisi doesn't have push access to the repo: ${cause.reason}`,
+							}),
+						),
+					),
+					Effect.catchTag("NoMergeMethodsEnabled", (cause) =>
+						Effect.fail(
+							errors.SERVICE_UNAVAILABLE({
+								message: `${cause.owner}/${cause.repo} has every merge method disabled`,
+							}),
+						),
+					),
+				);
 
 				// `allowedMethods` is guaranteed non-empty here — `fetchRepoMergeMethods`
 				// already fails `NoMergeMethodsEnabled` (mapped above) when it would
