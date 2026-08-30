@@ -59,15 +59,12 @@ import {
 } from "./diff-head.ts";
 
 /** `sessions.open`'s `cwd` doesn't resolve to a git working tree. */
-export class InvalidCwd extends Schema.TaggedErrorClass<InvalidCwd>()(
-	"InvalidCwd",
-	{
-		cwd: Schema.String,
-	},
-) {}
+export class InvalidCwd extends Schema.TaggedError<InvalidCwd>()("InvalidCwd", {
+	cwd: Schema.String,
+}) {}
 
 /** `sessions.open`'s `target: { kind: "pr" }` asked for a PR, but `resolveReviewTarget` found none open for the current branch. */
-export class NoPullRequest extends Schema.TaggedErrorClass<NoPullRequest>()(
+export class NoPullRequest extends Schema.TaggedError<NoPullRequest>()(
 	"NoPullRequest",
 	{
 		repoRoot: Schema.String,
@@ -75,7 +72,7 @@ export class NoPullRequest extends Schema.TaggedErrorClass<NoPullRequest>()(
 ) {}
 
 /** `sessions.open`'s `target: { kind: "branch", baseRef }` named a ref `git` couldn't resolve — typically a typo. `stderr` is git's own explanation, carried through so the caller sees which ref was bad instead of a generic "invalid base". */
-export class InvalidBaseRef extends Schema.TaggedErrorClass<InvalidBaseRef>()(
+export class InvalidBaseRef extends Schema.TaggedError<InvalidBaseRef>()(
 	"InvalidBaseRef",
 	{
 		repoRoot: Schema.String,

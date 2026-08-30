@@ -14,7 +14,7 @@
 		"@orpc/client": "2.0.0-beta.21",
 		"@orpc/contract": "2.0.0-beta.21",
 		"@orpc/experimental-effect": "2.0.0-beta.21",
-		"effect": "4.0.0-beta.102"
+		"effect": "catalog:"
 	},
 	"devDependencies": {
 		"@total-typescript/tsconfig": "1.0.4",

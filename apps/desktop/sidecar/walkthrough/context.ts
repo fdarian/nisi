@@ -30,7 +30,7 @@ import type { ChildProcessSpawner } from "effect/unstable/process";
  * PR-backed session never trips this, since its `repoRoot` is a worktree
  * nisi created and keeps checked out to exactly that PR's head.
  */
-export class HeadNotCheckedOut extends Schema.TaggedErrorClass<HeadNotCheckedOut>()(
+export class HeadNotCheckedOut extends Schema.TaggedError<HeadNotCheckedOut>()(
 	"HeadNotCheckedOut",
 	{
 		repoRoot: Schema.String,

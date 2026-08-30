@@ -12,13 +12,13 @@
 		"test": "bun test"
 	},
 	"dependencies": {
-		"@effect/sql-sqlite-bun": "4.0.0-beta.107",
+		"@effect/sql-sqlite-bun": "catalog:",
 		"deskkit": "github:fdarian/deskkit",
-		"drizzle-orm": "1.0.0-rc.4",
-		"effect": "4.0.0-beta.102"
+		"drizzle-orm": "1.0.0-rc.5-169397b",
+		"effect": "catalog:"
 	},
 	"devDependencies": {
-		"@effect/platform-bun": "4.0.0-beta.102",
+		"@effect/platform-bun": "catalog:",
 		"@total-typescript/tsconfig": "1.0.4",
 		"@types/bun": "1.3.14",
 		"typescript": "7.0.2"
