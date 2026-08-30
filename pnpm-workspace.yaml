@@ -28,6 +28,7 @@ minimumReleaseAgeExclude:
   - '@ai-sdk/harness-pi@1.0.93'
   - '@ai-sdk/mcp@2.0.39'
   - '@ai-sdk/react@4.0.86'
+  - devsess@0.3.0
 packageExtensions:
   bun-types:
     dependencies:

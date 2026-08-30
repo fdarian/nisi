@@ -20,6 +20,7 @@
 		"@repo/git": "workspace:*",
 		"@repo/logging": "workspace:*",
 		"@repo/sidecar-api": "workspace:*",
+		"deskkit": "github:fdarian/deskkit",
 		"effect": "catalog:"
 	},
 	"devDependencies": {

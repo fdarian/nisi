@@ -11,29 +11,26 @@ seam" for the port/token handshake this boots into.
   `SqliteDb`) wraps only the program's *tail* — deliberately provided at that nested point instead
   of around the whole program, so `SqliteDb`'s connection (and Drizzle's migrations) can't open
   until after the prefix has already run: bind the port (`http.ts`'s `bindHealthCheckServer`,
-  health-check-only — no `AppServices` needed yet), claim `sidecar-lock.ts`'s `sidecar.lock`, and
-  publish `sidecar.json`. See that file for why an atomic `O_EXCL` create, not a check-then-act
-  health check, is what closes the split-brain two sidecars sharing one `NISI_DATA_DIR` used to be
-  able to fall into (see `apps/desktop/AGENTS.md`'s "Dev/prod isolation" for the main way that
-  used to happen; the lock is the belt-and-suspenders for every other way, e.g. a manual `bun run
-  sidecar` against the production data dir while the app's already running) — and why gating
-  `MainLayer` behind it is what makes that guarantee extend to `app.db` too: two cold boots
-  racing on Drizzle's `CREATE TABLE IF NOT EXISTS` migration step is the same class of bug one
-  layer down, not a separate one. `@repo/db`'s `busy_timeout`/WAL pragmas (`client.ts`) are the
-  belt-and-suspenders for every *other* concurrent opener of `app.db` (a stray script, a future
-  reader) that this lock doesn't cover, since it only ever governed `sidecar.json`.
-- `sidecar-lock.ts` — `acquireSidecarLock`/`releaseSidecarLock`/`publishSidecarJson`. The lock file
-  (`sidecar.lock`, holding `{ port, token }`) is created via `wx` (`O_EXCL`) — the create either
-  succeeds or fails atomically, so two sidecars booting at the same instant can't both proceed the
-  way the old file-based check-then-act could. A losing process health-checks the lock's recorded
-  owner over the same authed `health.check` channel the frontend and CLI use — never a staleness
-  heuristic (file age, a reused PID) — and clears+retries once confirmed dead, bounded so a
-  persistently-dead lock fails loudly instead of spinning forever. A `SIGKILL`'d owner skips the
-  release effect entirely, but that's exactly the case the liveness check exists for: the next
-  boot finds the lock, gets no answer from the dead port, and recovers the same way. `sidecar.json`
-  itself is published via a temp file + `rename()` in the same directory — atomic on one
-  filesystem, so Rust's `wait_for_sidecar_json` and the CLI's `readHandshake` never observe a
-  partial write.
+  health-check-only — no `AppServices` needed yet), then claim and publish `sidecar.json` in one
+  atomic act via `deskkit/sidecar`'s `acquireSidecar`. `isSidecarAlive`, defined just above the boot
+  program in this file, is the caller-supplied liveness check that module takes — the same authed
+  `health.check` channel the frontend and CLI use, never a staleness heuristic (a lock file's age,
+  a PID that might have been reused). See root `AGENTS.md`'s "The seam" for why an atomic `wx`
+  create, not a check-then-act health check, is what closes the split-brain two sidecars sharing
+  one `NISI_DATA_DIR` can otherwise fall into (see `apps/desktop/AGENTS.md`'s "Dev/prod isolation"
+  for the main way that happens; `acquireSidecar` is the belt-and-suspenders for every other way,
+  e.g. a manual `bun run sidecar` against the production data dir while the app's already running)
+  — and why gating `MainLayer` behind it is what makes that guarantee extend to `app.db` too: two
+  cold boots racing on Drizzle's `CREATE TABLE IF NOT EXISTS` migration step is the same class of
+  bug one layer down, not a separate one. `@repo/db`'s `busy_timeout`/WAL pragmas (`client.ts`) are
+  the belt-and-suspenders for every *other* concurrent opener of `app.db` (a stray script, a future
+  reader) that `acquireSidecar` doesn't cover, since it only ever governs `sidecar.json`.
+  `acquireSidecar`'s own doc comment (`deskkit/sidecar`) covers its mechanism in full — atomic `wx`
+  create, liveness-checked recovery from a dead owner, and a same-port takeover that skips the
+  liveness check entirely when the recorded owner is on the port this process is already listening
+  on. That takeover's common trigger in dev is a fresh `bun dev` of the same devsess session
+  finding a previous one's dead sidecar, since `scripts/dev.ts` pins the sidecar port to a sticky
+  port for the whole session rather than a fresh one per run — see that file's own comment.
 - `logging.ts` — `LoggingLive`: console (`Logger.consolePretty`, stderr) plus a
   `@repo/logging`-backed rotating file logger at `<dataDir>/logs/sidecar.log`, both gated by the
   same `LOG_LEVEL`-derived minimum level. This is the only place stdout-in-production's "goes
@@ -115,11 +112,11 @@ seam" for the port/token handshake this boots into.
   including the next `live-poll.ts` tick — sees the fix too. `resolveSessionRepoRoot` is the
   sessionId-keyed public wrapper `live-poll.ts` calls, since it only ever starts from an id.
 - `http.ts` — `bindHealthCheckServer` binds the real port immediately with a hand-rolled
-  `health.check`-only handler (no `AppServices` needed), which `index.ts` records in the lock
-  before `AppServices` exists at all; `attachRouter` swaps in the full oRPC router afterward via
-  `server.reload` — same port, no restart, so a concurrent liveness check never observes a gap
-  where nothing's listening. The router itself: each handler maps one or two domain packages'
-  tagged errors to a declared contract error via `Effect.catchTag` + `errors.XXX(...)`; anything
+  `health.check`-only handler (no `AppServices` needed), which `index.ts` records via
+  `acquireSidecar`'s claim before `AppServices` exists at all; `attachRouter` swaps in the full
+  oRPC router afterward via `server.reload` — same port, no restart, so a concurrent liveness check
+  never observes a gap where nothing's listening. The router itself: each handler maps one or two
+  domain packages' tagged errors to a declared contract error via `Effect.catchTag` + `errors.XXX(...)`; anything
   else (gh auth failures, decode errors, etc.) is an uncaught defect → oRPC's generic 500.
   Deliberately not exhaustive for Phase 1 — see `packages/sidecar-api/AGENTS.md` for which shapes
   got extra errors and why.
