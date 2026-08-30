@@ -144,7 +144,21 @@ export function DiffSelectionPopover({
 					side="bottom"
 					sideOffset={8}
 				>
-					<PopoverPrimitive.Popup className="outline-none">
+					<PopoverPrimitive.Popup
+						className="outline-none"
+						// `isEventOriginOnGutterOrPopup` (`use-diff-selection.ts`) walks a
+						// `pointerup`'s `composedPath()` looking for this exact attribute
+						// to tell "the popup itself" apart from anywhere else outside the
+						// gutter — the same contract `#/components/ui/popover.tsx`'s
+						// `PopoverPopup` wrapper sets on its own `Popup`, kept here by
+						// hand since this component builds on the raw `PopoverPrimitive`
+						// instead (see this file's top doc comment for why). Without it,
+						// a click on "Copy reference" reads as an outside click: the
+						// `pointerup` clears the selection (and unmounts this popup)
+						// before the button's own `click` ever fires, so the copy
+						// silently never happens.
+						data-slot="popover-popup"
+					>
 						<Button
 							onClick={() => {
 								navigator.clipboard.writeText(
