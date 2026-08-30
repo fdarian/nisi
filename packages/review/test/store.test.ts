@@ -196,6 +196,133 @@ describe("ReviewStore sessions", () => {
 	});
 });
 
+describe("ReviewStore retargetToPullRequest", () => {
+	const branchInput = { ...prInput, pr: null };
+	const pr = prInput.pr;
+
+	test("retargets a branch session onto a PR in place, keeping the same id", async () => {
+		await withTempDataDir(async (dataDir) => {
+			const result = await run(
+				dataDir,
+				Effect.gen(function* () {
+					const store = yield* ReviewStore;
+					const branch = yield* store.openSession(branchInput);
+					const outcome = yield* store.retargetToPullRequest(
+						branch.id,
+						pr,
+						"main",
+						"feature",
+					);
+					return { branch, outcome };
+				}),
+			);
+
+			expect(result.outcome.kind).toBe("retargeted");
+			expect(result.outcome.session.id).toBe(result.branch.id);
+			expect(result.outcome.session.pr).toEqual(pr);
+			expect(result.outcome.session.baseRef).toBe("main");
+			expect(result.outcome.session.headRef).toBe("feature");
+		});
+	});
+
+	test("carries reviewed_files over across the retarget, since the row's id never changes", async () => {
+		await withTempDataDir(async (dataDir) => {
+			const state = await run(
+				dataDir,
+				Effect.gen(function* () {
+					const store = yield* ReviewStore;
+					const branch = yield* store.openSession(branchInput);
+					yield* store.markFileViewed(
+						branch.id,
+						"src/a.ts",
+						Option.some(new TextEncoder().encode("content\n")),
+					);
+					yield* store.retargetToPullRequest(branch.id, pr, "main", "feature");
+					return yield* store.getFileReviewState(branch.id, "src/a.ts");
+				}),
+			);
+
+			expect(state?.viewed).toBe(true);
+			expect(state?.snapshotHash).toBeTruthy();
+		});
+	});
+
+	test("colliding with an already-open PR session leaves both rows as-is and reports the existing one", async () => {
+		await withTempDataDir(async (dataDir) => {
+			const result = await run(
+				dataDir,
+				Effect.gen(function* () {
+					const store = yield* ReviewStore;
+					const branch = yield* store.openSession(branchInput);
+					const existingPrSession = yield* store.openSession(prInput);
+					const outcome = yield* store.retargetToPullRequest(
+						branch.id,
+						pr,
+						"main",
+						"feature",
+					);
+					const stillOpen = yield* store.listOpenSessions();
+					return { branch, existingPrSession, outcome, stillOpen };
+				}),
+			);
+
+			expect(result.outcome.kind).toBe("existing");
+			expect(result.outcome.session.id).toBe(result.existingPrSession.id);
+			expect(result.outcome.session.id).not.toBe(result.branch.id);
+			// The source branch session is left open — the caller (not
+			// ReviewStore) decides whether/when to close it.
+			expect(result.stillOpen.map((s) => s.id).sort()).toEqual(
+				[result.branch.id, result.existingPrSession.id].sort(),
+			);
+		});
+	});
+
+	test("colliding with a closed PR session reactivates it instead of leaving it closed", async () => {
+		await withTempDataDir(async (dataDir) => {
+			const result = await run(
+				dataDir,
+				Effect.gen(function* () {
+					const store = yield* ReviewStore;
+					const branch = yield* store.openSession(branchInput);
+					const closedPrSession = yield* store.openSession(prInput);
+					yield* store.closeSession(closedPrSession.id);
+					const outcome = yield* store.retargetToPullRequest(
+						branch.id,
+						pr,
+						"main",
+						"feature",
+					);
+					const stillOpen = yield* store.listOpenSessions();
+					return { branch, closedPrSession, outcome, stillOpen };
+				}),
+			);
+
+			expect(result.outcome.kind).toBe("existing");
+			expect(result.outcome.session.id).toBe(result.closedPrSession.id);
+			expect(result.stillOpen.map((s) => s.id)).toContain(
+				result.closedPrSession.id,
+			);
+		});
+	});
+
+	test("fails with SessionNotFound for an unknown sessionId", async () => {
+		await withTempDataDir(async (dataDir) => {
+			const exit = await Effect.runPromiseExit(
+				Effect.gen(function* () {
+					const store = yield* ReviewStore;
+					return yield* store.retargetToPullRequest(
+						"does-not-exist",
+						pr,
+						"main",
+						"feature",
+					);
+				}).pipe(Effect.provide(makeTestLayer(dataDir))),
+			);
+			expect(exit._tag).toBe("Failure");
+		});
+	});
+});
+
 describe("ReviewStore file review state", () => {
 	test("markFileViewed snapshots content and is reflected by getFileReviewState", async () => {
 		await withTempDataDir(async (dataDir) => {
