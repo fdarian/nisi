@@ -80,6 +80,8 @@ const toWireSettings = (settings: {
 	readonly includeUncommitted: WireSettings["includeUncommitted"];
 	readonly walkthroughEnabled: WireSettings["walkthroughEnabled"];
 	readonly wrapLines: WireSettings["wrapLines"];
+	readonly lastChatHarness: string | null;
+	readonly lastChatModel: WireSettings["lastChatModel"];
 }): WireSettings => ({
 	enabledHarnesses:
 		settings.enabledHarnesses === null
@@ -92,6 +94,11 @@ const toWireSettings = (settings: {
 	includeUncommitted: settings.includeUncommitted,
 	walkthroughEnabled: settings.walkthroughEnabled,
 	wrapLines: settings.wrapLines,
+	lastChatHarness:
+		settings.lastChatHarness === null
+			? null
+			: (settings.lastChatHarness as HarnessId),
+	lastChatModel: settings.lastChatModel,
 });
 
 /**

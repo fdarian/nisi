@@ -55,6 +55,19 @@ export const Settings = Schema.Struct({
 	walkthroughEnabled: Schema.Boolean,
 	/** See `@repo/settings`'s `Settings.wrapLines`. */
 	wrapLines: Schema.Boolean,
+	/**
+	 * Harness/model pair the user last actually sent a chat message with —
+	 * paired, not independent: `lastChatModel` only means something alongside
+	 * `lastChatHarness`, both `null` together until a thread's first send
+	 * ever locks one in. Seeds `ChatComposer`'s picker on a fresh thread; the
+	 * frontend re-validates the pair against the harness's live model list
+	 * before using it, since the stored harness may since be disabled or the
+	 * model gone from the CLI's discovered list. See `@repo/settings`'s
+	 * `Settings.lastChatHarness`/`lastChatModel` doc.
+	 */
+	lastChatHarness: Schema.NullOr(HarnessId),
+	/** Model id paired with `lastChatHarness` above — see that field's doc. */
+	lastChatModel: Schema.NullOr(Schema.String),
 });
 export type Settings = Schema.Schema.Type<typeof Settings>;
 
@@ -73,6 +86,8 @@ export const SettingsUpdate = Schema.Struct({
 	includeUncommitted: Schema.optional(Schema.Boolean),
 	walkthroughEnabled: Schema.optional(Schema.Boolean),
 	wrapLines: Schema.optional(Schema.Boolean),
+	lastChatHarness: Schema.optional(Schema.NullOr(HarnessId)),
+	lastChatModel: Schema.optional(Schema.NullOr(Schema.String)),
 });
 export type SettingsUpdate = Schema.Schema.Type<typeof SettingsUpdate>;
 
