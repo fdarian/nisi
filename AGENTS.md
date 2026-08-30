@@ -10,11 +10,11 @@ PR, every claim linked to a set of line ranges). Both are built; see `README.md`
 - **pnpm** for package management (`pnpm install`, `pnpm add <pkg>` from inside the target package,
   `enableGlobalVirtualStore: true` in `pnpm-workspace.yaml`) — never hand-edit `package.json`
   dependency fields. **Bun** is the runtime (`bun run ...`, `bun test`, `bun build --compile`).
-- **Effect v4** (`effect@beta`, currently `4.0.0-beta.x`) end-to-end. This is a beta line with real API
-  differences from v3 — e.g. services are `Context.Service<Self, Shape>()("id")`, not `Effect.Service`;
-  `Schema.TaggedError` is `Schema.TaggedErrorClass`; `@effect/platform-bun` exports `BunServices.layer`,
-  not `BunContext.layer`; subprocess spawning is `effect/unstable/process`. Check
-  `node_modules/effect/src/*.ts` before assuming a v3 pattern still applies.
+- **Effect v4** (`effect@rc`, currently `4.0.0-rc.x`, version shared via the `catalog:` entry in
+  `pnpm-workspace.yaml`) end-to-end. This is a pre-1.0 line with real API differences from v3 — e.g.
+  services are `Context.Service<Self, Shape>()("id")`, not `Effect.Service`; `@effect/platform-bun`
+  exports `BunServices.layer`, not `BunContext.layer`; subprocess spawning is `effect/unstable/process`.
+  Check `node_modules/effect/src/*.ts` before assuming a v3 pattern still applies.
 - **oRPC v2** (`beta` dist-tag) for the sidecar's wire contract — contract-first, `.effect()` handlers
   via `@orpc/experimental-effect` (see `packages/sidecar-api/AGENTS.md`).
 - **biome** (tabs, organize-imports on), **turbo** (`check:type` / `check:lint` only — no `build`/`dev`
@@ -73,8 +73,9 @@ slow (roughly 13–28s) while nisi installs a pinned copy of it; every run after
 ## Gotchas
 - Add deps with `pnpm add <pkg>` (run from inside the package directory) — never hand-edit
   `package.json`.
-- Beta packages (`effect`, `@effect/platform-bun`, `@orpc/*`) are pinned to exact versions, not `^`
-  ranges — bump them deliberately.
+- Pre-1.0 packages are pinned to exact versions, not `^` ranges — bump them deliberately. `effect`,
+  `@effect/platform-bun`, and `@effect/sql-sqlite-bun` share one version via the `catalog:` entry in
+  `pnpm-workspace.yaml`; `@orpc/*` versions are pinned per-package.
 - Patches in `patches/` register under `patchedDependencies` in `pnpm-workspace.yaml`, never
   `package.json` — pnpm 10+ silently ignores that key there with no warning. Patch filenames use
   percent-encoding for the scope slash (`@pierre%2Fdiffs@1.3.6.patch`); on pnpm 12 rc8,

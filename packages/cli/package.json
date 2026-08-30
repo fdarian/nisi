@@ -15,12 +15,12 @@
 		"test": "bun test"
 	},
 	"dependencies": {
-		"@effect/platform-bun": "4.0.0-beta.102",
+		"@effect/platform-bun": "catalog:",
 		"@orpc/client": "2.0.0-beta.21",
 		"@repo/git": "workspace:*",
 		"@repo/logging": "workspace:*",
 		"@repo/sidecar-api": "workspace:*",
-		"effect": "4.0.0-beta.102"
+		"effect": "catalog:"
 	},
 	"devDependencies": {
 		"@total-typescript/tsconfig": "1.0.4",
