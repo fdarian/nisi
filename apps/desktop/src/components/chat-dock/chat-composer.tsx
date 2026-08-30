@@ -42,6 +42,7 @@ import {
 	type ModelSelection,
 } from "#/components/walkthrough/harness-model-combobox";
 import type { SidecarQueryUtils } from "#/lib/backend-context";
+import { useLastChatModel } from "#/lib/settings-data";
 import { cn } from "#/lib/utils";
 import { type HarnessId, useHarnesses } from "#/lib/walkthrough-data";
 
@@ -84,6 +85,7 @@ function ComposerBody({
 	const [hasText, setHasText] = useState(false);
 	const [selection, setSelection] = useState<ModelSelection | null>(null);
 	const { harnesses } = useHarnesses(orpc);
+	const [lastChatModel] = useLastChatModel(orpc);
 
 	const isBusy = status === "submitted" || status === "streaming";
 	// The picker only matters before the thread's live harness session
@@ -91,6 +93,27 @@ function ComposerBody({
 	// side once a thread's first message picked them.
 	const needsPicker = threadHarness === null;
 	const hasEnabledHarness = harnesses.some((harness) => harness.enabled);
+
+	// Seeds the picker from the last harness/model the user actually sent a
+	// message with, once — never overwrites a choice already made this
+	// mount (`selection !== null` guard), and never trusts the persisted
+	// pair blindly: the harness may since have been disabled, or the model
+	// discovered from the CLI at runtime may no longer be in its live list.
+	// Falls back to no selection rather than inventing a substitute. Runs as
+	// an effect (not a lazy `useState` initializer) since `harnesses` loads
+	// asynchronously and isn't available on first render.
+	useEffect(() => {
+		if (!needsPicker || lastChatModel === null || selection !== null) return;
+		const harness = harnesses.find(
+			(candidate) => candidate.id === lastChatModel.harness,
+		);
+		if (harness === undefined || !harness.enabled) return;
+		const modelStillOffered = harness.models.some(
+			(model) => model.id === lastChatModel.modelId,
+		);
+		if (!modelStillOffered) return;
+		setSelection({ harness: harness.id, modelId: lastChatModel.modelId });
+	}, [needsPicker, lastChatModel, harnesses, selection]);
 
 	const submit = useCallback(() => {
 		if (isBusy) return;

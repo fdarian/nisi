@@ -43,6 +43,18 @@ export type Settings = {
 	walkthroughEnabled: boolean;
 	/** When true, long diff lines wrap instead of scrolling horizontally. */
 	wrapLines: boolean;
+	/**
+	 * Harness/model pair the user last actually sent a chat message with —
+	 * paired, not independent: `lastChatModel` only means something alongside
+	 * `lastChatHarness`, both `null` together until a thread's first send
+	 * ever locks one in. See `@repo/settings`'s `Settings.lastChatHarness`/
+	 * `lastChatModel` doc. Written back only at that lock-in moment
+	 * (`chat-panel.tsx`'s `onSend`), not on every picker keystroke; read back
+	 * by `chat-composer.tsx` to seed a fresh thread's picker, re-validated
+	 * there against the harness's live model list before use.
+	 */
+	lastChatHarness: HarnessId | null;
+	lastChatModel: string | null;
 };
 
 /**
@@ -61,6 +73,8 @@ const DEFAULT_SETTINGS: Settings = {
 	includeUncommitted: false,
 	walkthroughEnabled: false,
 	wrapLines: false,
+	lastChatHarness: null,
+	lastChatModel: null,
 };
 
 /** `settings.get`, defaulting to the sidecar's own defaults while the first fetch is in flight. */
@@ -212,4 +226,41 @@ export function useIncludeUncommitted(
 	);
 
 	return [settings.includeUncommitted, setIncludeUncommitted];
+}
+
+/**
+ * Harness/model pair the user last actually sent a chat message with — see
+ * `Settings.lastChatHarness`/`lastChatModel`'s doc above. Redeclares
+ * `HarnessModelCombobox`'s `ModelSelection` shape
+ * (`#/components/walkthrough/harness-model-combobox.tsx`) rather than
+ * importing it, keeping this lib file independent of a component. `null`
+ * when either half is unset, never a partial pair.
+ */
+export type LastChatModel = { harness: HarnessId; modelId: string | undefined };
+
+/** See `LastChatModel`'s doc above. */
+export function useLastChatModel(
+	orpc: SidecarQueryUtils,
+): [LastChatModel | null, (value: LastChatModel) => void] {
+	const { settings } = useSettings(orpc);
+	const update = useUpdateSettings(orpc);
+
+	const value: LastChatModel | null =
+		settings.lastChatHarness === null
+			? null
+			: {
+					harness: settings.lastChatHarness,
+					modelId: settings.lastChatModel ?? undefined,
+				};
+
+	const setValue = useCallback(
+		(next: LastChatModel) =>
+			update({
+				lastChatHarness: next.harness,
+				lastChatModel: next.modelId ?? null,
+			}),
+		[update],
+	);
+
+	return [value, setValue];
 }
