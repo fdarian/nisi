@@ -5,6 +5,7 @@ import {
 	CopyIcon,
 	ExternalLinkIcon,
 	GitPullRequestIcon,
+	LayoutDashboardIcon,
 	type LucideIcon,
 } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -46,6 +47,8 @@ type CommandPaletteProps = {
 	orpc: SidecarQueryUtils;
 	/** Fires once `sessions.open` resolves for "Switch to PR" — mirrors `OpenPullRequestPalette`'s `onSessionOpened` (`app-shell.tsx`), so the new tab activates the same way. */
 	onSessionOpened: (sessionId: string) => void;
+	/** "Go to Overview" — switches a session's own sub-tab (`pr-view.tsx`'s `PrViewTabStrip`), same store `app-shell.tsx` writes to via `useSetActiveTab`. */
+	onNavigateToTab: (sessionId: string, tab: string) => void;
 };
 
 /** Cmd+K, app-wide (`use-command-palette-shortcut.ts`). */
@@ -55,6 +58,7 @@ export function CommandPalette({
 	activeSession,
 	orpc,
 	onSessionOpened,
+	onNavigateToTab,
 }: CommandPaletteProps): React.ReactElement {
 	const [query, setQuery] = useState("");
 
@@ -64,7 +68,7 @@ export function CommandPalette({
 	}, [open]);
 
 	const { switchToPr } = useSwitchToPr(orpc, onSessionOpened);
-	const actions = buildActions(activeSession, switchToPr);
+	const actions = buildActions(activeSession, switchToPr, onNavigateToTab);
 	const filtered = actions.filter((action) =>
 		action.label.toLowerCase().includes(query.toLowerCase()),
 	);
@@ -116,9 +120,16 @@ export function CommandPalette({
 function buildActions(
 	session: Session | null,
 	switchToPr: (repoRoot: string) => void,
+	onNavigateToTab: (sessionId: string, tab: string) => void,
 ): CommandAction[] {
 	if (session === null) return [];
 	const actions: CommandAction[] = [
+		{
+			id: "go-to-overview",
+			label: "Go to Overview",
+			icon: LayoutDashboardIcon,
+			run: () => onNavigateToTab(session.id, "overview"),
+		},
 		{
 			id: "copy-branch-name",
 			label: "Copy branch name",

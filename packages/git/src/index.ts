@@ -8,6 +8,7 @@ export {
 	repoChangeSignatureEquals,
 } from "./change-signal.ts";
 export type { FileCategory } from "./classify.ts";
+export { fetchBranchCommits } from "./commit-log.ts";
 export { diffContents, diffContentsPatch } from "./content-diff.ts";
 export type {
 	FileChange,
@@ -84,6 +85,13 @@ export {
 	markPullRequestReady,
 	mergePullRequest,
 } from "./pull-request-merge.ts";
+export type {
+	FetchPullRequestOverviewInput,
+	OverviewCommit,
+	OverviewCommitCheck,
+	PullRequestOverview,
+} from "./pull-request-overview.ts";
+export { fetchPullRequestOverview } from "./pull-request-overview.ts";
 export type { UnpushedCommits } from "./repo.ts";
 export {
 	resolveCurrentBranch,

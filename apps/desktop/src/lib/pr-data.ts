@@ -1035,6 +1035,95 @@ export function usePullRequestChecks(
 }
 
 /**
+ * Mirrors `OverviewCheck` (`packages/sidecar-api/src/overview.ts`) — one CI
+ * check on a single commit. Deliberately the same field shape as
+ * `ci-status.tsx`'s `CiCheck` (name/status/detail/detailsUrl), so a commit's
+ * `checks` array passes straight into `CiStatusIcon` with no mapping step,
+ * unlike `PullRequestCheck` above (`durationMs`/`workflowName` need
+ * `pr-ci-status.tsx`'s `toCiChecks`).
+ */
+export type OverviewCheck = {
+	name: string;
+	status: PullRequestCheckStatus;
+	detail?: string;
+	detailsUrl?: string;
+};
+
+/**
+ * Mirrors `OverviewCommit` — one commit in the Overview tab's list.
+ * `authorLogin`/`url`/`checks` are all `null` for a branch/diff session: a
+ * plain `git log` has no GitHub identity or CI data to attach.
+ */
+export type OverviewCommit = {
+	sha: string;
+	shortSha: string;
+	headline: string;
+	body: string | null;
+	authorName: string;
+	authorLogin: string | null;
+	committedDate: string;
+	url: string | null;
+	checks: readonly OverviewCheck[] | null;
+};
+
+/** Mirrors `OverviewDescription` — `null` for a branch/diff session, which has no PR to describe. */
+export type OverviewDescription = {
+	authorLogin: string;
+	body: string | null;
+};
+
+/** Mirrors `OverviewResult` — `overview.get`'s output. */
+export type Overview = {
+	description: OverviewDescription | null;
+	/** Oldest-first, matching GitHub's own PR commits tab. */
+	commits: readonly OverviewCommit[];
+};
+
+/**
+ * `overview.get` — the Overview tab's PR description plus its full commit
+ * list. Input is built from `session.target`'s own discriminant, mirroring
+ * `OverviewInput`: a `"pr"` session carries owner/repo/number, a `"branch"`
+ * session carries baseRef/headRef instead. Same polling shape as
+ * `usePullRequestChecks` above, just checked across every commit's `checks`
+ * rather than one flat list — `false` once nothing in the whole PR is still
+ * `"running"`/`"pending"`, which is also the steady state for a branch
+ * session, whose commits never carry `checks` at all.
+ */
+export function useOverview(
+	orpc: SidecarQueryUtils,
+	session: Session,
+): UseQueryResult<Overview> {
+	const target = session.target;
+	const input =
+		target.kind === "pr"
+			? {
+					repoRoot: session.repoRoot,
+					kind: "pr" as const,
+					owner: target.owner,
+					repo: target.repo,
+					number: target.number,
+				}
+			: {
+					repoRoot: session.repoRoot,
+					kind: "branch" as const,
+					baseRef: target.baseRef,
+					headRef: target.headRef,
+				};
+
+	return useQuery({
+		...orpc.overview.get.queryOptions({ input }),
+		refetchInterval: (query) =>
+			query.state.data?.commits.some((commit) =>
+				commit.checks?.some(
+					(check) => check.status === "running" || check.status === "pending",
+				),
+			) === true
+				? 10000
+				: false,
+	});
+}
+
+/**
  * `pullRequests.unpushedCommits`'s result, collapsed to what the pre-merge
  * dialog actually branches on. `"unpushed"` is the real "some commits won't
  * be in this merge" case; `"unverifiable"` folds every failure mode

@@ -33,6 +33,7 @@ import { useSessions } from "#/lib/pr-data";
 import {
 	SessionUiProvider,
 	useClearSessionUiState,
+	useSetActiveTab,
 } from "#/lib/session-ui-store";
 import { cn } from "#/lib/utils";
 
@@ -178,6 +179,12 @@ function AppShellReady({
 		() => sessions.find((session) => session.id === activeSessionId) ?? null,
 		[sessions, activeSessionId],
 	);
+	// The command palette's "Go to Overview" action needs to switch a
+	// specific session's own sub-tab — the same per-session store `PrView`
+	// itself reads/writes, just the raw two-arg action rather than one bound
+	// to a single session, since `CommandPalette` already has the session id
+	// in hand (`activeSession.id`) at the moment it calls this.
+	const setActiveTab = useSetActiveTab();
 
 	// Which open tabs have gone idle long enough to unmount, plus the manual
 	// trigger and generation check `PrTabStrip`'s per-tab context menu needs
@@ -269,6 +276,7 @@ function AppShellReady({
 				/>
 				<CommandPalette
 					activeSession={activeSession}
+					onNavigateToTab={setActiveTab}
 					onOpenChange={setCommandPaletteOpen}
 					onSessionOpened={setRequestedActiveSessionId}
 					open={commandPaletteOpen}
@@ -351,6 +359,7 @@ function AppShellReady({
 			/>
 			<CommandPalette
 				activeSession={activeSession}
+				onNavigateToTab={setActiveTab}
 				onOpenChange={setCommandPaletteOpen}
 				onSessionOpened={setRequestedActiveSessionId}
 				open={commandPaletteOpen}

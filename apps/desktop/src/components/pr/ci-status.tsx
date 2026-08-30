@@ -86,6 +86,71 @@ function summarize(checks: readonly CiCheck[]): string {
 }
 
 /**
+ * One status for the whole set, same failing-outranks-running-outranks-
+ * pending-outranks-settled priority `summarize` uses for its headline — what
+ * `CiStatusIcon`'s single dot renders, since a commit row has no room for a
+ * multi-segment ring.
+ */
+function overallStatus(checks: readonly CiCheck[]): CiCheckStatus {
+	if (checks.some((check) => check.status === "failing")) return "failing";
+	if (checks.some((check) => check.status === "running")) return "running";
+	if (checks.some((check) => check.status === "pending")) return "pending";
+	if (checks.some((check) => check.status === "passing")) return "passing";
+	return "skipped";
+}
+
+/**
+ * The popover's own contents — summary headline + per-check list — shared by
+ * both `CiStatus`'s full ring badge and `CiStatusIcon`'s single-dot trigger
+ * below, so the two triggers stay two small components rather than one
+ * component branching on a variant prop.
+ */
+function CiChecksMenuContent({
+	checks,
+}: {
+	checks: readonly CiCheck[];
+}): React.ReactElement {
+	const summary = summarize(checks);
+	return (
+		<DropdownMenuContent align="end" className="w-72">
+			<div className="flex items-baseline justify-between gap-2 px-2 py-1.5">
+				<span className="font-medium text-xs">{summary}</span>
+				<span className="text-muted-foreground text-xs">
+					{checks.length} {checks.length === 1 ? "check" : "checks"}
+				</span>
+			</div>
+			<DropdownMenuSeparator />
+			{checks.map((check) => {
+				const detailsUrl = check.detailsUrl;
+				return (
+					<DropdownMenuItem
+						disabled={detailsUrl === undefined}
+						key={check.name}
+						onClick={
+							detailsUrl === undefined
+								? undefined
+								: () => void openUrl(detailsUrl)
+						}
+					>
+						<span
+							className={cn(
+								"size-1.5 shrink-0 rounded-full",
+								STATUS_DOT[check.status],
+								check.status === "running" && "animate-pulse",
+							)}
+						/>
+						<span className="min-w-0 flex-1 truncate">{check.name}</span>
+						<span className="shrink-0 text-muted-foreground text-xs">
+							{check.detail ?? STATUS_LABEL[check.status]}
+						</span>
+					</DropdownMenuItem>
+				);
+			})}
+		</DropdownMenuContent>
+	);
+}
+
+/**
  * One arc per check around a ring labeled "CI", click for the full list.
  *
  * Renders nothing when there are no checks — a PR with no CI configured
@@ -147,41 +212,45 @@ export function CiStatus({
 					</text>
 				</svg>
 			</DropdownMenuTrigger>
-			<DropdownMenuContent align="end" className="w-72">
-				<div className="flex items-baseline justify-between gap-2 px-2 py-1.5">
-					<span className="font-medium text-xs">{summary}</span>
-					<span className="text-muted-foreground text-xs">
-						{checks.length} {checks.length === 1 ? "check" : "checks"}
-					</span>
-				</div>
-				<DropdownMenuSeparator />
-				{checks.map((check) => {
-					const detailsUrl = check.detailsUrl;
-					return (
-						<DropdownMenuItem
-							disabled={detailsUrl === undefined}
-							key={check.name}
-							onClick={
-								detailsUrl === undefined
-									? undefined
-									: () => void openUrl(detailsUrl)
-							}
-						>
-							<span
-								className={cn(
-									"size-1.5 shrink-0 rounded-full",
-									STATUS_DOT[check.status],
-									check.status === "running" && "animate-pulse",
-								)}
-							/>
-							<span className="min-w-0 flex-1 truncate">{check.name}</span>
-							<span className="shrink-0 text-muted-foreground text-xs">
-								{check.detail ?? STATUS_LABEL[check.status]}
-							</span>
-						</DropdownMenuItem>
-					);
-				})}
-			</DropdownMenuContent>
+			<CiChecksMenuContent checks={checks} />
+		</DropdownMenu>
+	);
+}
+
+/**
+ * A single small status dot, click for the same per-check popover `CiStatus`
+ * offers — the Overview tab's commit rows need just this, not the full
+ * multi-segment ring badge (there's no room for one, and a commit isn't the
+ * PR-wide rollup the ring represents). Same "renders nothing for an empty
+ * list" rule as `CiStatus`.
+ */
+export function CiStatusIcon({
+	checks,
+	className,
+}: CiStatusProps): React.ReactElement | null {
+	if (checks.length === 0) return null;
+
+	const summary = summarize(checks);
+	const status = overallStatus(checks);
+
+	return (
+		<DropdownMenu>
+			<DropdownMenuTrigger
+				aria-label={`CI: ${summary}`}
+				className={cn(
+					"flex size-5 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent data-popup-open:bg-accent focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-1",
+					className,
+				)}
+			>
+				<span
+					className={cn(
+						"size-2 shrink-0 rounded-full",
+						STATUS_DOT[status],
+						status === "running" && "animate-pulse",
+					)}
+				/>
+			</DropdownMenuTrigger>
+			<CiChecksMenuContent checks={checks} />
 		</DropdownMenu>
 	);
 }
