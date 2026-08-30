@@ -107,5 +107,41 @@ export const repoPaths = sqliteTable(
 	],
 );
 
+/**
+ * The merge method (`"merge" | "squash" | "rebase"`) the user last actually
+ * merged a pull request with in a given `owner/repo` — one row per repo,
+ * same keying as `repoPaths` above, but a distinct concern (a remembered UI
+ * default, not a path mapping) so it gets its own table rather than a
+ * column bolted onto `repoPaths`. GitHub exposes no per-repo default of its
+ * own, so this is the only signal `mergeStatus`'s `defaultMethod` has beyond
+ * `allowedMethods[0]`.
+ */
+export const repoMergeMethods = sqliteTable(
+	"repo_merge_methods",
+	{
+		id: integer({ mode: "number" }).primaryKey({ autoIncrement: true }),
+		owner: text().notNull(),
+		repo: text().notNull(),
+		/**
+		 * `"merge" | "squash" | "rebase"`, plain text rather than a typed
+		 * column — this package stays independent of `@repo/sidecar-api`'s
+		 * `MergeMethod`, same reasoning as `enabledHarnesses` above. The
+		 * sidecar's wiring layer is where "must be one of the three known
+		 * methods" is actually enforced.
+		 */
+		method: text().notNull(),
+		updatedAt: integer({ mode: "timestamp_ms" })
+			.notNull()
+			.$defaultFn(() => new Date()),
+	},
+	(table) => [
+		uniqueIndex("repo_merge_methods_owner_repo_idx").on(
+			table.owner,
+			table.repo,
+		),
+	],
+);
+
 export type SettingsRow = typeof settings.$inferSelect;
 export type RepoPathRow = typeof repoPaths.$inferSelect;
+export type RepoMergeMethodRow = typeof repoMergeMethods.$inferSelect;
