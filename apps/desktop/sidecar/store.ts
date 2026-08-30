@@ -59,12 +59,9 @@ import {
 } from "./diff-head.ts";
 
 /** `sessions.open`'s `cwd` doesn't resolve to a git working tree. */
-export class InvalidCwd extends Schema.TaggedError<InvalidCwd>()(
-	"InvalidCwd",
-	{
-		cwd: Schema.String,
-	},
-) {}
+export class InvalidCwd extends Schema.TaggedError<InvalidCwd>()("InvalidCwd", {
+	cwd: Schema.String,
+}) {}
 
 /** `sessions.open`'s `target: { kind: "pr" }` asked for a PR, but `resolveReviewTarget` found none open for the current branch. */
 export class NoPullRequest extends Schema.TaggedError<NoPullRequest>()(
