@@ -225,6 +225,38 @@ export function attachRouter(
 		effect: Effect.Effect<A, never, AppServices>,
 	) => Effect.runPromise(Effect.provide(effect, mainContext));
 
+	/**
+	 * The non-domain teardown a session's closure needs beyond
+	 * `Store.closeSession`'s own `closedAt` write — its sandbox session
+	 * (spawned processes, a leased port), retained generation log, chat
+	 * threads, and watch-registry entry have no other owner once it's gone.
+	 * Shared by `sessions.close`'s handler and `sessions.switchToPr`'s
+	 * collision path (`store.ts`'s `Store.switchToPr` already closed the
+	 * *domain* row there; this is the rest of what a genuine close needs).
+	 */
+	const closeSessionSideEffects = (sessionId: string) =>
+		Effect.gen(function* () {
+			const sessionWatch = yield* SessionWatch;
+			// A closed tab's sandbox session (spawned processes, leased port)
+			// has no other owner — release it here rather than leaking it for
+			// the sidecar's lifetime. Its retained generation log goes with
+			// it — nothing left to reattach to once the session itself is gone.
+			yield* Effect.promise(() => stopLiveSession(sessionId));
+			clearGeneration(sessionId);
+			// Chat threads are scoped per PR tab (see `chat/sessions.ts`) — a
+			// closed tab's threads have no other owner either, same reasoning
+			// as `stopLiveSession` above.
+			yield* Effect.promise(() =>
+				closeChatThreadsForSession(sessionId, mainContext),
+			);
+			// Otherwise a closed session's id lingers in the watch registry
+			// forever — nothing else ever removes it, since the frontend's own
+			// unmount-time `setWatching(false)` races this close and isn't
+			// guaranteed to land first (or at all, if the tab close came from
+			// elsewhere — the CLI, another window).
+			yield* sessionWatch.remove(sessionId);
+		});
+
 	const implementer = implement(contract).$context<ServerContext>();
 
 	const authed = implementer.use(({ context, next, errors }) => {
@@ -319,7 +351,6 @@ export function attachRouter(
 			}),
 			close: authed.sessions.close.effect(function* ({ input, errors }) {
 				const store = yield* Store;
-				const sessionWatch = yield* SessionWatch;
 				yield* store.closeSession(input.sessionId).pipe(
 					Effect.catchTag("SessionNotFound", () =>
 						Effect.fail(
@@ -329,28 +360,88 @@ export function attachRouter(
 						),
 					),
 				);
-				// A closed tab's sandbox session (spawned processes, leased port)
-				// has no other owner — release it here rather than leaking it for
-				// the sidecar's lifetime. Its retained generation log goes with
-				// it — nothing left to reattach to once the session itself is gone.
-				yield* Effect.promise(() => stopLiveSession(input.sessionId));
-				clearGeneration(input.sessionId);
-				// Chat threads are scoped per PR tab (see `chat/sessions.ts`) — a
-				// closed tab's threads have no other owner either, same reasoning
-				// as `stopLiveSession` above.
-				yield* Effect.promise(() =>
-					closeChatThreadsForSession(input.sessionId, mainContext),
-				);
-				// Otherwise a closed session's id lingers in the watch registry
-				// forever — nothing else ever removes it, since the frontend's own
-				// unmount-time `setWatching(false)` races this close and isn't
-				// guaranteed to land first (or at all, if the tab close came from
-				// elsewhere — the CLI, another window).
-				yield* sessionWatch.remove(input.sessionId);
+				yield* closeSessionSideEffects(input.sessionId);
 				emit({ type: "session-closed", sessionId: input.sessionId });
 				yield* Effect.logInfo("session closed", {
 					sessionId: input.sessionId,
 				});
+			}),
+			switchToPr: authed.sessions.switchToPr.effect(function* ({
+				input,
+				errors,
+			}) {
+				const store = yield* Store;
+				const outcome = yield* store.switchToPr(input.sessionId).pipe(
+					Effect.catchTag("SessionNotFound", () =>
+						Effect.fail(
+							errors.NOT_FOUND({
+								message: `session not found: ${input.sessionId}`,
+							}),
+						),
+					),
+					// Same "never degrade to a branch diff" refusal as `open`'s own
+					// `target: { kind: "pr" }` — see that handler's comment and the
+					// contract's doc comment (`packages/sidecar-api/src/sessions.ts`).
+					Effect.catchTag("NoPullRequest", (cause) =>
+						Effect.fail(
+							errors.NOT_FOUND({
+								message: `no open pull request for the current branch in ${cause.repoRoot}`,
+							}),
+						),
+					),
+					Effect.catchTag("NoDefaultBranch", (cause) =>
+						Effect.fail(
+							errors.BAD_REQUEST({
+								message: `no branch to review against in ${cause.repoRoot} — the repository has no commits on a default branch`,
+							}),
+						),
+					),
+					Effect.catchTag("GitHubUnreachable", (cause) =>
+						Effect.fail(
+							errors.SERVICE_UNAVAILABLE({
+								message: `could not reach GitHub for ${cause.repoRoot}: ${cause.reason}`,
+							}),
+						),
+					),
+					Effect.catchTag("GitCommandError", (cause) =>
+						Effect.fail(
+							errors.INTERNAL_SERVER_ERROR({
+								message: formatGitCommandError(cause),
+							}),
+						),
+					),
+					Effect.catchTag("WorktreeRelocationFailed", (cause) =>
+						Effect.fail(
+							errors.INTERNAL_SERVER_ERROR({
+								message: formatWorktreeRelocationFailed(cause),
+							}),
+						),
+					),
+				);
+				const session = outcome.session;
+
+				if (outcome.kind === "retargeted") {
+					// Same tab, new PR identity. No row closed, so
+					// `session-updated` (not `session-closed`) is what tells
+					// every `sessions.list` subscriber to refetch.
+					emit({ type: "session-updated", session });
+				} else {
+					// Collision: some other session already held this PR's key, so
+					// `store.switchToPr` closed the source row instead
+					// (`Store.closeSession`, the domain-level state) and answered
+					// with that pre-existing session. The rest of a genuine close
+					// still needs doing — same teardown `sessions.close`'s handler
+					// runs, since this source session's live walkthrough/chat/watch
+					// state has no other owner now either.
+					yield* closeSessionSideEffects(input.sessionId);
+					emit({ type: "session-closed", sessionId: input.sessionId });
+				}
+
+				yield* Effect.logInfo("session switched to pull request", {
+					sessionId: session.id,
+					repoRoot: session.repoRoot,
+				});
+				return session;
 			}),
 			setWatching: authed.sessions.setWatching.effect(function* ({
 				input,

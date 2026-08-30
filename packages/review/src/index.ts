@@ -13,6 +13,7 @@ export type {
 	LineRange,
 	OpenSessionInput,
 	RangeReviewClaim,
+	RetargetToPullRequestResult,
 	Session,
 	SessionPullRequest,
 } from "./store.ts";

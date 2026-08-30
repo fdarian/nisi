@@ -722,35 +722,34 @@ export function useSessionWatch(
 }
 
 /**
- * `sessions.open`'s `{ target: { kind: "pr" } }` path — the ⌘K "Switch to
- * PR" command available on a branch-diff session, resolving to whatever PR
- * GitHub knows about for the branch (`resolveReviewTarget`,
- * `apps/desktop/sidecar/store.ts`). The branch session this was called from
- * is left open; this only opens a second, PR-scoped session alongside it,
- * same "leave what's there, open something new" shape as
- * `useOpenPullRequest` (`#/lib/pull-requests-data.ts`). `sessions.open`'s
- * own emitted `session-opened` event (see `useSessions` above) would
- * eventually invalidate the session list and activate this session too, but
- * `onOpened` fires straight from the mutation so the tab switch doesn't wait
- * on that round trip.
+ * `sessions.switchToPr` — the ⌘K "Switch to PR" command available on a
+ * branch-diff session, resolving to whatever PR GitHub knows about for the
+ * branch (`resolveReviewTarget`, `apps/desktop/sidecar/store.ts`).
+ * Transforms `sessionId`'s own tab in place — same session id, so its
+ * tracked-changes state and any generated walkthrough carry over — rather
+ * than `sessions.open`'s `{ target: { kind: "pr" } }`, which would leave the
+ * branch tab open and mint a second, unrelated one alongside it. `onOpened`
+ * still works for both outcomes the sidecar can answer with: the same
+ * session id back (retargeted in place) or a different, pre-existing PR
+ * session's id (another session already held that PR — see the contract's
+ * doc comment) — either way it's the id to activate.
  *
  * Errors toast rather than return — a command-palette action has no
  * dedicated place to render an inline error, matching
- * `useMarkPullRequestReady`. "No PR open" is `sessions.open`'s own
+ * `useMarkPullRequestReady`. "No PR open" is `sessions.switchToPr`'s own
  * `NOT_FOUND` code (`packages/sidecar-api/src/sessions.ts`) — distinct from
- * `BAD_REQUEST`, which that contract reserves for the request itself being
- * malformed (`cwd` not a git repo, an unresolvable `baseRef`/`headRef`, none
- * of which this call can trigger since it passes no `baseRef`/`headRef`).
+ * `BAD_REQUEST`, which that contract reserves for a GitHub-resolution
+ * failure on the branch's default-branch fallback.
  */
 export function useSwitchToPr(
 	orpc: SidecarQueryUtils,
 	onOpened: (sessionId: string) => void,
 ): {
-	switchToPr: (repoRoot: string) => void;
+	switchToPr: (sessionId: string) => void;
 	isPending: boolean;
 } {
 	const mutation = useMutation({
-		...orpc.sessions.open.mutationOptions(),
+		...orpc.sessions.switchToPr.mutationOptions(),
 		onSuccess: (session) => onOpened(session.id),
 		onError: (error) => {
 			const isNoPullRequest =
@@ -770,8 +769,8 @@ export function useSwitchToPr(
 	});
 
 	return {
-		switchToPr: (repoRoot: string) => {
-			mutation.mutate({ cwd: repoRoot, target: { kind: "pr" } });
+		switchToPr: (sessionId: string) => {
+			mutation.mutate({ sessionId });
 		},
 		isPending: mutation.isPending,
 	};

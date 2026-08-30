@@ -12,6 +12,12 @@ import { Session } from "./sessions.ts";
  * mtime/size signal — see `@repo/git`'s `readRepoChangeSignature`), not
  * *what*; the existing fetch procedures are already the source of truth for
  * the actual content.
+ *
+ * `session-updated` covers a session whose *own* data changed under an
+ * unchanged `id` — today, only `sessions.switchToPr` retargeting a branch
+ * session onto a PR in place. Distinct from `session-opened`: no new tab
+ * should appear, and `sessions.list` needs to observe the same session's new
+ * `target` rather than a second row.
  */
 export const SessionEvent = Schema.Union([
 	Schema.Struct({ type: Schema.Literal("session-opened"), session: Session }),
@@ -22,6 +28,10 @@ export const SessionEvent = Schema.Union([
 	Schema.Struct({
 		type: Schema.Literal("session-files-changed"),
 		sessionId: Schema.String,
+	}),
+	Schema.Struct({
+		type: Schema.Literal("session-updated"),
+		session: Session,
 	}),
 ]);
 export type SessionEvent = Schema.Schema.Type<typeof SessionEvent>;

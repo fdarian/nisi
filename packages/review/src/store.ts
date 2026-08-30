@@ -44,6 +44,20 @@ export type OpenSessionInput = {
 	readonly pr: SessionPullRequest | null;
 };
 
+/**
+ * `retargetToPullRequest`'s result — the caller (`apps/desktop/sidecar/store.ts`'s
+ * `switchToPr`) needs to tell "the row was retargeted in place" apart from
+ * "a different, pre-existing row already held this PR" to decide what else
+ * needs to happen (the sidecar's walkthrough live-session/chat-thread/watch
+ * cleanup for a genuinely-closed source session lives outside this package —
+ * see that file). `"existing"` names the outcome, not a verdict on whether
+ * anything went wrong: reviewing the same PR from two different branches
+ * (or reopening one after closing it) legitimately converges on one session.
+ */
+export type RetargetToPullRequestResult =
+	| { readonly kind: "retargeted"; readonly session: Session }
+	| { readonly kind: "existing"; readonly session: Session };
+
 export type FileReviewState = {
 	readonly viewed: boolean;
 	readonly snapshotHash: string | null;
@@ -207,6 +221,95 @@ export class ReviewStore extends Context.Service<ReviewStore>()("ReviewStore", {
 							);
 
 				return toSession(row);
+			});
+
+		/**
+		 * "Switch to PR": retargets `sessionId`'s row onto `pr` in place, so
+		 * every dependent table (reviewed files, range claims, a stored
+		 * walkthrough) keyed by this same `id` carries over untouched.
+		 *
+		 * The one thing that can go wrong: the PR's own `sessionKey` already
+		 * belongs to a different row. A row whose `closedAt` is set still
+		 * counts as occupying that key (`sessionKey` is `UNIQUE` regardless of
+		 * `closedAt`) rather than being free for `sessionId` to claim —
+		 * reopening-by-reuse is `openSession`'s job for every other key, and
+		 * giving this path a different rule would let two sessions resurrect
+		 * the same PR identity independently. So a closed collision is
+		 * reactivated in place, the same way `openSession` reopens any other
+		 * closed row, and `sessionId`'s own row is left for the caller to
+		 * close (see `kind: "existing"`).
+		 *
+		 * The collision check and the write it leads to happen inside one
+		 * transaction, so two concurrent calls converging on the same PR can't
+		 * both observe no collision and both try to claim the key.
+		 */
+		const retargetToPullRequest = (
+			sessionId: string,
+			pr: SessionPullRequest,
+			baseRef: string,
+			headRef: string,
+		): Effect.Effect<
+			RetargetToPullRequestResult,
+			SessionNotFound | ReviewStoreError
+		> =>
+			Effect.gen(function* () {
+				const source = yield* readSessionRow(sessionId);
+				const targetKey = computeSessionKey(
+					source.repoRoot,
+					pr,
+					baseRef,
+					headRef,
+				);
+				const now = new Date();
+
+				return yield* query(
+					db.transaction((tx) =>
+						Effect.gen(function* () {
+							const collisionRows = yield* tx
+								.select()
+								.from(sessions)
+								.where(eq(sessions.sessionKey, targetKey))
+								.limit(1);
+							const collision = collisionRows.at(0);
+
+							if (collision !== undefined && collision.id !== source.id) {
+								const existing =
+									collision.closedAt === null
+										? collision
+										: yield* tx
+												.update(sessions)
+												.set({ closedAt: null, updatedAt: now })
+												.where(eq(sessions.id, collision.id))
+												.returning()
+												.get();
+								return {
+									kind: "existing" as const,
+									session: toSession(existing),
+								};
+							}
+
+							const retargeted = yield* tx
+								.update(sessions)
+								.set({
+									sessionKey: targetKey,
+									owner: pr.owner,
+									repo: pr.repo,
+									prNumber: pr.number,
+									prTitle: pr.title,
+									baseRef,
+									headRef,
+									updatedAt: now,
+								})
+								.where(eq(sessions.id, source.id))
+								.returning()
+								.get();
+							return {
+								kind: "retargeted" as const,
+								session: toSession(retargeted),
+							};
+						}),
+					),
+				);
 			});
 
 		const listOpenSessions = (): Effect.Effect<
@@ -503,6 +606,7 @@ export class ReviewStore extends Context.Service<ReviewStore>()("ReviewStore", {
 
 		return {
 			openSession,
+			retargetToPullRequest,
 			listOpenSessions,
 			closeSession,
 			getSession,
