@@ -28,6 +28,10 @@ import {
 import { AnimatePresence, motion } from "motion/react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import { ChatComposer } from "#/components/chat-dock/chat-composer";
+import {
+	ChatPanelResizeHandles,
+	useChatPanelSize,
+} from "#/components/chat-dock/chat-panel-resize";
 import { Button } from "#/components/ui/button";
 import { ScrollArea } from "#/components/ui/scroll-area";
 import type { SidecarQueryUtils } from "#/lib/backend-context";
@@ -187,6 +191,13 @@ function ChatPanelBody({
 }): React.ReactElement {
 	const minimized = useChatPopupMinimized(sessionId);
 	const dock = useChatDockActions(sessionId, orpc);
+	const {
+		width,
+		height,
+		onLeftEdgePointerDown,
+		onTopEdgePointerDown,
+		onCornerPointerDown,
+	} = useChatPanelSize();
 	const [, setLastChatModel] = useLastChatModel(orpc);
 	const { messages, status, error, sendMessage, stop } = useChat({
 		chat: getOrCreateChat(orpc, sessionId, thread.id),
@@ -202,11 +213,18 @@ function ChatPanelBody({
 	return (
 		<motion.div
 			animate={{ opacity: 1, scale: 1, y: 0 }}
-			className="fixed right-4 bottom-14 z-50 flex w-90 flex-col overflow-hidden rounded-xl border bg-popover text-popover-foreground shadow-lg/10"
+			className="fixed right-4 bottom-14 z-50 flex flex-col overflow-hidden rounded-xl border bg-popover text-popover-foreground shadow-lg/10"
 			exit={{ opacity: 0, scale: 0.96, y: 8 }}
 			initial={{ opacity: 0, scale: 0.96, y: 8 }}
+			style={{ width }}
 			transition={{ duration: 0.15, ease: "easeOut" }}
 		>
+			<ChatPanelResizeHandles
+				minimized={minimized}
+				onCornerPointerDown={onCornerPointerDown}
+				onLeftEdgePointerDown={onLeftEdgePointerDown}
+				onTopEdgePointerDown={onTopEdgePointerDown}
+			/>
 			<div className="flex shrink-0 items-center justify-between gap-2 border-b px-3 py-2">
 				<span className="truncate font-medium text-sm">{title}</span>
 				<div className="flex shrink-0 items-center gap-1">
@@ -240,7 +258,7 @@ function ChatPanelBody({
 						key="body"
 						transition={{ duration: 0.15, ease: "easeOut" }}
 					>
-						<ScrollArea className="h-80" scrollFade>
+						<ScrollArea scrollFade style={{ height }}>
 							<MessageList
 								isWaitingForFirstReply={isWaitingForFirstReply}
 								messages={messages}
