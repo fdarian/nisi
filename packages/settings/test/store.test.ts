@@ -142,6 +142,24 @@ describe("SettingsStore", () => {
 			expect(result.sidebarViewMode).toBe("flat");
 		});
 	});
+
+	test("update() round-trips the last-used chat model pair through get()", async () => {
+		await withTempDataDir(async (dataDir) => {
+			const result = await run(
+				dataDir,
+				Effect.gen(function* () {
+					const store = yield* SettingsStore;
+					yield* store.update({
+						lastChatHarness: "claude-code",
+						lastChatModel: "opus",
+					});
+					return yield* store.get();
+				}),
+			);
+			expect(result.lastChatHarness).toBe("claude-code");
+			expect(result.lastChatModel).toBe("opus");
+		});
+	});
 });
 
 describe("SettingsStore repo path mapping", () => {
