@@ -22,7 +22,7 @@ import {
 	type WorktreeRelocationFailed,
 } from "@repo/git";
 import { ReviewStore } from "@repo/review";
-import { SettingsStore } from "@repo/settings";
+import { RepoMergeMethodStore, SettingsStore } from "@repo/settings";
 import type {
 	GenerateEvent,
 	HarnessId,
@@ -1099,6 +1099,25 @@ export function attachRouter(
 				input,
 				errors,
 			}) {
+				// A local SQLite read, not a `gh` call — kept out of the
+				// `Effect.all` below so it shares none of that group's
+				// concurrency or failure mapping. A remembered-preference read
+				// failing is not a reason to fail the whole request (that would
+				// turn a perfectly mergeable PR into an error in the UI): it
+				// degrades to `null`, the same as "never recorded", and
+				// `allowedMethods[0]` below covers it.
+				const repoMergeMethodStore = yield* RepoMergeMethodStore;
+				const rememberedMethod = yield* repoMergeMethodStore
+					.get(input.owner, input.repo)
+					.pipe(
+						Effect.catchTag("SettingsStoreError", (cause) =>
+							Effect.logWarning(
+								"failed to read remembered merge method, falling back to allowedMethods[0]",
+								{ owner: input.owner, repo: input.repo, cause },
+							).pipe(Effect.as(null)),
+						),
+					);
+
 				const [mergeability, allowedMethods] = yield* Effect.all(
 					[
 						fetchPullRequestMergeability(input.repoRoot, input.number),
@@ -1171,15 +1190,23 @@ export function attachRouter(
 				// `allowedMethods` is guaranteed non-empty here — `fetchRepoMergeMethods`
 				// already fails `NoMergeMethodsEnabled` (mapped above) when it would
 				// otherwise be empty — and is already in GitHub's own Merge → Squash →
-				// Rebase ordering, so the default is simply its first entry.
-				const defaultMethod = allowedMethods[0];
-				if (defaultMethod === undefined) {
+				// Rebase ordering, so falling back to its first entry is always
+				// safe. Prefer the remembered method instead, when there is one and
+				// the repo still allows it — GitHub itself exposes no per-repo
+				// default, so the last method the user actually merged with here is
+				// the only signal better than that fixed ordering.
+				const fallbackMethod = allowedMethods[0];
+				if (fallbackMethod === undefined) {
 					return yield* Effect.die(
 						new Error(
 							"fetchRepoMergeMethods resolved with an empty allowedMethods array",
 						),
 					);
 				}
+				const defaultMethod =
+					rememberedMethod !== null && allowedMethods.includes(rememberedMethod)
+						? rememberedMethod
+						: fallbackMethod;
 
 				return {
 					state: mergeability.state,
@@ -1191,6 +1218,7 @@ export function attachRouter(
 				};
 			}),
 			merge: authed.pullRequests.merge.effect(function* ({ input, errors }) {
+				const repoMergeMethodStore = yield* RepoMergeMethodStore;
 				yield* mergePullRequest(
 					input.repoRoot,
 					input.number,
@@ -1238,6 +1266,23 @@ export function attachRouter(
 					number: input.number,
 					method: input.method,
 				});
+
+				// Remembered as the next default for this repo (`mergeStatus`
+				// above) — a failure to persist it doesn't undo the merge that
+				// already succeeded, so it's logged and swallowed rather than
+				// turned into an error response.
+				yield* repoMergeMethodStore
+					.set(input.owner, input.repo, input.method)
+					.pipe(
+						Effect.catchTag("SettingsStoreError", (cause) =>
+							Effect.logWarning("failed to remember last-used merge method", {
+								owner: input.owner,
+								repo: input.repo,
+								method: input.method,
+								cause,
+							}),
+						),
+					);
 			}),
 			// The PR header overflow menu's "Mark as Ready" item, shown only
 			// while `mergeStatus.isDraft` is true. Error mapping

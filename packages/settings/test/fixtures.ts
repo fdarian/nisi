@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { BunServices } from "@effect/platform-bun";
 import { SqliteDb } from "@repo/db";
 import { ConfigProvider, Layer } from "effect";
+import { RepoMergeMethodStore } from "../src/repo-merge-method-store.ts";
 import { SettingsStore } from "../src/store.ts";
 
 /**
@@ -17,6 +18,18 @@ import { SettingsStore } from "../src/store.ts";
  */
 export const makeTestLayer = (dataDir: string) =>
 	SettingsStore.layer.pipe(
+		Layer.provideMerge(SqliteDb.layer),
+		Layer.provideMerge(BunServices.layer),
+		Layer.provide(
+			ConfigProvider.layer(
+				ConfigProvider.fromUnknown({ NISI_DATA_DIR: dataDir }),
+			),
+		),
+	);
+
+/** Same shape as `makeTestLayer` above, for `RepoMergeMethodStore` instead. */
+export const makeRepoMergeMethodTestLayer = (dataDir: string) =>
+	RepoMergeMethodStore.layer.pipe(
 		Layer.provideMerge(SqliteDb.layer),
 		Layer.provideMerge(BunServices.layer),
 		Layer.provide(
