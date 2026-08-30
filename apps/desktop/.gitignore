@@ -4,3 +4,6 @@
 
 *storybook.log
 storybook-static
+
+# TanStack Router build cache (auto-generated route trees)
+.tanstack
