@@ -94,23 +94,21 @@ function ComposerBody({
 	const needsPicker = threadHarness === null;
 	const hasEnabledHarness = harnesses.some((harness) => harness.enabled);
 
-	// Seeds the picker from the last harness/model the user actually sent a
-	// message with, once — never overwrites a choice already made this
-	// mount (`selection !== null` guard), and never trusts the persisted
-	// pair blindly: the harness may since have been disabled, or the model
-	// discovered from the CLI at runtime may no longer be in its live list.
-	// Falls back to no selection rather than inventing a substitute. Runs as
-	// an effect (not a lazy `useState` initializer) since `harnesses` loads
-	// asynchronously and isn't available on first render.
+	// Seeds the picker from the last harness/model actually sent with, once
+	// (never overwrites a choice already made this mount). Re-validates
+	// against the live harness list rather than trusting the persisted pair
+	// blindly — a harness-only selection (`modelId: undefined`) is legitimate
+	// and skips the model-membership check; a stored model id must still be
+	// in the harness's live list.
 	useEffect(() => {
 		if (!needsPicker || lastChatModel === null || selection !== null) return;
 		const harness = harnesses.find(
 			(candidate) => candidate.id === lastChatModel.harness,
 		);
 		if (harness === undefined || !harness.enabled) return;
-		const modelStillOffered = harness.models.some(
-			(model) => model.id === lastChatModel.modelId,
-		);
+		const modelStillOffered =
+			lastChatModel.modelId === undefined ||
+			harness.models.some((model) => model.id === lastChatModel.modelId);
 		if (!modelStillOffered) return;
 		setSelection({ harness: harness.id, modelId: lastChatModel.modelId });
 	}, [needsPicker, lastChatModel, harnesses, selection]);

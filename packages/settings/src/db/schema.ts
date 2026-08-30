@@ -57,19 +57,23 @@ export const settings = sqliteTable("settings", {
 	walkthroughEnabled: integer({ mode: "boolean" }).notNull().default(false),
 	/**
 	 * Harness id of the last chat model the user actually sent a message
-	 * with, paired with `lastChatModel` below — a pair, not two independent
-	 * settings, since `HarnessModelCombobox` returns them together as one
-	 * `ModelSelection`. `NULL` until a thread's first send ever locks one in.
-	 * Plain text, not a typed column — same reasoning as `enabledHarnesses`
-	 * above, this package stays independent of `@repo/sidecar-api`'s
-	 * `HarnessId`. Seeds the chat composer's picker on a fresh thread; the
-	 * frontend re-validates the pair against the harness's live model list
-	 * before using it, since the stored harness may since be disabled or the
-	 * model gone from the CLI's discovered list — see
-	 * `apps/desktop/src/components/chat-dock/chat-composer.tsx`.
+	 * with, paired with `lastChatModel` below — `HarnessModelCombobox`
+	 * returns them together as one `ModelSelection`, not two independent
+	 * settings. `NULL` until a thread's first send ever locks one in. Plain
+	 * text, not a typed column — same reasoning as `enabledHarnesses` above,
+	 * this package stays independent of `@repo/sidecar-api`'s `HarnessId`.
+	 * Seeds the chat composer's picker on a fresh thread; the frontend
+	 * re-validates the harness still exists and is enabled before using it
+	 * — see `apps/desktop/src/components/chat-dock/chat-composer.tsx`.
 	 */
 	lastChatHarness: text(),
-	/** Model id paired with `lastChatHarness` above — `NULL` together with it, never independently. */
+	/**
+	 * Model id paired with `lastChatHarness` above, or `NULL` when the user
+	 * sent with a harness but no specific model — a legitimate selection
+	 * (`ModelSelection.modelId` is `string | undefined`), not "unset."
+	 * Only meaningful alongside a non-`NULL` `lastChatHarness`; when set, the
+	 * frontend re-validates it's still in the harness's live model list.
+	 */
 	lastChatModel: text(),
 	updatedAt: integer({ mode: "timestamp_ms" })
 		.notNull()

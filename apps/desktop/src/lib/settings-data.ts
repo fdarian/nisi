@@ -43,17 +43,9 @@ export type Settings = {
 	walkthroughEnabled: boolean;
 	/** When true, long diff lines wrap instead of scrolling horizontally. */
 	wrapLines: boolean;
-	/**
-	 * Harness/model pair the user last actually sent a chat message with —
-	 * paired, not independent: `lastChatModel` only means something alongside
-	 * `lastChatHarness`, both `null` together until a thread's first send
-	 * ever locks one in. See `@repo/settings`'s `Settings.lastChatHarness`/
-	 * `lastChatModel` doc. Written back only at that lock-in moment
-	 * (`chat-panel.tsx`'s `onSend`), not on every picker keystroke; read back
-	 * by `chat-composer.tsx` to seed a fresh thread's picker, re-validated
-	 * there against the harness's live model list before use.
-	 */
+	/** Harness id of the last chat model sent with — see `@repo/settings`'s `Settings.lastChatHarness` doc. */
 	lastChatHarness: HarnessId | null;
+	/** Model id paired with `lastChatHarness` above. */
 	lastChatModel: string | null;
 };
 
@@ -230,11 +222,9 @@ export function useIncludeUncommitted(
 
 /**
  * Harness/model pair the user last actually sent a chat message with — see
- * `Settings.lastChatHarness`/`lastChatModel`'s doc above. Redeclares
- * `HarnessModelCombobox`'s `ModelSelection` shape
- * (`#/components/walkthrough/harness-model-combobox.tsx`) rather than
- * importing it, keeping this lib file independent of a component. `null`
- * when either half is unset, never a partial pair.
+ * `Settings.lastChatHarness`/`lastChatModel`'s doc above. Mirrors
+ * `HarnessModelCombobox`'s `ModelSelection` shape, redeclared rather than
+ * imported to keep this lib file independent of a component.
  */
 export type LastChatModel = { harness: HarnessId; modelId: string | undefined };
 

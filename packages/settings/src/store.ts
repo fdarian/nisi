@@ -55,11 +55,7 @@ export type Settings = {
 	readonly walkthroughEnabled: boolean;
 	/** When true, long diff lines wrap instead of scrolling horizontally. */
 	readonly wrapLines: boolean;
-	/**
-	 * Harness id of the last chat model the user actually sent a message
-	 * with — paired with `lastChatModel` below, `null` together with it. See
-	 * `db/schema.ts`'s `lastChatHarness` doc for the full story.
-	 */
+	/** Harness id of the last chat model sent with — see `db/schema.ts`'s `lastChatHarness` doc. */
 	readonly lastChatHarness: string | null;
 	/** Model id paired with `lastChatHarness` above. */
 	readonly lastChatModel: string | null;
