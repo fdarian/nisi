@@ -44,7 +44,7 @@ export function OverviewView({
 	const overview = overviewQuery.data;
 
 	return (
-		<div className="flex min-h-0 flex-1 flex-col">
+		<div className="flex min-w-0 min-h-0 flex-1 flex-col">
 			{overview.description === null ? (
 				// Branch/diff mode: no description pane, so the commits list gets
 				// the full width instead of sitting in a narrow right column next
