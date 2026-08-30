@@ -333,8 +333,11 @@ function AppShellReady({
 				))}
 			</FramePanel>
 
-			<div className="relative flex justify-between min-h-2 items-center">
+			<div className="relative flex min-h-2 items-center">
 				<DevTool />
+
+				<div className="grow" />
+
 				{activeSessionId !== null && (
 					<ChatDock orpc={orpc} sessionId={activeSessionId} />
 				)}
