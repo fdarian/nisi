@@ -31,6 +31,9 @@ import m0008 from "../drizzle/20260825083833_quiet_nick_fury/migration.sql" with
 import m0009 from "../drizzle/20260828061843_overconfident_black_bird/migration.sql" with {
 	type: "text",
 };
+import m0010 from "../drizzle/20260830105025_thick_nebula/migration.sql" with {
+	type: "text",
+};
 
 export default {
 	migrations: [
@@ -44,5 +47,6 @@ export default {
 		{ name: "20260808091904_late_deadpool", sql: m0007 },
 		{ name: "20260825083833_quiet_nick_fury", sql: m0008 },
 		{ name: "20260828061843_overconfident_black_bird", sql: m0009 },
+		{ name: "20260830105025_thick_nebula", sql: m0010 },
 	],
 };
