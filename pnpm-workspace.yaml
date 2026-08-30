@@ -38,6 +38,21 @@ packageExtensions:
   drizzle-kit:
     peerDependencies:
       drizzle-orm: "*"
+  # @pierre/theming declares @shikijs/themes as an *optional* peer dep, but never
+  # depends on it directly. pnpm only fills optional peers from deps declared by
+  # direct ancestors, and @shikijs/themes lives only nested inside shiki's own
+  # subtree (not as a direct dep of @pierre/diffs or @pierre/theming), so the slot
+  # goes unfilled and @pierre/theming's runtime `import("@shikijs/themes/<name>")`
+  # throws "Could not resolve" at runtime, breaking CodeView's highlight pipeline.
+  # Must be optionalDependencies, not dependencies: with auto-install-peers on,
+  # pnpm's resolver strips any injected `dependencies` key that also appears in
+  # `peerDependencies` (it's treated as satisfying the peer, not adding a dep),
+  # so a plain `dependencies` entry here silently no-ops. optionalDependencies
+  # isn't subject to that strip and links directly into @pierre/theming's own
+  # scope regardless of graph visibility.
+  "@pierre/theming":
+    optionalDependencies:
+      "@shikijs/themes": "4.4.3"
 patchedDependencies:
   "@ai-sdk/harness@1.0.91": patches/@ai-sdk%2Fharness@1.0.91.patch
   "@ai-sdk/harness-claude-code@1.0.94": patches/@ai-sdk%2Fharness-claude-code@1.0.94.patch
