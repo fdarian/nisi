@@ -19,32 +19,7 @@ import type { CodeViewLineSelection, SelectionSide } from "@pierre/diffs";
 import type { CodeViewHandle } from "@pierre/diffs/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { pollUntilReady } from "#/lib/diff-match-dom";
-
-/**
- * One resolved selection's *identity* — the file it's in and its
- * head-relative line range (see `resolveHeadRange`'s doc comment for what
- * "head-relative" means when the selection touches removed lines).
- * Deliberately carries no rect: unlike the selection itself, the anchor
- * position needs to keep changing as the pane scrolls (see `anchorRect`
- * below), and folding a live-updating field into this object would make
- * every scroll tick look like a brand-new selection to anything comparing
- * `reference` by identity (`DiffSelectionPopover`'s mount-animation guard,
- * the "did the selection change" copied-state reset).
- */
-export type DiffSelectionReference = {
-	path: string;
-	startLine: number;
-	endLine: number;
-};
-
-/** `relative/path.ts#L131-133` — repo-relative path plus a 1-based, inclusive line range. A single-line reference drops the range: `path.ts#L131`. */
-export function formatSelectionReference(
-	reference: DiffSelectionReference,
-): string {
-	return reference.startLine === reference.endLine
-		? `${reference.path}#L${reference.startLine}`
-		: `${reference.path}#L${reference.startLine}-${reference.endLine}`;
-}
+import type { DiffSelectionReference } from "#/lib/diff-reference";
 
 type UseDiffSelectionOptions<Metadata> = {
 	/** The same `CodeViewHandle` ref passed to `<DiffCodeView ref>` — used to reach a selected item's rendered shadow root (for the gutter path's anchor rect) and to resolve which item id a native text selection landed in. */

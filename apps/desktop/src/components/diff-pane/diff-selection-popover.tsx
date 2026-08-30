@@ -19,11 +19,11 @@ import { useEffect, useLayoutEffect, useState } from "react";
 import { Button } from "#/components/ui/button";
 import { Popover, PopoverPrimitive } from "#/components/ui/popover";
 import { toastManager } from "#/components/ui/toast";
+import { diffSelectionPopupMarkerProps } from "#/hooks/use-diff-selection";
 import {
 	type DiffSelectionReference,
-	diffSelectionPopupMarkerProps,
 	formatSelectionReference,
-} from "#/hooks/use-diff-selection";
+} from "#/lib/diff-reference";
 
 const COPIED_CONFIRMATION_MS = 1500;
 
