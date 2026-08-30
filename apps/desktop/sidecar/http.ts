@@ -22,7 +22,7 @@ import {
 	type WorktreeRelocationFailed,
 } from "@repo/git";
 import { ReviewStore } from "@repo/review";
-import { SettingsStore } from "@repo/settings";
+import { RepoMergeMethodStore, SettingsStore } from "@repo/settings";
 import type {
 	GenerateEvent,
 	HarnessId,
@@ -1008,87 +1008,98 @@ export function attachRouter(
 				input,
 				errors,
 			}) {
-				const [mergeability, allowedMethods] = yield* Effect.all(
-					[
-						fetchPullRequestMergeability(input.repoRoot, input.number),
-						fetchRepoMergeMethods(input.repoRoot, input.owner, input.repo),
-					],
-					{ concurrency: "unbounded" },
-				).pipe(
-					Effect.catchTag("GhNotAuthenticated", (cause) =>
-						Effect.fail(
-							errors.GH_NOT_AUTHENTICATED({
-								message: `gh is not authenticated: ${cause.reason}`,
-							}),
+				const repoMergeMethodStore = yield* RepoMergeMethodStore;
+				const [mergeability, allowedMethods, rememberedMethod] =
+					yield* Effect.all(
+						[
+							fetchPullRequestMergeability(input.repoRoot, input.number),
+							fetchRepoMergeMethods(input.repoRoot, input.owner, input.repo),
+							repoMergeMethodStore.get(input.owner, input.repo),
+						],
+						{ concurrency: "unbounded" },
+					).pipe(
+						Effect.catchTag("GhNotAuthenticated", (cause) =>
+							Effect.fail(
+								errors.GH_NOT_AUTHENTICATED({
+									message: `gh is not authenticated: ${cause.reason}`,
+								}),
+							),
 						),
-					),
-					Effect.catchTag("GhRateLimited", (cause) =>
-						Effect.fail(
-							errors.TOO_MANY_REQUESTS({
-								message: `GitHub's API is rate-limited right now: ${cause.reason}`,
-							}),
+						Effect.catchTag("GhRateLimited", (cause) =>
+							Effect.fail(
+								errors.TOO_MANY_REQUESTS({
+									message: `GitHub's API is rate-limited right now: ${cause.reason}`,
+								}),
+							),
 						),
-					),
-					Effect.catchTag("GhOutputDecodeError", (cause) =>
-						Effect.fail(
-							errors.SERVICE_UNAVAILABLE({
-								message: `gh returned output nisi couldn't parse (${cause.command})`,
-							}),
+						Effect.catchTag("GhOutputDecodeError", (cause) =>
+							Effect.fail(
+								errors.SERVICE_UNAVAILABLE({
+									message: `gh returned output nisi couldn't parse (${cause.command})`,
+								}),
+							),
 						),
-					),
-					Effect.catchTag("GitHubUnreachable", (cause) =>
-						Effect.fail(
-							errors.SERVICE_UNAVAILABLE({
-								message: `could not reach GitHub for ${cause.repoRoot}: ${cause.reason}`,
-							}),
+						Effect.catchTag("GitHubUnreachable", (cause) =>
+							Effect.fail(
+								errors.SERVICE_UNAVAILABLE({
+									message: `could not reach GitHub for ${cause.repoRoot}: ${cause.reason}`,
+								}),
+							),
 						),
-					),
-					Effect.catchTag("GitCommandError", (cause) =>
-						Effect.fail(
-							errors.SERVICE_UNAVAILABLE({
-								message: `${cause.command} could not be run: ${cause.stderr || String(cause.cause)}`,
-							}),
+						Effect.catchTag("GitCommandError", (cause) =>
+							Effect.fail(
+								errors.SERVICE_UNAVAILABLE({
+									message: `${cause.command} could not be run: ${cause.stderr || String(cause.cause)}`,
+								}),
+							),
 						),
-					),
-					Effect.catchTag("PullRequestNotFound", (cause) =>
-						Effect.fail(
-							errors.NOT_FOUND({
-								message: `pull request #${cause.number} couldn't be resolved on GitHub for ${cause.repoRoot}: ${cause.reason}`,
-							}),
+						Effect.catchTag("PullRequestNotFound", (cause) =>
+							Effect.fail(
+								errors.NOT_FOUND({
+									message: `pull request #${cause.number} couldn't be resolved on GitHub for ${cause.repoRoot}: ${cause.reason}`,
+								}),
+							),
 						),
-					),
-					// `mergeStateStatus` specifically requires push access to the
-					// repo — deliberately not folded into `SERVICE_UNAVAILABLE`, so
-					// the button can say "merge status unavailable" rather than a
-					// generic connectivity failure.
-					Effect.catchTag("PullRequestMergeStatusUnavailable", (cause) =>
-						Effect.fail(
-							errors.MERGE_STATUS_UNAVAILABLE({
-								message: `couldn't determine merge status for pull request #${cause.number} in ${cause.repoRoot} — this usually means nisi doesn't have push access to the repo: ${cause.reason}`,
-							}),
+						// `mergeStateStatus` specifically requires push access to the
+						// repo — deliberately not folded into `SERVICE_UNAVAILABLE`, so
+						// the button can say "merge status unavailable" rather than a
+						// generic connectivity failure.
+						Effect.catchTag("PullRequestMergeStatusUnavailable", (cause) =>
+							Effect.fail(
+								errors.MERGE_STATUS_UNAVAILABLE({
+									message: `couldn't determine merge status for pull request #${cause.number} in ${cause.repoRoot} — this usually means nisi doesn't have push access to the repo: ${cause.reason}`,
+								}),
+							),
 						),
-					),
-					Effect.catchTag("NoMergeMethodsEnabled", (cause) =>
-						Effect.fail(
-							errors.SERVICE_UNAVAILABLE({
-								message: `${cause.owner}/${cause.repo} has every merge method disabled`,
-							}),
+						Effect.catchTag("NoMergeMethodsEnabled", (cause) =>
+							Effect.fail(
+								errors.SERVICE_UNAVAILABLE({
+									message: `${cause.owner}/${cause.repo} has every merge method disabled`,
+								}),
+							),
 						),
-					),
-				);
+					);
 
 				// `allowedMethods` is guaranteed non-empty here — `fetchRepoMergeMethods`
 				// already fails `NoMergeMethodsEnabled` (mapped above) when it would
 				// otherwise be empty — and is already in GitHub's own Merge → Squash →
-				// Rebase ordering, so the default is simply its first entry.
-				const defaultMethod = allowedMethods[0];
-				if (defaultMethod === undefined) {
+				// Rebase ordering, so falling back to its first entry is always
+				// safe. Prefer the remembered method instead, when there is one and
+				// the repo still allows it — GitHub itself exposes no per-repo
+				// default, so the last method the user actually merged with here is
+				// the only signal better than that fixed ordering.
+				const fallbackMethod = allowedMethods[0];
+				if (fallbackMethod === undefined) {
 					return yield* Effect.die(
 						new Error(
 							"fetchRepoMergeMethods resolved with an empty allowedMethods array",
 						),
 					);
 				}
+				const defaultMethod =
+					rememberedMethod !== null && allowedMethods.includes(rememberedMethod)
+						? rememberedMethod
+						: fallbackMethod;
 
 				return {
 					state: mergeability.state,
@@ -1100,6 +1111,7 @@ export function attachRouter(
 				};
 			}),
 			merge: authed.pullRequests.merge.effect(function* ({ input, errors }) {
+				const repoMergeMethodStore = yield* RepoMergeMethodStore;
 				yield* mergePullRequest(
 					input.repoRoot,
 					input.number,
@@ -1147,6 +1159,23 @@ export function attachRouter(
 					number: input.number,
 					method: input.method,
 				});
+
+				// Remembered as the next default for this repo (`mergeStatus`
+				// above) — a failure to persist it doesn't undo the merge that
+				// already succeeded, so it's logged and swallowed rather than
+				// turned into an error response.
+				yield* repoMergeMethodStore
+					.set(input.owner, input.repo, input.method)
+					.pipe(
+						Effect.catchTag("SettingsStoreError", (cause) =>
+							Effect.logWarning("failed to remember last-used merge method", {
+								owner: input.owner,
+								repo: input.repo,
+								method: input.method,
+								cause,
+							}),
+						),
+					);
 			}),
 			// The PR header overflow menu's "Mark as Ready" item, shown only
 			// while `mergeStatus.isDraft` is true. Error mapping
