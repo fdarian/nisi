@@ -1,6 +1,8 @@
 "use client";
 
+import { ScrollAreaViewport } from "@base-ui/react";
 import { useLayoutEffect, useRef } from "react";
+import { ScrollArea } from "#/components/ui/scroll-area";
 import type { OverviewCommit } from "#/lib/pr-data";
 import { CommitRow } from "./commit-row";
 
@@ -35,12 +37,12 @@ export function CommitList({ commits }: CommitListProps): React.ReactElement {
 	}, []);
 
 	return (
-		<div className="min-h-0 flex-1 overflow-auto" ref={scrollRef}>
-			<div className="flex flex-col divide-y divide-border">
+		<ScrollArea className="min-h-0 flex-1" ref={scrollRef} scrollFade>
+			<div className="flex flex-col">
 				{commits.map((commit) => (
 					<CommitRow commit={commit} key={commit.sha} />
 				))}
 			</div>
-		</div>
+		</ScrollArea>
 	);
 }

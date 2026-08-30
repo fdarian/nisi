@@ -49,13 +49,15 @@ export function OverviewView({
 				// Branch/diff mode: no description pane, so the commits list gets
 				// the full width instead of sitting in a narrow right column next
 				// to an empty left half.
-				<div className="mx-auto flex min-h-0 w-full max-w-2xl flex-1 flex-col">
+				<div className="mx-auto flex min-h-0 w-full max-w-2xl flex-1 flex-col space-y-1 pt-5">
+					<p className="text-sm text-muted-foreground">Commits</p>
 					<CommitList commits={overview.commits} />
 				</div>
 			) : (
 				<div className="flex min-h-0 flex-1">
 					<DescriptionPane description={overview.description} />
-					<div className="flex min-h-0 w-[42%] max-w-2xl flex-col border-l">
+					<div className="flex min-h-0 w-[42%] max-w-2xl flex-col py-5 space-y-1 pr-3">
+						<p className="text-sm text-muted-foreground">Commits</p>
 						<CommitList commits={overview.commits} />
 					</div>
 				</div>

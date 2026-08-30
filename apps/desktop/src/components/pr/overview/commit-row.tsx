@@ -26,7 +26,7 @@ type CommitRowProps = {
  */
 export function CommitRow({ commit }: CommitRowProps): React.ReactElement {
 	return (
-		<div className="flex items-center gap-2.5 px-3 py-2">
+		<div className="flex items-center gap-2.5 py-2">
 			<Avatar className="size-6 shrink-0 text-[10px]">
 				{commit.authorLogin !== null && (
 					<AvatarImage alt="" src={githubAvatarUrl(commit.authorLogin)} />
