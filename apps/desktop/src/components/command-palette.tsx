@@ -45,7 +45,7 @@ type CommandPaletteProps = {
 	 */
 	activeSession: Session | null;
 	orpc: SidecarQueryUtils;
-	/** Fires once `sessions.open` resolves for "Switch to PR" — mirrors `OpenPullRequestPalette`'s `onSessionOpened` (`app-shell.tsx`), so the new tab activates the same way. */
+	/** Fires once `sessions.switchToPr` resolves for "Switch to PR" — mirrors `OpenPullRequestPalette`'s `onSessionOpened` (`app-shell.tsx`), so the active tab follows whichever session id the sidecar answered with. */
 	onSessionOpened: (sessionId: string) => void;
 	/** "Go to Overview" — switches a session's own sub-tab (`pr-view.tsx`'s `PrViewTabStrip`), same store `app-shell.tsx` writes to via `useSetActiveTab`. */
 	onNavigateToTab: (sessionId: string, tab: string) => void;
@@ -119,7 +119,7 @@ export function CommandPalette({
 
 function buildActions(
 	session: Session | null,
-	switchToPr: (repoRoot: string) => void,
+	switchToPr: (sessionId: string) => void,
 	onNavigateToTab: (sessionId: string, tab: string) => void,
 ): CommandAction[] {
 	if (session === null) return [];
@@ -150,13 +150,13 @@ function buildActions(
 			},
 		});
 	} else {
-		const repoRoot = session.repoRoot;
+		const sessionId = session.id;
 		actions.push({
 			id: "switch-to-pr",
 			label: "Switch to PR",
 			icon: GitPullRequestIcon,
 			run: () => {
-				switchToPr(repoRoot);
+				switchToPr(sessionId);
 			},
 		});
 	}
