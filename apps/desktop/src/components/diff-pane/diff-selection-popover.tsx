@@ -1,25 +1,36 @@
 "use client";
 
 /**
- * The floating "Copy reference" button `use-diff-selection.ts` drives —
- * mounted once per `DiffPane`, positioned against whichever selection (gutter
- * drag or text drag) is currently active via a virtual anchor rather than a
- * real trigger element, since neither selection mechanism has one DOM node
- * that's "the trigger" the way a normal popover menu does.
+ * The floating "Copy reference"/"Ask" toolbar `use-diff-selection.ts`
+ * drives — mounted once per `DiffPane`, positioned against whichever
+ * selection (gutter drag or text drag) is currently active via a virtual
+ * anchor rather than a real trigger element, since neither selection
+ * mechanism has one DOM node that's "the trigger" the way a normal popover
+ * menu does.
  *
  * Builds directly on `PopoverPrimitive` (re-exported by `#/components/ui/popover`)
- * instead of that module's `PopoverPopup` wrapper — this needs a bare button with
- * no panel chrome and no enter animation, and `PopoverPopup`'s classes are tuned
- * for a normal padded/bordered/shadowed popup that every *other* consumer relies
- * on, so they're not something to change there. `PopoverPrimitive.Positioner` is
- * still what does the actual anchor math (collision detection, flipping).
+ * instead of that module's `PopoverPopup` wrapper — this needs no panel chrome of
+ * its own and no enter animation, and `PopoverPopup`'s classes are tuned for a
+ * normal padded/bordered/shadowed popup that every *other* consumer relies on, so
+ * they're not something to change there. The `Toolbar` (`#/components/ui/toolbar`)
+ * rendered inside supplies the only chrome this popup has — its own
+ * `rounded-xl border bg-card p-1` — so the two buttons read as one surface
+ * rather than a box nested in a box. `PopoverPrimitive.Positioner` is still what
+ * does the actual anchor math (collision detection, flipping).
  */
-import { CheckIcon, CopyIcon } from "lucide-react";
+import { CheckIcon, CopyIcon, MessageCircleIcon } from "lucide-react";
 import { useEffect, useLayoutEffect, useState } from "react";
 import { Button } from "#/components/ui/button";
 import { Popover, PopoverPrimitive } from "#/components/ui/popover";
 import { toastManager } from "#/components/ui/toast";
+import {
+	Toolbar,
+	ToolbarButton,
+	ToolbarSeparator,
+} from "#/components/ui/toolbar";
 import { diffSelectionPopupMarkerProps } from "#/hooks/use-diff-selection";
+import type { SidecarQueryUtils } from "#/lib/backend-context";
+import { useChatDockActions } from "#/lib/chat-store";
 import {
 	type DiffSelectionReference,
 	formatSelectionReference,
@@ -28,6 +39,9 @@ import {
 const COPIED_CONFIRMATION_MS = 1500;
 
 type DiffSelectionPopoverProps = {
+	/** Which PR tab's chat threads "Ask" attaches this reference to — see `useChatDockActions`. */
+	sessionId: string;
+	orpc: SidecarQueryUtils;
 	reference: DiffSelectionReference | null;
 	/**
 	 * Where to anchor the button right now, or `null` when the selected rows
@@ -39,9 +53,11 @@ type DiffSelectionPopoverProps = {
 	 */
 	anchorRect: DOMRect | null;
 	/**
-	 * Called only when the user presses Escape to dismiss without copying —
-	 * the selection itself stays; `DiffPane`'s own scroll/selection-clear
-	 * handling is what actually clears it.
+	 * Called when the user presses Escape to dismiss without copying, or
+	 * clicks "Ask" (which, unlike "Copy reference", closes the popover once
+	 * it's attached the reference to a thread) — in both cases `DiffPane`'s
+	 * own scroll/selection-clear handling is what actually clears the
+	 * underlying selection.
 	 *
 	 * Deliberately NOT called for an outside-press dismissal. Base UI's
 	 * `Popover` treats any pointerdown outside the popup as a dismiss
@@ -62,11 +78,14 @@ type DiffSelectionPopoverProps = {
 };
 
 export function DiffSelectionPopover({
+	sessionId,
+	orpc,
 	reference,
 	anchorRect,
 	onDismiss,
 }: DiffSelectionPopoverProps): React.ReactElement | null {
 	const [copied, setCopied] = useState(false);
+	const dock = useChatDockActions(sessionId, orpc);
 
 	// A reference that moves (drag extends to a new range, or a fresh
 	// selection replaces the old one) shouldn't keep claiming the old range
@@ -158,26 +177,40 @@ export function DiffSelectionPopover({
 						data-slot="popover-popup"
 						{...diffSelectionPopupMarkerProps}
 					>
-						<Button
-							onClick={() => {
-								navigator.clipboard
-									.writeText(formatSelectionReference(reference))
-									.then(() => setCopied(true))
-									.catch((error: unknown) => {
-										toastManager.add({
-											title: "Failed to copy reference",
-											description:
-												error instanceof Error ? error.message : String(error),
-											type: "error",
+						<Toolbar>
+							<ToolbarButton
+								onClick={() => {
+									navigator.clipboard
+										.writeText(formatSelectionReference(reference))
+										.then(() => setCopied(true))
+										.catch((error: unknown) => {
+											toastManager.add({
+												title: "Failed to copy reference",
+												description:
+													error instanceof Error
+														? error.message
+														: String(error),
+												type: "error",
+											});
 										});
-									});
-							}}
-							size="xs"
-							variant="default"
-						>
-							{copied ? <CheckIcon /> : <CopyIcon />}
-							{copied ? "Copied" : "Copy reference"}
-						</Button>
+								}}
+								render={<Button size="xs" variant="ghost" />}
+							>
+								{copied ? <CheckIcon /> : <CopyIcon />}
+								{copied ? "Copied" : "Copy reference"}
+							</ToolbarButton>
+							<ToolbarSeparator />
+							<ToolbarButton
+								onClick={() => {
+									dock.askWithReference(reference);
+									onDismiss();
+								}}
+								render={<Button size="xs" variant="ghost" />}
+							>
+								<MessageCircleIcon />
+								Ask
+							</ToolbarButton>
+						</Toolbar>
 					</PopoverPrimitive.Popup>
 				</PopoverPrimitive.Positioner>
 			</PopoverPrimitive.Portal>
