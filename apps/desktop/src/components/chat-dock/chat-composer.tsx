@@ -46,6 +46,7 @@ import type { SidecarQueryUtils } from "#/lib/backend-context";
 import {
 	type DiffSelectionReference,
 	formatSelectionReference,
+	formatSelectionReferenceShort,
 } from "#/lib/diff-reference";
 import { useLastChatModel } from "#/lib/settings-data";
 import { cn } from "#/lib/utils";
@@ -66,7 +67,18 @@ type ChatComposerProps = {
 	onStop: () => void;
 };
 
-/** One removable "Ask"-attached reference, rendered above the composer input. */
+/**
+ * One removable "Ask"-attached reference, rendered above the composer
+ * input. Shows the short (basename-only) form — a chip has nowhere near
+ * enough width for a full repo-relative path (confirmed live: an
+ * un-truncated long path ran the chip past the composer, past the popup,
+ * and off the viewport entirely) — with the full `path#Lx-y` in `title` so
+ * hovering still disambiguates two files sharing a basename. `max-w-full`
+ * plus `truncate` on the label is a backstop for a single filename long
+ * enough to overflow on its own even in short form; the line range itself
+ * is never truncated, since that's the part that actually identifies the
+ * selection.
+ */
 function ReferenceChip({
 	reference,
 	onRemove,
@@ -74,13 +86,16 @@ function ReferenceChip({
 	reference: DiffSelectionReference;
 	onRemove: () => void;
 }): React.ReactElement {
-	const formatted = formatSelectionReference(reference);
+	const short = formatSelectionReferenceShort(reference);
+	const full = formatSelectionReference(reference);
 	return (
-		<Badge className="gap-1 pr-1 font-mono" variant="outline">
-			{formatted}
+		<Badge className="max-w-full gap-1 pr-1 font-mono" variant="outline">
+			<span className="min-w-0 truncate" title={full}>
+				{short}
+			</span>
 			<button
-				aria-label={`Remove ${formatted}`}
-				className="rounded-xs text-muted-foreground hover:text-foreground"
+				aria-label={`Remove ${full}`}
+				className="shrink-0 rounded-xs text-muted-foreground hover:text-foreground"
 				onClick={onRemove}
 				type="button"
 			>
