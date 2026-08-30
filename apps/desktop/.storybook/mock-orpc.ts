@@ -253,6 +253,11 @@ export function createMockOrpc(data: MockOrpcData = {}): SidecarQueryUtils {
 						: async () => checks,
 			unpushedCommits: neverSettles,
 		},
+		// No story exercises the Overview tab yet — same reasoning as
+		// `events.subscribe` above.
+		overview: {
+			get: neverSettles,
+		},
 		walkthrough: {
 			harnesses: async () => harnesses,
 			refreshHarnesses: async () => harnesses,

@@ -8,8 +8,10 @@ import {
 } from "@orpc/server/plugins";
 import { refreshLoginShellPath } from "@repo/bin-resolver";
 import {
+	fetchBranchCommits,
 	fetchPullRequestChecks,
 	fetchPullRequestMergeability,
+	fetchPullRequestOverview,
 	fetchRepoMergeMethods,
 	type GitCommandError,
 	markPullRequestReady,
@@ -1251,6 +1253,70 @@ export function attachRouter(
 						Effect.fail(
 							errors.SERVICE_UNAVAILABLE({
 								message: `git rev-list --count against ${cause.remoteRef} in ${cause.repoRoot} returned output nisi couldn't parse: ${cause.raw}`,
+							}),
+						),
+					),
+				);
+			}),
+		},
+		// Backs the Overview tab: a PR session dispatches to `@repo/git`'s
+		// GraphQL-backed `fetchPullRequestOverview`, a branch/diff session to
+		// its local-`git`-only `fetchBranchCommits` (wrapped into the same
+		// `OverviewResult` shape with `description: null`, since a plain diff
+		// has no PR to describe). No mapping beyond that dispatch — both
+		// domain functions already return wire-shaped commits.
+		overview: {
+			get: authed.overview.get.effect(function* ({ input, errors }) {
+				if (input.kind === "branch") {
+					const commits = yield* fetchBranchCommits(
+						input.repoRoot,
+						input.baseRef,
+						input.headRef,
+					).pipe(
+						Effect.catchTag("GitCommandError", (cause) =>
+							Effect.fail(
+								errors.SERVICE_UNAVAILABLE({
+									message: `${cause.command} could not be run: ${cause.stderr || String(cause.cause)}`,
+								}),
+							),
+						),
+					);
+					return { description: null, commits };
+				}
+
+				return yield* fetchPullRequestOverview(input).pipe(
+					Effect.catchTag("GhNotAuthenticated", (cause) =>
+						Effect.fail(
+							errors.GH_NOT_AUTHENTICATED({
+								message: `gh is not authenticated: ${cause.reason}`,
+							}),
+						),
+					),
+					Effect.catchTag("GhRateLimited", (cause) =>
+						Effect.fail(
+							errors.TOO_MANY_REQUESTS({
+								message: `GitHub's API is rate-limited right now: ${cause.reason}`,
+							}),
+						),
+					),
+					Effect.catchTag("GhOutputDecodeError", (cause) =>
+						Effect.fail(
+							errors.SERVICE_UNAVAILABLE({
+								message: `gh returned output nisi couldn't parse (${cause.command})`,
+							}),
+						),
+					),
+					Effect.catchTag("PullRequestNotFound", (cause) =>
+						Effect.fail(
+							errors.NOT_FOUND({
+								message: `pull request #${cause.number} couldn't be resolved on GitHub for ${cause.repoRoot}: ${cause.reason}`,
+							}),
+						),
+					),
+					Effect.catchTag("GitCommandError", (cause) =>
+						Effect.fail(
+							errors.SERVICE_UNAVAILABLE({
+								message: `${cause.command} could not be run: ${cause.stderr || String(cause.cause)}`,
 							}),
 						),
 					),
