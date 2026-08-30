@@ -33,7 +33,7 @@ import { useSessions } from "#/lib/pr-data";
 import {
 	SessionUiProvider,
 	useClearSessionUiState,
-	useSessionActiveTab,
+	useSetActiveTab,
 } from "#/lib/session-ui-store";
 import { cn } from "#/lib/utils";
 
@@ -179,15 +179,12 @@ function AppShellReady({
 		() => sessions.find((session) => session.id === activeSessionId) ?? null,
 		[sessions, activeSessionId],
 	);
-	// The command palette's "Go to Overview" action needs to switch the
-	// *active* session's own sub-tab — reads/writes the same per-session
-	// store `PrView` itself uses (`useSessionActiveTab`), scoped to whichever
-	// session is active right now rather than threading a callback down
-	// through every open `PrView`. `activeSessionId ?? ""` is safe even with
-	// no session open: `CommandPalette` never calls this without a non-null
-	// `activeSession` in hand (`buildActions` returns `[]` when it's `null`),
-	// so a `""`-keyed store entry is simply never read or written in that case.
-	const [, setActiveSessionTab] = useSessionActiveTab(activeSessionId ?? "");
+	// The command palette's "Go to Overview" action needs to switch a
+	// specific session's own sub-tab — the same per-session store `PrView`
+	// itself reads/writes, just the raw two-arg action rather than one bound
+	// to a single session, since `CommandPalette` already has the session id
+	// in hand (`activeSession.id`) at the moment it calls this.
+	const setActiveTab = useSetActiveTab();
 
 	// Which open tabs have gone idle long enough to unmount, plus the manual
 	// trigger and generation check `PrTabStrip`'s per-tab context menu needs
@@ -279,7 +276,7 @@ function AppShellReady({
 				/>
 				<CommandPalette
 					activeSession={activeSession}
-					onNavigateToTab={setActiveSessionTab}
+					onNavigateToTab={setActiveTab}
 					onOpenChange={setCommandPaletteOpen}
 					onSessionOpened={setRequestedActiveSessionId}
 					open={commandPaletteOpen}
@@ -362,7 +359,7 @@ function AppShellReady({
 			/>
 			<CommandPalette
 				activeSession={activeSession}
-				onNavigateToTab={setActiveSessionTab}
+				onNavigateToTab={setActiveTab}
 				onOpenChange={setCommandPaletteOpen}
 				onSessionOpened={setRequestedActiveSessionId}
 				open={commandPaletteOpen}

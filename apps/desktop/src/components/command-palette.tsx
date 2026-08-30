@@ -47,8 +47,8 @@ type CommandPaletteProps = {
 	orpc: SidecarQueryUtils;
 	/** Fires once `sessions.open` resolves for "Switch to PR" — mirrors `OpenPullRequestPalette`'s `onSessionOpened` (`app-shell.tsx`), so the new tab activates the same way. */
 	onSessionOpened: (sessionId: string) => void;
-	/** "Go to Overview" — switches `activeSession`'s own sub-tab (`pr-view.tsx`'s `PrViewTabStrip`), same store `app-shell.tsx` reads via `useSessionActiveTab`. */
-	onNavigateToTab: (tab: string) => void;
+	/** "Go to Overview" — switches a session's own sub-tab (`pr-view.tsx`'s `PrViewTabStrip`), same store `app-shell.tsx` writes to via `useSetActiveTab`. */
+	onNavigateToTab: (sessionId: string, tab: string) => void;
 };
 
 /** Cmd+K, app-wide (`use-command-palette-shortcut.ts`). */
@@ -120,7 +120,7 @@ export function CommandPalette({
 function buildActions(
 	session: Session | null,
 	switchToPr: (repoRoot: string) => void,
-	onNavigateToTab: (tab: string) => void,
+	onNavigateToTab: (sessionId: string, tab: string) => void,
 ): CommandAction[] {
 	if (session === null) return [];
 	const actions: CommandAction[] = [
@@ -128,7 +128,7 @@ function buildActions(
 			id: "go-to-overview",
 			label: "Go to Overview",
 			icon: LayoutDashboardIcon,
-			run: () => onNavigateToTab("overview"),
+			run: () => onNavigateToTab(session.id, "overview"),
 		},
 		{
 			id: "copy-branch-name",

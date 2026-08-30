@@ -471,6 +471,20 @@ export function useSessionActiveTab(
 	return [activeTab, setActiveTab] as const;
 }
 
+/**
+ * The store's own two-arg `setActiveTab(sessionId, tab)` action, unbound to
+ * any one session — for a caller that already has a specific session id in
+ * hand at the moment it needs to switch that session's sub-tab (the command
+ * palette's "Go to Overview"), rather than one that wants to read/write a
+ * single session's current tab the way `useSessionActiveTab` above does.
+ * Zustand's own action functions are stable references (defined once in
+ * `createSessionUiStore`), so this needs no `useCallback` wrapping.
+ */
+export function useSetActiveTab(): (sessionId: string, tab: string) => void {
+	const store = useSessionUiStore();
+	return useStore(store, (state) => state.setActiveTab);
+}
+
 export function useSessionWalkthroughSelection(
 	sessionId: string,
 ): readonly [
