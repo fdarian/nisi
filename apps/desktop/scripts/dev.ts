@@ -76,7 +76,7 @@ const awaitFreshHandshake = (
 const dev = Command.make(
 	"desktop-dev",
 	{
-		browser: Flag.boolean("browser"),
+		browser: Flag.boolean("browser").pipe(Flag.withDefault(false)),
 		// Pins the vite port instead of devsess's per-session sticky one. Rarely
 		// needed by hand — `.claude/launch.json` gets the same effect from
 		// `autoPort`, which passes its chosen port through `PORT` (see
@@ -88,13 +88,13 @@ const dev = Command.make(
 		// live production app: `sidecar-lock.ts`'s `acquireSidecarLock` health-
 		// checks any existing owner and refuses to boot (loudly) rather than
 		// splitting the data dir between two sidecars.
-		prodDataDir: Flag.boolean("prod-data-dir"),
+		prodDataDir: Flag.boolean("prod-data-dir").pipe(Flag.withDefault(false)),
 		// Binds vite to `0.0.0.0` (`VITE_HOST`, read by `vite.config.ts`) instead
 		// of localhost-only, so another device on the LAN can load the dev
 		// server — e.g. testing `--browser` mode from a phone. Distinct from
 		// `TAURI_DEV_HOST`, which points the HMR *client* at a specific address
 		// for Tauri mobile dev; this only widens what the server binds to.
-		host: Flag.boolean("host"),
+		host: Flag.boolean("host").pipe(Flag.withDefault(false)),
 	},
 	({ browser, port, prodDataDir, host }) =>
 		Effect.gen(function* () {
