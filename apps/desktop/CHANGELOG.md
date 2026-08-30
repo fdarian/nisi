@@ -1,5 +1,17 @@
 # @repo/desktop
 
+## 0.4.0
+
+### Minor Changes
+
+- a3aefd9: You can now chat with your coding agent about the pull request you're reviewing.
+
+### Patch Changes
+
+- d0f731f: Select lines in a diff and copy a reference to them
+- 36196e6: Long lines in a diff can now wrap instead of running off the side.
+- f15ee17: "Restart to update" now installs the new version instead of relaunching the old one and offering the same update again.
+
 ## 0.3.2
 
 ### Patch Changes
