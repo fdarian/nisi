@@ -9,15 +9,55 @@ import {
 	Ref,
 	Schedule,
 } from "effect";
+import type { PlatformError } from "effect/PlatformError";
+import type { ChildProcessSpawner } from "effect/unstable/process";
 import { APP_BUNDLE_PATH } from "./constants.ts";
-import { BREW_BIN, detectCaskInstall, fetchCaskArtifact } from "./homebrew.ts";
+import {
+	BREW_BIN,
+	type BrewResult,
+	detectCaskInstall,
+	fetchCaskArtifact,
+	refreshTap,
+} from "./homebrew.ts";
 import { spawnRestartHelper } from "./restart-helper.ts";
+import { readRestartOutcome } from "./restart-outcome.ts";
 import { fetchTapVersion, isNewerVersion } from "./tap-version.ts";
 
 /** How long after boot the first version check runs — long enough that it never competes with the sidecar's own startup work for the network/subprocess slots. */
 const FIRST_CHECK_DELAY = Duration.seconds(10);
 /** How often the version check re-runs once it's started. */
 const CHECK_INTERVAL = Duration.hours(1);
+
+type BrewOutcome =
+	| { readonly ok: true }
+	| { readonly ok: false; readonly message: string };
+
+/**
+ * Turns a `runBrew`-shaped effect into a plain ok/fail outcome — a nonzero
+ * exit or a `PlatformError` (couldn't even spawn `brew`) both read as
+ * "didn't work," with `stderr`/the error message as why. Shared by
+ * `runFetch`'s two brew steps (the tap refresh, then the fetch itself)
+ * below.
+ */
+const toBrewOutcome = (
+	effect: Effect.Effect<
+		BrewResult,
+		PlatformError,
+		ChildProcessSpawner.ChildProcessSpawner
+	>,
+	fallbackMessage: string,
+): Effect.Effect<BrewOutcome, never, ChildProcessSpawner.ChildProcessSpawner> =>
+	effect.pipe(
+		Effect.map(
+			(result): BrewOutcome =>
+				result.exitCode === 0
+					? { ok: true }
+					: { ok: false, message: result.stderr.trim() || fallbackMessage },
+		),
+		Effect.catchTag("PlatformError", (cause) =>
+			Effect.succeed<BrewOutcome>({ ok: false, message: cause.message }),
+		),
+	);
 
 /**
  * Auto-update's whole in-memory state machine — a `Ref`-backed service
@@ -33,6 +73,21 @@ const CHECK_INTERVAL = Duration.hours(1);
 export class Updater extends Context.Service<Updater>()("Updater", {
 	make: Effect.gen(function* () {
 		const state = yield* Ref.make<UpdateState>({ type: "idle" });
+
+		// Reconciles the previous session's restart-helper attempt (see
+		// restart-outcome.ts) before anything else touches `state` — a
+		// Homebrew upgrade that silently did nothing must land here as
+		// `failed`, not get overwritten by the first `checkOnce` tick
+		// re-offering the same "available" update forever.
+		const restartReconciliation = yield* readRestartOutcome;
+		if (restartReconciliation.kind === "upgrade-stalled") {
+			yield* Ref.set(state, {
+				type: "failed",
+				version: restartReconciliation.version,
+				message:
+					"The Homebrew upgrade didn't apply -- run `brew update && brew upgrade --cask nisi` manually.",
+			});
+		}
 
 		/**
 		 * One version-check tick. Returns whether the caller should keep
@@ -84,12 +139,18 @@ export class Updater extends Context.Service<Updater>()("Updater", {
 			);
 			if (Option.isNone(tapVersion)) return true;
 
-			yield* Ref.set(
-				state,
-				isNewerVersion(tapVersion.value, probe.version)
-					? { type: "available", version: tapVersion.value }
-					: { type: "idle" },
-			);
+			const nextState: UpdateState = isNewerVersion(
+				tapVersion.value,
+				probe.version,
+			)
+				? { type: "available", version: tapVersion.value }
+				: { type: "idle" };
+			yield* Effect.logInfo("checked the tap for a newer version", {
+				tapVersion: tapVersion.value,
+				installedVersion: probe.version,
+				resultingState: nextState.type,
+			});
+			yield* Ref.set(state, nextState);
 			return true;
 		});
 
@@ -117,57 +178,62 @@ export class Updater extends Context.Service<Updater>()("Updater", {
 		const status = Ref.get(state);
 
 		/**
-		 * Runs `brew fetch --cask nisi` and lands on `ready` or `failed` —
-		 * always one or the other, never a silent fall-back to `idle`: a fetch
-		 * that didn't work is something the user needs to see, not something
-		 * to quietly forget.
+		 * Runs `brew update` to refresh the tap, then `brew fetch --cask nisi`
+		 * to cache the artifact, landing on `ready` or `failed` — always one or
+		 * the other, never a silent fall-back to `idle`. The refresh is its own
+		 * explicit first step, not brew's own auto-update: every brew
+		 * invocation here (including the restart helper's `brew upgrade`) sets
+		 * `HOMEBREW_NO_AUTO_UPDATE=1` (see `homebrew.ts`'s `runBrew`), so
+		 * without it, both this fetch and the eventual upgrade would keep
+		 * reading a frozen local clone of `fdarian/homebrew-tap` and never see
+		 * a version bump — the exact bug this file exists to close. A failed
+		 * refresh aborts before ever attempting the fetch and is surfaced the
+		 * same way a fetch failure is, not swallowed.
 		 */
 		const runFetch = (version: string) =>
-			fetchCaskArtifact.pipe(
-				Effect.map(
-					(
-						result,
-					):
-						| { readonly ok: true }
-						| { readonly ok: false; readonly message: string } =>
-						result.exitCode === 0
-							? { ok: true }
-							: {
-									ok: false,
-									message:
-										result.stderr.trim() ||
-										`brew fetch exited with code ${result.exitCode}`,
-								},
-				),
-				Effect.catchTag("PlatformError", (cause) =>
-					Effect.succeed({ ok: false, message: cause.message } as const),
-				),
-				Effect.flatMap((outcome) =>
-					outcome.ok
-						? Ref.set(state, { type: "ready", version }).pipe(
-								Effect.tap(() =>
-									Effect.logInfo("update artifact cached -- ready to restart", {
-										version,
-									}),
-								),
-							)
-						: Ref.set(state, {
-								type: "failed",
-								version,
-								message: outcome.message,
-							}).pipe(
-								Effect.tap(() =>
-									Effect.logWarning(
-										"brew fetch failed while downloading the update",
-										{
-											version,
-											message: outcome.message,
-										},
-									),
-								),
-							),
-				),
-			);
+			Effect.gen(function* () {
+				const refreshOutcome = yield* toBrewOutcome(
+					refreshTap,
+					"brew update exited with a nonzero code",
+				);
+				if (!refreshOutcome.ok) {
+					yield* Ref.set(state, {
+						type: "failed",
+						version,
+						message: refreshOutcome.message,
+					});
+					yield* Effect.logWarning(
+						"brew update failed while refreshing the tap -- aborting the download",
+						{ version, message: refreshOutcome.message },
+					);
+					return;
+				}
+				yield* Effect.logInfo(
+					"refreshed the homebrew tap before fetching the update",
+					{ version },
+				);
+
+				const fetchOutcome = yield* toBrewOutcome(
+					fetchCaskArtifact,
+					"brew fetch exited with a nonzero code",
+				);
+				if (fetchOutcome.ok) {
+					yield* Ref.set(state, { type: "ready", version });
+					yield* Effect.logInfo("update artifact cached -- ready to restart", {
+						version,
+					});
+				} else {
+					yield* Ref.set(state, {
+						type: "failed",
+						version,
+						message: fetchOutcome.message,
+					});
+					yield* Effect.logWarning(
+						"brew fetch failed while downloading the update",
+						{ version, message: fetchOutcome.message },
+					);
+				}
+			});
 
 		/**
 		 * Fire-and-forget: transitions to `downloading` synchronously (so the
