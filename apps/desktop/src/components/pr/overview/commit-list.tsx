@@ -36,7 +36,7 @@ export function CommitList({ commits }: CommitListProps): React.ReactElement {
 
 	return (
 		<div className="min-h-0 flex-1 overflow-auto" ref={scrollRef}>
-			<div className="flex flex-col divide-y">
+			<div className="flex flex-col divide-y divide-border">
 				{commits.map((commit) => (
 					<CommitRow commit={commit} key={commit.sha} />
 				))}
