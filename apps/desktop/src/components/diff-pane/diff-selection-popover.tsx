@@ -18,7 +18,6 @@
  * rather than a box nested in a box. `PopoverPrimitive.Positioner` is still what
  * does the actual anchor math (collision detection, flipping).
  */
-import { CheckIcon, CopyIcon, MessageCircleIcon } from "lucide-react";
 import { useEffect, useLayoutEffect, useState } from "react";
 import { Button } from "#/components/ui/button";
 import { Popover, PopoverPrimitive } from "#/components/ui/popover";
