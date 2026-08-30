@@ -4,6 +4,7 @@ import { ORPCError } from "@orpc/client";
 import { ChevronDownIcon } from "lucide-react";
 import { useCallback, useState } from "react";
 import { Button, buttonVariants } from "#/components/ui/button";
+import { Group, GroupSeparator } from "#/components/ui/group";
 import {
 	DropdownMenu,
 	DropdownMenuContent,
@@ -230,12 +231,8 @@ export function PrMergeButton({
 
 	return (
 		<>
-			<div className="inline-flex">
+			<Group>
 				<Button
-					className={cn(
-						"border-transparent shadow-none! before:shadow-none!",
-						showMethodPicker && "rounded-r-none",
-					)}
 					disabled={disabled || isCheckingUnpushed}
 					onClick={handleClick}
 					size="sm"
@@ -245,45 +242,48 @@ export function PrMergeButton({
 					{label}
 				</Button>
 				{showMethodPicker && (
-					<DropdownMenu>
-						<DropdownMenuTrigger
-							aria-label="Select merge method"
-							className={cn(
-								buttonVariants({ size: "sm", variant: "outline" }),
-								"w-6 rounded-l-none border-transparent px-0 shadow-none! before:shadow-none!",
-							)}
-							disabled={disabled || isCheckingUnpushed}
-						>
-							<ChevronDownIcon />
-						</DropdownMenuTrigger>
-						<DropdownMenuContent align="end" className="w-80">
-							<DropdownMenuRadioGroup
-								onValueChange={(value) =>
-									setSelectedMethod(value as MergeMethod)
-								}
-								value={method ?? undefined}
+					<>
+						<GroupSeparator />
+						<DropdownMenu>
+							<DropdownMenuTrigger
+								aria-label="Select merge method"
+								className={cn(
+									buttonVariants({ size: "sm", variant: "outline" }),
+									"w-6 px-0",
+								)}
+								disabled={disabled || isCheckingUnpushed}
 							>
-								{allowedMethods.map((candidate) => (
-									<DropdownMenuRadioItem
-										closeOnClick
-										key={candidate}
-										value={candidate}
-									>
-										<div className="flex flex-col gap-0.5 py-0.5">
-											<span className="font-medium">
-												{METHOD_MENU_LABEL[candidate]}
-											</span>
-											<span className="text-muted-foreground text-xs">
-												{METHOD_DESCRIPTION[candidate]}
-											</span>
-										</div>
-									</DropdownMenuRadioItem>
-								))}
-							</DropdownMenuRadioGroup>
-						</DropdownMenuContent>
-					</DropdownMenu>
+								<ChevronDownIcon />
+							</DropdownMenuTrigger>
+							<DropdownMenuContent align="end" className="w-80">
+								<DropdownMenuRadioGroup
+									onValueChange={(value) =>
+										setSelectedMethod(value as MergeMethod)
+									}
+									value={method ?? undefined}
+								>
+									{allowedMethods.map((candidate) => (
+										<DropdownMenuRadioItem
+											closeOnClick
+											key={candidate}
+											value={candidate}
+										>
+											<div className="flex flex-col gap-0.5 py-0.5">
+												<span className="font-medium">
+													{METHOD_MENU_LABEL[candidate]}
+												</span>
+												<span className="text-muted-foreground text-xs">
+													{METHOD_DESCRIPTION[candidate]}
+												</span>
+											</div>
+										</DropdownMenuRadioItem>
+									))}
+								</DropdownMenuRadioGroup>
+							</DropdownMenuContent>
+						</DropdownMenu>
+					</>
 				)}
-			</div>
+			</Group>
 			<UnpushedCommitsDialog
 				check={pendingUnpushedCheck}
 				onMergeAnyway={() => {
