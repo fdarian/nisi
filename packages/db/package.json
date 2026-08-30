@@ -14,7 +14,7 @@
 	"dependencies": {
 		"@effect/sql-sqlite-bun": "catalog:",
 		"deskkit": "github:fdarian/deskkit",
-		"drizzle-orm": "1.0.0-rc.4",
+		"drizzle-orm": "1.0.0-rc.5-169397b",
 		"effect": "catalog:"
 	},
 	"devDependencies": {

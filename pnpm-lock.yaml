@@ -147,25 +147,25 @@ importers:
     dependencies:
       '@ai-sdk/harness':
         specifier: 1.0.91
-        version: 1.0.91(patch_hash=7fe99bf0c691e923a900a46e9c06da2e69a22167bf0ccae94efc7e7c6d6f414d)(ws@8.21.0)(zod@4.4.3)
+        version: 1.0.91(patch_hash=7fe99bf0c691e923a900a46e9c06da2e69a22167bf0ccae94efc7e7c6d6f414d)(ws@8.21.0)(zod@4.5.2)
       '@ai-sdk/harness-claude-code':
         specifier: 1.0.94
-        version: 1.0.94(patch_hash=19be27a44d7e5dfeb3c0ca1a61ff5f5cb8dcf407f87dd44ac77dfab69d95e63a)(zod@4.4.3)
+        version: 1.0.94(patch_hash=19be27a44d7e5dfeb3c0ca1a61ff5f5cb8dcf407f87dd44ac77dfab69d95e63a)(zod@4.5.2)
       '@ai-sdk/harness-codex':
         specifier: 1.0.93
-        version: 1.0.93(patch_hash=3b003d1c9402d196b62e8ec2dc9734e7116ab4585321f1c3f096512aeddd1c51)(zod@4.4.3)
+        version: 1.0.93(patch_hash=3b003d1c9402d196b62e8ec2dc9734e7116ab4585321f1c3f096512aeddd1c51)(zod@4.5.2)
       '@ai-sdk/harness-opencode':
         specifier: 1.0.92
-        version: 1.0.92(patch_hash=ca8793a635d82de60f14a887bc55a81e7f54d7a051c8fa3135fe8fe01ba9b0a6)(zod@4.4.3)
+        version: 1.0.92(patch_hash=ca8793a635d82de60f14a887bc55a81e7f54d7a051c8fa3135fe8fe01ba9b0a6)(zod@4.5.2)
       '@ai-sdk/harness-pi':
         specifier: 1.0.93
-        version: 1.0.93(@earendil-works/pi-tui@0.80.10)(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(@opentelemetry/api@1.9.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(ws@8.21.0)(zod@4.4.3)
+        version: 1.0.93(@earendil-works/pi-tui@0.84.4)(@modelcontextprotocol/sdk@1.30.0(zod@4.5.2))(@opentelemetry/api@1.9.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(ws@8.21.0)(zod@4.5.2)
       '@ai-sdk/react':
         specifier: 4.0.86
-        version: 4.0.86(react@19.2.8)(zod@4.4.3)
+        version: 4.0.86(react@19.2.8)(zod@4.5.2)
       '@anthropic-ai/claude-agent-sdk':
         specifier: ^0.3.246
-        version: 0.3.247(@anthropic-ai/sdk@0.121.0(zod@4.4.3))(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(zod@4.4.3)
+        version: 0.3.251(@anthropic-ai/sdk@0.122.0(zod@4.5.2))(@modelcontextprotocol/sdk@1.30.0(zod@4.5.2))(zod@4.5.2)
       '@base-ui/react':
         specifier: ^1.7.0
         version: 1.7.0(@date-fns/tz@1.5.0)(@types/react@19.2.18)(date-fns@4.4.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
@@ -186,10 +186,10 @@ importers:
         version: 3.2.2(react@19.2.8)
       '@earendil-works/pi-ai':
         specifier: 0.84.3
-        version: 0.84.3(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(ws@8.21.0)(zod@4.4.3)
+        version: 0.84.3(@modelcontextprotocol/sdk@1.30.0(zod@4.5.2))(ws@8.21.0)(zod@4.5.2)
       '@earendil-works/pi-coding-agent':
         specifier: ^0.84.3
-        version: 0.84.3(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(ws@8.21.0)(zod@4.4.3)
+        version: 0.84.4(@modelcontextprotocol/sdk@1.30.0(zod@4.5.2))(ws@8.21.0)(zod@4.5.2)
       '@effect/platform-bun':
         specifier: 'catalog:'
         version: 4.0.0-rc.112(effect@4.0.0-rc.112)
@@ -216,13 +216,13 @@ importers:
         version: 2.0.0-beta.21(@opentelemetry/api@1.9.0)
       '@orpc/tanstack-query':
         specifier: 2.0.0-beta.21
-        version: 2.0.0-beta.21(@opentelemetry/api@1.9.0)(@tanstack/query-core@5.102.7)
+        version: 2.0.0-beta.21(@opentelemetry/api@1.9.0)(@tanstack/query-core@5.102.8)
       '@pierre/diffs':
         specifier: 1.3.6
-        version: 1.3.6(patch_hash=31795077ef229d3de37b63f22529a58b7df76bd4ae397647a98b36a86a81ba86)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+        version: 1.3.6(patch_hash=31795077ef229d3de37b63f22529a58b7df76bd4ae397647a98b36a86a81ba86)(@shikijs/themes@4.4.3)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       '@pierre/trees':
         specifier: 1.0.0-beta.6
-        version: 1.0.0-beta.6(@pierre/theme@2.0.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(shiki@4.4.3)
+        version: 1.0.0-beta.6(@pierre/theme@2.0.0)(@shikijs/themes@4.4.3)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(shiki@4.4.3)
       '@repo/bin-resolver':
         specifier: workspace:*
         version: link:../../packages/bin-resolver
@@ -252,7 +252,7 @@ importers:
         version: link:../../packages/walkthrough
       '@tanstack/react-query':
         specifier: ^5.102.5
-        version: 5.102.7(react@19.2.8)
+        version: 5.102.8(react@19.2.8)
       '@tanstack/react-router':
         specifier: ^1.170.32
         version: 1.170.32(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
@@ -270,7 +270,7 @@ importers:
         version: 2.3.1
       ai:
         specifier: 7.0.83
-        version: 7.0.83(zod@4.4.3)
+        version: 7.0.83(zod@4.5.2)
       class-variance-authority:
         specifier: ^0.7.1
         version: 0.7.1
@@ -279,13 +279,13 @@ importers:
         version: 2.1.1
       deskkit:
         specifier: github:fdarian/deskkit
-        version: https://codeload.github.com/fdarian/deskkit/tar.gz/e102596ef69da78fefe4ba6cfb0f27a9a376cdc4(@effect/platform-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(@effect/sql-sqlite-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(drizzle-orm@1.0.0-rc.4(@effect/sql-sqlite-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(@opentelemetry/api@1.9.0)(bun-types@1.3.14)(effect@4.0.0-rc.112)(typebox@1.3.19)(zod@4.4.3))(effect@4.0.0-rc.112)
+        version: https://codeload.github.com/fdarian/deskkit/tar.gz/e102596ef69da78fefe4ba6cfb0f27a9a376cdc4(@effect/platform-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(@effect/sql-sqlite-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(drizzle-orm@1.0.0-rc.5-169397b(@effect/sql-sqlite-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(effect@4.0.0-rc.112))(effect@4.0.0-rc.112)
       devsess:
         specifier: ^0.2.0
-        version: 0.2.0(drizzle-orm@1.0.0-rc.4(@effect/sql-sqlite-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(@opentelemetry/api@1.9.0)(bun-types@1.3.14)(effect@4.0.0-rc.112)(typebox@1.3.19)(zod@4.4.3))(effect@4.0.0-rc.112)
+        version: 0.2.0(drizzle-orm@1.0.0-rc.5-169397b(@effect/sql-sqlite-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(@opentelemetry/api@1.9.0)(bun-types@1.4.0)(effect@4.0.0-rc.112)(typebox@1.3.20)(zod@4.5.2))(effect@4.0.0-rc.112)
       drizzle-orm:
-        specifier: 1.0.0-rc.4
-        version: 1.0.0-rc.4(@effect/sql-sqlite-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(@opentelemetry/api@1.9.0)(bun-types@1.3.14)(effect@4.0.0-rc.112)(typebox@1.3.19)(zod@4.4.3)
+        specifier: 1.0.0-rc.5-169397b
+        version: 1.0.0-rc.5-169397b(@effect/sql-sqlite-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(@opentelemetry/api@1.9.0)(bun-types@1.4.0)(effect@4.0.0-rc.112)(typebox@1.3.20)(zod@4.5.2)
       effect:
         specifier: 'catalog:'
         version: 4.0.0-rc.112
@@ -294,7 +294,7 @@ importers:
         version: 0.49.0(typescript@7.0.2)
       lucide-react:
         specifier: ^1.34.0
-        version: 1.34.0(react@19.2.8)
+        version: 1.37.0(react@19.2.8)
       motion:
         specifier: ^13.1.1
         version: 13.1.1(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
@@ -328,16 +328,16 @@ importers:
         version: 10.5.10(storybook@10.5.10(@types/react@19.2.18)(prettier@3.9.6)(react@19.2.8))
       '@storybook/react-vite':
         specifier: ^10.5.10
-        version: 10.5.10(@types/react-dom@19.2.5(@types/react@19.2.18))(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(storybook@10.5.10(@types/react@19.2.18)(prettier@3.9.6)(react@19.2.8))(typescript@7.0.2)(vite@8.2.2(@types/node@26.4.0)(jiti@2.7.0)(yaml@2.9.0))
+        version: 10.5.10(@types/react-dom@19.2.5(@types/react@19.2.18))(@types/react@19.2.18)(esbuild@0.28.2)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(storybook@10.5.10(@types/react@19.2.18)(prettier@3.9.6)(react@19.2.8))(typescript@7.0.2)(vite@8.2.2(@types/node@26.4.0)(esbuild@0.28.2)(jiti@2.7.0)(yaml@2.9.0))
       '@tailwindcss/vite':
         specifier: ^4.3.0
-        version: 4.3.3(vite@8.2.2(@types/node@26.4.0)(jiti@2.7.0)(yaml@2.9.0))
+        version: 4.3.3(vite@8.2.2(@types/node@26.4.0)(esbuild@0.28.2)(jiti@2.7.0)(yaml@2.9.0))
       '@tanstack/router-cli':
         specifier: ^1.167.33
         version: 1.167.33
       '@tanstack/router-plugin':
         specifier: ^1.168.35
-        version: 1.168.35(@tanstack/react-router@1.170.32(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(vite@8.2.2(@types/node@26.4.0)(jiti@2.7.0)(yaml@2.9.0))
+        version: 1.168.35(@tanstack/react-router@1.170.32(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(esbuild@0.28.2)(rolldown@1.2.6)(vite@8.2.2(@types/node@26.4.0)(esbuild@0.28.2)(jiti@2.7.0)(yaml@2.9.0))
       '@tauri-apps/cli':
         specifier: ^2.11.4
         version: 2.11.4
@@ -358,10 +358,10 @@ importers:
         version: 19.2.5(@types/react@19.2.18)
       '@vitejs/plugin-react':
         specifier: ^6.1.0
-        version: 6.1.0(vite@8.2.2(@types/node@26.4.0)(jiti@2.7.0)(yaml@2.9.0))
+        version: 6.1.1(vite@8.2.2(@types/node@26.4.0)(esbuild@0.28.2)(jiti@2.7.0)(yaml@2.9.0))
       agentation:
         specifier: github:fdarian/agentation#path:package&f19e8ff
-        version: https://codeload.github.com/fdarian/agentation/tar.gz/f19e8ff926c45ecd459cbaa5e0a8f4660128c154#path:package(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(vite@8.2.2(@types/node@26.4.0)(jiti@2.7.0)(yaml@2.9.0))
+        version: https://codeload.github.com/fdarian/agentation/tar.gz/f19e8ff926c45ecd459cbaa5e0a8f4660128c154#path:package(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(vite@8.2.2(@types/node@26.4.0)(esbuild@0.28.2)(jiti@2.7.0)(yaml@2.9.0))
       storybook:
         specifier: ^10.5.10
         version: 10.5.10(@types/react@19.2.18)(prettier@3.9.6)(react@19.2.8)
@@ -373,7 +373,7 @@ importers:
         version: 7.0.2
       vite:
         specifier: ^8.2.2
-        version: 8.2.2(@types/node@26.4.0)(jiti@2.7.0)(yaml@2.9.0)
+        version: 8.2.2(@types/node@26.4.0)(esbuild@0.28.2)(jiti@2.7.0)(yaml@2.9.0)
 
   packages/bin-resolver:
     devDependencies:
@@ -425,10 +425,10 @@ importers:
         version: 4.0.0-rc.112(effect@4.0.0-rc.112)
       deskkit:
         specifier: github:fdarian/deskkit
-        version: https://codeload.github.com/fdarian/deskkit/tar.gz/e102596ef69da78fefe4ba6cfb0f27a9a376cdc4(@effect/platform-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(@effect/sql-sqlite-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(drizzle-orm@1.0.0-rc.4(@effect/sql-sqlite-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(@opentelemetry/api@1.9.0)(bun-types@1.3.14)(effect@4.0.0-rc.112)(typebox@1.3.19)(zod@4.4.3))(effect@4.0.0-rc.112)
+        version: https://codeload.github.com/fdarian/deskkit/tar.gz/e102596ef69da78fefe4ba6cfb0f27a9a376cdc4(@effect/platform-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(@effect/sql-sqlite-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(drizzle-orm@1.0.0-rc.5-169397b(@effect/sql-sqlite-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(effect@4.0.0-rc.112))(effect@4.0.0-rc.112)
       drizzle-orm:
-        specifier: 1.0.0-rc.4
-        version: 1.0.0-rc.4(@effect/sql-sqlite-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(@opentelemetry/api@1.9.0)(bun-types@1.3.14)(effect@4.0.0-rc.112)(typebox@1.3.19)(zod@4.4.3)
+        specifier: 1.0.0-rc.5-169397b
+        version: 1.0.0-rc.5-169397b(@effect/sql-sqlite-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(@opentelemetry/api@1.9.0)(bun-types@1.4.0)(effect@4.0.0-rc.112)(typebox@1.3.20)(zod@4.5.2)
       effect:
         specifier: 'catalog:'
         version: 4.0.0-rc.112
@@ -475,17 +475,17 @@ importers:
     dependencies:
       '@ai-sdk/harness':
         specifier: 1.0.91
-        version: 1.0.91(patch_hash=7fe99bf0c691e923a900a46e9c06da2e69a22167bf0ccae94efc7e7c6d6f414d)(ws@8.21.3)(zod@4.4.3)
+        version: 1.0.91(patch_hash=7fe99bf0c691e923a900a46e9c06da2e69a22167bf0ccae94efc7e7c6d6f414d)(ws@8.21.3)(zod@4.5.2)
       '@ai-sdk/provider-utils':
         specifier: 5.0.32
-        version: 5.0.32(zod@4.4.3)
+        version: 5.0.32(zod@4.5.2)
       '@repo/bin-resolver':
         specifier: workspace:*
         version: link:../bin-resolver
     devDependencies:
       '@ai-sdk/harness-claude-code':
         specifier: 1.0.94
-        version: 1.0.94(patch_hash=19be27a44d7e5dfeb3c0ca1a61ff5f5cb8dcf407f87dd44ac77dfab69d95e63a)(zod@4.4.3)
+        version: 1.0.94(patch_hash=19be27a44d7e5dfeb3c0ca1a61ff5f5cb8dcf407f87dd44ac77dfab69d95e63a)(zod@4.5.2)
       '@total-typescript/tsconfig':
         specifier: 1.0.4
         version: 1.0.4
@@ -497,7 +497,7 @@ importers:
         version: 8.18.1
       ai:
         specifier: 7.0.83
-        version: 7.0.83(zod@4.4.3)
+        version: 7.0.83(zod@4.5.2)
       typescript:
         specifier: 7.0.2
         version: 7.0.2
@@ -506,7 +506,7 @@ importers:
         version: 8.21.3
       zod:
         specifier: ^4.1.8
-        version: 4.4.3
+        version: 4.5.2
 
   packages/logging:
     dependencies:
@@ -537,10 +537,10 @@ importers:
         version: link:../git
       deskkit:
         specifier: github:fdarian/deskkit
-        version: https://codeload.github.com/fdarian/deskkit/tar.gz/e102596ef69da78fefe4ba6cfb0f27a9a376cdc4(@effect/platform-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(@effect/sql-sqlite-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(drizzle-orm@1.0.0-rc.4(@effect/sql-sqlite-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(@opentelemetry/api@1.9.0)(bun-types@1.3.14)(effect@4.0.0-rc.112)(typebox@1.3.19)(zod@4.4.3))(effect@4.0.0-rc.112)
+        version: https://codeload.github.com/fdarian/deskkit/tar.gz/e102596ef69da78fefe4ba6cfb0f27a9a376cdc4(@effect/platform-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(@effect/sql-sqlite-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(drizzle-orm@1.0.0-rc.5-169397b(@effect/sql-sqlite-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(effect@4.0.0-rc.112))(effect@4.0.0-rc.112)
       drizzle-orm:
-        specifier: 1.0.0-rc.4
-        version: 1.0.0-rc.4(@effect/sql-sqlite-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(@opentelemetry/api@1.9.0)(bun-types@1.3.14)(effect@4.0.0-rc.112)(typebox@1.3.19)(zod@4.4.3)
+        specifier: 1.0.0-rc.5-169397b
+        version: 1.0.0-rc.5-169397b(@effect/sql-sqlite-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(@opentelemetry/api@1.9.0)(bun-types@1.4.0)(effect@4.0.0-rc.112)(typebox@1.3.20)(zod@4.5.2)
       effect:
         specifier: 'catalog:'
         version: 4.0.0-rc.112
@@ -559,7 +559,7 @@ importers:
         version: 1.3.14
       drizzle-kit:
         specifier: 1.0.0-rc.4
-        version: 1.0.0-rc.4(drizzle-orm@1.0.0-rc.4(@effect/sql-sqlite-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(@opentelemetry/api@1.9.0)(bun-types@1.3.14)(effect@4.0.0-rc.112)(typebox@1.3.19)(zod@4.4.3))
+        version: 1.0.0-rc.4(drizzle-orm@1.0.0-rc.5-169397b(effect@4.0.0-rc.112))
       typescript:
         specifier: 7.0.2
         version: 7.0.2
@@ -571,10 +571,10 @@ importers:
         version: link:../db
       deskkit:
         specifier: github:fdarian/deskkit
-        version: https://codeload.github.com/fdarian/deskkit/tar.gz/e102596ef69da78fefe4ba6cfb0f27a9a376cdc4(@effect/platform-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(@effect/sql-sqlite-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(drizzle-orm@1.0.0-rc.4(@effect/sql-sqlite-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(@opentelemetry/api@1.9.0)(bun-types@1.3.14)(effect@4.0.0-rc.112)(typebox@1.3.19)(zod@4.4.3))(effect@4.0.0-rc.112)
+        version: https://codeload.github.com/fdarian/deskkit/tar.gz/e102596ef69da78fefe4ba6cfb0f27a9a376cdc4(@effect/platform-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(@effect/sql-sqlite-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(drizzle-orm@1.0.0-rc.5-169397b(@effect/sql-sqlite-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(effect@4.0.0-rc.112))(effect@4.0.0-rc.112)
       drizzle-orm:
-        specifier: 1.0.0-rc.4
-        version: 1.0.0-rc.4(@effect/sql-sqlite-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(@opentelemetry/api@1.9.0)(bun-types@1.3.14)(effect@4.0.0-rc.112)(typebox@1.3.19)(zod@4.4.3)
+        specifier: 1.0.0-rc.5-169397b
+        version: 1.0.0-rc.5-169397b(@effect/sql-sqlite-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(@opentelemetry/api@1.9.0)(bun-types@1.4.0)(effect@4.0.0-rc.112)(typebox@1.3.20)(zod@4.5.2)
       effect:
         specifier: 'catalog:'
         version: 4.0.0-rc.112
@@ -590,7 +590,7 @@ importers:
         version: 1.3.14
       drizzle-kit:
         specifier: 1.0.0-rc.4
-        version: 1.0.0-rc.4(drizzle-orm@1.0.0-rc.4(@effect/sql-sqlite-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(@opentelemetry/api@1.9.0)(bun-types@1.3.14)(effect@4.0.0-rc.112)(typebox@1.3.19)(zod@4.4.3))
+        version: 1.0.0-rc.4(drizzle-orm@1.0.0-rc.5-169397b(effect@4.0.0-rc.112))
       typescript:
         specifier: 7.0.2
         version: 7.0.2
@@ -627,19 +627,19 @@ importers:
         version: 4.0.8
       '@ai-sdk/provider-utils':
         specifier: 5.0.32
-        version: 5.0.32(zod@4.4.3)
+        version: 5.0.32(zod@4.5.2)
       '@repo/git':
         specifier: workspace:*
         version: link:../git
       ai:
         specifier: 7.0.83
-        version: 7.0.83(zod@4.4.3)
+        version: 7.0.83(zod@4.5.2)
       deskkit:
         specifier: github:fdarian/deskkit
-        version: https://codeload.github.com/fdarian/deskkit/tar.gz/e102596ef69da78fefe4ba6cfb0f27a9a376cdc4(@effect/platform-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(@effect/sql-sqlite-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(drizzle-orm@1.0.0-rc.4(@effect/sql-sqlite-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(@opentelemetry/api@1.9.0)(bun-types@1.3.14)(effect@4.0.0-rc.112)(typebox@1.3.19)(zod@4.4.3))(effect@4.0.0-rc.112)
+        version: https://codeload.github.com/fdarian/deskkit/tar.gz/e102596ef69da78fefe4ba6cfb0f27a9a376cdc4(@effect/platform-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(@effect/sql-sqlite-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(drizzle-orm@1.0.0-rc.5-169397b(@effect/sql-sqlite-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(effect@4.0.0-rc.112))(effect@4.0.0-rc.112)
       drizzle-orm:
-        specifier: 1.0.0-rc.4
-        version: 1.0.0-rc.4(@effect/sql-sqlite-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(@opentelemetry/api@1.9.0)(bun-types@1.3.14)(effect@4.0.0-rc.112)(typebox@1.3.19)(zod@4.4.3)
+        specifier: 1.0.0-rc.5-169397b
+        version: 1.0.0-rc.5-169397b(@effect/sql-sqlite-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(@opentelemetry/api@1.9.0)(bun-types@1.4.0)(effect@4.0.0-rc.112)(typebox@1.3.20)(zod@4.5.2)
       effect:
         specifier: 'catalog:'
         version: 4.0.0-rc.112
@@ -652,7 +652,7 @@ importers:
         version: 1.3.14
       drizzle-kit:
         specifier: 1.0.0-rc.4
-        version: 1.0.0-rc.4(drizzle-orm@1.0.0-rc.4(@effect/sql-sqlite-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(@opentelemetry/api@1.9.0)(bun-types@1.3.14)(effect@4.0.0-rc.112)(typebox@1.3.19)(zod@4.4.3))
+        version: 1.0.0-rc.4(drizzle-orm@1.0.0-rc.5-169397b(effect@4.0.0-rc.112))
       typescript:
         specifier: 7.0.2
         version: 7.0.2
@@ -729,60 +729,60 @@ packages:
     peerDependencies:
       react: ^18 || ~19.0.1 || ~19.1.2 || ^19.2.1
 
-  '@anthropic-ai/claude-agent-sdk-darwin-arm64@0.3.247':
-    resolution: {integrity: sha512-vvCMAXy2KmiGHbJuThv+W6a+49qjofMR6S71FM8FTbkAAKg62cYcEyzVMVM3pNpBM5PtkMe8lRCqKnT9NUo6ng==}
+  '@anthropic-ai/claude-agent-sdk-darwin-arm64@0.3.251':
+    resolution: {integrity: sha512-C23h+Dbddcc4gai95+lhm4/94am2IOq+bf3IdEDDS7EPqDQqajo2s5q1/ZSwq9rOc0RJLT7Ws72ZCzYJh67KSg==}
     cpu: [arm64]
     os: [darwin]
 
-  '@anthropic-ai/claude-agent-sdk-darwin-x64@0.3.247':
-    resolution: {integrity: sha512-742ZXrdAxHvw+vzMFJMMvfbH8mWWCBajQH27BT+3fQU3Frjqu9gXKvA63dvQgxwjqO1gYU9TSy/A6PKq7zujaQ==}
+  '@anthropic-ai/claude-agent-sdk-darwin-x64@0.3.251':
+    resolution: {integrity: sha512-HrLnb3ggk+vMbymUvbosgPmxWp4W6Ot+0mNVjoBYDn5OZrTV3C3LRtbWf7jwcGyKMcg0xJf0AqiudQ2BRrlr8A==}
     cpu: [x64]
     os: [darwin]
 
-  '@anthropic-ai/claude-agent-sdk-linux-arm64-musl@0.3.247':
-    resolution: {integrity: sha512-8UNRQcSy9lpLhknXryid5cTfxHxBZft4oK5R0XIIZUXY/tXvsNP3+kVYAHQUNyc1J8IDa15sd19iKkMJMqFodA==}
+  '@anthropic-ai/claude-agent-sdk-linux-arm64-musl@0.3.251':
+    resolution: {integrity: sha512-RTUf7TPBUkQ6oV3pDkEdcD47I0uH0ZpvmZlXHnrLGznFqyLr+7XHupOxUMJD0Jwm9v5qeqpNiPAYB0dL4RYiHg==}
     cpu: [arm64]
     os: [linux]
     libc: [musl]
 
-  '@anthropic-ai/claude-agent-sdk-linux-arm64@0.3.247':
-    resolution: {integrity: sha512-5/3ZQ9vOwrLv6w0CFjdbaTxPFyabHNLAEojkeiYmKzqlZ/taXG58/kVKgjqgx2qQhjcHCzy9JXDw5kp3RKJoGw==}
+  '@anthropic-ai/claude-agent-sdk-linux-arm64@0.3.251':
+    resolution: {integrity: sha512-3E27F5j82EWOyEniRW7crmo0jWYYQmPDdP52jWq6Y6aytiyYIdUFMEGZZ6chVHNlZiU7GsjTa3teKk2xlQ68lQ==}
     cpu: [arm64]
     os: [linux]
     libc: [glibc]
 
-  '@anthropic-ai/claude-agent-sdk-linux-x64-musl@0.3.247':
-    resolution: {integrity: sha512-iMLjkVHbcxQ5WY2WwieOJK57kD4c8Cc2tpHwpEmdTDsnWLfmNt3XFuJdmeROwyra+tcVA52oHL0dWr51+V50Pg==}
+  '@anthropic-ai/claude-agent-sdk-linux-x64-musl@0.3.251':
+    resolution: {integrity: sha512-SzXrdy7jjrjJIuTG+VMRAY0YZ3G/8w21WuhAozwnvnEUAPo6NDv6lgFinu7NO8J6CPE+MK2sGze6JeCF+ljgUg==}
     cpu: [x64]
     os: [linux]
     libc: [musl]
 
-  '@anthropic-ai/claude-agent-sdk-linux-x64@0.3.247':
-    resolution: {integrity: sha512-+tEIHgblLvBF+datSZb9WwnODXsFI7JxSFvm++oliH0eQO5zGDq0LD0hbY6h/A3nqODnBbIwVVBykwXMn68GPg==}
+  '@anthropic-ai/claude-agent-sdk-linux-x64@0.3.251':
+    resolution: {integrity: sha512-qCD87XPjcNM1u4ukqmcgpHDl3Y6l+cW8j7kPzH91Y5yLBYJ5xYZA2KtJ7AYNEPOteVyOGJw/efmva0S8CRr0fg==}
     cpu: [x64]
     os: [linux]
     libc: [glibc]
 
-  '@anthropic-ai/claude-agent-sdk-win32-arm64@0.3.247':
-    resolution: {integrity: sha512-Sni6U2xR55bUEJRv7Eikm6oC27IOn3rlVJZAzXRFCAgkf9+aBqq/dEUJiIcRT2xbXOIe5QdPGUmpnYfU1BsHMw==}
+  '@anthropic-ai/claude-agent-sdk-win32-arm64@0.3.251':
+    resolution: {integrity: sha512-FH1ZLcyc97ie3h7CSlIxA1ppXILgf0V8sFQrWnHyKBrthJXQkMHXhsTq9OZV/2KhXslNf2hTe0gHpZ1nCL1Gmg==}
     cpu: [arm64]
     os: [win32]
 
-  '@anthropic-ai/claude-agent-sdk-win32-x64@0.3.247':
-    resolution: {integrity: sha512-yWfZo2ER3EIS/3pv6EX1M/VrZXu+zFzKhgWJjGgFSlcupbaCAxrVBRTdCyfv5UYBKWH9kl5HjgV2HhLHq67LSw==}
+  '@anthropic-ai/claude-agent-sdk-win32-x64@0.3.251':
+    resolution: {integrity: sha512-/jmtFIvfF0UFMxSZ8WV2Aus8aGA3+8Ft6AHvWuBJkY5jM2ubfqi6GnBjKCAL831TTllp2rKZlViANtWWRBvpvg==}
     cpu: [x64]
     os: [win32]
 
-  '@anthropic-ai/claude-agent-sdk@0.3.247':
-    resolution: {integrity: sha512-T9BDPloZxABkGREDRbWA7TVa9SLBMWI5GQXw39+XotQLCIX3McRic9OJdUnAdXa7sutwQ4nNrXwTSazN4IphjA==}
+  '@anthropic-ai/claude-agent-sdk@0.3.251':
+    resolution: {integrity: sha512-DqSi8mH2tQYRlVV0G+lJnQ/WbjJZ/a+8cJ3vPuYoqh8esIIvXHm1ZOXV1UPGsFYRnbBytEoiSGitguEXd+sQ+Q==}
     engines: {node: '>=18.0.0'}
     peerDependencies:
       '@anthropic-ai/sdk': '>=0.93.0'
       '@modelcontextprotocol/sdk': ^1.29.0
       zod: ^4.0.0
 
-  '@anthropic-ai/sdk@0.121.0':
-    resolution: {integrity: sha512-WFzwcH8l49CZHv0vQ9QQT51VJ1/DLDQfNSs9awpGlnKBdaSnqtdZa+tw/3cxxosTPIgK8uw1GqsJ2dSbCBD1Lg==}
+  '@anthropic-ai/sdk@0.122.0':
+    resolution: {integrity: sha512-GGPNftt0caaz9MDlmNQGHX8855Ojaduyy5pm9Sm1h7HalCn0cWNb5/bweadJF+4yzbal+QL6ztBa09WAAOzLmQ==}
     hasBin: true
     peerDependencies:
       zod: ^3.25.0 || ^4.0.0
@@ -816,8 +816,8 @@ packages:
     resolution: {integrity: sha512-u+NT61JZEkRFtpL0CAw1N1dwxnaLgwVXQl/zjJxTGgLyS/jTIdg2SdoEoCTHxgDyCnqa1HEi9QOoE9/pYRNpOQ==}
     engines: {node: '>=20.0.0'}
 
-  '@aws-sdk/client-bedrock-runtime@3.1119.0':
-    resolution: {integrity: sha512-NmmWFYYj+thIRMoWFL4rS2qSe2nzHiS1eF23bHu99iN3F8+TAAzWTl60wqwpnkR41eV0DMO0Y2COqHrFTfV4bw==}
+  '@aws-sdk/client-bedrock-runtime@3.1121.0':
+    resolution: {integrity: sha512-fSMUxttOVPfPkIDrrPO1IqDVK83/0yAKUYweEYsR8IayFRB2z/yvdGzTom7ZtgKH+97j8JKHSYIqM2t8qEZpSA==}
     engines: {node: '>=20.0.0'}
 
   '@aws-sdk/core@3.977.9':
@@ -884,8 +884,8 @@ packages:
     resolution: {integrity: sha512-ygIivKqh8aHzNkucOCXHyIBgBpLPfrSI0mCqXF+vLBsPTUKqj0VSqAY0GFPe7lQl4HntjOcQ+KSyS7oUV2C54Q==}
     engines: {node: '>=20.0.0'}
 
-  '@aws-sdk/token-providers@3.1119.0':
-    resolution: {integrity: sha512-yykRe5L/yHukeHJteTsYFFu4NpxTE4+zirs7mf1GjH8In2iohYv/wbe/n1jQyx6WzVg2TpXx4KNno2O0DsU6gA==}
+  '@aws-sdk/token-providers@3.1121.0':
+    resolution: {integrity: sha512-kyRVbJnFDDHDqPzgNzQdXyj2P3ANq2LQyg65o9IvQnuqiNrsP1zK+fDe5BzT0xKVnvAAGhmqzd5cvdzWP69Sfg==}
     engines: {node: '>=20.0.0'}
 
   '@aws-sdk/types@3.974.5':
@@ -1199,8 +1199,8 @@ packages:
     resolution: {integrity: sha512-nwnOR3SuLYGRFfyQm8ri4Nj5VGVAvAM9GuqQd3u7BUQj0d6hmD2F8w7OHAAjThE3CuySIdM+v8E22QJG6/RfCg==}
     engines: {node: '>=22.19.0'}
 
-  '@earendil-works/pi-agent-core@0.84.3':
-    resolution: {integrity: sha512-VURr+xBRl3RxYcw3kT9Pn3yfi6LbRoCJgHF7h1mAblMjtLNV/MfG/RyF0uJizBAM886AEakSiw3j9c/aSngppg==}
+  '@earendil-works/pi-agent-core@0.84.4':
+    resolution: {integrity: sha512-HyUnjaOXj6oN/6SNcr8A1J/ElRQA50FtIE0XUTSKAQVqmdlb9qdojOyUQwF/jULE5+yOEtGuVgi/N1RnBiNG+g==}
     engines: {node: '>=22.19.0'}
 
   '@earendil-works/pi-ai@0.74.2':
@@ -1218,8 +1218,13 @@ packages:
     engines: {node: '>=22.19.0'}
     hasBin: true
 
-  '@earendil-works/pi-client@0.84.3':
-    resolution: {integrity: sha512-zfErYane+390W0xpBJ/FWCp6aktPpkpcIcXUeZiAziWLoxE80ZNQALRyOSa/gGS5V+1OkNnMYxRxbzN0zUvnOA==}
+  '@earendil-works/pi-ai@0.84.4':
+    resolution: {integrity: sha512-AClAZxf5+c4RRu44NJPS6wyQy+Nmq+Mzyyrdvm4ZVMNuixelO02RZX4G4Aq1F145Yzp43wnM5S+hLlSI7ypfVw==}
+    engines: {node: '>=22.19.0'}
+    hasBin: true
+
+  '@earendil-works/pi-client@0.84.4':
+    resolution: {integrity: sha512-q398WY/3ZQHTizk7IKxApzqFV0xt4yM9LkSkwyqeLK5Bj5RwRjOWxESt26z4LgNp4O+8hqhqFPf/8fj4H5rE4A==}
     engines: {node: '>=22.19.0'}
 
   '@earendil-works/pi-coding-agent@0.80.10':
@@ -1227,25 +1232,25 @@ packages:
     engines: {node: '>=22.19.0'}
     hasBin: true
 
-  '@earendil-works/pi-coding-agent@0.84.3':
-    resolution: {integrity: sha512-Yr2p9PubrbFZmYEPYI+C8KmZP9xlFuLDnAG64RtU0ZDgrdiXYWa+y7WGyJO5OlqPliOkVCMd9IzVszO3/t0D0w==}
+  '@earendil-works/pi-coding-agent@0.84.4':
+    resolution: {integrity: sha512-jmOlrqUmvhh/siNWFRXjYLJzhKFIHNsAQaysRwzQPQFnPAaV/vhqHsLH/MBsIISA1Rjj7WTUFR3nJrpXoLx39w==}
     engines: {node: '>=22.19.0'}
     hasBin: true
 
-  '@earendil-works/pi-protocol@0.84.3':
-    resolution: {integrity: sha512-9a4g6WhLOvRqvsIOFaWxg/2gdrbY4Thclwj5ipLUPAWChfsDJ/8XdPc2sRhSOkD6EsxpEFJz3xppcfwI6EcZDg==}
+  '@earendil-works/pi-protocol@0.84.4':
+    resolution: {integrity: sha512-acyE9ozxkMiWiz/xyWpU0O9vwnYv0hyG889Vniv6Sg9c9zfsX+8MePnDNphBacY2Fvm1rxdsGmiVDSZl9yuDFA==}
     engines: {node: '>=22.19.0'}
 
-  '@earendil-works/pi-telemetry@0.84.3':
-    resolution: {integrity: sha512-sgEkWoKrvSGaKn+YfLLFZmn+/A7B/w62eLwTD57nI+C9to8ITlFFVbgC2OtwvPnT3NFGHdCd53qhBEMIlptD1g==}
+  '@earendil-works/pi-telemetry@0.84.4':
+    resolution: {integrity: sha512-8e2CuxM+ht+hedQXTZmi5JVl6/xDK9RpSDL2+MbITevKYQhMZ/z6lJOTFgox3HQyGxO8mOZEtYGVeQNaD4OzqA==}
     engines: {node: '>=22.19.0'}
 
   '@earendil-works/pi-tui@0.80.10':
     resolution: {integrity: sha512-c2JO29PbhKPEQ6fgHQKAl0WhwuFqzWfzspMmP+8B5tpDuP+0mvarRbKKg8gq4b+pQx/QX+6aVS4ko7deoyjQjg==}
     engines: {node: '>=22.19.0'}
 
-  '@earendil-works/pi-tui@0.84.3':
-    resolution: {integrity: sha512-fS6OEQKEEALnKa6Uw8LcgZZ+9CWck7f3MQSCETQp6leUgIFwMEDtKmOUnL9nsYm+RIPmy7OmplVxYRbV6hiaFg==}
+  '@earendil-works/pi-tui@0.84.4':
+    resolution: {integrity: sha512-nPUnwDkLtupPXnZQYrCwPFcuTydCDqTY6ZbFqhsL4S4kVq0AT418kPa/6uXwtaCD+MjBNBltb7ScTYX65yeE1w==}
     engines: {node: '>=22.19.0'}
 
   '@effect/platform-bun@4.0.0-rc.112':
@@ -1676,8 +1681,8 @@ packages:
     resolution: {integrity: sha512-bRISgCIjP20/tbWSPWMEi54QVPRZExkuD9lJL+UIxUKtwVJA8wW1Trb1jMs1RFXo1CBTNZ/5hpC9QvmKWdopKw==}
     engines: {node: '>=6.0.0'}
 
-  '@jridgewell/sourcemap-codec@1.5.5':
-    resolution: {integrity: sha512-cYQ9310grqxueWbl+WuIUIaiUaDcj7WOq5fVhEljNVgRfOUhY9fy2zTvfoqWsnebh8Sl70VScFbICvJnLKB0Og==}
+  '@jridgewell/sourcemap-codec@1.6.0':
+    resolution: {integrity: sha512-T7jf+5zgsZHwNJ4lvQ7/aezbyk0nNX+zJVWpmHA7VYsEx7a7qr5Rg5IbtJFqkgze5Y2sruq1RUY8Q837Od7iFw==}
 
   '@jridgewell/trace-mapping@0.3.31':
     resolution: {integrity: sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw==}
@@ -2826,11 +2831,11 @@ packages:
     resolution: {integrity: sha512-DR9t6lfLVdrjgCwpglrR9DR7Ok8/HlXjcOE+goWXF3zyuLUO/ug7vMbSFxTqrQTtbRghJfyhmIZ0S6LhPIy44w==}
     engines: {node: '>=20.19'}
 
-  '@tanstack/query-core@5.102.7':
-    resolution: {integrity: sha512-4TH8KQrCLoNs9Zvl1LW1iaZ9cZx3dGTgfZ1BnLrcRxMNnX/toe/dGbfvF/DkvbzRyfLfpMKZkembz3o0rnugtw==}
+  '@tanstack/query-core@5.102.8':
+    resolution: {integrity: sha512-ZNjkJ33CqvPNec/6lZBnHqLc3EVGPZ9ySLhYahU9TcuRFdmwXewuj0c4hwSWcGHqEUwcSrKeZ+oGcvPBqXcQcg==}
 
-  '@tanstack/react-query@5.102.7':
-    resolution: {integrity: sha512-bbd8T4jDIj9aPbNn11SsjNH8apKY4zspkrw63JRsNDXjpW5SRF7X0ipi7yrGd8DCs8QhYfhQJKqEj1YLru1DbQ==}
+  '@tanstack/react-query@5.102.8':
+    resolution: {integrity: sha512-TYBea4OuXWD7MhaSHq069TWbFe7rcwWN6kzT7JF0OKi1K6c1gTv2IzD6A6ExJsCMozdkqBWeuIUZmu4KQg0O5A==}
     peerDependencies:
       react: ^18 || ^19
 
@@ -3240,8 +3245,8 @@ packages:
     resolution: {integrity: sha512-UycprH3T6n3jH0k44NHMa7pnFHGu/N05MjojYr+Mc6I7obkoLIJujSWwin1pCvdy/eOxrI/l3uDLQsmcrOb4ug==}
     engines: {node: '>= 20'}
 
-  '@vitejs/plugin-react@6.1.0':
-    resolution: {integrity: sha512-qd2BzUBehkov86WFhg0JkEFEYyCLG9uPCe6qWTY/kRlss9OvJrOF2UbIWT7p+8IzZHkEu0DNGHc4HSv+JdDLsw==}
+  '@vitejs/plugin-react@6.1.1':
+    resolution: {integrity: sha512-yxLaQV9gkhS8ezJqCM6+ndU7mDY6gqAg75NQ+0IjwEI8IYOmQCgkRwHKVSfWXW076DsqMo0Dk+0FK1U+M5RgFw==}
     engines: {node: ^20.19.0 || >=22.12.0}
     peerDependencies:
       '@rolldown/plugin-babel': ^0.1.7 || ^0.2.0
@@ -3381,8 +3386,8 @@ packages:
   base64-js@1.5.1:
     resolution: {integrity: sha512-AKpaYlHn8t4SVbOHCy+b5+KKgvR4vrsD8vbvrbiQJps7fKDTkjkDry6ji0rUJjC0kzbNePLwzxq8iypo41qeWA==}
 
-  baseline-browser-mapping@2.11.19:
-    resolution: {integrity: sha512-Grytf1xOxOEMTGRwx6rLGKkTabd4vMg3VrKdj/7joCmV0qgh4QwMMO6xh34YEXQqirAuUdgQGa5orJQQ+69RBw==}
+  baseline-browser-mapping@2.11.20:
+    resolution: {integrity: sha512-H0ulySigv6icDJ1F7SjtdCD6PrhTpdYCmP0CactWy1+ekh0AFd0o1Wn5T8b+hnTmdBx19u9yhL6wvCylXMY7zw==}
     engines: {node: '>=6.0.0'}
     hasBin: true
 
@@ -3758,35 +3763,36 @@ packages:
     peerDependencies:
       drizzle-orm: '*'
 
-  drizzle-orm@1.0.0-rc.4:
-    resolution: {integrity: sha512-BT+pf+qoiYHqltoA88Jmf6ilGMXPlpfE0hEJKc2adRtMCAl25Swk/t5gXcWxZNAwdtf3F5gCd2FpeOyP/pT0Hw==}
+  drizzle-orm@1.0.0-rc.5-169397b:
+    resolution: {integrity: sha512-xf5TudQhFplMMzjwgmMY5f64Sqbv4iwXxdTHBHqvLMt+SHyY8rAYhzNLQchEkDxiqMclTS/txPEOg5pdQy0Tcw==}
     peerDependencies:
       '@aws-sdk/client-rds-data': '>=3'
       '@cloudflare/workers-types': '>=4'
-      '@effect/sql-d1': '>=4.0.0-beta.83 || >=4.0.0'
-      '@effect/sql-libsql': '>=4.0.0-beta.83 || >=4.0.0'
-      '@effect/sql-mysql2': '>=4.0.0-beta.83 || >=4.0.0'
-      '@effect/sql-pg': '>=4.0.0-beta.83 || >=4.0.0'
-      '@effect/sql-pglite': '>=4.0.0-beta.83 || >=4.0.0'
-      '@effect/sql-sqlite-bun': '>=4.0.0-beta.83 || >=4.0.0'
-      '@effect/sql-sqlite-do': '>=4.0.0-beta.83 || >=4.0.0'
-      '@effect/sql-sqlite-node': '>=4.0.0-beta.83 || >=4.0.0'
-      '@effect/sql-sqlite-wasm': '>=4.0.0-beta.83 || >=4.0.0'
+      '@drizzle-team/minipg': '>=0.3.2'
+      '@effect/sql-d1': '>=4.0.0-beta.105 || >=4.0.0'
+      '@effect/sql-libsql': '>=4.0.0-beta.105 || >=4.0.0'
+      '@effect/sql-mysql2': '>=4.0.0-beta.105 || >=4.0.0'
+      '@effect/sql-pg': '>=4.0.0-beta.105 || >=4.0.0'
+      '@effect/sql-pglite': '>=4.0.0-beta.105 || >=4.0.0'
+      '@effect/sql-sqlite-bun': '>=4.0.0-beta.105 || >=4.0.0'
+      '@effect/sql-sqlite-do': '>=4.0.0-beta.105 || >=4.0.0'
+      '@effect/sql-sqlite-node': '>=4.0.0-beta.105 || >=4.0.0'
+      '@effect/sql-sqlite-wasm': '>=4.0.0-beta.105 || >=4.0.0'
       '@electric-sql/pglite': '>=0.2.0'
       '@libsql/client': '>=0.10.0'
       '@libsql/client-wasm': '>=0.10.0'
       '@neondatabase/serverless': '>=0.10.0'
-      '@op-engineering/op-sqlite': '>=2'
+      '@op-engineering/op-sqlite': '>=17'
       '@opentelemetry/api': ^1.4.1
       '@planetscale/database': '>=1.13'
       '@sinclair/typebox': '>=0.34.8'
       '@sqlitecloud/drivers': '>=1.0.653'
       '@tidbcloud/serverless': '*'
-      '@tursodatabase/database': '>=0.6.0-pre.28 || >=0.6.0'
-      '@tursodatabase/database-common': '>=0.6.0-pre.28 || >=0.6.0'
-      '@tursodatabase/database-wasm': '>=0.6.0-pre.28 || >=0.6.0'
-      '@tursodatabase/serverless': '>=1.1.3'
-      '@tursodatabase/sync': '>=0.6.0-pre.28 || >=0.6.0'
+      '@tursodatabase/database': '>=0.7.1'
+      '@tursodatabase/database-common': '>=0.7.1'
+      '@tursodatabase/database-wasm': '>=0.7.1'
+      '@tursodatabase/serverless': '>=1.4.0'
+      '@tursodatabase/sync': '>=0.7.1'
       '@types/better-sqlite3': '*'
       '@types/mssql': ^9.1.4
       '@types/pg': '*'
@@ -3797,7 +3803,7 @@ packages:
       arktype: '>=2.0.0'
       better-sqlite3: '>=9.3.0'
       bun-types: '*'
-      effect: '>=4.0.0-beta.83 || >=4.0.0'
+      effect: '>=4.0.0-beta.105 || >=4.0.0'
       expo-sqlite: '>=14.0.0'
       mssql: ^11.0.1
       mysql2: '>=2'
@@ -3805,13 +3811,15 @@ packages:
       postgres: '>=3'
       sql.js: '>=1'
       sqlite3: '>=5'
-      typebox: '>=1.0.0'
+      typebox: '>=1.2.0'
       valibot: '>=1.0.0-beta.7'
       zod: ^3.25.0 || ^4.0.0
     peerDependenciesMeta:
       '@aws-sdk/client-rds-data':
         optional: true
       '@cloudflare/workers-types':
+        optional: true
+      '@drizzle-team/minipg':
         optional: true
       '@effect/sql-d1':
         optional: true
@@ -3917,8 +3925,8 @@ packages:
   effect@4.0.0-rc.112:
     resolution: {integrity: sha512-wXxwuh1Ywnv4cPRM3Wfa0vDwuOHnZ1TsTgHJkG9XgzND6inhBH9n1vBxhg3iIXOia/OrpmvVmd3lrD4vq6bF3A==}
 
-  electron-to-chromium@1.5.415:
-    resolution: {integrity: sha512-958V+Kbhtgz+SxXeEVKBjrlKRBIDAYvUJfwhjxMZ5S6ut9jAl7l9ZKBkBrvjyjZE36PabLUo2L8kEeV5O4vgJg==}
+  electron-to-chromium@1.5.416:
+    resolution: {integrity: sha512-K6bvB2BjnNrugtIih6ewlbBI9DXa976jIdiIlRLHhBoEI9a4JaQjjHyF+A1IQI543aQYR4LnmOrT/K5fZj0aPA==}
 
   emoji-regex@8.0.0:
     resolution: {integrity: sha512-MSjYzcWNOA0ewAHpz0MxpYFvwg6yjy1NG3xteoqz644VCo/RPgnr1/GGt+ic3iJTzQ8Eu3TdM14SawnVUmGE6A==}
@@ -3995,8 +4003,8 @@ packages:
     resolution: {integrity: sha512-CRT1WTyuQoD771GW56XEZFQ/ZoSfWid1alKGDYMmkt2yl8UXrVR4pspqWNEcqKvVIzg6PAltWjxcSSPrboA4iA==}
     engines: {node: '>=18.0.0'}
 
-  express-rate-limit@8.6.2:
-    resolution: {integrity: sha512-YH4ru+eOJxQABscKFfRCy9R7x9QFGdezclVMwwgFFndzS2Xnm0uo6B0ABZsLhcpeptGv2qvuJVWlQr9gQZoC3A==}
+  express-rate-limit@8.7.0:
+    resolution: {integrity: sha512-hOwV7WOxXfjRpAM1DSJWZDXx3GhplwD8IfwuwvogD8i1Qnkgosw/H45s4ZnFAUHDAhPjlY9hLBvJhKmGMyY26g==}
     engines: {node: '>= 16'}
     peerDependencies:
       express: '>= 4.11'
@@ -4028,8 +4036,8 @@ packages:
   fast-uri@3.1.6:
     resolution: {integrity: sha512-7Ical1vFEMr0onbVzEDIreM22I4khW+fzyQPwvAFWBp1iwdshSZRsL4jjRvPG9JP1uiqMHRto+YU6R2/CzDz5Q==}
 
-  fastq@1.20.1:
-    resolution: {integrity: sha512-GGToxJ/w1x32s/D2EKND7kTil4n8OVk/9mycTc4VDza13lOvpUZTGX3mFSCtV9ksdGBVzvsyAVLM6mHFThxXxw==}
+  fastq@1.20.3:
+    resolution: {integrity: sha512-XKv5nnLs6nLF71NgiKJLIZFLkPyIEuOselLG7ujZnGrRfQK8HpvY+WqKhAJUAdLomwVHErVS4LfxFlPq0/FTAw==}
 
   fdir@6.5.0:
     resolution: {integrity: sha512-tIbYtZbucOs0BRGqPJkshJUYdL+SDH7dVM8gjy+ERp3WAUjLEFJE+02kanyHtwjWOnwrKYBiwAmM0p4kLJAnXg==}
@@ -4233,8 +4241,8 @@ packages:
   inline-style-parser@0.2.7:
     resolution: {integrity: sha512-Nb2ctOyNR8DqQoR0OwRG95uNWIC0C1lCgf5Naz5H6Ji72KZ8OcFZLz2P5sNgwlyoJ8Yif11oMuYs5pBQa86csA==}
 
-  ip-address@10.5.0:
-    resolution: {integrity: sha512-R5SnVLJmgYYvf2F2ZgwSBnelz5G4q5AxIC277GDfUaNbrZKNANcBC7RHqYYePlszf4kBolVkJauG0ZjHHFh55g==}
+  ip-address@10.7.0:
+    resolution: {integrity: sha512-BGFsyJd5mpXp3rK6jIdADLNgpJUK1jnjzvYF8lK+VyDab9JAmqN0YOKDdP17HlgKb2+ehPgDc8EtnRLbGCAMhA==}
     engines: {node: '>= 12'}
 
   ipaddr.js@1.9.1:
@@ -4302,8 +4310,8 @@ packages:
     resolution: {integrity: sha512-e6rvdUCiQCAuumZslxRJWR/Doq4VpPR82kqclvcS0efgt430SlGIk05vdCN58+VrzgtIcfNODjozVielycD4Sw==}
     engines: {node: '>=16'}
 
-  isbot@5.2.1:
-    resolution: {integrity: sha512-dJ+LpKyClQZ7NG+j3OensC/mAZkGpukE9YUrgPYvAZj2doVL0edfDgywTUh5CXa0o+nW9a1V9e5+CJTX8+SxRw==}
+  isbot@5.2.2:
+    resolution: {integrity: sha512-iQcBXcd+Rv/pkubRyGh2utW2j1oPG5hZY6TUhVPpqK4G+o3IbxpJNx04hgksjc/N7GK5pEorUxDeg31cFgEk/w==}
     engines: {node: '>=18'}
 
   isexe@2.0.0:
@@ -4561,8 +4569,8 @@ packages:
   lru_map@0.4.1:
     resolution: {integrity: sha512-I+lBvqMMFfqaV8CJCISjI3wbjmwVu/VyOoU7+qtu9d7ioW5klMgsTTiUOUp+DJvfTTzKXoPbyC6YfgkNcyPSOg==}
 
-  lucide-react@1.34.0:
-    resolution: {integrity: sha512-vnjGJNI7Htk5+oWW8gXGuaLgwgAb0T6/iZbBrp9JCfRFwdNWZ0YTm3eyxjOLgwN6r8iyAf3UA70zNmBRBNv7yg==}
+  lucide-react@1.37.0:
+    resolution: {integrity: sha512-LPsB4rD1TD6wZu1djKOf9vUnS1jTNaHbolXebXDgiTdb6jeA1agIJhJsIybCmjKmQClcOaal1o1OaiYahEftyQ==}
     peerDependencies:
       react: ^16.5.1 || ^17.0.0 || ^18.0.0 || ^19.0.0
 
@@ -4739,8 +4747,8 @@ packages:
     resolution: {integrity: sha512-4kmO/MdyUIkLIvTPr8VHLil4AtoKIoniWPIEk5+CDy0xnWC84azhSFmuJ7PxZdsYtiP5kEeQsORAVIeMgxT+Hw==}
     hasBin: true
 
-  msgpackr@2.0.6:
-    resolution: {integrity: sha512-plGul/tqjt9vqWFR9zyqyLZls6gb5KTLvnsRO2B9+TZ8tNiXiVI/CR8LiDWlAX4IUeVkQ9gsmzKA6voC2QOciw==}
+  msgpackr@2.1.0:
+    resolution: {integrity: sha512-p/pBCVO63CsvvpkomUnNNag6+n38rULuDA6HHe70o2gtC8ODI52foF/4ko2qQcp6OiErJXTmrZeXmsGGHsIQNQ==}
 
   nanoid@3.3.18:
     resolution: {integrity: sha512-DTg4MJbGMWkfi6VZFdNt2/caMbQy4Ou+Op/hJQvGEWcnVfoA1QA+xzRKAzw9jD6+GVOOeYr/mIcuDSdug6F6+w==}
@@ -4770,8 +4778,8 @@ packages:
     resolution: {integrity: sha512-s+w+rBWnpTMwSFbaE0UXsRlg7hU4FjekKU4eyAih5T8nJuNZT1nNsskXpxmeqSK9UzkBl6UgRlnKc8hz8IEqOw==}
     hasBin: true
 
-  node-releases@2.0.53:
-    resolution: {integrity: sha512-D9UOmYG3UH1V+ENW56t5QXBwJw1YEY18ruVeus89Rw+SyIgjPkCO84bRzO3uNIYosJbNwiabWVn48o3uJLjxFQ==}
+  node-releases@2.0.54:
+    resolution: {integrity: sha512-YHs7BmmcsdAI5Ozuf8JZo6PT0mv2GIWC9vMfvUC3dp65M8hn7Ux8CPL+2oBI7juNuj9d0ndhTcznq2ODBps9cQ==}
     engines: {node: '>=18'}
 
   object-assign@4.1.1:
@@ -5259,8 +5267,8 @@ packages:
   sprintf-js@1.0.3:
     resolution: {integrity: sha512-D9cPgkvLlV3t3IzL0D0YLvGA9Ahk4PcvVwUbN0dSGr1aP0Nrt4AEnTUbuGvquEC0mA64Gqt1fzirlRs5ibXx8g==}
 
-  standardwebhooks@1.0.0:
-    resolution: {integrity: sha512-BbHGOQK9olHPMvQNHWul6MYlrRTAOKn03rOe4A8O3CLWhNf4YHBqq2HJKKC+sfqpxiBY52pNeesD6jIiLDz8jg==}
+  standardwebhooks@1.1.1:
+    resolution: {integrity: sha512-bCbX9ZEyFkWPsRz7Bl3NuQUJohmwGSev/yhr7vhaGPlc4AfIrspIRa6cPTBuI1ItmrTDJ4d/S2hCsfe4+vQGnQ==}
 
   statuses@2.0.2:
     resolution: {integrity: sha512-DvEy55V3DB7uknRo+4iOGT5fP1slR8wQohVdknigZPMpMstaKJQWhwiYBACJE3Ul2pTnATihhBYnRhZQHGBiRw==}
@@ -5406,8 +5414,8 @@ packages:
   typebox@1.1.38:
     resolution: {integrity: sha512-pZ0aQPmMmXoUvSbeuWf/Hzsc+avNw/Zd6VeE8CFgkVGWyuHPJvqeJJDeJqLve+K70LvjYIoleGcoJHPT17cWoA==}
 
-  typebox@1.3.19:
-    resolution: {integrity: sha512-OGhGi3JkTMol9QW8Bc6tgSD4ghV8v5WubAi1XeYnlxdocHvgS7TQJ8FcFZrQhVhigQU0z7bRFAEsZ+wpkRdCfg==}
+  typebox@1.3.20:
+    resolution: {integrity: sha512-qAQnoUNakcqjoTqwDzvqcg5e/+i3FHnltXFmKAbc0tpTPKT86bVOUPuevp/vYQguWUMC7YsVTmk1FT5UpjB/wg==}
 
   typebox@1.3.7:
     resolution: {integrity: sha512-meKuifc33Pccx0O6PdIzYMq3Og8zvP4TIi/a+Bw3AEMZMxOD0+RHGQvpglEe6Zdy3wZ8nqn/j95h8LUZLk/6Hg==}
@@ -5498,8 +5506,8 @@ packages:
       webpack:
         optional: true
 
-  update-browserslist-db@1.3.1:
-    resolution: {integrity: sha512-ZZ61DsRsOnakl74HAmp3oSN4aXUmEWXf+i/yv0h7tIBfICc3VdrFErQKUUKPgu3AMsTUMbcongALEN4l6GSUrQ==}
+  update-browserslist-db@1.3.2:
+    resolution: {integrity: sha512-UQ+MSxlhRm1bzjhU+DcuXfjFO1FzNtqhK5+9Yvlp90ItDLk5vT932A0rFu619nf7RVS+Y/VeaUW1jaRDqZ8VJw==}
     hasBin: true
     peerDependencies:
       browserslist: '>= 4.21.0'
@@ -5642,8 +5650,8 @@ packages:
     peerDependencies:
       zod: ^3.25.28 || ^4
 
-  zod@4.4.3:
-    resolution: {integrity: sha512-ytENFjIJFl2UwYglde2jchW2Hwm4GJFLDiSXWdTrJQBIN9Fcyp7n4DhxJEiWNAJMV1/BqWfW/kkg71UDcHJyTQ==}
+  zod@4.5.2:
+    resolution: {integrity: sha512-XkYXCol10+ba/6F/cueWV+TezUeOqXW0hdeJt5CdXjTYeAgAQg5N03RQdJ80mhfFE72+pblvYMW4wy2Qp4Qbrg==}
 
   zustand@5.0.15:
     resolution: {integrity: sha512-MpSEjRiBkA9crSYeOUH32rJC7SVqAbm0Fqcqge/bUi2PPoLcBWKOsG+C8mevmpr8TwXHBVkChbbJiyvkE+i/3A==}
@@ -5676,52 +5684,52 @@ snapshots:
       '@hono/node-server': 1.19.17(hono@4.13.5)
       hono: 4.13.5
 
-  '@ai-sdk/gateway@4.0.67(zod@4.4.3)':
+  '@ai-sdk/gateway@4.0.67(zod@4.5.2)':
     dependencies:
       '@ai-sdk/provider': 4.0.8
-      '@ai-sdk/provider-utils': 5.0.32(zod@4.4.3)
+      '@ai-sdk/provider-utils': 5.0.32(zod@4.5.2)
       '@vercel/oidc': 3.2.0
-      zod: 4.4.3
+      zod: 4.5.2
 
-  '@ai-sdk/harness-claude-code@1.0.94(patch_hash=19be27a44d7e5dfeb3c0ca1a61ff5f5cb8dcf407f87dd44ac77dfab69d95e63a)(zod@4.4.3)':
+  '@ai-sdk/harness-claude-code@1.0.94(patch_hash=19be27a44d7e5dfeb3c0ca1a61ff5f5cb8dcf407f87dd44ac77dfab69d95e63a)(zod@4.5.2)':
     dependencies:
-      '@ai-sdk/harness': 1.0.91(patch_hash=7fe99bf0c691e923a900a46e9c06da2e69a22167bf0ccae94efc7e7c6d6f414d)(ws@8.21.3)(zod@4.4.3)
-      '@ai-sdk/provider-utils': 5.0.32(zod@4.4.3)
+      '@ai-sdk/harness': 1.0.91(patch_hash=7fe99bf0c691e923a900a46e9c06da2e69a22167bf0ccae94efc7e7c6d6f414d)(ws@8.21.3)(zod@4.5.2)
+      '@ai-sdk/provider-utils': 5.0.32(zod@4.5.2)
       ws: 8.21.3
-      zod: 4.4.3
+      zod: 4.5.2
     transitivePeerDependencies:
       - bufferutil
       - utf-8-validate
 
-  '@ai-sdk/harness-codex@1.0.93(patch_hash=3b003d1c9402d196b62e8ec2dc9734e7116ab4585321f1c3f096512aeddd1c51)(zod@4.4.3)':
+  '@ai-sdk/harness-codex@1.0.93(patch_hash=3b003d1c9402d196b62e8ec2dc9734e7116ab4585321f1c3f096512aeddd1c51)(zod@4.5.2)':
     dependencies:
-      '@ai-sdk/harness': 1.0.91(patch_hash=7fe99bf0c691e923a900a46e9c06da2e69a22167bf0ccae94efc7e7c6d6f414d)(ws@8.21.3)(zod@4.4.3)
-      '@ai-sdk/provider-utils': 5.0.32(zod@4.4.3)
+      '@ai-sdk/harness': 1.0.91(patch_hash=7fe99bf0c691e923a900a46e9c06da2e69a22167bf0ccae94efc7e7c6d6f414d)(ws@8.21.3)(zod@4.5.2)
+      '@ai-sdk/provider-utils': 5.0.32(zod@4.5.2)
       ws: 8.21.3
-      zod: 4.4.3
+      zod: 4.5.2
     transitivePeerDependencies:
       - bufferutil
       - utf-8-validate
 
-  '@ai-sdk/harness-opencode@1.0.92(patch_hash=ca8793a635d82de60f14a887bc55a81e7f54d7a051c8fa3135fe8fe01ba9b0a6)(zod@4.4.3)':
+  '@ai-sdk/harness-opencode@1.0.92(patch_hash=ca8793a635d82de60f14a887bc55a81e7f54d7a051c8fa3135fe8fe01ba9b0a6)(zod@4.5.2)':
     dependencies:
-      '@ai-sdk/harness': 1.0.91(patch_hash=7fe99bf0c691e923a900a46e9c06da2e69a22167bf0ccae94efc7e7c6d6f414d)(ws@8.21.0)(zod@4.4.3)
-      '@ai-sdk/provider-utils': 5.0.32(zod@4.4.3)
+      '@ai-sdk/harness': 1.0.91(patch_hash=7fe99bf0c691e923a900a46e9c06da2e69a22167bf0ccae94efc7e7c6d6f414d)(ws@8.21.0)(zod@4.5.2)
+      '@ai-sdk/provider-utils': 5.0.32(zod@4.5.2)
       ws: 8.21.0
-      zod: 4.4.3
+      zod: 4.5.2
     transitivePeerDependencies:
       - bufferutil
       - utf-8-validate
 
-  '@ai-sdk/harness-pi@1.0.93(@earendil-works/pi-tui@0.80.10)(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(@opentelemetry/api@1.9.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(ws@8.21.0)(zod@4.4.3)':
+  '@ai-sdk/harness-pi@1.0.93(@earendil-works/pi-tui@0.84.4)(@modelcontextprotocol/sdk@1.30.0(zod@4.5.2))(@opentelemetry/api@1.9.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(ws@8.21.0)(zod@4.5.2)':
     dependencies:
-      '@ai-sdk/harness': 1.0.91(patch_hash=7fe99bf0c691e923a900a46e9c06da2e69a22167bf0ccae94efc7e7c6d6f414d)(ws@8.21.0)(zod@4.4.3)
-      '@ai-sdk/provider-utils': 5.0.32(zod@4.4.3)
-      '@earendil-works/pi-ai': 0.74.2(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(@opentelemetry/api@1.9.0)(ws@8.21.0)(zod@4.4.3)
-      '@earendil-works/pi-coding-agent': 0.80.10(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(ws@8.21.0)(zod@4.4.3)
-      pi-mcp-adapter: 2.12.1(@earendil-works/pi-ai@0.74.2(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(@opentelemetry/api@1.9.0)(ws@8.21.0)(zod@4.4.3))(@earendil-works/pi-tui@0.80.10)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(typebox@1.3.19)(zod@4.4.3)
-      typebox: 1.3.19
-      zod: 4.4.3
+      '@ai-sdk/harness': 1.0.91(patch_hash=7fe99bf0c691e923a900a46e9c06da2e69a22167bf0ccae94efc7e7c6d6f414d)(ws@8.21.0)(zod@4.5.2)
+      '@ai-sdk/provider-utils': 5.0.32(zod@4.5.2)
+      '@earendil-works/pi-ai': 0.74.2(@modelcontextprotocol/sdk@1.30.0(zod@4.5.2))(@opentelemetry/api@1.9.0)(ws@8.21.0)(zod@4.5.2)
+      '@earendil-works/pi-coding-agent': 0.80.10(@modelcontextprotocol/sdk@1.30.0(zod@4.5.2))(ws@8.21.0)(zod@4.5.2)
+      pi-mcp-adapter: 2.12.1(@earendil-works/pi-ai@0.74.2(@modelcontextprotocol/sdk@1.30.0(zod@4.5.2))(@opentelemetry/api@1.9.0)(ws@8.21.0)(zod@4.5.2))(@earendil-works/pi-tui@0.84.4)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(typebox@1.3.20)(zod@4.5.2)
+      typebox: 1.3.20
+      zod: 4.5.2
     transitivePeerDependencies:
       - '@cfworker/json-schema'
       - '@earendil-works/pi-tui'
@@ -5737,108 +5745,108 @@ snapshots:
       - utf-8-validate
       - ws
 
-  '@ai-sdk/harness@1.0.91(patch_hash=7fe99bf0c691e923a900a46e9c06da2e69a22167bf0ccae94efc7e7c6d6f414d)(ws@8.21.0)(zod@4.4.3)':
+  '@ai-sdk/harness@1.0.91(patch_hash=7fe99bf0c691e923a900a46e9c06da2e69a22167bf0ccae94efc7e7c6d6f414d)(ws@8.21.0)(zod@4.5.2)':
     dependencies:
       '@ai-sdk/provider': 4.0.8
-      '@ai-sdk/provider-utils': 5.0.32(zod@4.4.3)
-      ai: 7.0.83(zod@4.4.3)
-      zod: 4.4.3
+      '@ai-sdk/provider-utils': 5.0.32(zod@4.5.2)
+      ai: 7.0.83(zod@4.5.2)
+      zod: 4.5.2
     optionalDependencies:
       ws: 8.21.0
 
-  '@ai-sdk/harness@1.0.91(patch_hash=7fe99bf0c691e923a900a46e9c06da2e69a22167bf0ccae94efc7e7c6d6f414d)(ws@8.21.3)(zod@4.4.3)':
+  '@ai-sdk/harness@1.0.91(patch_hash=7fe99bf0c691e923a900a46e9c06da2e69a22167bf0ccae94efc7e7c6d6f414d)(ws@8.21.3)(zod@4.5.2)':
     dependencies:
       '@ai-sdk/provider': 4.0.8
-      '@ai-sdk/provider-utils': 5.0.32(zod@4.4.3)
-      ai: 7.0.83(zod@4.4.3)
-      zod: 4.4.3
+      '@ai-sdk/provider-utils': 5.0.32(zod@4.5.2)
+      ai: 7.0.83(zod@4.5.2)
+      zod: 4.5.2
     optionalDependencies:
       ws: 8.21.3
 
-  '@ai-sdk/mcp@2.0.39(zod@4.4.3)':
+  '@ai-sdk/mcp@2.0.39(zod@4.5.2)':
     dependencies:
       '@ai-sdk/provider': 4.0.8
-      '@ai-sdk/provider-utils': 5.0.32(zod@4.4.3)
+      '@ai-sdk/provider-utils': 5.0.32(zod@4.5.2)
       cross-spawn: 7.0.6
       pkce-challenge: 5.0.1
-      zod: 4.4.3
+      zod: 4.5.2
 
-  '@ai-sdk/provider-utils@5.0.32(zod@4.4.3)':
+  '@ai-sdk/provider-utils@5.0.32(zod@4.5.2)':
     dependencies:
       '@ai-sdk/provider': 4.0.8
       '@standard-schema/spec': 1.1.0
       '@workflow/serde': 4.1.0
       eventsource-parser: 3.1.1
       undici: 7.29.0
-      zod: 4.4.3
+      zod: 4.5.2
 
   '@ai-sdk/provider@4.0.8':
     dependencies:
       json-schema: 0.4.0
 
-  '@ai-sdk/react@4.0.86(react@19.2.8)(zod@4.4.3)':
+  '@ai-sdk/react@4.0.86(react@19.2.8)(zod@4.5.2)':
     dependencies:
-      '@ai-sdk/mcp': 2.0.39(zod@4.4.3)
+      '@ai-sdk/mcp': 2.0.39(zod@4.5.2)
       '@ai-sdk/provider': 4.0.8
-      '@ai-sdk/provider-utils': 5.0.32(zod@4.4.3)
-      ai: 7.0.83(zod@4.4.3)
+      '@ai-sdk/provider-utils': 5.0.32(zod@4.5.2)
+      ai: 7.0.83(zod@4.5.2)
       react: 19.2.8
       swr: 2.5.1(react@19.2.8)
       throttleit: 2.1.0
     transitivePeerDependencies:
       - zod
 
-  '@anthropic-ai/claude-agent-sdk-darwin-arm64@0.3.247':
+  '@anthropic-ai/claude-agent-sdk-darwin-arm64@0.3.251':
     optional: true
 
-  '@anthropic-ai/claude-agent-sdk-darwin-x64@0.3.247':
+  '@anthropic-ai/claude-agent-sdk-darwin-x64@0.3.251':
     optional: true
 
-  '@anthropic-ai/claude-agent-sdk-linux-arm64-musl@0.3.247':
+  '@anthropic-ai/claude-agent-sdk-linux-arm64-musl@0.3.251':
     optional: true
 
-  '@anthropic-ai/claude-agent-sdk-linux-arm64@0.3.247':
+  '@anthropic-ai/claude-agent-sdk-linux-arm64@0.3.251':
     optional: true
 
-  '@anthropic-ai/claude-agent-sdk-linux-x64-musl@0.3.247':
+  '@anthropic-ai/claude-agent-sdk-linux-x64-musl@0.3.251':
     optional: true
 
-  '@anthropic-ai/claude-agent-sdk-linux-x64@0.3.247':
+  '@anthropic-ai/claude-agent-sdk-linux-x64@0.3.251':
     optional: true
 
-  '@anthropic-ai/claude-agent-sdk-win32-arm64@0.3.247':
+  '@anthropic-ai/claude-agent-sdk-win32-arm64@0.3.251':
     optional: true
 
-  '@anthropic-ai/claude-agent-sdk-win32-x64@0.3.247':
+  '@anthropic-ai/claude-agent-sdk-win32-x64@0.3.251':
     optional: true
 
-  '@anthropic-ai/claude-agent-sdk@0.3.247(@anthropic-ai/sdk@0.121.0(zod@4.4.3))(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(zod@4.4.3)':
+  '@anthropic-ai/claude-agent-sdk@0.3.251(@anthropic-ai/sdk@0.122.0(zod@4.5.2))(@modelcontextprotocol/sdk@1.30.0(zod@4.5.2))(zod@4.5.2)':
     dependencies:
-      '@anthropic-ai/sdk': 0.121.0(zod@4.4.3)
-      '@modelcontextprotocol/sdk': 1.30.0(zod@4.4.3)
-      zod: 4.4.3
+      '@anthropic-ai/sdk': 0.122.0(zod@4.5.2)
+      '@modelcontextprotocol/sdk': 1.30.0(zod@4.5.2)
+      zod: 4.5.2
     optionalDependencies:
-      '@anthropic-ai/claude-agent-sdk-darwin-arm64': 0.3.247
-      '@anthropic-ai/claude-agent-sdk-darwin-x64': 0.3.247
-      '@anthropic-ai/claude-agent-sdk-linux-arm64': 0.3.247
-      '@anthropic-ai/claude-agent-sdk-linux-arm64-musl': 0.3.247
-      '@anthropic-ai/claude-agent-sdk-linux-x64': 0.3.247
-      '@anthropic-ai/claude-agent-sdk-linux-x64-musl': 0.3.247
-      '@anthropic-ai/claude-agent-sdk-win32-arm64': 0.3.247
-      '@anthropic-ai/claude-agent-sdk-win32-x64': 0.3.247
+      '@anthropic-ai/claude-agent-sdk-darwin-arm64': 0.3.251
+      '@anthropic-ai/claude-agent-sdk-darwin-x64': 0.3.251
+      '@anthropic-ai/claude-agent-sdk-linux-arm64': 0.3.251
+      '@anthropic-ai/claude-agent-sdk-linux-arm64-musl': 0.3.251
+      '@anthropic-ai/claude-agent-sdk-linux-x64': 0.3.251
+      '@anthropic-ai/claude-agent-sdk-linux-x64-musl': 0.3.251
+      '@anthropic-ai/claude-agent-sdk-win32-arm64': 0.3.251
+      '@anthropic-ai/claude-agent-sdk-win32-x64': 0.3.251
 
-  '@anthropic-ai/sdk@0.121.0(zod@4.4.3)':
-    dependencies:
-      json-schema-to-ts: 3.1.1
-      standardwebhooks: 1.0.0
-    optionalDependencies:
-      zod: 4.4.3
-
-  '@anthropic-ai/sdk@0.91.1(zod@4.4.3)':
+  '@anthropic-ai/sdk@0.122.0(zod@4.5.2)':
     dependencies:
       json-schema-to-ts: 3.1.1
+      standardwebhooks: 1.1.1
     optionalDependencies:
-      zod: 4.4.3
+      zod: 4.5.2
+
+  '@anthropic-ai/sdk@0.91.1(zod@4.5.2)':
+    dependencies:
+      json-schema-to-ts: 3.1.1
+    optionalDependencies:
+      zod: 4.5.2
 
   '@aws-crypto/sha256-browser@5.2.0':
     dependencies:
@@ -5883,14 +5891,14 @@ snapshots:
       '@smithy/types': 4.17.2
       tslib: 2.8.1
 
-  '@aws-sdk/client-bedrock-runtime@3.1119.0':
+  '@aws-sdk/client-bedrock-runtime@3.1121.0':
     dependencies:
       '@aws-sdk/core': 3.977.9
       '@aws-sdk/credential-provider-node': 3.972.81
       '@aws-sdk/eventstream-handler-node': 3.972.34
       '@aws-sdk/middleware-eventstream': 3.972.29
       '@aws-sdk/middleware-websocket': 3.972.52
-      '@aws-sdk/token-providers': 3.1119.0
+      '@aws-sdk/token-providers': 3.1121.0
       '@aws-sdk/types': 3.974.5
       '@smithy/core': 3.33.3
       '@smithy/fetch-http-handler': 5.7.2
@@ -6053,7 +6061,7 @@ snapshots:
       '@smithy/types': 4.17.2
       tslib: 2.8.1
 
-  '@aws-sdk/token-providers@3.1119.0':
+  '@aws-sdk/token-providers@3.1121.0':
     dependencies:
       '@aws-sdk/core': 3.977.9
       '@aws-sdk/nested-clients': 3.997.44
@@ -6471,9 +6479,9 @@ snapshots:
 
   '@drizzle-team/brocli@0.12.0': {}
 
-  '@earendil-works/pi-agent-core@0.80.10(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(ws@8.21.0)(zod@4.4.3)':
+  '@earendil-works/pi-agent-core@0.80.10(@modelcontextprotocol/sdk@1.30.0(zod@4.5.2))(ws@8.21.0)(zod@4.5.2)':
     dependencies:
-      '@earendil-works/pi-ai': 0.80.10(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(ws@8.21.0)(zod@4.4.3)
+      '@earendil-works/pi-ai': 0.80.10(@modelcontextprotocol/sdk@1.30.0(zod@4.5.2))(ws@8.21.0)(zod@4.5.2)
       ignore: 7.0.5
       typebox: 1.1.38
       yaml: 2.9.0
@@ -6485,10 +6493,10 @@ snapshots:
       - ws
       - zod
 
-  '@earendil-works/pi-agent-core@0.84.3(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(ws@8.21.0)(zod@4.4.3)':
+  '@earendil-works/pi-agent-core@0.84.4(@modelcontextprotocol/sdk@1.30.0(zod@4.5.2))(ws@8.21.0)(zod@4.5.2)':
     dependencies:
-      '@earendil-works/pi-ai': 0.84.3(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(ws@8.21.0)(zod@4.4.3)
-      '@earendil-works/pi-telemetry': 0.84.3
+      '@earendil-works/pi-ai': 0.84.4(@modelcontextprotocol/sdk@1.30.0(zod@4.5.2))(ws@8.21.0)(zod@4.5.2)
+      '@earendil-works/pi-telemetry': 0.84.4
       diff: 8.0.4
       ignore: 7.0.5
       typebox: 1.3.7
@@ -6501,17 +6509,17 @@ snapshots:
       - ws
       - zod
 
-  '@earendil-works/pi-ai@0.74.2(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(@opentelemetry/api@1.9.0)(ws@8.21.0)(zod@4.4.3)':
+  '@earendil-works/pi-ai@0.74.2(@modelcontextprotocol/sdk@1.30.0(zod@4.5.2))(@opentelemetry/api@1.9.0)(ws@8.21.0)(zod@4.5.2)':
     dependencies:
-      '@anthropic-ai/sdk': 0.91.1(zod@4.4.3)
-      '@aws-sdk/client-bedrock-runtime': 3.1119.0
-      '@google/genai': 1.52.0(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))
+      '@anthropic-ai/sdk': 0.91.1(zod@4.5.2)
+      '@aws-sdk/client-bedrock-runtime': 3.1121.0
+      '@google/genai': 1.52.0(@modelcontextprotocol/sdk@1.30.0(zod@4.5.2))
       '@mistralai/mistralai': 2.6.4(@opentelemetry/api@1.9.0)
       http-proxy-agent: 7.0.2
       https-proxy-agent: 7.0.6
-      openai: 6.26.0(ws@8.21.0)(zod@4.4.3)
+      openai: 6.26.0(ws@8.21.0)(zod@4.5.2)
       partial-json: 0.1.7
-      typebox: 1.3.19
+      typebox: 1.3.20
     transitivePeerDependencies:
       - '@modelcontextprotocol/sdk'
       - '@opentelemetry/api'
@@ -6524,17 +6532,17 @@ snapshots:
       - ws
       - zod
 
-  '@earendil-works/pi-ai@0.80.10(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(ws@8.21.0)(zod@4.4.3)':
+  '@earendil-works/pi-ai@0.80.10(@modelcontextprotocol/sdk@1.30.0(zod@4.5.2))(ws@8.21.0)(zod@4.5.2)':
     dependencies:
-      '@anthropic-ai/sdk': 0.91.1(zod@4.4.3)
+      '@anthropic-ai/sdk': 0.91.1(zod@4.5.2)
       '@aws-sdk/client-bedrock-runtime': 3.1048.0
-      '@google/genai': 1.52.0(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))
+      '@google/genai': 1.52.0(@modelcontextprotocol/sdk@1.30.0(zod@4.5.2))
       '@mistralai/mistralai': 2.2.6(@opentelemetry/api@1.9.0)
       '@opentelemetry/api': 1.9.0
       '@smithy/node-http-handler': 4.7.3
       http-proxy-agent: 7.0.2
       https-proxy-agent: 7.0.6
-      openai: 6.26.0(ws@8.21.0)(zod@4.4.3)
+      openai: 6.26.0(ws@8.21.0)(zod@4.5.2)
       partial-json: 0.1.7
       typebox: 1.1.38
     transitivePeerDependencies:
@@ -6545,16 +6553,16 @@ snapshots:
       - ws
       - zod
 
-  '@earendil-works/pi-ai@0.84.3(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(ws@8.21.0)(zod@4.4.3)':
+  '@earendil-works/pi-ai@0.84.3(@modelcontextprotocol/sdk@1.30.0(zod@4.5.2))(ws@8.21.0)(zod@4.5.2)':
     dependencies:
-      '@anthropic-ai/sdk': 0.91.1(zod@4.4.3)
+      '@anthropic-ai/sdk': 0.91.1(zod@4.5.2)
       '@aws-sdk/client-bedrock-runtime': 3.1048.0
-      '@earendil-works/pi-telemetry': 0.84.3
-      '@google/genai': 1.52.0(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))
+      '@earendil-works/pi-telemetry': 0.84.4
+      '@google/genai': 1.52.0(@modelcontextprotocol/sdk@1.30.0(zod@4.5.2))
       '@smithy/node-http-handler': 4.7.3
       http-proxy-agent: 7.0.2
       https-proxy-agent: 7.0.6
-      openai: 6.40.0(ws@8.21.0)(zod@4.4.3)
+      openai: 6.40.0(ws@8.21.0)(zod@4.5.2)
       partial-json: 0.1.7
       typebox: 1.3.7
     transitivePeerDependencies:
@@ -6565,14 +6573,34 @@ snapshots:
       - ws
       - zod
 
-  '@earendil-works/pi-client@0.84.3':
+  '@earendil-works/pi-ai@0.84.4(@modelcontextprotocol/sdk@1.30.0(zod@4.5.2))(ws@8.21.0)(zod@4.5.2)':
     dependencies:
-      '@earendil-works/pi-protocol': 0.84.3
+      '@anthropic-ai/sdk': 0.91.1(zod@4.5.2)
+      '@aws-sdk/client-bedrock-runtime': 3.1048.0
+      '@earendil-works/pi-telemetry': 0.84.4
+      '@google/genai': 1.52.0(@modelcontextprotocol/sdk@1.30.0(zod@4.5.2))
+      '@smithy/node-http-handler': 4.7.3
+      http-proxy-agent: 7.0.2
+      https-proxy-agent: 7.0.6
+      openai: 6.40.0(ws@8.21.0)(zod@4.5.2)
+      partial-json: 0.1.7
+      typebox: 1.3.7
+    transitivePeerDependencies:
+      - '@modelcontextprotocol/sdk'
+      - bufferutil
+      - supports-color
+      - utf-8-validate
+      - ws
+      - zod
 
-  '@earendil-works/pi-coding-agent@0.80.10(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(ws@8.21.0)(zod@4.4.3)':
+  '@earendil-works/pi-client@0.84.4':
     dependencies:
-      '@earendil-works/pi-agent-core': 0.80.10(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(ws@8.21.0)(zod@4.4.3)
-      '@earendil-works/pi-ai': 0.80.10(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(ws@8.21.0)(zod@4.4.3)
+      '@earendil-works/pi-protocol': 0.84.4
+
+  '@earendil-works/pi-coding-agent@0.80.10(@modelcontextprotocol/sdk@1.30.0(zod@4.5.2))(ws@8.21.0)(zod@4.5.2)':
+    dependencies:
+      '@earendil-works/pi-agent-core': 0.80.10(@modelcontextprotocol/sdk@1.30.0(zod@4.5.2))(ws@8.21.0)(zod@4.5.2)
+      '@earendil-works/pi-ai': 0.80.10(@modelcontextprotocol/sdk@1.30.0(zod@4.5.2))(ws@8.21.0)(zod@4.5.2)
       '@earendil-works/pi-tui': 0.80.10
       '@silvia-odwyer/photon-node': 0.3.4
       chalk: 5.6.2
@@ -6599,13 +6627,13 @@ snapshots:
       - ws
       - zod
 
-  '@earendil-works/pi-coding-agent@0.84.3(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(ws@8.21.0)(zod@4.4.3)':
+  '@earendil-works/pi-coding-agent@0.84.4(@modelcontextprotocol/sdk@1.30.0(zod@4.5.2))(ws@8.21.0)(zod@4.5.2)':
     dependencies:
-      '@earendil-works/pi-agent-core': 0.84.3(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(ws@8.21.0)(zod@4.4.3)
-      '@earendil-works/pi-ai': 0.84.3(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(ws@8.21.0)(zod@4.4.3)
-      '@earendil-works/pi-client': 0.84.3
-      '@earendil-works/pi-protocol': 0.84.3
-      '@earendil-works/pi-tui': 0.84.3
+      '@earendil-works/pi-agent-core': 0.84.4(@modelcontextprotocol/sdk@1.30.0(zod@4.5.2))(ws@8.21.0)(zod@4.5.2)
+      '@earendil-works/pi-ai': 0.84.4(@modelcontextprotocol/sdk@1.30.0(zod@4.5.2))(ws@8.21.0)(zod@4.5.2)
+      '@earendil-works/pi-client': 0.84.4
+      '@earendil-works/pi-protocol': 0.84.4
+      '@earendil-works/pi-tui': 0.84.4
       '@silvia-odwyer/photon-node': 0.3.4
       chalk: 5.6.2
       cross-spawn: 7.0.6
@@ -6631,18 +6659,18 @@ snapshots:
       - ws
       - zod
 
-  '@earendil-works/pi-protocol@0.84.3':
+  '@earendil-works/pi-protocol@0.84.4':
     dependencies:
       typebox: 1.3.7
 
-  '@earendil-works/pi-telemetry@0.84.3': {}
+  '@earendil-works/pi-telemetry@0.84.4': {}
 
   '@earendil-works/pi-tui@0.80.10':
     dependencies:
       get-east-asian-width: 1.6.0
       marked: 18.0.5
 
-  '@earendil-works/pi-tui@0.84.3':
+  '@earendil-works/pi-tui@0.84.4':
     dependencies:
       get-east-asian-width: 1.6.0
       marked: 18.0.5
@@ -6885,14 +6913,14 @@ snapshots:
 
   '@fontsource-variable/inter@5.3.0': {}
 
-  '@google/genai@1.52.0(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))':
+  '@google/genai@1.52.0(@modelcontextprotocol/sdk@1.30.0(zod@4.5.2))':
     dependencies:
       google-auth-library: 10.9.1
       p-retry: 4.6.2
       protobufjs: 7.6.6
       ws: 8.21.3
     optionalDependencies:
-      '@modelcontextprotocol/sdk': 1.30.0(zod@4.4.3)
+      '@modelcontextprotocol/sdk': 1.30.0(zod@4.5.2)
     transitivePeerDependencies:
       - bufferutil
       - supports-color
@@ -6919,17 +6947,17 @@ snapshots:
     optionalDependencies:
       '@types/node': 26.4.0
 
-  '@joshwooding/vite-plugin-react-docgen-typescript@0.7.0(typescript@7.0.2)(vite@8.2.2(@types/node@26.4.0)(jiti@2.7.0)(yaml@2.9.0))':
+  '@joshwooding/vite-plugin-react-docgen-typescript@0.7.0(typescript@7.0.2)(vite@8.2.2(@types/node@26.4.0)(esbuild@0.28.2)(jiti@2.7.0)(yaml@2.9.0))':
     dependencies:
       glob: 13.0.6
       react-docgen-typescript: 2.4.0(typescript@7.0.2)
-      vite: 8.2.2(@types/node@26.4.0)(jiti@2.7.0)(yaml@2.9.0)
+      vite: 8.2.2(@types/node@26.4.0)(esbuild@0.28.2)(jiti@2.7.0)(yaml@2.9.0)
     optionalDependencies:
       typescript: 7.0.2
 
   '@jridgewell/gen-mapping@0.3.13':
     dependencies:
-      '@jridgewell/sourcemap-codec': 1.5.5
+      '@jridgewell/sourcemap-codec': 1.6.0
       '@jridgewell/trace-mapping': 0.3.31
 
   '@jridgewell/remapping@2.3.5':
@@ -6939,12 +6967,12 @@ snapshots:
 
   '@jridgewell/resolve-uri@3.1.2': {}
 
-  '@jridgewell/sourcemap-codec@1.5.5': {}
+  '@jridgewell/sourcemap-codec@1.6.0': {}
 
   '@jridgewell/trace-mapping@0.3.31':
     dependencies:
       '@jridgewell/resolve-uri': 3.1.2
-      '@jridgewell/sourcemap-codec': 1.5.5
+      '@jridgewell/sourcemap-codec': 1.6.0
 
   '@js-temporal/polyfill@0.5.1':
     dependencies:
@@ -7244,8 +7272,8 @@ snapshots:
     dependencies:
       '@opentelemetry/semantic-conventions': 1.43.0
       ws: 8.21.3
-      zod: 4.4.3
-      zod-to-json-schema: 3.25.2(zod@4.4.3)
+      zod: 4.5.2
+      zod-to-json-schema: 3.25.2(zod@4.5.2)
     optionalDependencies:
       '@opentelemetry/api': 1.9.0
     transitivePeerDependencies:
@@ -7256,8 +7284,8 @@ snapshots:
     dependencies:
       '@opentelemetry/semantic-conventions': 1.43.0
       ws: 8.21.3
-      zod: 4.4.3
-      zod-to-json-schema: 3.25.2(zod@4.4.3)
+      zod: 4.5.2
+      zod-to-json-schema: 3.25.2(zod@4.5.2)
     optionalDependencies:
       '@opentelemetry/api': 1.9.0
     transitivePeerDependencies:
@@ -7272,22 +7300,22 @@ snapshots:
       eventsource-parser: 3.1.1
       jose: 6.2.10
       pkce-challenge: 5.0.1
-      zod: 4.4.3
+      zod: 4.5.2
 
   '@modelcontextprotocol/core@2.0.0-beta.5':
     dependencies:
-      zod: 4.4.3
+      zod: 4.5.2
 
-  '@modelcontextprotocol/ext-apps@1.7.5(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(zod@4.4.3)':
+  '@modelcontextprotocol/ext-apps@1.7.5(@modelcontextprotocol/sdk@1.30.0(zod@4.5.2))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(zod@4.5.2)':
     dependencies:
-      '@modelcontextprotocol/sdk': 1.30.0(zod@4.4.3)
+      '@modelcontextprotocol/sdk': 1.30.0(zod@4.5.2)
       '@standard-schema/spec': 1.1.0
-      zod: 4.4.3
+      zod: 4.5.2
     optionalDependencies:
       react: 19.2.8
       react-dom: 19.2.8(react@19.2.8)
 
-  '@modelcontextprotocol/sdk@1.30.0(zod@4.4.3)':
+  '@modelcontextprotocol/sdk@1.30.0(zod@4.5.2)':
     dependencies:
       '@hono/node-server': 2.1.1(hono@4.13.5)
       ajv: 8.20.0
@@ -7298,14 +7326,14 @@ snapshots:
       eventsource: 3.0.7
       eventsource-parser: 3.1.1
       express: 5.2.1
-      express-rate-limit: 8.6.2(express@5.2.1)
+      express-rate-limit: 8.7.0(express@5.2.1)
       hono: 4.13.5
       jose: 6.2.10
       json-schema-typed: 8.0.2
       pkce-challenge: 5.0.1
       raw-body: 3.0.2
-      zod: 4.4.3
-      zod-to-json-schema: 3.25.2(zod@4.4.3)
+      zod: 4.5.2
+      zod-to-json-schema: 3.25.2(zod@4.5.2)
     transitivePeerDependencies:
       - supports-color
 
@@ -7351,7 +7379,7 @@ snapshots:
   '@nodelib/fs.walk@1.2.8':
     dependencies:
       '@nodelib/fs.scandir': 2.1.5
-      fastq: 1.20.1
+      fastq: 1.20.3
 
   '@opentelemetry/api@1.9.0': {}
 
@@ -7433,13 +7461,13 @@ snapshots:
     optionalDependencies:
       '@opentelemetry/api': 1.9.0
 
-  '@orpc/tanstack-query@2.0.0-beta.21(@opentelemetry/api@1.9.0)(@tanstack/query-core@5.102.7)':
+  '@orpc/tanstack-query@2.0.0-beta.21(@opentelemetry/api@1.9.0)(@tanstack/query-core@5.102.8)':
     dependencies:
       '@orpc/client': 2.0.0-beta.21(@opentelemetry/api@1.9.0)
       '@orpc/contract': 2.0.0-beta.21(@opentelemetry/api@1.9.0)
       '@orpc/openapi': 2.0.0-beta.21(@opentelemetry/api@1.9.0)
       '@orpc/shared': 2.0.0-beta.21(@opentelemetry/api@1.9.0)
-      '@tanstack/query-core': 5.102.7
+      '@tanstack/query-core': 5.102.8
     transitivePeerDependencies:
       - '@opentelemetry/api'
       - '@scalar/api-reference'
@@ -7576,10 +7604,10 @@ snapshots:
   '@oxc-resolver/binding-win32-x64-msvc@11.21.2':
     optional: true
 
-  '@pierre/diffs@1.3.6(patch_hash=31795077ef229d3de37b63f22529a58b7df76bd4ae397647a98b36a86a81ba86)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)':
+  '@pierre/diffs@1.3.6(patch_hash=31795077ef229d3de37b63f22529a58b7df76bd4ae397647a98b36a86a81ba86)(@shikijs/themes@4.4.3)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)':
     dependencies:
       '@pierre/theme': 2.0.0
-      '@pierre/theming': 1.0.1(@pierre/theme@2.0.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(shiki@4.4.3)
+      '@pierre/theming': 1.0.1(@pierre/theme@2.0.0)(@shikijs/themes@4.4.3)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(shiki@4.4.3)
       '@shikijs/transformers': 4.4.3
       diff: 9.0.0
       hast-util-to-html: 9.0.5
@@ -7592,23 +7620,25 @@ snapshots:
 
   '@pierre/theme@2.0.0': {}
 
-  '@pierre/theming@1.0.0(@pierre/theme@2.0.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(shiki@4.4.3)':
+  '@pierre/theming@1.0.0(@pierre/theme@2.0.0)(@shikijs/themes@4.4.3)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(shiki@4.4.3)':
     optionalDependencies:
       '@pierre/theme': 2.0.0
+      '@shikijs/themes': 4.4.3
       react: 19.2.8
       react-dom: 19.2.8(react@19.2.8)
       shiki: 4.4.3
 
-  '@pierre/theming@1.0.1(@pierre/theme@2.0.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(shiki@4.4.3)':
+  '@pierre/theming@1.0.1(@pierre/theme@2.0.0)(@shikijs/themes@4.4.3)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(shiki@4.4.3)':
     optionalDependencies:
       '@pierre/theme': 2.0.0
+      '@shikijs/themes': 4.4.3
       react: 19.2.8
       react-dom: 19.2.8(react@19.2.8)
       shiki: 4.4.3
 
-  '@pierre/trees@1.0.0-beta.6(@pierre/theme@2.0.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(shiki@4.4.3)':
+  '@pierre/trees@1.0.0-beta.6(@pierre/theme@2.0.0)(@shikijs/themes@4.4.3)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(shiki@4.4.3)':
     dependencies:
-      '@pierre/theming': 1.0.0(@pierre/theme@2.0.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(shiki@4.4.3)
+      '@pierre/theming': 1.0.0(@pierre/theme@2.0.0)(@shikijs/themes@4.4.3)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(shiki@4.4.3)
       preact: 11.0.0-beta.0
       preact-render-to-string: 6.6.5(preact@11.0.0-beta.0)
       react: 19.2.8
@@ -7827,23 +7857,24 @@ snapshots:
       axe-core: 4.13.0
       storybook: 10.5.10(@types/react@19.2.18)(prettier@3.9.6)(react@19.2.8)
 
-  '@storybook/builder-vite@10.5.10(storybook@10.5.10(@types/react@19.2.18)(prettier@3.9.6)(react@19.2.8))(vite@8.2.2(@types/node@26.4.0)(jiti@2.7.0)(yaml@2.9.0))':
+  '@storybook/builder-vite@10.5.10(esbuild@0.28.2)(storybook@10.5.10(@types/react@19.2.18)(prettier@3.9.6)(react@19.2.8))(vite@8.2.2(@types/node@26.4.0)(esbuild@0.28.2)(jiti@2.7.0)(yaml@2.9.0))':
     dependencies:
-      '@storybook/csf-plugin': 10.5.10(storybook@10.5.10(@types/react@19.2.18)(prettier@3.9.6)(react@19.2.8))(vite@8.2.2(@types/node@26.4.0)(jiti@2.7.0)(yaml@2.9.0))
+      '@storybook/csf-plugin': 10.5.10(esbuild@0.28.2)(storybook@10.5.10(@types/react@19.2.18)(prettier@3.9.6)(react@19.2.8))(vite@8.2.2(@types/node@26.4.0)(esbuild@0.28.2)(jiti@2.7.0)(yaml@2.9.0))
       storybook: 10.5.10(@types/react@19.2.18)(prettier@3.9.6)(react@19.2.8)
       ts-dedent: 2.3.0
-      vite: 8.2.2(@types/node@26.4.0)(jiti@2.7.0)(yaml@2.9.0)
+      vite: 8.2.2(@types/node@26.4.0)(esbuild@0.28.2)(jiti@2.7.0)(yaml@2.9.0)
     transitivePeerDependencies:
       - esbuild
       - rollup
       - webpack
 
-  '@storybook/csf-plugin@10.5.10(storybook@10.5.10(@types/react@19.2.18)(prettier@3.9.6)(react@19.2.8))(vite@8.2.2(@types/node@26.4.0)(jiti@2.7.0)(yaml@2.9.0))':
+  '@storybook/csf-plugin@10.5.10(esbuild@0.28.2)(storybook@10.5.10(@types/react@19.2.18)(prettier@3.9.6)(react@19.2.8))(vite@8.2.2(@types/node@26.4.0)(esbuild@0.28.2)(jiti@2.7.0)(yaml@2.9.0))':
     dependencies:
       storybook: 10.5.10(@types/react@19.2.18)(prettier@3.9.6)(react@19.2.8)
       unplugin: 2.3.11
     optionalDependencies:
-      vite: 8.2.2(@types/node@26.4.0)(jiti@2.7.0)(yaml@2.9.0)
+      esbuild: 0.28.2
+      vite: 8.2.2(@types/node@26.4.0)(esbuild@0.28.2)(jiti@2.7.0)(yaml@2.9.0)
 
   '@storybook/global@5.0.0': {}
 
@@ -7860,11 +7891,11 @@ snapshots:
       '@types/react': 19.2.18
       '@types/react-dom': 19.2.5(@types/react@19.2.18)
 
-  '@storybook/react-vite@10.5.10(@types/react-dom@19.2.5(@types/react@19.2.18))(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(storybook@10.5.10(@types/react@19.2.18)(prettier@3.9.6)(react@19.2.8))(typescript@7.0.2)(vite@8.2.2(@types/node@26.4.0)(jiti@2.7.0)(yaml@2.9.0))':
+  '@storybook/react-vite@10.5.10(@types/react-dom@19.2.5(@types/react@19.2.18))(@types/react@19.2.18)(esbuild@0.28.2)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(storybook@10.5.10(@types/react@19.2.18)(prettier@3.9.6)(react@19.2.8))(typescript@7.0.2)(vite@8.2.2(@types/node@26.4.0)(esbuild@0.28.2)(jiti@2.7.0)(yaml@2.9.0))':
     dependencies:
-      '@joshwooding/vite-plugin-react-docgen-typescript': 0.7.0(typescript@7.0.2)(vite@8.2.2(@types/node@26.4.0)(jiti@2.7.0)(yaml@2.9.0))
+      '@joshwooding/vite-plugin-react-docgen-typescript': 0.7.0(typescript@7.0.2)(vite@8.2.2(@types/node@26.4.0)(esbuild@0.28.2)(jiti@2.7.0)(yaml@2.9.0))
       '@rollup/pluginutils': 5.4.0
-      '@storybook/builder-vite': 10.5.10(storybook@10.5.10(@types/react@19.2.18)(prettier@3.9.6)(react@19.2.8))(vite@8.2.2(@types/node@26.4.0)(jiti@2.7.0)(yaml@2.9.0))
+      '@storybook/builder-vite': 10.5.10(esbuild@0.28.2)(storybook@10.5.10(@types/react@19.2.18)(prettier@3.9.6)(react@19.2.8))(vite@8.2.2(@types/node@26.4.0)(esbuild@0.28.2)(jiti@2.7.0)(yaml@2.9.0))
       '@storybook/react': 10.5.10(@types/react-dom@19.2.5(@types/react@19.2.18))(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(storybook@10.5.10(@types/react@19.2.18)(prettier@3.9.6)(react@19.2.8))(typescript@7.0.2)
       empathic: 2.0.1
       magic-string: 0.30.21
@@ -7874,7 +7905,7 @@ snapshots:
       resolve: 1.22.12
       storybook: 10.5.10(@types/react@19.2.18)(prettier@3.9.6)(react@19.2.8)
       tsconfig-paths: 4.2.0
-      vite: 8.2.2(@types/node@26.4.0)(jiti@2.7.0)(yaml@2.9.0)
+      vite: 8.2.2(@types/node@26.4.0)(esbuild@0.28.2)(jiti@2.7.0)(yaml@2.9.0)
     optionalDependencies:
       typescript: 7.0.2
     transitivePeerDependencies:
@@ -7962,20 +7993,20 @@ snapshots:
       '@tailwindcss/oxide-win32-arm64-msvc': 4.3.3
       '@tailwindcss/oxide-win32-x64-msvc': 4.3.3
 
-  '@tailwindcss/vite@4.3.3(vite@8.2.2(@types/node@26.4.0)(jiti@2.7.0)(yaml@2.9.0))':
+  '@tailwindcss/vite@4.3.3(vite@8.2.2(@types/node@26.4.0)(esbuild@0.28.2)(jiti@2.7.0)(yaml@2.9.0))':
     dependencies:
       '@tailwindcss/node': 4.3.3
       '@tailwindcss/oxide': 4.3.3
       tailwindcss: 4.3.3
-      vite: 8.2.2(@types/node@26.4.0)(jiti@2.7.0)(yaml@2.9.0)
+      vite: 8.2.2(@types/node@26.4.0)(esbuild@0.28.2)(jiti@2.7.0)(yaml@2.9.0)
 
   '@tanstack/history@1.162.1': {}
 
-  '@tanstack/query-core@5.102.7': {}
+  '@tanstack/query-core@5.102.8': {}
 
-  '@tanstack/react-query@5.102.7(react@19.2.8)':
+  '@tanstack/react-query@5.102.8(react@19.2.8)':
     dependencies:
-      '@tanstack/query-core': 5.102.7
+      '@tanstack/query-core': 5.102.8
       react: 19.2.8
 
   '@tanstack/react-router@1.170.32(react-dom@19.2.8(react@19.2.8))(react@19.2.8)':
@@ -7983,7 +8014,7 @@ snapshots:
       '@tanstack/history': 1.162.1
       '@tanstack/react-store': 0.9.3(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       '@tanstack/router-core': 1.171.27
-      isbot: 5.2.1
+      isbot: 5.2.2
       react: 19.2.8
       react-dom: 19.2.8(react@19.2.8)
 
@@ -8018,11 +8049,11 @@ snapshots:
       jiti: 2.7.0
       magic-string: 0.30.21
       prettier: 3.9.6
-      zod: 4.4.3
+      zod: 4.5.2
     transitivePeerDependencies:
       - supports-color
 
-  '@tanstack/router-plugin@1.168.35(@tanstack/react-router@1.170.32(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(vite@8.2.2(@types/node@26.4.0)(jiti@2.7.0)(yaml@2.9.0))':
+  '@tanstack/router-plugin@1.168.35(@tanstack/react-router@1.170.32(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(esbuild@0.28.2)(rolldown@1.2.6)(vite@8.2.2(@types/node@26.4.0)(esbuild@0.28.2)(jiti@2.7.0)(yaml@2.9.0))':
     dependencies:
       '@babel/core': 7.29.7
       '@babel/template': 7.29.7
@@ -8031,11 +8062,11 @@ snapshots:
       '@tanstack/router-generator': 1.167.33
       '@tanstack/router-utils': 1.162.2
       chokidar: 5.0.0
-      unplugin: 3.3.0(vite@8.2.2(@types/node@26.4.0)(jiti@2.7.0)(yaml@2.9.0))
-      zod: 4.4.3
+      unplugin: 3.3.0(esbuild@0.28.2)(rolldown@1.2.6)(vite@8.2.2(@types/node@26.4.0)(esbuild@0.28.2)(jiti@2.7.0)(yaml@2.9.0))
+      zod: 4.5.2
     optionalDependencies:
       '@tanstack/react-router': 1.170.32(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
-      vite: 8.2.2(@types/node@26.4.0)(jiti@2.7.0)(yaml@2.9.0)
+      vite: 8.2.2(@types/node@26.4.0)(esbuild@0.28.2)(jiti@2.7.0)(yaml@2.9.0)
     transitivePeerDependencies:
       - '@farmfe/core'
       - '@rspack/core'
@@ -8327,10 +8358,10 @@ snapshots:
 
   '@vercel/oidc@3.2.0': {}
 
-  '@vitejs/plugin-react@6.1.0(vite@8.2.2(@types/node@26.4.0)(jiti@2.7.0)(yaml@2.9.0))':
+  '@vitejs/plugin-react@6.1.1(vite@8.2.2(@types/node@26.4.0)(esbuild@0.28.2)(jiti@2.7.0)(yaml@2.9.0))':
     dependencies:
       '@rolldown/pluginutils': 1.0.1
-      vite: 8.2.2(@types/node@26.4.0)(jiti@2.7.0)(yaml@2.9.0)
+      vite: 8.2.2(@types/node@26.4.0)(esbuild@0.28.2)(jiti@2.7.0)(yaml@2.9.0)
 
   '@vitest/expect@3.2.4':
     dependencies:
@@ -8367,7 +8398,7 @@ snapshots:
 
   agent-base@7.1.4: {}
 
-  agentation@https://codeload.github.com/fdarian/agentation/tar.gz/f19e8ff926c45ecd459cbaa5e0a8f4660128c154#path:package(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(vite@8.2.2(@types/node@26.4.0)(jiti@2.7.0)(yaml@2.9.0)):
+  agentation@https://codeload.github.com/fdarian/agentation/tar.gz/f19e8ff926c45ecd459cbaa5e0a8f4660128c154#path:package(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(vite@8.2.2(@types/node@26.4.0)(esbuild@0.28.2)(jiti@2.7.0)(yaml@2.9.0)):
     dependencies:
       '@babel/parser': 8.0.4
       '@babel/traverse': 8.0.4
@@ -8376,14 +8407,14 @@ snapshots:
     optionalDependencies:
       react: 19.2.8
       react-dom: 19.2.8(react@19.2.8)
-      vite: 8.2.2(@types/node@26.4.0)(jiti@2.7.0)(yaml@2.9.0)
+      vite: 8.2.2(@types/node@26.4.0)(esbuild@0.28.2)(jiti@2.7.0)(yaml@2.9.0)
 
-  ai@7.0.83(zod@4.4.3):
+  ai@7.0.83(zod@4.5.2):
     dependencies:
-      '@ai-sdk/gateway': 4.0.67(zod@4.4.3)
+      '@ai-sdk/gateway': 4.0.67(zod@4.5.2)
       '@ai-sdk/provider': 4.0.8
-      '@ai-sdk/provider-utils': 5.0.32(zod@4.4.3)
-      zod: 4.4.3
+      '@ai-sdk/provider-utils': 5.0.32(zod@4.5.2)
+      zod: 4.5.2
 
   ajv-formats@3.0.1(ajv@8.20.0):
     optionalDependencies:
@@ -8445,7 +8476,7 @@ snapshots:
 
   base64-js@1.5.1: {}
 
-  baseline-browser-mapping@2.11.19: {}
+  baseline-browser-mapping@2.11.20: {}
 
   better-path-resolve@1.0.0:
     dependencies:
@@ -8479,11 +8510,11 @@ snapshots:
 
   browserslist@4.28.8:
     dependencies:
-      baseline-browser-mapping: 2.11.19
+      baseline-browser-mapping: 2.11.20
       caniuse-lite: 1.0.30001810
-      electron-to-chromium: 1.5.415
-      node-releases: 2.0.53
-      update-browserslist-db: 1.3.1(browserslist@4.28.8)
+      electron-to-chromium: 1.5.416
+      node-releases: 2.0.54
+      update-browserslist-db: 1.3.2(browserslist@4.28.8)
 
   buffer-equal-constant-time@1.0.1: {}
 
@@ -8623,13 +8654,13 @@ snapshots:
 
   dequal@2.0.3: {}
 
-  deskkit@https://codeload.github.com/fdarian/deskkit/tar.gz/e102596ef69da78fefe4ba6cfb0f27a9a376cdc4(@effect/platform-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(@effect/sql-sqlite-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(drizzle-orm@1.0.0-rc.4(@effect/sql-sqlite-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(@opentelemetry/api@1.9.0)(bun-types@1.3.14)(effect@4.0.0-rc.112)(typebox@1.3.19)(zod@4.4.3))(effect@4.0.0-rc.112):
+  deskkit@https://codeload.github.com/fdarian/deskkit/tar.gz/e102596ef69da78fefe4ba6cfb0f27a9a376cdc4(@effect/platform-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(@effect/sql-sqlite-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(drizzle-orm@1.0.0-rc.5-169397b(@effect/sql-sqlite-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(effect@4.0.0-rc.112))(effect@4.0.0-rc.112):
     dependencies:
       '@effect/platform-bun': 4.0.0-rc.112(effect@4.0.0-rc.112)
       effect: 4.0.0-rc.112
     optionalDependencies:
       '@effect/sql-sqlite-bun': 4.0.0-rc.112(effect@4.0.0-rc.112)
-      drizzle-orm: 1.0.0-rc.4(@effect/sql-sqlite-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(@opentelemetry/api@1.9.0)(bun-types@1.3.14)(effect@4.0.0-rc.112)(typebox@1.3.19)(zod@4.4.3)
+      drizzle-orm: 1.0.0-rc.5-169397b(@effect/sql-sqlite-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(@opentelemetry/api@1.9.0)(bun-types@1.4.0)(effect@4.0.0-rc.112)(typebox@1.3.20)(zod@4.5.2)
 
   detect-indent@6.1.0: {}
 
@@ -8639,13 +8670,13 @@ snapshots:
     dependencies:
       dequal: 2.0.3
 
-  devsess@0.2.0(drizzle-orm@1.0.0-rc.4(@effect/sql-sqlite-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(@opentelemetry/api@1.9.0)(bun-types@1.3.14)(effect@4.0.0-rc.112)(typebox@1.3.19)(zod@4.4.3))(effect@4.0.0-rc.112):
+  devsess@0.2.0(drizzle-orm@1.0.0-rc.5-169397b(@effect/sql-sqlite-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(@opentelemetry/api@1.9.0)(bun-types@1.4.0)(effect@4.0.0-rc.112)(typebox@1.3.20)(zod@4.5.2))(effect@4.0.0-rc.112):
     dependencies:
       effect: 4.0.0-rc.112
       get-port: 7.2.0
       random-word-slugs: 0.1.7
     optionalDependencies:
-      drizzle-orm: 1.0.0-rc.4(@effect/sql-sqlite-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(@opentelemetry/api@1.9.0)(bun-types@1.3.14)(effect@4.0.0-rc.112)(typebox@1.3.19)(zod@4.4.3)
+      drizzle-orm: 1.0.0-rc.5-169397b(@effect/sql-sqlite-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(@opentelemetry/api@1.9.0)(bun-types@1.4.0)(effect@4.0.0-rc.112)(typebox@1.3.20)(zod@4.5.2)
 
   diff@8.0.4: {}
 
@@ -8663,23 +8694,23 @@ snapshots:
 
   dom-accessibility-api@0.6.3: {}
 
-  drizzle-kit@1.0.0-rc.4(drizzle-orm@1.0.0-rc.4(@effect/sql-sqlite-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(@opentelemetry/api@1.9.0)(bun-types@1.3.14)(effect@4.0.0-rc.112)(typebox@1.3.19)(zod@4.4.3)):
+  drizzle-kit@1.0.0-rc.4(drizzle-orm@1.0.0-rc.5-169397b(effect@4.0.0-rc.112)):
     dependencies:
       '@drizzle-team/brocli': 0.12.0
       '@js-temporal/polyfill': 0.5.1
-      drizzle-orm: 1.0.0-rc.4(@effect/sql-sqlite-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(@opentelemetry/api@1.9.0)(bun-types@1.3.14)(effect@4.0.0-rc.112)(typebox@1.3.19)(zod@4.4.3)
+      drizzle-orm: 1.0.0-rc.5-169397b(@effect/sql-sqlite-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(@opentelemetry/api@1.9.0)(bun-types@1.4.0)(effect@4.0.0-rc.112)(typebox@1.3.20)(zod@4.5.2)
       esbuild: 0.25.12
       get-tsconfig: 4.14.3
       jiti: 2.7.0
 
-  drizzle-orm@1.0.0-rc.4(@effect/sql-sqlite-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(@opentelemetry/api@1.9.0)(bun-types@1.3.14)(effect@4.0.0-rc.112)(typebox@1.3.19)(zod@4.4.3):
+  drizzle-orm@1.0.0-rc.5-169397b(@effect/sql-sqlite-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(@opentelemetry/api@1.9.0)(bun-types@1.4.0)(effect@4.0.0-rc.112)(typebox@1.3.20)(zod@4.5.2):
     optionalDependencies:
       '@effect/sql-sqlite-bun': 4.0.0-rc.112(effect@4.0.0-rc.112)
       '@opentelemetry/api': 1.9.0
-      bun-types: 1.3.14
+      bun-types: 1.4.0
       effect: 4.0.0-rc.112
-      typebox: 1.3.19
-      zod: 4.4.3
+      typebox: 1.3.20
+      zod: 4.5.2
 
   dunder-proto@1.0.1:
     dependencies:
@@ -8696,9 +8727,9 @@ snapshots:
   effect@4.0.0-rc.112:
     dependencies:
       fast-check: 4.9.0
-      msgpackr: 2.0.6
+      msgpackr: 2.1.0
 
-  electron-to-chromium@1.5.415: {}
+  electron-to-chromium@1.5.416: {}
 
   emoji-regex@8.0.0: {}
 
@@ -8802,11 +8833,11 @@ snapshots:
     dependencies:
       eventsource-parser: 3.1.1
 
-  express-rate-limit@8.6.2(express@5.2.1):
+  express-rate-limit@8.7.0(express@5.2.1):
     dependencies:
       debug: 4.4.3
       express: 5.2.1
-      ip-address: 10.5.0
+      ip-address: 10.7.0
     transitivePeerDependencies:
       - supports-color
 
@@ -8865,7 +8896,7 @@ snapshots:
 
   fast-uri@3.1.6: {}
 
-  fastq@1.20.1:
+  fastq@1.20.3:
     dependencies:
       reusify: 1.1.0
 
@@ -9110,7 +9141,7 @@ snapshots:
 
   inline-style-parser@0.2.7: {}
 
-  ip-address@10.5.0: {}
+  ip-address@10.7.0: {}
 
   ipaddr.js@1.9.1: {}
 
@@ -9159,7 +9190,7 @@ snapshots:
     dependencies:
       is-inside-container: 1.0.0
 
-  isbot@5.2.1: {}
+  isbot@5.2.2: {}
 
   isexe@2.0.0: {}
 
@@ -9348,7 +9379,7 @@ snapshots:
 
   lru_map@0.4.1: {}
 
-  lucide-react@1.34.0(react@19.2.8):
+  lucide-react@1.37.0(react@19.2.8):
     dependencies:
       react: 19.2.8
 
@@ -9356,11 +9387,11 @@ snapshots:
 
   magic-string@0.30.21:
     dependencies:
-      '@jridgewell/sourcemap-codec': 1.5.5
+      '@jridgewell/sourcemap-codec': 1.6.0
 
   magic-string@1.2.3:
     dependencies:
-      '@jridgewell/sourcemap-codec': 1.5.5
+      '@jridgewell/sourcemap-codec': 1.6.0
 
   marked@18.0.5: {}
 
@@ -9645,7 +9676,7 @@ snapshots:
       '@msgpackr-extract/msgpackr-extract-win32-x64': 3.0.4
     optional: true
 
-  msgpackr@2.0.6:
+  msgpackr@2.1.0:
     optionalDependencies:
       msgpackr-extract: 3.0.4
 
@@ -9674,7 +9705,7 @@ snapshots:
       detect-libc: 2.1.2
     optional: true
 
-  node-releases@2.0.53: {}
+  node-releases@2.0.54: {}
 
   object-assign@4.1.1: {}
 
@@ -9705,15 +9736,15 @@ snapshots:
       is-inside-container: 1.0.0
       wsl-utils: 0.1.0
 
-  openai@6.26.0(ws@8.21.0)(zod@4.4.3):
+  openai@6.26.0(ws@8.21.0)(zod@4.5.2):
     optionalDependencies:
       ws: 8.21.0
-      zod: 4.4.3
+      zod: 4.5.2
 
-  openai@6.40.0(ws@8.21.0)(zod@4.4.3):
+  openai@6.40.0(ws@8.21.0)(zod@4.5.2):
     optionalDependencies:
       ws: 8.21.0
-      zod: 4.4.3
+      zod: 4.5.2
 
   outdent@0.5.0: {}
 
@@ -9822,20 +9853,20 @@ snapshots:
 
   pathval@2.0.1: {}
 
-  pi-mcp-adapter@2.12.1(@earendil-works/pi-ai@0.74.2(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(@opentelemetry/api@1.9.0)(ws@8.21.0)(zod@4.4.3))(@earendil-works/pi-tui@0.80.10)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(typebox@1.3.19)(zod@4.4.3):
+  pi-mcp-adapter@2.12.1(@earendil-works/pi-ai@0.74.2(@modelcontextprotocol/sdk@1.30.0(zod@4.5.2))(@opentelemetry/api@1.9.0)(ws@8.21.0)(zod@4.5.2))(@earendil-works/pi-tui@0.84.4)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(typebox@1.3.20)(zod@4.5.2):
     dependencies:
       '@modelcontextprotocol/client': 2.0.0-beta.5
-      '@modelcontextprotocol/ext-apps': 1.7.5(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(zod@4.4.3)
-      '@modelcontextprotocol/sdk': 1.30.0(zod@4.4.3)
+      '@modelcontextprotocol/ext-apps': 1.7.5(@modelcontextprotocol/sdk@1.30.0(zod@4.5.2))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(zod@4.5.2)
+      '@modelcontextprotocol/sdk': 1.30.0(zod@4.5.2)
       cross-spawn: 7.0.6
       open: 10.2.0
       recheck: 4.5.0
       smol-toml: 1.8.0
-      zod: 4.4.3
+      zod: 4.5.2
     optionalDependencies:
-      '@earendil-works/pi-ai': 0.74.2(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(@opentelemetry/api@1.9.0)(ws@8.21.0)(zod@4.4.3)
-      '@earendil-works/pi-tui': 0.80.10
-      typebox: 1.3.19
+      '@earendil-works/pi-ai': 0.74.2(@modelcontextprotocol/sdk@1.30.0(zod@4.5.2))(@opentelemetry/api@1.9.0)(ws@8.21.0)(zod@4.5.2)
+      '@earendil-works/pi-tui': 0.84.4
+      typebox: 1.3.20
     transitivePeerDependencies:
       - '@cfworker/json-schema'
       - react
@@ -10226,7 +10257,7 @@ snapshots:
 
   sprintf-js@1.0.3: {}
 
-  standardwebhooks@1.0.0:
+  standardwebhooks@1.1.1:
     dependencies:
       '@stablelib/base64': 1.0.1
       fast-sha256: 1.3.0
@@ -10372,7 +10403,7 @@ snapshots:
 
   typebox@1.1.38: {}
 
-  typebox@1.3.19: {}
+  typebox@1.3.20: {}
 
   typebox@1.3.7: {}
 
@@ -10453,15 +10484,17 @@ snapshots:
       picomatch: 4.0.7
       webpack-virtual-modules: 0.6.2
 
-  unplugin@3.3.0(vite@8.2.2(@types/node@26.4.0)(jiti@2.7.0)(yaml@2.9.0)):
+  unplugin@3.3.0(esbuild@0.28.2)(rolldown@1.2.6)(vite@8.2.2(@types/node@26.4.0)(esbuild@0.28.2)(jiti@2.7.0)(yaml@2.9.0)):
     dependencies:
       '@jridgewell/remapping': 2.3.5
       picomatch: 4.0.7
       webpack-virtual-modules: 0.6.2
     optionalDependencies:
-      vite: 8.2.2(@types/node@26.4.0)(jiti@2.7.0)(yaml@2.9.0)
+      esbuild: 0.28.2
+      rolldown: 1.2.6
+      vite: 8.2.2(@types/node@26.4.0)(esbuild@0.28.2)(jiti@2.7.0)(yaml@2.9.0)
 
-  update-browserslist-db@1.3.1(browserslist@4.28.8):
+  update-browserslist-db@1.3.2(browserslist@4.28.8):
     dependencies:
       browserslist: 4.28.8
       escalade: 3.2.0
@@ -10485,7 +10518,7 @@ snapshots:
       '@types/unist': 3.0.3
       vfile-message: 4.0.3
 
-  vite@8.2.2(@types/node@26.4.0)(jiti@2.7.0)(yaml@2.9.0):
+  vite@8.2.2(@types/node@26.4.0)(esbuild@0.28.2)(jiti@2.7.0)(yaml@2.9.0):
     dependencies:
       lightningcss: 1.33.0
       picomatch: 4.0.7
@@ -10494,6 +10527,7 @@ snapshots:
       tinyglobby: 0.2.17
     optionalDependencies:
       '@types/node': 26.4.0
+      esbuild: 0.28.2
       fsevents: 2.3.3
       jiti: 2.7.0
       yaml: 2.9.0
@@ -10544,11 +10578,11 @@ snapshots:
     dependencies:
       lib0: 0.2.117
 
-  zod-to-json-schema@3.25.2(zod@4.4.3):
+  zod-to-json-schema@3.25.2(zod@4.5.2):
     dependencies:
-      zod: 4.4.3
+      zod: 4.5.2
 
-  zod@4.4.3: {}
+  zod@4.5.2: {}
 
   zustand@5.0.15(@types/react@19.2.18)(react@19.2.8)(use-sync-external-store@1.6.0(react@19.2.8)):
     optionalDependencies:
