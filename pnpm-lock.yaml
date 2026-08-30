@@ -117,7 +117,7 @@ catalogs:
       specifier: 4.0.0-rc.112
       version: 4.0.0-rc.112
 
-packageExtensionsChecksum: sha256-/uEQyyopQQgaDgi9VCyPI1DkHURKOZvr1eqH/L7v4JU=
+packageExtensionsChecksum: sha256-OJjli7Jt03re7jCpqmTDveZ0wD7HAwvpOoiVc5uWe1E=
 
 patchedDependencies:
   '@ai-sdk/harness-claude-code@1.0.94': 19be27a44d7e5dfeb3c0ca1a61ff5f5cb8dcf407f87dd44ac77dfab69d95e63a
@@ -219,10 +219,10 @@ importers:
         version: 2.0.0-beta.21(@opentelemetry/api@1.9.0)(@tanstack/query-core@5.102.8)
       '@pierre/diffs':
         specifier: 1.3.6
-        version: 1.3.6(patch_hash=31795077ef229d3de37b63f22529a58b7df76bd4ae397647a98b36a86a81ba86)(@shikijs/themes@4.4.3)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+        version: 1.3.6(patch_hash=31795077ef229d3de37b63f22529a58b7df76bd4ae397647a98b36a86a81ba86)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       '@pierre/trees':
         specifier: 1.0.0-beta.6
-        version: 1.0.0-beta.6(@pierre/theme@2.0.0)(@shikijs/themes@4.4.3)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(shiki@4.4.3)
+        version: 1.0.0-beta.6(@pierre/theme@2.0.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(shiki@4.4.3)
       '@repo/bin-resolver':
         specifier: workspace:*
         version: link:../../packages/bin-resolver
@@ -279,7 +279,7 @@ importers:
         version: 2.1.1
       deskkit:
         specifier: github:fdarian/deskkit
-        version: https://codeload.github.com/fdarian/deskkit/tar.gz/e102596ef69da78fefe4ba6cfb0f27a9a376cdc4(@effect/platform-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(@effect/sql-sqlite-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(drizzle-orm@1.0.0-rc.5-169397b(@effect/sql-sqlite-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(effect@4.0.0-rc.112))(effect@4.0.0-rc.112)
+        version: https://codeload.github.com/fdarian/deskkit/tar.gz/e102596ef69da78fefe4ba6cfb0f27a9a376cdc4(@effect/platform-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(@effect/sql-sqlite-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(drizzle-orm@1.0.0-rc.5-169397b(@effect/sql-sqlite-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(@opentelemetry/api@1.9.0)(bun-types@1.4.0)(effect@4.0.0-rc.112)(typebox@1.3.20)(zod@4.5.2))(effect@4.0.0-rc.112)
       devsess:
         specifier: ^0.2.0
         version: 0.2.0(drizzle-orm@1.0.0-rc.5-169397b(@effect/sql-sqlite-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(@opentelemetry/api@1.9.0)(bun-types@1.4.0)(effect@4.0.0-rc.112)(typebox@1.3.20)(zod@4.5.2))(effect@4.0.0-rc.112)
@@ -425,7 +425,7 @@ importers:
         version: 4.0.0-rc.112(effect@4.0.0-rc.112)
       deskkit:
         specifier: github:fdarian/deskkit
-        version: https://codeload.github.com/fdarian/deskkit/tar.gz/e102596ef69da78fefe4ba6cfb0f27a9a376cdc4(@effect/platform-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(@effect/sql-sqlite-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(drizzle-orm@1.0.0-rc.5-169397b(@effect/sql-sqlite-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(effect@4.0.0-rc.112))(effect@4.0.0-rc.112)
+        version: https://codeload.github.com/fdarian/deskkit/tar.gz/e102596ef69da78fefe4ba6cfb0f27a9a376cdc4(@effect/platform-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(@effect/sql-sqlite-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(drizzle-orm@1.0.0-rc.5-169397b(@effect/sql-sqlite-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(@opentelemetry/api@1.9.0)(bun-types@1.4.0)(effect@4.0.0-rc.112)(typebox@1.3.20)(zod@4.5.2))(effect@4.0.0-rc.112)
       drizzle-orm:
         specifier: 1.0.0-rc.5-169397b
         version: 1.0.0-rc.5-169397b(@effect/sql-sqlite-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(@opentelemetry/api@1.9.0)(bun-types@1.4.0)(effect@4.0.0-rc.112)(typebox@1.3.20)(zod@4.5.2)
@@ -537,7 +537,7 @@ importers:
         version: link:../git
       deskkit:
         specifier: github:fdarian/deskkit
-        version: https://codeload.github.com/fdarian/deskkit/tar.gz/e102596ef69da78fefe4ba6cfb0f27a9a376cdc4(@effect/platform-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(@effect/sql-sqlite-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(drizzle-orm@1.0.0-rc.5-169397b(@effect/sql-sqlite-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(effect@4.0.0-rc.112))(effect@4.0.0-rc.112)
+        version: https://codeload.github.com/fdarian/deskkit/tar.gz/e102596ef69da78fefe4ba6cfb0f27a9a376cdc4(@effect/platform-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(@effect/sql-sqlite-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(drizzle-orm@1.0.0-rc.5-169397b(@effect/sql-sqlite-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(@opentelemetry/api@1.9.0)(bun-types@1.4.0)(effect@4.0.0-rc.112)(typebox@1.3.20)(zod@4.5.2))(effect@4.0.0-rc.112)
       drizzle-orm:
         specifier: 1.0.0-rc.5-169397b
         version: 1.0.0-rc.5-169397b(@effect/sql-sqlite-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(@opentelemetry/api@1.9.0)(bun-types@1.4.0)(effect@4.0.0-rc.112)(typebox@1.3.20)(zod@4.5.2)
@@ -559,7 +559,7 @@ importers:
         version: 1.3.14
       drizzle-kit:
         specifier: 1.0.0-rc.4
-        version: 1.0.0-rc.4(drizzle-orm@1.0.0-rc.5-169397b(effect@4.0.0-rc.112))
+        version: 1.0.0-rc.4(drizzle-orm@1.0.0-rc.5-169397b(@effect/sql-sqlite-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(@opentelemetry/api@1.9.0)(bun-types@1.4.0)(effect@4.0.0-rc.112)(typebox@1.3.20)(zod@4.5.2))
       typescript:
         specifier: 7.0.2
         version: 7.0.2
@@ -571,7 +571,7 @@ importers:
         version: link:../db
       deskkit:
         specifier: github:fdarian/deskkit
-        version: https://codeload.github.com/fdarian/deskkit/tar.gz/e102596ef69da78fefe4ba6cfb0f27a9a376cdc4(@effect/platform-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(@effect/sql-sqlite-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(drizzle-orm@1.0.0-rc.5-169397b(@effect/sql-sqlite-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(effect@4.0.0-rc.112))(effect@4.0.0-rc.112)
+        version: https://codeload.github.com/fdarian/deskkit/tar.gz/e102596ef69da78fefe4ba6cfb0f27a9a376cdc4(@effect/platform-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(@effect/sql-sqlite-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(drizzle-orm@1.0.0-rc.5-169397b(@effect/sql-sqlite-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(@opentelemetry/api@1.9.0)(bun-types@1.4.0)(effect@4.0.0-rc.112)(typebox@1.3.20)(zod@4.5.2))(effect@4.0.0-rc.112)
       drizzle-orm:
         specifier: 1.0.0-rc.5-169397b
         version: 1.0.0-rc.5-169397b(@effect/sql-sqlite-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(@opentelemetry/api@1.9.0)(bun-types@1.4.0)(effect@4.0.0-rc.112)(typebox@1.3.20)(zod@4.5.2)
@@ -590,7 +590,7 @@ importers:
         version: 1.3.14
       drizzle-kit:
         specifier: 1.0.0-rc.4
-        version: 1.0.0-rc.4(drizzle-orm@1.0.0-rc.5-169397b(effect@4.0.0-rc.112))
+        version: 1.0.0-rc.4(drizzle-orm@1.0.0-rc.5-169397b(@effect/sql-sqlite-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(@opentelemetry/api@1.9.0)(bun-types@1.4.0)(effect@4.0.0-rc.112)(typebox@1.3.20)(zod@4.5.2))
       typescript:
         specifier: 7.0.2
         version: 7.0.2
@@ -636,7 +636,7 @@ importers:
         version: 7.0.83(zod@4.5.2)
       deskkit:
         specifier: github:fdarian/deskkit
-        version: https://codeload.github.com/fdarian/deskkit/tar.gz/e102596ef69da78fefe4ba6cfb0f27a9a376cdc4(@effect/platform-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(@effect/sql-sqlite-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(drizzle-orm@1.0.0-rc.5-169397b(@effect/sql-sqlite-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(effect@4.0.0-rc.112))(effect@4.0.0-rc.112)
+        version: https://codeload.github.com/fdarian/deskkit/tar.gz/e102596ef69da78fefe4ba6cfb0f27a9a376cdc4(@effect/platform-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(@effect/sql-sqlite-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(drizzle-orm@1.0.0-rc.5-169397b(@effect/sql-sqlite-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(@opentelemetry/api@1.9.0)(bun-types@1.4.0)(effect@4.0.0-rc.112)(typebox@1.3.20)(zod@4.5.2))(effect@4.0.0-rc.112)
       drizzle-orm:
         specifier: 1.0.0-rc.5-169397b
         version: 1.0.0-rc.5-169397b(@effect/sql-sqlite-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(@opentelemetry/api@1.9.0)(bun-types@1.4.0)(effect@4.0.0-rc.112)(typebox@1.3.20)(zod@4.5.2)
@@ -652,7 +652,7 @@ importers:
         version: 1.3.14
       drizzle-kit:
         specifier: 1.0.0-rc.4
-        version: 1.0.0-rc.4(drizzle-orm@1.0.0-rc.5-169397b(effect@4.0.0-rc.112))
+        version: 1.0.0-rc.4(drizzle-orm@1.0.0-rc.5-169397b(@effect/sql-sqlite-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(@opentelemetry/api@1.9.0)(bun-types@1.4.0)(effect@4.0.0-rc.112)(typebox@1.3.20)(zod@4.5.2))
       typescript:
         specifier: 7.0.2
         version: 7.0.2
@@ -2370,14 +2370,11 @@ packages:
     resolution: {integrity: sha512-WsdrnhKfjeyXGDikZmN9pkpeZ5S/cl6EE72feiSc0tlynT1tMYqXqouhuv/foK+PY9OEnebOAVRQn3+rAstR8g==}
     peerDependencies:
       '@pierre/theme': ^1.1.0
-      '@shikijs/themes': ^3.0.0 || ^4.0.0
       react: ^18.3.1 || ^19.0.0
       react-dom: ^18.3.1 || ^19.0.0
       shiki: ^3.0.0 || ^4.0.0
     peerDependenciesMeta:
       '@pierre/theme':
-        optional: true
-      '@shikijs/themes':
         optional: true
       react:
         optional: true
@@ -2390,14 +2387,11 @@ packages:
     resolution: {integrity: sha512-WCI5Qd7iprDpISL9fBYOLe8RV53+b7mFNA3bPzl60/2CKCSrsKN8zEcep6Y3BAzvARlmca50zGjDodqPGiTUKA==}
     peerDependencies:
       '@pierre/theme': ^1.1.0 || ^2.0.0
-      '@shikijs/themes': ^3.0.0 || ^4.0.0
       react: ^18.3.1 || ^19.0.0
       react-dom: ^18.3.1 || ^19.0.0
       shiki: ^3.0.0 || ^4.0.0
     peerDependenciesMeta:
       '@pierre/theme':
-        optional: true
-      '@shikijs/themes':
         optional: true
       react:
         optional: true
@@ -7604,10 +7598,10 @@ snapshots:
   '@oxc-resolver/binding-win32-x64-msvc@11.21.2':
     optional: true
 
-  '@pierre/diffs@1.3.6(patch_hash=31795077ef229d3de37b63f22529a58b7df76bd4ae397647a98b36a86a81ba86)(@shikijs/themes@4.4.3)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)':
+  '@pierre/diffs@1.3.6(patch_hash=31795077ef229d3de37b63f22529a58b7df76bd4ae397647a98b36a86a81ba86)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)':
     dependencies:
       '@pierre/theme': 2.0.0
-      '@pierre/theming': 1.0.1(@pierre/theme@2.0.0)(@shikijs/themes@4.4.3)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(shiki@4.4.3)
+      '@pierre/theming': 1.0.1(@pierre/theme@2.0.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(shiki@4.4.3)
       '@shikijs/transformers': 4.4.3
       diff: 9.0.0
       hast-util-to-html: 9.0.5
@@ -7615,12 +7609,10 @@ snapshots:
       react: 19.2.8
       react-dom: 19.2.8(react@19.2.8)
       shiki: 4.4.3
-    transitivePeerDependencies:
-      - '@shikijs/themes'
 
   '@pierre/theme@2.0.0': {}
 
-  '@pierre/theming@1.0.0(@pierre/theme@2.0.0)(@shikijs/themes@4.4.3)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(shiki@4.4.3)':
+  '@pierre/theming@1.0.0(@pierre/theme@2.0.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(shiki@4.4.3)':
     optionalDependencies:
       '@pierre/theme': 2.0.0
       '@shikijs/themes': 4.4.3
@@ -7628,7 +7620,7 @@ snapshots:
       react-dom: 19.2.8(react@19.2.8)
       shiki: 4.4.3
 
-  '@pierre/theming@1.0.1(@pierre/theme@2.0.0)(@shikijs/themes@4.4.3)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(shiki@4.4.3)':
+  '@pierre/theming@1.0.1(@pierre/theme@2.0.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(shiki@4.4.3)':
     optionalDependencies:
       '@pierre/theme': 2.0.0
       '@shikijs/themes': 4.4.3
@@ -7636,16 +7628,15 @@ snapshots:
       react-dom: 19.2.8(react@19.2.8)
       shiki: 4.4.3
 
-  '@pierre/trees@1.0.0-beta.6(@pierre/theme@2.0.0)(@shikijs/themes@4.4.3)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(shiki@4.4.3)':
+  '@pierre/trees@1.0.0-beta.6(@pierre/theme@2.0.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(shiki@4.4.3)':
     dependencies:
-      '@pierre/theming': 1.0.0(@pierre/theme@2.0.0)(@shikijs/themes@4.4.3)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(shiki@4.4.3)
+      '@pierre/theming': 1.0.0(@pierre/theme@2.0.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(shiki@4.4.3)
       preact: 11.0.0-beta.0
       preact-render-to-string: 6.6.5(preact@11.0.0-beta.0)
       react: 19.2.8
       react-dom: 19.2.8(react@19.2.8)
     transitivePeerDependencies:
       - '@pierre/theme'
-      - '@shikijs/themes'
       - shiki
 
   '@pkgr/core@0.1.2': {}
@@ -8654,7 +8645,7 @@ snapshots:
 
   dequal@2.0.3: {}
 
-  deskkit@https://codeload.github.com/fdarian/deskkit/tar.gz/e102596ef69da78fefe4ba6cfb0f27a9a376cdc4(@effect/platform-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(@effect/sql-sqlite-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(drizzle-orm@1.0.0-rc.5-169397b(@effect/sql-sqlite-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(effect@4.0.0-rc.112))(effect@4.0.0-rc.112):
+  deskkit@https://codeload.github.com/fdarian/deskkit/tar.gz/e102596ef69da78fefe4ba6cfb0f27a9a376cdc4(@effect/platform-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(@effect/sql-sqlite-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(drizzle-orm@1.0.0-rc.5-169397b(@effect/sql-sqlite-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(@opentelemetry/api@1.9.0)(bun-types@1.4.0)(effect@4.0.0-rc.112)(typebox@1.3.20)(zod@4.5.2))(effect@4.0.0-rc.112):
     dependencies:
       '@effect/platform-bun': 4.0.0-rc.112(effect@4.0.0-rc.112)
       effect: 4.0.0-rc.112
@@ -8694,7 +8685,7 @@ snapshots:
 
   dom-accessibility-api@0.6.3: {}
 
-  drizzle-kit@1.0.0-rc.4(drizzle-orm@1.0.0-rc.5-169397b(effect@4.0.0-rc.112)):
+  drizzle-kit@1.0.0-rc.4(drizzle-orm@1.0.0-rc.5-169397b(@effect/sql-sqlite-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(@opentelemetry/api@1.9.0)(bun-types@1.4.0)(effect@4.0.0-rc.112)(typebox@1.3.20)(zod@4.5.2)):
     dependencies:
       '@drizzle-team/brocli': 0.12.0
       '@js-temporal/polyfill': 0.5.1
