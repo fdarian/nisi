@@ -5,6 +5,7 @@ import { useMemo } from "react";
 import { useDevToolScope } from "#/components/devtool/dev-tool-context";
 import { useRefetchToasts } from "#/components/devtool/use-refetch-toasts";
 import { FilesChangedView } from "#/components/pr/files-changed-view";
+import { OverviewView } from "#/components/pr/overview/overview-view";
 import { PrHeader } from "#/components/pr/pr-header";
 import {
 	Empty,
@@ -15,6 +16,7 @@ import {
 import { Spinner } from "#/components/ui/spinner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "#/components/ui/tabs";
 import { WalkthroughView } from "#/components/walkthrough/walkthrough-view";
+import type { KeyBindings } from "#/hooks/use-key-bindings";
 import { useKeyBindings } from "#/hooks/use-key-bindings";
 import { useWindowFocused } from "#/hooks/use-window-focused";
 import type { SidecarQueryUtils } from "#/lib/backend-context";
@@ -46,7 +48,7 @@ type PrViewProps = {
 	onCloseTab: () => void;
 };
 
-/** Renders one open PR's content: header + Files Changed / Walkthrough / Commits tabs. */
+/** Renders one open PR's content: header + Overview / Walkthrough / Files Changed tabs. */
 export function PrView({
 	session,
 	orpc,
@@ -68,11 +70,13 @@ export function PrView({
 	// that survives that to land back on the same sub-tab on resume.
 	const [activeTab, setActiveTab] = useSessionActiveTab(session.id);
 	// The user can flip `walkthroughEnabled` off while sitting on the
-	// Walkthrough tab — its `TabsList`/`TabsContent` stop rendering below, so
-	// the value actually handed to `<Tabs>` must fall back to "files"
+	// Walkthrough tab — its `TabsTrigger`/`TabsContent` stop rendering below,
+	// so the value actually handed to `<Tabs>` must fall back to "files"
 	// regardless of what `activeTab` state still holds, rather than mutating
-	// `activeTab` itself in an effect.
-	const tabsValue = walkthroughEnabled ? activeTab : "files";
+	// `activeTab` itself in an effect. "overview"/"files" both stay valid
+	// regardless of the setting, so only "walkthrough" ever needs the fallback.
+	const tabsValue =
+		activeTab === "walkthrough" && !walkthroughEnabled ? "files" : activeTab;
 	// Lifted above the tabs, not local to `WalkthroughView` — a reference/
 	// uncovered-file selection should survive switching away to Files Changed
 	// and back, not reset every time the Walkthrough tab remounts (and, same
@@ -111,6 +115,21 @@ export function PrView({
 		[files],
 	);
 
+	// Overview and Files Changed always exist regardless of the walkthrough
+	// setting; Walkthrough only joins the strip when it's enabled. A single
+	// array, not three separately-gated `TabsTrigger`s, is what lets
+	// `PrViewTabStrip` derive the `1`/`2`/`3` (or `1`/`2`, walkthrough off)
+	// shortcuts from each tab's own index instead of hardcoding which digit
+	// means what.
+	const tabs = useMemo<readonly PrViewTab[]>(() => {
+		const list: PrViewTab[] = [{ value: "overview", label: "Overview" }];
+		if (walkthroughEnabled) {
+			list.push({ value: "walkthrough", label: "Walkthrough" });
+		}
+		list.push({ value: "files", label: "Files Changed" });
+		return list;
+	}, [walkthroughEnabled]);
+
 	return (
 		<div className="flex min-h-0 flex-1 flex-col">
 			<PrHeader
@@ -125,13 +144,15 @@ export function PrView({
 				onValueChange={(value) => setActiveTab(value as string)}
 				value={tabsValue}
 			>
-				{walkthroughEnabled && (
-					<WalkthroughTabStrip
-						isSelectedTab={isSelectedTab}
-						setActiveTab={setActiveTab}
-					/>
-				)}
+				<PrViewTabStrip
+					isSelectedTab={isSelectedTab}
+					setActiveTab={setActiveTab}
+					tabs={tabs}
+				/>
 
+				<TabsContent className="flex min-h-0 flex-1" value="overview">
+					<OverviewView orpc={orpc} session={session} />
+				</TabsContent>
 				<TabsContent className="flex min-h-0 flex-1 flex-col" value="files">
 					{error != null ? (
 						<FilesChangedError error={error} />
@@ -166,34 +187,41 @@ export function PrView({
 	);
 }
 
+type PrViewTab = { value: string; label: string };
+
 /**
- * The Walkthrough/Files Changed tab strip, plus the `1`/`2` shortcuts that
- * switch between them — co-located because they're the same feature: when
- * `PrView` doesn't render this component (walkthrough disabled), the
- * `useKeyBindings` listener underneath unmounts along with the tab strip it
- * drives, so `1`/`2` become no-ops in one gate instead of a duplicated
- * `walkthroughEnabled` check on the bindings themselves.
+ * The Overview/Walkthrough/Files Changed tab strip, plus the digit
+ * shortcuts that switch between them — co-located because they're the same
+ * feature. Always rendered (unlike the old Walkthrough-only strip this
+ * replaced): Overview and Files Changed exist regardless of the walkthrough
+ * setting, so there's no longer a "hide the whole strip" case. The digit
+ * bound to each tab is just its index in `tabs` (`PrView` builds that array
+ * with Walkthrough already included-or-not), so collapsing from three tabs
+ * to two never leaves a dead key bound to a tab that isn't showing.
  */
-function WalkthroughTabStrip({
+function PrViewTabStrip({
+	tabs,
 	setActiveTab,
 	isSelectedTab,
 }: {
+	tabs: readonly PrViewTab[];
 	setActiveTab: (tab: string) => void;
 	isSelectedTab: boolean;
 }): React.ReactElement {
-	useKeyBindings(
-		{
-			"1": () => setActiveTab("walkthrough"),
-			"2": () => setActiveTab("files"),
-		},
-		{ enabled: isSelectedTab },
-	);
+	const bindings: KeyBindings = {};
+	tabs.forEach((tab, index) => {
+		bindings[String(index + 1)] = () => setActiveTab(tab.value);
+	});
+	useKeyBindings(bindings, { enabled: isSelectedTab });
 
 	return (
 		<div className="border-b">
 			<TabsList className="mx-4" variant="underline">
-				<TabsTrigger value="walkthrough">Walkthrough</TabsTrigger>
-				<TabsTrigger value="files">Files Changed</TabsTrigger>
+				{tabs.map((tab) => (
+					<TabsTrigger key={tab.value} value={tab.value}>
+						{tab.label}
+					</TabsTrigger>
+				))}
 			</TabsList>
 		</div>
 	);
