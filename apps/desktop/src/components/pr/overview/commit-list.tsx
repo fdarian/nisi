@@ -1,6 +1,5 @@
 "use client";
 
-import { ScrollAreaViewport } from "@base-ui/react";
 import { useLayoutEffect, useRef } from "react";
 import { ScrollArea } from "#/components/ui/scroll-area";
 import type { OverviewCommit } from "#/lib/pr-data";
