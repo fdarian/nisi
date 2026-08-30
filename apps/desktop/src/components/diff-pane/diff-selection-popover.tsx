@@ -20,6 +20,7 @@ import { Button } from "#/components/ui/button";
 import { Popover, PopoverPrimitive } from "#/components/ui/popover";
 import {
 	type DiffSelectionReference,
+	diffSelectionPopupMarkerProps,
 	formatSelectionReference,
 } from "#/hooks/use-diff-selection";
 
@@ -146,18 +147,15 @@ export function DiffSelectionPopover({
 				>
 					<PopoverPrimitive.Popup
 						className="outline-none"
-						// `isEventOriginOnGutterOrPopup` (`use-diff-selection.ts`) walks a
-						// `pointerup`'s `composedPath()` looking for this exact attribute
-						// to tell "the popup itself" apart from anywhere else outside the
-						// gutter — the same contract `#/components/ui/popover.tsx`'s
-						// `PopoverPopup` wrapper sets on its own `Popup`, kept here by
-						// hand since this component builds on the raw `PopoverPrimitive`
-						// instead (see this file's top doc comment for why). Without it,
-						// a click on "Copy reference" reads as an outside click: the
-						// `pointerup` clears the selection (and unmounts this popup)
-						// before the button's own `click` ever fires, so the copy
-						// silently never happens.
+						// Cosmetic only, matching the `data-slot` convention every other
+						// shared-UI primitive in this app sets on itself. The
+						// selection-clearing logic in `use-diff-selection.ts` does NOT
+						// key off this — see `diffSelectionPopupMarkerProps` below for
+						// the attribute it actually checks, and that constant's doc
+						// comment for why depending on `data-slot` for that broke once
+						// already.
 						data-slot="popover-popup"
+						{...diffSelectionPopupMarkerProps}
 					>
 						<Button
 							onClick={() => {

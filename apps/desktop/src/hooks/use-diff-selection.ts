@@ -206,6 +206,32 @@ function isEventOriginOnGutter(event: Event): boolean {
 }
 
 /**
+ * Presence-only marker `diff-selection-popover.tsx` sets on the floating
+ * "Copy reference" popup's root node, spread there via
+ * `diffSelectionPopupMarkerProps` below — checked by
+ * `isEventOriginOnGutterOrPopup` to recognize a gesture landing inside that
+ * popup.
+ *
+ * Deliberately not `data-slot="popover-popup"`, even though that string
+ * happens to also land on this same node via `#/components/ui/popover.tsx`'s
+ * styling convention. `data-slot` is shared UI's own labeling scheme, owned
+ * by that module for its own consumers — matching against it here made this
+ * selection-clearing check quietly break the moment `diff-selection-popover.tsx`
+ * stopped rendering through the `PopoverPopup` wrapper that happened to set
+ * it (nothing failed loudly; "Copy reference" just stopped working), and it
+ * was over-broad besides: it would have treated a click inside *any* other
+ * popover in the app as "inside this feature's popup" too. A dedicated
+ * attribute, defined once and imported by both sides, means the two can't
+ * drift apart again and doesn't reach into a module this feature doesn't own.
+ */
+const DIFF_SELECTION_POPUP_ATTRIBUTE = "data-diff-selection-popup";
+
+/** Spread onto the floating "Copy reference" popup's root DOM node — see `DIFF_SELECTION_POPUP_ATTRIBUTE`'s doc comment. */
+export const diffSelectionPopupMarkerProps = {
+	[DIFF_SELECTION_POPUP_ATTRIBUTE]: "",
+};
+
+/**
  * Whether `event`'s true origin (see `isEventOriginOnGutter`'s doc comment
  * on why `composedPath()` rather than `event.target`) was the line-number
  * gutter or the floating popup itself.
@@ -222,7 +248,7 @@ function isEventOriginOnGutterOrPopup(event: Event): boolean {
 	if (isEventOriginOnGutter(event)) return true;
 	for (const node of event.composedPath()) {
 		if (!(node instanceof Element)) continue;
-		if (node.getAttribute("data-slot") === "popover-popup") return true;
+		if (node.hasAttribute(DIFF_SELECTION_POPUP_ATTRIBUTE)) return true;
 	}
 	return false;
 }
