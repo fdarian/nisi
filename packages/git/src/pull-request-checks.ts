@@ -69,7 +69,8 @@ export type PullRequestCheck = {
  * `CheckStatusState`/`CheckConclusionState`/`StatusState` enums via `gh api
  * graphql` introspection) rather than modeled as optional.
  */
-const CheckRunView = Schema.Struct({
+/** Exported for `pull-request-overview.ts`, which decodes the same `CheckRun` node shape off a hand-written `gh api graphql` call rather than `gh pr view`'s flattened `--json` output. */
+export const CheckRunView = Schema.Struct({
 	__typename: Schema.Literal("CheckRun"),
 	name: Schema.String,
 	status: Schema.Literals([
@@ -97,9 +98,10 @@ const CheckRunView = Schema.Struct({
 	detailsUrl: Schema.String,
 	workflowName: Schema.String,
 });
-type CheckRunView = Schema.Schema.Type<typeof CheckRunView>;
+export type CheckRunView = Schema.Schema.Type<typeof CheckRunView>;
 
-const StatusContextView = Schema.Struct({
+/** Exported for `pull-request-overview.ts` — same reasoning as `CheckRunView` above. */
+export const StatusContextView = Schema.Struct({
 	__typename: Schema.Literal("StatusContext"),
 	context: Schema.String,
 	state: Schema.Literals([
@@ -112,7 +114,7 @@ const StatusContextView = Schema.Struct({
 	startedAt: Schema.String,
 	targetUrl: Schema.String,
 });
-type StatusContextView = Schema.Schema.Type<typeof StatusContextView>;
+export type StatusContextView = Schema.Schema.Type<typeof StatusContextView>;
 
 const StatusCheckRollupView = Schema.Struct({
 	statusCheckRollup: Schema.Array(
@@ -200,7 +202,8 @@ const toStatusContextResult = (view: StatusContextView): PullRequestCheck => ({
 	detailsUrl: view.targetUrl,
 });
 
-const toPullRequestCheck = (
+/** Exported for `pull-request-overview.ts`, which builds the same `CheckRunView`/`StatusContextView` shapes off a raw `gh api graphql` response instead of `gh pr view`'s flattened `--json` output, then dispatches through this same mapper rather than a second one. */
+export const toPullRequestCheck = (
 	view: CheckRunView | StatusContextView,
 ): PullRequestCheck =>
 	view.__typename === "CheckRun"
