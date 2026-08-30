@@ -196,7 +196,6 @@ export function DiffSelectionPopover({
 								}}
 								render={<Button size="xs" variant="ghost" />}
 							>
-								{copied ? <CheckIcon /> : <CopyIcon />}
 								{copied ? "Copied" : "Copy reference"}
 							</ToolbarButton>
 							<ToolbarSeparator />
@@ -207,7 +206,6 @@ export function DiffSelectionPopover({
 								}}
 								render={<Button size="xs" variant="ghost" />}
 							>
-								<MessageCircleIcon />
 								Ask
 							</ToolbarButton>
 						</Toolbar>
