@@ -163,12 +163,24 @@ seam" for the port/token handshake this boots into.
   first time it finds this isn't a cask install; `download`/`restart` (the `update.*` oRPC handlers)
   own every other transition, so the poller can never stomp a download in flight or a cached artifact
   waiting for a restart. `homebrew.ts` resolves `brew` and shells out to it (`list --cask --versions`,
-  `fetch --cask`); `tap-version.ts` reads the tap's cask file over HTTP and compares semver against
-  the installed version — brew itself, not GitHub's release API, since a release can ship ahead of the
-  tap. `restart-helper.ts` writes a POSIX-sh script to `<data dir>/update/` and spawns it detached
-  (`ChildProcessSpawner`, `detached: true`, every stdio `"ignore"`, `handle.unref` before its own scope
-  closes) so it outlives the sidecar; the script waits for the app to quit, runs
-  `brew upgrade --cask nisi` against the artifact `download` already cached, and relaunches either way.
+  `update`, `fetch --cask`); `tap-version.ts` reads the tap's cask file over HTTP and compares semver
+  against the installed version — brew itself, not GitHub's release API, since a release can ship
+  ahead of the tap. Every brew invocation sets `HOMEBREW_NO_AUTO_UPDATE=1` except the explicit
+  `brew update` calls (`homebrew.ts`'s `refreshTap`, and the restart script below) — that env var only
+  suppresses brew's *implicit* auto-update ahead of `install`/`upgrade`/`fetch`, not an explicit
+  `update` command, so `refreshTap` still forces a fresh read of the third-party
+  `fdarian/homebrew-tap` clone; `download` runs it right before `brew fetch --cask nisi`, aborting to
+  `failed` if the refresh itself fails rather than fetching against a stale tap. `restart-helper.ts`
+  writes a POSIX-sh script to `<data dir>/update/` and spawns it detached (`ChildProcessSpawner`,
+  `detached: true`, every stdio `"ignore"`, `handle.unref` before its own scope closes) so it outlives
+  the sidecar; the script waits for the app to quit, runs its own `brew update` for the same reason,
+  then `brew upgrade --cask nisi` against the artifact `download` already cached, and relaunches
+  either way — recording the installed version before and after, plus the upgrade's exit code, to
+  `<data dir>/update/restart-outcome.json`. `restart-outcome.ts` reads and clears that marker on the
+  next boot, before `Updater`'s first check can run: if the installed version didn't move, `Updater`
+  starts in `failed` with a message pointing the user at running
+  `brew update && brew upgrade --cask nisi` by hand, instead of quietly re-offering the same
+  "available" update forever.
 
 ## Gotchas
 
