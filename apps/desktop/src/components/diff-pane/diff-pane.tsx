@@ -40,6 +40,7 @@ import {
 import { Skeleton } from "#/components/ui/skeleton";
 import { useDiffMatchHighlighting } from "#/hooks/use-diff-match-highlighting";
 import { useDiffSelection } from "#/hooks/use-diff-selection";
+import type { SidecarQueryUtils } from "#/lib/backend-context";
 import { buildFileDiff } from "#/lib/build-file-diff";
 import type { LineRange } from "#/lib/build-location-diff";
 import { buildLocationFileDiff } from "#/lib/build-location-diff";
@@ -186,8 +187,9 @@ export type DiffPaneHandle = {
 };
 
 type DiffPaneProps = {
-	/** Keys this pane's collapse-override state (`expandedHiddenPaths`/`fileCollapseOverrides` below) into the per-session UI store (`session-ui-store.ts`), so it survives this component unmounting when the tab suspends. */
+	/** Keys this pane's collapse-override state (`expandedHiddenPaths`/`fileCollapseOverrides` below) into the per-session UI store (`session-ui-store.ts`), so it survives this component unmounting when the tab suspends. Also what the selection popover's "Ask" button attaches a reference to — see `DiffSelectionPopover`. */
 	sessionId: string;
+	orpc: SidecarQueryUtils;
 	/** The session's repo root — joined with `FileChange.path` for the header dropdown's "Copy absolute path". */
 	repoRoot: string;
 	files: readonly FileChange[];
@@ -401,6 +403,7 @@ function resolveLoadFileAnnotations(
 
 export function DiffPane({
 	sessionId,
+	orpc,
 	repoRoot,
 	files,
 	fileContents,
@@ -1302,7 +1305,9 @@ export function DiffPane({
 			<DiffSelectionPopover
 				anchorRect={diffSelection.anchorRect}
 				onDismiss={diffSelection.clearSelection}
+				orpc={orpc}
 				reference={diffSelection.reference}
+				sessionId={sessionId}
 			/>
 		</>
 	);

@@ -271,6 +271,10 @@ function ChatPanelBody({
 						)}
 						<ChatComposer
 							key={thread.id}
+							onClearReferences={() => dock.clearReferences(thread.id)}
+							onRemoveReference={(reference) =>
+								dock.removeReference(thread.id, reference)
+							}
 							onSend={(text, harness, model) => {
 								// Only the send that actually locks the thread's
 								// harness/model in is "the user sent with this" —
@@ -285,6 +289,7 @@ function ChatPanelBody({
 							}}
 							onStop={() => void stop()}
 							orpc={orpc}
+							references={thread.references}
 							status={status}
 							threadHarness={thread.harness}
 							threadModel={thread.model}

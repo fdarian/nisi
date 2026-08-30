@@ -40,6 +40,7 @@ import {
 import { createStore, type StoreApi, useStore } from "zustand";
 import type { SidecarQueryUtils } from "#/lib/backend-context";
 import { createOrpcChatTransport, messageText } from "#/lib/chat-transport";
+import type { DiffSelectionReference } from "#/lib/diff-reference";
 import type { HarnessId } from "#/lib/walkthrough-data";
 
 export type ChatThreadMeta = {
@@ -53,7 +54,26 @@ export type ChatThreadMeta = {
 	 */
 	harness: HarnessId | null;
 	model: string | undefined;
+	/**
+	 * Diff-pane selections attached via "Ask" (`DiffSelectionPopover`) or the
+	 * composer's own chip `x` button — rendered as chips above the composer
+	 * input (`chat-composer.tsx`) and prepended to the outgoing message text
+	 * on send, then cleared. Lives here (not component state) so a chip
+	 * survives the popup being minimized, closed, and reopened, same as the
+	 * rest of a thread's metadata.
+	 */
+	references: readonly DiffSelectionReference[];
 };
+
+/** Same-selection identity for dedup — two references naming the same file and line range are the same chip even if they came from separate "Ask" clicks. */
+function referencesEqual(
+	a: DiffSelectionReference,
+	b: DiffSelectionReference,
+): boolean {
+	return (
+		a.path === b.path && a.startLine === b.startLine && a.endLine === b.endLine
+	);
+}
 
 type SessionChatState = {
 	threads: readonly ChatThreadMeta[];
@@ -177,6 +197,20 @@ type ChatStore = {
 		harness: HarnessId,
 		model: string | undefined,
 	) => void;
+	/** Appends `reference` to the thread's chips, unless an equal one (same `path`/`startLine`/`endLine`) is already attached. */
+	attachReference: (
+		sessionId: string,
+		threadId: string,
+		reference: DiffSelectionReference,
+	) => void;
+	/** Drops one reference chip, matched by value rather than position — see `referencesEqual`. */
+	removeReference: (
+		sessionId: string,
+		threadId: string,
+		reference: DiffSelectionReference,
+	) => void;
+	/** Drops every reference chip on a thread — called after its formatted references are folded into an outgoing message. */
+	clearReferences: (sessionId: string, threadId: string) => void;
 	/** Drops a closed PR tab's chat state entirely, including every one of its threads' `Chat` instances — call from wherever a session actually closes, mirroring `session-ui-store.tsx`'s `clearSession`. */
 	clearSession: (sessionId: string) => void;
 };
@@ -197,6 +231,7 @@ function createChatStore(): StoreApi<ChatStore> {
 						id: threadId,
 						harness: null,
 						model: undefined,
+						references: [],
 					};
 					return {
 						...session,
@@ -257,6 +292,41 @@ function createChatStore(): StoreApi<ChatStore> {
 					threads: mapThread(session.threads, threadId, (thread) =>
 						thread.harness === null ? { ...thread, harness, model } : thread,
 					),
+				})),
+			})),
+		attachReference: (sessionId, threadId, reference) =>
+			set((state) => ({
+				sessions: withSession(state.sessions, sessionId, (session) => ({
+					...session,
+					threads: mapThread(session.threads, threadId, (thread) =>
+						thread.references.some((existing) =>
+							referencesEqual(existing, reference),
+						)
+							? thread
+							: { ...thread, references: [...thread.references, reference] },
+					),
+				})),
+			})),
+		removeReference: (sessionId, threadId, reference) =>
+			set((state) => ({
+				sessions: withSession(state.sessions, sessionId, (session) => ({
+					...session,
+					threads: mapThread(session.threads, threadId, (thread) => ({
+						...thread,
+						references: thread.references.filter(
+							(existing) => !referencesEqual(existing, reference),
+						),
+					})),
+				})),
+			})),
+		clearReferences: (sessionId, threadId) =>
+			set((state) => ({
+				sessions: withSession(state.sessions, sessionId, (session) => ({
+					...session,
+					threads: mapThread(session.threads, threadId, (thread) => ({
+						...thread,
+						references: [],
+					})),
 				})),
 			})),
 		clearSession: (sessionId) =>
@@ -347,6 +417,18 @@ export function useChatDockActions(
 		harness: HarnessId,
 		model: string | undefined,
 	) => void;
+	/**
+	 * Attaches `reference` to the session's active thread, opening (and
+	 * un-minimizing) the popup on it — or, if the session has no threads
+	 * yet, creates one first via the same path `openNewThread` uses, then
+	 * attaches to that. The "Ask" button's whole behavior.
+	 */
+	askWithReference: (reference: DiffSelectionReference) => void;
+	removeReference: (
+		threadId: string,
+		reference: DiffSelectionReference,
+	) => void;
+	clearReferences: (threadId: string) => void;
 } {
 	const store = useChatStore();
 	const openNewThreadAction = useStore(store, (state) => state.openNewThread);
@@ -363,6 +445,18 @@ export function useChatDockActions(
 	const lockThreadHarnessAction = useStore(
 		store,
 		(state) => state.lockThreadHarness,
+	);
+	const attachReferenceAction = useStore(
+		store,
+		(state) => state.attachReference,
+	);
+	const removeReferenceAction = useStore(
+		store,
+		(state) => state.removeReference,
+	);
+	const clearReferencesAction = useStore(
+		store,
+		(state) => state.clearReferences,
 	);
 
 	const openNewThread = useCallback(() => {
@@ -397,6 +491,41 @@ export function useChatDockActions(
 			lockThreadHarnessAction(sessionId, threadId, harness, model),
 		[lockThreadHarnessAction, sessionId],
 	);
+	const askWithReference = useCallback(
+		(reference: DiffSelectionReference) => {
+			// Read fresh, not a subscribed value — this only runs on click, so a
+			// stale `activeThreadId`/`threads` closure would risk attaching to a
+			// thread the user has since switched away from or closed.
+			const session = store.getState().sessions.get(sessionId);
+			if (session !== undefined && session.threads.length > 0) {
+				const activeThreadId = session.activeThreadId ?? session.threads[0].id;
+				attachReferenceAction(sessionId, activeThreadId, reference);
+				setPopupOpenAction(sessionId, true);
+				setPopupMinimizedAction(sessionId, false);
+				return;
+			}
+			const threadId = crypto.randomUUID();
+			openNewThreadAction(sessionId, threadId);
+			attachReferenceAction(sessionId, threadId, reference);
+		},
+		[
+			store,
+			sessionId,
+			attachReferenceAction,
+			setPopupOpenAction,
+			setPopupMinimizedAction,
+			openNewThreadAction,
+		],
+	);
+	const removeReference = useCallback(
+		(threadId: string, reference: DiffSelectionReference) =>
+			removeReferenceAction(sessionId, threadId, reference),
+		[removeReferenceAction, sessionId],
+	);
+	const clearReferences = useCallback(
+		(threadId: string) => clearReferencesAction(sessionId, threadId),
+		[clearReferencesAction, sessionId],
+	);
 
 	return useMemo(
 		() => ({
@@ -406,6 +535,9 @@ export function useChatDockActions(
 			setPopupOpen,
 			setPopupMinimized,
 			lockThreadHarness,
+			askWithReference,
+			removeReference,
+			clearReferences,
 		}),
 		[
 			openNewThread,
@@ -414,6 +546,9 @@ export function useChatDockActions(
 			setPopupOpen,
 			setPopupMinimized,
 			lockThreadHarness,
+			askWithReference,
+			removeReference,
+			clearReferences,
 		],
 	);
 }

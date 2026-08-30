@@ -34,14 +34,20 @@ import {
 	COMMAND_PRIORITY_CRITICAL,
 	KEY_ENTER_COMMAND,
 } from "lexical";
-import { ArrowUpIcon, SquareIcon } from "lucide-react";
+import { ArrowUpIcon, SquareIcon, XIcon } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
+import { Badge } from "#/components/ui/badge";
 import { Button, buttonVariants } from "#/components/ui/button";
 import {
 	HarnessModelCombobox,
 	type ModelSelection,
 } from "#/components/walkthrough/harness-model-combobox";
 import type { SidecarQueryUtils } from "#/lib/backend-context";
+import {
+	type DiffSelectionReference,
+	formatSelectionReference,
+	formatSelectionReferenceShort,
+} from "#/lib/diff-reference";
 import { useLastChatModel } from "#/lib/settings-data";
 import { cn } from "#/lib/utils";
 import { type HarnessId, useHarnesses } from "#/lib/walkthrough-data";
@@ -53,9 +59,51 @@ type ChatComposerProps = {
 	/** From `useChat({ chat })` — `"submitted"`/`"streaming"` both count as busy for this composer's own send/stop toggle, same as the old `thread.status === "streaming"` check covered both phases at once. */
 	status: ChatStatus;
 	orpc: SidecarQueryUtils;
+	/** Diff-pane selections attached via "Ask" — rendered as removable chips above the input and folded into the outgoing message text on send (see `submit` below). */
+	references: readonly DiffSelectionReference[];
+	onRemoveReference: (reference: DiffSelectionReference) => void;
+	onClearReferences: () => void;
 	onSend: (text: string, harness: HarnessId, model: string | undefined) => void;
 	onStop: () => void;
 };
+
+/**
+ * One removable "Ask"-attached reference, rendered above the composer
+ * input. Shows the short (basename-only) form — a chip has nowhere near
+ * enough width for a full repo-relative path (confirmed live: an
+ * un-truncated long path ran the chip past the composer, past the popup,
+ * and off the viewport entirely) — with the full `path#Lx-y` in `title` so
+ * hovering still disambiguates two files sharing a basename. `max-w-full`
+ * plus `truncate` on the label is a backstop for a single filename long
+ * enough to overflow on its own even in short form; the line range itself
+ * is never truncated, since that's the part that actually identifies the
+ * selection.
+ */
+function ReferenceChip({
+	reference,
+	onRemove,
+}: {
+	reference: DiffSelectionReference;
+	onRemove: () => void;
+}): React.ReactElement {
+	const short = formatSelectionReferenceShort(reference);
+	const full = formatSelectionReference(reference);
+	return (
+		<Badge className="max-w-full gap-1 pr-1 font-mono" variant="outline">
+			<span className="min-w-0 truncate" title={full}>
+				{short}
+			</span>
+			<button
+				aria-label={`Remove ${full}`}
+				className="shrink-0 rounded-xs text-muted-foreground hover:text-foreground"
+				onClick={onRemove}
+				type="button"
+			>
+				<XIcon />
+			</button>
+		</Badge>
+	);
+}
 
 export function ChatComposer(props: ChatComposerProps): React.ReactElement {
 	return (
@@ -78,6 +126,9 @@ function ComposerBody({
 	threadModel,
 	status,
 	orpc,
+	references,
+	onRemoveReference,
+	onClearReferences,
 	onSend,
 	onStop,
 }: ChatComposerProps): React.ReactElement {
@@ -116,11 +167,19 @@ function ComposerBody({
 	const submit = useCallback(() => {
 		if (isBusy) return;
 		const text = editor.read(() => $getRoot().getTextContent());
+		// A no-op if the user has references attached but typed nothing —
+		// same as an empty message being a no-op today. References stay
+		// attached (not cleared) so a later send still includes them.
 		if (text.trim().length === 0) return;
 		const harness = threadHarness ?? selection?.harness ?? null;
 		if (harness === null) return;
 		const model = needsPicker ? selection?.modelId : threadModel;
-		onSend(text, harness, model);
+		const outgoingText =
+			references.length === 0
+				? text
+				: `${references.map(formatSelectionReference).join("\n")}\n\n${text}`;
+		onSend(outgoingText, harness, model);
+		if (references.length > 0) onClearReferences();
 		editor.update(() => {
 			const root = $getRoot();
 			root.clear();
@@ -135,7 +194,9 @@ function ComposerBody({
 		threadHarness,
 		threadModel,
 		selection,
+		references,
 		onSend,
+		onClearReferences,
 	]);
 
 	useEffect(() => {
@@ -177,6 +238,17 @@ function ComposerBody({
 						.
 					</p>
 				))}
+			{references.length > 0 && (
+				<div className="flex flex-wrap gap-1">
+					{references.map((reference) => (
+						<ReferenceChip
+							key={formatSelectionReference(reference)}
+							onRemove={() => onRemoveReference(reference)}
+							reference={reference}
+						/>
+					))}
+				</div>
+			)}
 			<div className="flex items-end gap-2 rounded-lg border border-input bg-background px-2.5 py-1.5 shadow-xs/5 transition-shadow focus-within:border-ring focus-within:ring-[3px] focus-within:ring-ring/24">
 				<div className="relative min-h-8 flex-1">
 					<PlainTextPlugin

@@ -694,6 +694,7 @@ export function FilesChangedView({
 						keywordMatchesByPath={keywordMatchesByPath}
 						onForceLoad={addForcedPath}
 						onVisiblePathChange={handleVisiblePathChange}
+						orpc={orpc}
 						ref={diffPaneRef}
 						repoRoot={session.repoRoot}
 						reviewState={reviewState}
