@@ -11,7 +11,7 @@ import { zshCompletionScript } from "./completion.ts";
 import { handoff, logFilePathConfig } from "./handoff.ts";
 
 /** Already printed a message for the user — `BunRuntime.runMain` just needs to see a failure to exit non-zero. */
-class ReportedFailure extends Schema.TaggedErrorClass<ReportedFailure>()(
+class ReportedFailure extends Schema.TaggedError<ReportedFailure>()(
 	"ReportedFailure",
 	{},
 ) {}

@@ -6,7 +6,7 @@ import { Schema } from "effect";
  * `null` for the former, so callers can tell "never ran" apart from "ran and
  * failed" without guessing from a sentinel number.
  */
-export class GitCommandError extends Schema.TaggedErrorClass<GitCommandError>()(
+export class GitCommandError extends Schema.TaggedError<GitCommandError>()(
 	"GitCommandError",
 	{
 		command: Schema.String,
@@ -19,13 +19,13 @@ export class GitCommandError extends Schema.TaggedErrorClass<GitCommandError>()(
 ) {}
 
 /** `cwd` (or an ancestor) isn't inside a git working tree. */
-export class NotAGitRepository extends Schema.TaggedErrorClass<NotAGitRepository>()(
+export class NotAGitRepository extends Schema.TaggedError<NotAGitRepository>()(
 	"NotAGitRepository",
 	{ cwd: Schema.String },
 ) {}
 
 /** `gh`'s `--json` output didn't parse or didn't match the shape we expect. */
-export class GhOutputDecodeError extends Schema.TaggedErrorClass<GhOutputDecodeError>()(
+export class GhOutputDecodeError extends Schema.TaggedError<GhOutputDecodeError>()(
 	"GhOutputDecodeError",
 	{
 		command: Schema.String,
@@ -39,7 +39,7 @@ export class GhOutputDecodeError extends Schema.TaggedErrorClass<GhOutputDecodeE
  * the repo's own refs (`origin/HEAD`, `init.defaultBranch`, `main`,
  * `master`). An empty repository with no commits is the usual cause.
  */
-export class NoDefaultBranch extends Schema.TaggedErrorClass<NoDefaultBranch>()(
+export class NoDefaultBranch extends Schema.TaggedError<NoDefaultBranch>()(
 	"NoDefaultBranch",
 	{ repoRoot: Schema.String },
 ) {}
@@ -50,7 +50,7 @@ export class NoDefaultBranch extends Schema.TaggedErrorClass<NoDefaultBranch>()(
  * GitHub answering "no such repository", which is a normal local-only
  * review target (see `resolveReviewTarget`) rather than a failure.
  */
-export class GitHubUnreachable extends Schema.TaggedErrorClass<GitHubUnreachable>()(
+export class GitHubUnreachable extends Schema.TaggedError<GitHubUnreachable>()(
 	"GitHubUnreachable",
 	{ repoRoot: Schema.String, reason: Schema.String },
 ) {}
@@ -63,7 +63,7 @@ export class GitHubUnreachable extends Schema.TaggedErrorClass<GitHubUnreachable
  * `apps/desktop/sidecar/walkthrough/context.ts`'s `gatherGenerationContext`,
  * which constructs one manually when a requested path comes back missing).
  */
-export class FileNotChanged extends Schema.TaggedErrorClass<FileNotChanged>()(
+export class FileNotChanged extends Schema.TaggedError<FileNotChanged>()(
 	"FileNotChanged",
 	{ path: Schema.String },
 ) {}
@@ -77,7 +77,7 @@ export class FileNotChanged extends Schema.TaggedErrorClass<FileNotChanged>()(
  * already handles as a value, not a failure — see that function's doc
  * comment.
  */
-export class WorktreeReadFailed extends Schema.TaggedErrorClass<WorktreeReadFailed>()(
+export class WorktreeReadFailed extends Schema.TaggedError<WorktreeReadFailed>()(
 	"WorktreeReadFailed",
 	{
 		path: Schema.String,
@@ -94,7 +94,7 @@ export class WorktreeReadFailed extends Schema.TaggedErrorClass<WorktreeReadFail
  * a count of `0` — an unverifiable state isn't "nothing to push", and the
  * frontend shows a distinct dialog for it.
  */
-export class NoRemoteRefToCompare extends Schema.TaggedErrorClass<NoRemoteRefToCompare>()(
+export class NoRemoteRefToCompare extends Schema.TaggedError<NoRemoteRefToCompare>()(
 	"NoRemoteRefToCompare",
 	{ repoRoot: Schema.String, branch: Schema.String },
 ) {}
@@ -107,7 +107,7 @@ export class NoRemoteRefToCompare extends Schema.TaggedErrorClass<NoRemoteRefToC
  * on unexpected output produces `NaN`, which would otherwise reach the wire
  * and render as "NaN commits" in the pre-merge dialog.
  */
-export class UnpushedCommitCountUnparseable extends Schema.TaggedErrorClass<UnpushedCommitCountUnparseable>()(
+export class UnpushedCommitCountUnparseable extends Schema.TaggedError<UnpushedCommitCountUnparseable>()(
 	"UnpushedCommitCountUnparseable",
 	{ repoRoot: Schema.String, remoteRef: Schema.String, raw: Schema.String },
 ) {}
@@ -120,7 +120,7 @@ export type GitError =
 	| GitHubUnreachable;
 
 /** The repo has no `origin` remote — nothing to fetch a PR's ref from. */
-export class NoOriginRemote extends Schema.TaggedErrorClass<NoOriginRemote>()(
+export class NoOriginRemote extends Schema.TaggedError<NoOriginRemote>()(
 	"NoOriginRemote",
 	{ repoRoot: Schema.String },
 ) {}
@@ -130,7 +130,7 @@ export class NoOriginRemote extends Schema.TaggedErrorClass<NoOriginRemote>()(
  * wrong, or GitHub has garbage-collected it (long-closed PRs eventually lose
  * this ref).
  */
-export class PullRequestRefNotFound extends Schema.TaggedErrorClass<PullRequestRefNotFound>()(
+export class PullRequestRefNotFound extends Schema.TaggedError<PullRequestRefNotFound>()(
 	"PullRequestRefNotFound",
 	{ repoRoot: Schema.String, number: Schema.Number },
 ) {}
@@ -143,7 +143,7 @@ export class PullRequestRefNotFound extends Schema.TaggedErrorClass<PullRequestR
  * this only still surfaces when something else (another nisi process, a
  * manual `git worktree add`) wins the race in between.
  */
-export class WorktreeBranchInUse extends Schema.TaggedErrorClass<WorktreeBranchInUse>()(
+export class WorktreeBranchInUse extends Schema.TaggedError<WorktreeBranchInUse>()(
 	"WorktreeBranchInUse",
 	{ repoRoot: Schema.String, number: Schema.Number, stderr: Schema.String },
 ) {}
@@ -153,7 +153,7 @@ export class WorktreeBranchInUse extends Schema.TaggedErrorClass<WorktreeBranchI
  * registered there — a leftover directory (e.g. from before nisi tracked
  * worktrees, or a manual `rm` instead of `git worktree remove`) is in the way.
  */
-export class WorktreePathOccupied extends Schema.TaggedErrorClass<WorktreePathOccupied>()(
+export class WorktreePathOccupied extends Schema.TaggedError<WorktreePathOccupied>()(
 	"WorktreePathOccupied",
 	{ path: Schema.String },
 ) {}
@@ -178,7 +178,7 @@ export type PullRequestWorktreeError =
  * worktree) — that case has no second path to consult, so a missing `path`
  * fails outright.
  */
-export class WorktreeRelocationFailed extends Schema.TaggedErrorClass<WorktreeRelocationFailed>()(
+export class WorktreeRelocationFailed extends Schema.TaggedError<WorktreeRelocationFailed>()(
 	"WorktreeRelocationFailed",
 	{
 		path: Schema.String,
@@ -196,7 +196,7 @@ export class WorktreeRelocationFailed extends Schema.TaggedErrorClass<WorktreeRe
  * branch's PR to fall back to, so a number `gh` can't resolve is a genuine
  * error, not a silent degrade to the default-branch diff.
  */
-export class PullRequestNotFound extends Schema.TaggedErrorClass<PullRequestNotFound>()(
+export class PullRequestNotFound extends Schema.TaggedError<PullRequestNotFound>()(
 	"PullRequestNotFound",
 	{ repoRoot: Schema.String, number: Schema.Number, reason: Schema.String },
 ) {}
@@ -212,7 +212,7 @@ export class PullRequestNotFound extends Schema.TaggedErrorClass<PullRequestNotF
  * `GitHubSearchUnreachable` so the palette can tell the user which one
  * actually applies instead of one generic "search failed".
  */
-export class GhNotAuthenticated extends Schema.TaggedErrorClass<GhNotAuthenticated>()(
+export class GhNotAuthenticated extends Schema.TaggedError<GhNotAuthenticated>()(
 	"GhNotAuthenticated",
 	{ reason: Schema.String },
 ) {}
@@ -224,7 +224,7 @@ export class GhNotAuthenticated extends Schema.TaggedErrorClass<GhNotAuthenticat
  * this is matched by message rather than exit status. A "wait and retry"
  * condition, not a "something's broken" one.
  */
-export class GhRateLimited extends Schema.TaggedErrorClass<GhRateLimited>()(
+export class GhRateLimited extends Schema.TaggedError<GhRateLimited>()(
 	"GhRateLimited",
 	{ reason: Schema.String },
 ) {}
@@ -239,7 +239,7 @@ export class GhRateLimited extends Schema.TaggedErrorClass<GhRateLimited>()(
  * `pull-request.ts`'s `isNoGitHubRepo` treating everything unmatched as a
  * failure rather than silently returning no results.
  */
-export class GitHubSearchUnreachable extends Schema.TaggedErrorClass<GitHubSearchUnreachable>()(
+export class GitHubSearchUnreachable extends Schema.TaggedError<GitHubSearchUnreachable>()(
 	"GitHubSearchUnreachable",
 	{ reason: Schema.String },
 ) {}
@@ -251,19 +251,19 @@ export type PullRequestSearchError =
 	| GitHubSearchUnreachable;
 
 /** A candidate repo path (a sibling guess, or a user-picked folder) doesn't exist on disk at all. */
-export class RepoPathNotFound extends Schema.TaggedErrorClass<RepoPathNotFound>()(
+export class RepoPathNotFound extends Schema.TaggedError<RepoPathNotFound>()(
 	"RepoPathNotFound",
 	{ path: Schema.String },
 ) {}
 
 /** A candidate repo path exists but isn't inside a git working tree. */
-export class RepoPathNotAGitRepo extends Schema.TaggedErrorClass<RepoPathNotAGitRepo>()(
+export class RepoPathNotAGitRepo extends Schema.TaggedError<RepoPathNotAGitRepo>()(
 	"RepoPathNotAGitRepo",
 	{ path: Schema.String },
 ) {}
 
 /** A candidate repo path is a git working tree, but has no `origin` remote to compare against. */
-export class RepoPathNoOriginRemote extends Schema.TaggedErrorClass<RepoPathNoOriginRemote>()(
+export class RepoPathNoOriginRemote extends Schema.TaggedError<RepoPathNoOriginRemote>()(
 	"RepoPathNoOriginRemote",
 	{ path: Schema.String },
 ) {}
@@ -274,7 +274,7 @@ export class RepoPathNoOriginRemote extends Schema.TaggedErrorClass<RepoPathNoOr
  * couldn't be parsed as an `owner/repo` at all (`actualOwner`/`actualRepo`
  * are `null` in that case).
  */
-export class RepoPathOriginMismatch extends Schema.TaggedErrorClass<RepoPathOriginMismatch>()(
+export class RepoPathOriginMismatch extends Schema.TaggedError<RepoPathOriginMismatch>()(
 	"RepoPathOriginMismatch",
 	{
 		path: Schema.String,
@@ -309,7 +309,7 @@ export type RepoPathVerificationError =
  * checking mergeability from a fork or a read-only clone gets a real error
  * instead of a silently substituted `"UNKNOWN"`.
  */
-export class PullRequestMergeStatusUnavailable extends Schema.TaggedErrorClass<PullRequestMergeStatusUnavailable>()(
+export class PullRequestMergeStatusUnavailable extends Schema.TaggedError<PullRequestMergeStatusUnavailable>()(
 	"PullRequestMergeStatusUnavailable",
 	{ repoRoot: Schema.String, number: Schema.Number, reason: Schema.String },
 ) {}
@@ -320,7 +320,7 @@ export class PullRequestMergeStatusUnavailable extends Schema.TaggedErrorClass<P
  * merge anything through the UI or API at all), not a case to silently
  * default a method for.
  */
-export class NoMergeMethodsEnabled extends Schema.TaggedErrorClass<NoMergeMethodsEnabled>()(
+export class NoMergeMethodsEnabled extends Schema.TaggedError<NoMergeMethodsEnabled>()(
 	"NoMergeMethodsEnabled",
 	{ owner: Schema.String, repo: Schema.String },
 ) {}
@@ -331,7 +331,7 @@ export class NoMergeMethodsEnabled extends Schema.TaggedErrorClass<NoMergeMethod
  * message since `gh` reports this as a plain exit 1 like every other
  * failure.
  */
-export class PullRequestNotMergeable extends Schema.TaggedErrorClass<PullRequestNotMergeable>()(
+export class PullRequestNotMergeable extends Schema.TaggedError<PullRequestNotMergeable>()(
 	"PullRequestNotMergeable",
 	{ repoRoot: Schema.String, number: Schema.Number, reason: Schema.String },
 ) {}
@@ -340,7 +340,7 @@ export class PullRequestNotMergeable extends Schema.TaggedErrorClass<PullRequest
  * `gh pr merge` failed for a reason that isn't auth, not-found, or
  * not-mergeable — the catch-all so a merge attempt never silently no-ops.
  */
-export class GhMergeFailed extends Schema.TaggedErrorClass<GhMergeFailed>()(
+export class GhMergeFailed extends Schema.TaggedError<GhMergeFailed>()(
 	"GhMergeFailed",
 	{ repoRoot: Schema.String, number: Schema.Number, reason: Schema.String },
 ) {}
@@ -384,7 +384,7 @@ export type PullRequestMergeError =
  * catch-all so marking a PR ready for review never silently no-ops. Mirrors
  * `GhMergeFailed`'s role for `mergePullRequest`.
  */
-export class GhPullRequestReadyFailed extends Schema.TaggedErrorClass<GhPullRequestReadyFailed>()(
+export class GhPullRequestReadyFailed extends Schema.TaggedError<GhPullRequestReadyFailed>()(
 	"GhPullRequestReadyFailed",
 	{ repoRoot: Schema.String, number: Schema.Number, reason: Schema.String },
 ) {}

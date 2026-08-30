@@ -33,13 +33,13 @@ const MAX_ACQUIRE_ATTEMPTS = 5;
  * Refused to boot because another sidecar is already live for this data dir
  * — see `acquireSidecarLock` below.
  */
-export class SidecarAlreadyRunning extends Schema.TaggedErrorClass<SidecarAlreadyRunning>()(
+export class SidecarAlreadyRunning extends Schema.TaggedError<SidecarAlreadyRunning>()(
 	"SidecarAlreadyRunning",
 	{ port: Schema.Number },
 ) {}
 
 /** Gave up acquiring the lock after repeatedly finding (and clearing) a dead owner. */
-export class LockAcquisitionFailed extends Schema.TaggedErrorClass<LockAcquisitionFailed>()(
+export class LockAcquisitionFailed extends Schema.TaggedError<LockAcquisitionFailed>()(
 	"LockAcquisitionFailed",
 	{ attempts: Schema.Number },
 ) {}

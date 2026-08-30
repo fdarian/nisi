@@ -10,7 +10,7 @@ import type { ChildProcessSpawner } from "effect/unstable/process";
  * — kept as its own tag rather than reusing it so a typo on either side of
  * the range is attributed to the ref that was actually bad.
  */
-export class InvalidHeadRef extends Schema.TaggedErrorClass<InvalidHeadRef>()(
+export class InvalidHeadRef extends Schema.TaggedError<InvalidHeadRef>()(
 	"InvalidHeadRef",
 	{
 		repoRoot: Schema.String,

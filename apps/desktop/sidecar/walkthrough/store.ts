@@ -6,7 +6,7 @@ import { applyEmbeddedMigrations } from "deskkit/sqlite";
 import { eq } from "drizzle-orm";
 import { Context, Effect, Layer, Schema } from "effect";
 
-export class WalkthroughStoreError extends Schema.TaggedErrorClass<WalkthroughStoreError>()(
+export class WalkthroughStoreError extends Schema.TaggedError<WalkthroughStoreError>()(
 	"WalkthroughStoreError",
 	{ cause: Schema.Defect() },
 ) {}

@@ -67,7 +67,7 @@ export const parseCaskFileVersion = (rubySource: string): string | undefined =>
 	VERSION_LINE_PATTERN.exec(rubySource)?.[1];
 
 /** The tap fetch itself failed, or came back in a shape this couldn't read — never a reason to fall back to a made-up version, only to leave `UpdateState` where it was and retry on the next check (see `updater/service.ts`). */
-export class TapFetchError extends Schema.TaggedErrorClass<TapFetchError>()(
+export class TapFetchError extends Schema.TaggedError<TapFetchError>()(
 	"TapFetchError",
 	{ reason: Schema.String },
 ) {}

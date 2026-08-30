@@ -5,7 +5,7 @@ import { FileSystem } from "effect/FileSystem";
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
 
 /** Couldn't find an app bundle to launch, or `open` itself failed. */
-export class AppLaunchError extends Schema.TaggedErrorClass<AppLaunchError>()(
+export class AppLaunchError extends Schema.TaggedError<AppLaunchError>()(
 	"AppLaunchError",
 	{ reason: Schema.String },
 ) {}
