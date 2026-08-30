@@ -55,6 +55,10 @@ export const Settings = Schema.Struct({
 	walkthroughEnabled: Schema.Boolean,
 	/** See `@repo/settings`'s `Settings.wrapLines`. */
 	wrapLines: Schema.Boolean,
+	/** Harness id of the last chat model sent with — see `@repo/settings`'s `Settings.lastChatHarness` doc. */
+	lastChatHarness: Schema.NullOr(HarnessId),
+	/** Model id paired with `lastChatHarness` above. */
+	lastChatModel: Schema.NullOr(Schema.String),
 });
 export type Settings = Schema.Schema.Type<typeof Settings>;
 
@@ -73,6 +77,8 @@ export const SettingsUpdate = Schema.Struct({
 	includeUncommitted: Schema.optional(Schema.Boolean),
 	walkthroughEnabled: Schema.optional(Schema.Boolean),
 	wrapLines: Schema.optional(Schema.Boolean),
+	lastChatHarness: Schema.optional(Schema.NullOr(HarnessId)),
+	lastChatModel: Schema.optional(Schema.NullOr(Schema.String)),
 });
 export type SettingsUpdate = Schema.Schema.Type<typeof SettingsUpdate>;
 

@@ -42,6 +42,7 @@ import {
 	type ModelSelection,
 } from "#/components/walkthrough/harness-model-combobox";
 import type { SidecarQueryUtils } from "#/lib/backend-context";
+import { useLastChatModel } from "#/lib/settings-data";
 import { cn } from "#/lib/utils";
 import { type HarnessId, useHarnesses } from "#/lib/walkthrough-data";
 
@@ -84,6 +85,7 @@ function ComposerBody({
 	const [hasText, setHasText] = useState(false);
 	const [selection, setSelection] = useState<ModelSelection | null>(null);
 	const { harnesses } = useHarnesses(orpc);
+	const [lastChatModel] = useLastChatModel(orpc);
 
 	const isBusy = status === "submitted" || status === "streaming";
 	// The picker only matters before the thread's live harness session
@@ -91,6 +93,25 @@ function ComposerBody({
 	// side once a thread's first message picked them.
 	const needsPicker = threadHarness === null;
 	const hasEnabledHarness = harnesses.some((harness) => harness.enabled);
+
+	// Seeds the picker from the last harness/model actually sent with, once
+	// (never overwrites a choice already made this mount). Re-validates
+	// against the live harness list rather than trusting the persisted pair
+	// blindly — a harness-only selection (`modelId: undefined`) is legitimate
+	// and skips the model-membership check; a stored model id must still be
+	// in the harness's live list.
+	useEffect(() => {
+		if (!needsPicker || lastChatModel === null || selection !== null) return;
+		const harness = harnesses.find(
+			(candidate) => candidate.id === lastChatModel.harness,
+		);
+		if (harness === undefined || !harness.enabled) return;
+		const modelStillOffered =
+			lastChatModel.modelId === undefined ||
+			harness.models.some((model) => model.id === lastChatModel.modelId);
+		if (!modelStillOffered) return;
+		setSelection({ harness: harness.id, modelId: lastChatModel.modelId });
+	}, [needsPicker, lastChatModel, harnesses, selection]);
 
 	const submit = useCallback(() => {
 		if (isBusy) return;

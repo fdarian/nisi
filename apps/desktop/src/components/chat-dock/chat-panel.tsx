@@ -40,6 +40,7 @@ import {
 	useChatPopupMinimized,
 	useChatThreads,
 } from "#/lib/chat-store";
+import { useLastChatModel } from "#/lib/settings-data";
 import { cn } from "#/lib/utils";
 
 const markdownComponents: Components = {
@@ -186,6 +187,7 @@ function ChatPanelBody({
 }): React.ReactElement {
 	const minimized = useChatPopupMinimized(sessionId);
 	const dock = useChatDockActions(sessionId, orpc);
+	const [, setLastChatModel] = useLastChatModel(orpc);
 	const { messages, status, error, sendMessage, stop } = useChat({
 		chat: getOrCreateChat(orpc, sessionId, thread.id),
 	});
@@ -252,6 +254,14 @@ function ChatPanelBody({
 						<ChatComposer
 							key={thread.id}
 							onSend={(text, harness, model) => {
+								// Only the send that actually locks the thread's
+								// harness/model in is "the user sent with this" —
+								// every later send in the same thread reuses the
+								// already-locked pair, so re-persisting it would
+								// just be a redundant write of the same value.
+								if (thread.harness === null) {
+									setLastChatModel({ harness, modelId: model });
+								}
 								dock.lockThreadHarness(thread.id, harness, model);
 								void sendMessage({ text }, { body: { harness, model } });
 							}}

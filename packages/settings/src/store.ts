@@ -55,6 +55,10 @@ export type Settings = {
 	readonly walkthroughEnabled: boolean;
 	/** When true, long diff lines wrap instead of scrolling horizontally. */
 	readonly wrapLines: boolean;
+	/** Harness id of the last chat model sent with — see `db/schema.ts`'s `lastChatHarness` doc. */
+	readonly lastChatHarness: string | null;
+	/** Model id paired with `lastChatHarness` above. */
+	readonly lastChatModel: string | null;
 };
 
 export type SettingsUpdate = Partial<Settings>;
@@ -83,6 +87,8 @@ export const DEFAULT_SETTINGS: Settings = {
 	includeUncommitted: false,
 	walkthroughEnabled: false,
 	wrapLines: false,
+	lastChatHarness: null,
+	lastChatModel: null,
 };
 
 const toSettings = (row: SettingsRow): Settings => ({
@@ -97,6 +103,8 @@ const toSettings = (row: SettingsRow): Settings => ({
 	includeUncommitted: row.includeUncommitted,
 	walkthroughEnabled: row.walkthroughEnabled,
 	wrapLines: row.wrapLines,
+	lastChatHarness: row.lastChatHarness,
+	lastChatModel: row.lastChatModel,
 });
 
 const toRepoPathMapping = (row: RepoPathRow): RepoPathMapping => ({
@@ -156,6 +164,8 @@ export class SettingsStore extends Context.Service<SettingsStore>()(
 						includeUncommitted: next.includeUncommitted,
 						walkthroughEnabled: next.walkthroughEnabled,
 						wrapLines: next.wrapLines,
+						lastChatHarness: next.lastChatHarness,
+						lastChatModel: next.lastChatModel,
 						updatedAt: new Date(),
 					};
 
