@@ -83,6 +83,7 @@
 	"devDependencies": {
 		"@ai-sdk/devtools": "^1.0.13",
 		"@orpc/shared": "2.0.0-beta.21",
+		"@rolldown/plugin-babel": "^0.2.3",
 		"@storybook/addon-a11y": "^10.5.10",
 		"@storybook/react-vite": "^10.5.10",
 		"@tailwindcss/vite": "^4.3.0",
@@ -96,6 +97,7 @@
 		"@types/react-dom": "^19.2.5",
 		"@vitejs/plugin-react": "^6.1.0",
 		"agentation": "github:fdarian/agentation#path:package&f19e8ff",
+		"babel-plugin-react-compiler": "^1.0.0",
 		"storybook": "^10.5.10",
 		"tailwindcss": "^4.3.0",
 		"typescript": "7.0.2",
