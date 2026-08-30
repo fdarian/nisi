@@ -224,37 +224,24 @@ export class ReviewStore extends Context.Service<ReviewStore>()("ReviewStore", {
 			});
 
 		/**
-		 * "Switch to PR": retargets `sessionId`'s row onto `pr` in place — same
-		 * `id`, `sessionKey`/`owner`/`repo`/`prNumber`/`prTitle`/`baseRef`/
-		 * `headRef` overwritten to the PR's — so every dependent table
-		 * (`reviewed_files`, `review_range_claims`, a stored walkthrough keyed
-		 * by this same `publicId`) carries over with no migration or copy.
-		 * Unlike `openSession`, this never inserts: the row named by
-		 * `sessionId` already exists (or this fails `SessionNotFound`), so
-		 * there's nothing to get-or-create.
+		 * "Switch to PR": retargets `sessionId`'s row onto `pr` in place, so
+		 * every dependent table (reviewed files, range claims, a stored
+		 * walkthrough) keyed by this same `id` carries over untouched.
 		 *
-		 * The one thing that *can* go wrong is the PR's own `sessionKey`
-		 * already belonging to a different row — another session already
-		 * reviewing this PR, from a second worktree, a second branch pushed to
-		 * the same PR, or a previous "Switch to PR" that was never closed. A
-		 * row whose `closedAt` is set still counts as occupying the key here
-		 * (`sessions.sessionKey` is `UNIQUE` regardless of `closedAt`, so it
-		 * physically does), rather than being treated as free for `sessionId`
-		 * to claim: reopening-by-reuse is squarely `openSession`'s job for
-		 * *every* other key, and giving this one path a different rule for a
-		 * closed row would mean two sessions could resurrect the same PR
-		 * identity independently and disagree about which one's the "real"
-		 * reopen. So a closed collision is reactivated (its `closedAt`
-		 * cleared) exactly the way `openSession` already reopens any other
-		 * closed row, and `sessionId`'s own row is left untouched — the
-		 * caller decides whether to close it (see `kind: "existing"` above).
+		 * The one thing that can go wrong: the PR's own `sessionKey` already
+		 * belongs to a different row. A row whose `closedAt` is set still
+		 * counts as occupying that key (`sessionKey` is `UNIQUE` regardless of
+		 * `closedAt`) rather than being free for `sessionId` to claim —
+		 * reopening-by-reuse is `openSession`'s job for every other key, and
+		 * giving this path a different rule would let two sessions resurrect
+		 * the same PR identity independently. So a closed collision is
+		 * reactivated in place, the same way `openSession` reopens any other
+		 * closed row, and `sessionId`'s own row is left for the caller to
+		 * close (see `kind: "existing"`).
 		 *
-		 * The collision check and whichever write follows it happen inside one
-		 * transaction, so two concurrent "Switch to PR" calls converging on
-		 * the same PR can't both observe no collision and both try to claim
-		 * the key (`sessionKey`'s own `UNIQUE` constraint would catch that
-		 * anyway, but as a write failure instead of the discriminated result
-		 * this signature promises).
+		 * The collision check and the write it leads to happen inside one
+		 * transaction, so two concurrent calls converging on the same PR can't
+		 * both observe no collision and both try to claim the key.
 		 */
 		const retargetToPullRequest = (
 			sessionId: string,

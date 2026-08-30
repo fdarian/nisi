@@ -237,11 +237,23 @@ export function attachRouter(
 	const closeSessionSideEffects = (sessionId: string) =>
 		Effect.gen(function* () {
 			const sessionWatch = yield* SessionWatch;
+			// A closed tab's sandbox session (spawned processes, leased port)
+			// has no other owner — release it here rather than leaking it for
+			// the sidecar's lifetime. Its retained generation log goes with
+			// it — nothing left to reattach to once the session itself is gone.
 			yield* Effect.promise(() => stopLiveSession(sessionId));
 			clearGeneration(sessionId);
+			// Chat threads are scoped per PR tab (see `chat/sessions.ts`) — a
+			// closed tab's threads have no other owner either, same reasoning
+			// as `stopLiveSession` above.
 			yield* Effect.promise(() =>
 				closeChatThreadsForSession(sessionId, mainContext),
 			);
+			// Otherwise a closed session's id lingers in the watch registry
+			// forever — nothing else ever removes it, since the frontend's own
+			// unmount-time `setWatching(false)` races this close and isn't
+			// guaranteed to land first (or at all, if the tab close came from
+			// elsewhere — the CLI, another window).
 			yield* sessionWatch.remove(sessionId);
 		});
 
@@ -359,7 +371,7 @@ export function attachRouter(
 				errors,
 			}) {
 				const store = yield* Store;
-				const session = yield* store.switchToPr(input.sessionId).pipe(
+				const outcome = yield* store.switchToPr(input.sessionId).pipe(
 					Effect.catchTag("SessionNotFound", () =>
 						Effect.fail(
 							errors.NOT_FOUND({
@@ -406,11 +418,12 @@ export function attachRouter(
 						),
 					),
 				);
+				const session = outcome.session;
 
-				if (session.id === input.sessionId) {
-					// Retargeted in place — same tab, new PR identity. No row
-					// closed, so `session-updated` (not `session-closed`) is what
-					// tells every `sessions.list` subscriber to refetch.
+				if (outcome.kind === "retargeted") {
+					// Same tab, new PR identity. No row closed, so
+					// `session-updated` (not `session-closed`) is what tells
+					// every `sessions.list` subscriber to refetch.
 					emit({ type: "session-updated", session });
 				} else {
 					// Collision: some other session already held this PR's key, so

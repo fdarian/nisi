@@ -462,25 +462,17 @@ export class Store extends Context.Service<Store>()("Store", {
 		/**
 		 * The command palette's "Switch to PR" action — transforms `sessionId`'s
 		 * row from a `"branch"` target onto the PR open for its current branch,
-		 * in place. Resolves the target the same way `openSession`'s own
-		 * `"pr"` selector does (`resolveSessionTarget`, so `NoPullRequest`
-		 * behaves identically — it never degrades to a branch diff here
-		 * either), then hands the resolved PR to `@repo/review`'s
-		 * `retargetToPullRequest` instead of `openSession`, since there's an
-		 * existing row to transform rather than get-or-create.
+		 * in place (`@repo/review`'s `retargetToPullRequest`, not
+		 * `openSession` — the row already exists). `resolveSessionTarget`
+		 * resolves the target the same way `openSession`'s own `"pr"` selector
+		 * does, so `NoPullRequest` behaves identically; `resolved.pr` is only
+		 * ever `null` from that function's `"branch"` variant, unreachable here.
 		 *
-		 * `resolved.pr` is only ever `null` from `resolveSessionTarget`'s
-		 * `"branch"` variant — unreachable here since this always asks for
-		 * `"pr"` — so a `null` is an invariant violation, not a real case to
-		 * handle.
-		 *
-		 * On the collision outcome (some other session already held that PR's
-		 * key), the source session is genuinely done — this closes it
-		 * (`closeSession`, the domain-level state; the sidecar-wide cleanup
-		 * for its live walkthrough/chat/watch state is `http.ts`'s job, same
-		 * as `sessions.close`'s own handler) and returns the pre-existing PR
-		 * session in its place. The caller tells the two outcomes apart by
-		 * comparing the returned session's `id` against `sessionId`.
+		 * Returns the retarget outcome alongside the wire session, not just the
+		 * session — `http.ts`'s handler needs `kind` to know whether a row
+		 * genuinely closed (see the collision branch below) so it can run the
+		 * matching sidecar-wide teardown and emit the right event, and
+		 * shouldn't have to re-derive that by comparing ids.
 		 */
 		const switchToPr = (sessionId: string) =>
 			Effect.gen(function* () {
@@ -504,11 +496,18 @@ export class Store extends Context.Service<Store>()("Store", {
 					resolved.headRef,
 				);
 
+				// On collision, the source row is genuinely done — close its
+				// domain state here (`Store.closeSession`); the sidecar-wide
+				// teardown for its live walkthrough/chat/watch state is
+				// `http.ts`'s job, same as `sessions.close`'s own handler.
 				if (outcome.kind === "existing") {
 					yield* reviewStore.closeSession(sessionId);
 				}
 
-				return toWireSession(outcome.session);
+				return {
+					kind: outcome.kind,
+					session: toWireSession(outcome.session),
+				};
 			});
 
 		/**
