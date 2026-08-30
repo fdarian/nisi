@@ -311,15 +311,13 @@ const toOverviewCommit = (
 	const commit = node.commit;
 	const author = commit.authors.nodes[0];
 	if (author === undefined || author.name === null) {
-		return Effect.fail(
-			new GhOutputDecodeError({
-				command: "gh api graphql (overview)",
-				raw: JSON.stringify(node),
-				cause: new Error(
-					`commit ${commit.oid} in ${repoRoot} reported no git author name`,
-				),
-			}),
-		);
+		return new GhOutputDecodeError({
+			command: "gh api graphql (overview)",
+			raw: JSON.stringify(node),
+			cause: new Error(
+				`commit ${commit.oid} in ${repoRoot} reported no git author name`,
+			),
+		});
 	}
 
 	return Effect.succeed({
