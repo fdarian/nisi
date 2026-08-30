@@ -18,6 +18,7 @@ import { CheckIcon, CopyIcon } from "lucide-react";
 import { useEffect, useLayoutEffect, useState } from "react";
 import { Button } from "#/components/ui/button";
 import { Popover, PopoverPrimitive } from "#/components/ui/popover";
+import { toastManager } from "#/components/ui/toast";
 import {
 	type DiffSelectionReference,
 	diffSelectionPopupMarkerProps,
@@ -159,10 +160,17 @@ export function DiffSelectionPopover({
 					>
 						<Button
 							onClick={() => {
-								navigator.clipboard.writeText(
-									formatSelectionReference(reference),
-								);
-								setCopied(true);
+								navigator.clipboard
+									.writeText(formatSelectionReference(reference))
+									.then(() => setCopied(true))
+									.catch((error: unknown) => {
+										toastManager.add({
+											title: "Failed to copy reference",
+											description:
+												error instanceof Error ? error.message : String(error),
+											type: "error",
+										});
+									});
 							}}
 							size="xs"
 							variant="default"
