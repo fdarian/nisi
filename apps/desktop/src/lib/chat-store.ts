@@ -80,6 +80,17 @@ type SessionChatState = {
 	activeThreadId: string | null;
 	popupOpen: boolean;
 	popupMinimized: boolean;
+	/**
+	 * Bumped every time something asks the composer to take the caret —
+	 * today only "Ask" (`askWithReference`). A counter rather than a derived
+	 * signal because "the user asked to type here" is an event, and none of
+	 * the state it would otherwise be inferred from actually changes on every
+	 * occurrence: a second "Ask" on the same lines dedups to the identical
+	 * `references` array (see `attachReference`), and the popup is already
+	 * open and un-minimized. `chat-composer.tsx` keys its focus effect on
+	 * this.
+	 */
+	composerFocusRequest: number;
 };
 
 function createDefaultSessionChatState(): SessionChatState {
@@ -88,6 +99,7 @@ function createDefaultSessionChatState(): SessionChatState {
 		activeThreadId: null,
 		popupOpen: false,
 		popupMinimized: false,
+		composerFocusRequest: 0,
 	};
 }
 
@@ -211,6 +223,8 @@ type ChatStore = {
 	) => void;
 	/** Drops every reference chip on a thread — called after its formatted references are folded into an outgoing message. */
 	clearReferences: (sessionId: string, threadId: string) => void;
+	/** Asks the active thread's composer to take the caret — see `SessionChatState.composerFocusRequest`. */
+	requestComposerFocus: (sessionId: string) => void;
 	/** Drops a closed PR tab's chat state entirely, including every one of its threads' `Chat` instances — call from wherever a session actually closes, mirroring `session-ui-store.tsx`'s `clearSession`. */
 	clearSession: (sessionId: string) => void;
 };
@@ -329,6 +343,13 @@ function createChatStore(): StoreApi<ChatStore> {
 					})),
 				})),
 			})),
+		requestComposerFocus: (sessionId) =>
+			set((state) => ({
+				sessions: withSession(state.sessions, sessionId, (session) => ({
+					...session,
+					composerFocusRequest: session.composerFocusRequest + 1,
+				})),
+			})),
 		clearSession: (sessionId) =>
 			set((state) => {
 				const session = state.sessions.get(sessionId);
@@ -391,6 +412,15 @@ export function useChatPopupMinimized(sessionId: string): boolean {
 	return useStore(
 		store,
 		(state) => state.sessions.get(sessionId)?.popupMinimized ?? false,
+	);
+}
+
+/** The session's focus-request counter — an opaque value to subscribers, meaningful only in that it changes. See `SessionChatState.composerFocusRequest`. */
+export function useChatComposerFocusRequest(sessionId: string): number {
+	const store = useChatStore();
+	return useStore(
+		store,
+		(state) => state.sessions.get(sessionId)?.composerFocusRequest ?? 0,
 	);
 }
 
@@ -458,6 +488,10 @@ export function useChatDockActions(
 		store,
 		(state) => state.clearReferences,
 	);
+	const requestComposerFocusAction = useStore(
+		store,
+		(state) => state.requestComposerFocus,
+	);
 
 	const openNewThread = useCallback(() => {
 		const threadId = crypto.randomUUID();
@@ -502,11 +536,18 @@ export function useChatDockActions(
 				attachReferenceAction(sessionId, activeThreadId, reference);
 				setPopupOpenAction(sessionId, true);
 				setPopupMinimizedAction(sessionId, false);
-				return;
+			} else {
+				const threadId = crypto.randomUUID();
+				openNewThreadAction(sessionId, threadId);
+				attachReferenceAction(sessionId, threadId, reference);
 			}
-			const threadId = crypto.randomUUID();
-			openNewThreadAction(sessionId, threadId);
-			attachReferenceAction(sessionId, threadId, reference);
+			// Unconditional, and deliberately not folded into either branch
+			// above: every "Ask" puts the caret in the composer, including the
+			// ones where nothing else here changed any state (same reference
+			// re-attached to an already-open, already-expanded popup). That case
+			// is the whole reason this is a separate signal rather than something
+			// the composer derives from `references`.
+			requestComposerFocusAction(sessionId);
 		},
 		[
 			store,
@@ -515,6 +556,7 @@ export function useChatDockActions(
 			setPopupOpenAction,
 			setPopupMinimizedAction,
 			openNewThreadAction,
+			requestComposerFocusAction,
 		],
 	);
 	const removeReference = useCallback(
