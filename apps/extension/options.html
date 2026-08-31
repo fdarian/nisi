@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<title>nisi</title>
+		<style>
+			body {
+				font: 14px -apple-system, system-ui, sans-serif;
+				max-width: 28rem;
+				margin: 2rem;
+				color: #1a1a1a;
+			}
+			fieldset {
+				border: 1px solid #ddd;
+				border-radius: 6px;
+				margin: 0 0 1.5rem;
+			}
+			label {
+				display: block;
+				margin: 0.5rem 0;
+			}
+			input[type="text"] {
+				font: inherit;
+				width: 100%;
+				box-sizing: border-box;
+				padding: 0.4rem;
+			}
+		</style>
+	</head>
+	<body>
+		<h1>nisi</h1>
+		<p>
+			Hands a GitHub pull request page off to the nisi app when you arrive at
+			it directly — a link from Slack, a typed or pasted URL, a bookmark.
+			Clicking around inside GitHub itself never triggers it.
+		</p>
+		<form id="options-form">
+			<fieldset>
+				<legend>After handing off, the GitHub tab should</legend>
+				<label
+					><input type="radio" name="tabBehavior" value="stay" checked />
+					Stay open</label
+				>
+				<label
+					><input type="radio" name="tabBehavior" value="close" /> Close</label
+				>
+			</fieldset>
+			<fieldset>
+				<legend>Deep link scheme</legend>
+				<label for="scheme">
+					<code>nisi</code> for the production app, <code>nisi-dev</code> for a
+					dev build
+				</label>
+				<input type="text" id="scheme" name="scheme" placeholder="nisi" />
+			</fieldset>
+		</form>
+		<p id="status" role="status"></p>
+		<script type="module" src="options.js"></script>
+	</body>
+</html>
