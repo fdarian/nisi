@@ -17,9 +17,8 @@ here resolves it without a bundler, so imports stay relative (`./direct-arrival.
   tab's last-committed URL fresh through GitHub's Turbo (pjax) navigations via
   `onHistoryStateUpdated`, since those never fire `onCommitted`. Performs the hand-off with
   `chrome.tabs.update` to the deep link, then optionally `chrome.tabs.remove`.
-- `options.html`/`options.js` — the post-hand-off tab preference (stay open, default; or close)
-  and the deep-link scheme (`nisi` for the production app, `nisi-dev` for a dev build), both in
-  `chrome.storage.sync` and read fresh on every hand-off.
+- `options.html`/`options.js` — the post-hand-off tab preference (stay open, default; or close),
+  persisted to `chrome.storage.sync` and read fresh on every hand-off.
 - `manifest.json` pins a `"key"` so the extension ID is stable across loads — needed to address
   `chrome-extension://<id>/options.html` directly (e.g. from an automated verification script)
   without first discovering the ID.
