@@ -25,6 +25,8 @@ Workspaces declared in `pnpm-workspace.yaml` (`packages/*`, `apps/*`). Each has 
 with the detail — this is only the map.
 
 - `apps/desktop` — Tauri shell + Bun/Effect sidecar + React frontend.
+- `apps/extension` — Chrome extension that hands a directly-arrived-at GitHub PR page to the app
+  via a `nisi://` deep link.
 - `packages/sidecar-api` — oRPC contract shared by the sidecar and the frontend. Start here for wire shapes.
 - `packages/git` — PR/diff detection and file classification. Pure, no SQLite, no oRPC.
 - `packages/review` — session/review persistence + the base/reviewed/head reconciliation engine.
