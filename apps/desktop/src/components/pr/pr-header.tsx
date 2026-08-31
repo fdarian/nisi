@@ -185,7 +185,7 @@ export function PrHeader({
 									<DropdownMenuItem
 										key={editor.id}
 										onClick={() =>
-											openInEditor(editor.id, editor.name, repoRoot)
+											openInEditor(editor.id, editor.name, repoRoot, repoRoot)
 										}
 									>
 										{editor.name}
