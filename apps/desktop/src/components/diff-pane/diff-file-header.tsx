@@ -182,7 +182,12 @@ export function DiffFileHeader({
 									<DropdownMenuItem
 										key={editor.id}
 										onClick={() =>
-											openInEditor(editor.id, editor.name, absolutePath)
+											openInEditor(
+												editor.id,
+												editor.name,
+												repoRoot,
+												absolutePath,
+											)
 										}
 									>
 										{editor.name}

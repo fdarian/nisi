@@ -44,21 +44,27 @@ export function useAvailableEditors(): {
 }
 
 /**
- * Opens `path` (a file or directory) in the editor registered for `scheme`.
- * Surfaces a failed `open_in_editor` invoke as a toast rather than swallowing
- * it, matching how failed refetches are surfaced elsewhere
- * (`use-refetch-toasts.ts`).
+ * Opens `path` (a file or directory) in the editor registered for `scheme`,
+ * alongside `repoRoot` — the repo/PR's root, always passed even when `path`
+ * already points at that same root. Only Zed's backing `open_in_editor`
+ * branch (`editors/zed.rs`) uses `repoRoot`; every other editor still opens
+ * via the `<scheme>://file/<path>` URL and ignores it. Surfaces a failed
+ * `open_in_editor` invoke as a toast rather than swallowing it, matching how
+ * failed refetches are surfaced elsewhere (`use-refetch-toasts.ts`).
  */
 export function openInEditor(
 	scheme: string,
 	editorName: string,
+	repoRoot: string,
 	path: string,
 ): void {
-	invoke("open_in_editor", { scheme, path }).catch((error: unknown) => {
-		toastManager.add({
-			title: `Failed to open in ${editorName}`,
-			description: error instanceof Error ? error.message : String(error),
-			type: "error",
-		});
-	});
+	invoke("open_in_editor", { scheme, repoRoot, path }).catch(
+		(error: unknown) => {
+			toastManager.add({
+				title: `Failed to open in ${editorName}`,
+				description: error instanceof Error ? error.message : String(error),
+				type: "error",
+			});
+		},
+	);
 }

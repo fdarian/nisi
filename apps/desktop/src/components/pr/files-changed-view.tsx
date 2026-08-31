@@ -505,6 +505,7 @@ export function FilesChangedView({
 			openInEditor(
 				preferredEditor,
 				editorName,
+				session.repoRoot,
 				`${session.repoRoot}/${selectedPath}`,
 			);
 			return;
@@ -531,6 +532,7 @@ export function FilesChangedView({
 			openInEditor(
 				editor.id,
 				editor.name,
+				session.repoRoot,
 				`${session.repoRoot}/${selectedPath}`,
 			);
 		},

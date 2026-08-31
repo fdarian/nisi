@@ -1,3 +1,5 @@
+mod zed;
+
 use objc2_app_kit::NSWorkspace;
 use objc2_foundation::{NSString, NSURL};
 use percent_encoding::{utf8_percent_encode, AsciiSet, NON_ALPHANUMERIC};
@@ -59,7 +61,7 @@ pub fn list_available_editors() -> Vec<EditorInfo> {
  * absolute filesystem path whose separators the receiving editor expects
  * literally, not encoded as `%2F`.
  */
-const PATH_SAFE: &AsciiSet = &NON_ALPHANUMERIC
+pub(crate) const PATH_SAFE: &AsciiSet = &NON_ALPHANUMERIC
     .remove(b'/')
     .remove(b'-')
     .remove(b'_')
@@ -68,17 +70,32 @@ const PATH_SAFE: &AsciiSet = &NON_ALPHANUMERIC
 
 /**
  * Opens `path` — a repo root or a specific file, never a line within one —
- * in the editor registered for `scheme`. Built as
- * `<scheme>://file/<percent-encoded-path>`
- * and handed to `tauri_plugin_opener`'s Rust `open_url` directly (the plugin
- * already registered in `lib.rs`'s builder; its sibling `tauri_plugin_shell`
- * has an equivalent `open`, but that one is deprecated in favor of this).
- * Called from inside a command function like this rather than invoked over
- * IPC, it bypasses the capability/ACL system entirely — no `shell:allow-open`
- * or opener-equivalent grant is needed for this to work.
+ * in the editor registered for `scheme`, with `repo_root` carried alongside
+ * so an editor that needs it (currently only Zed, see `zed::open`) can open
+ * `path` with project context instead of as a rootless file.
+ *
+ * Zed gets its own branch (`zed::open`) because its URL scheme can't express
+ * "this file, inside this project" in one path — see that module's doc
+ * comment. Every other editor keeps the original
+ * `<scheme>://file/<percent-encoded-path>` shape, handed to
+ * `tauri_plugin_opener`'s Rust `open_url` directly (the plugin already
+ * registered in `lib.rs`'s builder; its sibling `tauri_plugin_shell` has an
+ * equivalent `open`, but that one is deprecated in favor of this). Called
+ * from inside a command function like this rather than invoked over IPC, it
+ * bypasses the capability/ACL system entirely — no `shell:allow-open` or
+ * opener-equivalent grant is needed for this to work.
  */
 #[tauri::command]
-pub fn open_in_editor(app: tauri::AppHandle, scheme: String, path: String) -> Result<(), String> {
+pub fn open_in_editor(
+    app: tauri::AppHandle,
+    scheme: String,
+    repo_root: String,
+    path: String,
+) -> Result<(), String> {
+    if scheme == "zed" {
+        return zed::open(&app, &repo_root, &path);
+    }
+
     let encoded_path = utf8_percent_encode(&path, PATH_SAFE).to_string();
     let url = format!("{scheme}://file/{encoded_path}");
     app.opener()
