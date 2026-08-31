@@ -4,6 +4,9 @@
 		"beforeBuildCommand": "bun run build:sidecar && bun run build:frontend:dev"
 	},
 	"bundle": {
-		"externalBin": ["binaries/sidecar"]
+		"externalBin": ["binaries/sidecar"],
+		"macOS": {
+			"entitlements": "./entitlements.plist"
+		}
 	}
 }
