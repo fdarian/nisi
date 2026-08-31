@@ -159,7 +159,11 @@ export function PrView({
 				/>
 
 				<TabsContent className="flex min-h-0 flex-1" value="overview">
-					<OverviewView orpc={orpc} session={session} />
+					<OverviewView
+						orpc={orpc}
+						session={session}
+						watched={isHeaderWatched}
+					/>
 				</TabsContent>
 				<TabsContent className="flex min-h-0 flex-1 flex-col" value="files">
 					{error != null ? (

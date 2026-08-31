@@ -1163,13 +1163,28 @@ export type Overview = {
  * `OverviewInput`: a `"pr"` session carries owner/repo/number, a `"branch"`
  * session carries baseRef/headRef instead. Same polling shape as
  * `usePullRequestChecks` above, just checked across every commit's `checks`
- * rather than one flat list — `false` once nothing in the whole PR is still
- * `"running"`/`"pending"`, which is also the steady state for a branch
- * session, whose commits never carry `checks` at all.
+ * rather than one flat list — `CI_CHECKS_UNSETTLED_POLL_MS` while anything
+ * in the whole PR is still `"running"`/`"pending"`, regardless of
+ * `watched`, same rationale as `usePullRequestChecks`'s own unsettled path.
+ *
+ * Once everything's settled (also the steady state for a branch session,
+ * whose commits never carry `checks` at all), this drops to
+ * `CI_CHECKS_SETTLED_POLL_MS` while `watched` rather than stopping outright
+ * — reusing the exact interval `usePullRequestChecks` picked, since this
+ * backs the same per-commit CI dots the header's ring already summarizes,
+ * and the same nothing-else-invalidates-it gap applies (`main.tsx` disables
+ * `refetchOnWindowFocus` globally). `useRefreshOnWatchedEdge` covers the
+ * same immediate-refetch-on-return edge.
+ *
+ * `watched` is the caller's `pr-view.tsx`-level `isHeaderWatched` — "this
+ * PR's tab is selected and the window has focus" — not a signal scoped to
+ * the Overview sub-tab actually being the one on screen, the same
+ * broader-than-sub-tab shape `PrHeader`'s CI ring already uses.
  */
 export function useOverview(
 	orpc: SidecarQueryUtils,
 	session: Session,
+	watched: boolean,
 ): UseQueryResult<Overview> {
 	const target = session.target;
 	const input =
@@ -1188,7 +1203,8 @@ export function useOverview(
 					headRef: target.headRef,
 				};
 
-	return useQuery({
+	const queryClient = useQueryClient();
+	const query = useQuery({
 		...orpc.overview.get.queryOptions({ input }),
 		refetchInterval: (query) =>
 			query.state.data?.commits.some((commit) =>
@@ -1196,9 +1212,20 @@ export function useOverview(
 					(check) => check.status === "running" || check.status === "pending",
 				),
 			) === true
-				? 10000
-				: false,
+				? CI_CHECKS_UNSETTLED_POLL_MS
+				: watched
+					? CI_CHECKS_SETTLED_POLL_MS
+					: false,
 	});
+
+	const refresh = useCallback(() => {
+		queryClient.invalidateQueries({
+			queryKey: orpc.overview.get.key({ input }),
+		});
+	}, [queryClient, orpc, input]);
+	useRefreshOnWatchedEdge(watched, refresh);
+
+	return query;
 }
 
 /**
