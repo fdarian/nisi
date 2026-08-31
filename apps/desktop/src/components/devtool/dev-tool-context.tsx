@@ -17,6 +17,7 @@ type DevToolState = {
 	toastOnRefetch: boolean;
 	devToolVisible: boolean;
 	agentationEnabled: boolean;
+	mesurerEnabled: boolean;
 };
 
 type DevToolActions = {
@@ -25,6 +26,7 @@ type DevToolActions = {
 	setToastOnRefetch: (value: boolean) => void;
 	setDevToolVisible: (value: boolean) => void;
 	setAgentationEnabled: (value: boolean) => void;
+	setMesurerEnabled: (value: boolean) => void;
 };
 
 type DevToolStore = DevToolState & DevToolActions;
@@ -49,6 +51,7 @@ function createDevToolStore(): StoreApi<DevToolStore> {
 		devToolVisible:
 			localStorage.getItem(DEV_TOOL_VISIBLE_STORAGE_KEY) === "true",
 		agentationEnabled: false,
+		mesurerEnabled: false,
 		registerScope: (scope) =>
 			set((state) => {
 				const next = new Map(state.scopeCounts);
@@ -73,6 +76,7 @@ function createDevToolStore(): StoreApi<DevToolStore> {
 			set({ devToolVisible: value });
 		},
 		setAgentationEnabled: (value) => set({ agentationEnabled: value }),
+		setMesurerEnabled: (value) => set({ mesurerEnabled: value }),
 	}));
 }
 
@@ -181,4 +185,19 @@ export function useAgentationEnabled(): readonly [
 		(state) => state.setAgentationEnabled,
 	);
 	return [agentationEnabled, setAgentationEnabled] as const;
+}
+
+/**
+ * Whether `<Mesurer />` (the third-party UI-inspector overlay mounted in
+ * `__root.tsx`) should render. Ephemeral like `agentationEnabled` — defaults
+ * to `false` since, unlike Agentation, it wasn't previously always-on in dev.
+ */
+export function useMesurerEnabled(): readonly [
+	boolean,
+	(value: boolean) => void,
+] {
+	const store = useDevToolStore();
+	const mesurerEnabled = useStore(store, (state) => state.mesurerEnabled);
+	const setMesurerEnabled = useStore(store, (state) => state.setMesurerEnabled);
+	return [mesurerEnabled, setMesurerEnabled] as const;
 }

@@ -98,6 +98,7 @@
 		"@vitejs/plugin-react": "^6.1.0",
 		"agentation": "github:fdarian/agentation#path:package&f19e8ff",
 		"babel-plugin-react-compiler": "^1.0.0",
+		"mesurer": "0.1.0",
 		"storybook": "^10.5.10",
 		"tailwindcss": "^4.3.0",
 		"typescript": "7.0.2",

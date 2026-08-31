@@ -2,6 +2,7 @@ import type React from "react";
 import {
 	useAgentationEnabled,
 	useIsDevToolScopeActive,
+	useMesurerEnabled,
 	useToastOnRefetch,
 } from "#/components/devtool/dev-tool-context";
 import { Popover, PopoverPopup, PopoverTrigger } from "#/components/ui/popover";
@@ -28,6 +29,7 @@ function DevToolOptions(): React.ReactElement {
 	return (
 		<div className="flex flex-col gap-3">
 			<AgentationOption />
+			<MesurerOption />
 			{isFilesChangedActive ? (
 				<ToastOnRefetchOption />
 			) : (
@@ -51,6 +53,23 @@ function AgentationOption(): React.ReactElement {
 				checked={agentationEnabled}
 				id={AGENTATION_ID}
 				onCheckedChange={setAgentationEnabled}
+			/>
+		</div>
+	);
+}
+
+const MESURER_ID = "devtool-mesurer";
+
+function MesurerOption(): React.ReactElement {
+	const [mesurerEnabled, setMesurerEnabled] = useMesurerEnabled();
+
+	return (
+		<div className="flex items-center justify-between gap-3 text-sm">
+			<label htmlFor={MESURER_ID}>Mesurer</label>
+			<Switch
+				checked={mesurerEnabled}
+				id={MESURER_ID}
+				onCheckedChange={setMesurerEnabled}
 			/>
 		</div>
 	);
