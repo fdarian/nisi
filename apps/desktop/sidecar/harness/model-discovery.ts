@@ -74,8 +74,16 @@ export const createModelDiscoveryCache = (ttlMs = CACHE_TTL_MS) => {
 				return { models: attempt.success, status: "fresh" as const };
 			}
 			if (cached !== undefined) {
+				yield* Effect.logWarning(
+					"model discovery failed -- degrading to the last cached model list",
+					{ harnessId: id, cause: attempt.failure },
+				);
 				return { models: cached.models, status: "stale" as const };
 			}
+			yield* Effect.logWarning(
+				"model discovery failed with no cached model list -- harness will report no models",
+				{ harnessId: id, cause: attempt.failure },
+			);
 			return { models: [], status: "unavailable" as const };
 		});
 

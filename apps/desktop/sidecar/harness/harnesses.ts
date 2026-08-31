@@ -91,6 +91,12 @@ export const listHarnesses = (
 		Effect.gen(function* () {
 			const availability = checkHarnessAvailability(id);
 			if (!isEnabled(id) || !availability.available) {
+				if (isEnabled(id)) {
+					yield* Effect.logWarning(
+						"harness is enabled but its CLI wasn't resolvable -- skipping model discovery",
+						{ harnessId: id },
+					);
+				}
 				return {
 					...availability,
 					models: [] as ReadonlyArray<HarnessModel>,
@@ -99,6 +105,10 @@ export const listHarnesses = (
 			}
 			const discovery = yield* cache.get(id, DISCOVER_MODELS[id], {
 				force: opts?.force,
+			});
+			yield* Effect.logDebug("model discovery finished", {
+				harnessId: id,
+				modelCount: discovery.models.length,
 			});
 			return {
 				...availability,
