@@ -62,6 +62,39 @@ export function pullRequestUrl(
 	return `https://github.com/${target.owner}/${target.repo}/pull/${target.number}`;
 }
 
+export type PullRequestUrlParts = {
+	owner: string;
+	repo: string;
+	number: number;
+};
+
+/**
+ * `pullRequestUrl`'s inverse — recognizes a GitHub PR page even with
+ * trailing segments (`/files`, `/commits/<sha>`), a query string, or a
+ * fragment, since that's exactly what a browser extension forwards
+ * verbatim (`.../pull/12/files#discussion_r1`, see `#/lib/deep-link.ts`).
+ * Only `github.com` is recognized — the same Enterprise gap noted on
+ * `pullRequestUrl` above applies here. Returns `null` rather than throwing:
+ * a URL that isn't a PR link is an expected outcome for a caller parsing
+ * arbitrary input, not a parse error.
+ */
+export function parsePullRequestUrl(url: string): PullRequestUrlParts | null {
+	let parsed: URL;
+	try {
+		parsed = new URL(url);
+	} catch {
+		return null;
+	}
+	if (parsed.hostname !== "github.com") return null;
+
+	const match = parsed.pathname.match(
+		/^\/([^/]+)\/([^/]+)\/pull\/(\d+)(?:\/.*)?$/,
+	);
+	if (match === null) return null;
+
+	return { owner: match[1], repo: match[2], number: Number(match[3]) };
+}
+
 export type Session = {
 	id: string;
 	repoRoot: string;
