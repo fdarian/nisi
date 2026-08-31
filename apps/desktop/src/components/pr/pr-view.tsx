@@ -43,7 +43,9 @@ type PrViewProps = {
 	 * `keepMounted`), so this is what tells an inactive one apart from the active
 	 * one. Gates both the sidecar watch below and every keyboard shortcut here —
 	 * and everything threaded down to `FilesChangedView`/`FilesSidebar` — to only
-	 * the selected tab. */
+	 * the selected tab. Also factors into `PrHeader`'s `watched` (below), since
+	 * the CI ring it hosts is on screen whenever this tab is selected,
+	 * regardless of which sub-tab is active. */
 	isSelectedTab: boolean;
 	onCloseTab: () => void;
 };
@@ -97,6 +99,11 @@ export function PrView({
 	// switching into this tab and regaining window focus — see
 	// `useRefreshOnWatchedEdge`'s doc comment (`pr-data.ts`).
 	useRefreshOnWatchedEdge(watched, refreshFileChanges);
+	// `PrHeader`'s CI ring is on screen whenever this PR's tab is selected —
+	// unlike Files Changed above, it doesn't care which sub-tab is active —
+	// see `usePullRequestChecks`'s doc comment (`pr-data.ts`) for how this
+	// gates its poll.
+	const isHeaderWatched = isSelectedTab && windowFocused;
 	// Not gated on window focus — the devtool popover should offer the
 	// "toast on every refetch" option whenever Files Changed is the visible
 	// tab, whether or not the window currently has focus.
@@ -138,6 +145,7 @@ export function PrView({
 				repoRoot={session.repoRoot}
 				stat={stat}
 				target={session.target}
+				watched={isHeaderWatched}
 			/>
 			<Tabs
 				className="flex min-h-0 flex-1 flex-col gap-0"

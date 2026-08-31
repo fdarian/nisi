@@ -1008,29 +1008,68 @@ export type PullRequestChecksParams = {
 	number: number;
 };
 
+/** While any check is still `"running"`/`"pending"`, regardless of `watched` — see `usePullRequestChecks`. */
+const CI_CHECKS_UNSETTLED_POLL_MS = 10000;
+
+/**
+ * Once every check has settled, but only while `watched` — see
+ * `usePullRequestChecks`. Slow because a settled PR rarely gets a fresh push
+ * or re-run; this just bounds how stale the ring can get without the user
+ * doing anything, not a responsiveness guarantee (that's the focus-refetch's
+ * job).
+ */
+const CI_CHECKS_SETTLED_POLL_MS = 60000;
+
 /**
  * `pullRequests.checks` — every CI check attached to the PR, backing the
- * header's `CiStatus` ring. Polls only while something is still unsettled
- * (any check `"running"`/`"pending"`) — unlike `usePullRequestMergeStatus`'s
- * 2s cadence, CI is slow (real pipelines run minutes, not seconds), so a
- * tight poll would just spam the sidecar with `gh pr view` calls for no
- * visible benefit. `false` (TanStack Query's "stop polling") once every
- * check has settled, same as a query that never had anything in flight (a PR
- * with zero checks, or every check already passing/failing/skipped).
+ * header's `CiStatus` ring. Polls at `CI_CHECKS_UNSETTLED_POLL_MS` while
+ * something is still unsettled (any check `"running"`/`"pending"`) —
+ * unlike `usePullRequestMergeStatus`'s 2s cadence, CI is slow (real
+ * pipelines run minutes, not seconds), so a tight poll would just spam the
+ * sidecar with `gh pr view` calls for no visible benefit. That fast path
+ * runs regardless of `watched` — an in-flight check is exactly what a user
+ * left this PR's tab open to wait on.
+ *
+ * Once every check has settled, polling doesn't stop outright the way
+ * `usePullRequestMergeStatus`'s does — a push or a re-run on GitHub after
+ * that point would otherwise never reach the ring, since nothing else ever
+ * invalidates this query (`refetchOnWindowFocus` is globally off, see
+ * `main.tsx`). Instead it drops to `CI_CHECKS_SETTLED_POLL_MS`, but only
+ * while `watched` — the caller's "this PR's tab is the selected one and the
+ * window has focus" signal, the same shape as `pr-view.tsx`'s Files-Changed
+ * `watched`. `false` while unwatched, same as a query that never had
+ * anything in flight, so a background PR tab never spawns a `gh`
+ * subprocess of its own. `useRefreshOnWatchedEdge` layers the other half of
+ * the fix on top: an immediate refetch the instant `watched` flips back to
+ * true, covering the common case (alt-tab to GitHub/CI and back) without
+ * waiting out the slow poll.
  */
 export function usePullRequestChecks(
 	orpc: SidecarQueryUtils,
 	params: PullRequestChecksParams,
+	watched: boolean,
 ): UseQueryResult<readonly PullRequestCheck[]> {
-	return useQuery({
+	const queryClient = useQueryClient();
+	const query = useQuery({
 		...orpc.pullRequests.checks.queryOptions({ input: params }),
 		refetchInterval: (query) =>
 			query.state.data?.some(
 				(check) => check.status === "running" || check.status === "pending",
 			) === true
-				? 10000
-				: false,
+				? CI_CHECKS_UNSETTLED_POLL_MS
+				: watched
+					? CI_CHECKS_SETTLED_POLL_MS
+					: false,
 	});
+
+	const refresh = useCallback(() => {
+		queryClient.invalidateQueries({
+			queryKey: orpc.pullRequests.checks.key({ input: params }),
+		});
+	}, [queryClient, orpc, params]);
+	useRefreshOnWatchedEdge(watched, refresh);
+
+	return query;
 }
 
 /**
