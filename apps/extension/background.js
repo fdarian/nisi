@@ -2,8 +2,9 @@
  * MV3 service worker. Watches every top-frame commit on github.com
  * (`host_permissions` already restricts `webNavigation` events to that host,
  * so there's no per-listener URL filter here) and hands a direct-arrival PR
- * page to the nisi app via a `nisi://` deep link — see `direct-arrival.js`
- * for what "direct" means.
+ * page off to the nisi app — see `direct-arrival.js` for what "direct"
+ * means, and `interstitial.js` for the actual `nisi://` deep link and why
+ * hand-off doesn't happen straight from here.
  *
  * GitHub's own navigation is mostly Turbo (pjax-style `history.pushState`),
  * which never fires `onCommitted` — `onHistoryStateUpdated` is the only
@@ -16,9 +17,6 @@
  * every wake and make every navigation look like a fresh tab.
  */
 import { isDirectArrival } from "./direct-arrival.js";
-
-const DEEP_LINK_SCHEME = "nisi";
-const DEFAULT_TAB_BEHAVIOR = "stay";
 
 /** @param {number} tabId */
 function storageKey(tabId) {
@@ -49,6 +47,22 @@ async function clearLastCommittedUrl(tabId) {
 }
 
 /**
+ * The interstitial's "Open on GitHub" link navigates the tab straight back
+ * to the PR URL it just came from — to `isDirectArrival`, that looks
+ * exactly like a fresh arrival (the previous URL isn't github.com, since
+ * it's this extension's own page), which would hand off again and bounce
+ * the user right back to the interstitial instead of letting them read the
+ * PR. Recognizing that specific case here, instead of teaching
+ * `isDirectArrival` about pages outside its GitHub/opener vocabulary, is
+ * what keeps that function pure and github-only.
+ * @param {string | undefined} url
+ * @returns {boolean}
+ */
+function isInterstitialUrl(url) {
+	return url?.startsWith(chrome.runtime.getURL("interstitial.html")) ?? false;
+}
+
+/**
  * `tab.url` is only populated when the extension has permission to see that
  * tab's origin — we only have `host_permissions` for github.com, so a
  * non-github opener simply comes back `undefined` here. That's the correct
@@ -66,33 +80,23 @@ async function getOpenerUrl(tab) {
 	}
 }
 
-async function getOptions() {
-	const stored = await chrome.storage.sync.get(["tabBehavior"]);
-	return {
-		tabBehavior:
-			stored.tabBehavior === "close" ? "close" : DEFAULT_TAB_BEHAVIOR,
-	};
-}
-
 /**
- * Forwards `details.url` verbatim (`/files`, `#discussion_r…` and all —
- * `parsePullRequestUrl` on the app side tolerates the trailing segment,
- * query, and fragment) as `nisi://open?url=<encoded url>`. Per the
- * Phase 0 spike, `chrome.tabs.update` to an unregistered scheme reaches the
- * OS handler without a user gesture and leaves the tab on GitHub with no
- * further navigation event — that's what makes "stay" (the default) a
- * no-op beyond firing the update. "close" additionally removes the tab;
- * the OS handoff has already been dispatched by the time `tabs.remove` runs.
+ * Navigates the tab to the extension's own interstitial page instead of
+ * straight to `nisi://` — `interstitial.html?url=<encoded github url>`
+ * carries the PR URL over so the interstitial can fire the deep link
+ * itself. Firing `nisi://` directly from here and then optionally removing
+ * the tab (the old design) could tear down Chrome's external-protocol
+ * confirmation dialog mid-flight: if the user hadn't yet approved the
+ * hand-off, closing the tab kills the pending dialog, and the PR page is
+ * gone too. Routing through a page that stays put sidesteps that — see
+ * `interstitial.js` for the deep link and why it never closes the tab
+ * itself either.
  * @param {number} tabId
  * @param {string} url
  */
 async function handOff(tabId, url) {
-	const options = await getOptions();
-	const deepLink = `${DEEP_LINK_SCHEME}://open?url=${encodeURIComponent(url)}`;
-	await chrome.tabs.update(tabId, { url: deepLink });
-	if (options.tabBehavior === "close") {
-		await chrome.tabs.remove(tabId);
-	}
+	const interstitialUrl = `${chrome.runtime.getURL("interstitial.html")}?url=${encodeURIComponent(url)}`;
+	await chrome.tabs.update(tabId, { url: interstitialUrl });
 }
 
 chrome.webNavigation.onHistoryStateUpdated.addListener(async (details) => {
@@ -113,14 +117,16 @@ chrome.webNavigation.onCommitted.addListener(async (details) => {
 		openerUrl = undefined;
 	}
 
-	const shouldHandOff = isDirectArrival({
-		frameId: details.frameId,
-		url: details.url,
-		transitionType: details.transitionType,
-		transitionQualifiers: details.transitionQualifiers,
-		previousUrl,
-		openerUrl,
-	});
+	const shouldHandOff =
+		!isInterstitialUrl(previousUrl) &&
+		isDirectArrival({
+			frameId: details.frameId,
+			url: details.url,
+			transitionType: details.transitionType,
+			transitionQualifiers: details.transitionQualifiers,
+			previousUrl,
+			openerUrl,
+		});
 
 	if (details.frameId === 0) {
 		await setLastCommittedUrl(details.tabId, details.url);

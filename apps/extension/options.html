@@ -10,15 +10,6 @@
 				margin: 2rem;
 				color: #1a1a1a;
 			}
-			fieldset {
-				border: 1px solid #ddd;
-				border-radius: 6px;
-				margin: 0 0 1.5rem;
-			}
-			label {
-				display: block;
-				margin: 0.5rem 0;
-			}
 		</style>
 	</head>
 	<body>
@@ -28,19 +19,12 @@
 			it directly — a link from Slack, a typed or pasted URL, a bookmark.
 			Clicking around inside GitHub itself never triggers it.
 		</p>
-		<form id="options-form">
-			<fieldset>
-				<legend>After handing off, the GitHub tab should</legend>
-				<label
-					><input type="radio" name="tabBehavior" value="stay" checked />
-					Stay open</label
-				>
-				<label
-					><input type="radio" name="tabBehavior" value="close" /> Close</label
-				>
-			</fieldset>
-		</form>
-		<p id="status" role="status"></p>
-		<script type="module" src="options.js"></script>
+		<p>
+			The hand-off lands on an interstitial page in the same tab, which fires
+			the deep link and stays open. Chrome gives no reliable way to tell
+			whether its "open nisi?" confirmation prompt is still pending, so the
+			tab is never closed automatically — the interstitial offers a retry
+			button and a link back to the pull request on GitHub instead.
+		</p>
 	</body>
 </html>

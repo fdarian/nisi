@@ -4,7 +4,9 @@ MV3 Chrome extension. Recognizes a GitHub pull request page arrived at directly 
 Slack, a typed or pasted URL, a bookmark — and hands it to the nisi desktop app via a
 `nisi://open?url=<encoded github url>` deep link (`apps/desktop/src/lib/deep-link.ts` owns that
 grammar; this extension only forwards the GitHub URL verbatim, trailing segments and fragment
-included). Clicking around inside GitHub itself never triggers a hand-off.
+included). Clicking around inside GitHub itself never triggers a hand-off. The hand-off lands on
+the extension's own interstitial page rather than firing the deep link straight from
+`background.js` — see `interstitial.js`'s docblock for why.
 
 No build step: hand-written `manifest.json`, plain ESM `.js` files typechecked by `tsc --noEmit`
 with `allowJs`/`checkJs` and `@types/chrome` (JSDoc types, not `.ts`). No `#/*` alias — nothing
@@ -15,13 +17,15 @@ here resolves it without a bundler, so imports stay relative (`./direct-arrival.
   caller.
 - `background.js` — wires that decision to `chrome.webNavigation.onCommitted`, and keeps each
   tab's last-committed URL fresh through GitHub's Turbo (pjax) navigations via
-  `onHistoryStateUpdated`, since those never fire `onCommitted`. Performs the hand-off with
-  `chrome.tabs.update` to the deep link, then optionally `chrome.tabs.remove`.
-- `options.html`/`options.js` — the post-hand-off tab preference (stay open, default; or close),
-  persisted to `chrome.storage.sync` and read fresh on every hand-off.
-- `manifest.json` pins a `"key"` so the extension ID is stable across loads — needed to address
-  `chrome-extension://<id>/options.html` directly (e.g. from an automated verification script)
-  without first discovering the ID.
+  `onHistoryStateUpdated`, since those never fire `onCommitted`. Hands off by navigating the tab
+  to `interstitial.html?url=<encoded github url>`.
+- `interstitial.html`/`interstitial.js` — fires the `nisi://` deep link and stays on screen
+  indefinitely, with a retry button and a link back to the PR on GitHub. Never closes the tab
+  itself, in either tab-behavior setting; read the docblock before changing that.
+- `options.html` — static info page; no settings to persist. `manifest.json` pins a `"key"` so
+  the extension ID is stable across loads, which lets both this and `interstitial.html` be
+  addressed directly at `chrome-extension://<id>/...` (e.g. from an automated verification
+  script) without first discovering the ID.
 
 ## Gotchas
 
@@ -31,12 +35,25 @@ here resolves it without a bundler, so imports stay relative (`./direct-arrival.
   already covers that for the one case this extension reads it (an opener tab on github.com), and
   doubles as the `webNavigation` event filter — MV3 host-filters that API, so events for other
   origins never reach `background.js` at all.
+- Chrome exposes no reliable way, from extension/page JS, to tell "the external-protocol
+  confirmation dialog is pending" apart from "the app already launched silently" — `interstitial.js`
+  has the full investigation (what was tried, what Chromium source says, why each candidate signal
+  is confounded). Don't reach for a timer or a focus/blur heuristic to auto-close the tab; that's
+  the exact failure mode this page exists to avoid.
+- `chrome.tabs.update`/`window.location` navigations to an unregistered scheme are, per Chrome's
+  `ExternalProtocolHandler`, attributed to the *initiating* origin for its "always allow" memory —
+  both a `chrome.tabs.update` call from the service worker and a same-origin `window.location`
+  assignment from an extension page attribute to `chrome-extension://<id>`, not to whatever the
+  tab happened to be showing before.
 - Verifying this against a real browser needs Chrome specifically, launched with
   `--executable-path` pointed at a Chrome-for-Testing build (cached under
   `~/.cache/puppeteer/chrome/`) — branded Chrome Stable ≥137 silently ignores `--load-extension`.
   `agent-browser --engine chrome --headed --executable-path <that binary>` is the combination that
   actually loads it (this machine's default `agent-browser` engine is lightpanda, which refuses
-  extensions outright).
+  extensions outright). The confirmation dialog itself is invisible to CDP (`Page.javascriptDialogOpening`
+  never fires for it — it's native browser chrome, not a JS dialog); use an OS-side side effect
+  (e.g. a protocol handler that appends to a log file) as the discriminator instead, and run
+  unattended — a human clicking the dialog by hand invalidates the result.
 - An absence assertion (e.g. "the tab stayed open") is only evidence once the same probe has been
   shown to detect presence — stub `isDirectArrival` to `() => true`, rerun the negative case, and
   confirm it flips before trusting the unstubbed result.
