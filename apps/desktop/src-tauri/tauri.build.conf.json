@@ -9,12 +9,5 @@
 			"signingIdentity": "-",
 			"entitlements": "./entitlements.plist"
 		}
-	},
-	"plugins": {
-		"deep-link": {
-			"desktop": {
-				"schemes": ["nisi"]
-			}
-		}
 	}
 }
