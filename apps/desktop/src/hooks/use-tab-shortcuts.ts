@@ -2,7 +2,6 @@
 
 import { isTauri } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useEffect } from "react";
 
 /** Emitted by the File menu's "Close Tab" item — see `src-tauri/src/lib.rs`. */
@@ -71,13 +70,9 @@ export function useTabShortcuts({
 			onActivateTab(targetId);
 		};
 
-		/** Browser-style: the last tab's close takes the window with it. */
 		const closeActiveTab = () => {
-			if (tabIds.length > 1 && activeTabId !== null) {
-				onCloseTab(activeTabId);
-				return;
-			}
-			getCurrentWindow().close();
+			if (activeTabId === null) return;
+			onCloseTab(activeTabId);
 		};
 
 		window.addEventListener("keydown", handleKeyDown);
