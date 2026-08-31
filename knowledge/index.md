@@ -24,7 +24,7 @@ importantly, the rules for deciding whether a thing belongs here at all.
 
 # Architecture
 
-* [What breaks only in the compiled binary](compiled-binary-differences.md) - the four ways `bun build --compile` differs from `bun run`, and when you must test against it
+* [What breaks only in the compiled binary](compiled-binary-differences.md) - the five ways the packaged sidecar differs from `bun run`, and when you must test against it
 * [Why the walkthrough runs on HarnessAgent](why-harness-agent-not-direct-sdks.md) - driving the four CLIs directly is the obvious approach and the wrong one
 * [Content invisible in the base → head diff can't be shown, even reviewed](reverted-lines-invisible-after-review.md) - a line added then reverted away lives only in a review snapshot, never in base or head, so no diff between real file states can render it
 
