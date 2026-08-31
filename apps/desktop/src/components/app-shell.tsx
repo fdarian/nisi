@@ -29,6 +29,7 @@ import { useTabSuspension } from "#/hooks/use-tab-suspension";
 import type { SidecarQueryUtils } from "#/lib/backend-context";
 import { useBackendContext } from "#/lib/backend-context";
 import { ChatProvider, useClearChatSession } from "#/lib/chat-store";
+import { useDeepLinkOpener } from "#/lib/deep-link-data";
 import { useSessions } from "#/lib/pr-data";
 import {
 	SessionUiProvider,
@@ -129,6 +130,10 @@ function AppShellReady({
 		string | null
 	>(null);
 	const listed = useSessions(orpc, setRequestedActiveSessionId);
+	// Hooks run before the `sessions.length === 0` early return below, so a
+	// cold start into the empty state (nothing open yet) still opens a
+	// pending deep link instead of stalling on it.
+	useDeepLinkOpener(orpc, setRequestedActiveSessionId);
 	const tabOrder = useTabOrder(listed.sessions);
 	const sessions = tabOrder.orderedSessions;
 	const closeSession = listed.closeSession;

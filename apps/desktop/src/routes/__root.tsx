@@ -10,6 +10,7 @@ import {
 import { ToastProvider } from "#/components/ui/toast";
 import { useSettingsShortcut } from "#/hooks/use-settings-shortcut";
 import { BackendProvider } from "#/lib/backend-context";
+import { useRedirectHomeOnPendingDeepLink } from "#/lib/deep-link-data";
 
 export const Route = createRootRoute({
 	component: RootLayout,
@@ -17,6 +18,12 @@ export const Route = createRootRoute({
 
 function RootLayout() {
 	useSettingsShortcut();
+	// `AppShellReady` (where `useDeepLinkOpener` actually opens a pending
+	// link) only renders on `/` — this is what gets a link that arrived
+	// while `/settings` was showing back to a route that can see it. See
+	// `deep-link-data.ts`'s doc comment for why this can't live there
+	// instead.
+	useRedirectHomeOnPendingDeepLink();
 
 	return (
 		<ThemeProvider attribute="class" defaultTheme="system" enableSystem>

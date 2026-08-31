@@ -3,7 +3,13 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createRouter, RouterProvider } from "@tanstack/react-router";
 import React from "react";
 import ReactDOM from "react-dom/client";
+import { startDeepLinkListener } from "#/lib/deep-link-store";
 import { routeTree } from "./routeTree.gen";
+
+// Boot-once, before anything renders — a `nisi://` link can arrive before
+// the webview exists or React mounts. See `deep-link-store.ts`'s doc
+// comment for why this must never run again after this call.
+void startDeepLinkListener();
 
 const router = createRouter({ routeTree });
 // The sidecar's `events.subscribe` stream (session-opened/closed,
