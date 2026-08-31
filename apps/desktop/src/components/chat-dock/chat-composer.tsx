@@ -61,6 +61,8 @@ type ChatComposerProps = {
 	orpc: SidecarQueryUtils;
 	/** Diff-pane selections attached via "Ask" — rendered as removable chips above the input and folded into the outgoing message text on send (see `submit` below). */
 	references: readonly DiffSelectionReference[];
+	/** Opaque counter — every change puts the caret back in the input. See `chat-store.ts`'s `SessionChatState.composerFocusRequest`. */
+	focusRequest: number;
 	onRemoveReference: (reference: DiffSelectionReference) => void;
 	onClearReferences: () => void;
 	onSend: (text: string, harness: HarnessId, model: string | undefined) => void;
@@ -127,6 +129,7 @@ function ComposerBody({
 	status,
 	orpc,
 	references,
+	focusRequest,
 	onRemoveReference,
 	onClearReferences,
 	onSend,
@@ -137,6 +140,22 @@ function ComposerBody({
 	const [selection, setSelection] = useState<ModelSelection | null>(null);
 	const { harnesses } = useHarnesses(orpc);
 	const [lastChatModel] = useLastChatModel(orpc);
+
+	// Takes the caret on mount (opening the popup, expanding from minimized,
+	// or switching threads — `chat-panel.tsx` keys `ChatComposer` by
+	// `thread.id`) and again on every `focusRequest` bump, which is "Ask"'s
+	// case: it attaches to the *already-mounted* active thread's composer, so
+	// there's no mount to hang this off. `focusRequest` isn't read in the body
+	// — its only job is to be a dependency that changes.
+	//
+	// Only sticks because `DiffSelectionPopover` disables Base UI's default
+	// focus-restore-on-close (`finalFocus={false}`) — that would otherwise
+	// return focus to wherever the drag gesture landed it a tick after this
+	// runs.
+	// biome-ignore lint/correctness/useExhaustiveDependencies: see comment above
+	useEffect(() => {
+		editor.focus();
+	}, [editor, focusRequest]);
 
 	const isBusy = status === "submitted" || status === "streaming";
 	// The picker only matters before the thread's live harness session

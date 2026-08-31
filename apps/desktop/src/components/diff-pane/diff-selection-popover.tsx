@@ -174,6 +174,16 @@ export function DiffSelectionPopover({
 						// comment for why depending on `data-slot` for that broke once
 						// already.
 						data-slot="popover-popup"
+						// Base UI's default `finalFocus` returns focus to whatever was
+						// focused when the popover opened — here, wherever the drag
+						// gesture happened to land focus in the diff pane (a file
+						// header row, since there's no real trigger element for this
+						// virtual-anchor popover). Left on, that steals focus back out
+						// of the composer a tick after "Ask" moves it there
+						// (`chat-composer.tsx`'s mount-focus effect). `false` disables
+						// the restore entirely, since neither button here has a
+						// "trigger" to sensibly return focus to.
+						finalFocus={false}
 						{...diffSelectionPopupMarkerProps}
 					>
 						<Toolbar>

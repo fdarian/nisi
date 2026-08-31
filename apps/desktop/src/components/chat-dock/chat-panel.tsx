@@ -40,6 +40,7 @@ import {
 	deriveThreadTitle,
 	getOrCreateChat,
 	useChatActiveThreadId,
+	useChatComposerFocusRequest,
 	useChatDockActions,
 	useChatPopupMinimized,
 	useChatThreads,
@@ -190,6 +191,7 @@ function ChatPanelBody({
 	thread: ChatThreadMeta;
 }): React.ReactElement {
 	const minimized = useChatPopupMinimized(sessionId);
+	const composerFocusRequest = useChatComposerFocusRequest(sessionId);
 	const dock = useChatDockActions(sessionId, orpc);
 	const {
 		width,
@@ -270,6 +272,7 @@ function ChatPanelBody({
 							</p>
 						)}
 						<ChatComposer
+							focusRequest={composerFocusRequest}
 							key={thread.id}
 							onClearReferences={() => dock.clearReferences(thread.id)}
 							onRemoveReference={(reference) =>
