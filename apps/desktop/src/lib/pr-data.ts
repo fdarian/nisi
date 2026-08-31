@@ -835,31 +835,71 @@ export type PullRequestMergeStatusParams = {
 	number: number;
 };
 
+/** While `mergeable` is still being computed (`"UNKNOWN"`), regardless of `watched` — see `usePullRequestMergeStatus`. */
+const MERGE_STATUS_UNSETTLED_POLL_MS = 2000;
+
+/**
+ * Once `mergeable` has resolved, but only while `watched` — see
+ * `usePullRequestMergeStatus`. Faster than `CI_CHECKS_SETTLED_POLL_MS`: a
+ * mergeability check is one cheap `gh pr view` call rather than a full
+ * checks fetch, and the cost of staying stale here is someone hitting Merge
+ * on a PR that quietly went conflicting after a base-branch push — a
+ * mistake, not just a stale badge.
+ */
+const MERGE_STATUS_SETTLED_POLL_MS = 10000;
+
 /**
  * `pullRequests.mergeStatus` — PR mergeability plus the repo's enabled merge
  * methods in one query, everything the PR header's Merge button needs to
  * decide its label/enabled state and its method picker. GitHub computes
- * `mergeable` asynchronously, so this re-polls every 2s while it's still
- * `"UNKNOWN"` rather than leaving the button stuck on "Checking
- * mergeability…" until something else happens to trigger a refetch —
- * `false` (TanStack Query's "stop polling") the instant it resolves either
- * way. Once the PR itself is no longer open, GitHub stops computing
- * `mergeable` at all and it stays `"UNKNOWN"` forever — checking `state`
- * first is what stops a merged/closed PR from being polled every 2s for the
- * rest of the session.
+ * `mergeable` asynchronously, so this re-polls every
+ * `MERGE_STATUS_UNSETTLED_POLL_MS` while it's still `"UNKNOWN"` rather than
+ * leaving the button stuck on "Checking mergeability…" until something else
+ * triggers a refetch. That fast path runs regardless of `watched`, same as
+ * `usePullRequestChecks`'s unsettled path — it's normally a few-second
+ * GitHub computation, not something worth gating.
+ *
+ * Once `mergeable` resolves, polling doesn't stop outright the way it used
+ * to — a base-branch push after that point can flip a `MERGEABLE` PR to
+ * `CONFLICTING` with nothing else to invalidate this query
+ * (`refetchOnWindowFocus` is globally off, see `main.tsx`), and the Merge
+ * button reading stale mergeability is a real mistake, not just a stale
+ * badge. Instead it drops to `MERGE_STATUS_SETTLED_POLL_MS`, but only while
+ * `watched` — the same "selected tab + window focus" signal
+ * `usePullRequestChecks` gates its own settled poll on — so a background PR
+ * tab never spawns a `gh` subprocess of its own. `useRefreshOnWatchedEdge`
+ * layers the same immediate refetch on the watched false→true edge.
+ *
+ * Once the PR itself is no longer open, GitHub stops computing `mergeable`
+ * at all and it stays `"UNKNOWN"` forever — checking `state` first is what
+ * stops a merged/closed PR from being polled for the rest of the session,
+ * watched or not.
  */
 export function usePullRequestMergeStatus(
 	orpc: SidecarQueryUtils,
 	params: PullRequestMergeStatusParams,
+	watched: boolean,
 ): UseQueryResult<PullRequestMergeStatus> {
-	return useQuery({
+	const queryClient = useQueryClient();
+	const query = useQuery({
 		...orpc.pullRequests.mergeStatus.queryOptions({ input: params }),
-		refetchInterval: (query) =>
-			query.state.data?.state === "OPEN" &&
-			query.state.data.mergeable === "UNKNOWN"
-				? 2000
-				: false,
+		refetchInterval: (query) => {
+			if (query.state.data?.state !== "OPEN") return false;
+			if (query.state.data.mergeable === "UNKNOWN") {
+				return MERGE_STATUS_UNSETTLED_POLL_MS;
+			}
+			return watched ? MERGE_STATUS_SETTLED_POLL_MS : false;
+		},
 	});
+
+	const refresh = useCallback(() => {
+		queryClient.invalidateQueries({
+			queryKey: orpc.pullRequests.mergeStatus.key({ input: params }),
+		});
+	}, [queryClient, orpc, params]);
+	useRefreshOnWatchedEdge(watched, refresh);
+
+	return query;
 }
 
 export type MergePullRequestParams = {
@@ -1030,11 +1070,11 @@ const CI_CHECKS_SETTLED_POLL_MS = 60000;
  * runs regardless of `watched` — an in-flight check is exactly what a user
  * left this PR's tab open to wait on.
  *
- * Once every check has settled, polling doesn't stop outright the way
- * `usePullRequestMergeStatus`'s does — a push or a re-run on GitHub after
- * that point would otherwise never reach the ring, since nothing else ever
- * invalidates this query (`refetchOnWindowFocus` is globally off, see
- * `main.tsx`). Instead it drops to `CI_CHECKS_SETTLED_POLL_MS`, but only
+ * Once every check has settled, polling doesn't stop outright — a push or
+ * a re-run on GitHub after that point would otherwise never reach the ring,
+ * since nothing else ever invalidates this query (`refetchOnWindowFocus`
+ * is globally off, see `main.tsx`). Instead it drops to
+ * `CI_CHECKS_SETTLED_POLL_MS`, but only
  * while `watched` — the caller's "this PR's tab is the selected one and the
  * window has focus" signal, the same shape as `pr-view.tsx`'s Files-Changed
  * `watched`. `false` while unwatched, same as a query that never had
