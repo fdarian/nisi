@@ -2,8 +2,8 @@
  * MV3 service worker. Watches every top-frame commit on github.com
  * (`host_permissions` already restricts `webNavigation` events to that host,
  * so there's no per-listener URL filter here) and hands a direct-arrival PR
- * page to the nisi app via a `nisi://`/`nisi-dev://` deep link — see
- * `direct-arrival.js` for what "direct" means.
+ * page to the nisi app via a `nisi://` deep link — see `direct-arrival.js`
+ * for what "direct" means.
  *
  * GitHub's own navigation is mostly Turbo (pjax-style `history.pushState`),
  * which never fires `onCommitted` — `onHistoryStateUpdated` is the only
@@ -17,7 +17,7 @@
  */
 import { isDirectArrival } from "./direct-arrival.js";
 
-const DEFAULT_SCHEME = "nisi";
+const DEEP_LINK_SCHEME = "nisi";
 const DEFAULT_TAB_BEHAVIOR = "stay";
 
 /** @param {number} tabId */
@@ -67,12 +67,8 @@ async function getOpenerUrl(tab) {
 }
 
 async function getOptions() {
-	const stored = await chrome.storage.sync.get(["scheme", "tabBehavior"]);
+	const stored = await chrome.storage.sync.get(["tabBehavior"]);
 	return {
-		scheme:
-			typeof stored.scheme === "string" && stored.scheme.length > 0
-				? stored.scheme
-				: DEFAULT_SCHEME,
 		tabBehavior:
 			stored.tabBehavior === "close" ? "close" : DEFAULT_TAB_BEHAVIOR,
 	};
@@ -81,7 +77,7 @@ async function getOptions() {
 /**
  * Forwards `details.url` verbatim (`/files`, `#discussion_r…` and all —
  * `parsePullRequestUrl` on the app side tolerates the trailing segment,
- * query, and fragment) as `<scheme>://open?url=<encoded url>`. Per the
+ * query, and fragment) as `nisi://open?url=<encoded url>`. Per the
  * Phase 0 spike, `chrome.tabs.update` to an unregistered scheme reaches the
  * OS handler without a user gesture and leaves the tab on GitHub with no
  * further navigation event — that's what makes "stay" (the default) a
@@ -92,7 +88,7 @@ async function getOptions() {
  */
 async function handOff(tabId, url) {
 	const options = await getOptions();
-	const deepLink = `${options.scheme}://open?url=${encodeURIComponent(url)}`;
+	const deepLink = `${DEEP_LINK_SCHEME}://open?url=${encodeURIComponent(url)}`;
 	await chrome.tabs.update(tabId, { url: deepLink });
 	if (options.tabBehavior === "close") {
 		await chrome.tabs.remove(tabId);

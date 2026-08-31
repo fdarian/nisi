@@ -19,12 +19,6 @@
 				display: block;
 				margin: 0.5rem 0;
 			}
-			input[type="text"] {
-				font: inherit;
-				width: 100%;
-				box-sizing: border-box;
-				padding: 0.4rem;
-			}
 		</style>
 	</head>
 	<body>
@@ -44,14 +38,6 @@
 				<label
 					><input type="radio" name="tabBehavior" value="close" /> Close</label
 				>
-			</fieldset>
-			<fieldset>
-				<legend>Deep link scheme</legend>
-				<label for="scheme">
-					<code>nisi</code> for the production app, <code>nisi-dev</code> for a
-					dev build
-				</label>
-				<input type="text" id="scheme" name="scheme" placeholder="nisi" />
 			</fieldset>
 		</form>
 		<p id="status" role="status"></p>

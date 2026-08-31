@@ -1,25 +1,17 @@
 /**
- * Stay-vs-close radios (default stay) + a scheme field (default `nisi`),
- * persisted to `chrome.storage.sync` — `background.js` reads both fresh on
- * every hand-off rather than caching them, so a change here takes effect
- * immediately. The scheme field is what lets the extension target a
- * `nisi-dev` build without a code edit.
+ * Stay-vs-close radios (default stay), persisted to `chrome.storage.sync` —
+ * `background.js` reads it fresh on every hand-off rather than caching it,
+ * so a change here takes effect immediately.
  */
-const DEFAULT_SCHEME = "nisi";
 const DEFAULT_TAB_BEHAVIOR = "stay";
 
 const form = /** @type {HTMLFormElement} */ (
 	document.getElementById("options-form")
 );
-const schemeInput = /** @type {HTMLInputElement} */ (
-	document.getElementById("scheme")
-);
 const status = /** @type {HTMLElement} */ (document.getElementById("status"));
 
 async function loadOptions() {
-	const stored = await chrome.storage.sync.get(["scheme", "tabBehavior"]);
-	schemeInput.value =
-		typeof stored.scheme === "string" ? stored.scheme : DEFAULT_SCHEME;
+	const stored = await chrome.storage.sync.get(["tabBehavior"]);
 
 	const tabBehavior =
 		stored.tabBehavior === "close" ? "close" : DEFAULT_TAB_BEHAVIOR;
@@ -35,9 +27,8 @@ async function saveOptions() {
 		checkedRadio instanceof HTMLInputElement && checkedRadio.value === "close"
 			? "close"
 			: DEFAULT_TAB_BEHAVIOR;
-	const scheme = schemeInput.value.trim() || DEFAULT_SCHEME;
 
-	await chrome.storage.sync.set({ scheme, tabBehavior });
+	await chrome.storage.sync.set({ tabBehavior });
 	status.textContent = "Saved.";
 	setTimeout(() => {
 		status.textContent = "";
