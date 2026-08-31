@@ -72,12 +72,9 @@ describe("parseNisiDeepLink", () => {
 		});
 	});
 
-	test("parses the nisi-dev:// twin scheme identically", () => {
+	test("rejects the retired nisi-dev:// scheme", () => {
 		const encoded = encodeURIComponent("https://github.com/owner/repo/pull/12");
-		expect(parseNisiDeepLink(`nisi-dev://open?url=${encoded}`)).toEqual({
-			kind: "open-pull-request",
-			pullRequest: { owner: "owner", repo: "repo", number: 12 },
-		});
+		expect(parseNisiDeepLink(`nisi-dev://open?url=${encoded}`)).toBeNull();
 	});
 
 	test("tolerates a trailing segment and fragment on the wrapped url", () => {

@@ -1,5 +1,5 @@
 /**
- * Module-scope home for pending `nisi://`/`nisi-dev://` links. A link can
+ * Module-scope home for pending `nisi://` links. A link can
  * arrive (the plugin's `deep-link://new-url` event, from Rust's
  * `RunEvent::Opened`) before the webview exists, before React mounts, and
  * before the sidecar handshake resolves — module scope for the same reason

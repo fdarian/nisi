@@ -1,14 +1,11 @@
 /**
  * `nisi://open?url=<encoded github url>` — the app owns this grammar; the
  * Chrome extension (Phase 4) only forwards a GitHub PR URL verbatim through
- * it. `nisi-dev:` is the same shape under a second scheme, which is what
- * lets one built `dist/` serve both a prod and a dev app bundle without a
- * code branch (see `apps/desktop/AGENTS.md`'s scheme-split note once it's
- * written). Delegates the GitHub half to `parsePullRequestUrl`.
+ * it. Delegates the GitHub half to `parsePullRequestUrl`.
  */
 import { type PullRequestUrlParts, parsePullRequestUrl } from "#/lib/pr-data";
 
-const DEEP_LINK_SCHEMES = ["nisi", "nisi-dev"];
+const DEEP_LINK_SCHEMES = ["nisi"];
 
 export type NisiDeepLink = {
 	kind: "open-pull-request";
