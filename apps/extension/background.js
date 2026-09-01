@@ -48,18 +48,32 @@ async function clearLastCommittedUrl(tabId) {
 
 /**
  * The interstitial's "Open on GitHub" link navigates the tab straight back
- * to the PR URL it just came from — to `isDirectArrival`, that looks
+ * to the exact PR URL it just came from — to `isDirectArrival`, that looks
  * exactly like a fresh arrival (the previous URL isn't github.com, since
  * it's this extension's own page), which would hand off again and bounce
  * the user right back to the interstitial instead of letting them read the
- * PR. Recognizing that specific case here, instead of teaching
+ * PR. Recognizing that specific bounce-back here, instead of teaching
  * `isDirectArrival` about pages outside its GitHub/opener vocabulary, is
  * what keeps that function pure and github-only.
- * @param {string | undefined} url
+ *
+ * This only matches when `url` is byte-identical to the PR URL the
+ * interstitial was carrying — a *different* URL arriving right after the
+ * interstitial (the user typed a new PR link, or a bookmark, while it was
+ * still on screen) is a genuine new direct arrival and must still hand off.
+ * @param {string | undefined} previousUrl
+ * @param {string} url
  * @returns {boolean}
  */
-function isInterstitialUrl(url) {
-	return url?.startsWith(chrome.runtime.getURL("interstitial.html")) ?? false;
+function isBounceBackFromInterstitial(previousUrl, url) {
+	if (previousUrl === undefined) return false;
+	if (!previousUrl.startsWith(chrome.runtime.getURL("interstitial.html"))) {
+		return false;
+	}
+	try {
+		return new URL(previousUrl).searchParams.get("url") === url;
+	} catch {
+		return false;
+	}
 }
 
 /**
@@ -118,7 +132,7 @@ chrome.webNavigation.onCommitted.addListener(async (details) => {
 	}
 
 	const shouldHandOff =
-		!isInterstitialUrl(previousUrl) &&
+		!isBounceBackFromInterstitial(previousUrl, details.url) &&
 		isDirectArrival({
 			frameId: details.frameId,
 			url: details.url,
