@@ -29,6 +29,7 @@ const meta: Meta<typeof PrMergeButton> = {
 		owner: "acme",
 		repo: "widgets",
 		number: 42,
+		watched: true,
 	},
 };
 export default meta;

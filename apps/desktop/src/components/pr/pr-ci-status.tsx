@@ -13,6 +13,8 @@ type PrCiStatusProps = {
 	owner: string;
 	repo: string;
 	number: number;
+	/** This PR's tab is both the selected one and the window has focus — see `usePullRequestChecks` (`pr-data.ts`). */
+	watched: boolean;
 };
 
 /** `"1m 12s"`/`"48s"` — the one place that decides how a check's run time reads, since neither the sidecar nor `@repo/git` should be minting English text. */
@@ -87,13 +89,13 @@ export function PrCiStatus({
 	owner,
 	repo,
 	number,
+	watched,
 }: PrCiStatusProps): React.ReactElement | null {
-	const checksQuery = usePullRequestChecks(orpc, {
-		repoRoot,
-		owner,
-		repo,
-		number,
-	});
+	const checksQuery = usePullRequestChecks(
+		orpc,
+		{ repoRoot, owner, repo, number },
+		watched,
+	);
 
 	if (checksQuery.data === undefined) return null;
 

@@ -36,6 +36,7 @@ const meta: Meta<typeof PrHeader> = {
 		repoRoot: "/tmp/storybook-repo",
 		stat: { additions: 12, deletions: 4 },
 		onCloseTab: () => {},
+		watched: true,
 	},
 };
 export default meta;

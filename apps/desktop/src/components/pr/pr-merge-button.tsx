@@ -32,6 +32,8 @@ type PrMergeButtonProps = {
 	owner: string;
 	repo: string;
 	number: number;
+	/** This PR's tab is both the selected one and the window has focus — see `usePullRequestMergeStatus` (`pr-data.ts`). */
+	watched: boolean;
 };
 
 const METHOD_LABEL: Record<MergeMethod, string> = {
@@ -155,13 +157,13 @@ export function PrMergeButton({
 	owner,
 	repo,
 	number,
+	watched,
 }: PrMergeButtonProps): React.ReactElement {
-	const statusQuery = usePullRequestMergeStatus(orpc, {
-		repoRoot,
-		owner,
-		repo,
-		number,
-	});
+	const statusQuery = usePullRequestMergeStatus(
+		orpc,
+		{ repoRoot, owner, repo, number },
+		watched,
+	);
 	const { merge, isPending: isMerging } = useMergePullRequest(orpc);
 	const { check: checkUnpushedCommits, isPending: isCheckingUnpushed } =
 		useUnpushedCommitsCheck(orpc);
