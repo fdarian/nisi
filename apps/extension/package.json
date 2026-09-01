@@ -4,6 +4,7 @@
 	"version": "0.1.0",
 	"type": "module",
 	"scripts": {
+		"build": "bun scripts/build.ts",
 		"check:type": "tsc --noEmit",
 		"check:lint": "biome lint .",
 		"test": "bun test"
