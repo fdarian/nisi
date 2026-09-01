@@ -2,10 +2,10 @@
  * MV3 service worker. Watches every top-frame commit on github.com
  * (`host_permissions` already restricts `webNavigation` events to that host,
  * so there's no per-listener URL filter here) and hands a direct-arrival PR
- * page off to the nisi app — see `direct-arrival.ts` for what "direct"
- * means, `bounce-back.ts` for the one case that overrides it, and
- * `interstitial.ts` for the actual `nisi://` deep link and why hand-off
- * doesn't happen straight from here.
+ * page off to the nisi app — see `../modules/direct-arrival.ts` for what
+ * "direct" means, `../modules/bounce-back.ts` for the one case that
+ * overrides it, and `interstitial.ts` for the actual `nisi://` deep link
+ * and why hand-off doesn't happen straight from here.
  *
  * GitHub's own navigation is mostly Turbo (pjax-style `history.pushState`),
  * which never fires `onCommitted` — `onHistoryStateUpdated` is the only
@@ -17,8 +17,8 @@
  * kills this worker between events; a variable would reset to empty on
  * every wake and make every navigation look like a fresh tab.
  */
-import { isBounceBackFromInterstitial } from "./bounce-back.js";
-import { isDirectArrival } from "./direct-arrival.js";
+import { isBounceBackFromInterstitial } from "../modules/bounce-back.js";
+import { isDirectArrival } from "../modules/direct-arrival.js";
 
 const INTERSTITIAL_URL_PREFIX = chrome.runtime.getURL("interstitial.html");
 

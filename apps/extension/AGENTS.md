@@ -6,43 +6,47 @@ Slack, a typed or pasted URL, a bookmark — and hands it to the nisi desktop ap
 grammar; this extension only forwards the GitHub URL verbatim, trailing segments and fragment
 included). Clicking around inside GitHub itself never triggers a hand-off. The hand-off lands on
 the extension's own interstitial page rather than firing the deep link straight from
-`background.ts` — see `interstitial.ts`'s docblock for why.
+`entries/background.ts` — see `entries/interstitial.ts`'s docblock for why.
 
-Everything the extension ships lives under `src/` — `manifest.json`, both `.html` pages, and the
-`.ts` sources — and `bun run build` (`scripts/build.ts`, plain `Bun.build`, unminified, sourcemaps
-on) mirrors it into `dist/`, pinning entry filenames unhashed since `manifest.json` and the two
-`.html` pages reference them literally. `dist/` is the load-unpacked target — point Chrome (or
-`--load-extension`) at `apps/extension/dist`, not the package root, and re-run the build after
-every source change; there's no watch mode. `Bun.build` strips types without checking them, so
-`bun run check:type` (`tsc --noEmit` with `@types/chrome`) is a separate step. No `#/*` alias:
-five flat files, so relative imports (`./direct-arrival.js`) stay shorter than an alias would be.
+`src/` is organized by role: `entries/` holds the three bundler entrypoints, `modules/` holds
+pure logic with its `bun test`-able tests colocated, `routes/` holds the two HTML pages, and
+`manifest.json` sits directly under `src/`. `bun run build` (`scripts/build.ts`, plain
+`Bun.build`, unminified, sourcemaps on) flattens all of it into `dist/` — `manifest.json`'s
+`service_worker`, each HTML page's `<script src>`, and `chrome.runtime.getURL(…)` all address
+built files by bare name, so `dist/` cannot mirror `src/`'s directory structure without breaking
+every one of them. `dist/` is the load-unpacked target — point Chrome (or `--load-extension`) at
+`apps/extension/dist`, not the package root, and re-run the build after every source change;
+there's no watch mode. `Bun.build` strips types without checking them, so `bun run check:type`
+(`tsc --noEmit` with `@types/chrome`) is a separate step. No `#/*` alias: relative imports
+(`../modules/direct-arrival.js`) stay short enough without one.
 
-- `direct-arrival.ts` — `isDirectArrival`, the hand-off decision. Pure (no `chrome.*` calls), so
-  it's `bun test`-able without a browser (`direct-arrival.test.ts`); `background.ts` is its only
-  caller.
-- `bounce-back.ts` — `isBounceBackFromInterstitial`, the one case that overrides
+- `modules/direct-arrival.ts` — `isDirectArrival`, the hand-off decision. Pure (no `chrome.*`
+  calls), so it's `bun test`-able without a browser (`modules/direct-arrival.test.ts`);
+  `entries/background.ts` is its only caller.
+- `modules/bounce-back.ts` — `isBounceBackFromInterstitial`, the one case that overrides
   `isDirectArrival`: the interstitial's own "Open on GitHub" link landing back on the exact PR URL
-  it was carrying. Same shape as `direct-arrival.ts` — pure, `bun test`-able
-  (`bounce-back.test.ts`), `background.ts`'s only caller — and deliberately a separate predicate
-  rather than folded into `isDirectArrival`, since the two don't share logic beyond both reading
-  `previousUrl`.
-- `background.ts` — wires both decisions to `chrome.webNavigation.onCommitted` (a bounce-back
-  short-circuits before `isDirectArrival` even runs), and keeps each tab's last-committed URL
-  fresh through GitHub's Turbo (pjax) navigations via `onHistoryStateUpdated`, since those never
-  fire `onCommitted`. Hands off by navigating the tab to `interstitial.html?url=<encoded github
-  url>`. `direct-arrival.ts` and `bounce-back.ts` are imports of this file, not build entries, so
-  they end up inlined into `dist/background.js` rather than emitted as their own files.
-- `interstitial.html`/`interstitial.ts` — fires the `nisi://` deep link, with a retry button and
-  a link back to the PR on GitHub. Stays on screen through the first hand-off ever, since Chrome
-  gives no reliable way to confirm the deep link actually launched nisi (see the docblock); a
-  button there lets the user assert that it did, which is what flips `autoCloseAfterHandoff` in
-  `chrome.storage.sync` for good. Once that flag is set, every later hand-off fires the deep link
-  and closes the tab immediately, no detection involved.
-- `options.html`/`options.ts` — a single checkbox mirroring `autoCloseAfterHandoff`, so it's
-  reversible without clearing extension data. `manifest.json` pins a `"key"` so the extension ID
-  is stable across loads, which lets both this and `interstitial.html` be addressed directly at
-  `chrome-extension://<id>/...` (e.g. from an automated verification script) without first
-  discovering the ID.
+  it was carrying. Same shape as `modules/direct-arrival.ts` — pure, `bun test`-able
+  (`modules/bounce-back.test.ts`), `entries/background.ts`'s only caller — and deliberately a
+  separate predicate rather than folded into `isDirectArrival`, since the two don't share logic
+  beyond both reading `previousUrl`.
+- `entries/background.ts` — wires both decisions to `chrome.webNavigation.onCommitted` (a
+  bounce-back short-circuits before `isDirectArrival` even runs), and keeps each tab's
+  last-committed URL fresh through GitHub's Turbo (pjax) navigations via `onHistoryStateUpdated`,
+  since those never fire `onCommitted`. Hands off by navigating the tab to
+  `interstitial.html?url=<encoded github url>`. `modules/direct-arrival.ts` and
+  `modules/bounce-back.ts` are imports of this file, not build entries, so they end up inlined
+  into `dist/background.js` rather than emitted as their own files.
+- `entries/interstitial.ts` (+ `routes/interstitial.html`) — fires the `nisi://` deep link, with
+  a retry button and a link back to the PR on GitHub. Stays on screen through the first hand-off
+  ever, since Chrome gives no reliable way to confirm the deep link actually launched nisi (see
+  the docblock); a button there lets the user assert that it did, which is what flips
+  `autoCloseAfterHandoff` in `chrome.storage.sync` for good. Once that flag is set, every later
+  hand-off fires the deep link and closes the tab immediately, no detection involved.
+- `entries/options.ts` (+ `routes/options.html`) — a single checkbox mirroring
+  `autoCloseAfterHandoff`, so it's reversible without clearing extension data. `manifest.json`
+  pins a `"key"` so the extension ID is stable across loads, which lets both this and
+  `interstitial.html` be addressed directly at `chrome-extension://<id>/...` (e.g. from an
+  automated verification script) without first discovering the ID.
 
 ## Gotchas
 
@@ -51,13 +55,13 @@ five flat files, so relative imports (`./direct-arrival.js`) stay shorter than a
   returned `Tab`'s `url`/`title` fields are populated. `host_permissions: ["https://github.com/*"]`
   already covers that for the one case this extension reads it (an opener tab on github.com), and
   doubles as the `webNavigation` event filter — MV3 host-filters that API, so events for other
-  origins never reach `background.ts` at all.
+  origins never reach `entries/background.ts` at all.
 - Chrome exposes no reliable way, from extension/page JS, to tell "the external-protocol
-  confirmation dialog is pending" apart from "the app already launched silently" — `interstitial.ts`
-  has the full investigation (what was tried, what Chromium source says, why each candidate signal
-  is confounded). `autoCloseAfterHandoff` sidesteps that by asking the user to confirm success
-  once instead of detecting it; don't reach for a timer or a focus/blur heuristic here instead —
-  that's the exact failure mode the interstitial exists to avoid.
+  confirmation dialog is pending" apart from "the app already launched silently" —
+  `entries/interstitial.ts` has the full investigation (what was tried, what Chromium source says,
+  why each candidate signal is confounded). `autoCloseAfterHandoff` sidesteps that by asking the
+  user to confirm success once instead of detecting it; don't reach for a timer or a focus/blur
+  heuristic here instead — that's the exact failure mode the interstitial exists to avoid.
 - `chrome.tabs.update`/`window.location` navigations to an unregistered scheme are, per Chrome's
   `ExternalProtocolHandler`, attributed to the *initiating* origin for its "always allow" memory —
   both a `chrome.tabs.update` call from the service worker and a same-origin `window.location`

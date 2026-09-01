@@ -48,10 +48,11 @@
  * actually watched nisi open — "close automatically from now on". That
  * turns the one undetectable state into one the user confirms exactly
  * once. `AUTO_CLOSE_STORAGE_KEY` in `chrome.storage.sync` (also toggleable
- * from `options.html`, so it's reversible without clearing extension data)
- * is the only thing that ever triggers an automatic close: once it's set,
- * every later hand-off fires the deep link and closes this tab right
- * after, no detection involved, because the user already watched it work.
+ * from `../routes/options.html`, so it's reversible without clearing
+ * extension data) is the only thing that ever triggers an automatic
+ * close: once it's set, every later hand-off fires the deep link and
+ * closes this tab right after, no detection involved, because the user
+ * already watched it work.
  */
 
 const AUTO_CLOSE_STORAGE_KEY = "autoCloseAfterHandoff";

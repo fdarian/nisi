@@ -6,8 +6,8 @@
  * bounce the user right back to the interstitial instead of letting them
  * read the PR. Kept free of any `chrome.*` call, like `direct-arrival.ts`,
  * so it's `bun test`-able without a browser (`bounce-back.test.ts`) —
- * `background.ts`'s `onCommitted` listener is the only caller, and owns
- * computing `interstitialUrlPrefix` via
+ * `../entries/background.ts`'s `onCommitted` listener is the only caller,
+ * and owns computing `interstitialUrlPrefix` via
  * `chrome.runtime.getURL("interstitial.html")`.
  *
  * "Bounce-back" means exactly one thing: `previousUrl` is the interstitial

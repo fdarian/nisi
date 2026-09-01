@@ -1,9 +1,19 @@
 /**
- * Bundles `src/` into `dist/`, the extension's load-unpacked target. Three
- * entries (`background.ts` fires from the manifest as the service worker;
- * `interstitial.ts`/`options.ts` are `<script type="module" src=…>` in
- * their own HTML pages) — `direct-arrival.ts` and `bounce-back.ts` are
- * imports of `background.ts`, not entries, so they end up inlined into
+ * Bundles `src/` into `dist/`, the extension's load-unpacked target.
+ * `src/` is organized by role (`entries/`, `modules/`, `routes/`), but
+ * `dist/` stays flat — `manifest.json`'s `service_worker`, each HTML
+ * page's `<script src>`, and `chrome.runtime.getURL(…)` all address
+ * built files by bare name, so nesting `dist/` to mirror `src/` would
+ * break every one of them. `naming: "[name].js"` already flattens: for a
+ * nested entry like `src/entries/background.ts`, `[name]` is just the
+ * basename (`background`), not the path from `src/` — confirmed by
+ * building a probe entry from a nested dir and checking the output path.
+ *
+ * Three entries (`entries/background.ts` fires from the manifest as the
+ * service worker; `entries/interstitial.ts`/`entries/options.ts` are
+ * `<script type="module" src=…>` in their own HTML pages) —
+ * `modules/direct-arrival.ts` and `modules/bounce-back.ts` are imports of
+ * `entries/background.ts`, not entries, so they end up inlined into
  * `background.js` rather than emitted as their own files.
  *
  * `naming` is pinned to `[name].js` for both entries and chunks (Bun's
@@ -49,11 +59,13 @@ function assertExpectedOutputsExist(): void {
 
 await rm(outdir, { recursive: true, force: true });
 
+const entriesDir = path.join(srcDir, "entries");
+
 const result = await Bun.build({
 	entrypoints: [
-		path.join(srcDir, "background.ts"),
-		path.join(srcDir, "interstitial.ts"),
-		path.join(srcDir, "options.ts"),
+		path.join(entriesDir, "background.ts"),
+		path.join(entriesDir, "interstitial.ts"),
+		path.join(entriesDir, "options.ts"),
 	],
 	outdir,
 	target: "browser",
@@ -70,14 +82,19 @@ if (!result.success) {
 	process.exit(1);
 }
 
+const routesDir = path.join(srcDir, "routes");
+
 await cp(
 	path.join(srcDir, "manifest.json"),
 	path.join(outdir, "manifest.json"),
 );
 await cp(
-	path.join(srcDir, "interstitial.html"),
+	path.join(routesDir, "interstitial.html"),
 	path.join(outdir, "interstitial.html"),
 );
-await cp(path.join(srcDir, "options.html"), path.join(outdir, "options.html"));
+await cp(
+	path.join(routesDir, "options.html"),
+	path.join(outdir, "options.html"),
+);
 
 assertExpectedOutputsExist();

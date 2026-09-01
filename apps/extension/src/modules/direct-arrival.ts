@@ -1,7 +1,8 @@
 /**
  * The hand-off decision, kept free of any `chrome.*` call so it's plain-value
- * unit-testable (see `direct-arrival.test.ts`) — `background.ts` is the only
- * caller, and owns gathering the inputs from `chrome.webNavigation`/`chrome.tabs`.
+ * unit-testable (see `direct-arrival.test.ts`) — `../entries/background.ts`
+ * is the only caller, and owns gathering the inputs from
+ * `chrome.webNavigation`/`chrome.tabs`.
  *
  * "Direct arrival" means: the user landed on a GitHub PR page from outside
  * GitHub — a Slack link, a typed/pasted URL, a bookmark — not by clicking
