@@ -3,8 +3,9 @@
  * (`host_permissions` already restricts `webNavigation` events to that host,
  * so there's no per-listener URL filter here) and hands a direct-arrival PR
  * page off to the nisi app — see `direct-arrival.js` for what "direct"
- * means, and `interstitial.js` for the actual `nisi://` deep link and why
- * hand-off doesn't happen straight from here.
+ * means, `bounce-back.js` for the one case that overrides it, and
+ * `interstitial.js` for the actual `nisi://` deep link and why hand-off
+ * doesn't happen straight from here.
  *
  * GitHub's own navigation is mostly Turbo (pjax-style `history.pushState`),
  * which never fires `onCommitted` — `onHistoryStateUpdated` is the only
@@ -16,7 +17,10 @@
  * kills this worker between events; a variable would reset to empty on
  * every wake and make every navigation look like a fresh tab.
  */
+import { isBounceBackFromInterstitial } from "./bounce-back.js";
 import { isDirectArrival } from "./direct-arrival.js";
+
+const INTERSTITIAL_URL_PREFIX = chrome.runtime.getURL("interstitial.html");
 
 /** @param {number} tabId */
 function storageKey(tabId) {
@@ -44,36 +48,6 @@ async function setLastCommittedUrl(tabId, url) {
 /** @param {number} tabId */
 async function clearLastCommittedUrl(tabId) {
 	await chrome.storage.session.remove(storageKey(tabId));
-}
-
-/**
- * The interstitial's "Open on GitHub" link navigates the tab straight back
- * to the exact PR URL it just came from — to `isDirectArrival`, that looks
- * exactly like a fresh arrival (the previous URL isn't github.com, since
- * it's this extension's own page), which would hand off again and bounce
- * the user right back to the interstitial instead of letting them read the
- * PR. Recognizing that specific bounce-back here, instead of teaching
- * `isDirectArrival` about pages outside its GitHub/opener vocabulary, is
- * what keeps that function pure and github-only.
- *
- * This only matches when `url` is byte-identical to the PR URL the
- * interstitial was carrying — a *different* URL arriving right after the
- * interstitial (the user typed a new PR link, or a bookmark, while it was
- * still on screen) is a genuine new direct arrival and must still hand off.
- * @param {string | undefined} previousUrl
- * @param {string} url
- * @returns {boolean}
- */
-function isBounceBackFromInterstitial(previousUrl, url) {
-	if (previousUrl === undefined) return false;
-	if (!previousUrl.startsWith(chrome.runtime.getURL("interstitial.html"))) {
-		return false;
-	}
-	try {
-		return new URL(previousUrl).searchParams.get("url") === url;
-	} catch {
-		return false;
-	}
 }
 
 /**
@@ -109,7 +83,7 @@ async function getOpenerUrl(tab) {
  * @param {string} url
  */
 async function handOff(tabId, url) {
-	const interstitialUrl = `${chrome.runtime.getURL("interstitial.html")}?url=${encodeURIComponent(url)}`;
+	const interstitialUrl = `${INTERSTITIAL_URL_PREFIX}?url=${encodeURIComponent(url)}`;
 	await chrome.tabs.update(tabId, { url: interstitialUrl });
 }
 
@@ -132,7 +106,11 @@ chrome.webNavigation.onCommitted.addListener(async (details) => {
 	}
 
 	const shouldHandOff =
-		!isBounceBackFromInterstitial(previousUrl, details.url) &&
+		!isBounceBackFromInterstitial({
+			previousUrl,
+			url: details.url,
+			interstitialUrlPrefix: INTERSTITIAL_URL_PREFIX,
+		}) &&
 		isDirectArrival({
 			frameId: details.frameId,
 			url: details.url,

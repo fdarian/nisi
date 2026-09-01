@@ -15,10 +15,17 @@ here resolves it without a bundler, so imports stay relative (`./direct-arrival.
 - `direct-arrival.js` — `isDirectArrival`, the hand-off decision. Pure (no `chrome.*` calls), so
   it's `bun test`-able without a browser (`direct-arrival.test.ts`); `background.js` is its only
   caller.
-- `background.js` — wires that decision to `chrome.webNavigation.onCommitted`, and keeps each
-  tab's last-committed URL fresh through GitHub's Turbo (pjax) navigations via
-  `onHistoryStateUpdated`, since those never fire `onCommitted`. Hands off by navigating the tab
-  to `interstitial.html?url=<encoded github url>`.
+- `bounce-back.js` — `isBounceBackFromInterstitial`, the one case that overrides
+  `isDirectArrival`: the interstitial's own "Open on GitHub" link landing back on the exact PR URL
+  it was carrying. Same shape as `direct-arrival.js` — pure, `bun test`-able
+  (`bounce-back.test.ts`), `background.js`'s only caller — and deliberately a separate predicate
+  rather than folded into `isDirectArrival`, since the two don't share logic beyond both reading
+  `previousUrl`.
+- `background.js` — wires both decisions to `chrome.webNavigation.onCommitted` (a bounce-back
+  short-circuits before `isDirectArrival` even runs), and keeps each tab's last-committed URL
+  fresh through GitHub's Turbo (pjax) navigations via `onHistoryStateUpdated`, since those never
+  fire `onCommitted`. Hands off by navigating the tab to `interstitial.html?url=<encoded github
+  url>`.
 - `interstitial.html`/`interstitial.js` — fires the `nisi://` deep link, with a retry button and
   a link back to the PR on GitHub. Stays on screen through the first hand-off ever, since Chrome
   gives no reliable way to confirm the deep link actually launched nisi (see the docblock); a
