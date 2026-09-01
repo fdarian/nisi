@@ -1,0 +1,17 @@
+{
+	"manifest_version": 3,
+	"name": "nisi",
+	"version": "0.1.0",
+	"description": "Hands a GitHub pull request page you arrived at directly off to the nisi desktop app.",
+	"key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAup3yIMqplaPZOVLmKTmH46aA0tbspUfur2JF3w+pl++CvNEBxDdoQUvYNQTAzki5h5axG+3mX65F2XnyH3XH/8Rx+pChZE+O+W4qx2fVxYtRDw/WxRG3PdJa7Gluk6x+e1r/gcO9wpndkmTSCTsEVjpnJFglAj+9NkmpSbCNwHff/3iRWu5T5VEuR7GS60V8tCuqGgUY7yLH4csevyEwVnu0D9y+9n4/0aj6XIj8wBbVfmKXofLBpa+pcr2p+pYl9/vb11s7rrV1/5lntDSZiFOFXNIWbW/InZKITMIoGN+DrBav33WiIxFm0nMtWz5o56sVX+5fLwJTTniBwtnG7wIDAQAB",
+	"permissions": ["webNavigation", "storage"],
+	"host_permissions": ["https://github.com/*"],
+	"background": {
+		"service_worker": "background.js",
+		"type": "module"
+	},
+	"options_ui": {
+		"page": "options.html",
+		"open_in_tab": true
+	}
+}

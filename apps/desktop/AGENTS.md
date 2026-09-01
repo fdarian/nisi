@@ -227,6 +227,14 @@ fixture PR lives at `src/components/walkthrough/walkthrough.fixture.ts`.
   missing binary that dev never runs (dev's sidecar is `bun run sidecar/index.ts`, see
   [Dev/prod isolation](#devprod-isolation)). The cost of the split: a rename of the binary or its
   triple suffix now only breaks `bun build`, never dev.
+- **The `nisi://` deep-link scheme is registered once, in the base `tauri.conf.json`**
+  (`plugins.deep-link.desktop.schemes`), inherited by both `bun run build` and `bun run build:dev` —
+  unlike `externalBin` above, there's no dev-vs-build split to protect, since both bundles share
+  the same `identifier` and app-data dir. `tauri dev` produces no `.app` bundle at all
+  (`CFBundleURLTypes` is only emitted by the macOS bundler, which only `tauri build` runs) — a deep
+  link is only testable against a build from `bun run build` or `bun run build:dev`, installed
+  somewhere LaunchServices can see it (`/Applications` or `~/Applications`; `/tmp` isn't
+  LaunchServices-trusted).
 - **`HarnessInfo.available` and `.enabled` are independent, both always present.** `available` is a
   live `@repo/bin-resolver` binary-presence check (`sidecar/harness/availability.ts`), never
   cached; `enabled` is `@repo/settings`'s `enabledHarnesses`, a user declaration. A harness can be

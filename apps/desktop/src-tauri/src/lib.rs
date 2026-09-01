@@ -6,9 +6,11 @@ use std::time::Duration;
 
 use editors::{list_available_editors, open_in_editor};
 use serde::{Deserialize, Serialize};
-use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, Submenu, HELP_SUBMENU_ID, WINDOW_SUBMENU_ID};
+use tauri::menu::{
+    Menu, MenuItem, PredefinedMenuItem, Submenu, HELP_SUBMENU_ID, WINDOW_SUBMENU_ID,
+};
 use tauri::webview::PageLoadEvent;
-use tauri::{Emitter, Manager, Runtime, TitleBarStyle, WebviewUrl, WebviewWindowBuilder};
+use tauri::{Emitter, Listener, Manager, Runtime, TitleBarStyle, WebviewUrl, WebviewWindowBuilder};
 use tauri_plugin_shell::process::CommandChild;
 #[cfg(not(debug_assertions))]
 use tauri_plugin_shell::ShellExt;
@@ -397,7 +399,28 @@ pub fn run() {
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_deep_link::init())
         .setup(|app| {
+            // Foreground the main window the instant a `nisi://` link lands —
+            // deliberately separate from the focus `useSessions` already does
+            // on the frontend's `session-opened` event (`src/lib/pr-data.ts`):
+            // that one arrives seconds late, after `pullRequests.open`'s own
+            // `git fetch` completes, while this fires on the plugin's
+            // `deep-link://new-url` event (emitted from `RunEvent::Opened`),
+            // before the frontend has even resolved the link.
+            let deep_link_app_handle = app.handle().clone();
+            app.listen("deep-link://new-url", move |_event| {
+                let Some(window) = deep_link_app_handle.get_webview_window("main") else {
+                    return;
+                };
+                if let Err(e) = window.show() {
+                    eprintln!("failed to show the main window for a deep link: {e}");
+                }
+                if let Err(e) = window.set_focus() {
+                    eprintln!("failed to focus the main window for a deep link: {e}");
+                }
+            });
+
             // NISI_DATA_DIR overrides the app data dir — useful for tests or ad-hoc
             // isolation. Absent in prod (and in the plain `scripts/dev.ts` orchestrator),
             // where the parent process never sets it, so app_data_dir() is the fallback.

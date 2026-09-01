@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<title>nisi</title>
+		<style>
+			body {
+				font: 14px -apple-system, system-ui, sans-serif;
+				max-width: 28rem;
+				margin: 2rem;
+				color: #1a1a1a;
+			}
+			label {
+				display: block;
+				margin: 1.5rem 0 0.5rem;
+			}
+		</style>
+	</head>
+	<body>
+		<h1>nisi</h1>
+		<p>
+			Hands a GitHub pull request page off to the nisi app when you arrive at
+			it directly — a link from Slack, a typed or pasted URL, a bookmark.
+			Clicking around inside GitHub itself never triggers it.
+		</p>
+		<p>
+			The hand-off lands on an interstitial page in the same tab, which fires
+			the deep link. It stays open the first time, so you can confirm nisi
+			actually opened before deciding whether it should close the tab
+			automatically on every hand-off after that.
+		</p>
+		<label>
+			<input type="checkbox" id="auto-close" />
+			Close the tab automatically after a hand-off
+		</label>
+		<p id="status" role="status"></p>
+		<script type="module" src="options.js"></script>
+	</body>
+</html>

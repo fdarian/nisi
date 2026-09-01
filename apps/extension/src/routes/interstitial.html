@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<title>nisi</title>
+		<style>
+			body {
+				font: 14px -apple-system, system-ui, sans-serif;
+				max-width: 28rem;
+				margin: 2rem;
+				color: #1a1a1a;
+			}
+			.actions {
+				display: flex;
+				gap: 0.75rem;
+				margin-top: 1.5rem;
+			}
+			button,
+			a.button {
+				font: inherit;
+				padding: 0.5rem 1rem;
+				border-radius: 6px;
+				border: 1px solid #ddd;
+				background: #fff;
+				cursor: pointer;
+				text-decoration: none;
+				color: inherit;
+			}
+			button:disabled {
+				cursor: default;
+				opacity: 0.6;
+			}
+			.confirm {
+				margin-top: 2rem;
+				padding-top: 1rem;
+				border-top: 1px solid #eee;
+			}
+			.confirm p {
+				color: #555;
+			}
+		</style>
+	</head>
+	<body>
+		<h1>nisi</h1>
+		<p id="status" role="status">Opening in nisi…</p>
+		<div class="actions">
+			<button id="retry" type="button">Open in nisi</button>
+			<a id="github-link" class="button">Open on GitHub</a>
+		</div>
+		<div class="confirm">
+			<p>If nisi just opened, you can skip seeing this page next time:</p>
+			<button id="enable-auto-close" type="button">
+				nisi opened — close this tab automatically from now on
+			</button>
+		</div>
+		<script type="module" src="interstitial.js"></script>
+	</body>
+</html>
