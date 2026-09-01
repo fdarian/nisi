@@ -1,22 +1,20 @@
 /**
- * Mirrors `AUTO_CLOSE_STORAGE_KEY` in `interstitial.js`, which sets this
+ * Mirrors `AUTO_CLOSE_STORAGE_KEY` in `interstitial.ts`, which sets this
  * flag once the user confirms — via the interstitial's own button — that
  * nisi actually opened. This checkbox is the reverse path: turning
  * auto-close back off without clearing extension data.
  */
 const AUTO_CLOSE_STORAGE_KEY = "autoCloseAfterHandoff";
 
-const checkbox = /** @type {HTMLInputElement} */ (
-	document.getElementById("auto-close")
-);
-const status = /** @type {HTMLElement} */ (document.getElementById("status"));
+const checkbox = document.getElementById("auto-close") as HTMLInputElement;
+const status = document.getElementById("status") as HTMLElement;
 
-async function loadSetting() {
+async function loadSetting(): Promise<void> {
 	const stored = await chrome.storage.sync.get([AUTO_CLOSE_STORAGE_KEY]);
 	checkbox.checked = stored[AUTO_CLOSE_STORAGE_KEY] === true;
 }
 
-async function saveSetting() {
+async function saveSetting(): Promise<void> {
 	await chrome.storage.sync.set({ [AUTO_CLOSE_STORAGE_KEY]: checkbox.checked });
 	status.textContent = "Saved.";
 	setTimeout(() => {

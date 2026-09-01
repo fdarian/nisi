@@ -4,9 +4,9 @@
  * looks exactly like a fresh arrival (the previous URL isn't github.com,
  * since it's this extension's own page), which would hand off again and
  * bounce the user right back to the interstitial instead of letting them
- * read the PR. Kept free of any `chrome.*` call, like `direct-arrival.js`,
+ * read the PR. Kept free of any `chrome.*` call, like `direct-arrival.ts`,
  * so it's `bun test`-able without a browser (`bounce-back.test.ts`) —
- * `background.js`'s `onCommitted` listener is the only caller, and owns
+ * `background.ts`'s `onCommitted` listener is the only caller, and owns
  * computing `interstitialUrlPrefix` via
  * `chrome.runtime.getURL("interstitial.html")`.
  *
@@ -27,18 +27,16 @@
  * back", just the same `previousUrl` input.
  */
 
-/**
- * @typedef {Object} BounceBackInput
- * @property {string | undefined} previousUrl - the tab's last committed URL before this navigation, if known.
- * @property {string} url - the committed URL (`chrome.webNavigation.onCommitted`'s `details.url`).
- * @property {string} interstitialUrlPrefix - `chrome.runtime.getURL("interstitial.html")`.
- */
+export interface BounceBackInput {
+	/** the tab's last committed URL before this navigation, if known. */
+	previousUrl: string | undefined;
+	/** the committed URL (`chrome.webNavigation.onCommitted`'s `details.url`). */
+	url: string;
+	/** `chrome.runtime.getURL("interstitial.html")`. */
+	interstitialUrlPrefix: string;
+}
 
-/**
- * @param {BounceBackInput} input
- * @returns {boolean}
- */
-export function isBounceBackFromInterstitial(input) {
+export function isBounceBackFromInterstitial(input: BounceBackInput): boolean {
 	if (input.previousUrl === undefined) return false;
 	if (!input.previousUrl.startsWith(input.interstitialUrlPrefix)) return false;
 	try {

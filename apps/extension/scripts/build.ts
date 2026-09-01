@@ -1,9 +1,9 @@
 /**
  * Bundles `src/` into `dist/`, the extension's load-unpacked target. Three
- * entries (`background.js` fires from the manifest as the service worker;
- * `interstitial.js`/`options.js` are `<script type="module" src=…>` in
- * their own HTML pages) — `direct-arrival.js` and `bounce-back.js` are
- * imports of `background.js`, not entries, so they end up inlined into
+ * entries (`background.ts` fires from the manifest as the service worker;
+ * `interstitial.ts`/`options.ts` are `<script type="module" src=…>` in
+ * their own HTML pages) — `direct-arrival.ts` and `bounce-back.ts` are
+ * imports of `background.ts`, not entries, so they end up inlined into
  * `background.js` rather than emitted as their own files.
  *
  * `naming` is pinned to `[name].js` (Bun's default without it hashes
@@ -19,7 +19,7 @@ const outdir = new URL("../dist/", import.meta.url).pathname;
 await rm(outdir, { recursive: true, force: true });
 
 const result = await Bun.build({
-	entrypoints: ["src/background.js", "src/interstitial.js", "src/options.js"],
+	entrypoints: ["src/background.ts", "src/interstitial.ts", "src/options.ts"],
 	outdir,
 	target: "browser",
 	format: "esm",

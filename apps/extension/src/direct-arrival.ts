@@ -1,6 +1,6 @@
 /**
  * The hand-off decision, kept free of any `chrome.*` call so it's plain-value
- * unit-testable (see `direct-arrival.test.ts`) — `background.js` is the only
+ * unit-testable (see `direct-arrival.test.ts`) — `background.ts` is the only
  * caller, and owns gathering the inputs from `chrome.webNavigation`/`chrome.tabs`.
  *
  * "Direct arrival" means: the user landed on a GitHub PR page from outside
@@ -24,21 +24,20 @@ const TYPED_TRANSITION_TYPES = new Set([
 	"keyword",
 ]);
 
-/**
- * @typedef {Object} DirectArrivalInput
- * @property {number} frameId - `0` is the top-level frame; anything else is a subframe.
- * @property {string} url - the committed URL (`chrome.webNavigation.onCommitted`'s `details.url`).
- * @property {string} transitionType - `chrome.webNavigation.TransitionType`.
- * @property {string[]} transitionQualifiers - `chrome.webNavigation.TransitionQualifier[]`.
- * @property {string | undefined} previousUrl - the tab's last committed URL before this navigation, if known.
- * @property {string | undefined} openerUrl - the opener tab's current URL, if known.
- */
+export interface DirectArrivalInput {
+	/** `0` is the top-level frame; anything else is a subframe. */
+	frameId: number;
+	/** the committed URL (`chrome.webNavigation.onCommitted`'s `details.url`). */
+	url: string;
+	transitionType: `${chrome.webNavigation.TransitionType}`;
+	transitionQualifiers: `${chrome.webNavigation.TransitionQualifier}`[];
+	/** the tab's last committed URL before this navigation, if known. */
+	previousUrl: string | undefined;
+	/** the opener tab's current URL, if known. */
+	openerUrl: string | undefined;
+}
 
-/**
- * @param {string | undefined} url
- * @returns {boolean}
- */
-function isOnGithub(url) {
+function isOnGithub(url: string | undefined): boolean {
 	if (url === undefined) return false;
 	try {
 		return new URL(url).hostname === "github.com";
@@ -47,11 +46,7 @@ function isOnGithub(url) {
 	}
 }
 
-/**
- * @param {DirectArrivalInput} input
- * @returns {boolean}
- */
-export function isDirectArrival(input) {
+export function isDirectArrival(input: DirectArrivalInput): boolean {
 	if (input.frameId !== 0) return false;
 	if (!PULL_REQUEST_URL_PATTERN.test(input.url)) return false;
 	if (input.transitionType === "reload") return false;

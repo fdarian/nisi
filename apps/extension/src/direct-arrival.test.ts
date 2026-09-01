@@ -1,17 +1,17 @@
 import { describe, expect, test } from "bun:test";
-import { isDirectArrival } from "./direct-arrival.js";
+import { type DirectArrivalInput, isDirectArrival } from "./direct-arrival.js";
 
 const PR_URL = "https://github.com/owner/repo/pull/12";
 const GITHUB_URL = "https://github.com/owner/repo";
 const NON_GITHUB_URL = "https://slack.com/archives/C1/p1";
 
 /** Fills in the fields every case below overrides only some of. */
-function baseInput(overrides: Partial<Parameters<typeof isDirectArrival>[0]>) {
+function baseInput(overrides: Partial<DirectArrivalInput>): DirectArrivalInput {
 	return {
 		frameId: 0,
 		url: PR_URL,
 		transitionType: "link",
-		transitionQualifiers: [] as string[],
+		transitionQualifiers: [],
 		previousUrl: undefined,
 		openerUrl: undefined,
 		...overrides,
@@ -65,12 +65,13 @@ describe("isDirectArrival", () => {
 	});
 
 	describe("typed-style transitions hand off regardless of previous URL or opener", () => {
-		for (const transitionType of [
+		const typedStyleTransitionTypes: DirectArrivalInput["transitionType"][] = [
 			"typed",
 			"generated",
 			"auto_bookmark",
 			"keyword",
-		]) {
+		];
+		for (const transitionType of typedStyleTransitionTypes) {
 			test(transitionType, () => {
 				expect(
 					isDirectArrival(

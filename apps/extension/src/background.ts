@@ -2,9 +2,9 @@
  * MV3 service worker. Watches every top-frame commit on github.com
  * (`host_permissions` already restricts `webNavigation` events to that host,
  * so there's no per-listener URL filter here) and hands a direct-arrival PR
- * page off to the nisi app — see `direct-arrival.js` for what "direct"
- * means, `bounce-back.js` for the one case that overrides it, and
- * `interstitial.js` for the actual `nisi://` deep link and why hand-off
+ * page off to the nisi app — see `direct-arrival.ts` for what "direct"
+ * means, `bounce-back.ts` for the one case that overrides it, and
+ * `interstitial.ts` for the actual `nisi://` deep link and why hand-off
  * doesn't happen straight from here.
  *
  * GitHub's own navigation is mostly Turbo (pjax-style `history.pushState`),
@@ -22,31 +22,21 @@ import { isDirectArrival } from "./direct-arrival.js";
 
 const INTERSTITIAL_URL_PREFIX = chrome.runtime.getURL("interstitial.html");
 
-/** @param {number} tabId */
-function storageKey(tabId) {
+function storageKey(tabId: number): string {
 	return String(tabId);
 }
 
-/**
- * @param {number} tabId
- * @returns {Promise<string | undefined>}
- */
-async function getLastCommittedUrl(tabId) {
+async function getLastCommittedUrl(tabId: number): Promise<string | undefined> {
 	const stored = await chrome.storage.session.get(storageKey(tabId));
 	const value = stored[storageKey(tabId)];
 	return typeof value === "string" ? value : undefined;
 }
 
-/**
- * @param {number} tabId
- * @param {string} url
- */
-async function setLastCommittedUrl(tabId, url) {
+async function setLastCommittedUrl(tabId: number, url: string): Promise<void> {
 	await chrome.storage.session.set({ [storageKey(tabId)]: url });
 }
 
-/** @param {number} tabId */
-async function clearLastCommittedUrl(tabId) {
+async function clearLastCommittedUrl(tabId: number): Promise<void> {
 	await chrome.storage.session.remove(storageKey(tabId));
 }
 
@@ -56,9 +46,8 @@ async function clearLastCommittedUrl(tabId) {
  * non-github opener simply comes back `undefined` here. That's the correct
  * outcome for `isDirectArrival`, not a permission gap to work around: an
  * opener we can't see is (almost certainly) not github.com either.
- * @param {chrome.tabs.Tab} tab
  */
-async function getOpenerUrl(tab) {
+async function getOpenerUrl(tab: chrome.tabs.Tab): Promise<string | undefined> {
 	if (tab.openerTabId === undefined) return undefined;
 	try {
 		const opener = await chrome.tabs.get(tab.openerTabId);
@@ -77,12 +66,10 @@ async function getOpenerUrl(tab) {
  * confirmation dialog mid-flight: if the user hadn't yet approved the
  * hand-off, closing the tab kills the pending dialog, and the PR page is
  * gone too. Routing through a page that stays put sidesteps that — see
- * `interstitial.js` for the deep link and why it never closes the tab
+ * `interstitial.ts` for the deep link and why it never closes the tab
  * itself either.
- * @param {number} tabId
- * @param {string} url
  */
-async function handOff(tabId, url) {
+async function handOff(tabId: number, url: string): Promise<void> {
 	const interstitialUrl = `${INTERSTITIAL_URL_PREFIX}?url=${encodeURIComponent(url)}`;
 	await chrome.tabs.update(tabId, { url: interstitialUrl });
 }
@@ -97,7 +84,7 @@ chrome.webNavigation.onCommitted.addListener(async (details) => {
 	// navigation `details` describes.
 	const previousUrl = await getLastCommittedUrl(details.tabId);
 
-	let openerUrl;
+	let openerUrl: string | undefined;
 	try {
 		const tab = await chrome.tabs.get(details.tabId);
 		openerUrl = await getOpenerUrl(tab);

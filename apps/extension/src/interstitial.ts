@@ -1,11 +1,11 @@
 /**
  * The page a direct-arrival hand-off actually lands on (see
- * `background.js`'s `handOff`), instead of navigating straight to
+ * `background.ts`'s `handOff`), instead of navigating straight to
  * `nisi://`. It fires the deep link itself, and closes the tab immediately
  * afterward only once the user has explicitly said to — see
  * `AUTO_CLOSE_STORAGE_KEY` below.
  *
- * Why it fires the deep link itself, not `background.js`: a top-level
+ * Why it fires the deep link itself, not `background.ts`: a top-level
  * navigation to an unregistered scheme is attributed, for Chrome's
  * external-protocol "always allow this app" memory, to whatever origin
  * initiated it. A `chrome.tabs.update` call from the service worker and a
@@ -56,32 +56,23 @@
 
 const AUTO_CLOSE_STORAGE_KEY = "autoCloseAfterHandoff";
 
-const statusEl = /** @type {HTMLElement} */ (document.getElementById("status"));
-const retryButton = /** @type {HTMLButtonElement} */ (
-	document.getElementById("retry")
-);
-const githubLink = /** @type {HTMLAnchorElement} */ (
-	document.getElementById("github-link")
-);
-const enableAutoCloseButton = /** @type {HTMLButtonElement} */ (
-	document.getElementById("enable-auto-close")
-);
+const statusEl = document.getElementById("status") as HTMLElement;
+const retryButton = document.getElementById("retry") as HTMLButtonElement;
+const githubLink = document.getElementById("github-link") as HTMLAnchorElement;
+const enableAutoCloseButton = document.getElementById(
+	"enable-auto-close",
+) as HTMLButtonElement;
 
-/**
- * @param {string} url
- * @returns {string}
- */
-function buildDeepLink(url) {
+function buildDeepLink(url: string): string {
 	return `nisi://open?url=${encodeURIComponent(url)}`;
 }
 
-/** @returns {Promise<boolean>} */
-async function getAutoCloseSetting() {
+async function getAutoCloseSetting(): Promise<boolean> {
 	const stored = await chrome.storage.sync.get([AUTO_CLOSE_STORAGE_KEY]);
 	return stored[AUTO_CLOSE_STORAGE_KEY] === true;
 }
 
-async function closeThisTab() {
+async function closeThisTab(): Promise<void> {
 	const tab = await chrome.tabs.getCurrent();
 	if (tab?.id === undefined) return;
 	await chrome.tabs.remove(tab.id);
@@ -91,16 +82,15 @@ async function closeThisTab() {
  * Fires the deep link, then — only if the user has already confirmed nisi
  * opens, on some earlier hand-off — closes this tab right away. No
  * detection, no timer: the stored flag is the sole authority.
- * @param {string} url
  */
-async function fireDeepLink(url) {
+async function fireDeepLink(url: string): Promise<void> {
 	window.location.href = buildDeepLink(url);
 	if (await getAutoCloseSetting()) {
 		await closeThisTab();
 	}
 }
 
-function enableAutoClose() {
+function enableAutoClose(): void {
 	chrome.storage.sync.set({ [AUTO_CLOSE_STORAGE_KEY]: true });
 	enableAutoCloseButton.disabled = true;
 	enableAutoCloseButton.textContent = "Auto-close enabled for next time";
