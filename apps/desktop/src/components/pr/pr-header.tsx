@@ -40,6 +40,8 @@ type PrHeaderProps = {
 	onCloseTab: () => void;
 	/** This PR's tab is both the selected one and the window has focus — threaded straight through to `PrCiStatus`'s own poll gating, see `usePullRequestChecks` (`pr-data.ts`). */
 	watched: boolean;
+	/** This PR's session id — threaded straight through to `PrCiStatus`, see `usePullRequestChecks`'s `useAwaitingNewCi` (`pr-data.ts`). */
+	sessionId: string;
 };
 
 type MarkReadyMenuItemProps = {
@@ -96,6 +98,7 @@ export function PrHeader({
 	stat,
 	onCloseTab,
 	watched,
+	sessionId,
 }: PrHeaderProps): React.ReactElement {
 	const repoNameSegments = repoRoot.split("/");
 	const repoName = repoNameSegments[repoNameSegments.length - 1] || repoRoot;
@@ -145,6 +148,7 @@ export function PrHeader({
 						owner={target.owner}
 						repo={target.repo}
 						repoRoot={repoRoot}
+						sessionId={sessionId}
 						watched={watched}
 					/>
 					<PrMergeButton

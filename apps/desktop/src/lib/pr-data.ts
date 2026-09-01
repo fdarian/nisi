@@ -1094,43 +1094,105 @@ const CI_CHECKS_UNSETTLED_POLL_MS = 10000;
 const CI_CHECKS_SETTLED_POLL_MS = 60000;
 
 /**
+ * How long `useAwaitingNewCi`'s flag stays sticky after a local commit —
+ * the sole clear condition, alongside checks actually going unsettled (see
+ * `usePullRequestChecks`'s `refetchInterval`). Commit→push is normally
+ * seconds; this only guards against the user committing and never pushing.
+ */
+const CI_CHECKS_AWAITING_NEW_CI_TIMEOUT_MS = 120000;
+
+/** `true` iff any check in `checks` is still `"running"`/`"pending"`. */
+const hasUnsettledCheck = (
+	checks: readonly PullRequestCheck[] | undefined,
+): boolean =>
+	checks?.some(
+		(check) => check.status === "running" || check.status === "pending",
+	) === true;
+
+/**
+ * Sticky flag `usePullRequestChecks` folds into its `refetchInterval` so a
+ * fresh local commit resumes fast polling immediately rather than waiting
+ * out the slow settled-poll: at commit time nothing's been pushed yet, so
+ * `pullRequests.checks` still reports the old settled state, and a one-shot
+ * invalidate on the sidecar's change event would just refetch that same
+ * stale data. Set (or re-armed) on a `session-files-changed` event for
+ * `sessionId` (the sidecar's live worktree poller noticing local HEAD
+ * moved — `apps/desktop/sidecar/live-poll.ts`,
+ * `packages/sidecar-api/src/events.ts`), subscribing the same way
+ * `useLiveFileChanges` does (shared query key, no extra connection).
+ * Clears only on `CI_CHECKS_AWAITING_NEW_CI_TIMEOUT_MS` — once checks are
+ * actually unsettled, `refetchInterval`'s own `hasUnsettledCheck` check
+ * already forces the fast poll, so a stale-true flag changes nothing.
+ */
+const useAwaitingNewCi = (
+	orpc: SidecarQueryUtils,
+	sessionId: string,
+): boolean => {
+	const eventsQuery = useQuery(orpc.events.subscribe.liveOptions());
+	const [awaitingNewCi, setAwaitingNewCi] = useState(false);
+	const timeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(
+		undefined,
+	);
+
+	useEffect(() => {
+		const event = eventsQuery.data;
+		if (event === undefined || event.type !== "session-files-changed") return;
+		if (event.sessionId !== sessionId) return;
+		clearTimeout(timeoutRef.current);
+		timeoutRef.current = setTimeout(
+			() => setAwaitingNewCi(false),
+			CI_CHECKS_AWAITING_NEW_CI_TIMEOUT_MS,
+		);
+		setAwaitingNewCi(true);
+	}, [eventsQuery.data, sessionId]);
+
+	useEffect(() => () => clearTimeout(timeoutRef.current), []);
+
+	return awaitingNewCi;
+};
+
+export type PullRequestChecksOptions = {
+	/** This PR's tab is both the selected one and the window has focus — see `usePullRequestChecks`. */
+	watched: boolean;
+	/** Identifies which session's `session-files-changed` events count as "a new commit for this PR" — see `useAwaitingNewCi`. */
+	sessionId: string;
+};
+
+/**
  * `pullRequests.checks` — every CI check attached to the PR, backing the
  * header's `CiStatus` ring. Polls at `CI_CHECKS_UNSETTLED_POLL_MS` while
- * something is still unsettled (any check `"running"`/`"pending"`) —
- * unlike `usePullRequestMergeStatus`'s 2s cadence, CI is slow (real
- * pipelines run minutes, not seconds), so a tight poll would just spam the
- * sidecar with `gh pr view` calls for no visible benefit. That fast path
- * runs regardless of `watched` — an in-flight check is exactly what a user
- * left this PR's tab open to wait on.
+ * something is still unsettled, or while `useAwaitingNewCi` is holding its
+ * sticky flag open for a fresh local commit — unlike
+ * `usePullRequestMergeStatus`'s 2s cadence, CI is slow, so a tight poll
+ * would just spam the sidecar with `gh pr view` calls for no visible
+ * benefit. Runs regardless of `watched`, since an in-flight check (or a
+ * commit someone just made) is exactly what a user left this tab open to
+ * wait on.
  *
- * Once every check has settled, polling doesn't stop outright — a push or
- * a re-run on GitHub after that point would otherwise never reach the ring,
- * since nothing else ever invalidates this query (`refetchOnWindowFocus`
- * is globally off, see `main.tsx`). Instead it drops to
- * `CI_CHECKS_SETTLED_POLL_MS`, but only
- * while `watched` — the caller's "this PR's tab is the selected one and the
- * window has focus" signal, the same shape as `pr-view.tsx`'s Files-Changed
- * `watched`. `false` while unwatched, same as a query that never had
- * anything in flight, so a background PR tab never spawns a `gh`
- * subprocess of its own. `useRefreshOnWatchedEdge` layers the other half of
- * the fix on top: an immediate refetch the instant `watched` flips back to
- * true, covering the common case (alt-tab to GitHub/CI and back) without
- * waiting out the slow poll.
+ * Once every check has settled and no commit is pending, polling doesn't
+ * stop outright — a push or re-run on GitHub would otherwise never reach
+ * the ring, since nothing else ever invalidates this query
+ * (`refetchOnWindowFocus` is globally off, see `main.tsx`). Instead it
+ * drops to `CI_CHECKS_SETTLED_POLL_MS`, only while `watched`, and `false`
+ * while unwatched — same shape as `pr-view.tsx`'s Files-Changed `watched`,
+ * so a background PR tab never spawns a `gh` subprocess.
+ * `useRefreshOnWatchedEdge` covers the other common case: an immediate
+ * refetch the instant `watched` flips back to true (alt-tab to GitHub/CI
+ * and back), without waiting out the slow poll.
  */
 export function usePullRequestChecks(
 	orpc: SidecarQueryUtils,
 	params: PullRequestChecksParams,
-	watched: boolean,
+	options: PullRequestChecksOptions,
 ): UseQueryResult<readonly PullRequestCheck[]> {
 	const queryClient = useQueryClient();
+	const awaitingNewCi = useAwaitingNewCi(orpc, options.sessionId);
 	const query = useQuery({
 		...orpc.pullRequests.checks.queryOptions({ input: params }),
 		refetchInterval: (query) =>
-			query.state.data?.some(
-				(check) => check.status === "running" || check.status === "pending",
-			) === true
+			hasUnsettledCheck(query.state.data) || (options.watched && awaitingNewCi)
 				? CI_CHECKS_UNSETTLED_POLL_MS
-				: watched
+				: options.watched
 					? CI_CHECKS_SETTLED_POLL_MS
 					: false,
 	});
@@ -1140,7 +1202,7 @@ export function usePullRequestChecks(
 			queryKey: orpc.pullRequests.checks.key({ input: params }),
 		});
 	}, [queryClient, orpc, params]);
-	useRefreshOnWatchedEdge(watched, refresh);
+	useRefreshOnWatchedEdge(options.watched, refresh);
 
 	return query;
 }

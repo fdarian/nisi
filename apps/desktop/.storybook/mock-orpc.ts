@@ -207,7 +207,9 @@ export function createMockOrpc(data: MockOrpcData = {}): SidecarQueryUtils {
 			setWatching: async () => undefined,
 		},
 		events: {
-			// Never referenced by the walkthrough tree's hooks.
+			// Never resolves — the same "no events forthcoming" shape
+			// `useLiveFileChanges`/`useSessions`/`usePullRequestChecks`'s
+			// `useAwaitingNewCi` all treat as the steady state.
 			subscribe: async () => neverIterator(),
 		},
 		// No story exercises the chat dock yet (Phase 3/4 frontend work) — these
