@@ -1061,43 +1061,131 @@ const CI_CHECKS_UNSETTLED_POLL_MS = 10000;
 const CI_CHECKS_SETTLED_POLL_MS = 60000;
 
 /**
+ * How long `useAwaitingNewCi`'s flag stays sticky after a local commit,
+ * bounding the fast poll it forces even though every currently-known check
+ * still looks settled. Commit→push is normally seconds — this only guards
+ * against the user committing and never pushing.
+ */
+const CI_CHECKS_AWAITING_NEW_CI_TIMEOUT_MS = 120000;
+
+/** `true` iff any check in `checks` is still `"running"`/`"pending"` — shared by `usePullRequestChecks`'s `refetchInterval` and `useAwaitingNewCi`'s own clear condition. */
+const hasUnsettledCheck = (
+	checks: readonly PullRequestCheck[] | undefined,
+): boolean =>
+	checks?.some(
+		(check) => check.status === "running" || check.status === "pending",
+	) === true;
+
+/**
+ * Sticky flag `usePullRequestChecks` folds into its `refetchInterval`
+ * decision so a fresh local commit resumes `CI_CHECKS_UNSETTLED_POLL_MS`
+ * polling immediately, instead of waiting out the slow
+ * `CI_CHECKS_SETTLED_POLL_MS` poll. At commit time nothing has been pushed
+ * yet, so `pullRequests.checks` still reports the old settled state — a
+ * one-shot invalidate on the sidecar's change event would just refetch that
+ * same stale-but-settled data and immediately re-latch to the slow poll.
+ * This flag stays true across several polls instead, until the pushed CI
+ * actually shows up.
+ *
+ * Set (or re-armed) on a `session-files-changed` event for `sessionId` —
+ * the sidecar's live worktree poller noticing local HEAD moved
+ * (`apps/desktop/sidecar/live-poll.ts`, `packages/sidecar-api/src/events.ts`).
+ * Subscribes to `events.subscribe` the same way `useLiveFileChanges` does:
+ * same query key, so this is a second observer, not a second connection.
+ * Reads `pullRequests.checks`'s own cache the same way (a second observer
+ * on `usePullRequestChecks`'s own query key) rather than taking its data as
+ * a parameter, so this hook doesn't depend on render order relative to the
+ * caller's own `useQuery` call.
+ *
+ * Cleared by whichever happens first: `CI_CHECKS_AWAITING_NEW_CI_TIMEOUT_MS`
+ * elapsing, or the checks query's data going unsettled again (the push
+ * landed and `CI_CHECKS_UNSETTLED_POLL_MS`'s own fast path has taken over,
+ * so this flag has done its job). A second commit while already awaiting
+ * re-arms the timeout rather than being ignored — the event effect below
+ * always clears and restarts it, not just on the first event.
+ */
+const useAwaitingNewCi = (
+	orpc: SidecarQueryUtils,
+	params: PullRequestChecksParams,
+	sessionId: string,
+): boolean => {
+	const eventsQuery = useQuery(orpc.events.subscribe.liveOptions());
+	const checksQuery = useQuery(
+		orpc.pullRequests.checks.queryOptions({ input: params }),
+	);
+	const [awaitingNewCi, setAwaitingNewCi] = useState(false);
+	const timeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(
+		undefined,
+	);
+
+	useEffect(() => {
+		const event = eventsQuery.data;
+		if (event === undefined || event.type !== "session-files-changed") return;
+		if (event.sessionId !== sessionId) return;
+		clearTimeout(timeoutRef.current);
+		timeoutRef.current = setTimeout(
+			() => setAwaitingNewCi(false),
+			CI_CHECKS_AWAITING_NEW_CI_TIMEOUT_MS,
+		);
+		setAwaitingNewCi(true);
+	}, [eventsQuery.data, sessionId]);
+
+	useEffect(() => {
+		if (!hasUnsettledCheck(checksQuery.data)) return;
+		clearTimeout(timeoutRef.current);
+		setAwaitingNewCi(false);
+	}, [checksQuery.data]);
+
+	useEffect(() => () => clearTimeout(timeoutRef.current), []);
+
+	return awaitingNewCi;
+};
+
+export type PullRequestChecksOptions = {
+	/** This PR's tab is both the selected one and the window has focus — see `usePullRequestChecks`. */
+	watched: boolean;
+	/** Identifies which session's `session-files-changed` events count as "a new commit for this PR" — see `useAwaitingNewCi`. */
+	sessionId: string;
+};
+
+/**
  * `pullRequests.checks` — every CI check attached to the PR, backing the
  * header's `CiStatus` ring. Polls at `CI_CHECKS_UNSETTLED_POLL_MS` while
- * something is still unsettled (any check `"running"`/`"pending"`) —
- * unlike `usePullRequestMergeStatus`'s 2s cadence, CI is slow (real
+ * something is still unsettled (any check `"running"`/`"pending"`), or while
+ * `useAwaitingNewCi` is holding its sticky flag open for a fresh local
+ * commit — unlike `usePullRequestMergeStatus`'s 2s cadence, CI is slow (real
  * pipelines run minutes, not seconds), so a tight poll would just spam the
  * sidecar with `gh pr view` calls for no visible benefit. That fast path
- * runs regardless of `watched` — an in-flight check is exactly what a user
- * left this PR's tab open to wait on.
+ * runs regardless of `watched` — an in-flight check, or a commit someone
+ * just made, is exactly what a user left this PR's tab open to wait on.
  *
- * Once every check has settled, polling doesn't stop outright — a push or
- * a re-run on GitHub after that point would otherwise never reach the ring,
- * since nothing else ever invalidates this query (`refetchOnWindowFocus`
- * is globally off, see `main.tsx`). Instead it drops to
- * `CI_CHECKS_SETTLED_POLL_MS`, but only
- * while `watched` — the caller's "this PR's tab is the selected one and the
- * window has focus" signal, the same shape as `pr-view.tsx`'s Files-Changed
- * `watched`. `false` while unwatched, same as a query that never had
- * anything in flight, so a background PR tab never spawns a `gh`
- * subprocess of its own. `useRefreshOnWatchedEdge` layers the other half of
- * the fix on top: an immediate refetch the instant `watched` flips back to
- * true, covering the common case (alt-tab to GitHub/CI and back) without
- * waiting out the slow poll.
+ * Once every check has settled and no commit is pending, polling doesn't
+ * stop outright — a push or a re-run on GitHub after that point would
+ * otherwise never reach the ring, since nothing else ever invalidates this
+ * query (`refetchOnWindowFocus` is globally off, see `main.tsx`). Instead
+ * it drops to `CI_CHECKS_SETTLED_POLL_MS`, but only while `watched` — the
+ * caller's "this PR's tab is the selected one and the window has focus"
+ * signal, the same shape as `pr-view.tsx`'s Files-Changed `watched`.
+ * `false` while unwatched, same as a query that never had anything in
+ * flight, so a background PR tab never spawns a `gh` subprocess of its
+ * own. `useRefreshOnWatchedEdge` layers the other half of the fix on top:
+ * an immediate refetch the instant `watched` flips back to true, covering
+ * the common case (alt-tab to GitHub/CI and back) without waiting out the
+ * slow poll.
  */
 export function usePullRequestChecks(
 	orpc: SidecarQueryUtils,
 	params: PullRequestChecksParams,
-	watched: boolean,
+	options: PullRequestChecksOptions,
 ): UseQueryResult<readonly PullRequestCheck[]> {
 	const queryClient = useQueryClient();
+	const awaitingNewCi = useAwaitingNewCi(orpc, params, options.sessionId);
 	const query = useQuery({
 		...orpc.pullRequests.checks.queryOptions({ input: params }),
 		refetchInterval: (query) =>
-			query.state.data?.some(
-				(check) => check.status === "running" || check.status === "pending",
-			) === true
+			hasUnsettledCheck(query.state.data) || (options.watched && awaitingNewCi)
 				? CI_CHECKS_UNSETTLED_POLL_MS
-				: watched
+				: options.watched
 					? CI_CHECKS_SETTLED_POLL_MS
 					: false,
 	});
@@ -1107,7 +1195,7 @@ export function usePullRequestChecks(
 			queryKey: orpc.pullRequests.checks.key({ input: params }),
 		});
 	}, [queryClient, orpc, params]);
-	useRefreshOnWatchedEdge(watched, refresh);
+	useRefreshOnWatchedEdge(options.watched, refresh);
 
 	return query;
 }
