@@ -26,6 +26,18 @@
 				text-decoration: none;
 				color: inherit;
 			}
+			button:disabled {
+				cursor: default;
+				opacity: 0.6;
+			}
+			.confirm {
+				margin-top: 2rem;
+				padding-top: 1rem;
+				border-top: 1px solid #eee;
+			}
+			.confirm p {
+				color: #555;
+			}
 		</style>
 	</head>
 	<body>
@@ -34,6 +46,12 @@
 		<div class="actions">
 			<button id="retry" type="button">Open in nisi</button>
 			<a id="github-link" class="button">Open on GitHub</a>
+		</div>
+		<div class="confirm">
+			<p>If nisi just opened, you can skip seeing this page next time:</p>
+			<button id="enable-auto-close" type="button">
+				nisi opened — close this tab automatically from now on
+			</button>
 		</div>
 		<script type="module" src="interstitial.js"></script>
 	</body>

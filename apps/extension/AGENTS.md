@@ -19,13 +19,17 @@ here resolves it without a bundler, so imports stay relative (`./direct-arrival.
   tab's last-committed URL fresh through GitHub's Turbo (pjax) navigations via
   `onHistoryStateUpdated`, since those never fire `onCommitted`. Hands off by navigating the tab
   to `interstitial.html?url=<encoded github url>`.
-- `interstitial.html`/`interstitial.js` — fires the `nisi://` deep link and stays on screen
-  indefinitely, with a retry button and a link back to the PR on GitHub. Never closes the tab
-  itself, in either tab-behavior setting; read the docblock before changing that.
-- `options.html` — static info page; no settings to persist. `manifest.json` pins a `"key"` so
-  the extension ID is stable across loads, which lets both this and `interstitial.html` be
-  addressed directly at `chrome-extension://<id>/...` (e.g. from an automated verification
-  script) without first discovering the ID.
+- `interstitial.html`/`interstitial.js` — fires the `nisi://` deep link, with a retry button and
+  a link back to the PR on GitHub. Stays on screen through the first hand-off ever, since Chrome
+  gives no reliable way to confirm the deep link actually launched nisi (see the docblock); a
+  button there lets the user assert that it did, which is what flips `autoCloseAfterHandoff` in
+  `chrome.storage.sync` for good. Once that flag is set, every later hand-off fires the deep link
+  and closes the tab immediately, no detection involved.
+- `options.html`/`options.js` — a single checkbox mirroring `autoCloseAfterHandoff`, so it's
+  reversible without clearing extension data. `manifest.json` pins a `"key"` so the extension ID
+  is stable across loads, which lets both this and `interstitial.html` be addressed directly at
+  `chrome-extension://<id>/...` (e.g. from an automated verification script) without first
+  discovering the ID.
 
 ## Gotchas
 
@@ -38,8 +42,9 @@ here resolves it without a bundler, so imports stay relative (`./direct-arrival.
 - Chrome exposes no reliable way, from extension/page JS, to tell "the external-protocol
   confirmation dialog is pending" apart from "the app already launched silently" — `interstitial.js`
   has the full investigation (what was tried, what Chromium source says, why each candidate signal
-  is confounded). Don't reach for a timer or a focus/blur heuristic to auto-close the tab; that's
-  the exact failure mode this page exists to avoid.
+  is confounded). `autoCloseAfterHandoff` sidesteps that by asking the user to confirm success
+  once instead of detecting it; don't reach for a timer or a focus/blur heuristic here instead —
+  that's the exact failure mode the interstitial exists to avoid.
 - `chrome.tabs.update`/`window.location` navigations to an unregistered scheme are, per Chrome's
   `ExternalProtocolHandler`, attributed to the *initiating* origin for its "always allow" memory —
   both a `chrome.tabs.update` call from the service worker and a same-origin `window.location`

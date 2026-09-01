@@ -1,7 +1,9 @@
 /**
  * The page a direct-arrival hand-off actually lands on (see
  * `background.js`'s `handOff`), instead of navigating straight to
- * `nisi://`. It fires the deep link itself and never closes the tab.
+ * `nisi://`. It fires the deep link itself, and closes the tab immediately
+ * afterward only once the user has explicitly said to — see
+ * `AUTO_CLOSE_STORAGE_KEY` below.
  *
  * Why it fires the deep link itself, not `background.js`: a top-level
  * navigation to an unregistered scheme is attributed, for Chrome's
@@ -19,9 +21,9 @@
  * on this page sidesteps that regardless of which way the deep link is
  * fired.
  *
- * Why it never closes the tab: Chrome gives no way, from page JS or any
- * extension API, to tell "the confirmation dialog is currently showing"
- * apart from "the app already launched silently" —
+ * Why it doesn't close itself on some detected signal: Chrome gives no
+ * way, from page JS or any extension API, to tell "the confirmation dialog
+ * is currently showing" apart from "the app already launched silently" —
  *   - `window`/`document` fire no `blur`, `focus`, `visibilitychange`, or
  *     `pagehide`/`unload` event for either case on their own; forcing the
  *     tab into the foreground first, `blur` *does* reliably fire the
@@ -33,21 +35,26 @@
  *   - the profile pref that remembers "always allow" isn't exposed to
  *     extensions through `chrome.tabs`, `chrome.windows`, `chrome.privacy`,
  *     or `chrome.contentSettings`.
- * The nearest thing to a real signal, `chrome.windows.onFocusChanged`
- * firing with `WINDOW_ID_NONE` (a non-Chrome app took the foreground),
- * only rules the dialog *out* — it never fires while the dialog is up,
- * since the dialog is Chrome-owned — but it doesn't rule success *in*: an
- * unrelated app grabbing focus would fire it too, and an app that never
- * steals focus wouldn't. Closing on it would still be a guess, just a
- * differently-shaped one, so this page doesn't act on it. Auto-closing on
- * a guess is exactly the failure mode above — it's how the tab and the
+ *   - `chrome.windows.onFocusChanged` firing with `WINDOW_ID_NONE` (a
+ *     non-Chrome app took the foreground) only rules the dialog *out* — it
+ *     never fires while the dialog is up, since the dialog is Chrome-owned
+ *     — but it doesn't rule success *in*: an unrelated app grabbing focus
+ *     would fire it too, and an app that never steals focus wouldn't.
+ * Closing on any of those would be a guess — exactly how the tab and the
  * hand-off both got lost before.
  *
- * So both tab-behavior settings converge here: the interstitial is the
- * durable landing place, with a manual retry (the dialog may have been
- * dismissed, or missed) and a link back to the PR on GitHub, since this
- * tab no longer holds the GitHub page as a fallback.
+ * So instead of detecting success, the first hand-off ever always stays
+ * put, offering `#enable-auto-close` for the user to assert — having
+ * actually watched nisi open — "close automatically from now on". That
+ * turns the one undetectable state into one the user confirms exactly
+ * once. `AUTO_CLOSE_STORAGE_KEY` in `chrome.storage.sync` (also toggleable
+ * from `options.html`, so it's reversible without clearing extension data)
+ * is the only thing that ever triggers an automatic close: once it's set,
+ * every later hand-off fires the deep link and closes this tab right
+ * after, no detection involved, because the user already watched it work.
  */
+
+const AUTO_CLOSE_STORAGE_KEY = "autoCloseAfterHandoff";
 
 const statusEl = /** @type {HTMLElement} */ (document.getElementById("status"));
 const retryButton = /** @type {HTMLButtonElement} */ (
@@ -55,6 +62,9 @@ const retryButton = /** @type {HTMLButtonElement} */ (
 );
 const githubLink = /** @type {HTMLAnchorElement} */ (
 	document.getElementById("github-link")
+);
+const enableAutoCloseButton = /** @type {HTMLButtonElement} */ (
+	document.getElementById("enable-auto-close")
 );
 
 /**
@@ -65,16 +75,49 @@ function buildDeepLink(url) {
 	return `nisi://open?url=${encodeURIComponent(url)}`;
 }
 
+/** @returns {Promise<boolean>} */
+async function getAutoCloseSetting() {
+	const stored = await chrome.storage.sync.get([AUTO_CLOSE_STORAGE_KEY]);
+	return stored[AUTO_CLOSE_STORAGE_KEY] === true;
+}
+
+async function closeThisTab() {
+	const tab = await chrome.tabs.getCurrent();
+	if (tab?.id === undefined) return;
+	await chrome.tabs.remove(tab.id);
+}
+
+/**
+ * Fires the deep link, then — only if the user has already confirmed nisi
+ * opens, on some earlier hand-off — closes this tab right away. No
+ * detection, no timer: the stored flag is the sole authority.
+ * @param {string} url
+ */
+async function fireDeepLink(url) {
+	window.location.href = buildDeepLink(url);
+	if (await getAutoCloseSetting()) {
+		await closeThisTab();
+	}
+}
+
+function enableAutoClose() {
+	chrome.storage.sync.set({ [AUTO_CLOSE_STORAGE_KEY]: true });
+	enableAutoCloseButton.disabled = true;
+	enableAutoCloseButton.textContent = "Auto-close enabled for next time";
+}
+
 const githubUrl = new URLSearchParams(location.search).get("url");
 
 if (githubUrl === null) {
 	statusEl.textContent = "No pull request URL was provided.";
 	retryButton.hidden = true;
 	githubLink.hidden = true;
+	enableAutoCloseButton.hidden = true;
 } else {
 	githubLink.href = githubUrl;
 	retryButton.addEventListener("click", () => {
-		window.location.href = buildDeepLink(githubUrl);
+		fireDeepLink(githubUrl);
 	});
-	window.location.href = buildDeepLink(githubUrl);
+	enableAutoCloseButton.addEventListener("click", enableAutoClose);
+	fireDeepLink(githubUrl);
 }
