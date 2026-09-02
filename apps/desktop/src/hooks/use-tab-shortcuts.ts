@@ -65,21 +65,27 @@ export function useTabShortcuts({
 }: TabShortcutsOptions): void {
 	useEffect(() => {
 		const handleKeyDown = (event: KeyboardEvent) => {
-			if (isTextEntry(event.target)) return;
-
-			if (isCloseOtherTabsChord(event)) {
-				if (activeTabId === null || tabIds.length <= 1) return;
-				event.preventDefault();
-				onCloseOtherTabs(activeTabId);
-				return;
-			}
-
+			// Chat's first refusal happens before the text-entry gate below,
+			// deliberately: a ⌘⇧-modified bracket is never text input, and the
+			// composer (a contenteditable div) holds focus in exactly the state —
+			// popup open, thread just switched to — where chat is supposed to own
+			// this chord. Gating it the same as everything else would make the
+			// whole feature a dead letter outside that one state.
 			const bracketDirection = resolveBracketDirection(event);
 			if (
 				bracketDirection !== undefined &&
 				onChatThreadShortcut?.(bracketDirection)
 			) {
 				event.preventDefault();
+				return;
+			}
+
+			if (isTextEntry(event.target)) return;
+
+			if (isCloseOtherTabsChord(event)) {
+				if (activeTabId === null || tabIds.length <= 1) return;
+				event.preventDefault();
+				onCloseOtherTabs(activeTabId);
 				return;
 			}
 
@@ -169,7 +175,12 @@ function resolveTargetIndex(
 	return position < 0 ? undefined : position;
 }
 
-/** Keeps these chords out of the files sidebar's filter box and any other text field. */
+/**
+ * Keeps every shortcut here out of the files sidebar's filter box and any
+ * other text field, *except* the chat-thread bracket chord — that one is
+ * resolved above, before this gate even runs, so it reaches
+ * `onChatThreadShortcut` regardless of focus.
+ */
 function isTextEntry(target: EventTarget | null): boolean {
 	if (!(target instanceof HTMLElement)) return false;
 	return target.isContentEditable || TEXT_ENTRY_TAGS.has(target.tagName);
