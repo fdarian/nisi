@@ -425,19 +425,24 @@ export function useChatActiveThreadId(sessionId: string): string | null {
 	);
 }
 
-export function useChatPopupOpen(sessionId: string): boolean {
+/** `null` reads as `false` — no active session means no open popup, not a placeholder session. */
+export function useChatPopupOpen(sessionId: string | null): boolean {
 	const store = useChatStore();
 	return useStore(
 		store,
-		(state) => state.sessions.get(sessionId)?.popupOpen ?? false,
+		(state) =>
+			sessionId !== null && (state.sessions.get(sessionId)?.popupOpen ?? false),
 	);
 }
 
-export function useChatPopupMinimized(sessionId: string): boolean {
+/** `null` reads as `false` — see `useChatPopupOpen`. */
+export function useChatPopupMinimized(sessionId: string | null): boolean {
 	const store = useChatStore();
 	return useStore(
 		store,
-		(state) => state.sessions.get(sessionId)?.popupMinimized ?? false,
+		(state) =>
+			sessionId !== null &&
+			(state.sessions.get(sessionId)?.popupMinimized ?? false),
 	);
 }
 
@@ -448,6 +453,20 @@ export function useChatComposerFocusRequest(sessionId: string): number {
 		store,
 		(state) => state.sessions.get(sessionId)?.composerFocusRequest ?? 0,
 	);
+}
+
+/**
+ * Unbound `cycleActiveThread`, for callers that need to step a thread
+ * without pulling in `useChatDockActions`' whole RPC-bound bundle (or a
+ * concrete `sessionId`/`orpc`) just for this one action — see its wiring in
+ * `app-shell.tsx`'s `useTabShortcuts` call.
+ */
+export function useCycleActiveThread(): (
+	sessionId: string,
+	direction: "next" | "previous",
+) => void {
+	const store = useChatStore();
+	return useStore(store, (state) => state.cycleActiveThread);
 }
 
 /**

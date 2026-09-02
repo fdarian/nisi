@@ -30,10 +30,10 @@ import type { SidecarQueryUtils } from "#/lib/backend-context";
 import { useBackendContext } from "#/lib/backend-context";
 import {
 	ChatProvider,
-	useChatDockActions,
 	useChatPopupMinimized,
 	useChatPopupOpen,
 	useClearChatSession,
+	useCycleActiveThread,
 } from "#/lib/chat-store";
 import { useDeepLinkOpener } from "#/lib/deep-link-data";
 import { useSessions } from "#/lib/pr-data";
@@ -253,23 +253,24 @@ function AppShellReady({
 		() => sessions.map((session) => session.id),
 		[sessions],
 	);
-	// ⌘⇧]/⌘⇧[ step chat threads instead of PR tabs while the active session's
-	// chat popup is open and expanded — see `useTabShortcuts`'s
-	// `onChatThreadShortcut` doc comment. `?? ""` covers the no-active-session
-	// case: `useChatPopupOpen`/`useChatPopupMinimized` just read `false` for
-	// an id nothing has opened a popup under, so the callback below falls
-	// through to tab cycling exactly like it does when chat is plain closed.
-	const activeChatSessionId = activeSessionId ?? "";
-	const activeChatPopupOpen = useChatPopupOpen(activeChatSessionId);
-	const activeChatPopupMinimized = useChatPopupMinimized(activeChatSessionId);
-	const activeChatDock = useChatDockActions(activeChatSessionId, orpc);
+	// The active session's chat popup gets first refusal on ⌘⇧]/⌘⇧[ — see
+	// `useTabShortcuts`'s `onChatThreadShortcut` doc comment.
+	const activeChatPopupOpen = useChatPopupOpen(activeSessionId);
+	const activeChatPopupMinimized = useChatPopupMinimized(activeSessionId);
+	const cycleActiveThread = useCycleActiveThread();
 	const handleChatThreadShortcut = useCallback(
 		(direction: "next" | "previous"): boolean => {
+			if (activeSessionId === null) return false;
 			if (!activeChatPopupOpen || activeChatPopupMinimized) return false;
-			activeChatDock.cycleActiveThread(direction);
+			cycleActiveThread(activeSessionId, direction);
 			return true;
 		},
-		[activeChatPopupOpen, activeChatPopupMinimized, activeChatDock],
+		[
+			activeSessionId,
+			activeChatPopupOpen,
+			activeChatPopupMinimized,
+			cycleActiveThread,
+		],
 	);
 	useTabShortcuts({
 		activeTabId: activeSessionId,

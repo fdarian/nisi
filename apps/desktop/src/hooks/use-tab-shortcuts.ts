@@ -29,13 +29,10 @@ type TabShortcutsOptions = {
 	onCloseTab: (tabId: string) => void;
 	onCloseOtherTabs: (tabId: string) => void;
 	/**
-	 * Consulted first on ⌘⇧]/⌘⇧[, before tab cycling: return `true` when
-	 * something else already handled the chord (the chat popup stepping to
-	 * its next/previous thread), `false` to fall through to the normal
-	 * tab-cycling behavior below. `"next"` is ⌘⇧], `"previous"` is ⌘⇧[ — the
-	 * same mapping `resolveTargetIndex` uses for tab cycling, so a chord chat
-	 * doesn't claim steps tabs in the same direction it would have stepped
-	 * threads.
+	 * Consulted first on ⌘⇧]/⌘⇧[, before tab cycling. Return `true` if
+	 * something else (the chat popup) already handled the chord; return
+	 * `false`, or omit this prop, to fall through to tab cycling. `"next"` is
+	 * ⌘⇧], `"previous"` is ⌘⇧[.
 	 */
 	onChatThreadShortcut?: (direction: "next" | "previous") => boolean;
 };
@@ -77,10 +74,10 @@ export function useTabShortcuts({
 				return;
 			}
 
-			const threadCycleDirection = resolveThreadCycleDirection(event);
+			const bracketDirection = resolveBracketDirection(event);
 			if (
-				threadCycleDirection !== undefined &&
-				onChatThreadShortcut?.(threadCycleDirection)
+				bracketDirection !== undefined &&
+				onChatThreadShortcut?.(bracketDirection)
 			) {
 				event.preventDefault();
 				return;
@@ -128,12 +125,12 @@ function isCloseOtherTabsChord(event: KeyboardEvent): boolean {
 }
 
 /**
- * ⌘⇧]/⌘⇧['s direction, independent of who ends up handling it — checked
- * before `resolveTargetIndex`'s own identical bracket branch below, since a
- * chord `onChatThreadShortcut` doesn't claim still falls through to tab
- * cycling.
+ * ⌘⇧]/⌘⇧['s direction, or `undefined` for any other chord — the single
+ * place that decodes those two key codes, called both from `handleKeyDown`
+ * (to offer the chord to `onChatThreadShortcut` first) and from
+ * `resolveTargetIndex` below (to fall back to tab cycling).
  */
-function resolveThreadCycleDirection(
+function resolveBracketDirection(
 	event: KeyboardEvent,
 ): "next" | "previous" | undefined {
 	if (!event.metaKey || event.ctrlKey || event.altKey || !event.shiftKey)
@@ -155,15 +152,15 @@ function resolveTargetIndex(
 ): number | undefined {
 	if (!event.metaKey || event.ctrlKey || event.altKey) return undefined;
 
-	if (event.shiftKey) {
+	const bracketDirection = resolveBracketDirection(event);
+	if (bracketDirection !== undefined) {
 		const activeIndex = activeTabId === null ? -1 : tabIds.indexOf(activeTabId);
 		if (activeIndex < 0) return undefined;
+		const step = bracketDirection === "next" ? 1 : -1;
 		// Both wrap, so ⌘⇧] off the right edge lands back on the first tab.
-		if (event.code === "BracketRight") return (activeIndex + 1) % tabIds.length;
-		if (event.code === "BracketLeft")
-			return (activeIndex - 1 + tabIds.length) % tabIds.length;
-		return undefined;
+		return (activeIndex + step + tabIds.length) % tabIds.length;
 	}
+	if (event.shiftKey) return undefined;
 
 	// Chrome and Safari both read ⌘9 as "last tab", not "ninth tab", and make
 	// ⌘1…⌘8 no-ops when that many tabs aren't open.
