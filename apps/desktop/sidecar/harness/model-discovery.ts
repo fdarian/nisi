@@ -1,5 +1,5 @@
 import { resolveBin } from "@repo/bin-resolver";
-import type { HarnessModel } from "@repo/sidecar-api";
+import type { HarnessId, HarnessModel } from "@repo/sidecar-api";
 import { Effect } from "effect";
 import { HARNESS_CLI_BIN } from "./harness-bin.ts";
 
@@ -30,38 +30,66 @@ export type DiscoveryReason =
 const runCli = (
 	binary: string,
 	args: ReadonlyArray<string>,
+	harnessId: HarnessId,
+	reason: DiscoveryReason,
 ): Effect.Effect<string, Error> =>
-	Effect.tryPromise({
-		// `signal` is Effect's own interruption signal (fired on
-		// `Effect.timeout`'s deadline or an outright interrupt) — Effect only
-		// aborts it, the underlying async work has to observe it itself (see
-		// `tryPromise`'s own doc). Bun's `spawn` does that natively via its
-		// `signal` option ("If the signal is aborted, the process will be
-		// killed"), so wiring it straight through is enough: without this, a
-		// timed-out/interrupted call abandoned the `Promise.all` below but
-		// left the spawned CLI process running as an orphan — the same class
-		// of leak `discoverClaudeCodeModels` below has, just via `Bun.spawn`
-		// instead of the SDK's own `query()`.
-		try: async (signal) => {
-			const proc = Bun.spawn([binary, ...args], {
-				stdout: "pipe",
-				stderr: "pipe",
-				signal,
-			});
-			const [stdout, stderr, exitCode] = await Promise.all([
-				new Response(proc.stdout).text(),
-				new Response(proc.stderr).text(),
-				proc.exited,
-			]);
-			if (exitCode !== 0) {
-				throw new Error(
+	Effect.gen(function* () {
+		// A plain synchronous `Bun.spawn` call, but run through `tryPromise`
+		// (an `async` wrapper) rather than a bare `Effect.sync` — there's no
+		// non-throwing synchronous constructor in this Effect version, and an
+		// `async` function catches a synchronous throw (a bad executable path)
+		// into a rejection exactly the same as a real async failure.
+		const proc = yield* Effect.tryPromise({
+			try: async () =>
+				Bun.spawn([binary, ...args], { stdout: "pipe", stderr: "pipe" }),
+			catch: (cause) =>
+				cause instanceof Error ? cause : new Error(String(cause)),
+		});
+		yield* Effect.logDebug("spawning harness discovery subprocess", {
+			harnessId,
+			reason,
+			pid: proc.pid,
+			binary,
+		});
+
+		const [stdout, stderr, exitCode] = yield* Effect.tryPromise({
+			// `signal` is Effect's own interruption signal (fired on
+			// `Effect.timeout`'s deadline or an outright interrupt) — Effect
+			// only aborts it, the underlying async work has to observe it
+			// itself (see `tryPromise`'s own doc). Killing `proc` on that abort
+			// is what closes the leak this used to have: without it, a
+			// timed-out/interrupted call abandoned the `Promise.all` below but
+			// left the spawned CLI process running as an orphan — the same
+			// class of leak `discoverClaudeCodeModels` below has, just via
+			// `Bun.spawn` instead of the SDK's own `query()`.
+			try: async (signal) => {
+				signal.addEventListener("abort", () => proc.kill(), { once: true });
+				return await Promise.all([
+					new Response(proc.stdout).text(),
+					new Response(proc.stderr).text(),
+					proc.exited,
+				]);
+			},
+			catch: (cause) =>
+				cause instanceof Error ? cause : new Error(String(cause)),
+		}).pipe(
+			Effect.ensuring(
+				Effect.logDebug("harness discovery subprocess exited", {
+					harnessId,
+					reason,
+					pid: proc.pid,
+				}),
+			),
+		);
+
+		if (exitCode !== 0) {
+			return yield* Effect.fail(
+				new Error(
 					`${binary} ${args.join(" ")} exited ${exitCode}: ${stderr.slice(0, 300)}`,
-				);
-			}
-			return stdout;
-		},
-		catch: (cause) =>
-			cause instanceof Error ? cause : new Error(String(cause)),
+				),
+			);
+		}
+		return stdout;
 	});
 
 /**
@@ -74,16 +102,17 @@ const runCli = (
  * otherwise silently fail to spawn in the built app. Overridable via
  * `NISI_OPENCODE_BIN` for tests/CI, mirroring oagent's `OAGENT_OPENCODE_BIN`.
  */
-export const discoverOpenCodeModels = (): Effect.Effect<
-	ReadonlyArray<HarnessModel>,
-	Error
-> =>
+export const discoverOpenCodeModels = (
+	reason: DiscoveryReason,
+): Effect.Effect<ReadonlyArray<HarnessModel>, Error> =>
 	runCli(
 		resolveBin(
 			HARNESS_CLI_BIN.opencode.name,
 			HARNESS_CLI_BIN.opencode.envOverrideVar,
 		),
 		["models"],
+		"opencode",
+		reason,
 	).pipe(
 		Effect.map((stdout) =>
 			stdout
@@ -108,16 +137,17 @@ type CodexModelCatalogEntry = {
  * Resolved via `@repo/bin-resolver` for the same GUI-`PATH` reason as
  * `discoverOpenCodeModels` above. Overridable via `NISI_CODEX_BIN`.
  */
-export const discoverCodexModels = (): Effect.Effect<
-	ReadonlyArray<HarnessModel>,
-	Error
-> =>
+export const discoverCodexModels = (
+	reason: DiscoveryReason,
+): Effect.Effect<ReadonlyArray<HarnessModel>, Error> =>
 	runCli(
 		resolveBin(
 			HARNESS_CLI_BIN.codex.name,
 			HARNESS_CLI_BIN.codex.envOverrideVar,
 		),
 		["debug", "models"],
+		"codex",
+		reason,
 	).pipe(
 		Effect.map((stdout) => {
 			const parsed = JSON.parse(stdout) as {
@@ -158,73 +188,89 @@ export const discoverCodexModels = (): Effect.Effect<
  * binary entirely, so it works the same way in dev and in the compiled
  * binary. Overridable via `NISI_CLAUDE_BIN`.
  */
-export const discoverClaudeCodeModels = (): Effect.Effect<
-	ReadonlyArray<HarnessModel>,
-	Error
-> =>
-	Effect.tryPromise({
-		try: async (signal) => {
-			const { query } = await import("@anthropic-ai/claude-agent-sdk");
+export const discoverClaudeCodeModels = (
+	reason: DiscoveryReason,
+): Effect.Effect<ReadonlyArray<HarnessModel>, Error> =>
+	Effect.gen(function* () {
+		const binaryPath = resolveBin(
+			HARNESS_CLI_BIN["claude-code"].name,
+			HARNESS_CLI_BIN["claude-code"].envOverrideVar,
+		);
+		// No pid to log here, unlike `runCli`'s `Bun.spawn` — the SDK's `Query`
+		// doesn't expose the underlying subprocess's OS pid anywhere in its
+		// public surface, only a "kernel-verified pid" for an unrelated
+		// cross-session messaging feature.
+		yield* Effect.logDebug("spawning harness discovery subprocess", {
+			harnessId: "claude-code",
+			reason,
+			binaryPath,
+		});
 
-			async function* idlePrompt(): AsyncGenerator<never> {
-				await new Promise<never>(() => {});
-			}
+		return yield* Effect.tryPromise({
+			try: async (signal) => {
+				const { query } = await import("@anthropic-ai/claude-agent-sdk");
 
-			// The SDK's own `.d.ts` draws a sharp line between these two:
-			// `abortController` is what tears the underlying `claude`
-			// subprocess down ("the query will stop and clean up resources"),
-			// while `interrupt()` (the call this replaces) only cancels the
-			// *current turn* — and this discovery call never starts one (the
-			// prompt generator above never yields), so `interrupt()` alone had
-			// nothing to cancel and the spawned process was left sitting on
-			// its stdin forever. That's the leak this fixes.
-			const abortController = new AbortController();
-			// Effect's own interruption signal (a hung/timed-out
-			// `supportedModels()` call below never reaches the `finally`) — see
-			// `runCli`'s matching comment. Forwarded into `abortController`
-			// rather than used directly, since the SDK's `options` takes an
-			// `AbortController`, not a bare `AbortSignal`.
-			signal.addEventListener("abort", () => abortController.abort(), {
-				once: true,
-			});
-
-			const session = query({
-				prompt: idlePrompt(),
-				options: {
-					pathToClaudeCodeExecutable: resolveBin(
-						HARNESS_CLI_BIN["claude-code"].name,
-						HARNESS_CLI_BIN["claude-code"].envOverrideVar,
-					),
-					abortController,
-				},
-			});
-			// Drains the session's own message stream so its internal buffers
-			// don't back up while we wait on `supportedModels()` below — this
-			// discovery call never sends a prompt, so nothing meaningful is
-			// expected on it, but the control channel still needs a reader.
-			void (async () => {
-				try {
-					for await (const _message of session) {
-						// discarded — this call only wants supportedModels()
-					}
-				} catch {
-					// draining errors don't matter once supportedModels() has
-					// already resolved (or failed) below
+				async function* idlePrompt(): AsyncGenerator<never> {
+					await new Promise<never>(() => {});
 				}
-			})();
 
-			try {
-				const models = await session.supportedModels();
-				return models.map((model) => ({
-					id: model.value,
-					label: model.displayName,
-				}));
-			} finally {
-				abortController.abort();
-			}
-		},
-		catch: (cause) =>
-			cause instanceof Error ? cause : new Error(String(cause)),
+				// The SDK's own `.d.ts` draws a sharp line between these two:
+				// `abortController` is what tears the underlying `claude`
+				// subprocess down ("the query will stop and clean up resources"),
+				// while `interrupt()` (the call this replaces) only cancels the
+				// *current turn* — and this discovery call never starts one (the
+				// prompt generator above never yields), so `interrupt()` alone had
+				// nothing to cancel and the spawned process was left sitting on
+				// its stdin forever. That's the leak this fixes.
+				const abortController = new AbortController();
+				// Effect's own interruption signal (a hung/timed-out
+				// `supportedModels()` call below never reaches the `finally`) — see
+				// `runCli`'s matching comment. Forwarded into `abortController`
+				// rather than used directly, since the SDK's `options` takes an
+				// `AbortController`, not a bare `AbortSignal`.
+				signal.addEventListener("abort", () => abortController.abort(), {
+					once: true,
+				});
+
+				const session = query({
+					prompt: idlePrompt(),
+					options: { pathToClaudeCodeExecutable: binaryPath, abortController },
+				});
+				// Drains the session's own message stream so its internal buffers
+				// don't back up while we wait on `supportedModels()` below — this
+				// discovery call never sends a prompt, so nothing meaningful is
+				// expected on it, but the control channel still needs a reader.
+				void (async () => {
+					try {
+						for await (const _message of session) {
+							// discarded — this call only wants supportedModels()
+						}
+					} catch {
+						// draining errors don't matter once supportedModels() has
+						// already resolved (or failed) below
+					}
+				})();
+
+				try {
+					const models = await session.supportedModels();
+					return models.map((model) => ({
+						id: model.value,
+						label: model.displayName,
+					}));
+				} finally {
+					abortController.abort();
+				}
+			},
+			catch: (cause) =>
+				cause instanceof Error ? cause : new Error(String(cause)),
+		}).pipe(
+			Effect.ensuring(
+				Effect.logDebug("harness discovery subprocess exited", {
+					harnessId: "claude-code",
+					reason,
+				}),
+			),
+		);
 	}).pipe(Effect.timeout(DISCOVERY_TIMEOUT));
 
 /**
