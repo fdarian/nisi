@@ -144,7 +144,7 @@ function MessageBubble({
 	);
 }
 
-function MessageList({
+export function MessageList({
 	messages,
 	isWaitingForFirstReply,
 }: {
