@@ -91,6 +91,51 @@ export function buildMatchRange(
 }
 
 /**
+ * Whether `event`'s true origin — not its retargeted `.target`, which
+ * `@pierre/diffs`' open shadow roots rewrite to the shadow host for anything
+ * that happened inside them (so a click deep inside one would otherwise look
+ * identical to a click anywhere else on that file's card); `composedPath()`
+ * isn't retargeted this way, so this walks that instead — carries any of
+ * `@pierre/diffs`' row-identity attributes.
+ */
+function composedPathHasAttribute(
+	event: Event,
+	attributes: readonly string[],
+): boolean {
+	for (const node of event.composedPath()) {
+		if (!(node instanceof Element)) continue;
+		if (attributes.some((attribute) => node.hasAttribute(attribute))) {
+			return true;
+		}
+	}
+	return false;
+}
+
+/**
+ * Whether `event`'s true origin was the line-number gutter (`data-column-number`
+ * on a gutter cell, `data-gutter` on its container) — see
+ * `composedPathHasAttribute`'s doc comment for why `composedPath()`, not
+ * `.target`. Used to tell a gutter-started drag from a text/row one.
+ */
+export function isEventOriginOnGutter(event: Event): boolean {
+	return composedPathHasAttribute(event, ["data-column-number", "data-gutter"]);
+}
+
+/**
+ * Whether `event`'s true origin was any diff row — content (`data-line`) or
+ * the gutter (`isEventOriginOnGutter`) — rather than surrounding chrome (a
+ * file header, a "Reviewed" checkbox, a popover button) or the scroll
+ * container's own native scrollbar (a scrollbar thumb's hit target is the
+ * scrollable element itself, which never carries these attributes).
+ */
+export function isEventOriginOnDiffRow(event: Event): boolean {
+	return (
+		isEventOriginOnGutter(event) ||
+		composedPathHasAttribute(event, ["data-line"])
+	);
+}
+
+/**
  * Retries `attempt` once per animation frame until it reports success, or
  * the frame budget runs out — the shared shape behind both "scroll to an
  * item" (`diff-pane.tsx`'s `scrollWhenReady`) and "highlight the current

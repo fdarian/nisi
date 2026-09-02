@@ -9,8 +9,14 @@
  * while a drag is near the edge" is a separate concern with its own
  * start/stop lifecycle, not another selection source. This hook has no idea
  * whether a selection actually exists and doesn't need to — a pointer that
- * went down inside the diff and hasn't come back up yet is enough to arm it;
- * nothing happens unless that pointer is also near an edge.
+ * went down on a diff row or its gutter (`isEventOriginOnDiffRow`, shared
+ * with `use-diff-selection.ts`'s narrower gutter-only check) and hasn't come
+ * back up yet is enough to arm it; nothing happens unless that pointer is
+ * also near an edge. Deliberately narrower than "anywhere inside the scroll
+ * container": that would also arm on a scrollbar-thumb drag (its hit target
+ * is the scrollable element itself, so it'd fight this hook's own delta
+ * against the browser's own thumb-tracking) or a press-and-hold on chrome
+ * like a file header button or the "Reviewed" checkbox.
  *
  * A container scroll alone doesn't extend the gutter-drag selection, since
  * `@pierre/diffs`' `InteractionManager` only (re-)resolves which row the
@@ -47,6 +53,7 @@
  * `resolveActiveTextSelection`), which is a bigger, separate change.
  */
 import { useEffect, useRef } from "react";
+import { isEventOriginOnDiffRow } from "#/lib/diff-match-dom";
 
 type UseDragAutoscrollOptions = {
 	/** Reach the diff pane's scroll container fresh on every check, the same way `diff-pane.tsx` itself does (`codeViewRef.current?.getInstance()?.getContainerElement()`) — it isn't mounted until `@pierre/diffs` has rendered at least one file, and this hook may be armed before or after that happens. */
@@ -79,19 +86,6 @@ function resolveAutoscrollDelta(rect: DOMRect, clientY: number): number {
 	if (downSpeed >= upSpeed && downSpeed > 0) return downSpeed;
 	if (upSpeed > 0) return -upSpeed;
 	return 0;
-}
-
-/**
- * Whether `event`'s true origin (not its retargeted `.target` — see
- * `use-diff-selection.ts`'s `isEventOriginOnGutter` doc comment for why
- * `composedPath()` is what survives shadow-root retargeting) is inside
- * `container`.
- */
-function isEventOriginInside(event: Event, container: HTMLElement): boolean {
-	for (const node of event.composedPath()) {
-		if (node === container) return true;
-	}
-	return false;
 }
 
 /**
@@ -175,8 +169,9 @@ export function useDragAutoscroll({
 
 		const handlePointerDown = (event: PointerEvent) => {
 			if (event.pointerType === "mouse" && event.button !== 0) return;
-			const container = getScrollContainerRef.current();
-			if (!container || !isEventOriginInside(event, container)) return;
+			// See this file's doc comment for why this is the gate, not "anywhere
+			// inside the scroll container".
+			if (!isEventOriginOnDiffRow(event)) return;
 			draggingPointerId = event.pointerId;
 			lastClientX = event.clientX;
 			lastClientY = event.clientY;
