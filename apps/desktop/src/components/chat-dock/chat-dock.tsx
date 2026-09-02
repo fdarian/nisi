@@ -53,7 +53,7 @@ export function ChatDock({
 	// ⌘J: no threads yet starts the first one (which opens the popup on it
 	// as a side effect of `openNewThread`); otherwise it's a plain
 	// open/closed toggle, the same gesture re-clicking the active tab below
-	// performs.
+	// performs. ⌘⇧J always starts a new thread, same as the `+` button.
 	const handleToggle = useCallback(() => {
 		if (threads.length === 0) {
 			dock.openNewThread();
@@ -61,7 +61,7 @@ export function ChatDock({
 		}
 		dock.setPopupOpen(!popupOpen);
 	}, [threads.length, popupOpen, dock]);
-	useChatShortcut(handleToggle);
+	useChatShortcut(handleToggle, dock.openNewThread);
 
 	return (
 		<>
