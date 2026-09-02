@@ -192,6 +192,58 @@ describe("HarnessModelCache — warm and stale (past the 24h TTL)", () => {
 		expect(row?.modelsJson).toBe(JSON.stringify([newModel]));
 		expect(row?.consecutiveFailures).toBe(0);
 	});
+
+	test("a background revalidation that fails still lands its failure write, not just the stale success path", async () => {
+		// The success path above proves the detached fiber's *write* survives
+		// past `get` returning; this proves the same for a *failing* attempt —
+		// a distinct code path (`runExclusive`'s failure branch re-reads the
+		// row and calls `writeFailure`) that a success-only test can't cover.
+		// This is exactly the shape where a detached fiber's write could
+		// silently get dropped, so the row itself is asserted, not the
+		// discovery's returned value.
+		const oldModel: HarnessModel = { id: "old", label: "Old" };
+		await seedRow({
+			harnessId: "codex",
+			modelsJson: JSON.stringify([oldModel]),
+			fetchedAt: new Date(Date.now() - 25 * 60 * 60 * 1000),
+			lastAttemptAt: new Date(Date.now() - 25 * 60 * 60 * 1000),
+			consecutiveFailures: 0,
+		});
+
+		const row = await Effect.runPromise(
+			Effect.gen(function* () {
+				const cache = yield* HarnessModelCache;
+				const started = yield* Deferred.make<void>();
+				const discover = () =>
+					Effect.gen(function* () {
+						yield* Deferred.succeed(started, undefined);
+						return yield* Effect.fail(new Error("boom"));
+					});
+
+				const served = yield* cache.get("codex", discover);
+				// Still serves the previously-good list immediately — the
+				// caller of *this* `get` call never even learns the background
+				// attempt is about to fail.
+				expect(served).toEqual({ models: [oldModel], status: "stale" });
+
+				yield* Deferred.await(started).pipe(Effect.timeout("2 seconds"));
+				yield* Effect.sleep("50 millis");
+
+				const db = yield* SqliteDb;
+				const rows = yield* db
+					.select()
+					.from(harnessModelDiscoveries)
+					.where(eq(harnessModelDiscoveries.harnessId, "codex"));
+				return rows[0];
+			}).pipe(Effect.provide(makeTestLayer(dataDir))),
+		);
+
+		// The failure landed (bookkeeping updated)...
+		expect(row?.consecutiveFailures).toBe(1);
+		expect(row?.lastError).toContain("boom");
+		// ...but the previously-good list is untouched, not dropped.
+		expect(row?.modelsJson).toBe(JSON.stringify([oldModel]));
+	});
 });
 
 describe("HarnessModelCache — failure backoff", () => {
