@@ -1,6 +1,6 @@
 import { resolveBin } from "@repo/bin-resolver";
-import type { HarnessId, HarnessModel, ModelsStatus } from "@repo/sidecar-api";
-import { Effect, Result } from "effect";
+import type { HarnessModel } from "@repo/sidecar-api";
+import { Effect } from "effect";
 import { HARNESS_CLI_BIN } from "./harness-bin.ts";
 
 /**
@@ -12,83 +12,20 @@ import { HARNESS_CLI_BIN } from "./harness-bin.ts";
  */
 const DISCOVERY_TIMEOUT = "15 seconds";
 
-/** How long a successful discovery is trusted before the next `harnesses()` call re-fetches — mirrors oagent's `ModelCatalog` (`services/engine/src/model-catalog.ts`), the reference implementation this follows. */
-const CACHE_TTL_MS = 5 * 60 * 1000;
-
-type CacheEntry = {
-	readonly models: ReadonlyArray<HarnessModel>;
-	readonly fetchedAt: number;
-};
-
-export type DiscoveryResult = {
-	readonly models: ReadonlyArray<HarnessModel>;
-	readonly status: ModelsStatus;
-};
-
 /**
- * A cache of the last successful discovery per harness, with the lookup
- * function that decides fresh-hit / re-fetch / degrade. Exposed as a factory
- * (rather than one module-level singleton) so tests can exercise the
- * caching/fallback behavior against an isolated instance — `listHarnesses`
- * below uses the one singleton instance for the sidecar's actual lifetime.
- * `ttlMs` defaults to `CACHE_TTL_MS`; overridable so tests can force a cache
- * entry to expire without waiting five real minutes.
+ * Why a particular discovery attempt is running — threaded through from
+ * `model-store.ts`'s `HarnessModelCache` (the persistent, single-flight
+ * cache that now owns fresh/stale/backoff decisions; this module no longer
+ * decides any of that itself). Exists so a discovery attempt's own
+ * spawn/teardown log lines can say *why* it ran, not just *that* it ran —
+ * "the cache had never seen this harness" and "a broken harness got probed
+ * again" look identical from inside `runCli`/`discoverClaudeCodeModels`
+ * without it.
  */
-export const createModelDiscoveryCache = (ttlMs = CACHE_TTL_MS) => {
-	const cache = new Map<HarnessId, CacheEntry>();
-
-	/**
-	 * Runs `discover` and returns its models, unless a cached result from
-	 * within `CACHE_TTL_MS` already exists (returned as `"fresh"` without
-	 * paying for I/O again) — unless `opts.force` is set, which skips that
-	 * cache-hit shortcut and always re-runs `discover`, for an explicit
-	 * user-initiated refresh (`harnesses.ts`'s `listHarnesses` `force` option,
-	 * behind `walkthrough.refreshHarnesses`). On failure — timeout, a missing
-	 * CLI, malformed output — falls back to the last cached result flagged
-	 * `"stale"` rather than failing the whole harness, or `"unavailable"` with
-	 * an empty model list when there's never been a successful discovery.
-	 * `force` doesn't disturb this fallback: the previous cache entry is kept
-	 * around for exactly this case even though the freshness check is
-	 * skipped. Never fails: this is exactly the "a harness whose discovery
-	 * fails should still be selectable rather than vanishing" requirement.
-	 */
-	const get = (
-		id: HarnessId,
-		discover: Effect.Effect<ReadonlyArray<HarnessModel>, unknown>,
-		opts?: { readonly force?: boolean },
-	): Effect.Effect<DiscoveryResult> =>
-		Effect.gen(function* () {
-			const now = Date.now();
-			const cached = cache.get(id);
-			if (
-				opts?.force !== true &&
-				cached !== undefined &&
-				now - cached.fetchedAt < ttlMs
-			) {
-				return { models: cached.models, status: "fresh" as const };
-			}
-
-			const attempt = yield* Effect.result(discover);
-			if (Result.isSuccess(attempt)) {
-				cache.set(id, { models: attempt.success, fetchedAt: now });
-				return { models: attempt.success, status: "fresh" as const };
-			}
-			if (cached !== undefined) {
-				yield* Effect.logWarning(
-					"model discovery failed -- degrading to the last cached model list",
-					{ harnessId: id, cause: attempt.failure },
-				);
-				return { models: cached.models, status: "stale" as const };
-			}
-			yield* Effect.logWarning(
-				"model discovery failed with no cached model list -- harness will report no models",
-				{ harnessId: id, cause: attempt.failure },
-			);
-			return { models: [], status: "unavailable" as const };
-		});
-
-	return { get };
-};
+export type DiscoveryReason =
+	| "cold-miss"
+	| "forced-refresh"
+	| "background-revalidation";
 
 const runCli = (
 	binary: string,

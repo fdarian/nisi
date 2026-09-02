@@ -17,13 +17,14 @@ import { getAgentDir } from "@earendil-works/pi-coding-agent";
 import type { HarnessId, HarnessInfo, HarnessModel } from "@repo/sidecar-api";
 import { Effect } from "effect";
 import { checkHarnessAvailability } from "./availability.ts";
+import type { DiscoveryReason } from "./model-discovery.ts";
 import {
-	createModelDiscoveryCache,
 	discoverClaudeCodeModels,
 	discoverCodexModels,
 	discoverOpenCodeModels,
 	discoverPiModels,
 } from "./model-discovery.ts";
+import { HarnessModelCache } from "./model-store.ts";
 
 registerBunOAuthFlows();
 
@@ -34,17 +35,16 @@ const HARNESS_LABELS: Record<HarnessId, string> = {
 	pi: "Pi",
 };
 
-/** One cache for the sidecar's lifetime, shared across every `listHarnesses` call — see `model-discovery.ts`'s `createModelDiscoveryCache`. */
-const modelDiscoveryCache = createModelDiscoveryCache();
-
 const DISCOVER_MODELS: Record<
 	HarnessId,
-	Effect.Effect<ReadonlyArray<HarnessModel>, unknown>
+	(
+		reason: DiscoveryReason,
+	) => Effect.Effect<ReadonlyArray<HarnessModel>, unknown>
 > = {
-	"claude-code": discoverClaudeCodeModels(),
-	codex: discoverCodexModels(),
-	opencode: discoverOpenCodeModels(),
-	pi: discoverPiModels(),
+	"claude-code": discoverClaudeCodeModels,
+	codex: discoverCodexModels,
+	opencode: discoverOpenCodeModels,
+	pi: discoverPiModels,
 };
 
 /**
@@ -70,76 +70,79 @@ const DISCOVER_MODELS: Record<
  * `"unavailable"` rather than serving stale cached models under a `"stale"`
  * label that would read as a transient hiccup instead of "not installed."
  *
- * `opts.force` bypasses `model-discovery.ts`'s cache for this call — see
- * `walkthrough.refreshHarnesses`. `opts.cache` overrides the shared
- * module-level cache instance; tests use this to avoid cross-test state,
- * production always defaults to the one singleton for the sidecar's
- * lifetime.
+ * `opts.force` bypasses `model-store.ts`'s TTL/backoff for this call — see
+ * `walkthrough.refreshHarnesses`. The cache itself (`HarnessModelCache`, a
+ * `Context.Service`) is threaded through the ambient `AppServices` context
+ * rather than passed as a parameter — a persistent, single-flight,
+ * SQLite-backed store isn't something a caller should be able to swap for a
+ * throwaway instance the way the old in-memory `Map` was; tests provide
+ * their own `HarnessModelCache.layer` (a temp-dir `SqliteDb`) instead.
  */
 export const listHarnesses = (
 	enabledHarnesses: ReadonlySet<HarnessId> | null,
 	opts?: {
 		readonly force?: boolean;
-		readonly cache?: ReturnType<typeof createModelDiscoveryCache>;
 	},
-): Effect.Effect<ReadonlyArray<HarnessInfo>> => {
-	const cache = opts?.cache ?? modelDiscoveryCache;
-	const isEnabled = (id: HarnessId): boolean =>
-		enabledHarnesses === null || enabledHarnesses.has(id);
+): Effect.Effect<ReadonlyArray<HarnessInfo>, never, HarnessModelCache> =>
+	Effect.gen(function* () {
+		const cache = yield* HarnessModelCache;
+		const isEnabled = (id: HarnessId): boolean =>
+			enabledHarnesses === null || enabledHarnesses.has(id);
 
-	const discover = (id: HarnessId) =>
-		Effect.gen(function* () {
-			const availability = checkHarnessAvailability(id);
-			if (!isEnabled(id) || !availability.available) {
-				if (isEnabled(id)) {
-					yield* Effect.logWarning(
-						"harness is enabled but its CLI wasn't resolvable -- skipping model discovery",
-						{ harnessId: id },
-					);
+		const discover = (id: HarnessId) =>
+			Effect.gen(function* () {
+				const availability = checkHarnessAvailability(id);
+				if (!isEnabled(id) || !availability.available) {
+					if (isEnabled(id)) {
+						yield* Effect.logWarning(
+							"harness is enabled but its CLI wasn't resolvable -- skipping model discovery",
+							{ harnessId: id },
+						);
+					}
+					return {
+						...availability,
+						models: [] as ReadonlyArray<HarnessModel>,
+						status: "unavailable" as const,
+					};
 				}
+				const discovery = yield* cache.get(id, DISCOVER_MODELS[id], {
+					force: opts?.force,
+				});
+				yield* Effect.logDebug("model discovery finished", {
+					harnessId: id,
+					modelCount: discovery.models.length,
+					status: discovery.status,
+				});
 				return {
 					...availability,
-					models: [] as ReadonlyArray<HarnessModel>,
-					status: "unavailable" as const,
+					models: discovery.models,
+					status: discovery.status,
 				};
-			}
-			const discovery = yield* cache.get(id, DISCOVER_MODELS[id], {
-				force: opts?.force,
 			});
-			yield* Effect.logDebug("model discovery finished", {
-				harnessId: id,
-				modelCount: discovery.models.length,
-			});
-			return {
-				...availability,
-				models: discovery.models,
-				status: discovery.status,
-			};
-		});
 
-	return Effect.all(
-		{
-			"claude-code": discover("claude-code"),
-			codex: discover("codex"),
-			opencode: discover("opencode"),
-			pi: discover("pi"),
-		},
-		{ concurrency: "unbounded" },
-	).pipe(
-		Effect.map(
-			(discoveries): ReadonlyArray<HarnessInfo> =>
-				(["claude-code", "codex", "opencode", "pi"] as const).map((id) => ({
-					id,
-					label: HARNESS_LABELS[id],
-					models: discoveries[id].models,
-					enabled: isEnabled(id),
-					modelsStatus: discoveries[id].status,
-					available: discoveries[id].available,
-					binaryPath: discoveries[id].binaryPath,
-				})),
-		),
-	);
-};
+		return yield* Effect.all(
+			{
+				"claude-code": discover("claude-code"),
+				codex: discover("codex"),
+				opencode: discover("opencode"),
+				pi: discover("pi"),
+			},
+			{ concurrency: "unbounded" },
+		).pipe(
+			Effect.map(
+				(discoveries): ReadonlyArray<HarnessInfo> =>
+					(["claude-code", "codex", "opencode", "pi"] as const).map((id) => ({
+						id,
+						label: HARNESS_LABELS[id],
+						models: discoveries[id].models,
+						enabled: isEnabled(id),
+						modelsStatus: discoveries[id].status,
+						available: discoveries[id].available,
+						binaryPath: discoveries[id].binaryPath,
+					})),
+			),
+		);
+	});
 
 /** Splits opencode's `provider/model` combo id back into its two settings fields — see `model-discovery.ts`'s `discoverOpenCodeModels`/`discoverPiModels`, which both mint ids in that shape. */
 const splitProviderModel = (
