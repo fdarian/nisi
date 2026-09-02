@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { BunServices } from "@effect/platform-bun";
 import { SqliteDb } from "@repo/db";
-import type { HarnessInfo } from "@repo/sidecar-api";
+import type { HarnessInfo, HarnessModel } from "@repo/sidecar-api";
 import { ConfigProvider, Effect, Layer } from "effect";
 import { listHarnesses } from "../harnesses.ts";
 import { HarnessModelCache } from "../model-store.ts";
@@ -139,5 +139,45 @@ describe("listHarnesses — availability composition", () => {
 		expect(codex.available).toBe(true);
 		expect(codex.modelsStatus).toBe("unavailable");
 		expect(codex.models).toEqual([]);
+	});
+
+	test("force is threaded through to the cache, bypassing a fresh cache hit", async () => {
+		const binPath = join(tempDir, "codex");
+		// Empty output -- `discoverCodexModels`'s `JSON.parse` on it fails, so
+		// a real attempt against this binary always reports a failure. That's
+		// exactly the signal this test needs: the primed list can only ever
+		// come back flagged *stale* (not fresh) if a live discovery genuinely
+		// ran and failed, which only happens when `force` really reached the
+		// cache rather than being silently dropped on the way from
+		// `listHarnesses`'s own `opts?.force`.
+		writeFileSync(binPath, "#!/bin/sh\n");
+		process.env.NISI_CODEX_BIN = binPath;
+
+		const primed: HarnessModel = { id: "primed", label: "Primed" };
+
+		await withLayer(
+			Effect.gen(function* () {
+				const cache = yield* HarnessModelCache;
+				yield* cache.get("codex", () => Effect.succeed([primed]));
+
+				// Within the TTL, an unforced call is a pure cache hit --
+				// `listHarnesses` never reaches the real `discoverCodexModels`,
+				// so the primed list survives untouched and fresh.
+				const unforced = yield* listHarnesses(new Set(["codex"]));
+				const unforcedCodex = unforced.find((info) => info.id === "codex");
+				expect(unforcedCodex?.modelsStatus).toBe("fresh");
+				expect(unforcedCodex?.models).toEqual([primed]);
+
+				// `force: true` (`harnesses.ts`'s composition point,
+				// `cache.get(id, DISCOVER_MODELS[id], { force: opts?.force })`)
+				// must bypass that TTL and reach a real, live attempt.
+				const forced = yield* listHarnesses(new Set(["codex"]), {
+					force: true,
+				});
+				const forcedCodex = forced.find((info) => info.id === "codex");
+				expect(forcedCodex?.modelsStatus).toBe("stale");
+				expect(forcedCodex?.models).toEqual([primed]);
+			}),
+		);
 	});
 });
