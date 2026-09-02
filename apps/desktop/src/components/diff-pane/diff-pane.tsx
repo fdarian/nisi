@@ -40,6 +40,7 @@ import {
 import { Skeleton } from "#/components/ui/skeleton";
 import { useDiffMatchHighlighting } from "#/hooks/use-diff-match-highlighting";
 import { useDiffSelection } from "#/hooks/use-diff-selection";
+import { useDragAutoscroll } from "#/hooks/use-drag-autoscroll";
 import type { SidecarQueryUtils } from "#/lib/backend-context";
 import { buildFileDiff } from "#/lib/build-file-diff";
 import type { LineRange } from "#/lib/build-location-diff";
@@ -893,6 +894,14 @@ export function DiffPane({
 	const diffSelection = useDiffSelection({
 		codeViewRef,
 		resolveItemPath: resolveSelectionItemPath,
+	});
+	// Scrolls this same container while a selection drag (either of
+	// `diffSelection`'s two sources) is held near its top or bottom edge —
+	// see `use-drag-autoscroll.ts`'s doc comment for why this is its own
+	// hook rather than folded into `useDiffSelection`.
+	useDragAutoscroll({
+		getScrollContainer: () =>
+			codeViewRef.current?.getInstance()?.getContainerElement(),
 	});
 
 	const renderCustomHeader = useCallback(
