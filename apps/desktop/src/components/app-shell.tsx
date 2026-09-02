@@ -28,7 +28,13 @@ import { useTabShortcuts } from "#/hooks/use-tab-shortcuts";
 import { useTabSuspension } from "#/hooks/use-tab-suspension";
 import type { SidecarQueryUtils } from "#/lib/backend-context";
 import { useBackendContext } from "#/lib/backend-context";
-import { ChatProvider, useClearChatSession } from "#/lib/chat-store";
+import {
+	ChatProvider,
+	useChatPopupMinimized,
+	useChatPopupOpen,
+	useClearChatSession,
+	useCycleActiveThread,
+} from "#/lib/chat-store";
 import { useDeepLinkOpener } from "#/lib/deep-link-data";
 import { useSessions } from "#/lib/pr-data";
 import {
@@ -247,9 +253,29 @@ function AppShellReady({
 		() => sessions.map((session) => session.id),
 		[sessions],
 	);
+	// The active session's chat popup gets first refusal on ⌘⇧]/⌘⇧[ — see
+	// `useTabShortcuts`'s `onChatThreadShortcut` doc comment.
+	const activeChatPopupOpen = useChatPopupOpen(activeSessionId);
+	const activeChatPopupMinimized = useChatPopupMinimized(activeSessionId);
+	const cycleActiveThread = useCycleActiveThread();
+	const handleChatThreadShortcut = useCallback(
+		(direction: "next" | "previous"): boolean => {
+			if (activeSessionId === null) return false;
+			if (!activeChatPopupOpen || activeChatPopupMinimized) return false;
+			cycleActiveThread(activeSessionId, direction);
+			return true;
+		},
+		[
+			activeSessionId,
+			activeChatPopupOpen,
+			activeChatPopupMinimized,
+			cycleActiveThread,
+		],
+	);
 	useTabShortcuts({
 		activeTabId: activeSessionId,
 		onActivateTab: setRequestedActiveSessionId,
+		onChatThreadShortcut: handleChatThreadShortcut,
 		onCloseOtherTabs: handleCloseOtherSessions,
 		onCloseTab: handleCloseSession,
 		tabIds: sessionIds,

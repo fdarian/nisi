@@ -19,8 +19,6 @@ const POSITION_CODES = [
 	"Digit8",
 ];
 
-const TEXT_ENTRY_TAGS = new Set(["INPUT", "TEXTAREA", "SELECT"]);
-
 type TabShortcutsOptions = {
 	/** Tab ids left to right, in the order the strip renders them. */
 	tabIds: readonly string[];
@@ -28,12 +26,29 @@ type TabShortcutsOptions = {
 	onActivateTab: (tabId: string) => void;
 	onCloseTab: (tabId: string) => void;
 	onCloseOtherTabs: (tabId: string) => void;
+	/**
+	 * Consulted first on ⌘⇧]/⌘⇧[, before tab cycling. Return `true` if
+	 * something else (the chat popup) already handled the chord; return
+	 * `false`, or omit this prop, to fall through to tab cycling. `"next"` is
+	 * ⌘⇧], `"previous"` is ⌘⇧[.
+	 */
+	onChatThreadShortcut?: (direction: "next" | "previous") => boolean;
 };
 
 /**
  * Every tab keybinding in one place, mounted where the tab state lives
  * (`app-shell.tsx`): ⌘⇧] / ⌘⇧[ to step (wrapping), ⌘1…⌘9 to jump, ⌘W to
- * close, and ⌘⌥W to close every tab but the active one.
+ * close, and ⌘⌥W to close every tab but the active one. ⌘⇧]/⌘⇧[ aren't
+ * unconditionally tab-cycling, though — `onChatThreadShortcut` gets first
+ * refusal, so the same chord steps the chat popup's active thread instead
+ * whenever the caller says it owns the combo.
+ *
+ * None of this checks whether focus is in a text field, unlike the bare
+ * single-key bindings in `use-key-bindings.ts` (`j`/`k`/`/`, etc.) — every
+ * chord here requires ⌘, and a ⌘-held keydown never inserts a character
+ * anywhere, so there's nothing for a text field to lose. That's also
+ * `use-key-bindings.ts`'s own `mod+`-prefixed convention: a real chord fires
+ * regardless of focus.
  *
  * ⌘W arrives as a *menu* event rather than a keystroke: it's a real File
  * menu item ("Close Tab", distinct from "Close Window" on ⌘⇧W) so it shows up
@@ -51,10 +66,20 @@ export function useTabShortcuts({
 	onActivateTab,
 	onCloseTab,
 	onCloseOtherTabs,
+	onChatThreadShortcut,
 }: TabShortcutsOptions): void {
 	useEffect(() => {
 		const handleKeyDown = (event: KeyboardEvent) => {
-			if (isTextEntry(event.target)) return;
+			// Chat gets first refusal on the bracket chord — see
+			// `onChatThreadShortcut`'s doc comment above.
+			const bracketDirection = resolveBracketDirection(event);
+			if (
+				bracketDirection !== undefined &&
+				onChatThreadShortcut?.(bracketDirection)
+			) {
+				event.preventDefault();
+				return;
+			}
 
 			if (isCloseOtherTabsChord(event)) {
 				if (activeTabId === null || tabIds.length <= 1) return;
@@ -84,7 +109,14 @@ export function useTabShortcuts({
 			window.removeEventListener("keydown", handleKeyDown);
 			unlisten?.then((stop) => stop());
 		};
-	}, [tabIds, activeTabId, onActivateTab, onCloseTab, onCloseOtherTabs]);
+	}, [
+		tabIds,
+		activeTabId,
+		onActivateTab,
+		onCloseTab,
+		onCloseOtherTabs,
+		onChatThreadShortcut,
+	]);
 }
 
 function isCloseOtherTabsChord(event: KeyboardEvent): boolean {
@@ -95,6 +127,22 @@ function isCloseOtherTabsChord(event: KeyboardEvent): boolean {
 		!event.shiftKey &&
 		event.code === "KeyW"
 	);
+}
+
+/**
+ * ⌘⇧]/⌘⇧['s direction, or `undefined` for any other chord — the single
+ * place that decodes those two key codes, called both from `handleKeyDown`
+ * (to offer the chord to `onChatThreadShortcut` first) and from
+ * `resolveTargetIndex` below (to fall back to tab cycling).
+ */
+function resolveBracketDirection(
+	event: KeyboardEvent,
+): "next" | "previous" | undefined {
+	if (!event.metaKey || event.ctrlKey || event.altKey || !event.shiftKey)
+		return undefined;
+	if (event.code === "BracketRight") return "next";
+	if (event.code === "BracketLeft") return "previous";
+	return undefined;
 }
 
 /**
@@ -109,25 +157,19 @@ function resolveTargetIndex(
 ): number | undefined {
 	if (!event.metaKey || event.ctrlKey || event.altKey) return undefined;
 
-	if (event.shiftKey) {
+	const bracketDirection = resolveBracketDirection(event);
+	if (bracketDirection !== undefined) {
 		const activeIndex = activeTabId === null ? -1 : tabIds.indexOf(activeTabId);
 		if (activeIndex < 0) return undefined;
+		const step = bracketDirection === "next" ? 1 : -1;
 		// Both wrap, so ⌘⇧] off the right edge lands back on the first tab.
-		if (event.code === "BracketRight") return (activeIndex + 1) % tabIds.length;
-		if (event.code === "BracketLeft")
-			return (activeIndex - 1 + tabIds.length) % tabIds.length;
-		return undefined;
+		return (activeIndex + step + tabIds.length) % tabIds.length;
 	}
+	if (event.shiftKey) return undefined;
 
 	// Chrome and Safari both read ⌘9 as "last tab", not "ninth tab", and make
 	// ⌘1…⌘8 no-ops when that many tabs aren't open.
 	if (event.code === "Digit9") return tabIds.length - 1;
 	const position = POSITION_CODES.indexOf(event.code);
 	return position < 0 ? undefined : position;
-}
-
-/** Keeps these chords out of the files sidebar's filter box and any other text field. */
-function isTextEntry(target: EventTarget | null): boolean {
-	if (!(target instanceof HTMLElement)) return false;
-	return target.isContentEditable || TEXT_ENTRY_TAGS.has(target.tagName);
 }
