@@ -24,8 +24,15 @@ import {
 	useSortable,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { GitPullRequestIcon, LeafIcon, PlusIcon, XIcon } from "lucide-react";
+import {
+	GitPullRequestArrowIcon,
+	GitPullRequestIcon,
+	LeafIcon,
+	PlusIcon,
+	XIcon,
+} from "lucide-react";
 import { useMemo, useState } from "react";
+import { GitPullRequestMergedIcon } from "#/components/icons/git-pull-request-merged";
 import {
 	ContextMenu,
 	ContextMenuItem,
@@ -39,9 +46,11 @@ import { TabsPrimitive } from "#/components/ui/tabs";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "#/components/ui/tooltip";
 import { UpdatePill } from "#/components/update-pill";
 import type { SidecarQueryUtils } from "#/lib/backend-context";
-import type { Session } from "#/lib/pr-data";
+import type { Session, SessionTarget } from "#/lib/pr-data";
+import { usePullRequestChecks, usePullRequestMergeStatus } from "#/lib/pr-data";
 import { cn } from "#/lib/utils";
 import { Button } from "../ui/button";
+import { derivePrTabStatus, type PrTabStatus } from "./pr-tab-status";
 
 type PrTabStripProps = {
 	sessions: readonly Session[];
@@ -186,6 +195,7 @@ export function PrTabStrip({
 								onClose={() => onCloseSession(session.id)}
 								onCloseOthers={() => onCloseOtherSessions(session.id)}
 								onSuspend={() => onSuspendTab(session.id)}
+								orpc={orpc}
 								session={session}
 							/>
 						))}
@@ -271,16 +281,93 @@ const PR_TAB_CLASS = cn(
 	"focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
 );
 
+const PR_TAB_ICON_CLASS = "size-3.5 shrink-0";
+
+/**
+ * The tab pill's leading icon. Suspension wins over everything (a leaf
+ * regardless of PR status), and a branch tab — no PR to poll a status for —
+ * keeps exactly the plain `GitPullRequestIcon` this rendered before `status`
+ * existed. Only a `"pr"` tab's own five states (suspended handled above,
+ * merged/ci-running/ready/default handled here) reach for
+ * `GitPullRequestArrowIcon`/`GitPullRequestMergedIcon` and a semantic color.
+ */
 function PrTabIcon({
 	isSuspended,
+	kind,
+	status,
 }: {
 	isSuspended: boolean;
+	kind: SessionTarget["kind"];
+	status: PrTabStatus;
 }): React.ReactElement {
-	return isSuspended ? (
-		<LeafIcon className="size-3.5 shrink-0" />
-	) : (
-		<GitPullRequestIcon className="size-3.5 shrink-0" />
-	);
+	if (isSuspended) return <LeafIcon className={PR_TAB_ICON_CLASS} />;
+	if (kind !== "pr")
+		return <GitPullRequestIcon className={PR_TAB_ICON_CLASS} />;
+
+	switch (status) {
+		case "merged":
+			return (
+				<GitPullRequestMergedIcon
+					className={cn(PR_TAB_ICON_CLASS, "text-merged")}
+				/>
+			);
+		case "ci-running":
+			return (
+				<GitPullRequestArrowIcon
+					className={cn(PR_TAB_ICON_CLASS, "animate-pulse text-warning")}
+				/>
+			);
+		case "ready":
+			return (
+				<GitPullRequestArrowIcon
+					className={cn(PR_TAB_ICON_CLASS, "text-success")}
+				/>
+			);
+		case "default":
+			return <GitPullRequestArrowIcon className={PR_TAB_ICON_CLASS} />;
+	}
+}
+
+/**
+ * Mounts `usePullRequestMergeStatus`/`usePullRequestChecks` scoped to one PR
+ * tab and feeds their result into `PrTabIcon` — the piece that only exists
+ * because a hook can't be called conditionally: `PrTab` below renders this
+ * in place of a plain `PrTabIcon` only when `session.target.kind === "pr"`,
+ * so a branch tab's render never reaches these queries at all.
+ *
+ * `watched: false` on both keeps a background PR tab off their slow polls —
+ * TanStack Query dedupes against the same query key `PrHeader`/
+ * `PrMergeButton`/`PrCiStatus` already poll once this tab becomes the active
+ * (watched) one, so this doesn't cost a second round trip, just a second
+ * subscriber to the existing cache entry.
+ */
+function PrTabStatusIcon({
+	orpc,
+	repoRoot,
+	target,
+	sessionId,
+	isSuspended,
+}: {
+	orpc: SidecarQueryUtils;
+	repoRoot: string;
+	target: Extract<SessionTarget, { kind: "pr" }>;
+	sessionId: string;
+	isSuspended: boolean;
+}): React.ReactElement {
+	const params = {
+		repoRoot,
+		owner: target.owner,
+		repo: target.repo,
+		number: target.number,
+	};
+	const mergeStatusQuery = usePullRequestMergeStatus(orpc, params, false);
+	const checksQuery = usePullRequestChecks(orpc, params, {
+		watched: false,
+		sessionId,
+	});
+	const status = derivePrTabStatus(mergeStatusQuery.data, checksQuery.data);
+
+	return <PrTabIcon isSuspended={isSuspended} kind="pr" status={status} />;
 }
 
 function PrTab({
@@ -292,6 +379,7 @@ function PrTab({
 	onCloseOthers,
 	onSuspend,
 	checkGenerationRunning,
+	orpc,
 }: {
 	session: Session;
 	isActive: boolean;
@@ -301,6 +389,8 @@ function PrTab({
 	onCloseOthers: () => void;
 	onSuspend: () => void;
 	checkGenerationRunning: (sessionId: string) => Promise<boolean>;
+	/** Threaded through only for `PrTabStatusIcon` — nothing else in this tab talks to the sidecar. */
+	orpc: SidecarQueryUtils;
 }): React.ReactElement {
 	const sortable = useSortable({
 		id: session.id,
@@ -351,7 +441,21 @@ function PrTab({
 						render={<div />}
 						value={session.id}
 					>
-						<PrTabIcon isSuspended={isSuspended} />
+						{session.target.kind === "pr" ? (
+							<PrTabStatusIcon
+								isSuspended={isSuspended}
+								orpc={orpc}
+								repoRoot={session.repoRoot}
+								sessionId={session.id}
+								target={session.target}
+							/>
+						) : (
+							<PrTabIcon
+								isSuspended={isSuspended}
+								kind={session.target.kind}
+								status="default"
+							/>
+						)}
 						<span className="min-w-0 flex-1 truncate">
 							{sessionLabel(session)}
 						</span>
@@ -399,7 +503,14 @@ function PrTab({
 	);
 }
 
-/** Presentational clone for `DragOverlay` — must not call `useSortable`. */
+/**
+ * Presentational clone for `DragOverlay` — must not call `useSortable`, and
+ * deliberately doesn't mount `PrTabStatusIcon` either: it's a transient
+ * clone that only exists mid-drag, so re-subscribing it to the same
+ * merge-status/checks queries `PrTab` already holds for the real tab
+ * being dragged would just be a second, throwaway subscriber. Always shows
+ * the muted `"default"` look for a PR tab rather than its live status.
+ */
 function PrTabPreview({
 	session,
 	isSuspended,
@@ -415,7 +526,11 @@ function PrTabPreview({
 			)}
 			data-tauri-drag-region="false"
 		>
-			<PrTabIcon isSuspended={isSuspended} />
+			<PrTabIcon
+				isSuspended={isSuspended}
+				kind={session.target.kind}
+				status="default"
+			/>
 			<span className="min-w-0 flex-1 truncate">{sessionLabel(session)}</span>
 			<span className="size-4 shrink-0" />
 		</div>

@@ -1,4 +1,16 @@
-import type { LucideProps } from "lucide-react";
+import type { GitPullRequestArrowIcon } from "lucide-react";
+import type { ComponentProps } from "react";
+
+/**
+ * lucide-react's own exported `LucideProps` type structurally loses
+ * `className` (and the rest of `SVGProps`) through its `interface extends`
+ * of an intersection involving a `Partial<...>` mapped type — reproducible
+ * in isolation against this exact package version, unrelated to this file.
+ * Deriving the prop type from a real icon component instead sidesteps it
+ * while staying exactly as compatible as every other lucide icon usage in
+ * this codebase.
+ */
+type LucideIconProps = ComponentProps<typeof GitPullRequestArrowIcon>;
 
 /**
  * Lucide has no merged-PR icon, so this is hand-authored to sit in the same
@@ -21,7 +33,7 @@ import type { LucideProps } from "lucide-react";
 export function GitPullRequestMergedIcon({
 	size = 24,
 	...props
-}: LucideProps): React.ReactElement {
+}: LucideIconProps): React.ReactElement {
 	return (
 		<svg
 			aria-hidden="true"
