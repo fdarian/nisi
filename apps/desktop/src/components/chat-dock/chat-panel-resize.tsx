@@ -21,8 +21,11 @@ import { useCallback, useState } from "react";
 const CHAT_PANEL_WIDTH_STORAGE_KEY = "nisi:chat-panel-width";
 const CHAT_PANEL_HEIGHT_STORAGE_KEY = "nisi:chat-panel-height";
 
-const CHAT_PANEL_DEFAULT_WIDTH = 360;
-const CHAT_PANEL_MIN_WIDTH = 300;
+// Exported so Storybook fixtures (`chat-panel.stories.tsx`) can render the
+// message list at the panel's real default/minimum widths instead of a
+// drift-prone hardcoded copy.
+export const CHAT_PANEL_DEFAULT_WIDTH = 360;
+export const CHAT_PANEL_MIN_WIDTH = 300;
 const CHAT_PANEL_MAX_WIDTH = 640;
 
 const CHAT_PANEL_DEFAULT_HEIGHT = 320;

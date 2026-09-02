@@ -57,8 +57,26 @@ const markdownComponents: Components = {
 	),
 	code: (props) => (
 		<code
-			className="rounded bg-background/60 px-1 py-0.5 font-mono text-[0.8125em]"
 			{...props}
+			className={cn(
+				"rounded bg-background/60 px-1 py-0.5 font-mono text-[0.8125em]",
+				props.className,
+			)}
+		/>
+	),
+	// Fenced blocks arrive as `<pre><code>` — the `code` renderer above still
+	// fires for the nested `<code>`, so its own bg/padding/rounding are
+	// cancelled here (`[&>code]:...`) rather than doubled up inside `pre`'s
+	// own box. `whitespace-pre-wrap` is load-bearing: a bare `<pre>` defaults
+	// to `white-space: pre`, which suppresses wrapping outright regardless of
+	// `overflow-wrap`.
+	pre: (props) => (
+		<pre
+			{...props}
+			className={cn(
+				"whitespace-pre-wrap wrap-anywhere rounded bg-background/60 px-2 py-1.5 font-mono text-[0.8125em] [&>code]:rounded-none [&>code]:bg-transparent [&>code]:p-0",
+				props.className,
+			)}
 		/>
 	),
 	a: (props) => (
@@ -80,7 +98,7 @@ function MessageBubble({
 	return (
 		<div
 			className={cn(
-				"flex flex-col gap-1.5",
+				"flex min-w-0 flex-col gap-1.5",
 				isUser ? "items-end" : "items-start",
 			)}
 		>
@@ -89,7 +107,7 @@ function MessageBubble({
 					return (
 						<div
 							className={cn(
-								"max-w-[85%] rounded-2xl px-3 py-1.5 text-sm",
+								"min-w-0 max-w-[85%] wrap-anywhere rounded-2xl px-3 py-1.5 text-sm",
 								isUser
 									? "bg-primary text-primary-foreground"
 									: "bg-muted text-foreground",
@@ -98,7 +116,9 @@ function MessageBubble({
 							key={index}
 						>
 							{isUser ? (
-								<span className="whitespace-pre-wrap">{part.text}</span>
+								<span className="whitespace-pre-wrap wrap-anywhere">
+									{part.text}
+								</span>
 							) : (
 								<ReactMarkdown components={markdownComponents}>
 									{part.text}
@@ -110,7 +130,7 @@ function MessageBubble({
 				if (isToolUIPart(part)) {
 					return (
 						<div
-							className="rounded-md bg-muted/60 px-2 py-1 text-muted-foreground text-xs"
+							className="min-w-0 wrap-anywhere rounded-md bg-muted/60 px-2 py-1 text-muted-foreground text-xs"
 							// biome-ignore lint/suspicious/noArrayIndexKey: see the text-part branch above.
 							key={index}
 						>
@@ -124,7 +144,7 @@ function MessageBubble({
 	);
 }
 
-function MessageList({
+export function MessageList({
 	messages,
 	isWaitingForFirstReply,
 }: {
@@ -141,7 +161,7 @@ function MessageList({
 	}
 
 	return (
-		<div className="flex flex-col gap-3 px-3 py-3">
+		<div className="flex min-w-0 flex-col gap-3 px-3 py-3">
 			{messages.map((message) => (
 				<MessageBubble key={message.id} message={message} />
 			))}
