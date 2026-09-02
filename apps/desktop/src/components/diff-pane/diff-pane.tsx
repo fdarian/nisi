@@ -185,8 +185,6 @@ export type DiffPaneHandle = {
 	scrollToPath: (path: string) => void;
 	/** Scrolls to one keyword-search match's own rendered row (`match.side`/`match.rowLine`, not `match.headLine` — see `DiffMatch`'s doc comment for why those can differ). Purely a viewport concern; the *highlight* on this match is driven declaratively by the `currentMatch` prop instead, so navigating and highlighting stay decoupled. */
 	scrollToMatch: (match: DiffMatch) => void;
-	/** Moves keyboard focus onto the diff's own scroll container, so arrow/Page keys scroll the diff instead of whatever had focus before (e.g. the sidebar's filter input). A no-op until `DiffCodeView` has actually mounted a container to focus. */
-	focus: () => void;
 };
 
 type DiffPaneProps = {
@@ -1104,14 +1102,9 @@ export function DiffPane({
 		[scrollWhenReady],
 	);
 
-	const focus = useCallback(() => {
-		codeViewRef.current?.getInstance()?.getContainerElement()?.focus();
-	}, []);
-
-	useImperativeHandle(ref, () => ({ scrollToPath, scrollToMatch, focus }), [
+	useImperativeHandle(ref, () => ({ scrollToPath, scrollToMatch }), [
 		scrollToPath,
 		scrollToMatch,
-		focus,
 	]);
 
 	useEffect(
