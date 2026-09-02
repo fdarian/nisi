@@ -72,7 +72,7 @@ export function ChatTab({
 				size="xs"
 				variant="ghost"
 			>
-				{isStreaming && <LoaderCircleIcon className="size-3 animate-spin" />}
+				{isStreaming && <LoaderCircleIcon className="animate-spin" />}
 				<span className="max-w-32 truncate group-focus:mask-r-from-[calc(100%-2.25rem)] group-focus:mask-r-to-[calc(100%-0.75rem)] group-hover:mask-r-from-[calc(100%-2.25rem)] group-hover:mask-r-to-[calc(100%-0.75rem)]">
 					{title}
 				</span>
