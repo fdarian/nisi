@@ -405,9 +405,9 @@ export function FilesChangedView({
 			);
 			const hasFileInDirection =
 				currentIndex !== -1 &&
-				currentIndex + direction >= 0 &&
-				currentIndex + direction < queryFilteredFiles.length;
-			selectRelative(hasFileInDirection ? direction : (-direction as 1 | -1));
+				queryFilteredFiles[currentIndex + direction] !== undefined;
+			const oppositeDirection = direction === 1 ? -1 : 1;
+			selectRelative(hasFileInDirection ? direction : oppositeDirection);
 		},
 		[
 			selectedPath,
