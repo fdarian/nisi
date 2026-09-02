@@ -552,6 +552,9 @@ export function FilesChangedView({
 			j: () => selectRelative(1),
 			k: () => selectRelative(-1),
 			r: handleToggleReviewed,
+			// Shift+R — focuses the diff pane's own scroll container instead of
+			// toggling reviewed, so arrow/Page keys scroll the diff next.
+			R: () => diffPaneRef.current?.focus(),
 			u: handleUndo,
 			"mod+[": handleHistoryBack,
 			"mod+]": handleHistoryForward,
