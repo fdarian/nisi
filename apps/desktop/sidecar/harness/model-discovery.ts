@@ -27,7 +27,13 @@ export type DiscoveryReason =
 	| "forced-refresh"
 	| "background-revalidation";
 
-const runCli = (
+/**
+ * Exported (only) so `test/model-discovery.test.ts` can drive its
+ * interruption/timeout teardown directly against a real spawned process,
+ * rather than only indirectly through `discoverCodexModels`/
+ * `discoverOpenCodeModels`'s CLI-specific argv/output handling.
+ */
+export const runCli = (
 	binary: string,
 	args: ReadonlyArray<string>,
 	harnessId: HarnessId,
