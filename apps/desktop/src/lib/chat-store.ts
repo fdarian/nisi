@@ -459,6 +459,8 @@ export function useChatDockActions(
 		reference: DiffSelectionReference,
 	) => void;
 	clearReferences: (threadId: string) => void;
+	/** Asks the active thread's composer to take the caret — see `SessionChatState.composerFocusRequest`. */
+	requestComposerFocus: () => void;
 } {
 	const store = useChatStore();
 	const openNewThreadAction = useStore(store, (state) => state.openNewThread);
@@ -568,6 +570,10 @@ export function useChatDockActions(
 		(threadId: string) => clearReferencesAction(sessionId, threadId),
 		[clearReferencesAction, sessionId],
 	);
+	const requestComposerFocus = useCallback(
+		() => requestComposerFocusAction(sessionId),
+		[requestComposerFocusAction, sessionId],
+	);
 
 	return useMemo(
 		() => ({
@@ -580,6 +586,7 @@ export function useChatDockActions(
 			askWithReference,
 			removeReference,
 			clearReferences,
+			requestComposerFocus,
 		}),
 		[
 			openNewThread,
@@ -591,6 +598,7 @@ export function useChatDockActions(
 			askWithReference,
 			removeReference,
 			clearReferences,
+			requestComposerFocus,
 		],
 	);
 }

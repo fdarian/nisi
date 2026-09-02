@@ -27,6 +27,7 @@ import { ChatPanel } from "#/components/chat-dock/chat-panel";
 import { ChatTab } from "#/components/chat-dock/chat-tab";
 import { Button } from "#/components/ui/button";
 import { useChatShortcut } from "#/hooks/use-chat-shortcut";
+import { useKeyBindings } from "#/hooks/use-key-bindings";
 import type { SidecarQueryUtils } from "#/lib/backend-context";
 import {
 	useChatActiveThreadId,
@@ -51,17 +52,38 @@ export function ChatDock({
 	const dock = useChatDockActions(sessionId, orpc);
 
 	// ⌘J: no threads yet starts the first one (which opens the popup on it
-	// as a side effect of `openNewThread`); otherwise it's a plain
-	// open/closed toggle, the same gesture re-clicking the active tab below
-	// performs. ⌘⇧J always starts a new thread, same as the `+` button.
+	// as a side effect of `openNewThread`). With threads and the popup
+	// already open, it only closes when the composer itself has focus —
+	// e.g. after `j`/`k` navigation moved focus away (see
+	// `chat-composer.tsx`'s Escape handler), ⌘J instead returns the caret to
+	// the composer rather than closing a panel the user can no longer see
+	// they're about to dismiss. ⌘⇧J always starts a new thread, same as the
+	// `+` button.
 	const handleToggle = useCallback(() => {
 		if (threads.length === 0) {
 			dock.openNewThread();
 			return;
 		}
+		if (
+			popupOpen &&
+			!document.activeElement?.hasAttribute("data-chat-composer")
+		) {
+			dock.requestComposerFocus();
+			return;
+		}
 		dock.setPopupOpen(!popupOpen);
 	}, [threads.length, popupOpen, dock]);
 	useChatShortcut(handleToggle, dock.openNewThread);
+
+	// Second Escape — the first blurs the composer, per its own
+	// `KEY_ESCAPE_COMMAND` handler in `chat-composer.tsx` — closes the panel.
+	// `useKeyBindings`' `isTextEntry` gate is what keeps this from firing on
+	// that same first Escape: its target is still the composer's
+	// contenteditable at that point.
+	useKeyBindings(
+		{ Escape: () => dock.setPopupOpen(false) },
+		{ enabled: popupOpen },
+	);
 
 	return (
 		<>
