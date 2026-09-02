@@ -28,7 +28,13 @@ import { useTabShortcuts } from "#/hooks/use-tab-shortcuts";
 import { useTabSuspension } from "#/hooks/use-tab-suspension";
 import type { SidecarQueryUtils } from "#/lib/backend-context";
 import { useBackendContext } from "#/lib/backend-context";
-import { ChatProvider, useClearChatSession } from "#/lib/chat-store";
+import {
+	ChatProvider,
+	useChatDockActions,
+	useChatPopupMinimized,
+	useChatPopupOpen,
+	useClearChatSession,
+} from "#/lib/chat-store";
 import { useDeepLinkOpener } from "#/lib/deep-link-data";
 import { useSessions } from "#/lib/pr-data";
 import {
@@ -247,9 +253,28 @@ function AppShellReady({
 		() => sessions.map((session) => session.id),
 		[sessions],
 	);
+	// ⌘⇧]/⌘⇧[ step chat threads instead of PR tabs while the active session's
+	// chat popup is open and expanded — see `useTabShortcuts`'s
+	// `onChatThreadShortcut` doc comment. `?? ""` covers the no-active-session
+	// case: `useChatPopupOpen`/`useChatPopupMinimized` just read `false` for
+	// an id nothing has opened a popup under, so the callback below falls
+	// through to tab cycling exactly like it does when chat is plain closed.
+	const activeChatSessionId = activeSessionId ?? "";
+	const activeChatPopupOpen = useChatPopupOpen(activeChatSessionId);
+	const activeChatPopupMinimized = useChatPopupMinimized(activeChatSessionId);
+	const activeChatDock = useChatDockActions(activeChatSessionId, orpc);
+	const handleChatThreadShortcut = useCallback(
+		(direction: "next" | "previous"): boolean => {
+			if (!activeChatPopupOpen || activeChatPopupMinimized) return false;
+			activeChatDock.cycleActiveThread(direction);
+			return true;
+		},
+		[activeChatPopupOpen, activeChatPopupMinimized, activeChatDock],
+	);
 	useTabShortcuts({
 		activeTabId: activeSessionId,
 		onActivateTab: setRequestedActiveSessionId,
+		onChatThreadShortcut: handleChatThreadShortcut,
 		onCloseOtherTabs: handleCloseOtherSessions,
 		onCloseTab: handleCloseSession,
 		tabIds: sessionIds,

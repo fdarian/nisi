@@ -28,12 +28,25 @@ type TabShortcutsOptions = {
 	onActivateTab: (tabId: string) => void;
 	onCloseTab: (tabId: string) => void;
 	onCloseOtherTabs: (tabId: string) => void;
+	/**
+	 * Consulted first on ⌘⇧]/⌘⇧[, before tab cycling: return `true` when
+	 * something else already handled the chord (the chat popup stepping to
+	 * its next/previous thread), `false` to fall through to the normal
+	 * tab-cycling behavior below. `"next"` is ⌘⇧], `"previous"` is ⌘⇧[ — the
+	 * same mapping `resolveTargetIndex` uses for tab cycling, so a chord chat
+	 * doesn't claim steps tabs in the same direction it would have stepped
+	 * threads.
+	 */
+	onChatThreadShortcut?: (direction: "next" | "previous") => boolean;
 };
 
 /**
  * Every tab keybinding in one place, mounted where the tab state lives
  * (`app-shell.tsx`): ⌘⇧] / ⌘⇧[ to step (wrapping), ⌘1…⌘9 to jump, ⌘W to
- * close, and ⌘⌥W to close every tab but the active one.
+ * close, and ⌘⌥W to close every tab but the active one. ⌘⇧]/⌘⇧[ aren't
+ * unconditionally tab-cycling, though — `onChatThreadShortcut` gets first
+ * refusal, so the same chord steps the chat popup's active thread instead
+ * whenever the caller says it owns the combo.
  *
  * ⌘W arrives as a *menu* event rather than a keystroke: it's a real File
  * menu item ("Close Tab", distinct from "Close Window" on ⌘⇧W) so it shows up
@@ -51,6 +64,7 @@ export function useTabShortcuts({
 	onActivateTab,
 	onCloseTab,
 	onCloseOtherTabs,
+	onChatThreadShortcut,
 }: TabShortcutsOptions): void {
 	useEffect(() => {
 		const handleKeyDown = (event: KeyboardEvent) => {
@@ -60,6 +74,15 @@ export function useTabShortcuts({
 				if (activeTabId === null || tabIds.length <= 1) return;
 				event.preventDefault();
 				onCloseOtherTabs(activeTabId);
+				return;
+			}
+
+			const threadCycleDirection = resolveThreadCycleDirection(event);
+			if (
+				threadCycleDirection !== undefined &&
+				onChatThreadShortcut?.(threadCycleDirection)
+			) {
+				event.preventDefault();
 				return;
 			}
 
@@ -84,7 +107,14 @@ export function useTabShortcuts({
 			window.removeEventListener("keydown", handleKeyDown);
 			unlisten?.then((stop) => stop());
 		};
-	}, [tabIds, activeTabId, onActivateTab, onCloseTab, onCloseOtherTabs]);
+	}, [
+		tabIds,
+		activeTabId,
+		onActivateTab,
+		onCloseTab,
+		onCloseOtherTabs,
+		onChatThreadShortcut,
+	]);
 }
 
 function isCloseOtherTabsChord(event: KeyboardEvent): boolean {
@@ -95,6 +125,22 @@ function isCloseOtherTabsChord(event: KeyboardEvent): boolean {
 		!event.shiftKey &&
 		event.code === "KeyW"
 	);
+}
+
+/**
+ * ⌘⇧]/⌘⇧['s direction, independent of who ends up handling it — checked
+ * before `resolveTargetIndex`'s own identical bracket branch below, since a
+ * chord `onChatThreadShortcut` doesn't claim still falls through to tab
+ * cycling.
+ */
+function resolveThreadCycleDirection(
+	event: KeyboardEvent,
+): "next" | "previous" | undefined {
+	if (!event.metaKey || event.ctrlKey || event.altKey || !event.shiftKey)
+		return undefined;
+	if (event.code === "BracketRight") return "next";
+	if (event.code === "BracketLeft") return "previous";
+	return undefined;
 }
 
 /**

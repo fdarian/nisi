@@ -200,6 +200,17 @@ type ChatStore = {
 	 */
 	closeThread: (sessionId: string, threadId: string) => void;
 	setActiveThread: (sessionId: string, threadId: string) => void;
+	/**
+	 * Steps the session's active thread to the next/previous entry in
+	 * `threads`, wrapping — the ⌘⇧]/⌘⇧[ effect when the chat popup owns the
+	 * combo (see `useTabShortcuts`'s `onChatThreadShortcut`, wired up in
+	 * `app-shell.tsx`). Unlike `setActiveThread`, this only changes which
+	 * thread is active: it never opens or un-minimizes the popup.
+	 */
+	cycleActiveThread: (
+		sessionId: string,
+		direction: "next" | "previous",
+	) => void;
 	setPopupOpen: (sessionId: string, open: boolean) => void;
 	setPopupMinimized: (sessionId: string, minimized: boolean) => void;
 	/** Locks in `harness`/`model` the first time a thread sends a message — a no-op on every later call for the same thread, mirroring the sidecar's own "first send wins" reattach posture. */
@@ -284,6 +295,21 @@ function createChatStore(): StoreApi<ChatStore> {
 					popupOpen: true,
 					popupMinimized: false,
 				})),
+			})),
+		cycleActiveThread: (sessionId, direction) =>
+			set((state) => ({
+				sessions: withSession(state.sessions, sessionId, (session) => {
+					if (session.threads.length === 0) return session;
+					const currentIndex = session.threads.findIndex(
+						(thread) => thread.id === session.activeThreadId,
+					);
+					const step = direction === "next" ? 1 : -1;
+					const baseIndex = currentIndex < 0 ? 0 : currentIndex;
+					const nextIndex =
+						(baseIndex + step + session.threads.length) %
+						session.threads.length;
+					return { ...session, activeThreadId: session.threads[nextIndex].id };
+				}),
 			})),
 		setPopupOpen: (sessionId, open) =>
 			set((state) => ({
@@ -440,6 +466,8 @@ export function useChatDockActions(
 	openNewThread: () => string;
 	closeThread: (threadId: string) => void;
 	setActiveThread: (threadId: string) => void;
+	/** See `ChatStore.cycleActiveThread`'s doc comment — bound to this session. */
+	cycleActiveThread: (direction: "next" | "previous") => void;
 	setPopupOpen: (open: boolean) => void;
 	setPopupMinimized: (minimized: boolean) => void;
 	lockThreadHarness: (
@@ -466,6 +494,10 @@ export function useChatDockActions(
 	const setActiveThreadAction = useStore(
 		store,
 		(state) => state.setActiveThread,
+	);
+	const cycleActiveThreadAction = useStore(
+		store,
+		(state) => state.cycleActiveThread,
 	);
 	const setPopupOpenAction = useStore(store, (state) => state.setPopupOpen);
 	const setPopupMinimizedAction = useStore(
@@ -511,6 +543,11 @@ export function useChatDockActions(
 	const setActiveThread = useCallback(
 		(threadId: string) => setActiveThreadAction(sessionId, threadId),
 		[setActiveThreadAction, sessionId],
+	);
+	const cycleActiveThread = useCallback(
+		(direction: "next" | "previous") =>
+			cycleActiveThreadAction(sessionId, direction),
+		[cycleActiveThreadAction, sessionId],
 	);
 	const setPopupOpen = useCallback(
 		(open: boolean) => setPopupOpenAction(sessionId, open),
@@ -574,6 +611,7 @@ export function useChatDockActions(
 			openNewThread,
 			closeThread,
 			setActiveThread,
+			cycleActiveThread,
 			setPopupOpen,
 			setPopupMinimized,
 			lockThreadHarness,
@@ -585,6 +623,7 @@ export function useChatDockActions(
 			openNewThread,
 			closeThread,
 			setActiveThread,
+			cycleActiveThread,
 			setPopupOpen,
 			setPopupMinimized,
 			lockThreadHarness,
