@@ -19,8 +19,6 @@ const POSITION_CODES = [
 	"Digit8",
 ];
 
-const TEXT_ENTRY_TAGS = new Set(["INPUT", "TEXTAREA", "SELECT"]);
-
 type TabShortcutsOptions = {
 	/** Tab ids left to right, in the order the strip renders them. */
 	tabIds: readonly string[];
@@ -45,6 +43,13 @@ type TabShortcutsOptions = {
  * refusal, so the same chord steps the chat popup's active thread instead
  * whenever the caller says it owns the combo.
  *
+ * None of this checks whether focus is in a text field, unlike the bare
+ * single-key bindings in `use-key-bindings.ts` (`j`/`k`/`/`, etc.) — every
+ * chord here requires ⌘, and a ⌘-held keydown never inserts a character
+ * anywhere, so there's nothing for a text field to lose. That's also
+ * `use-key-bindings.ts`'s own `mod+`-prefixed convention: a real chord fires
+ * regardless of focus.
+ *
  * ⌘W arrives as a *menu* event rather than a keystroke: it's a real File
  * menu item ("Close Tab", distinct from "Close Window" on ⌘⇧W) so it shows up
  * where macOS users look for it, and on macOS a menu key equivalent is
@@ -65,12 +70,8 @@ export function useTabShortcuts({
 }: TabShortcutsOptions): void {
 	useEffect(() => {
 		const handleKeyDown = (event: KeyboardEvent) => {
-			// Chat's first refusal happens before the text-entry gate below,
-			// deliberately: a ⌘⇧-modified bracket is never text input, and the
-			// composer (a contenteditable div) holds focus in exactly the state —
-			// popup open, thread just switched to — where chat is supposed to own
-			// this chord. Gating it the same as everything else would make the
-			// whole feature a dead letter outside that one state.
+			// Chat gets first refusal on the bracket chord — see
+			// `onChatThreadShortcut`'s doc comment above.
 			const bracketDirection = resolveBracketDirection(event);
 			if (
 				bracketDirection !== undefined &&
@@ -79,8 +80,6 @@ export function useTabShortcuts({
 				event.preventDefault();
 				return;
 			}
-
-			if (isTextEntry(event.target)) return;
 
 			if (isCloseOtherTabsChord(event)) {
 				if (activeTabId === null || tabIds.length <= 1) return;
@@ -173,15 +172,4 @@ function resolveTargetIndex(
 	if (event.code === "Digit9") return tabIds.length - 1;
 	const position = POSITION_CODES.indexOf(event.code);
 	return position < 0 ? undefined : position;
-}
-
-/**
- * Keeps every shortcut here out of the files sidebar's filter box and any
- * other text field, *except* the chat-thread bracket chord — that one is
- * resolved above, before this gate even runs, so it reaches
- * `onChatThreadShortcut` regardless of focus.
- */
-function isTextEntry(target: EventTarget | null): boolean {
-	if (!(target instanceof HTMLElement)) return false;
-	return target.isContentEditable || TEXT_ENTRY_TAGS.has(target.tagName);
 }
