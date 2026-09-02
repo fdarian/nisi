@@ -1,103 +1,97 @@
 {
-  "version": "7",
-  "dialect": "sqlite",
-  "id": "ccdc767b-0200-4409-aeb9-45333d59827d",
-  "prevIds": [
-    "00000000-0000-0000-0000-000000000000"
-  ],
-  "ddl": [
-    {
-      "name": "harness_model_discoveries",
-      "entityType": "tables"
-    },
-    {
-      "type": "integer",
-      "notNull": false,
-      "autoincrement": true,
-      "default": null,
-      "generated": null,
-      "name": "id",
-      "entityType": "columns",
-      "table": "harness_model_discoveries"
-    },
-    {
-      "type": "text",
-      "notNull": true,
-      "autoincrement": false,
-      "default": null,
-      "generated": null,
-      "name": "harnessId",
-      "entityType": "columns",
-      "table": "harness_model_discoveries"
-    },
-    {
-      "type": "text",
-      "notNull": false,
-      "autoincrement": false,
-      "default": null,
-      "generated": null,
-      "name": "modelsJson",
-      "entityType": "columns",
-      "table": "harness_model_discoveries"
-    },
-    {
-      "type": "integer",
-      "notNull": false,
-      "autoincrement": false,
-      "default": null,
-      "generated": null,
-      "name": "fetchedAt",
-      "entityType": "columns",
-      "table": "harness_model_discoveries"
-    },
-    {
-      "type": "integer",
-      "notNull": true,
-      "autoincrement": false,
-      "default": null,
-      "generated": null,
-      "name": "lastAttemptAt",
-      "entityType": "columns",
-      "table": "harness_model_discoveries"
-    },
-    {
-      "type": "integer",
-      "notNull": true,
-      "autoincrement": false,
-      "default": "0",
-      "generated": null,
-      "name": "consecutiveFailures",
-      "entityType": "columns",
-      "table": "harness_model_discoveries"
-    },
-    {
-      "type": "text",
-      "notNull": false,
-      "autoincrement": false,
-      "default": null,
-      "generated": null,
-      "name": "lastError",
-      "entityType": "columns",
-      "table": "harness_model_discoveries"
-    },
-    {
-      "columns": [
-        "id"
-      ],
-      "nameExplicit": false,
-      "name": "harness_model_discoveries_pk",
-      "table": "harness_model_discoveries",
-      "entityType": "pks"
-    },
-    {
-      "columns": [
-        "harnessId"
-      ],
-      "nameExplicit": false,
-      "name": "harness_model_discoveries_harnessId_unique",
-      "entityType": "uniques",
-      "table": "harness_model_discoveries"
-    }
-  ],
-  "renames": []
+	"version": "7",
+	"dialect": "sqlite",
+	"id": "ccdc767b-0200-4409-aeb9-45333d59827d",
+	"prevIds": ["00000000-0000-0000-0000-000000000000"],
+	"ddl": [
+		{
+			"name": "harness_model_discoveries",
+			"entityType": "tables"
+		},
+		{
+			"type": "integer",
+			"notNull": false,
+			"autoincrement": true,
+			"default": null,
+			"generated": null,
+			"name": "id",
+			"entityType": "columns",
+			"table": "harness_model_discoveries"
+		},
+		{
+			"type": "text",
+			"notNull": true,
+			"autoincrement": false,
+			"default": null,
+			"generated": null,
+			"name": "harnessId",
+			"entityType": "columns",
+			"table": "harness_model_discoveries"
+		},
+		{
+			"type": "text",
+			"notNull": false,
+			"autoincrement": false,
+			"default": null,
+			"generated": null,
+			"name": "modelsJson",
+			"entityType": "columns",
+			"table": "harness_model_discoveries"
+		},
+		{
+			"type": "integer",
+			"notNull": false,
+			"autoincrement": false,
+			"default": null,
+			"generated": null,
+			"name": "fetchedAt",
+			"entityType": "columns",
+			"table": "harness_model_discoveries"
+		},
+		{
+			"type": "integer",
+			"notNull": true,
+			"autoincrement": false,
+			"default": null,
+			"generated": null,
+			"name": "lastAttemptAt",
+			"entityType": "columns",
+			"table": "harness_model_discoveries"
+		},
+		{
+			"type": "integer",
+			"notNull": true,
+			"autoincrement": false,
+			"default": "0",
+			"generated": null,
+			"name": "consecutiveFailures",
+			"entityType": "columns",
+			"table": "harness_model_discoveries"
+		},
+		{
+			"type": "text",
+			"notNull": false,
+			"autoincrement": false,
+			"default": null,
+			"generated": null,
+			"name": "lastError",
+			"entityType": "columns",
+			"table": "harness_model_discoveries"
+		},
+		{
+			"columns": ["id"],
+			"nameExplicit": false,
+			"name": "harness_model_discoveries_pk",
+			"table": "harness_model_discoveries",
+			"entityType": "pks"
+		},
+		{
+			"columns": ["harnessId"],
+			"nameExplicit": false,
+			"name": "harness_model_discoveries_harnessId_unique",
+			"entityType": "uniques",
+			"table": "harness_model_discoveries"
+		}
+	],
+	"renames": []
 }

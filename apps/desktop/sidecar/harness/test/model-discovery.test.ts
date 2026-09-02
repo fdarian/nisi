@@ -49,7 +49,9 @@ mock.module("@anthropic-ai/claude-agent-sdk", () => ({
 	},
 }));
 
-const { discoverClaudeCodeModels, runCli } = await import("../model-discovery.ts");
+const { discoverClaudeCodeModels, runCli } = await import(
+	"../model-discovery.ts"
+);
 
 const isAlive = (pid: number): boolean => {
 	try {
@@ -96,7 +98,10 @@ describe("runCli — process teardown", () => {
 	 */
 	const makeSleepyScript = (pidFile: string): string => {
 		const scriptPath = join(tempDir, "sleepy.sh");
-		writeFileSync(scriptPath, `#!/bin/sh\necho $$ > "${pidFile}"\nexec sleep 30\n`);
+		writeFileSync(
+			scriptPath,
+			`#!/bin/sh\necho $$ > "${pidFile}"\nexec sleep 30\n`,
+		);
 		chmodSync(scriptPath, 0o755);
 		return scriptPath;
 	};
@@ -181,7 +186,9 @@ describe("discoverClaudeCodeModels — abortController teardown", () => {
 
 		const outcome = await Effect.runPromise(
 			Effect.result(
-				discoverClaudeCodeModels("cold-miss").pipe(Effect.timeout("100 millis")),
+				discoverClaudeCodeModels("cold-miss").pipe(
+					Effect.timeout("100 millis"),
+				),
 			),
 		);
 		expect(Result.isFailure(outcome)).toBe(true);
