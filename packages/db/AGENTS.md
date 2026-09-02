@@ -30,8 +30,9 @@ Migration application itself (`applyEmbeddedMigrations`) isn't this
 package's anymore — it's `deskkit/sqlite`'s. Each domain package imports it
 directly from there and calls it once against `SqliteDb`'s connection during
 its own store's construction (see `packages/review/src/db/client.ts`,
-`packages/settings/src/db/client.ts`, and the inline call in
-`apps/desktop/sidecar/walkthrough/store.ts`).
+`packages/settings/src/db/client.ts`, and the inline calls in
+`apps/desktop/sidecar/walkthrough/store.ts` and
+`apps/desktop/sidecar/harness/model-store.ts`).
 
 ## Non-obvious decisions
 

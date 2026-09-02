@@ -11,6 +11,7 @@ import {
 import { Config, Effect, Layer, Option } from "effect";
 import { FileSystem } from "effect/FileSystem";
 import { ChatSessions } from "./chat/sessions.ts";
+import { HarnessModelCache } from "./harness/model-store.ts";
 import { attachRouter, bindHealthCheckServer } from "./http.ts";
 import { startLivePolling } from "./live-poll.ts";
 import { LoggingLive } from "./logging.ts";
@@ -170,22 +171,23 @@ const program = Effect.scoped(
 	}),
 );
 
-// `Store.layer`, `WalkthroughStore.layer`, `SettingsStore.layer`, and
-// `RepoMergeMethodStore.layer` all need `SqliteDb` (the app's one shared
-// connection — see `@repo/db`'s AGENTS.md) and `FileSystem`/
-// `ChildProcessSpawner` (via `@repo/review`'s `ReviewStore` and, per-call,
-// `@repo/git`'s functions). `provideMerge`, not `provide`, at every step —
-// `SqliteDb`/`ReviewStore`/`BunServices` all need to stay available in the
-// final context too, not just be consumed while constructing
-// `Store`/`WalkthroughStore`/`SettingsStore`/`RepoMergeMethodStore`
-// themselves, since oRPC handlers (and the walkthrough generation loop)
-// reach some of them directly. Provided around only the program's tail
-// above — deliberately *not* around the whole program the way `EarlyLayer`
-// below is — so `SqliteDb`'s connection (and its migrations) never opens
-// until this process is the data dir's confirmed sole owner. `Updater.layer`
-// doesn't need `SqliteDb` at all (its state is a Ref, not a table — see its
-// own doc), just `FileSystem`/`ChildProcessSpawner` from the same
-// `BunServices` merge everything else here already needs.
+// `Store.layer`, `WalkthroughStore.layer`, `SettingsStore.layer`,
+// `RepoMergeMethodStore.layer`, and `HarnessModelCache.layer` all need
+// `SqliteDb` (the app's one shared connection — see `@repo/db`'s AGENTS.md)
+// and `FileSystem`/`ChildProcessSpawner` (via `@repo/review`'s
+// `ReviewStore` and, per-call, `@repo/git`'s functions). `provideMerge`, not
+// `provide`, at every step — `SqliteDb`/`ReviewStore`/`BunServices` all need
+// to stay available in the final context too, not just be consumed while
+// constructing `Store`/`WalkthroughStore`/`SettingsStore`/
+// `RepoMergeMethodStore`/`HarnessModelCache` themselves, since oRPC handlers
+// (and the walkthrough generation loop) reach some of them directly.
+// Provided around only the program's tail above — deliberately *not* around
+// the whole program the way `EarlyLayer` below is — so `SqliteDb`'s
+// connection (and its migrations) never opens until this process is the
+// data dir's confirmed sole owner. `Updater.layer` doesn't need `SqliteDb`
+// at all (its state is a Ref, not a table — see its own doc), just
+// `FileSystem`/`ChildProcessSpawner` from the same `BunServices` merge
+// everything else here already needs.
 const MainLayer = Layer.mergeAll(
 	Store.layer,
 	WalkthroughStore.layer,
@@ -194,6 +196,7 @@ const MainLayer = Layer.mergeAll(
 	SessionWatch.layer,
 	Updater.layer,
 	ChatSessions.layer,
+	HarnessModelCache.layer,
 ).pipe(
 	Layer.provideMerge(SqliteDb.layer),
 	Layer.provideMerge(BunServices.layer),

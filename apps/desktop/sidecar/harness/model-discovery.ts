@@ -1,6 +1,6 @@
 import { resolveBin } from "@repo/bin-resolver";
-import type { HarnessId, HarnessModel, ModelsStatus } from "@repo/sidecar-api";
-import { Effect, Result } from "effect";
+import type { HarnessId, HarnessModel } from "@repo/sidecar-api";
+import { Effect } from "effect";
 import { HARNESS_CLI_BIN } from "./harness-bin.ts";
 
 /**
@@ -12,108 +12,90 @@ import { HARNESS_CLI_BIN } from "./harness-bin.ts";
  */
 const DISCOVERY_TIMEOUT = "15 seconds";
 
-/** How long a successful discovery is trusted before the next `harnesses()` call re-fetches — mirrors oagent's `ModelCatalog` (`services/engine/src/model-catalog.ts`), the reference implementation this follows. */
-const CACHE_TTL_MS = 5 * 60 * 1000;
-
-type CacheEntry = {
-	readonly models: ReadonlyArray<HarnessModel>;
-	readonly fetchedAt: number;
-};
-
-export type DiscoveryResult = {
-	readonly models: ReadonlyArray<HarnessModel>;
-	readonly status: ModelsStatus;
-};
+/**
+ * Why a particular discovery attempt is running — threaded through from
+ * `model-store.ts`'s `HarnessModelCache` (the persistent, single-flight
+ * cache that now owns fresh/stale/backoff decisions; this module no longer
+ * decides any of that itself). Exists so a discovery attempt's own
+ * spawn/teardown log lines can say *why* it ran, not just *that* it ran —
+ * "the cache had never seen this harness" and "a broken harness got probed
+ * again" look identical from inside `runCli`/`discoverClaudeCodeModels`
+ * without it.
+ */
+export type DiscoveryReason =
+	| "cold-miss"
+	| "forced-refresh"
+	| "background-revalidation";
 
 /**
- * A cache of the last successful discovery per harness, with the lookup
- * function that decides fresh-hit / re-fetch / degrade. Exposed as a factory
- * (rather than one module-level singleton) so tests can exercise the
- * caching/fallback behavior against an isolated instance — `listHarnesses`
- * below uses the one singleton instance for the sidecar's actual lifetime.
- * `ttlMs` defaults to `CACHE_TTL_MS`; overridable so tests can force a cache
- * entry to expire without waiting five real minutes.
+ * Exported (only) so `test/model-discovery.test.ts` can drive its
+ * interruption/timeout teardown directly against a real spawned process,
+ * rather than only indirectly through `discoverCodexModels`/
+ * `discoverOpenCodeModels`'s CLI-specific argv/output handling.
  */
-export const createModelDiscoveryCache = (ttlMs = CACHE_TTL_MS) => {
-	const cache = new Map<HarnessId, CacheEntry>();
-
-	/**
-	 * Runs `discover` and returns its models, unless a cached result from
-	 * within `CACHE_TTL_MS` already exists (returned as `"fresh"` without
-	 * paying for I/O again) — unless `opts.force` is set, which skips that
-	 * cache-hit shortcut and always re-runs `discover`, for an explicit
-	 * user-initiated refresh (`harnesses.ts`'s `listHarnesses` `force` option,
-	 * behind `walkthrough.refreshHarnesses`). On failure — timeout, a missing
-	 * CLI, malformed output — falls back to the last cached result flagged
-	 * `"stale"` rather than failing the whole harness, or `"unavailable"` with
-	 * an empty model list when there's never been a successful discovery.
-	 * `force` doesn't disturb this fallback: the previous cache entry is kept
-	 * around for exactly this case even though the freshness check is
-	 * skipped. Never fails: this is exactly the "a harness whose discovery
-	 * fails should still be selectable rather than vanishing" requirement.
-	 */
-	const get = (
-		id: HarnessId,
-		discover: Effect.Effect<ReadonlyArray<HarnessModel>, unknown>,
-		opts?: { readonly force?: boolean },
-	): Effect.Effect<DiscoveryResult> =>
-		Effect.gen(function* () {
-			const now = Date.now();
-			const cached = cache.get(id);
-			if (
-				opts?.force !== true &&
-				cached !== undefined &&
-				now - cached.fetchedAt < ttlMs
-			) {
-				return { models: cached.models, status: "fresh" as const };
-			}
-
-			const attempt = yield* Effect.result(discover);
-			if (Result.isSuccess(attempt)) {
-				cache.set(id, { models: attempt.success, fetchedAt: now });
-				return { models: attempt.success, status: "fresh" as const };
-			}
-			if (cached !== undefined) {
-				yield* Effect.logWarning(
-					"model discovery failed -- degrading to the last cached model list",
-					{ harnessId: id, cause: attempt.failure },
-				);
-				return { models: cached.models, status: "stale" as const };
-			}
-			yield* Effect.logWarning(
-				"model discovery failed with no cached model list -- harness will report no models",
-				{ harnessId: id, cause: attempt.failure },
-			);
-			return { models: [], status: "unavailable" as const };
-		});
-
-	return { get };
-};
-
-const runCli = (
+export const runCli = (
 	binary: string,
 	args: ReadonlyArray<string>,
+	harnessId: HarnessId,
+	reason: DiscoveryReason,
 ): Effect.Effect<string, Error> =>
-	Effect.tryPromise({
-		try: async () => {
-			const proc = Bun.spawn([binary, ...args], {
-				stdout: "pipe",
-				stderr: "pipe",
-			});
-			const [stdout, stderr, exitCode] = await Promise.all([
-				new Response(proc.stdout).text(),
-				new Response(proc.stderr).text(),
-				proc.exited,
-			]);
-			if (exitCode !== 0) {
-				throw new Error(
+	Effect.gen(function* () {
+		// A plain synchronous `Bun.spawn` call, but run through `tryPromise`
+		// (an `async` wrapper) rather than a bare `Effect.sync` — there's no
+		// non-throwing synchronous constructor in this Effect version, and an
+		// `async` function catches a synchronous throw (a bad executable path)
+		// into a rejection exactly the same as a real async failure.
+		const proc = yield* Effect.tryPromise({
+			try: async () =>
+				Bun.spawn([binary, ...args], { stdout: "pipe", stderr: "pipe" }),
+			catch: (cause) =>
+				cause instanceof Error ? cause : new Error(String(cause)),
+		});
+		yield* Effect.logDebug("spawning harness discovery subprocess", {
+			harnessId,
+			reason,
+			pid: proc.pid,
+			binary,
+		});
+
+		const [stdout, stderr, exitCode] = yield* Effect.tryPromise({
+			// `signal` is Effect's own interruption signal (fired on
+			// `Effect.timeout`'s deadline or an outright interrupt) — Effect
+			// only aborts it, the underlying async work has to observe it
+			// itself (see `tryPromise`'s own doc). Killing `proc` on that abort
+			// is what closes the leak this used to have: without it, a
+			// timed-out/interrupted call abandoned the `Promise.all` below but
+			// left the spawned CLI process running as an orphan — the same
+			// class of leak `discoverClaudeCodeModels` below has, just via
+			// `Bun.spawn` instead of the SDK's own `query()`.
+			try: async (signal) => {
+				signal.addEventListener("abort", () => proc.kill(), { once: true });
+				return await Promise.all([
+					new Response(proc.stdout).text(),
+					new Response(proc.stderr).text(),
+					proc.exited,
+				]);
+			},
+			catch: (cause) =>
+				cause instanceof Error ? cause : new Error(String(cause)),
+		}).pipe(
+			Effect.ensuring(
+				Effect.logDebug("harness discovery subprocess exited", {
+					harnessId,
+					reason,
+					pid: proc.pid,
+				}),
+			),
+		);
+
+		if (exitCode !== 0) {
+			return yield* Effect.fail(
+				new Error(
 					`${binary} ${args.join(" ")} exited ${exitCode}: ${stderr.slice(0, 300)}`,
-				);
-			}
-			return stdout;
-		},
-		catch: (cause) =>
-			cause instanceof Error ? cause : new Error(String(cause)),
+				),
+			);
+		}
+		return stdout;
 	});
 
 /**
@@ -126,16 +108,17 @@ const runCli = (
  * otherwise silently fail to spawn in the built app. Overridable via
  * `NISI_OPENCODE_BIN` for tests/CI, mirroring oagent's `OAGENT_OPENCODE_BIN`.
  */
-export const discoverOpenCodeModels = (): Effect.Effect<
-	ReadonlyArray<HarnessModel>,
-	Error
-> =>
+export const discoverOpenCodeModels = (
+	reason: DiscoveryReason,
+): Effect.Effect<ReadonlyArray<HarnessModel>, Error> =>
 	runCli(
 		resolveBin(
 			HARNESS_CLI_BIN.opencode.name,
 			HARNESS_CLI_BIN.opencode.envOverrideVar,
 		),
 		["models"],
+		"opencode",
+		reason,
 	).pipe(
 		Effect.map((stdout) =>
 			stdout
@@ -160,16 +143,17 @@ type CodexModelCatalogEntry = {
  * Resolved via `@repo/bin-resolver` for the same GUI-`PATH` reason as
  * `discoverOpenCodeModels` above. Overridable via `NISI_CODEX_BIN`.
  */
-export const discoverCodexModels = (): Effect.Effect<
-	ReadonlyArray<HarnessModel>,
-	Error
-> =>
+export const discoverCodexModels = (
+	reason: DiscoveryReason,
+): Effect.Effect<ReadonlyArray<HarnessModel>, Error> =>
 	runCli(
 		resolveBin(
 			HARNESS_CLI_BIN.codex.name,
 			HARNESS_CLI_BIN.codex.envOverrideVar,
 		),
 		["debug", "models"],
+		"codex",
+		reason,
 	).pipe(
 		Effect.map((stdout) => {
 			const parsed = JSON.parse(stdout) as {
@@ -210,54 +194,89 @@ export const discoverCodexModels = (): Effect.Effect<
  * binary entirely, so it works the same way in dev and in the compiled
  * binary. Overridable via `NISI_CLAUDE_BIN`.
  */
-export const discoverClaudeCodeModels = (): Effect.Effect<
-	ReadonlyArray<HarnessModel>,
-	Error
-> =>
-	Effect.tryPromise({
-		try: async () => {
-			const { query } = await import("@anthropic-ai/claude-agent-sdk");
+export const discoverClaudeCodeModels = (
+	reason: DiscoveryReason,
+): Effect.Effect<ReadonlyArray<HarnessModel>, Error> =>
+	Effect.gen(function* () {
+		const binaryPath = resolveBin(
+			HARNESS_CLI_BIN["claude-code"].name,
+			HARNESS_CLI_BIN["claude-code"].envOverrideVar,
+		);
+		// No pid to log here, unlike `runCli`'s `Bun.spawn` — the SDK's `Query`
+		// doesn't expose the underlying subprocess's OS pid anywhere in its
+		// public surface, only a "kernel-verified pid" for an unrelated
+		// cross-session messaging feature.
+		yield* Effect.logDebug("spawning harness discovery subprocess", {
+			harnessId: "claude-code",
+			reason,
+			binaryPath,
+		});
 
-			async function* idlePrompt(): AsyncGenerator<never> {
-				await new Promise<never>(() => {});
-			}
+		return yield* Effect.tryPromise({
+			try: async (signal) => {
+				const { query } = await import("@anthropic-ai/claude-agent-sdk");
 
-			const session = query({
-				prompt: idlePrompt(),
-				options: {
-					pathToClaudeCodeExecutable: resolveBin(
-						HARNESS_CLI_BIN["claude-code"].name,
-						HARNESS_CLI_BIN["claude-code"].envOverrideVar,
-					),
-				},
-			});
-			// Drains the session's own message stream so its internal buffers
-			// don't back up while we wait on `supportedModels()` below — this
-			// discovery call never sends a prompt, so nothing meaningful is
-			// expected on it, but the control channel still needs a reader.
-			void (async () => {
-				try {
-					for await (const _message of session) {
-						// discarded — this call only wants supportedModels()
-					}
-				} catch {
-					// draining errors don't matter once supportedModels() has
-					// already resolved (or failed) below
+				async function* idlePrompt(): AsyncGenerator<never> {
+					await new Promise<never>(() => {});
 				}
-			})();
 
-			try {
-				const models = await session.supportedModels();
-				return models.map((model) => ({
-					id: model.value,
-					label: model.displayName,
-				}));
-			} finally {
-				await session.interrupt().catch(() => {});
-			}
-		},
-		catch: (cause) =>
-			cause instanceof Error ? cause : new Error(String(cause)),
+				// The SDK's own `.d.ts` draws a sharp line between these two:
+				// `abortController` is what tears the underlying `claude`
+				// subprocess down ("the query will stop and clean up resources"),
+				// while `interrupt()` (the call this replaces) only cancels the
+				// *current turn* — and this discovery call never starts one (the
+				// prompt generator above never yields), so `interrupt()` alone had
+				// nothing to cancel and the spawned process was left sitting on
+				// its stdin forever. That's the leak this fixes.
+				const abortController = new AbortController();
+				// Effect's own interruption signal (a hung/timed-out
+				// `supportedModels()` call below never reaches the `finally`) — see
+				// `runCli`'s matching comment. Forwarded into `abortController`
+				// rather than used directly, since the SDK's `options` takes an
+				// `AbortController`, not a bare `AbortSignal`.
+				signal.addEventListener("abort", () => abortController.abort(), {
+					once: true,
+				});
+
+				const session = query({
+					prompt: idlePrompt(),
+					options: { pathToClaudeCodeExecutable: binaryPath, abortController },
+				});
+				// Drains the session's own message stream so its internal buffers
+				// don't back up while we wait on `supportedModels()` below — this
+				// discovery call never sends a prompt, so nothing meaningful is
+				// expected on it, but the control channel still needs a reader.
+				void (async () => {
+					try {
+						for await (const _message of session) {
+							// discarded — this call only wants supportedModels()
+						}
+					} catch {
+						// draining errors don't matter once supportedModels() has
+						// already resolved (or failed) below
+					}
+				})();
+
+				try {
+					const models = await session.supportedModels();
+					return models.map((model) => ({
+						id: model.value,
+						label: model.displayName,
+					}));
+				} finally {
+					abortController.abort();
+				}
+			},
+			catch: (cause) =>
+				cause instanceof Error ? cause : new Error(String(cause)),
+		}).pipe(
+			Effect.ensuring(
+				Effect.logDebug("harness discovery subprocess exited", {
+					harnessId: "claude-code",
+					reason,
+				}),
+			),
+		);
 	}).pipe(Effect.timeout(DISCOVERY_TIMEOUT));
 
 /**

@@ -14,15 +14,27 @@ against a review session imports from this directory rather than reaching into a
   with no caching of its own. This is `HarnessInfo.available`, distinct from `enabled`
   (`@repo/settings`'s user declaration) — see `packages/sidecar-api/src/walkthrough.ts`'s doc.
 - `model-discovery.ts` — `discover*Models` (one real live-discovery function per harness — CLI
-  subprocess for codex/opencode, `@anthropic-ai/claude-agent-sdk`'s `query()` for claude-code,
-  `@earendil-works/pi-coding-agent`'s `ModelRegistry` for Pi, each timeout-bounded) and
-  `createModelDiscoveryCache` (the fresh/stale/unavailable TTL cache in front of them, with a `force`
-  option to bypass a cache hit — see the file's own comments for the fallback rules; follows oagent's
-  `services/engine/src/model-catalog.ts`).
+  subprocess for codex/opencode via `runCli`, `@anthropic-ai/claude-agent-sdk`'s `query()` for
+  claude-code, `@earendil-works/pi-coding-agent`'s `ModelRegistry` for Pi, each timeout-bounded and
+  taking a `DiscoveryReason` for its own spawn/teardown debug logs). `runCli` and
+  `discoverClaudeCodeModels` each tie their subprocess's lifetime to Effect's own interruption signal
+  (`Bun.spawn`'s `signal` kill path / an `AbortController` passed into `query()`'s `options` and
+  aborted in a `finally`) — a timed-out or interrupted discovery must not leave the CLI running as an
+  orphan. `discoverPiModels` never spawns an OS subprocess at all (an in-process registry read), so
+  neither concern applies to it.
+- `model-store.ts` — `HarnessModelCache`, a `Context.Service` backed by `db/schema.ts`'s
+  `harnessModelDiscoveries` table (one row per harness id, via `@repo/db`'s `SqliteDb`). Persistent
+  stale-while-revalidate cache in front of `model-discovery.ts`: cold blocks on a real discovery;
+  warm-and-fresh (within 24h) serves the row with no I/O; warm-and-stale serves the row immediately
+  and forks a background revalidation (`Effect.forkDetach`) unless a failure backoff (1 minute,
+  doubling per consecutive failure, capped at 24h) is still running. Every attempt — cold, background,
+  or `force`d — goes through one single-flight path keyed by harness id, so concurrent callers for the
+  same harness join one discovery instead of each spawning their own subprocess. A run of failures
+  never overwrites a previously-good model list, only the failure/backoff bookkeeping.
 - `harnesses.ts` — `listHarnesses` (the registry `walkthrough.harnesses`/`walkthrough.refreshHarnesses`
   return — always all four, each carrying an `enabled` flag against the caller-supplied
   `enabledHarnesses` set, `available`/`binaryPath` from `availability.ts`, and a `modelsStatus` from
-  `model-discovery.ts`, so the onboarding picker and the settings page can render every harness as a
+  `HarnessModelCache`, so the onboarding picker and the settings page can render every harness as a
   row; `http.ts` reads `enabledHarnesses` from `@repo/settings`'s `SettingsStore` before calling in).
   Model discovery only runs for a harness that's both `enabled` *and* `available` — an unavailable
   harness short-circuits to `modelsStatus: "unavailable"` without ever touching the discovery cache,
@@ -65,3 +77,13 @@ against a review session imports from this directory rather than reaching into a
 - Codex's adapter exposes no `write`/`edit` builtins at all (only `bash`/`webSearch` — its own
   patch-apply mechanism isn't surfaced as an AI-SDK tool), hence `FILE_MUTATING_BUILTINS.codex`'s
   empty list — codex has no builtin file writer to switch off in the first place.
+- **A test that triggers `HarnessModelCache`'s background revalidation must keep the same
+  `Effect.provide`d layer open across the trigger and the wait.** `Effect.provide`'s scope tears down
+  (closing `SqliteDb`'s connection) as soon as the driving effect completes, but a background
+  revalidation is a detached fiber (`Effect.forkDetach`) that keeps running after `get` itself
+  returns — a test that builds a fresh layer per call and reads the row back through a second one can
+  close the connection out from under that fiber's own write. Trigger, wait (on a `Deferred` the fake
+  `discover` resolves, plus a short settle sleep), and read all inside one `Effect.provide`/
+  `Effect.runPromise` call instead — see `test/model-store.test.ts`'s "warm and stale" tests. In the
+  real sidecar this never happens: `index.ts` provides `HarnessModelCache`'s layer around the whole
+  `Effect.never`-ending process lifetime, not per request.

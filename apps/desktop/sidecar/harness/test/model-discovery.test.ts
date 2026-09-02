@@ -1,154 +1,209 @@
-import { describe, expect, test } from "bun:test";
-import { Effect } from "effect";
-import { createModelDiscoveryCache } from "../model-discovery.ts";
+import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
+import {
+	chmodSync,
+	existsSync,
+	mkdtempSync,
+	readFileSync,
+	rmSync,
+	writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { Effect, Fiber, Result } from "effect";
 
-describe("createModelDiscoveryCache", () => {
-	test("a successful discovery is reported fresh and cached for later calls", async () => {
-		const cache = createModelDiscoveryCache();
-		let calls = 0;
-		const discover = Effect.sync(() => {
-			calls++;
-			return [{ id: "a", label: "A" }];
-		});
+/**
+ * `discoverClaudeCodeModels` reaches `@anthropic-ai/claude-agent-sdk`'s
+ * `query()` through a *dynamic* `await import(...)` inside its own function
+ * body (see `model-discovery.ts`), not a static top-level import — unlike
+ * `chat/sessions.test.ts`'s `@ai-sdk/harness/agent` mock (which has to land
+ * before `sessions.ts` itself is first evaluated), this only has to land
+ * before the function actually *runs*, so a plain top-level import of
+ * `model-discovery.ts` below is enough; no `await import("../model-discovery.ts")`
+ * dance needed. Same reason to mock at the module boundary as that file:
+ * a real `query()` call spawns a real `claude` subprocess and talks to a
+ * real account, neither of which belongs in a unit test — and this file's
+ * whole point is asserting what happens to the *fake* subprocess's
+ * `AbortController`, which no real CLI would let us observe from outside.
+ */
+let lastAbortController: AbortController | undefined;
+let supportedModelsBehavior: "resolve" | "hang" = "resolve";
 
-		const first = await Effect.runPromise(cache.get("codex", discover));
-		expect(first).toEqual({
-			models: [{ id: "a", label: "A" }],
-			status: "fresh",
-		});
-		expect(calls).toBe(1);
+const fakeSession = {
+	[Symbol.asyncIterator]: () => ({
+		// Mirrors a real idle session's drain loop: never yields, same as the
+		// real `idlePrompt()` this discovery call sends.
+		next: () => new Promise<never>(() => {}),
+	}),
+	supportedModels: async () => {
+		if (supportedModelsBehavior === "hang") {
+			await new Promise<never>(() => {});
+		}
+		return [{ value: "m", displayName: "M" }];
+	},
+};
 
-		// Second call within the TTL must not re-run `discover`.
-		const second = await Effect.runPromise(cache.get("codex", discover));
-		expect(second).toEqual({
-			models: [{ id: "a", label: "A" }],
-			status: "fresh",
-		});
-		expect(calls).toBe(1);
+mock.module("@anthropic-ai/claude-agent-sdk", () => ({
+	query: (opts: { options: { abortController?: AbortController } }) => {
+		lastAbortController = opts.options.abortController;
+		return fakeSession;
+	},
+}));
+
+const { discoverClaudeCodeModels, runCli } = await import(
+	"../model-discovery.ts"
+);
+
+const isAlive = (pid: number): boolean => {
+	try {
+		process.kill(pid, 0);
+		return true;
+	} catch {
+		return false;
+	}
+};
+
+const waitUntil = async (
+	predicate: () => boolean,
+	timeoutMs = 2000,
+): Promise<void> => {
+	const start = Date.now();
+	while (!predicate()) {
+		if (Date.now() - start > timeoutMs) {
+			throw new Error("waitUntil timed out");
+		}
+		await new Promise((resolve) => setTimeout(resolve, 10));
+	}
+};
+
+describe("runCli — process teardown", () => {
+	let tempDir: string;
+
+	beforeEach(() => {
+		tempDir = mkdtempSync(join(tmpdir(), "run-cli-teardown-"));
 	});
 
-	test("a failed discovery with no prior success reports unavailable and an empty list", async () => {
-		const cache = createModelDiscoveryCache();
-		const discover = Effect.fail(new Error("cli not found"));
-
-		const result = await Effect.runPromise(cache.get("codex", discover));
-		expect(result).toEqual({ models: [], status: "unavailable" });
+	afterEach(() => {
+		rmSync(tempDir, { recursive: true, force: true });
 	});
 
-	test("within the TTL, a cache hit is served without re-running discover even if it would now fail", async () => {
-		const cache = createModelDiscoveryCache();
-		let shouldFail = false;
-		const discover = Effect.suspend(() =>
-			shouldFail
-				? Effect.fail(new Error("cli crashed"))
-				: Effect.succeed([{ id: "a", label: "A" }]),
+	/**
+	 * Announces its own pid to a file (not stdout — a pipe only flushes to
+	 * `new Response(proc.stdout).text()` once the process exits, which
+	 * defeats the point of observing the pid *before* teardown) and then
+	 * sleeps far longer than any test here waits. `exec` replaces the shell's
+	 * own process image with `sleep` rather than forking a child for it — one
+	 * process, whose pid is exactly the `$$` captured a line earlier, so
+	 * killing that one pid can't leave an orphaned grandchild for this test
+	 * to misreport as "still running" or silently miss.
+	 */
+	const makeSleepyScript = (pidFile: string): string => {
+		const scriptPath = join(tempDir, "sleepy.sh");
+		writeFileSync(
+			scriptPath,
+			`#!/bin/sh\necho $$ > "${pidFile}"\nexec sleep 30\n`,
 		);
+		chmodSync(scriptPath, 0o755);
+		return scriptPath;
+	};
 
-		const primed = await Effect.runPromise(cache.get("opencode", discover));
-		expect(primed.status).toBe("fresh");
+	const readPid = async (pidFile: string): Promise<number> => {
+		await waitUntil(() => existsSync(pidFile));
+		return Number(readFileSync(pidFile, "utf-8").trim());
+	};
 
-		shouldFail = true;
-		const result = await Effect.runPromise(cache.get("opencode", discover));
-		expect(result).toEqual({
-			models: [{ id: "a", label: "A" }],
-			status: "fresh",
-		});
+	test("kills the spawned process when the Effect is interrupted", async () => {
+		const pidFile = join(tempDir, "pid");
+		const scriptPath = makeSleepyScript(pidFile);
+
+		const fiber = Effect.runFork(runCli(scriptPath, [], "codex", "cold-miss"));
+
+		const pid = await readPid(pidFile);
+		expect(isAlive(pid)).toBe(true);
+
+		await Effect.runPromise(Fiber.interrupt(fiber));
+
+		await waitUntil(() => !isAlive(pid));
+		expect(isAlive(pid)).toBe(false);
 	});
 
-	test("once the TTL expires, a failing re-fetch falls back to the last cached list, flagged stale", async () => {
-		// A near-zero TTL forces every call past the cache-hit branch and into a
-		// real `discover` re-attempt, without waiting out the real 5-minute TTL.
-		const cache = createModelDiscoveryCache(1);
-		let shouldFail = false;
-		const discover = Effect.suspend(() =>
-			shouldFail
-				? Effect.fail(new Error("cli crashed"))
-				: Effect.succeed([{ id: "a", label: "A" }]),
+	test("kills the spawned process when the surrounding effect times out", async () => {
+		const pidFile = join(tempDir, "pid");
+		const scriptPath = makeSleepyScript(pidFile);
+
+		// A short-ish outer timeout stands in for the real `DISCOVERY_TIMEOUT`
+		// (15s, far too slow for a test) -- `Effect.timeout` interrupts the
+		// fiber through the exact same mechanism an explicit `Fiber.interrupt`
+		// does, so this exercises the identical teardown path
+		// `DISCOVERY_TIMEOUT` relies on in production, just on a shorter
+		// clock. 1 second, not a few hundred ms: a cold `/bin/sh` spawn under
+		// a loaded sandbox can occasionally take longer than a real user
+		// would ever wait to write a one-line pidfile, and this test needs
+		// that write to land *before* the timeout fires to prove anything --
+		// still two orders of magnitude faster than `DISCOVERY_TIMEOUT`.
+		const outcome = await Effect.runPromise(
+			Effect.result(
+				runCli(scriptPath, [], "codex", "cold-miss").pipe(
+					Effect.timeout("1 second"),
+				),
+			),
 		);
+		expect(Result.isFailure(outcome)).toBe(true);
 
-		const primed = await Effect.runPromise(cache.get("opencode", discover));
-		expect(primed.status).toBe("fresh");
-
-		await new Promise((resolve) => setTimeout(resolve, 5));
-		shouldFail = true;
-		const staleResult = await Effect.runPromise(
-			cache.get("opencode", discover),
-		);
-		expect(staleResult).toEqual({
-			models: [{ id: "a", label: "A" }],
-			status: "stale",
-		});
-
-		// The stale fallback isn't itself re-cached as a fresh success — the
-		// next call re-attempts discovery again rather than trusting a failure.
-		shouldFail = false;
-		await new Promise((resolve) => setTimeout(resolve, 5));
-		const recovered = await Effect.runPromise(cache.get("opencode", discover));
-		expect(recovered).toEqual({
-			models: [{ id: "a", label: "A" }],
-			status: "fresh",
-		});
+		const pid = await readPid(pidFile);
+		await waitUntil(() => !isAlive(pid));
+		expect(isAlive(pid)).toBe(false);
 	});
 
-	test("force bypasses the cache-hit shortcut, re-running discover even within the TTL", async () => {
-		const cache = createModelDiscoveryCache();
-		let calls = 0;
-		const discover = Effect.sync(() => {
-			calls++;
-			return [{ id: `a${calls}`, label: `A${calls}` }];
-		});
+	test("a process that exits on its own is not affected by the teardown path", async () => {
+		const scriptPath = join(tempDir, "quick.sh");
+		writeFileSync(scriptPath, "#!/bin/sh\necho hello\n");
+		chmodSync(scriptPath, 0o755);
 
-		const first = await Effect.runPromise(cache.get("codex", discover));
-		expect(first).toEqual({
-			models: [{ id: "a1", label: "A1" }],
-			status: "fresh",
-		});
-		expect(calls).toBe(1);
-
-		// Still well within the TTL — an unforced call would be a cache hit.
-		const forced = await Effect.runPromise(
-			cache.get("codex", discover, { force: true }),
+		const stdout = await Effect.runPromise(
+			runCli(scriptPath, [], "codex", "cold-miss"),
 		);
-		expect(forced).toEqual({
-			models: [{ id: "a2", label: "A2" }],
-			status: "fresh",
-		});
-		expect(calls).toBe(2);
+		expect(stdout.trim()).toBe("hello");
+	});
+});
+
+describe("discoverClaudeCodeModels — abortController teardown", () => {
+	beforeEach(() => {
+		lastAbortController = undefined;
+		supportedModelsBehavior = "resolve";
 	});
 
-	test("a forced re-fetch that fails still falls back to the last cached list, flagged stale — not dropped", async () => {
-		const cache = createModelDiscoveryCache();
-		const succeed = Effect.succeed([{ id: "a", label: "A" }]);
-
-		const primed = await Effect.runPromise(cache.get("codex", succeed));
-		expect(primed.status).toBe("fresh");
-
-		const fail = Effect.fail(new Error("cli crashed"));
-		const forced = await Effect.runPromise(
-			cache.get("codex", fail, { force: true }),
+	test("aborts the controller passed into query()'s options once supportedModels() resolves", async () => {
+		const models = await Effect.runPromise(
+			discoverClaudeCodeModels("cold-miss"),
 		);
-		expect(forced).toEqual({
-			models: [{ id: "a", label: "A" }],
-			status: "stale",
-		});
+		expect(models).toEqual([{ id: "m", label: "M" }]);
+		expect(lastAbortController).toBeDefined();
+		expect(lastAbortController?.signal.aborted).toBe(true);
 	});
 
-	test("independent harness ids don't share cache entries", async () => {
-		const cache = createModelDiscoveryCache();
-		const codexDiscover = Effect.succeed([{ id: "codex-model", label: "C" }]);
-		const openCodeDiscover = Effect.fail(new Error("unreachable"));
+	test("aborts the controller when the surrounding effect times out", async () => {
+		supportedModelsBehavior = "hang";
 
-		const codexResult = await Effect.runPromise(
-			cache.get("codex", codexDiscover),
+		const outcome = await Effect.runPromise(
+			Effect.result(
+				discoverClaudeCodeModels("cold-miss").pipe(
+					Effect.timeout("100 millis"),
+				),
+			),
 		);
-		const openCodeResult = await Effect.runPromise(
-			cache.get("opencode", openCodeDiscover),
-		);
+		expect(Result.isFailure(outcome)).toBe(true);
+		expect(lastAbortController).toBeDefined();
+		expect(lastAbortController?.signal.aborted).toBe(true);
+	});
 
-		expect(codexResult).toEqual({
-			models: [{ id: "codex-model", label: "C" }],
-			status: "fresh",
-		});
-		expect(openCodeResult).toEqual({ models: [], status: "unavailable" });
+	test("aborts the controller when the fiber is interrupted directly", async () => {
+		supportedModelsBehavior = "hang";
+
+		const fiber = Effect.runFork(discoverClaudeCodeModels("cold-miss"));
+		await waitUntil(() => lastAbortController !== undefined);
+		expect(lastAbortController?.signal.aborted).toBe(false);
+
+		await Effect.runPromise(Fiber.interrupt(fiber));
+		expect(lastAbortController?.signal.aborted).toBe(true);
 	});
 });
