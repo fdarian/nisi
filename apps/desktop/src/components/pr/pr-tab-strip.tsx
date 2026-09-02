@@ -290,8 +290,9 @@ const PR_TAB_ICON_CLASS = "size-3.5 shrink-0";
  * existed. Only a `"pr"` tab's own five states (suspended handled above,
  * merged/ci-running/ready/default handled here) reach for
  * `GitPullRequestArrowIcon`/`GitPullRequestMergedIcon` and a semantic color.
+ * Exported only for `pr-tab-strip.stories.tsx` — every other caller stays
+ * inside this file.
  */
-/** Exported only for `pr-tab-strip.stories.tsx` — every other caller stays inside this file. */
 export function PrTabIcon({
 	isSuspended,
 	kind,
@@ -333,8 +334,12 @@ export function PrTabIcon({
  * Mounts `usePullRequestMergeStatus`/`usePullRequestChecks` scoped to one PR
  * tab and feeds their result into `PrTabIcon` — the piece that only exists
  * because a hook can't be called conditionally: `PrTab` below renders this
- * in place of a plain `PrTabIcon` only when `session.target.kind === "pr"`,
- * so a branch tab's render never reaches these queries at all.
+ * in place of a plain `PrTabIcon` only when `session.target.kind === "pr"`
+ * *and* the tab isn't suspended, so neither a branch tab nor a suspended PR
+ * tab ever reaches these queries — suspension exists precisely to stop
+ * background work for a tab, and two live polling subscriptions would defeat
+ * that. `isSuspended` is never a prop here for the same reason: a caller
+ * that reached this component has already ruled it out.
  *
  * `watched: false` on both keeps a background PR tab off their slow polls —
  * TanStack Query dedupes against the same query key `PrHeader`/
@@ -347,13 +352,11 @@ function PrTabStatusIcon({
 	repoRoot,
 	target,
 	sessionId,
-	isSuspended,
 }: {
 	orpc: SidecarQueryUtils;
 	repoRoot: string;
 	target: Extract<SessionTarget, { kind: "pr" }>;
 	sessionId: string;
-	isSuspended: boolean;
 }): React.ReactElement {
 	const params = {
 		repoRoot,
@@ -368,7 +371,7 @@ function PrTabStatusIcon({
 	});
 	const status = derivePrTabStatus(mergeStatusQuery.data, checksQuery.data);
 
-	return <PrTabIcon isSuspended={isSuspended} kind="pr" status={status} />;
+	return <PrTabIcon isSuspended={false} kind="pr" status={status} />;
 }
 
 function PrTab({
@@ -442,9 +445,8 @@ function PrTab({
 						render={<div />}
 						value={session.id}
 					>
-						{session.target.kind === "pr" ? (
+						{session.target.kind === "pr" && !isSuspended ? (
 							<PrTabStatusIcon
-								isSuspended={isSuspended}
 								orpc={orpc}
 								repoRoot={session.repoRoot}
 								sessionId={session.id}
