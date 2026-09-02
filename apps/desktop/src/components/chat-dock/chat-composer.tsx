@@ -33,6 +33,7 @@ import {
 	$getRoot,
 	COMMAND_PRIORITY_CRITICAL,
 	KEY_ENTER_COMMAND,
+	KEY_ESCAPE_COMMAND,
 } from "lexical";
 import { ArrowUpIcon, SquareIcon, XIcon } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
@@ -230,6 +231,22 @@ function ComposerBody({
 			COMMAND_PRIORITY_CRITICAL,
 		);
 	}, [editor, submit]);
+
+	// Blurs the composer so focus returns to the main view — `j`/`k` and the
+	// rest of `FilesChangedView`'s bare-key bindings are suppressed while this
+	// contenteditable has focus (`isTextEntry` in `use-key-bindings.ts`), same
+	// as the filter input's own first-Escape-blurs handling in
+	// `files-sidebar.tsx`.
+	useEffect(() => {
+		return editor.registerCommand<KeyboardEvent>(
+			KEY_ESCAPE_COMMAND,
+			() => {
+				editor.getRootElement()?.blur();
+				return true;
+			},
+			COMMAND_PRIORITY_CRITICAL,
+		);
+	}, [editor]);
 
 	const canSubmit = hasText && (threadHarness !== null || selection !== null);
 
