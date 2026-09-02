@@ -291,7 +291,8 @@ const PR_TAB_ICON_CLASS = "size-3.5 shrink-0";
  * merged/ci-running/ready/default handled here) reach for
  * `GitPullRequestArrowIcon`/`GitPullRequestMergedIcon` and a semantic color.
  */
-function PrTabIcon({
+/** Exported only for `pr-tab-strip.stories.tsx` — every other caller stays inside this file. */
+export function PrTabIcon({
 	isSuspended,
 	kind,
 	status,
