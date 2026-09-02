@@ -2,4 +2,4 @@
 "@repo/desktop": patch
 ---
 
-Shift+R now focuses the diff pane, so you can immediately scroll it with the keyboard.
+Shift+R now marks the selected file reviewed and moves to the previous file, mirroring r's move to the next.
