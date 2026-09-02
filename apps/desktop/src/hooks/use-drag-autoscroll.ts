@@ -12,26 +12,39 @@
  * went down inside the diff and hasn't come back up yet is enough to arm it;
  * nothing happens unless that pointer is also near an edge.
  *
- * A container scroll alone doesn't extend either selection mechanism, since
- * both only (re-)resolve which row the pointer is over from a move event,
- * never from a scroll event: `@pierre/diffs`' `InteractionManager` tracks an
+ * A container scroll alone doesn't extend the gutter-drag selection, since
+ * `@pierre/diffs`' `InteractionManager` only (re-)resolves which row the
+ * pointer is over from a move event, never a scroll event — it tracks an
  * in-progress gutter drag via its own `document`-level `pointermove`
- * listener, hit-testing `event.clientX`/`clientY` through
- * `elementFromPoint` on each move (confirmed in
- * `InteractionManager.js`'s `handleDocumentPointerMove` /
- * `pathFromCoordinates` — no `setPointerCapture`, no auto-scroll option of
- * its own to opt into instead); a native text-selection drag extends off
- * the browser's own `mousemove`-driven default action the same way. Either
- * way, a pointer that hasn't physically moved never tells either mechanism
- * "the row under you just changed" just because the content scrolled past
- * it. Each scroll step re-dispatches a synthetic pointer/mouse move at the
- * same client coordinates the real pointer last reported — exactly what a
- * real move at that same screen position would carry — so both mechanisms
- * re-resolve against whatever row is actually under the cursor now.
- * `pointermove` alone only reaches `@pierre/diffs`' listener: Chromium only
- * synthesizes a compatibility `mousemove` from a *trusted* pointer event,
- * never from one built via `dispatchEvent`, so the native text-selection
- * path needs its own explicit `mousemove` dispatch alongside it.
+ * listener, hit-testing `event.clientX`/`clientY` through `elementFromPoint`
+ * on each move (confirmed in `InteractionManager.js`'s
+ * `handleDocumentPointerMove` / `pathFromCoordinates` — no
+ * `setPointerCapture`, no auto-scroll option of its own to opt into
+ * instead). A pointer that hasn't physically moved never tells it "the row
+ * under you just changed" just because the content scrolled past it, so
+ * each scroll step re-dispatches a synthetic `pointermove` at the same
+ * client coordinates the real pointer last reported — exactly what a real
+ * move at that same screen position would carry — so it re-resolves against
+ * whatever row is actually under the cursor now.
+ *
+ * Native text-drag selection does **not** get the same treatment, and can't
+ * with this technique: extending it is the browser's own `mousemove`
+ * default action, and default actions don't run for untrusted
+ * (script-`dispatchEvent`ed) events. Verified live, in the real diff pane
+ * (Chromium — the dev-browser harness this was checked in; not separately
+ * confirmed on the shipped app's WKWebView, though the trust gate on default
+ * actions is standard engine behavior, not a Chromium quirk): mid-drag,
+ * dispatching an untrusted `mousemove` at a different point left the active
+ * `Selection` unchanged, while the drag's own next *real* `mousemove`
+ * extended it normally. So a text drag still arms this hook and the
+ * container still scrolls near an edge — but the selection itself freezes
+ * at whatever row a real pointermove last reported; the view and the
+ * selection drift apart until the pointer genuinely moves again. Left that
+ * way rather than dispatching a `mousemove` that does nothing: fixing it for
+ * real would mean driving the `Selection`/`Range` API directly (e.g.
+ * `setBaseAndExtent` off a caret position at the scroll-adjusted point,
+ * itself a shadow-root-aware lookup — see `use-diff-selection.ts`'s
+ * `resolveActiveTextSelection`), which is a bigger, separate change.
  */
 import { useEffect, useRef } from "react";
 
@@ -81,29 +94,31 @@ function isEventOriginInside(event: Event, container: HTMLElement): boolean {
 	return false;
 }
 
-/** Re-dispatches a pointer/mouse move at `clientX`/`clientY` — see this file's doc comment for why both event types and why this is what makes a scroll step actually extend either selection mechanism. */
-function redispatchMoveAt(
+/**
+ * Re-dispatches a `pointermove` at `clientX`/`clientY` — what makes a scroll
+ * step actually extend the gutter-drag selection (see this file's doc
+ * comment). Deliberately doesn't also dispatch a `mousemove` for the
+ * text-drag path: verified live that an untrusted one doesn't run the
+ * browser's native selection-extension default action, so it would only be
+ * a dead dispatch — see this file's doc comment for what that means for a
+ * text drag.
+ */
+function redispatchPointerMoveAt(
 	clientX: number,
 	clientY: number,
 	pointerId: number,
 ): void {
-	const shared = {
-		clientX,
-		clientY,
-		bubbles: true,
-		cancelable: true,
-		composed: true,
-	};
 	document.dispatchEvent(
 		new PointerEvent("pointermove", {
-			...shared,
+			clientX,
+			clientY,
+			bubbles: true,
+			cancelable: true,
+			composed: true,
 			pointerId,
 			pointerType: "mouse",
 			isPrimary: true,
 		}),
-	);
-	document.dispatchEvent(
-		new MouseEvent("mousemove", { ...shared, button: 0, buttons: 1 }),
 	);
 }
 
@@ -147,7 +162,11 @@ export function useDragAutoscroll({
 					// Already at the scroll boundary — nothing moved, so nothing for
 					// either selection mechanism to re-resolve against.
 					if (container.scrollTop !== before) {
-						redispatchMoveAt(lastClientX, lastClientY, draggingPointerId);
+						redispatchPointerMoveAt(
+							lastClientX,
+							lastClientY,
+							draggingPointerId,
+						);
 					}
 				}
 			}
