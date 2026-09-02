@@ -387,31 +387,37 @@ export function FilesChangedView({
 		[queryFilteredFiles, selectedPath, selectPath],
 	);
 
-	// `r`'s post-toggle selection: advance to the next file in
-	// `queryFilteredFiles`, falling back to the previous one when there isn't
-	// a next file — same no-wrap edges as `selectRelative` itself, so a
-	// single-file list leaves the selection alone. Reads `queryFilteredFiles`
-	// from this render's closure, the same pre-toggle snapshot `selectRelative`
+	// `r`/`R`'s post-toggle selection: advance to the next (`r`, `direction:
+	// 1`) or previous (`R`, `direction: -1`) file in `queryFilteredFiles`,
+	// falling back to the opposite direction when there isn't one that way —
+	// same no-wrap edges as `selectRelative` itself, so a single-file list
+	// leaves the selection alone either way. Reads `queryFilteredFiles` from
+	// this render's closure, the same pre-toggle snapshot `selectRelative`
 	// itself reads.
-	const handleToggleReviewed = useCallback(() => {
-		if (selectedPath === null) return;
-		const previousViewed = isViewed(selectedPath);
-		undoStack.push({ path: selectedPath, previousViewed });
-		setViewed(selectedPath, !previousViewed);
-		const currentIndex = queryFilteredFiles.findIndex(
-			(file) => file.path === selectedPath,
-		);
-		const hasNextFile =
-			currentIndex !== -1 && currentIndex + 1 < queryFilteredFiles.length;
-		selectRelative(hasNextFile ? 1 : -1);
-	}, [
-		selectedPath,
-		isViewed,
-		setViewed,
-		selectRelative,
-		undoStack,
-		queryFilteredFiles,
-	]);
+	const handleToggleReviewed = useCallback(
+		(direction: 1 | -1) => {
+			if (selectedPath === null) return;
+			const previousViewed = isViewed(selectedPath);
+			undoStack.push({ path: selectedPath, previousViewed });
+			setViewed(selectedPath, !previousViewed);
+			const currentIndex = queryFilteredFiles.findIndex(
+				(file) => file.path === selectedPath,
+			);
+			const hasFileInDirection =
+				currentIndex !== -1 &&
+				queryFilteredFiles[currentIndex + direction] !== undefined;
+			const oppositeDirection = direction === 1 ? -1 : 1;
+			selectRelative(hasFileInDirection ? direction : oppositeDirection);
+		},
+		[
+			selectedPath,
+			isViewed,
+			setViewed,
+			selectRelative,
+			undoStack,
+			queryFilteredFiles,
+		],
+	);
 
 	const handleUndo = useCallback(() => {
 		const lastRecord = undoStack.pop();
@@ -551,7 +557,10 @@ export function FilesChangedView({
 		{
 			j: () => selectRelative(1),
 			k: () => selectRelative(-1),
-			r: handleToggleReviewed,
+			r: () => handleToggleReviewed(1),
+			// Mirrors `r` exactly — same toggle, same undo-stack push — but walks
+			// `queryFilteredFiles` backward instead of forward.
+			R: () => handleToggleReviewed(-1),
 			u: handleUndo,
 			"mod+[": handleHistoryBack,
 			"mod+]": handleHistoryForward,
