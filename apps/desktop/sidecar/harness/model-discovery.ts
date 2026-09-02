@@ -95,10 +95,21 @@ const runCli = (
 	args: ReadonlyArray<string>,
 ): Effect.Effect<string, Error> =>
 	Effect.tryPromise({
-		try: async () => {
+		// `signal` is Effect's own interruption signal (fired on
+		// `Effect.timeout`'s deadline or an outright interrupt) — Effect only
+		// aborts it, the underlying async work has to observe it itself (see
+		// `tryPromise`'s own doc). Bun's `spawn` does that natively via its
+		// `signal` option ("If the signal is aborted, the process will be
+		// killed"), so wiring it straight through is enough: without this, a
+		// timed-out/interrupted call abandoned the `Promise.all` below but
+		// left the spawned CLI process running as an orphan — the same class
+		// of leak `discoverClaudeCodeModels` below has, just via `Bun.spawn`
+		// instead of the SDK's own `query()`.
+		try: async (signal) => {
 			const proc = Bun.spawn([binary, ...args], {
 				stdout: "pipe",
 				stderr: "pipe",
+				signal,
 			});
 			const [stdout, stderr, exitCode] = await Promise.all([
 				new Response(proc.stdout).text(),
@@ -215,12 +226,30 @@ export const discoverClaudeCodeModels = (): Effect.Effect<
 	Error
 > =>
 	Effect.tryPromise({
-		try: async () => {
+		try: async (signal) => {
 			const { query } = await import("@anthropic-ai/claude-agent-sdk");
 
 			async function* idlePrompt(): AsyncGenerator<never> {
 				await new Promise<never>(() => {});
 			}
+
+			// The SDK's own `.d.ts` draws a sharp line between these two:
+			// `abortController` is what tears the underlying `claude`
+			// subprocess down ("the query will stop and clean up resources"),
+			// while `interrupt()` (the call this replaces) only cancels the
+			// *current turn* — and this discovery call never starts one (the
+			// prompt generator above never yields), so `interrupt()` alone had
+			// nothing to cancel and the spawned process was left sitting on
+			// its stdin forever. That's the leak this fixes.
+			const abortController = new AbortController();
+			// Effect's own interruption signal (a hung/timed-out
+			// `supportedModels()` call below never reaches the `finally`) — see
+			// `runCli`'s matching comment. Forwarded into `abortController`
+			// rather than used directly, since the SDK's `options` takes an
+			// `AbortController`, not a bare `AbortSignal`.
+			signal.addEventListener("abort", () => abortController.abort(), {
+				once: true,
+			});
 
 			const session = query({
 				prompt: idlePrompt(),
@@ -229,6 +258,7 @@ export const discoverClaudeCodeModels = (): Effect.Effect<
 						HARNESS_CLI_BIN["claude-code"].name,
 						HARNESS_CLI_BIN["claude-code"].envOverrideVar,
 					),
+					abortController,
 				},
 			});
 			// Drains the session's own message stream so its internal buffers
@@ -253,7 +283,7 @@ export const discoverClaudeCodeModels = (): Effect.Effect<
 					label: model.displayName,
 				}));
 			} finally {
-				await session.interrupt().catch(() => {});
+				abortController.abort();
 			}
 		},
 		catch: (cause) =>
