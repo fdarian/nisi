@@ -18,7 +18,7 @@
 import type { CodeViewLineSelection, SelectionSide } from "@pierre/diffs";
 import type { CodeViewHandle } from "@pierre/diffs/react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { pollUntilReady } from "#/lib/diff-match-dom";
+import { isEventOriginOnGutter, pollUntilReady } from "#/lib/diff-match-dom";
 import type { DiffSelectionReference } from "#/lib/diff-reference";
 
 type UseDiffSelectionOptions<Metadata> = {
@@ -151,33 +151,6 @@ function resolveActiveTextSelection(
 	const root = range.commonAncestorContainer.getRootNode();
 	const item = items.find((candidate) => candidate.element.shadowRoot === root);
 	return item ? { itemId: item.id, range } : undefined;
-}
-
-/**
- * Whether `event`'s *true* origin (not its retargeted `.target`) was the
- * line-number gutter. `event.target`, read from a `document`-level
- * listener, is retargeted to the shadow host for anything that happened
- * inside `@pierre/diffs`' open shadow roots — so a click deep in the gutter
- * would otherwise look identical to a click anywhere else on that file's
- * card. `event.composedPath()` isn't retargeted this way; it carries the
- * real path from the deepest element outward, open-shadow-boundary or not,
- * so this checks that instead.
- *
- * Used on `pointerdown` to record whether the gesture about to unfold
- * started as a gutter drag, and by `isEventOriginOnGutterOrPopup` to check
- * the same thing at the *end* of a gesture (`pointerup`).
- */
-function isEventOriginOnGutter(event: Event): boolean {
-	for (const node of event.composedPath()) {
-		if (!(node instanceof Element)) continue;
-		if (
-			node.hasAttribute("data-column-number") ||
-			node.hasAttribute("data-gutter")
-		) {
-			return true;
-		}
-	}
-	return false;
 }
 
 /**
