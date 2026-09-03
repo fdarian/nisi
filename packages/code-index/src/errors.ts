@@ -31,16 +31,19 @@ export class ScipTypescriptInstallError extends Schema.TaggedError<ScipTypescrip
 ) {}
 
 /**
- * `scip-typescript index` exited nonzero. Per the established behavior
+ * `scip-typescript index` failed to spawn at all (`exitCode: null`, `cause`
+ * the underlying `PlatformError`) or exited nonzero (`cause` a plain `Error`
+ * describing it, `stderr` its own output). Per the established behavior
  * against this indexer, stderr output alone (e.g. its harmless empty-`files`
  * tsconfig warning) is never a failure on its own — only a nonzero exit
- * code is, which is what this error's existence signals.
+ * code, or a failure to spawn in the first place, is.
  */
 export class ScipTypescriptIndexError extends Schema.TaggedError<ScipTypescriptIndexError>()(
 	"ScipTypescriptIndexError",
 	{
 		exitCode: Schema.NullOr(Schema.Number),
 		stderr: Schema.String,
+		cause: Schema.Defect(),
 	},
 ) {}
 
