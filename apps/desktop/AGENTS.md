@@ -26,6 +26,10 @@ Three parts, one seam:
   shape as the `@pierre/trees` sidebar — it renders `diff.fileContents`' `patch`/`oldContent` directly,
   no client-side slicing; a reviewed file's already-seen spans arrive pre-collapsed into ordinary
   context by the sidecar (`FileContentReview.baselineKind`, see `@repo/review`'s `reconcile`).
+  `src/components/code-index/` holds SCIP-powered code navigation (⌘-hover underline, ⌘-click peek
+  references) — one `useCodeIndexInteractions` hook shared by the diff pane's additions side and the
+  whole-file viewer (`src/components/pr/file-view.tsx`), since `@pierre/diffs` token events carry no
+  item/path field of their own to key a per-file occurrence lookup off.
 
 ## The seam
 The sidecar binds a port and mints a token, then claims and publishes `{ port, token }` to
