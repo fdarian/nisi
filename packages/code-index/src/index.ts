@@ -1,4 +1,12 @@
 export {
+	type CachedIndexInfo,
+	findCachedIndex,
+	listCachedIndexes,
+	mostRecentCachedIndex,
+	readIndexBytes,
+	writeIndex,
+} from "./cache.ts";
+export {
 	type CodeIndex,
 	type CompactOccurrence,
 	decodeIndex,

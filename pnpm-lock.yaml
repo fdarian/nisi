@@ -474,6 +474,9 @@ importers:
       '@repo/bin-resolver':
         specifier: workspace:*
         version: link:../bin-resolver
+      '@repo/db':
+        specifier: workspace:*
+        version: link:../db
       '@scip-code/scip':
         specifier: 0.9.0
         version: 0.9.0
