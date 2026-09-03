@@ -133,21 +133,38 @@ export function useCodeIndexInteractions<Metadata>({
 		() => Array.from(requestedPaths),
 		[requestedPaths],
 	);
-	const occurrenceQueries = useQueries({
+	// `combine` (not a bare `.map(q => q.data)` over `useQueries`' own result)
+	// for the same reason `pr-data.ts`'s `useFileContents` needs it: plain
+	// `useQueries` with no `combine` hands back a fresh array every render
+	// regardless of whether any query's data actually changed, which would
+	// otherwise give `occurrenceIndexByPath` a new identity every render and
+	// cascade into every callback derived from it below (`handleTokenClick`,
+	// `recomputeHoveredOccurrence`, ...), right up to `codeViewOptions` —
+	// forcing `CodeView` to re-bind its interaction callbacks on every
+	// unrelated render of the pane. `combine` must itself stay referentially
+	// stable across renders where `requestedPathList` hasn't changed, hence
+	// the `useCallback`.
+	const combineOccurrenceIndexByPath = useCallback(
+		(
+			results: readonly { data: readonly CodeIndexOccurrence[] | undefined }[],
+		): ReadonlyMap<string, OccurrenceIndex> => {
+			const map = new Map<string, OccurrenceIndex>();
+			requestedPathList.forEach((path, index) => {
+				const data = results[index]?.data;
+				if (data !== undefined) map.set(path, buildOccurrenceIndex(data));
+			});
+			return map;
+		},
+		[requestedPathList],
+	);
+	const occurrenceIndexByPath = useQueries({
+		combine: combineOccurrenceIndexByPath,
 		queries: requestedPathList.map((path) =>
 			orpc.codeIndex.fileOccurrences.queryOptions({
 				input: { sessionId, path },
 			}),
 		),
 	});
-	const occurrenceIndexByPath = useMemo(() => {
-		const map = new Map<string, OccurrenceIndex>();
-		requestedPathList.forEach((path, index) => {
-			const data = occurrenceQueries[index]?.data;
-			if (data !== undefined) map.set(path, buildOccurrenceIndex(data));
-		});
-		return map;
-	}, [requestedPathList, occurrenceQueries]);
 
 	// The token currently under the pointer, regardless of whether it matched
 	// an occurrence yet — kept separate from `hoveredTokenRef` (below) so a

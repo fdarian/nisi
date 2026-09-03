@@ -13,6 +13,7 @@
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback } from "react";
+import { toastManager } from "#/components/ui/toast";
 import type { SidecarQueryUtils } from "#/lib/backend-context";
 
 /** While a build is in flight, `status` is polled once a second so the peek's spinner/"Building…" state stays live; otherwise it's a plain one-shot fetch. */
@@ -34,6 +35,19 @@ export function useCodeIndexStatus(orpc: SidecarQueryUtils, sessionId: string) {
 		buildMutation.mutate(
 			{ sessionId },
 			{
+				onError: (error) => {
+					// A rejected `build` call (session gone, repo unsupported) is
+					// distinct from the sidecar recording a `"failed"` *status* after
+					// a build actually started and errored — `status`'s own
+					// `failureMessage` covers that case already (rendered by
+					// `IndexStatusBanner`), so this only needs to cover the call
+					// itself never having started.
+					toastManager.add({
+						title: "Couldn't start building the code index",
+						description: error instanceof Error ? error.message : String(error),
+						type: "error",
+					});
+				},
 				onSettled: () => {
 					queryClient.invalidateQueries({ queryKey: queryOptions.queryKey });
 				},

@@ -121,7 +121,7 @@ export function CodeIndexPeekPanel({
 					/>
 				</div>
 				<div className="w-72 shrink-0">
-					<ScrollArea className="max-h-72" fill>
+					<ScrollArea className="max-h-72">
 						<div className="p-2">
 							{referencesQuery.isLoading ? (
 								<div className="flex items-center justify-center gap-2 py-6 text-muted-foreground">
