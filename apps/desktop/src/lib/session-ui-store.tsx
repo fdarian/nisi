@@ -60,6 +60,15 @@ type SessionUiState = {
 	 * for the static ones.
 	 */
 	openFiles: readonly string[];
+	/**
+	 * A file tab opened with a target line (e.g. from a code-index peek's
+	 * "open file" action) that hasn't been consumed by its `FileView` yet —
+	 * see `useSessionFileScrollTarget`'s doc comment. Cleared by the consumer
+	 * once it scrolls there, not by `openFile` itself, so a target line
+	 * survives whatever render passes happen between the tab opening and the
+	 * file's content actually loading.
+	 */
+	pendingFileScrollLines: ReadonlyMap<string, number>;
 	walkthroughSelection: WalkthroughSelection | null;
 	/** Browser-style back/forward history (⌘[/⌘]) over `selectedPath` — see `#/lib/file-history.ts` for the transition semantics. Always a fresh, immutable value from that module's pure functions, never mutated in place. */
 	fileHistory: FileHistoryState;
@@ -87,6 +96,7 @@ function createDefaultSessionUiState(): SessionUiState {
 		fileCollapseOverrides: new Map(),
 		activeTab: "files",
 		openFiles: EMPTY_OPEN_FILES,
+		pendingFileScrollLines: EMPTY_PENDING_FILE_SCROLL_LINES,
 		walkthroughSelection: null,
 		undoStack: [],
 		fileHistory: EMPTY_FILE_HISTORY,
@@ -98,6 +108,7 @@ const EMPTY_FORCED_PATHS: ReadonlySet<string> = new Set();
 const EMPTY_EXPANDED_HIDDEN_PATHS: ReadonlySet<string> = new Set();
 const EMPTY_FILE_COLLAPSE_OVERRIDES: ReadonlyMap<string, boolean> = new Map();
 const EMPTY_OPEN_FILES: readonly string[] = [];
+const EMPTY_PENDING_FILE_SCROLL_LINES: ReadonlyMap<string, number> = new Map();
 
 /** The tab id an open file's `TabsContent`/`TabsTrigger` renders under — namespaced so it can never collide with a static tab's own `"overview"`/`"walkthrough"`/`"files"` value. */
 export function fileTabId(path: string): string {
@@ -124,10 +135,18 @@ type SessionUiStore = {
 	) => void;
 	clearFileCollapseOverride: (sessionId: string, path: string) => void;
 	setActiveTab: (sessionId: string, tab: string) => void;
-	/** Opens `path`'s viewer tab, activating it — idempotent: an already-open path is just activated, not duplicated in `openFiles`. */
-	openFile: (sessionId: string, path: string) => void;
+	/**
+	 * Opens `path`'s viewer tab, activating it — idempotent: an already-open
+	 * path is just activated, not duplicated in `openFiles`. `targetLine`,
+	 * when given, records a pending scroll target (`pendingFileScrollLines`)
+	 * even if the tab was already open, so re-triggering "open file" on an
+	 * already-open tab with a new line still scrolls it there.
+	 */
+	openFile: (sessionId: string, path: string, targetLine?: number) => void;
 	/** Closes `path`'s viewer tab. Falls back `activeTab` to `"files"` only when `path`'s tab was the active one — closing a background file tab leaves whatever's currently active alone. */
 	closeFile: (sessionId: string, path: string) => void;
+	/** Consumes one path's pending scroll target — see `SessionUiState.pendingFileScrollLines`'s doc comment. */
+	clearPendingFileScrollLine: (sessionId: string, path: string) => void;
 	setWalkthroughSelection: (
 		sessionId: string,
 		selection: WalkthroughSelection | null,
@@ -242,15 +261,22 @@ function createSessionUiStore(): StoreApi<SessionUiStore> {
 					activeTab: tab,
 				})),
 			})),
-		openFile: (sessionId, path) =>
+		openFile: (sessionId, path, targetLine) =>
 			set((state) => ({
-				sessions: withSession(state.sessions, sessionId, (session) => ({
-					...session,
-					openFiles: session.openFiles.includes(path)
-						? session.openFiles
-						: [...session.openFiles, path],
-					activeTab: fileTabId(path),
-				})),
+				sessions: withSession(state.sessions, sessionId, (session) => {
+					const pendingFileScrollLines =
+						targetLine === undefined
+							? session.pendingFileScrollLines
+							: new Map(session.pendingFileScrollLines).set(path, targetLine);
+					return {
+						...session,
+						openFiles: session.openFiles.includes(path)
+							? session.openFiles
+							: [...session.openFiles, path],
+						activeTab: fileTabId(path),
+						pendingFileScrollLines,
+					};
+				}),
 			})),
 		closeFile: (sessionId, path) =>
 			set((state) => ({
@@ -264,6 +290,15 @@ function createSessionUiStore(): StoreApi<SessionUiStore> {
 						),
 						activeTab: wasActive ? "files" : session.activeTab,
 					};
+				}),
+			})),
+		clearPendingFileScrollLine: (sessionId, path) =>
+			set((state) => ({
+				sessions: withSession(state.sessions, sessionId, (session) => {
+					if (!session.pendingFileScrollLines.has(path)) return session;
+					const next = new Map(session.pendingFileScrollLines);
+					next.delete(path);
+					return { ...session, pendingFileScrollLines: next };
 				}),
 			})),
 		setWalkthroughSelection: (sessionId, selection) =>
@@ -537,7 +572,8 @@ export function useSetActiveTab(): (sessionId: string, tab: string) => void {
 /** Insertion-ordered open file-viewer tabs, plus `openFile`/`closeFile` — see `SessionUiState.openFiles`'s doc comment. */
 export function useSessionOpenFiles(sessionId: string): {
 	openFiles: readonly string[];
-	openFile: (path: string) => void;
+	/** `targetLine`, when given, scrolls the tab there once open — see `useSessionFileScrollTarget`. */
+	openFile: (path: string, targetLine?: number) => void;
 	closeFile: (path: string) => void;
 } {
 	const store = useSessionUiStore();
@@ -548,7 +584,8 @@ export function useSessionOpenFiles(sessionId: string): {
 	const openFileAction = useStore(store, (state) => state.openFile);
 	const closeFileAction = useStore(store, (state) => state.closeFile);
 	const openFile = useCallback(
-		(path: string) => openFileAction(sessionId, path),
+		(path: string, targetLine?: number) =>
+			openFileAction(sessionId, path, targetLine),
 		[openFileAction, sessionId],
 	);
 	const closeFile = useCallback(
@@ -559,6 +596,34 @@ export function useSessionOpenFiles(sessionId: string): {
 		() => ({ openFiles, openFile, closeFile }),
 		[openFiles, openFile, closeFile],
 	);
+}
+
+/**
+ * One file tab's pending scroll target, set by `openFile(path, targetLine)`
+ * (e.g. a code-index peek's "open file" action) — reactive, unlike
+ * `useSessionUndoStack`'s imperative style, since `FileView` needs to react
+ * to a target line arriving *after* its own mount (the tab was already open
+ * when a second peek entry targeted a different line in it). The consumer
+ * calls `clear()` once it's acted on the target, so an unrelated re-render
+ * doesn't re-trigger the same scroll.
+ */
+export function useSessionFileScrollTarget(
+	sessionId: string,
+	path: string,
+): readonly [number | undefined, () => void] {
+	const store = useSessionUiStore();
+	const targetLine = useStore(store, (state) =>
+		state.sessions.get(sessionId)?.pendingFileScrollLines.get(path),
+	);
+	const clearAction = useStore(
+		store,
+		(state) => state.clearPendingFileScrollLine,
+	);
+	const clear = useCallback(
+		() => clearAction(sessionId, path),
+		[clearAction, sessionId, path],
+	);
+	return [targetLine, clear] as const;
 }
 
 export function useSessionWalkthroughSelection(
