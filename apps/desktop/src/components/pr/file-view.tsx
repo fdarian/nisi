@@ -10,11 +10,14 @@
  */
 
 import { ORPCError } from "@orpc/client";
-import type { CodeViewItem } from "@pierre/diffs";
+import type { CodeViewItem, LineAnnotation } from "@pierre/diffs";
 import type { CodeViewHandle } from "@pierre/diffs/react";
 import { useQuery } from "@tanstack/react-query";
 import { AlertTriangleIcon } from "lucide-react";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { CodeIndexPeekPanel } from "#/components/code-index/code-index-peek-panel";
+import type { CodeIndexPeekAnnotationMetadata } from "#/components/code-index/use-code-index-interactions";
+import { useCodeIndexInteractions } from "#/components/code-index/use-code-index-interactions";
 import {
 	buildDiffCodeViewOptions,
 	DiffCodeView,
@@ -38,6 +41,7 @@ import { Toolbar } from "#/components/ui/toolbar";
 import { useDiffSelection } from "#/hooks/use-diff-selection";
 import type { SidecarQueryUtils } from "#/lib/backend-context";
 import { hashItemVersion } from "#/lib/item-version";
+import { useSessionFileScrollTarget } from "#/lib/session-ui-store";
 import { splitPath } from "#/lib/tree-paths";
 
 type FileViewProps = {
@@ -79,6 +83,9 @@ function errorMessage(error: unknown): string {
 	);
 }
 
+/** No open peek in this tab — see the identity-stability reasoning in `diff-pane.tsx`'s own annotation-array doc comment; a fresh `[]` literal on every render would reset this item's measured layout for no reason. */
+const EMPTY_ANNOTATIONS: LineAnnotation<CodeIndexPeekAnnotationMetadata>[] = [];
+
 export function FileView({
 	sessionId,
 	path,
@@ -92,7 +99,9 @@ export function FileView({
 	const markdownFile = isMarkdownPath(path);
 	const [mode, setMode] = useState<FileViewMode>("preview");
 
-	const codeViewRef = useRef<CodeViewHandle<undefined, undefined>>(null);
+	const codeViewRef =
+		useRef<CodeViewHandle<CodeIndexPeekAnnotationMetadata>>(null);
+	const codeIndex = useCodeIndexInteractions({ sessionId, orpc, codeViewRef });
 	const resolveSelectionItemPath = useCallback(
 		(itemId: string) => (itemId === path ? path : undefined),
 		[path],
@@ -105,35 +114,101 @@ export function FileView({
 		diffSelection.refreshAnchorRect();
 	}, [diffSelection.refreshAnchorRect]);
 
-	const items = useMemo<readonly CodeViewItem<undefined>[]>(() => {
+	// A tab opened with a target line (a code-index peek's "open file" action,
+	// or a walkthrough reference) scrolls there once its content is actually
+	// rendered — polled the same way `DiffPane.scrollWhenReady` waits for a
+	// not-yet-measured item, since the file may still be loading when the tab
+	// opens.
+	const [pendingScrollLine, clearPendingScrollLine] =
+		useSessionFileScrollTarget(sessionId, path);
+	useEffect(() => {
+		if (pendingScrollLine === undefined || query.data === undefined) return;
+		let frame: number | null = null;
+		const tryScroll = () => {
+			const handle = codeViewRef.current;
+			if (handle?.getInstance()?.getTopForItem(path) === undefined) {
+				frame = requestAnimationFrame(tryScroll);
+				return;
+			}
+			handle.scrollTo({
+				type: "line",
+				id: path,
+				lineNumber: pendingScrollLine,
+				align: "center",
+				behavior: "smooth",
+			});
+			clearPendingScrollLine();
+		};
+		tryScroll();
+		return () => {
+			if (frame !== null) cancelAnimationFrame(frame);
+		};
+	}, [pendingScrollLine, query.data, path, clearPendingScrollLine]);
+
+	const items = useMemo<
+		readonly CodeViewItem<CodeIndexPeekAnnotationMetadata>[]
+	>(() => {
 		if (query.data === undefined) return [];
+		const peekTarget =
+			codeIndex.peekTarget?.path === path ? codeIndex.peekTarget : null;
+		const annotations =
+			peekTarget === null
+				? EMPTY_ANNOTATIONS
+				: [
+						{
+							lineNumber: peekTarget.lineNumber,
+							metadata: {
+								type: "code-index-peek" as const,
+								target: peekTarget,
+							},
+						},
+					];
 		return [
 			{
 				id: path,
 				type: "file",
 				file: { name: path, contents: query.data.content, cacheKey: path },
-				version: hashItemVersion(`${path}:${query.data.content.length}`),
+				annotations,
+				version: hashItemVersion(
+					`${path}:${query.data.content.length}:${
+						peekTarget === null
+							? "no-peek"
+							: `peek:${peekTarget.occurrence.symbolKey}:${peekTarget.lineNumber}`
+					}`,
+				),
 			},
 		];
-	}, [path, query.data]);
+	}, [path, query.data, codeIndex.peekTarget]);
 
 	const codeViewOptions = useMemo(
 		() => ({
-			...buildDiffCodeViewOptions<undefined>({
+			...buildDiffCodeViewOptions<CodeIndexPeekAnnotationMetadata>({
 				enableLineSelection: true,
 				extraCSS: `
 					:host {
 						--diffs-light-bg: transparent;
 						--diffs-dark-bg: transparent;
 					}
+					${codeIndex.tokenCSS}
 				`,
 				theme: diffTheme.theme,
+				onPostRender: (_node, _instance, phase, context) => {
+					if (phase !== "unmount") {
+						codeIndex.notifyItemRendered(context.item.id);
+					}
+				},
 			}),
 			disableFileHeader: true,
 			itemMetrics: { ...diffItemMetrics, paddingBottom: 0 },
 			layout: { ...diffCodeViewLayout, paddingBottom: 0 },
+			...codeIndex.codeViewOptions,
 		}),
-		[diffTheme.theme],
+		[
+			diffTheme.theme,
+			codeIndex.tokenCSS,
+			codeIndex.notifyItemRendered,
+			codeIndex.codeViewOptions,
+		],
 	);
 
 	const fileContent = query.data;
@@ -199,7 +274,14 @@ export function FileView({
 								onSelectedLinesChange={diffSelection.onSelectedLinesChange}
 								options={codeViewOptions}
 								ref={codeViewRef}
-								renderAnnotation={() => null}
+								renderAnnotation={(annotation) => (
+									<CodeIndexPeekPanel
+										onClose={codeIndex.closePeek}
+										orpc={orpc}
+										sessionId={sessionId}
+										target={annotation.metadata.target}
+									/>
+								)}
 								selectedLines={diffSelection.selectedLines}
 							/>
 							<DiffSelectionPopover
