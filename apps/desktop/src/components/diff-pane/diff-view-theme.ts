@@ -142,15 +142,40 @@ export const DIFF_THEME_LIGHT_OPTIONS: readonly DiffThemeOption[] =
 export const DIFF_THEME_DARK_OPTIONS: readonly DiffThemeOption[] =
 	buildDiffThemeOptions("dark");
 
-/** The two knobs every `CodeView`/highlighter instance needs, given the pair `useDiffTheme` below assembles. */
+/**
+ * The two knobs every `CodeView`/highlighter instance needs, given the pair
+ * `useDiffTheme` below assembles. `tokenInteractions` sets
+ * `useTokenTransformer: true` — required for the two `DiffCodeView`
+ * consumers that drive SCIP code navigation (`diff-pane.tsx`'s additions
+ * side, `file-view.tsx`). `useTokenTransformer` here is what actually
+ * matters for `onTokenClick`/`onTokenEnter`/`onTokenLeave` firing at all:
+ * `@pierre/diffs` renders through `WorkerPoolContextProvider`'s worker pool,
+ * and its own `shouldUseTokenTransformer` auto-detection (from those
+ * callbacks being non-null) runs against whatever options reach the
+ * tokenizing pass — functions aren't structured-cloneable, so a worker never
+ * receives the callbacks themselves to auto-detect from. Setting
+ * `useTokenTransformer` on a `CodeViewOptions` object
+ * (`useCodeIndexInteractions`'s own `codeViewOptions.useTokenTransformer`) is
+ * not enough on its own: this `highlighterOptions` object — passed to
+ * `WorkerPoolContextProvider` itself, not per-item — is what the worker
+ * actually tokenizes against. Confirmed live: without this, every rendered
+ * token span carries no `data-char` attribute at all, so
+ * `InteractionManager.resolvePointerTarget` (which hit-tests against
+ * `data-char`) never resolves a token target and the callbacks silently
+ * never fire — not an occurrence-matching bug, a missing-attribute one.
+ * Opt-in per consumer, not the default: `reference-pane.tsx` shares the same
+ * `DiffCodeView` component and has no token-interaction feature, and token
+ * wrapping adds real per-token DOM overhead.
+ */
 export function buildDiffHighlighterOptions(
 	theme: ThemesType,
+	options?: { tokenInteractions?: boolean },
 ): WorkerInitializationRenderOptions {
 	return {
 		maxLineDiffLength: 2000,
 		theme,
 		tokenizeMaxLineLength: 20_000,
-		useTokenTransformer: false,
+		useTokenTransformer: options?.tokenInteractions === true,
 	};
 }
 
@@ -171,18 +196,23 @@ export type DiffTheme = {
  * this hook is the one place that derives both from `diffThemeLight`/
  * `diffThemeDark`, so `diff-pane.tsx` and `reference-pane.tsx` share one
  * memoized pair instead of each assembling — and risking diverging — its
- * own.
+ * own. Pass `tokenInteractions: true` for a consumer driving SCIP code
+ * navigation — see `buildDiffHighlighterOptions`'s doc comment.
  */
-export function useDiffTheme(orpc: SidecarQueryUtils): DiffTheme {
+export function useDiffTheme(
+	orpc: SidecarQueryUtils,
+	options?: { tokenInteractions?: boolean },
+): DiffTheme {
 	const [diffThemeLight] = useDiffThemeLight(orpc);
 	const [diffThemeDark] = useDiffThemeDark(orpc);
+	const tokenInteractions = options?.tokenInteractions === true;
 	const theme = useMemo<ThemesType>(
 		() => ({ light: diffThemeLight, dark: diffThemeDark }),
 		[diffThemeLight, diffThemeDark],
 	);
 	const highlighterOptions = useMemo(
-		() => buildDiffHighlighterOptions(theme),
-		[theme],
+		() => buildDiffHighlighterOptions(theme, { tokenInteractions }),
+		[theme, tokenInteractions],
 	);
 	return useMemo(
 		() => ({ theme, highlighterOptions }),

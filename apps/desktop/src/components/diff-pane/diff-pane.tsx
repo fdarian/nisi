@@ -460,7 +460,7 @@ export function DiffPane({
 }: DiffPaneProps): React.ReactElement {
 	const codeViewRef =
 		useRef<CodeViewHandle<DiffAnnotationMetadata, undefined>>(null);
-	const diffTheme = useDiffTheme(orpc);
+	const diffTheme = useDiffTheme(orpc, { tokenInteractions: true });
 	const codeIndex = useCodeIndexInteractions({ sessionId, orpc, codeViewRef });
 	const fileDiffCache = useRef(new Map<string, CachedFileDiff>());
 	const hiddenFileAnnotationCache = useRef(

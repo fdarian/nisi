@@ -40,14 +40,20 @@ export function buildOccurrenceIndex(
  * space SCIP uses (both describe offsets into the same line's plain text),
  * so no further conversion is needed for the character comparison.
  *
- * Tries an exact range match first (the common case: a Shiki token and a
- * SCIP occurrence agree on where an identifier starts/ends), falling back to
- * containment (the occurrence's range fully covers the token's) for the rare
- * case where tokenization splits a symbol differently than SCIP's range —
- * e.g. a token boundary landing mid-identifier for some highlighter
- * grammars. Ignores an occurrence the token only partially overlaps, since a
- * partial overlap means the token and the occurrence disagree about where
- * the symbol actually is — safer to show no affordance than a wrong one.
+ * Overlap, not containment either direction, is the right test — confirmed
+ * live against real rendered output: Shiki merges a leading run of
+ * whitespace/punctuation into the *same* span as an adjacent identifier
+ * (`"  ConfigField,"` renders as one token, two leading spaces and all), so
+ * a token's range can be *wider* than the occurrence it corresponds to, not
+ * only narrower (a token boundary landing mid-identifier, the case this used
+ * to handle via one-directional containment). An earlier version tried exact
+ * match then "occurrence contains token" — both fail outright for a
+ * whitespace-merged token, since the occurrence is narrower than the token
+ * in exactly that case. Picking the candidate with the *largest* overlap
+ * (rather than the first one that overlaps at all) is what makes this safe
+ * when a merged token's padding happens to abut a second, unrelated
+ * occurrence on the same line — e.g. two adjacent short identifiers
+ * separated only by punctuation the tokenizer folded into one of them.
  */
 export function findOccurrenceForToken(
 	index: OccurrenceIndex,
@@ -57,13 +63,17 @@ export function findOccurrenceForToken(
 ): CodeIndexOccurrence | undefined {
 	const candidates = index.get(lineNumber);
 	if (candidates === undefined) return undefined;
-	const exact = candidates.find(
-		(occurrence) =>
-			occurrence.charStart === charStart && occurrence.charEnd === charEnd,
-	);
-	if (exact !== undefined) return exact;
-	return candidates.find(
-		(occurrence) =>
-			occurrence.charStart <= charStart && charEnd <= occurrence.charEnd,
-	);
+
+	let best: CodeIndexOccurrence | undefined;
+	let bestOverlap = 0;
+	for (const occurrence of candidates) {
+		const overlapStart = Math.max(occurrence.charStart, charStart);
+		const overlapEnd = Math.min(occurrence.charEnd, charEnd);
+		const overlap = overlapEnd - overlapStart;
+		if (overlap > bestOverlap) {
+			bestOverlap = overlap;
+			best = occurrence;
+		}
+	}
+	return best;
 }

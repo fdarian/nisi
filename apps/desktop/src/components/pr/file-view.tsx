@@ -95,7 +95,7 @@ export function FileView({
 		orpc.file.get.queryOptions({ input: { sessionId, path } }),
 	);
 	const basename = splitPath(path).basename;
-	const diffTheme = useDiffTheme(orpc);
+	const diffTheme = useDiffTheme(orpc, { tokenInteractions: true });
 	const markdownFile = isMarkdownPath(path);
 	const [mode, setMode] = useState<FileViewMode>("preview");
 

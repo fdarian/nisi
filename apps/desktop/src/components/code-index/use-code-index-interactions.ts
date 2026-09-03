@@ -107,7 +107,7 @@ export function useCodeIndexInteractions<Metadata>({
 	/** Spread into the pane's own `CodeViewOptions`. */
 	codeViewOptions: Pick<
 		CodeViewOptions<Metadata>,
-		"onTokenEnter" | "onTokenLeave" | "onTokenClick"
+		"onTokenEnter" | "onTokenLeave" | "onTokenClick" | "useTokenTransformer"
 	>;
 	/** Appended to `unsafeCSS`/`extraCSS` — see `CODE_INDEX_TOKEN_CSS`. */
 	tokenCSS: string;
@@ -332,6 +332,23 @@ export function useCodeIndexInteractions<Metadata>({
 
 	const codeViewOptions = useMemo(
 		() => ({
+			// `@pierre/diffs` only emits the per-token `data-char` attribute its
+			// own `InteractionManager.resolvePointerTarget` hit-tests against
+			// (`utils/wrapTokenFragments.js`) when `shouldUseTokenTransformer`
+			// resolves true — which auto-detects from `onTokenClick`/
+			// `onTokenEnter`/`onTokenLeave` being non-null (`utils/
+			// shouldUseTokenTransformer.js`), EXCEPT that auto-detection runs
+			// against whatever options reach the *tokenizing* pass, and
+			// `WorkerPoolContextProvider` (`diff-code-view.tsx`) renders through
+			// a Web Worker — functions aren't structured-cloneable, so the
+			// worker never sees these callbacks to auto-detect from in the
+			// first place. Confirmed live: without this, every rendered token
+			// span carries no `data-char` at all (`sr.querySelectorAll('[data-char]')`
+			// returns empty), so `resolvePointerTarget` never resolves a token
+			// hit and `onTokenClick`/`onTokenEnter` silently never fire —
+			// `useTokenTransformer: true` is the serializable flag that reaches
+			// the worker instead.
+			useTokenTransformer: true,
 			// `onTokenEnter`/`onTokenLeave`/`onTokenClick` are declared with a
 			// 2-arg `(props, event)` signature per `InteractionManagerBaseOptions`
 			// (`InteractionManager.d.ts:47-53`) — the handlers above match that
@@ -346,7 +363,7 @@ export function useCodeIndexInteractions<Metadata>({
 		[handleTokenEnter, handleTokenLeave, handleTokenClick],
 	) as Pick<
 		CodeViewOptions<Metadata>,
-		"onTokenEnter" | "onTokenLeave" | "onTokenClick"
+		"onTokenEnter" | "onTokenLeave" | "onTokenClick" | "useTokenTransformer"
 	>;
 
 	return {
