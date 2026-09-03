@@ -229,6 +229,8 @@ type DiffPaneProps = {
 	onVisiblePathChange?: (path: string) => void;
 	reviewState: ReadonlyMap<string, ReviewStateEntry>;
 	setViewed: (path: string, viewed: boolean) => void;
+	/** Opens a path in a whole-file viewer tab — the per-file "…" menu's "View full file" item (`DiffFileHeader`). */
+	onOpenFile: (path: string) => void;
 	diffStyle: DiffStyleMode;
 	/** Wraps long diff lines instead of letting them scroll horizontally — see `@repo/settings`'s `wrapLines`. */
 	wrapLines: boolean;
@@ -416,6 +418,7 @@ export function DiffPane({
 	onVisiblePathChange,
 	reviewState,
 	setViewed,
+	onOpenFile,
 	diffStyle,
 	wrapLines,
 	ref,
@@ -918,13 +921,20 @@ export function DiffPane({
 					onToggleViewed={() =>
 						handleToggleViewed(meta.file.path, !meta.viewed)
 					}
+					onViewFullFile={() => onOpenFile(meta.file.path)}
 					repoRoot={repoRoot}
 					reviewStatus={meta.reviewStatus}
 					viewed={meta.viewed}
 				/>
 			);
 		},
-		[itemMetadata, handleToggleFileCollapse, handleToggleViewed, repoRoot],
+		[
+			itemMetadata,
+			handleToggleFileCollapse,
+			handleToggleViewed,
+			onOpenFile,
+			repoRoot,
+		],
 	);
 
 	const renderAnnotation = useCallback(
