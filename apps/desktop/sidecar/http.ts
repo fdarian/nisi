@@ -16,13 +16,18 @@ import {
 	type GitCommandError,
 	markPullRequestReady,
 	mergePullRequest,
+	resolveHeadSha,
 	resolveUnpushedCommitCount,
 	searchPullRequests,
 	type WorktreeReadFailed,
 	type WorktreeRelocationFailed,
 } from "@repo/git";
-import { ReviewStore } from "@repo/review";
-import { RepoMergeMethodStore, SettingsStore } from "@repo/settings";
+import { ReviewStore, type ReviewStoreError } from "@repo/review";
+import {
+	RepoMergeMethodStore,
+	SettingsStore,
+	type SettingsStoreError,
+} from "@repo/settings";
 import type {
 	GenerateEvent,
 	HarnessId,
@@ -31,6 +36,7 @@ import type {
 import { contract } from "@repo/sidecar-api";
 import type { Context } from "effect";
 import { Effect } from "effect";
+import type { ChildProcessSpawner } from "effect/unstable/process";
 import {
 	ChatSessionNotFound,
 	resolveChatPromptContext,
@@ -43,6 +49,15 @@ import {
 } from "./chat/sessions.ts";
 import { streamChatTurn } from "./chat/stream.ts";
 import {
+	buildFileOccurrencesResponse,
+	buildReferencesPlan,
+	buildReferencesResponse,
+	isCodeIndexUnsupported,
+	resolveCodeIndexStatus,
+	resolveQueryableIndex,
+	startCodeIndexBuild,
+} from "./code-index/state.ts";
+import {
 	emit,
 	type SidecarEvent,
 	subscribe as subscribeToSidecarEvents,
@@ -51,7 +66,7 @@ import { listHarnesses } from "./harness/harnesses.ts";
 import { checkSessionForChanges } from "./live-poll.ts";
 import type { AppServices } from "./services.ts";
 import { SessionWatch } from "./session-watch.ts";
-import { Store } from "./store.ts";
+import { type SessionNotFound, Store } from "./store.ts";
 import { Updater } from "./updater/service.ts";
 import {
 	beginTrackedGeneration,
@@ -260,6 +275,79 @@ export function attachRouter(
 			// elsewhere — the CLI, another window).
 			yield* sessionWatch.remove(sessionId);
 		});
+
+	/**
+	 * Every `codeIndex.*` handler starts by resolving `sessionId` to a live
+	 * repo root, then that repo's current head sha — shared here since all
+	 * four procedures declare the same `NOT_FOUND`/`INTERNAL_SERVER_ERROR`
+	 * codes for it. Mirrors `file.get`'s own repo-root-resolution catch
+	 * chain (`SessionNotFound` → `NOT_FOUND`, `GitCommandError`/
+	 * `WorktreeRelocationFailed` → `INTERNAL_SERVER_ERROR`); `ReviewStoreError`/
+	 * `SettingsStoreError` are left as uncaught defects, same as there —
+	 * genuinely rare, and not exhaustively mapped per `sidecar/AGENTS.md`.
+	 * `ENotFound`/`EInternal` are inferred separately from whichever
+	 * procedure's `errors` builder is passed in (they're never the same
+	 * concrete `ORPCError` type), so this stays exactly typed per call site
+	 * instead of widening to `unknown`.
+	 */
+	const resolveCodeIndexRepoRoot = <ENotFound, EInternal>(
+		sessionEffect: Effect.Effect<
+			string,
+			| SessionNotFound
+			| ReviewStoreError
+			| GitCommandError
+			| WorktreeRelocationFailed
+			| SettingsStoreError,
+			ChildProcessSpawner.ChildProcessSpawner
+		>,
+		sessionId: string,
+		errors: {
+			readonly NOT_FOUND: (input: { message: string }) => ENotFound;
+			readonly INTERNAL_SERVER_ERROR: (input: { message: string }) => EInternal;
+		},
+	) =>
+		// A single `catchTags` call against the concrete input union, rather
+		// than three chained `catchTag`s — chaining would make each step
+		// operate on the *previous* step's already-widened (generic-`E`-
+		// including) output type, which confuses `ExtractTag`'s inference for
+		// the generic `ENotFound`/`EInternal` this function is parameterized
+		// over. One call sidesteps that entirely.
+		sessionEffect.pipe(
+			Effect.catchTags({
+				SessionNotFound: () =>
+					Effect.fail(
+						errors.NOT_FOUND({ message: `session not found: ${sessionId}` }),
+					),
+				GitCommandError: (cause) =>
+					Effect.fail(
+						errors.INTERNAL_SERVER_ERROR({
+							message: formatGitCommandError(cause),
+						}),
+					),
+				WorktreeRelocationFailed: (cause) =>
+					Effect.fail(
+						errors.INTERNAL_SERVER_ERROR({
+							message: formatWorktreeRelocationFailed(cause),
+						}),
+					),
+			}),
+		);
+
+	const resolveCodeIndexHeadSha = <EInternal>(
+		repoRoot: string,
+		errors: {
+			readonly INTERNAL_SERVER_ERROR: (input: { message: string }) => EInternal;
+		},
+	) =>
+		resolveHeadSha(repoRoot).pipe(
+			Effect.catchTag("GitCommandError", (cause) =>
+				Effect.fail(
+					errors.INTERNAL_SERVER_ERROR({
+						message: formatGitCommandError(cause),
+					}),
+				),
+			),
+		);
 
 	const implementer = implement(contract).$context<ServerContext>();
 
@@ -1519,6 +1607,91 @@ export function attachRouter(
 						),
 					),
 				);
+			}),
+		},
+		codeIndex: {
+			status: authed.codeIndex.status.effect(function* ({ input, errors }) {
+				const store = yield* Store;
+				const repoRoot = yield* resolveCodeIndexRepoRoot(
+					store.resolveSessionRepoRoot(input.sessionId),
+					input.sessionId,
+					errors,
+				);
+				const headSha = yield* resolveCodeIndexHeadSha(repoRoot, errors);
+				return yield* resolveCodeIndexStatus(repoRoot, headSha);
+			}),
+			// A build already running for this repo is a no-op — `startCodeIndexBuild`
+			// itself guards on that (see its own doc comment) — so this handler's
+			// only real branch is `UNSUPPORTED` (no tsconfig anywhere in the repo).
+			build: authed.codeIndex.build.effect(function* ({ input, errors }) {
+				const store = yield* Store;
+				const repoRoot = yield* resolveCodeIndexRepoRoot(
+					store.resolveSessionRepoRoot(input.sessionId),
+					input.sessionId,
+					errors,
+				);
+				const headSha = yield* resolveCodeIndexHeadSha(repoRoot, errors);
+				const unsupported = yield* isCodeIndexUnsupported(repoRoot);
+				if (unsupported) {
+					return yield* Effect.fail(
+						errors.UNSUPPORTED({
+							message: `no tsconfig.json found anywhere in ${repoRoot}`,
+						}),
+					);
+				}
+				yield* Effect.promise(() =>
+					startCodeIndexBuild(repoRoot, headSha, mainContext),
+				);
+			}),
+			fileOccurrences: authed.codeIndex.fileOccurrences.effect(function* ({
+				input,
+				errors,
+			}) {
+				const store = yield* Store;
+				const repoRoot = yield* resolveCodeIndexRepoRoot(
+					store.resolveSessionRepoRoot(input.sessionId),
+					input.sessionId,
+					errors,
+				);
+				const headSha = yield* resolveCodeIndexHeadSha(repoRoot, errors);
+				const index = yield* resolveQueryableIndex(repoRoot, headSha);
+				if (index === null) return [];
+				return buildFileOccurrencesResponse(index, input.path);
+			}),
+			references: authed.codeIndex.references.effect(function* ({
+				input,
+				errors,
+			}) {
+				const store = yield* Store;
+				const repoRoot = yield* resolveCodeIndexRepoRoot(
+					store.resolveSessionRepoRoot(input.sessionId),
+					input.sessionId,
+					errors,
+				);
+				const headSha = yield* resolveCodeIndexHeadSha(repoRoot, errors);
+				const index = yield* resolveQueryableIndex(repoRoot, headSha);
+				if (index === null) {
+					return {
+						displayName: "",
+						documentation: [],
+						definition: null,
+						files: [],
+						totalReferenceCount: 0,
+						returnedReferenceCount: 0,
+					};
+				}
+
+				const plan = buildReferencesPlan(index, input.symbolKey);
+				const paths = [
+					...new Set(plan.returnedLocations.map((location) => location.path)),
+				];
+				// Best-effort: a read failure here shouldn't hide the reference
+				// locations themselves, only their line-text preview (see
+				// `groupReferencesByFile`'s doc comment in `code-index/state.ts`).
+				const fileContents = yield* store
+					.readCurrentFileContents(input.sessionId, paths)
+					.pipe(Effect.catch(() => Effect.succeed(new Map())));
+				return buildReferencesResponse(plan, fileContents);
 			}),
 		},
 	});

@@ -1181,6 +1181,36 @@ export class Store extends Context.Service<Store>()("Store", {
 			});
 
 		/**
+		 * The batched sibling of `readFileViewerContent`, for a caller that
+		 * needs several paths' current content in one call — `codeIndex.references`'
+		 * source-line previews, potentially across many files at once — rather
+		 * than paying for `resolveSessionDiffHead` once per path the way N
+		 * `readFileViewerContent` calls would. Goes through the exact same
+		 * `readCurrentContent` gate, so it can never disagree with
+		 * `readFileViewerContent`/`setFileViewed` about which universe
+		 * "current" means. A path absent from the result is exactly
+		 * `readCurrentContent`'s own "not in this universe" case (deleted,
+		 * never existed) — not an error, and callers here don't need the
+		 * `FileViewerPathNotFound` treatment a single-path viewer tab does.
+		 */
+		const readCurrentFileContents = (
+			sessionId: string,
+			paths: ReadonlyArray<string>,
+		) =>
+			Effect.gen(function* () {
+				const session = yield* reviewStore.getSession(sessionId);
+				const repoRoot = yield* resolveLiveRepoRoot(session);
+				const diffHead = yield* resolveSessionDiffHead(session, repoRoot);
+				const settings = yield* settingsStore.get();
+				return yield* readCurrentContent(
+					repoRoot,
+					diffHead,
+					settings.includeUncommitted,
+					paths,
+				);
+			});
+
+		/**
 		 * Un-ticking Reviewed just clears the snapshot. Ticking it reads the
 		 * file's *current* content directly via `readCurrentContent` — a plain
 		 * read, not `@repo/git`'s size-gated `getFileContents`, since a review
@@ -1426,6 +1456,7 @@ export class Store extends Context.Service<Store>()("Store", {
 			listChangedFiles,
 			readFileContents,
 			readFileViewerContent,
+			readCurrentFileContents,
 			setFileViewed,
 			setRangeViewed,
 		};

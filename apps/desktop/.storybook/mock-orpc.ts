@@ -305,6 +305,14 @@ export function createMockOrpc(data: MockOrpcData = {}): SidecarQueryUtils {
 			},
 			stop: async () => undefined,
 		},
+		// No story exercises go-to-definition/find-references yet — same
+		// reasoning as `events.subscribe` above.
+		codeIndex: {
+			status: neverSettles,
+			build: neverSettles,
+			fileOccurrences: neverSettles,
+			references: neverSettles,
+		},
 	};
 
 	return createTanstackQueryUtils(client);

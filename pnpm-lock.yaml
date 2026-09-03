@@ -226,6 +226,9 @@ importers:
       '@repo/bin-resolver':
         specifier: workspace:*
         version: link:../../packages/bin-resolver
+      '@repo/code-index':
+        specifier: workspace:*
+        version: link:../../packages/code-index
       '@repo/db':
         specifier: workspace:*
         version: link:../../packages/db

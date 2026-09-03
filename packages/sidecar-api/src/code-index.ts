@@ -116,7 +116,7 @@ export const codeIndexContract = {
 	status: oc
 		.input(Schema.Struct({ sessionId: Schema.String }))
 		.output(CodeIndexStatus)
-		.errors({ NOT_FOUND: {} }),
+		.errors({ NOT_FOUND: {}, INTERNAL_SERVER_ERROR: {} }),
 	/**
 	 * Starts a build for `sessionId`'s repo and returns immediately —
 	 * `status` is what reports progress. A second `build` call while one's
@@ -133,6 +133,7 @@ export const codeIndexContract = {
 		.errors({
 			NOT_FOUND: {},
 			UNSUPPORTED: {},
+			INTERNAL_SERVER_ERROR: {},
 		}),
 	/**
 	 * Every occurrence in one file, fetched once per opened file so a hover
@@ -145,7 +146,7 @@ export const codeIndexContract = {
 	fileOccurrences: oc
 		.input(Schema.Struct({ sessionId: Schema.String, path: Schema.String }))
 		.output(Schema.Array(CodeIndexOccurrence))
-		.errors({ NOT_FOUND: {} }),
+		.errors({ NOT_FOUND: {}, INTERNAL_SERVER_ERROR: {} }),
 	/**
 	 * `symbolKey` is always one echoed back by a prior `fileOccurrences`
 	 * call. A `symbolKey` the index doesn't recognize (stale from an
@@ -158,5 +159,5 @@ export const codeIndexContract = {
 			Schema.Struct({ sessionId: Schema.String, symbolKey: Schema.String }),
 		)
 		.output(CodeIndexReferencesResult)
-		.errors({ NOT_FOUND: {} }),
+		.errors({ NOT_FOUND: {}, INTERNAL_SERVER_ERROR: {} }),
 };

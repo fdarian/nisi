@@ -154,6 +154,16 @@ seam" for the port/token handshake this boots into.
 - `walkthrough/` — Phase 3's wiring layer. See its own AGENTS.md.
 - `chat/` — the quick-chat popup's read-only `HarnessAgent` conversations, one per thread. See its
   own AGENTS.md.
+- `code-index/state.ts` — the `codeIndex.*` handlers' process-lifetime state: which repo roots have
+  a build in flight or a just-failed one (`buildStates`, gone on restart — same reasoning as
+  `generation-log.ts`'s map), the one decoded `@repo/code-index` `CodeIndex` kept resident per repo
+  root (`decodedIndexes`, decoding being real work over tens of thousands of occurrences), and a
+  memoized `tsconfig*.json`-presence check per repo (`tsConfigPresence`) backing `status`'s
+  `unsupported` outcome. `resolveCodeIndexStatus`/`startCodeIndexBuild` are this module's read/act
+  split, same shape as `walkthrough.activeGeneration`/`walkthrough.generate` — `startCodeIndexBuild`
+  registers `"building"` synchronously before any `await`, so two racing `build` calls for the same
+  repo can't both start one. `@repo/code-index` itself stays pure (decode/query/indexer/cache
+  primitives, no in-memory state) — this file is where that state actually lives.
 - `updater/` — macOS Homebrew-cask auto-update. `service.ts`'s `Updater` owns a `Ref<UpdateState>`
   and is the only writer of it: `startChecks()` (forked from `index.ts`'s boot program, same shape as
   `startLivePolling` above) drives `idle ⇄ available` on an hourly `Schedule`, stopping for good the

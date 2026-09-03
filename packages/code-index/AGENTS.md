@@ -41,8 +41,8 @@ structure, and answers position→symbol and symbol→occurrence queries against
   is answered by "does `<currentHeadSha>.scip` exist", not a written status field. Keeps only the
   2 most recent index files per repo (`pruneStaleIndexes`), so the data dir doesn't grow by one
   full index per commit reviewed.
-- `src/errors.ts` — typed failures: `ScipTypescriptInstallError`, `ScipTypescriptIndexError`
-  (nonzero-exit only), `CodeIndexCacheError`.
+- `src/errors.ts` — typed failures: `ScipDecodeError`, `ScipTypescriptInstallError`,
+  `ScipTypescriptIndexError` (nonzero-exit only), `CodeIndexCacheError`.
 
 ## Gotchas
 
