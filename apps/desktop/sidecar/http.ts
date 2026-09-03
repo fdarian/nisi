@@ -564,6 +564,57 @@ export function attachRouter(
 					);
 			}),
 		},
+		file: {
+			get: authed.file.get.effect(function* ({ input, errors }) {
+				const store = yield* Store;
+				return yield* store
+					.readFileViewerContent(input.sessionId, input.path)
+					.pipe(
+						Effect.catchTag("SessionNotFound", () =>
+							Effect.fail(
+								errors.NOT_FOUND({
+									message: `session not found: ${input.sessionId}`,
+								}),
+							),
+						),
+						Effect.catchTag("FileViewerPathNotFound", (cause) =>
+							Effect.fail(
+								errors.FILE_NOT_FOUND({
+									message: `${cause.path} doesn't exist`,
+								}),
+							),
+						),
+						Effect.catchTag("FileViewerContentTooLarge", (cause) =>
+							Effect.fail(
+								errors.FILE_TOO_LARGE({
+									message: `${cause.path} is ${cause.size} bytes, over the file viewer's size limit`,
+								}),
+							),
+						),
+						Effect.catchTag("GitCommandError", (cause) =>
+							Effect.fail(
+								errors.INTERNAL_SERVER_ERROR({
+									message: formatGitCommandError(cause),
+								}),
+							),
+						),
+						Effect.catchTag("WorktreeReadFailed", (cause) =>
+							Effect.fail(
+								errors.INTERNAL_SERVER_ERROR({
+									message: formatWorktreeReadFailed(cause),
+								}),
+							),
+						),
+						Effect.catchTag("WorktreeRelocationFailed", (cause) =>
+							Effect.fail(
+								errors.INTERNAL_SERVER_ERROR({
+									message: formatWorktreeRelocationFailed(cause),
+								}),
+							),
+						),
+					);
+			}),
+		},
 		review: {
 			setViewed: authed.review.setViewed.effect(function* ({ input, errors }) {
 				const store = yield* Store;
