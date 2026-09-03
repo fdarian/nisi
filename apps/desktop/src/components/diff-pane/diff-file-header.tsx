@@ -13,6 +13,7 @@ import {
 	DropdownMenu,
 	DropdownMenuContent,
 	DropdownMenuItem,
+	DropdownMenuSeparator,
 	DropdownMenuSub,
 	DropdownMenuSubContent,
 	DropdownMenuSubTrigger,
@@ -50,6 +51,8 @@ type DiffFileHeaderProps = {
 	/** Whether this file's card currently shows header-only — see `diff-pane.tsx`'s `fileCollapseOverrides`. */
 	collapsed: boolean;
 	onToggleCollapse: () => void;
+	/** Opens `file.path` in a whole-file viewer tab — the "…" menu's "View full file" item. */
+	onViewFullFile: () => void;
 };
 
 /**
@@ -76,6 +79,7 @@ export function DiffFileHeader({
 	onToggleViewed,
 	collapsed,
 	onToggleCollapse,
+	onViewFullFile,
 }: DiffFileHeaderProps): React.ReactElement {
 	const { dirname, basename } = splitPath(file.path);
 	const { editors, loadEditors } = useAvailableEditors();
@@ -164,6 +168,10 @@ export function DiffFileHeader({
 					<MoreHorizontalIcon />
 				</DropdownMenuTrigger>
 				<DropdownMenuContent align="end">
+					<DropdownMenuItem onClick={onViewFullFile}>
+						View full file
+					</DropdownMenuItem>
+					<DropdownMenuSeparator />
 					<DropdownMenuItem
 						onClick={() => navigator.clipboard.writeText(file.path)}
 					>

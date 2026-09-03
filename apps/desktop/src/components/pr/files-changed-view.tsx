@@ -75,6 +75,8 @@ type FilesChangedViewProps = {
 	files: readonly FileChange[];
 	reviewState: ReadonlyMap<string, ReviewStateEntry>;
 	setViewed: (path: string, viewed: boolean) => void;
+	/** Opens a path in a whole-file viewer tab — threaded down to `DiffPane`'s per-file "…" menu. */
+	onOpenFile: (path: string) => void;
 	hasPendingChanges: boolean;
 	onRefresh: () => void;
 	/** Whether this PR tab is the selected one — `PrView` stays mounted for every
@@ -89,6 +91,7 @@ export function FilesChangedView({
 	files,
 	reviewState,
 	setViewed,
+	onOpenFile,
 	hasPendingChanges,
 	onRefresh,
 	shortcutsEnabled,
@@ -704,6 +707,7 @@ export function FilesChangedView({
 						forcedPaths={forcedPaths}
 						keywordMatchesByPath={keywordMatchesByPath}
 						onForceLoad={addForcedPath}
+						onOpenFile={onOpenFile}
 						onVisiblePathChange={handleVisiblePathChange}
 						orpc={orpc}
 						ref={diffPaneRef}

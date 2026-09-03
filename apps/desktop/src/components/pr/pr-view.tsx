@@ -98,7 +98,7 @@ export function PrView({
 		useSessionWalkthroughSelection(session.id);
 	// The dynamic file-viewer tabs (`file-view.tsx`) rendered after the static
 	// ones in `PrViewTabStrip` — see `SessionUiState.openFiles`'s doc comment.
-	const { openFiles, closeFile } = useSessionOpenFiles(session.id);
+	const { openFiles, openFile, closeFile } = useSessionOpenFiles(session.id);
 
 	// Gates the sidecar's 2s worktree poller (`live-poll.ts`) to exactly the
 	// sessions someone could actually see a result from — window focused,
@@ -191,6 +191,7 @@ export function PrView({
 						<FilesChangedView
 							files={files}
 							hasPendingChanges={hasPendingChanges}
+							onOpenFile={openFile}
 							onRefresh={refreshFileChanges}
 							orpc={orpc}
 							reviewState={reviewState}
