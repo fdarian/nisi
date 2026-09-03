@@ -466,6 +466,34 @@ importers:
         specifier: 7.0.2
         version: 7.0.2
 
+  packages/code-index:
+    dependencies:
+      '@bufbuild/protobuf':
+        specifier: 2.14.1
+        version: 2.14.1
+      '@repo/bin-resolver':
+        specifier: workspace:*
+        version: link:../bin-resolver
+      '@scip-code/scip':
+        specifier: 0.9.0
+        version: 0.9.0
+      effect:
+        specifier: 'catalog:'
+        version: 4.0.0-rc.112
+    devDependencies:
+      '@effect/platform-bun':
+        specifier: 'catalog:'
+        version: 4.0.0-rc.112(effect@4.0.0-rc.112)
+      '@total-typescript/tsconfig':
+        specifier: 1.0.4
+        version: 1.0.4
+      '@types/bun':
+        specifier: 1.3.14
+        version: 1.3.14
+      typescript:
+        specifier: 7.0.2
+        version: 7.0.2
+
   packages/db:
     dependencies:
       '@effect/sql-sqlite-bun':
@@ -1147,6 +1175,9 @@ packages:
     engines: {node: '>=14.21.3'}
     cpu: [x64]
     os: [win32]
+
+  '@bufbuild/protobuf@2.14.1':
+    resolution: {integrity: sha512-agRJn3+EJDUe8AvxTx/LnHA/GErvLE62pSaSk7+MwFOtOv8eWBu/qCq2qoZjBjVZ3C2aiFJCveuSs17KMkYGOw==}
 
   '@changesets/apply-release-plan@7.1.1':
     resolution: {integrity: sha512-9qPCm/rLx/xoOFXIHGB229+4GOL76S4MC+7tyOuTsR6+1jYlfFDQORdvwR5hDA6y4FL2BPt3qpbcQIS+dW85LA==}
@@ -2621,6 +2652,9 @@ packages:
     peerDependenciesMeta:
       rollup:
         optional: true
+
+  '@scip-code/scip@0.9.0':
+    resolution: {integrity: sha512-9ctqUkzIc46tSSarvGhp/yMyPGHGzXgVePMa8NlwKAkbHBvHYURUG42Q9ga0poofa1rV1wazZOe4g3UT+ObWoQ==}
 
   '@shikijs/core@4.4.3':
     resolution: {integrity: sha512-QCR4q2ZO/ILJEuwiBMel4wdcTDb1JGwfjKTxPDF6x8ixOaluPrVqIn06C99AcRPhmYlBR56d/Fb+GN58GzExpg==}
@@ -6419,6 +6453,8 @@ snapshots:
   '@biomejs/cli-win32-x64@2.4.15':
     optional: true
 
+  '@bufbuild/protobuf@2.14.1': {}
+
   '@changesets/apply-release-plan@7.1.1':
     dependencies:
       '@changesets/config': 3.1.4
@@ -7857,6 +7893,10 @@ snapshots:
       '@types/estree': 1.0.9
       estree-walker: 2.0.2
       picomatch: 4.0.7
+
+  '@scip-code/scip@0.9.0':
+    dependencies:
+      '@bufbuild/protobuf': 2.14.1
 
   '@shikijs/core@4.4.3':
     dependencies:
