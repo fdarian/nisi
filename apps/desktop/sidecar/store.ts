@@ -81,6 +81,28 @@ export class InvalidBaseRef extends Schema.TaggedError<InvalidBaseRef>()(
 	},
 ) {}
 
+/** `file.get` asked for a path that doesn't exist in the resolved universe (the worktree, or `diffHead.headRef`'s committed tree — see `readFileViewerContent`) — distinct from a git failure, so the frontend can render "this file doesn't exist" instead of a generic error. */
+export class FileViewerPathNotFound extends Schema.TaggedError<FileViewerPathNotFound>()(
+	"FileViewerPathNotFound",
+	{ path: Schema.String },
+) {}
+
+/** `file.get`'s content exceeded `FILE_VIEWER_MAX_BYTES` — a real, renderable outcome (nothing bounds how large an arbitrary repo path can be) rather than a failure the caller has no way to distinguish from a genuine error. */
+export class FileViewerContentTooLarge extends Schema.TaggedError<FileViewerContentTooLarge>()(
+	"FileViewerContentTooLarge",
+	{ path: Schema.String, size: Schema.Number },
+) {}
+
+/**
+ * `readFileViewerContent`'s hard cap — mirrors `@repo/git`'s own
+ * `LOAD_ON_DEMAND_LIMIT` (`packages/git/src/diff.ts`, not exported and not
+ * reused directly: this viewer doesn't go through `getFileContents` at
+ * all). Unlike the diff pane's own size gate, there's no "Load anyway"
+ * override for this procedure — see `packages/sidecar-api`'s `file.ts` doc
+ * comment for why the contract carries no `force` field.
+ */
+const FILE_VIEWER_MAX_BYTES = 2 * 1024 * 1024;
+
 /**
  * `sessions.open`'s target selector — mirrors `packages/sidecar-api`'s
  * `OpenSessionTarget`, plus one variant that never crosses the wire:
@@ -1108,6 +1130,57 @@ export class Store extends Context.Service<Store>()("Store", {
 			});
 
 		/**
+		 * One arbitrary path's whole-file content for a file-viewer tab
+		 * (`packages/sidecar-api`'s `file.get`) — deliberately not
+		 * `readFileContents`/`@repo/git`'s `getFileContents` above: those are
+		 * diff-scoped (patch + old/new content pairs for paths the `base →
+		 * head` diff actually touches), while a viewer tab can be opened for
+		 * any path in the repo — a walkthrough reference into a file outside
+		 * the diff, or "View full file" from Files Changed. Reuses
+		 * `readCurrentContent` instead, the same "what does this path look
+		 * like right now" gate `setFileViewed`'s snapshot write uses:
+		 * worktree bytes when `includeUncommitted` (read fresh from
+		 * `SettingsStore`, same reasoning as `setFileViewed` — this call
+		 * carries no per-request flag of its own) and the session is
+		 * worktree-eligible, else `diffHead.headRef`'s own committed tree.
+		 *
+		 * A path absent from that universe (deleted, never existed, or a
+		 * typo'd walkthrough reference) fails `FileViewerPathNotFound` rather
+		 * than silently reporting empty content — `readCurrentContent` itself
+		 * treats absence as a value (the map simply has no entry), so this is
+		 * the one place that turns it into a failure for a caller that has
+		 * exactly one path and nothing sensible to render for "nothing here."
+		 * Content past `FILE_VIEWER_MAX_BYTES` fails `FileViewerContentTooLarge`
+		 * instead of being read and discarded — unlike `getFileContents`'
+		 * size gate, there's no worktree-side `stat()` to check first here
+		 * (`readCurrentContent` has no such option), so the cap is enforced
+		 * after the read; still cheap; nothing here streams to disk first.
+		 */
+		const readFileViewerContent = (sessionId: string, path: string) =>
+			Effect.gen(function* () {
+				const session = yield* reviewStore.getSession(sessionId);
+				const repoRoot = yield* resolveLiveRepoRoot(session);
+				const diffHead = yield* resolveSessionDiffHead(session, repoRoot);
+				const settings = yield* settingsStore.get();
+				const currentContent = yield* readCurrentContent(
+					repoRoot,
+					diffHead,
+					settings.includeUncommitted,
+					[path],
+				);
+				const bytes = currentContent.get(path);
+				if (bytes === undefined) {
+					return yield* Effect.fail(new FileViewerPathNotFound({ path }));
+				}
+				if (bytes.byteLength > FILE_VIEWER_MAX_BYTES) {
+					return yield* Effect.fail(
+						new FileViewerContentTooLarge({ path, size: bytes.byteLength }),
+					);
+				}
+				return { content: new TextDecoder().decode(bytes) };
+			});
+
+		/**
 		 * Un-ticking Reviewed just clears the snapshot. Ticking it reads the
 		 * file's *current* content directly via `readCurrentContent` — a plain
 		 * read, not `@repo/git`'s size-gated `getFileContents`, since a review
@@ -1352,6 +1425,7 @@ export class Store extends Context.Service<Store>()("Store", {
 			resolveSessionRepoRoot,
 			listChangedFiles,
 			readFileContents,
+			readFileViewerContent,
 			setFileViewed,
 			setRangeViewed,
 		};

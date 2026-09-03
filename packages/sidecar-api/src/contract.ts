@@ -13,6 +13,7 @@ import { oc } from "@orpc/contract";
 import { chatContract } from "./chat.ts";
 import { diffContract } from "./diff.ts";
 import { eventsContract } from "./events.ts";
+import { fileContract } from "./file.ts";
 import { healthContract } from "./health.ts";
 import { overviewContract } from "./overview.ts";
 import { pullRequestsContract } from "./pull-requests.ts";
@@ -25,6 +26,7 @@ import { walkthroughContract } from "./walkthrough.ts";
 export * from "./chat.ts";
 export * from "./diff.ts";
 export * from "./events.ts";
+export * from "./file.ts";
 export * from "./health.ts";
 export * from "./overview.ts";
 export * from "./pull-requests.ts";
@@ -41,6 +43,7 @@ export const contract = oc.errors({ UNAUTHORIZED: {} }).router({
 	health: healthContract,
 	sessions: sessionsContract,
 	diff: diffContract,
+	file: fileContract,
 	review: reviewContract,
 	events: eventsContract,
 	walkthrough: walkthroughContract,
