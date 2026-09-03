@@ -100,7 +100,7 @@ export function FileView({
 	const [mode, setMode] = useState<FileViewMode>("preview");
 
 	const codeViewRef =
-		useRef<CodeViewHandle<CodeIndexPeekAnnotationMetadata>>(null);
+		useRef<CodeViewHandle<CodeIndexPeekAnnotationMetadata, undefined>>(null);
 	const codeIndex = useCodeIndexInteractions({ sessionId, orpc, codeViewRef });
 	const resolveSelectionItemPath = useCallback(
 		(itemId: string) => (itemId === path ? path : undefined),

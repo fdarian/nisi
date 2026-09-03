@@ -19,6 +19,12 @@ import {
 	useMemo,
 	useRef,
 } from "react";
+import { CodeIndexPeekPanel } from "#/components/code-index/code-index-peek-panel";
+import type {
+	CodeIndexPeekAnnotationMetadata,
+	CodeIndexPeekTarget,
+} from "#/components/code-index/use-code-index-interactions";
+import { useCodeIndexInteractions } from "#/components/code-index/use-code-index-interactions";
 import {
 	buildDiffCodeViewOptions,
 	DiffCodeView,
@@ -73,7 +79,8 @@ type DiffAnnotationMetadata =
 	| { type: "load-file"; path: string; stillTooLarge: boolean }
 	| { type: "hidden-file"; path: string; reason: HiddenFileReason }
 	| { type: "reviewed-empty" }
-	| { type: "loading" };
+	| { type: "loading" }
+	| CodeIndexPeekAnnotationMetadata;
 
 /**
  * Noise reduction, unrelated to review state. A `"generated"` file's body is
@@ -172,6 +179,33 @@ const LOADING_ANNOTATIONS: LineAnnotation<DiffAnnotationMetadata>[] = [
  * silent exception for "empty is fine."
  */
 const EMPTY_DIFF_ANNOTATIONS: DiffLineAnnotation<DiffAnnotationMetadata>[] = [];
+
+/**
+ * Appends the open code-index peek's annotation onto `base` for exactly the
+ * one file it targets — `base` (usually `EMPTY_DIFF_ANNOTATIONS` or
+ * `resolveLoadFileAnnotations`'s cached array) is returned unchanged for
+ * every other file, preserving its identity so pierre never resets that
+ * file's layout cache for a peek opening/closing somewhere else (see this
+ * file's own identity-stability doc comment above `BINARY_ANNOTATIONS`).
+ * Additions-side only — the peek can only ever have been opened from an
+ * additions-side token (`useCodeIndexInteractions` ignores deletions-side
+ * clicks entirely), so there's no ambiguity about which side to anchor to.
+ */
+function withPeekAnnotation(
+	base: DiffLineAnnotation<DiffAnnotationMetadata>[],
+	path: string,
+	peekTarget: CodeIndexPeekTarget | null,
+): DiffLineAnnotation<DiffAnnotationMetadata>[] {
+	if (peekTarget === null || peekTarget.path !== path) return base;
+	return [
+		...base,
+		{
+			side: "additions",
+			lineNumber: peekTarget.lineNumber,
+			metadata: { type: "code-index-peek", target: peekTarget },
+		},
+	];
+}
 
 /**
  * The pane's imperative seam, for the one thing its props can't express:
@@ -427,6 +461,7 @@ export function DiffPane({
 	const codeViewRef =
 		useRef<CodeViewHandle<DiffAnnotationMetadata, undefined>>(null);
 	const diffTheme = useDiffTheme(orpc);
+	const codeIndex = useCodeIndexInteractions({ sessionId, orpc, codeViewRef });
 	const fileDiffCache = useRef(new Map<string, CachedFileDiff>());
 	const hiddenFileAnnotationCache = useRef(
 		new Map<string, CachedHiddenFileAnnotation>(),
@@ -645,7 +680,17 @@ export function DiffPane({
 			// in here only invalidated two items per click and dragged the whole
 			// memo (and every file's parse below) along with it. Selection reaches
 			// the pane through `scrollToPath`, not through rendering.
-			const baseVersionInput = `${file.fingerprint}:${diffStyle}:${reviewStatus}:${cardCollapsed ? "card-collapsed" : "card-expanded"}`;
+			// Folded into `baseVersionInput` (not left for `withPeekAnnotation`
+			// alone) so `hashItemVersion` actually changes for the one file whose
+			// annotations `withPeekAnnotation` is about to touch — pierre keys its
+			// own re-sync off `version`, not off `annotations`' reference, for an
+			// item whose version is unchanged (see this file's own doc comment on
+			// `resolveFileDiff`).
+			const peekVersionSuffix =
+				codeIndex.peekTarget?.path === file.path
+					? `peek:${codeIndex.peekTarget.occurrence.symbolKey}:${codeIndex.peekTarget.lineNumber}`
+					: "no-peek";
+			const baseVersionInput = `${file.fingerprint}:${diffStyle}:${reviewStatus}:${cardCollapsed ? "card-collapsed" : "card-expanded"}:${peekVersionSuffix}`;
 
 			if (file.binary) {
 				nextItems.push({
@@ -746,7 +791,11 @@ export function DiffPane({
 						id: file.path,
 						type: "diff",
 						fileDiff: keywordFileDiff,
-						annotations: EMPTY_DIFF_ANNOTATIONS,
+						annotations: withPeekAnnotation(
+							EMPTY_DIFF_ANNOTATIONS,
+							file.path,
+							codeIndex.peekTarget,
+						),
 						collapsed: cardCollapsed,
 						version: hashItemVersion(
 							`${baseVersionInput}:keyword:${matchSignature}`,
@@ -832,13 +881,17 @@ export function DiffPane({
 				continue;
 			}
 
-			const annotations = content.truncated
-				? resolveLoadFileAnnotations(
-						loadFileAnnotationCache.current,
-						file,
-						forcedPaths.has(file.path),
-					)
-				: EMPTY_DIFF_ANNOTATIONS;
+			const annotations = withPeekAnnotation(
+				content.truncated
+					? resolveLoadFileAnnotations(
+							loadFileAnnotationCache.current,
+							file,
+							forcedPaths.has(file.path),
+						)
+					: EMPTY_DIFF_ANNOTATIONS,
+				file.path,
+				codeIndex.peekTarget,
+			);
 
 			nextItems.push({
 				id: file.path,
@@ -876,6 +929,7 @@ export function DiffPane({
 		forcedPaths,
 		expandedHiddenPaths,
 		fileCollapse.overrides,
+		codeIndex.peekTarget,
 	]);
 
 	// Item ids are the file path directly (`id: file.path` above) — resolving
@@ -983,6 +1037,16 @@ export function DiffPane({
 					</div>
 				);
 			}
+			if (metadata.type === "code-index-peek") {
+				return (
+					<CodeIndexPeekPanel
+						onClose={codeIndex.closePeek}
+						orpc={orpc}
+						sessionId={sessionId}
+						target={metadata.target}
+					/>
+				);
+			}
 			if (metadata.stillTooLarge) {
 				return (
 					<div className="px-3 py-2 text-muted-foreground text-xs">
@@ -1004,16 +1068,16 @@ export function DiffPane({
 				</div>
 			);
 		},
-		[onForceLoad, handleShowHiddenFile],
+		[onForceLoad, handleShowHiddenFile, codeIndex.closePeek, orpc, sessionId],
 	);
 
 	const codeViewOptions: CodeViewOptions<DiffAnnotationMetadata, undefined> =
 		useMemo(
-			() =>
-				buildDiffCodeViewOptions({
+			() => ({
+				...buildDiffCodeViewOptions({
 					diffStyle,
 					enableLineSelection: true,
-					extraCSS: diffCardChromeCSS + highlightCSS,
+					extraCSS: diffCardChromeCSS + highlightCSS + codeIndex.tokenCSS,
 					overflow: wrapLines ? "wrap" : "scroll",
 					theme: diffTheme.theme,
 					onPostRender: (node, _instance, phase, context) => {
@@ -1030,8 +1094,13 @@ export function DiffPane({
 							context.item.id,
 							phase === "unmount" ? undefined : (node.shadowRoot ?? undefined),
 						);
+						if (phase !== "unmount") {
+							codeIndex.notifyItemRendered(context.item.id);
+						}
 					},
 				}),
+				...codeIndex.codeViewOptions,
+			}),
 			[
 				diffStyle,
 				wrapLines,
@@ -1039,6 +1108,9 @@ export function DiffPane({
 				itemMetadata,
 				highlightCSS,
 				onItemPostRender,
+				codeIndex.tokenCSS,
+				codeIndex.notifyItemRendered,
+				codeIndex.codeViewOptions,
 			],
 		);
 
