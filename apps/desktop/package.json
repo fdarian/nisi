@@ -68,7 +68,7 @@
 		"@tauri-apps/plugin-process": "^2.3.1",
 		"ai": "7.0.83",
 		"class-variance-authority": "^0.7.1",
-		"clsx": "^2.1.1",
+		"cn": "^0.2.3",
 		"deskkit": "github:fdarian/deskkit",
 		"devsess": "^0.3.0",
 		"drizzle-orm": "1.0.0-rc.5-169397b",
@@ -80,7 +80,6 @@
 		"react": "^19.2.8",
 		"react-dom": "^19.2.8",
 		"react-markdown": "^10.1.0",
-		"tailwind-merge": "^3.6.0",
 		"zustand": "^5.0.15"
 	},
 	"devDependencies": {
