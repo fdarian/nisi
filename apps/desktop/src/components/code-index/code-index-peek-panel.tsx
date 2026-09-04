@@ -59,23 +59,39 @@ export function CodeIndexPeekPanel({
 	const { openFile } = useSessionOpenFiles(sessionId);
 	const indexStatus = useCodeIndexStatus(orpc, sessionId);
 
-	const referencesQuery = useQuery(
-		orpc.codeIndex.references.queryOptions({
-			input: { sessionId, symbolKey: target.occurrence.symbolKey },
+	// `target.occurrence` is `undefined` when the peek was opened via
+	// `handleTokenClick`'s not-ready fallback (no index to resolve a symbol
+	// against yet) — there's no `symbolKey` to look references up by in that
+	// case, so the query stays disabled rather than firing with a made-up one.
+	const referencesQuery = useQuery({
+		...orpc.codeIndex.references.queryOptions({
+			input: { sessionId, symbolKey: target.occurrence?.symbolKey ?? "" },
 		}),
-	);
+		enabled: target.occurrence !== undefined,
+	});
 	const references = referencesQuery.data;
 
 	// The definition, when resolved, is what the left preview shows — falling
-	// back to the clicked occurrence's own location so the panel still shows
-	// *something* for a pure reference with no resolvable definition (a
-	// symbol from an external package, e.g.).
-	const previewLocation = references?.definition ?? {
-		path: target.path,
-		line: target.occurrence.line,
-		charStart: target.occurrence.charStart,
-		charEnd: target.occurrence.charEnd,
-	};
+	// back first to the clicked occurrence's own location (a pure reference
+	// with no resolvable definition, e.g. a symbol from an external package),
+	// and finally to the clicked token's own raw range when there's no
+	// occurrence at all (index not ready — see `target.occurrence`'s doc
+	// comment on `CodeIndexPeekTarget`).
+	const previewLocation =
+		references?.definition ??
+		(target.occurrence !== undefined
+			? {
+					path: target.path,
+					line: target.occurrence.line,
+					charStart: target.occurrence.charStart,
+					charEnd: target.occurrence.charEnd,
+				}
+			: {
+					path: target.path,
+					line: target.lineNumber - 1, // @pierre/diffs' 1-based -> SCIP's 0-based
+					charStart: target.charStart,
+					charEnd: target.charEnd,
+				});
 
 	const openReference = (path: string, line: number) => {
 		openFile(path, line + 1); // SCIP's 0-based line -> @pierre/diffs' 1-based
@@ -123,7 +139,11 @@ export function CodeIndexPeekPanel({
 				<div className="w-72 shrink-0">
 					<ScrollArea className="max-h-72">
 						<div className="p-2">
-							{referencesQuery.isLoading ? (
+							{target.occurrence === undefined ? (
+								<div className="px-1 py-6 text-center text-muted-foreground">
+									References will appear here once the code index is built.
+								</div>
+							) : referencesQuery.isLoading ? (
 								<div className="flex items-center justify-center gap-2 py-6 text-muted-foreground">
 									<Spinner className="size-3.5" />
 									Loading references…

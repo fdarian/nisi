@@ -10,6 +10,11 @@
  * `sessionId` (every open file tab, plus the diff pane, each call this) —
  * so "fetch it once per session" falls out of TanStack Query's normal
  * subscription sharing rather than needing its own singleton.
+ *
+ * `enabled` (default `true`) reaches straight through to `useQuery` — the
+ * SCIP code-navigation feature is opt-in per session
+ * (`useSessionCodeIndexEnabled`), and disabled means disabled: no request at
+ * all, not even this one-shot status read, while the toggle is off.
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback } from "react";
@@ -19,13 +24,18 @@ import type { SidecarQueryUtils } from "#/lib/backend-context";
 /** While a build is in flight, `status` is polled once a second so the peek's spinner/"Building…" state stays live; otherwise it's a plain one-shot fetch. */
 const BUILD_POLL_INTERVAL_MS = 1000;
 
-export function useCodeIndexStatus(orpc: SidecarQueryUtils, sessionId: string) {
+export function useCodeIndexStatus(
+	orpc: SidecarQueryUtils,
+	sessionId: string,
+	enabled = true,
+) {
 	const queryClient = useQueryClient();
 	const queryOptions = orpc.codeIndex.status.queryOptions({
 		input: { sessionId },
 	});
 	const statusQuery = useQuery({
 		...queryOptions,
+		enabled,
 		refetchInterval: (query) =>
 			query.state.data?.status === "building" ? BUILD_POLL_INTERVAL_MS : false,
 	});

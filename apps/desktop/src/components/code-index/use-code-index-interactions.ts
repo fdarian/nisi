@@ -7,6 +7,20 @@
  * fragment into their own `CodeView` options and read `peekTarget`/`closePeek`
  * to decide whether (and where) to render a `CodeIndexPeekPanel` annotation.
  * Nothing here renders anything itself; it only produces state and callbacks.
+ *
+ * `enabled` (from `useSessionCodeIndexEnabled`, defaults off every session —
+ * see `session-ui-store.tsx`) is a real gate, not just a flag that skips the
+ * callbacks: when it's false, this hook makes no `codeIndex.status` request,
+ * requests no file's occurrences, attaches no keydown/keyup listeners, and
+ * its returned `codeViewOptions` is `{}` — spreading in nothing, so the
+ * consumer's own `CodeView` never even learns these callbacks exist. The one
+ * piece a caller must *also* gate itself is `useTokenTransformer` at the
+ * `WorkerPoolContextProvider` level (`diff-view-theme.ts`'s
+ * `diffHighlighterOptions` vs. `diffHighlighterOptionsWithTokenInteractions`,
+ * chosen via `DiffCodeView`'s `highlighterOptions` prop) — that's what
+ * actually avoids the per-token `data-char` wrapping cost, and it can't be
+ * expressed as a per-item `CodeViewOptions` field alone (see that constant's
+ * own doc comment for why).
  */
 import type {
 	CodeViewOptions,
@@ -14,7 +28,7 @@ import type {
 	TokenEventBase,
 } from "@pierre/diffs";
 import type { CodeViewHandle } from "@pierre/diffs/react";
-import type { CodeIndexOccurrence } from "@repo/sidecar-api";
+import type { CodeIndexOccurrence, CodeIndexStatus } from "@repo/sidecar-api";
 import { useQueries } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -22,7 +36,21 @@ import {
 	findOccurrenceForToken,
 	type OccurrenceIndex,
 } from "#/components/code-index/occurrence-index";
+import { useCodeIndexStatus } from "#/components/code-index/use-code-index-status";
 import type { SidecarQueryUtils } from "#/lib/backend-context";
+
+/**
+ * Statuses `handleTokenClick` (below) treats as "the index exists in some
+ * form, or could — a ⌘-click should still surface the peek so its
+ * build/rebuild affordance is reachable" — mirrors `code-index-peek-panel.tsx`'s
+ * `IndexStatusBanner`, which already renders a distinct affordance for each.
+ * `unsupported` is deliberately excluded — the feature stays invisible there
+ * by design (no tsconfig means nothing here could ever resolve); `ready`
+ * is excluded too, since a `ready` index that still failed to match a token
+ * means the click genuinely wasn't on an indexed symbol.
+ */
+const INDEX_NOT_READY_STATUSES: ReadonlySet<CodeIndexStatus["status"]> =
+	new Set(["absent", "stale", "building", "failed"]);
 
 /** Class toggled directly on a token's `HTMLElement` — `@pierre/diffs` has no keyed decoration API, so this is the supported way to style one token (see `InteractionManager`'s own doc). Styled via `extraCSS`/`unsafeCSS` in each pane's `CodeViewOptions` — see `CODE_INDEX_TOKEN_CSS` below. */
 export const CODE_INDEX_TOKEN_ACTIVE_CLASS = "nisi-code-index-token-active";
@@ -37,13 +65,28 @@ export const CODE_INDEX_TOKEN_CSS = `
 	}
 `;
 
-/** One resolved ⌘-click, everything `CodeIndexPeekPanel` needs to render without re-deriving it from the DOM event that opened it. */
+/**
+ * One resolved ⌘-click, everything `CodeIndexPeekPanel` needs to render
+ * without re-deriving it from the DOM event that opened it. `charStart`/
+ * `charEnd` are the clicked token's own range (0-based, SCIP's coordinate
+ * space — see `occurrence-index.ts`) — carried alongside `occurrence` rather
+ * than only inside it, since they're what the panel falls back to anchoring
+ * its source preview on when `occurrence` is `undefined`.
+ *
+ * `occurrence` is optional, not defaulted to a placeholder: a ⌘-click while
+ * the index is `absent`/`stale`/`building`/`failed` still opens the peek
+ * (`handleTokenClick`, below) so its build/rebuild affordance is reachable,
+ * but there's genuinely no occurrence to report in that case — inventing one
+ * would be a lie the panel would have to un-tell.
+ */
 export type CodeIndexPeekTarget = {
 	/** The file the clicked token lives in — the peek annotation anchors here. */
 	path: string;
 	/** 1-based — `@pierre/diffs`' own line-numbering, already converted from SCIP's 0-based `occurrence.line`. */
 	lineNumber: number;
-	occurrence: CodeIndexOccurrence;
+	charStart: number;
+	charEnd: number;
+	occurrence: CodeIndexOccurrence | undefined;
 };
 
 /**
@@ -92,42 +135,87 @@ function isDeletionsSideToken(props: TokenProps): boolean {
 	return "side" in props && props.side === "deletions";
 }
 
+/** A fragment with none of this feature's callbacks/options set — what `codeViewOptions` resolves to while `enabled` is false, so spreading it into the pane's own options changes nothing at all. */
+const DISABLED_CODE_VIEW_OPTIONS = {};
+
 type UseCodeIndexInteractionsOptions<Metadata> = {
 	sessionId: string;
 	orpc: SidecarQueryUtils;
 	/** The `CodeView` this hook drives — read only for `getInstance().getRenderedItems()`, to resolve which file a token event belongs to. */
 	codeViewRef: React.RefObject<CodeViewHandle<Metadata> | null>;
+	/** From `useSessionCodeIndexEnabled` — the whole feature's real on/off switch. See this module's own doc comment for exactly what turns off. */
+	enabled: boolean;
 };
 
 export function useCodeIndexInteractions<Metadata>({
 	sessionId,
 	orpc,
 	codeViewRef,
+	enabled,
 }: UseCodeIndexInteractionsOptions<Metadata>): {
-	/** Spread into the pane's own `CodeViewOptions`. */
+	/** Spread into the pane's own `CodeViewOptions` — `{}` while `enabled` is false. */
 	codeViewOptions: Pick<
 		CodeViewOptions<Metadata>,
 		"onTokenEnter" | "onTokenLeave" | "onTokenClick" | "useTokenTransformer"
 	>;
-	/** Appended to `unsafeCSS`/`extraCSS` — see `CODE_INDEX_TOKEN_CSS`. */
+	/** Appended to `unsafeCSS`/`extraCSS` — see `CODE_INDEX_TOKEN_CSS`. Empty while `enabled` is false. */
 	tokenCSS: string;
-	/** Call from the pane's own `onPostRender` for every non-`"unmount"` phase — lazily requests that item's occurrences once it's actually rendered, never per token. */
+	/** Call from the pane's own `onPostRender` for every non-`"unmount"` phase — lazily requests that item's occurrences once it's actually rendered, never per token. No-op while `enabled` is false. */
 	notifyItemRendered: (path: string) => void;
 	peekTarget: CodeIndexPeekTarget | null;
 	closePeek: () => void;
+	/**
+	 * `codeIndex.status` — exposed here too (rather than only inside
+	 * `CodeIndexPeekPanel`) since `handleTokenClick`'s fallback-open below
+	 * already needs it. `undefined` while `enabled` is false (the query
+	 * itself is disabled — see this module's own doc comment).
+	 */
+	indexStatus: CodeIndexStatus | undefined;
+	buildIndex: () => void;
+	isBuildStarting: boolean;
+	/**
+	 * `enabled` narrowed by "and not a known-`unsupported` repo" — what the
+	 * consumer's own `<DiffCodeView highlighterOptions>` choice
+	 * (`diffHighlighterOptions` vs. `diffHighlighterOptionsWithTokenInteractions`,
+	 * `diff-view-theme.ts`) should actually key off, since paying the
+	 * per-token `data-char` wrapping cost for a repo this feature could never
+	 * work in would be exactly the waste the toggle exists to avoid.
+	 */
+	tokenInteractionsActive: boolean;
 } {
+	const indexStatusQuery = useCodeIndexStatus(orpc, sessionId, enabled);
+	// The toggle being on isn't the whole story once status resolves: an
+	// `unsupported` repo (no tsconfig) has nothing this feature could ever
+	// index, so every `fileOccurrences` request would just come back empty —
+	// harmless, but exactly the waste the toggle exists to avoid. `active`
+	// self-corrects the moment that's known, without needing the toggle
+	// itself flipped back off (`files-changed-view.tsx` does that
+	// separately, once, so the checkbox stays hidden from then on). Stays
+	// `true` until the status query actually resolves — a brief window right
+	// after enabling where a few `fileOccurrences` requests could still fire
+	// for an unsupported repo before this narrows; self-limiting, not worth
+	// blocking on.
+	const active = enabled && indexStatusQuery.status?.status !== "unsupported";
+
 	// Paths whose occurrences have been requested — grows via
 	// `notifyItemRendered` (called from each pane's own `onPostRender`), so a
 	// file only ever costs one `fileOccurrences` round trip, made once it's
 	// actually rendered rather than for every file in a possibly-huge diff.
+	// Never grows while `enabled` is false (`notifyItemRendered` no-ops), so
+	// `requestedPathList` — and therefore `queries` below — stays empty and
+	// no `fileOccurrences` request ever fires.
 	const [requestedPaths, setRequestedPaths] = useState<ReadonlySet<string>>(
 		() => new Set(),
 	);
-	const notifyItemRendered = useCallback((path: string) => {
-		setRequestedPaths((current) =>
-			current.has(path) ? current : new Set(current).add(path),
-		);
-	}, []);
+	const notifyItemRendered = useCallback(
+		(path: string) => {
+			if (!active) return;
+			setRequestedPaths((current) =>
+				current.has(path) ? current : new Set(current).add(path),
+			);
+		},
+		[active],
+	);
 
 	const requestedPathList = useMemo(
 		() => Array.from(requestedPaths),
@@ -230,8 +318,11 @@ export function useCodeIndexInteractions<Metadata>({
 	// The underline must react to ⌘ going up/down even when the pointer
 	// hasn't moved since — so this listens globally rather than relying on
 	// `onTokenEnter`/`onTokenLeave` alone. `blur` covers ⌘-Tab, which leaves
-	// no `keyup` for the key that was held when focus left.
+	// no `keyup` for the key that was held when focus left. Attaches nothing
+	// at all while `enabled` is false — part of "off costs exactly what it
+	// cost before this feature existed" (this module's own doc comment).
 	useEffect(() => {
+		if (!active) return;
 		const applyMetaHeld = (held: boolean) => {
 			metaHeldRef.current = held;
 			const hovered = hoveredTokenRef.current;
@@ -252,7 +343,7 @@ export function useCodeIndexInteractions<Metadata>({
 			window.removeEventListener("keyup", handleKeyUp);
 			window.removeEventListener("blur", handleBlur);
 		};
-	}, []);
+	}, [active]);
 
 	const [peekTarget, setPeekTarget] = useState<CodeIndexPeekTarget | null>(
 		null,
@@ -281,6 +372,7 @@ export function useCodeIndexInteractions<Metadata>({
 
 	const handleTokenEnter = useCallback(
 		(props: TokenProps, event: PointerEvent) => {
+			if (!active) return;
 			if (isDeletionsSideToken(props)) return;
 			const path = resolvePath(event);
 			if (path === undefined) return;
@@ -294,7 +386,7 @@ export function useCodeIndexInteractions<Metadata>({
 			};
 			recomputeHoveredOccurrence();
 		},
-		[resolvePath, notifyItemRendered, recomputeHoveredOccurrence],
+		[active, resolvePath, notifyItemRendered, recomputeHoveredOccurrence],
 	);
 
 	const handleTokenLeave = useCallback((props: TokenProps) => {
@@ -309,6 +401,7 @@ export function useCodeIndexInteractions<Metadata>({
 
 	const handleTokenClick = useCallback(
 		(props: TokenProps, event: MouseEvent) => {
+			if (!active) return;
 			if (!event.metaKey) return;
 			if (isDeletionsSideToken(props)) return;
 			const path = resolvePath(event);
@@ -323,15 +416,35 @@ export function useCodeIndexInteractions<Metadata>({
 							props.lineCharStart,
 							props.lineCharEnd,
 						);
-			if (occurrence === undefined) return;
+			// No occurrence match doesn't necessarily mean "not a symbol" — it
+			// can just as easily mean "no index to match against yet". Surface
+			// the peek anyway when the index is in one of those recoverable
+			// states, so its build/rebuild affordance is reachable from a ⌘-click
+			// even before an index has ever been built.
+			const indexNotReady =
+				indexStatusQuery.status !== undefined &&
+				INDEX_NOT_READY_STATUSES.has(indexStatusQuery.status.status);
+			if (occurrence === undefined && !indexNotReady) return;
 			event.preventDefault();
-			setPeekTarget({ path, lineNumber: props.lineNumber, occurrence });
+			setPeekTarget({
+				path,
+				lineNumber: props.lineNumber,
+				charStart: props.lineCharStart,
+				charEnd: props.lineCharEnd,
+				occurrence,
+			});
 		},
-		[resolvePath, occurrenceIndexByPath],
+		[active, resolvePath, occurrenceIndexByPath, indexStatusQuery.status],
 	);
 
-	const codeViewOptions = useMemo(
-		() => ({
+	const codeViewOptions = useMemo(():
+		| Pick<
+				CodeViewOptions<Metadata>,
+				"onTokenEnter" | "onTokenLeave" | "onTokenClick" | "useTokenTransformer"
+		  >
+		| typeof DISABLED_CODE_VIEW_OPTIONS => {
+		if (!active) return DISABLED_CODE_VIEW_OPTIONS;
+		return {
 			// `@pierre/diffs` only emits the per-token `data-char` attribute its
 			// own `InteractionManager.resolvePointerTarget` hit-tests against
 			// (`utils/wrapTokenFragments.js`) when `shouldUseTokenTransformer`
@@ -359,18 +472,21 @@ export function useCodeIndexInteractions<Metadata>({
 			onTokenEnter: handleTokenEnter,
 			onTokenLeave: handleTokenLeave,
 			onTokenClick: handleTokenClick,
-		}),
-		[handleTokenEnter, handleTokenLeave, handleTokenClick],
-	) as Pick<
-		CodeViewOptions<Metadata>,
-		"onTokenEnter" | "onTokenLeave" | "onTokenClick" | "useTokenTransformer"
-	>;
+		} as Pick<
+			CodeViewOptions<Metadata>,
+			"onTokenEnter" | "onTokenLeave" | "onTokenClick" | "useTokenTransformer"
+		>;
+	}, [active, handleTokenEnter, handleTokenLeave, handleTokenClick]);
 
 	return {
 		codeViewOptions,
-		tokenCSS: CODE_INDEX_TOKEN_CSS,
+		tokenCSS: active ? CODE_INDEX_TOKEN_CSS : "",
 		notifyItemRendered,
 		peekTarget,
 		closePeek,
+		indexStatus: indexStatusQuery.status,
+		buildIndex: indexStatusQuery.build,
+		isBuildStarting: indexStatusQuery.isBuildStarting,
+		tokenInteractionsActive: active,
 	};
 }
