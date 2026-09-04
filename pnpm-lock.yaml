@@ -500,6 +500,25 @@ importers:
         specifier: 7.0.2
         version: 7.0.2
 
+  packages/code-lsp:
+    dependencies:
+      effect:
+        specifier: 'catalog:'
+        version: 4.0.0-rc.112
+      typescript:
+        specifier: 7.0.2
+        version: 7.0.2
+    devDependencies:
+      '@effect/platform-bun':
+        specifier: 'catalog:'
+        version: 4.0.0-rc.112(effect@4.0.0-rc.112)
+      '@total-typescript/tsconfig':
+        specifier: 1.0.4
+        version: 1.0.4
+      '@types/bun':
+        specifier: 1.3.14
+        version: 1.3.14
+
   packages/db:
     dependencies:
       '@effect/sql-sqlite-bun':
