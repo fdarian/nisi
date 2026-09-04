@@ -71,6 +71,15 @@ type SessionUiState = {
 	 * file's content actually loading.
 	 */
 	pendingFileScrollLines: ReadonlyMap<string, number>;
+	/**
+	 * SCIP code-navigation (⌘-hover underline, ⌘-click peek) is opt-in per
+	 * session and defaults off *every* session, deliberately not persisted —
+	 * unlike `hideReviewed`/`wrapLines`/etc. (`settings-data.ts`), which are
+	 * sticky preferences, this one costs something real whenever it's on
+	 * (`useCodeIndexInteractions`'s own doc comment), so a new tab starting
+	 * cold each time is the point, not a gap.
+	 */
+	codeIndexEnabled: boolean;
 	walkthroughSelection: WalkthroughSelection | null;
 	/** Browser-style back/forward history (⌘[/⌘]) for this PR session — see `#/lib/navigation-history.ts` for transition semantics. Always a fresh, immutable value from that module's pure functions, never mutated in place. */
 	navigationHistory: NavigationHistoryState;
@@ -99,6 +108,7 @@ function createDefaultSessionUiState(): SessionUiState {
 		activeTab: "files",
 		openFiles: EMPTY_OPEN_FILES,
 		pendingFileScrollLines: EMPTY_PENDING_FILE_SCROLL_LINES,
+		codeIndexEnabled: false,
 		walkthroughSelection: null,
 		undoStack: [],
 		navigationHistory: createNavigationHistory({
@@ -171,6 +181,7 @@ type SessionUiStore = {
 	closeFile: (sessionId: string, path: string) => void;
 	/** Consumes one path's pending scroll target — see `SessionUiState.pendingFileScrollLines`'s doc comment. */
 	clearPendingFileScrollLine: (sessionId: string, path: string) => void;
+	setCodeIndexEnabled: (sessionId: string, enabled: boolean) => void;
 	setWalkthroughSelection: (
 		sessionId: string,
 		selection: WalkthroughSelection | null,
@@ -381,6 +392,13 @@ function createSessionUiStore(): StoreApi<SessionUiStore> {
 					next.delete(path);
 					return { ...session, pendingFileScrollLines: next };
 				}),
+			})),
+		setCodeIndexEnabled: (sessionId, enabled) =>
+			set((state) => ({
+				sessions: withSession(state.sessions, sessionId, (session) => ({
+					...session,
+					codeIndexEnabled: enabled,
+				})),
 			})),
 		setWalkthroughSelection: (sessionId, selection) =>
 			set((state) => ({
@@ -741,6 +759,26 @@ export function useSessionFileScrollTarget(
 		[clearAction, sessionId, path],
 	);
 	return [targetLine, clear] as const;
+}
+
+/** The SCIP code-navigation opt-in toggle — see `SessionUiState.codeIndexEnabled`'s doc comment for why this defaults off every session rather than living in `settings-data.ts`. */
+export function useSessionCodeIndexEnabled(
+	sessionId: string,
+): readonly [boolean, (enabled: boolean) => void] {
+	const store = useSessionUiStore();
+	const enabled = useStore(
+		store,
+		(state) => state.sessions.get(sessionId)?.codeIndexEnabled ?? false,
+	);
+	const setCodeIndexEnabledAction = useStore(
+		store,
+		(state) => state.setCodeIndexEnabled,
+	);
+	const setEnabled = useCallback(
+		(next: boolean) => setCodeIndexEnabledAction(sessionId, next),
+		[setCodeIndexEnabledAction, sessionId],
+	);
+	return [enabled, setEnabled] as const;
 }
 
 export function useSessionWalkthroughSelection(
