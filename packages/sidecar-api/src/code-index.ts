@@ -4,15 +4,23 @@ import { Schema } from "effect";
 /**
  * `status`'s outcome, six mutually exclusive states rather than a
  * boolean-plus-flags pile, since the UI needs to render a genuinely
- * different affordance for each: `unsupported` — no `tsconfig*.json`
- * anywhere in the repo, so there's nothing for scip-typescript to index (no
- * build button at all); `absent` — supported, but never built (a "build
- * index" prompt); `building` — a `build` call is in flight (a spinner, no
- * new `build` needed); `ready` — the cached index matches the repo's
- * current head exactly; `stale` — a cached index exists but for an older
- * head (an "index out of date, rebuild?" affordance, while still usable for
- * `fileOccurrences`/`references` in the meantime); `failed` — the most
- * recent `build` errored, with nothing usable cached.
+ * different affordance for each. Backed by a live `tsc --lsp --stdio`
+ * process per tsconfig project (`@repo/code-lsp`), not a static on-disk
+ * index — see `apps/desktop/sidecar/code-index/state.ts` for the exact
+ * derivation. `unsupported` — no `tsconfig.json` anywhere in the repo, so
+ * there's no project for a server to spawn against at all (no build button);
+ * `absent` — supported, but `build` has never been called this session (a
+ * "build index" prompt); `building` — a `build` call is spawning/
+ * initializing a server (a spinner, no new `build` needed); `ready` — that
+ * spawn/initialize last succeeded; `failed` — it last failed (a binary
+ * resolution or process-spawn problem — see `describeBuildFailure`).
+ * **`stale` is never emitted.** It existed only for a static index that
+ * could disagree with a repo that moved past the head it was built for — a
+ * live server has no such staleness to report, since it answers every query
+ * by reading the file straight off disk at query time (see
+ * `CodeIndexReference.lineText`'s own doc comment below). The literal stays
+ * in this schema only so the wire type doesn't change shape out from under
+ * any code that still matches on it.
  */
 export const CodeIndexStatusKind = Schema.Literals([
 	"unsupported",
@@ -27,16 +35,18 @@ export type CodeIndexStatusKind = Schema.Schema.Type<
 >;
 
 /**
- * `indexedHeadSha`/`generatedAt` describe whatever index is cached right
- * now, if any — both `null` for `unsupported`/`absent`, and for `building`
- * or `failed` when nothing has ever built successfully. They stay populated
- * for `building`/`failed` when an *older* successful build exists (a
- * rebuild in flight, or one that just failed, doesn't discard the index
- * still on disk from before), which is also what lets `fileOccurrences`/
- * `references` keep answering from a `stale` index while a fresher one
- * builds. `documentCount` is populated only for `ready` — a `stale` index
- * is still queryable, but its document count isn't surfaced as current
- * information here. `failureMessage` is populated only for `failed`.
+ * `indexedHeadSha`/`generatedAt` describe the last successful `build` for
+ * this repo's primary tsconfig project, if any — both `null` for
+ * `unsupported`/`absent`/`failed` (nothing has ever succeeded to describe;
+ * see `apps/desktop/sidecar/code-index/state.ts`'s `buildStates`, which
+ * doesn't retain a prior success once a later `build` fails, unlike the old
+ * on-disk cache this replaced). `indexedHeadSha` mirrors `headSha` exactly
+ * whenever it's populated — there's no separate index revision to disagree
+ * with it anymore, since a live server always answers against whatever's on
+ * disk right now, not a snapshot taken at some earlier head. `documentCount`
+ * is always `null` — the LSP server has no "how many files does this cover"
+ * concept to report; every query is scoped to one file or one symbol, never
+ * the whole project. `failureMessage` is populated only for `failed`.
  */
 export const CodeIndexStatus = Schema.Struct({
 	status: CodeIndexStatusKind,
@@ -48,7 +58,24 @@ export const CodeIndexStatus = Schema.Struct({
 });
 export type CodeIndexStatus = Schema.Schema.Type<typeof CodeIndexStatus>;
 
-/** One occurrence in a file — `symbolKey` is an opaque token, meaningful only as `references`' input, never parsed client-side. `hasDefinition`/`referenceCount` are index-wide (not "in this file"), computed once so a hover doesn't need a second round trip to know whether "Go to definition" would find anything. */
+/**
+ * One occurrence in a file — `symbolKey` is an opaque token, meaningful only
+ * as `references`' input, never parsed client-side (it's an encoded
+ * `path:line:char` position now, not a SCIP symbol string — still opaque to
+ * every caller either way, so this is not a breaking change to this schema).
+ * `hasDefinition` is `true` unconditionally: every occurrence here came from
+ * a real semantic token (`textDocument/semanticTokens/full`), and
+ * TypeScript's own token classifier only ever labels named bindings — see
+ * `apps/desktop/sidecar/code-index/state.ts`'s `buildFileOccurrencesResponse`.
+ * There is no `referenceCount` field — the SCIP index computed it for free
+ * as an index-wide number; an LSP server would need one `references` round
+ * trip per token to answer it, and nothing on the frontend reads it (verified
+ * before dropping it, not assumed), so it was removed outright rather than
+ * populated with a fabricated `0`. The peek panel's reference count
+ * (`CodeIndexReferencesResult.totalReferenceCount`) is unaffected — that one
+ * *is* the result of a real `references` call, made only once a symbol is
+ * actually opened.
+ */
 export const CodeIndexOccurrence = Schema.Struct({
 	line: Schema.Number,
 	charStart: Schema.Number,
@@ -56,7 +83,6 @@ export const CodeIndexOccurrence = Schema.Struct({
 	symbolKey: Schema.String,
 	isDefinition: Schema.Boolean,
 	hasDefinition: Schema.Boolean,
-	referenceCount: Schema.Number,
 });
 export type CodeIndexOccurrence = Schema.Schema.Type<
 	typeof CodeIndexOccurrence
@@ -75,15 +101,15 @@ export type CodeIndexLocation = Schema.Schema.Type<typeof CodeIndexLocation>;
  * than making the frontend fetch each file separately, since the peek
  * preview needs to render immediately for every entry in the list.
  *
- * `lineText` is `null` when the sidecar can't vouch for it: scip-typescript
- * indexes the working tree at build time, and the cache's staleness check
- * only tracks *committed* head-sha movement (see `CodeIndexStatus`'s doc) —
- * an edit to the file after the index was built (committed or not) can
- * shift every later line without ever moving `headSha`, so a `"ready"`
- * index can still disagree with what's actually on disk for a specific
- * location. The sidecar detects this per location (comparing the occurrence's
- * `[charStart, charEnd)` slice against the symbol's own name) rather than
- * ever rendering text it knows doesn't match.
+ * `lineText` is `null` only when the sidecar genuinely couldn't read it —
+ * the file is gone, or the recorded line no longer exists in a file that
+ * got shorter (`apps/desktop/sidecar/code-index/state.ts`'s
+ * `groupReferencesByFile`). There's no drift case to guard against anymore:
+ * the LSP server that produced this location and the worktree read that
+ * produced `lineText` both read the same live file off disk, at query time —
+ * unlike the SCIP index this replaced, which was built once and could
+ * silently disagree with a file edited afterward. See `CodeIndexStatus`'s
+ * own doc comment on why `"stale"` is retired for the same reason.
  */
 export const CodeIndexReference = Schema.Struct({
 	line: Schema.Number,
@@ -107,15 +133,16 @@ export type CodeIndexFileReferences = Schema.Schema.Type<
  * `lines[definition.line - startLine]`. Carried here rather than making the
  * frontend fetch the whole file itself: a separate `file.get` call reads
  * through `Store.readCurrentContent`'s `includeUncommitted` gate, which is a
- * *diff-scoping* preference with no authority over what a SCIP index means
- * — scip-typescript always indexes the working tree, so a preview read any
- * other way can describe a different revision than the one `definition`'s
- * position was computed against, which is indistinguishable from genuine
- * drift and defeats the whole point of checking for it (rebuilding can
- * never clear a mismatch that was never real staleness to begin with). This
- * field is always read the same way `CodeIndexReference.lineText` is —
- * worktree-unconditional, verified with the same check — so both halves of
- * a peek agree on their source.
+ * *diff-scoping* preference with no authority over what the LSP server's
+ * positions mean — it always reads the working tree, so a preview read any
+ * other way could describe a different revision than the one `definition`'s
+ * position was resolved against. This field is always read the same
+ * worktree-unconditional way `CodeIndexReference.lineText` is (`@repo/git`'s
+ * `readWorktreeBlobContent`, via `readWorktreeFileContents` in
+ * `apps/desktop/sidecar/code-index/state.ts`), so both halves of a peek
+ * agree on their source. `null` only when there's no `definition` at all,
+ * or its file couldn't be read — see `CodeIndexReferencesResult`'s own doc
+ * comment.
  */
 export const CodeIndexSourceContext = Schema.Struct({
 	startLine: Schema.Number,
@@ -133,7 +160,7 @@ export type CodeIndexSourceContext = Schema.Schema.Type<
  * symbol (an exported type, a common utility) can have thousands.
  *
  * `definitionContext` is `null` both when there's no `definition` to begin
- * with and when there is one but it didn't check out fresh — same "no
+ * with and when there is one but its file couldn't be read — same "no
  * reliable preview" meaning `CodeIndexReference.lineText: null` carries;
  * `definition` itself stays populated either way; only the *text* preview
  * is withheld.
@@ -163,14 +190,22 @@ export const codeIndexContract = {
 		.output(CodeIndexStatus)
 		.errors({ NOT_FOUND: {}, INTERNAL_SERVER_ERROR: {} }),
 	/**
-	 * Starts a build for `sessionId`'s repo and returns immediately —
-	 * `status` is what reports progress. A second `build` call while one's
-	 * already running for this repo is a no-op, not an error: the existing
-	 * build keeps going and the caller just polls the same `status` every
-	 * other caller would. Not a streaming procedure on purpose — a ~15s job
-	 * polled once a second is cheap enough that it doesn't earn the
-	 * `eventIterator`/async-generator handler shape `walkthrough.generate`
-	 * needs for genuinely live, multi-event progress.
+	 * Spawns/initializes a `tsc --lsp --stdio` server for `sessionId`'s
+	 * repo's primary tsconfig project and returns immediately — `status` is
+	 * what reports progress. A second `build` call while one's already
+	 * running for this repo is a no-op, not an error: the existing attempt
+	 * keeps going and the caller just polls the same `status` every other
+	 * caller would. Not a streaming procedure on purpose — a cold spawn plus
+	 * `initialize` is on the order of tens of milliseconds (measured against
+	 * `@repo/code-lsp`), cheap enough polled once a second that it doesn't
+	 * earn the `eventIterator`/async-generator handler shape
+	 * `walkthrough.generate` needs for genuinely live, multi-event progress.
+	 * `fileOccurrences`/`references` don't depend on
+	 * this having been called at all — each spawns its own project's server
+	 * lazily on first use regardless (see
+	 * `apps/desktop/sidecar/code-index/state.ts`) — `build` only exists to
+	 * give the UI something to show progress against and to keep one
+	 * concrete project warm ahead of time.
 	 */
 	build: oc
 		.input(Schema.Struct({ sessionId: Schema.String }))
@@ -185,8 +220,10 @@ export const codeIndexContract = {
 	 * is a purely local lookup against the response rather than a round trip
 	 * per token — that's the whole reason this is shaped per-file instead of
 	 * per-position. Empty (not an error) both for a file with no TypeScript
-	 * symbols and for a repo with no index built yet — `status` is where a
-	 * caller learns which case it is.
+	 * symbols and for a file with no tsconfig project above it, or whose
+	 * project's server failed to spawn — `status` reports the repo-level
+	 * picture, but this procedure itself never fails just because indexing
+	 * isn't available for the requested file.
 	 */
 	fileOccurrences: oc
 		.input(Schema.Struct({ sessionId: Schema.String, path: Schema.String }))
@@ -194,10 +231,10 @@ export const codeIndexContract = {
 		.errors({ NOT_FOUND: {}, INTERNAL_SERVER_ERROR: {} }),
 	/**
 	 * `symbolKey` is always one echoed back by a prior `fileOccurrences`
-	 * call. A `symbolKey` the index doesn't recognize (stale from an
-	 * old index, e.g.) degrades to an empty result rather than an error —
-	 * the same "absence is a value, not a failure" choice `fileOccurrences`
-	 * makes for a repo with no index.
+	 * call. A `symbolKey` this sidecar can no longer resolve (malformed, or
+	 * its file's project can't be found/spawned) degrades to an empty result
+	 * rather than an error — the same "absence is a value, not a failure"
+	 * choice `fileOccurrences` makes for a file with nothing indexable.
 	 */
 	references: oc
 		.input(

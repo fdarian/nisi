@@ -7,7 +7,7 @@ Git/review procedures sit alongside `health.check`.
 - `health.ts`, `sessions.ts`, `diff.ts`, `review.ts`, `events.ts`, `walkthrough.ts`, `chat.ts`,
   `settings.ts`, `code-index.ts` — schema + procedure contract per domain
   (`packages/sidecar-api/src/<domain>.ts`), each just types — no git/SQLite/agent logic lives here,
-  that's `@repo/git`/`@repo/review`/`@repo/walkthrough`/`@repo/harness-local`/`@repo/settings`/`@repo/code-index`,
+  that's `@repo/git`/`@repo/review`/`@repo/walkthrough`/`@repo/harness-local`/`@repo/settings`/`@repo/code-lsp`,
   consumed only by the sidecar's implementation. `walkthrough.ts` redeclares `@repo/walkthrough`'s
   `Location`/`ReferenceBlock`/`Section`/`Walkthrough` rather than importing them, same as
   `diff.ts` mirrors `@repo/git`'s `FileChange` — this package stays dependency-free from every
@@ -15,9 +15,10 @@ Git/review procedures sit alongside `health.check`.
   type": there's no `HarnessId` in any domain package to mirror (`@repo/settings` deliberately
   stores it as a loose `string[]`, per its own AGENTS.md), so `HarnessId` here is sidecar-api's own
   invention, defined once in `walkthrough.ts` and imported by both rather than redeclared.
-  `code-index.ts`'s `symbolKey` fields are opaque strings (`@repo/code-index`'s branded
-  `SymbolKey`, unwrapped to a plain `string` at the wire boundary) — meaningful only as
-  `codeIndex.references`' input, never parsed client-side.
+  `code-index.ts`'s `symbolKey` fields are opaque strings — an encoded `path:line:char` position
+  (`apps/desktop/sidecar/code-index/state.ts`'s `encodeSymbolKey`/`decodeSymbolKey`), not a type this
+  package or `@repo/code-lsp` names anywhere — meaningful only as `codeIndex.references`' input,
+  never parsed client-side.
 - `contract.ts` — composes domain contracts into the router; owns the two
   `@orpc/experimental-effect/extensions/*` side-effect imports. These **must** run before any domain
   module calls `oc.input()`/`oc.output()` — every domain module is imported only from here, never
