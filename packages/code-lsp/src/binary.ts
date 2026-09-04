@@ -20,15 +20,22 @@ const isCompiledBinary = (): boolean =>
 	import.meta.url.startsWith(COMPILED_URL_PREFIX);
 
 /**
- * Filename Tauri bundles the platform `tsc` binary under, as a sibling of
- * the sidecar executable in the packaged app's `Contents/MacOS/` — a third
- * `externalBin` alongside `sidecar`/`nisi-cli`. That packaging change is a
- * later phase; until it lands, a compiled sidecar has no sibling to find and
- * {@link resolveCompiledBinary} fails with a clear error rather than
- * silently falling back to the dev strategy (which cannot work compiled —
- * see this package's AGENTS.md).
+ * Where `apps/desktop/scripts/build-lsp-binary.ts` stages the platform
+ * `tsc` binary plus every `lib.*.d.ts` file it needs as direct siblings on
+ * disk (see this package's AGENTS.md, "The TS7 binary needs its
+ * `lib.*.d.ts` files as siblings") — a directory, not a bare `externalBin`.
+ * `tauri.build.conf.json`'s `bundle.macOS.files` copies that whole
+ * directory into the packaged app's `Contents/Resources/ts-lsp/` at build
+ * time. **Not** `Contents/MacOS/` alongside `sidecar`/`nisi-cli`: `codesign`
+ * treats every file under `Contents/MacOS/` as a nested code object
+ * requiring its own signature, and a plain-text `.d.ts` file there breaks
+ * signing the whole app — reproduced against a real `tauri build`.
+ * {@link resolveCompiledBinary} walks up from `process.execPath`
+ * (`Contents/MacOS/sidecar`) to `Contents/`, then down into
+ * `Resources/ts-lsp/ts-lsp`.
  */
-const COMPILED_SIBLING_NAME = "ts-lsp";
+const COMPILED_RESOURCE_DIR = "ts-lsp";
+const COMPILED_BINARY_NAME = "ts-lsp";
 
 /**
  * Dev-only. `typescript/lib/getExePath.js` resolves the exact platform
@@ -62,20 +69,29 @@ const resolveDevBinary = (): Effect.Effect<
  * `import.meta.url` (rewritten to a virtual `/$bunfs/...` path with nothing
  * on disk beside it) and calls `import.meta.resolve` on a
  * dynamically-computed specifier, which Bun's bundler has nothing to embed
- * for at build time. The only option left is the sibling binary Tauri
- * bundles next to the sidecar executable — see {@link COMPILED_SIBLING_NAME}.
+ * for at build time. The only option left is the bundled resource directory
+ * Tauri packages alongside the app — see {@link COMPILED_RESOURCE_DIR}.
+ * `process.execPath` is `.../Contents/MacOS/sidecar` in a packaged app (it
+ * returns the real on-disk path even compiled, unlike `import.meta.url`),
+ * so its grandparent is `Contents/`.
  */
 const resolveCompiledBinary = (): Effect.Effect<
 	string,
 	TsLspBinaryResolutionError
 > =>
 	Effect.gen(function* () {
-		const candidate = join(dirname(process.execPath), COMPILED_SIBLING_NAME);
+		const contentsDir = dirname(dirname(process.execPath));
+		const candidate = join(
+			contentsDir,
+			"Resources",
+			COMPILED_RESOURCE_DIR,
+			COMPILED_BINARY_NAME,
+		);
 		const exists = yield* Effect.sync(() => existsSync(candidate));
 		if (!exists) {
 			return yield* new TsLspBinaryResolutionError({
-				strategy: "compiled-sibling",
-				cause: new Error(`no sibling LSP binary at ${candidate}`),
+				strategy: "compiled-resource",
+				cause: new Error(`no bundled LSP binary at ${candidate}`),
 			});
 		}
 		return candidate;

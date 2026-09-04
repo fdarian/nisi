@@ -92,11 +92,30 @@ repo-integration test pins the 24/4 numbers as a regression check.
   runtime — nothing for the bundler to embed. `resolveTsLspBinary` detects compiled mode by checking
   whether `import.meta.url` starts with `file:///$bunfs/` (verified empirically: `process.execPath`,
   unlike `import.meta.url`/`import.meta.dir`, still returns the real on-disk path when compiled) and
-  in that case looks for a `ts-lsp` binary as a sibling of `process.execPath` instead. **That sibling
-  isn't bundled yet** — Tauri packaging a third `externalBin` alongside `sidecar`/`nisi-cli` is a
-  later phase, so `spawnLspServer` fails with `TsLspBinaryResolutionError({ strategy:
-  "compiled-sibling" })` in a compiled sidecar until it does. `NISI_TS_LSP_BIN` bypasses both
-  strategies.
+  in that case looks under the packaged app's bundled `Contents/Resources/ts-lsp/` directory instead
+  (`process.execPath` is `Contents/MacOS/sidecar`, so `resolveCompiledBinary` walks up to `Contents/`
+  and back down). That directory is built by `apps/desktop/scripts/build-lsp-binary.ts`
+  (`bun run build:lsp`) — a plain copy of the platform `tsc` binary (nothing to `bun build --compile`,
+  it's already a native executable) plus its `lib.*.d.ts` files (next bullet) — and staged into the
+  bundle by `tauri.build.conf.json`'s `bundle.macOS.files`, **not** `externalBin`. `NISI_TS_LSP_BIN`
+  bypasses both strategies.
+- **The TS7 binary needs its `lib.*.d.ts` files as direct siblings on disk, not just its own
+  executable — and that rules out Tauri's `externalBin` mechanism entirely.** Discovered empirically:
+  copying only the `tsc`/platform binary produces `panic: bundled: .../lib.d.ts does not exist; this
+  executable may be misplaced` on startup — it resolves `dirname(os.Executable())` and looks for the
+  ~110 `lib.*.d.ts` declaration files there directly, with no `CWD` or `../Resources` fallback tried.
+  `externalBin` (how `sidecar`/`nisi-cli` ship) only stages a single file, always into
+  `Contents/MacOS/` — and a second empirical finding rules that directory out even if it didn't:
+  `codesign` treats every file under `Contents/MacOS/` as a nested code object requiring its own
+  signature, so a plain-text `.d.ts` file dropped there breaks signing the *whole app*
+  (`... code object is not signed at all / In subcomponent: .../Contents/MacOS/lib.es2015.core.d.ts`,
+  reproduced against a real `tauri build`). The fix is to keep the binary and its `.d.ts` files
+  together in one directory and stage that whole directory under `Contents/Resources/ts-lsp/` instead,
+  via `bundle.macOS.files: { "Resources/ts-lsp": "binaries/ts-lsp" }` — `codesign` treats `Resources/`
+  as ordinary bundle content, not nested code, and still finds and properly signs the nested `ts-lsp`
+  executable inside it. Don't split the binary onto `externalBin` and the `.d.ts` files onto
+  `bundle.macOS.files` separately — that packages "successfully" and then panics on first spawn
+  (Contents/MacOS split) or fails to codesign at all (both under Contents/MacOS).
 - **The reviewed project does not need TypeScript installed at all, at any version.** The TS7 native
   binary is self-contained and never consults the queried project's own `typescript` package — this is
   strictly more available than a tool that resolves the reviewed repo's own toolchain. Don't gate

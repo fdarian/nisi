@@ -226,6 +226,22 @@ fixture PR lives at `src/components/walkthrough/walkthrough.fixture.ts`.
 - `build:sidecar`/`build:cli` both go through `scripts/build-binary.ts` rather than a bare
   `bun build --compile` — a `bun build --compile` output with no further step gets `SIGKILL`'d on
   Apple Silicon, so the script strips and re-applies a clean ad-hoc code signature after compiling.
+- **`build:lsp` (`scripts/build-lsp-binary.ts`) ships `@repo/code-lsp`'s TypeScript 7 native LSP
+  binary — deliberately *not* as a third `externalBin`.** It stages a plain copy of the platform
+  `tsc` binary (resolved via `typescript/lib/getExePath.js`, the same way `code-lsp/src/binary.ts`'s
+  dev strategy does — nothing to `bun build --compile`, it's already a native executable) plus the
+  ~110 `lib.*.d.ts` files that ship beside it, together, into `src-tauri/binaries/ts-lsp/`. The LSP
+  server panics on boot if those `.d.ts` files aren't direct siblings of its own executable on disk,
+  and Tauri's `externalBin` both only stages a single file per entry *and* always lands it in
+  `Contents/MacOS/` — where `codesign` treats every file as a nested code object requiring its own
+  signature, so a plain-text `.d.ts` file there fails signing the whole app (reproduced against a
+  real `tauri build`: `code object is not signed at all / In subcomponent: .../Contents/MacOS/
+  lib.es2015.core.d.ts`). `tauri.build.conf.json`'s `bundle.macOS.files`
+  (`{ "Resources/ts-lsp": "binaries/ts-lsp" }`) copies the whole staged directory into
+  `Contents/Resources/ts-lsp/` instead — `codesign` treats `Resources/` as ordinary content and still
+  finds and signs the nested `ts-lsp` executable correctly. See `packages/code-lsp/AGENTS.md`'s "The
+  TS7 binary needs its `lib.*.d.ts` files as direct siblings on disk" for the full empirical trail.
+  `src-tauri/binaries/ts-lsp/` is gitignored the same way `binaries/sidecar-*` is.
 - **`externalBin` is not in `tauri.conf.json`** — it lives in `src-tauri/tauri.build.conf.json`, which
   only `bun build` merges in (`tauri build --config …`). `tauri-build` validates every `externalBin`
   path at compile time in *both* modes, so keeping it in the base config made `bun dev` fail on a
