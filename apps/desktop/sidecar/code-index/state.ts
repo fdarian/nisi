@@ -23,10 +23,12 @@ import {
 	writeIndex,
 } from "@repo/code-index";
 import { getDataDirConfig } from "@repo/db";
+import { readWorktreeBlobContent, type WorktreeReadFailed } from "@repo/git";
 import type {
 	CodeIndexFileReferences,
 	CodeIndexOccurrence,
 	CodeIndexReferencesResult,
+	CodeIndexSourceContext,
 	CodeIndexStatus,
 } from "@repo/sidecar-api";
 import type { Context } from "effect";
@@ -331,12 +333,53 @@ export const buildFileOccurrencesResponse = (
 export const MAX_RETURNED_REFERENCES = 200;
 
 /**
+ * Reads `paths`' raw worktree bytes from `repoRoot`, unconditionally — no
+ * `includeUncommitted`/`worktreeEligible` gate. `Store.readCurrentContent`
+ * (the sidecar's one gate for "what does this path look like right now" —
+ * `apps/desktop/sidecar/store.ts`) exists for diff/review semantics, where
+ * "current" is a user preference (`includeUncommitted`). scip-typescript has
+ * no such preference: it indexes whatever's physically on disk at
+ * `repoRoot`, full stop (see `@repo/code-index`'s AGENTS.md). Reading a
+ * code-index preview through the settings-gated path would describe a
+ * *different* revision than the one the index's positions were computed
+ * against whenever `includeUncommitted` is off and the worktree is dirty —
+ * indistinguishable from genuine drift, and unrecoverable by rebuilding
+ * (rebuilding re-indexes the same dirty tree; the preview would keep
+ * reading the last commit; the mismatch would never clear). This function
+ * is what `groupReferencesByFile`/`buildDefinitionContext` are read
+ * through instead, so both halves of a peek agree on their source.
+ *
+ * Absent paths (deleted, never existed) are simply missing from the
+ * result — same "absence is a value" contract `readWorktreeBlobContent`
+ * itself uses.
+ */
+export const readWorktreeFileContents = (
+	repoRoot: string,
+	paths: ReadonlyArray<string>,
+): Effect.Effect<ReadonlyMap<string, Uint8Array>, WorktreeReadFailed> =>
+	Effect.gen(function* () {
+		const entries = yield* Effect.forEach(
+			paths,
+			(path) =>
+				readWorktreeBlobContent(join(repoRoot, path)).pipe(
+					Effect.map((content) => [path, content] as const),
+				),
+			{ concurrency: "unbounded" },
+		);
+		const contents = new Map<string, Uint8Array>();
+		for (const [path, content] of entries) {
+			if (Option.isSome(content)) contents.set(path, content.value);
+		}
+		return contents;
+	});
+
+/**
  * Everything `codeIndex.references` needs about `symbolKey` from `index`
  * alone — source line text isn't decided here since that needs a file read
- * (`Store.readCurrentFileContents`), which lives at the http.ts call site,
- * not in this state module. A `symbolKey` the index doesn't recognize
- * (stale from an old index, e.g.) degrades to the all-empty result below
- * rather than a special case — every field here is already exactly what an
+ * (`readWorktreeFileContents`), which lives at the http.ts call site, not
+ * in this state module. A `symbolKey` the index doesn't recognize (stale
+ * from an old index, e.g.) degrades to the all-empty result below rather
+ * than a special case — every field here is already exactly what an
  * unrecognized key naturally produces (no display name, no documentation,
  * no definition, zero references).
  */
@@ -497,7 +540,64 @@ export const groupReferencesByFile = (
 	}));
 };
 
-/** Assembles the full `codeIndex.references` wire response from a plan and its resolved file contents. */
+/** Lines of context padded around the definition's own line — the peek panel shows roughly 8 lines total (3 before, the target line, 4 after). Mirrors what `code-index-peek-panel.tsx` used to slice client-side before this moved server-side. */
+const DEFINITION_CONTEXT_LINES_BEFORE = 3;
+const DEFINITION_CONTEXT_LINES_AFTER = 4;
+
+/**
+ * `plan.definition`'s surrounding source lines, drift-checked the same way
+ * `groupReferencesByFile` checks each reference location — `null` when
+ * there's no definition to begin with, its file couldn't be read, or
+ * {@link isLocationStale} finds the expected symbol isn't actually at that
+ * position anymore in `fileContents` (which must itself come from
+ * {@link readWorktreeFileContents} — a mismatched source here is exactly
+ * what produces a false drift verdict that a rebuild could never clear).
+ */
+const buildDefinitionContext = (
+	definition: ReturnType<typeof buildReferencesPlan>["definition"],
+	fileContents: ReadonlyMap<string, Uint8Array>,
+	displayName: string,
+	isLocal: boolean,
+): CodeIndexSourceContext | null => {
+	if (definition === null) return null;
+
+	const bytes = fileContents.get(definition.path);
+	if (bytes === undefined) return null;
+
+	const contentLines = new TextDecoder().decode(bytes).split("\n");
+	const targetLine = contentLines[definition.line];
+	if (targetLine === undefined) return null;
+	if (
+		isLocationStale(
+			targetLine,
+			definition.charStart,
+			definition.charEnd,
+			displayName,
+			isLocal,
+		)
+	) {
+		return null;
+	}
+
+	const startLine = Math.max(
+		0,
+		definition.line - DEFINITION_CONTEXT_LINES_BEFORE,
+	);
+	const endLine = Math.min(
+		contentLines.length - 1,
+		definition.line + DEFINITION_CONTEXT_LINES_AFTER,
+	);
+	return { startLine, lines: contentLines.slice(startLine, endLine + 1) };
+};
+
+/**
+ * Assembles the full `codeIndex.references` wire response from a plan and
+ * its resolved file contents — `fileContents` must be read via
+ * {@link readWorktreeFileContents} (never `Store.readCurrentContent`'s
+ * `includeUncommitted`-gated path), and must include `plan.definition`'s
+ * own path alongside every `returnedLocations` path, or `definitionContext`
+ * degrades to `null` for a file that was simply never fetched.
+ */
 export const buildReferencesResponse = (
 	plan: ReturnType<typeof buildReferencesPlan>,
 	fileContents: ReadonlyMap<string, Uint8Array>,
@@ -505,6 +605,12 @@ export const buildReferencesResponse = (
 	displayName: plan.displayName,
 	documentation: plan.documentation,
 	definition: plan.definition,
+	definitionContext: buildDefinitionContext(
+		plan.definition,
+		fileContents,
+		plan.displayName,
+		plan.isLocal,
+	),
 	files: groupReferencesByFile(
 		plan.returnedLocations,
 		fileContents,

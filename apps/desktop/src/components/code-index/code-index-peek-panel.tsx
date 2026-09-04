@@ -4,11 +4,23 @@
  * The VS Code-style "peek references" panel — rendered inline, anchored to
  * the clicked token's own line via `renderAnnotation` (`file-view.tsx`/
  * `diff-pane.tsx`), not a floating popover. Left: ~8 lines of source context
- * around the *definition* (fetched separately via `file.get`, since
- * `CodeIndexReferencesResult` only carries locations, not surrounding text).
- * Right: a collapsible tree of files, each listing its referencing lines —
- * `CodeIndexReferencesResult.files` already arrives grouped by file, so this
- * only has to render that shape, not build it.
+ * around the *definition* — `codeIndex.references`' own `definitionContext`,
+ * not a separate `file.get` fetch. Right: a collapsible tree of files, each
+ * listing its referencing lines — `CodeIndexReferencesResult.files` already
+ * arrives grouped by file, so this only has to render that shape, not build
+ * it.
+ *
+ * Both panes read through the sidecar's one worktree-unconditional path
+ * (`readWorktreeFileContents`, `apps/desktop/sidecar/code-index/state.ts`)
+ * rather than `file.get` (which honours the `includeUncommitted` diff-
+ * scoping preference) — scip-typescript always indexes the working tree, so
+ * a preview read any other way could describe a different revision than the
+ * one the index's positions were computed against, which reads as drift
+ * with no way to ever clear it by rebuilding. See that module's own doc
+ * comment on `readWorktreeFileContents` for the full reasoning; this
+ * component itself does no drift verification of its own anymore — the
+ * sidecar's is authoritative and this only renders what it reports
+ * (`definitionContext: null` means "no reliable preview", not "empty").
  *
  * Clicking a reference row opens that file in a real file-viewer tab
  * (`useSessionOpenFiles`' `openFile(path, line)`) rather than swapping the
@@ -39,10 +51,6 @@ import { useSessionOpenFiles } from "#/lib/session-ui-store";
 import { splitPath } from "#/lib/tree-paths";
 import { cn } from "#/lib/utils";
 
-/** Lines of context padded around the definition's own line — the reference screenshot shows roughly 8 lines total. */
-const CONTEXT_LINES_BEFORE = 3;
-const CONTEXT_LINES_AFTER = 4;
-
 type CodeIndexPeekPanelProps = {
 	sessionId: string;
 	orpc: SidecarQueryUtils;
@@ -71,81 +79,25 @@ export function CodeIndexPeekPanel({
 	});
 	const references = referencesQuery.data;
 
-	// The definition, when resolved, is what the left preview shows — falling
-	// back first to the clicked occurrence's own location (a pure reference
-	// with no resolvable definition, e.g. a symbol from an external package),
-	// and finally to the clicked token's own raw range when there's no
-	// occurrence at all (index not ready — see `target.occurrence`'s doc
-	// comment on `CodeIndexPeekTarget`).
-	const previewLocation =
-		references?.definition ??
-		(target.occurrence !== undefined
-			? {
-					path: target.path,
-					line: target.occurrence.line,
-					charStart: target.occurrence.charStart,
-					charEnd: target.occurrence.charEnd,
-				}
-			: {
-					path: target.path,
-					line: target.lineNumber - 1, // @pierre/diffs' 1-based -> SCIP's 0-based
-					charStart: target.charStart,
-					charEnd: target.charEnd,
-				});
+	// The header's path label: the definition's own file once resolved,
+	// falling back to the clicked token's file before that — the only
+	// location known before the index (or the query) has answered anything.
+	const previewPath = references?.definition?.path ?? target.path;
 
-	// Whether `previewLocation` is itself a claim the (possibly working-tree-
-	// stale) index made, as opposed to the raw clicked position echoed back
-	// with nothing to verify against — see `CodeIndexPeekTarget.occurrence`'s
-	// doc comment. Only the former needs `SourcePreview` to verify anything.
-	const previewIsIndexClaim = target.occurrence !== undefined;
-
-	const fileQuery = useQuery(
-		orpc.file.get.queryOptions({
-			input: { sessionId, path: previewLocation.path },
-		}),
-	);
-
-	// Same drift check `groupReferencesByFile` (`apps/desktop/sidecar/code-index/state.ts`)
-	// runs server-side for each reference, mirrored here for the one location
-	// the sidecar never gets a chance to verify itself: the definition slot,
-	// which this component alone resolves and slices against a `file.get`
-	// fetch. `references.displayName` is the same ground truth the sidecar
-	// checks reference locations against; there's no `isLocal` flag on the
-	// wire to also mirror its weaker fallback for local symbols exactly, so
-	// this accepts either an exact name match or a plausible identifier
-	// shape — strict enough to catch the reported bug class (drifting onto
-	// punctuation, JSX, blank lines), lenient enough not to flag every local
-	// symbol's preview as unavailable just because its "display name" (a
-	// scip-typescript per-document counter, not real text) can never equal
-	// real source.
-	const definitionContentLines =
-		fileQuery.data === undefined
-			? undefined
-			: fileQuery.data.content.split("\n");
-	const definitionLineText = definitionContentLines?.[previewLocation.line];
-	// `undefined` while we can't yet say either way (still loading the file
-	// or the references query that supplies `displayName`) — distinct from
-	// `false` (checked, and it failed) so the preview can keep showing its
-	// loading state instead of flashing "unavailable" and then correcting.
-	const definitionIsFresh: boolean | undefined = !previewIsIndexClaim
-		? true
-		: fileQuery.isLoading || referencesQuery.isLoading
-			? undefined
-			: definitionLineText === undefined
-				? false
-				: isSliceFresh(
-						definitionLineText.slice(
-							previewLocation.charStart,
-							previewLocation.charEnd,
-						),
-						references?.displayName,
-					);
-
+	// True when this peek's own data disagrees with the index (a reference's
+	// `lineText` came back `null`, or a resolvable `definition`'s
+	// `definitionContext` did) even though `status` itself says `"ready"` —
+	// see `IndexStatusBanner`'s own doc comment for why this matters and
+	// `codeIndex.references`' contract doc for what `null` means on each.
 	const hasDriftedReference =
 		references?.files.some((file) =>
 			file.references.some((reference) => reference.lineText === null),
 		) ?? false;
-	const driftDetected = definitionIsFresh === false || hasDriftedReference;
+	const definitionDrifted =
+		references !== undefined &&
+		references.definition !== null &&
+		references.definitionContext === null;
+	const driftDetected = definitionDrifted || hasDriftedReference;
 
 	const openReference = (path: string, line: number) => {
 		openFile(path, line + 1); // SCIP's 0-based line -> @pierre/diffs' 1-based
@@ -155,7 +107,7 @@ export function CodeIndexPeekPanel({
 	return (
 		<div className="my-1.5 flex min-h-0 flex-col overflow-hidden rounded-xl border bg-card text-xs shadow-sm">
 			<div className="flex items-center gap-2 border-b bg-background px-3 py-2">
-				<PathLabel path={previewLocation.path} />
+				<PathLabel path={previewPath} />
 				{references !== undefined && references.displayName !== "" && (
 					<Badge className="font-mono" size="sm" variant="outline">
 						{references.displayName}
@@ -183,12 +135,9 @@ export function CodeIndexPeekPanel({
 			<div className="flex min-h-0 flex-1 divide-x">
 				<div className="min-w-0 flex-1 overflow-auto p-2">
 					<SourcePreview
-						charEnd={previewLocation.charEnd}
-						charStart={previewLocation.charStart}
-						content={fileQuery.data?.content}
-						isFresh={definitionIsFresh}
-						isLoading={fileQuery.isLoading}
-						line={previewLocation.line}
+						hasOccurrence={target.occurrence !== undefined}
+						isLoading={referencesQuery.isLoading}
+						references={references}
 					/>
 				</div>
 				<div className="w-72 shrink-0">
@@ -221,30 +170,6 @@ export function CodeIndexPeekPanel({
 	);
 }
 
-/** A real JS/TS source identifier — mirrors the sidecar's own `SIMPLE_IDENTIFIER` (`apps/desktop/sidecar/code-index/state.ts`), the weak fallback for a symbol whose display name can't be trusted as real source text. */
-const SIMPLE_IDENTIFIER = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
-
-/**
- * Whether `slice` (a location's own `[charStart, charEnd)` text) still looks
- * like the symbol the index claims it is — the same drift check
- * `apps/desktop/sidecar/code-index/state.ts`'s `isLocationStale` runs for
- * every reference location, applied here to the one location the sidecar
- * doesn't verify itself (see `CodeIndexPeekPanel`'s own doc comment on
- * `definitionIsFresh`). An empty/undefined `displayName` means there's
- * nothing to exact-match against, so this falls back to the identifier-shape
- * check alone.
- */
-function isSliceFresh(slice: string, displayName: string | undefined): boolean {
-	if (
-		displayName !== undefined &&
-		displayName !== "" &&
-		slice === displayName
-	) {
-		return true;
-	}
-	return SIMPLE_IDENTIFIER.test(slice);
-}
-
 function PathLabel({ path }: { path: string }): React.ReactElement {
 	const { dirname, basename } = splitPath(path);
 	return (
@@ -268,14 +193,16 @@ function IndexStatusBanner({
 	isBuildStarting: boolean;
 	/**
 	 * True when this peek's own data disagrees with the index (a reference's
-	 * `lineText` came back `null`, or the definition slice didn't match the
-	 * symbol's name) even though `status` itself says `"ready"` — `status`
-	 * only tracks *committed* head-sha movement (see `CodeIndexStatus`'s own
-	 * doc comment on `packages/sidecar-api/src/code-index.ts`), so an edited-
-	 * but-uncommitted file can drift every line number under a `"ready"`
-	 * index with nothing in `status` ever reflecting it. This is the one
-	 * signal that exists for that case — not a new procedure, just noticing
-	 * what this peek's own responses already disagree about.
+	 * `lineText` came back `null`, or a resolvable `definition`'s
+	 * `definitionContext` did — both verified worktree-unconditionally,
+	 * server-side, in `apps/desktop/sidecar/code-index/state.ts`) even
+	 * though `status` itself says `"ready"` — `status` only tracks
+	 * *committed* head-sha movement (see `CodeIndexStatus`'s own doc comment
+	 * on `packages/sidecar-api/src/code-index.ts`), so an edited-but-
+	 * uncommitted file can drift every line number under a `"ready"` index
+	 * with nothing in `status` ever reflecting it. This is the one signal
+	 * that exists for that case — not a new procedure, just noticing what
+	 * this peek's own response already disagrees about.
 	 */
 	driftDetected: boolean;
 }): React.ReactElement | null {
@@ -374,28 +301,32 @@ function StatusBannerRow({
 }
 
 /**
- * Purely presentational — `CodeIndexPeekPanel` owns the `file.get` fetch and
- * the drift verdict (`definitionIsFresh`) so it can factor the *same*
- * verdict into `IndexStatusBanner`'s rebuild affordance; this only renders
- * whichever state it's handed.
+ * Purely presentational — `CodeIndexPeekPanel` owns the `codeIndex.references`
+ * fetch; this only renders whichever of five states it's handed, entirely
+ * from `references`' own fields (`definition`/`definitionContext`). No
+ * client-side drift verification happens here anymore — the sidecar's is
+ * authoritative (see this file's top-of-module doc comment) — so this
+ * component never has a "wrong text, unverified" state to guard against,
+ * only "no reliable preview" (`definitionContext: null`).
  */
 function SourcePreview({
+	hasOccurrence,
 	isLoading,
-	content,
-	isFresh,
-	line,
-	charStart,
-	charEnd,
+	references,
 }: {
+	/** `target.occurrence !== undefined` — `false` means the index wasn't ready at all when this peek was opened, so there's no `symbolKey` to have asked `codeIndex.references` about in the first place. */
+	hasOccurrence: boolean;
 	isLoading: boolean;
-	content: string | undefined;
-	/** `undefined` while still verifying (waiting on `file.get` and/or `codeIndex.references`); `false` once verified and the slice didn't match — see `CodeIndexPeekPanel`'s own doc comment on `definitionIsFresh`. */
-	isFresh: boolean | undefined;
-	line: number;
-	charStart: number;
-	charEnd: number;
+	references: CodeIndexReferencesResult | undefined;
 }): React.ReactElement {
-	if (isLoading || isFresh === undefined) {
+	if (!hasOccurrence) {
+		return (
+			<div className="py-4 text-center text-muted-foreground">
+				A definition preview will appear here once the code index is built.
+			</div>
+		);
+	}
+	if (isLoading) {
 		return (
 			<div className="flex items-center gap-2 py-4 text-muted-foreground">
 				<Spinner className="size-3.5" />
@@ -403,12 +334,19 @@ function SourcePreview({
 			</div>
 		);
 	}
-	if (content === undefined) {
+	if (references === undefined) {
 		return (
 			<div className="py-4 text-muted-foreground">Couldn't load source.</div>
 		);
 	}
-	if (!isFresh) {
+	if (references.definition === null) {
+		return (
+			<div className="py-4 text-center text-muted-foreground">
+				No definition found for this symbol.
+			</div>
+		);
+	}
+	if (references.definitionContext === null) {
 		return (
 			<div className="py-4 text-center text-muted-foreground italic">
 				Preview unavailable — this file changed since the index was built.
@@ -416,16 +354,14 @@ function SourcePreview({
 		);
 	}
 
-	const contentLines = content.split("\n");
-	const startLine = Math.max(0, line - CONTEXT_LINES_BEFORE);
-	const endLine = Math.min(contentLines.length - 1, line + CONTEXT_LINES_AFTER);
+	const definition = references.definition;
+	const context = references.definitionContext;
 
 	return (
 		<pre className="overflow-x-auto font-mono leading-5">
-			{Array.from({ length: endLine - startLine + 1 }, (_, offset) => {
-				const lineIndex = startLine + offset;
-				const text = contentLines[lineIndex] ?? "";
-				const isTargetLine = lineIndex === line;
+			{context.lines.map((text, offset) => {
+				const lineIndex = context.startLine + offset;
+				const isTargetLine = lineIndex === definition.line;
 				return (
 					<div
 						className={cn(
@@ -440,11 +376,11 @@ function SourcePreview({
 						<span className="whitespace-pre">
 							{isTargetLine ? (
 								<>
-									{text.slice(0, charStart)}
+									{text.slice(0, definition.charStart)}
 									<mark className="rounded-[3px] bg-primary/25 text-inherit">
-										{text.slice(charStart, charEnd)}
+										{text.slice(definition.charStart, definition.charEnd)}
 									</mark>
-									{text.slice(charEnd)}
+									{text.slice(definition.charEnd)}
 								</>
 							) : (
 								text

@@ -102,16 +102,47 @@ export type CodeIndexFileReferences = Schema.Schema.Type<
 >;
 
 /**
+ * A window of source lines around `CodeIndexReferencesResult.definition` —
+ * `lines[0]` is `startLine` (0-based), so the definition's own line is
+ * `lines[definition.line - startLine]`. Carried here rather than making the
+ * frontend fetch the whole file itself: a separate `file.get` call reads
+ * through `Store.readCurrentContent`'s `includeUncommitted` gate, which is a
+ * *diff-scoping* preference with no authority over what a SCIP index means
+ * — scip-typescript always indexes the working tree, so a preview read any
+ * other way can describe a different revision than the one `definition`'s
+ * position was computed against, which is indistinguishable from genuine
+ * drift and defeats the whole point of checking for it (rebuilding can
+ * never clear a mismatch that was never real staleness to begin with). This
+ * field is always read the same way `CodeIndexReference.lineText` is —
+ * worktree-unconditional, verified with the same check — so both halves of
+ * a peek agree on their source.
+ */
+export const CodeIndexSourceContext = Schema.Struct({
+	startLine: Schema.Number,
+	lines: Schema.Array(Schema.String),
+});
+export type CodeIndexSourceContext = Schema.Schema.Type<
+	typeof CodeIndexSourceContext
+>;
+
+/**
  * `returnedReferenceCount` vs. `totalReferenceCount` is what lets the UI
  * render "showing N of M" rather than silently truncating — the sidecar
  * caps how many reference locations a single call returns (see
  * `apps/desktop/sidecar/code-index/state.ts`), since a widely-referenced
  * symbol (an exported type, a common utility) can have thousands.
+ *
+ * `definitionContext` is `null` both when there's no `definition` to begin
+ * with and when there is one but it didn't check out fresh — same "no
+ * reliable preview" meaning `CodeIndexReference.lineText: null` carries;
+ * `definition` itself stays populated either way; only the *text* preview
+ * is withheld.
  */
 export const CodeIndexReferencesResult = Schema.Struct({
 	displayName: Schema.String,
 	documentation: Schema.Array(Schema.String),
 	definition: Schema.NullOr(CodeIndexLocation),
+	definitionContext: Schema.NullOr(CodeIndexSourceContext),
 	files: Schema.Array(CodeIndexFileReferences),
 	totalReferenceCount: Schema.Number,
 	returnedReferenceCount: Schema.Number,

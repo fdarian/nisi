@@ -163,3 +163,143 @@ describe("buildReferencesResponse", () => {
 		expect(response.totalReferenceCount).toBe(1);
 	});
 });
+
+/**
+ * Regression tests for the follow-up bug: `Store.readCurrentContent` gates
+ * worktree reads on the `includeUncommitted` setting, so with it off and a
+ * dirty worktree at build time, `references`' old file-reading path served
+ * last-committed content while the index (which scip-typescript always
+ * builds from the working tree) described the dirty tree - two different
+ * revisions of the same file compared against each other, which the drift
+ * check correctly reports as a mismatch, but which no rebuild could ever
+ * clear (rebuilding re-indexes the same dirty tree; the preview kept
+ * reading the last commit regardless). The fix is `readWorktreeFileContents`
+ * reading unconditionally - these tests exercise `buildDefinitionContext`
+ * (via `buildReferencesResponse`) with `fileContents` standing in for
+ * "whatever `readWorktreeFileContents` returned," proving the response
+ * shape is correct once source and index agree, and null (not silently
+ * wrong text) when they don't.
+ */
+describe("buildReferencesResponse - definitionContext", () => {
+	const basePlan = (
+		definition: {
+			path: string;
+			line: number;
+			charStart: number;
+			charEnd: number;
+		} | null,
+		isLocal = false,
+	) => ({
+		displayName: "myFunction",
+		isLocal,
+		documentation: [],
+		definition,
+		totalReferenceCount: 0,
+		returnedLocations: [],
+	});
+
+	test("a definition whose slice matches displayName gets a verified context window", () => {
+		const fileContents = new Map([
+			[
+				"a.ts",
+				encode(
+					"line0\nline1\nline2\nfunction myFunction() {}\nline4\nline5\nline6\nline7\nline8\n",
+				),
+			],
+		]);
+		const plan = basePlan({ path: "a.ts", line: 3, charStart: 9, charEnd: 19 });
+		const response = buildReferencesResponse(plan, fileContents);
+		expect(response.definitionContext).toEqual({
+			startLine: 0,
+			lines: [
+				"line0",
+				"line1",
+				"line2",
+				"function myFunction() {}",
+				"line4",
+				"line5",
+				"line6",
+				"line7",
+			],
+		});
+	});
+
+	test("regression: content read from a different revision than the one the index described reports definitionContext: null, never the wrong window", () => {
+		// The index recorded this definition at line 3 against the working
+		// tree. `fileContents` here stands in for the bug: content from a
+		// *different* revision (e.g. the last commit, via the old
+		// includeUncommitted-gated read) where line 3 holds something else.
+		const fileContents = new Map([
+			["a.ts", encode("line0\nline1\nline2\nunrelated text here\nline4\n")],
+		]);
+		const plan = basePlan({ path: "a.ts", line: 3, charStart: 9, charEnd: 19 });
+		const response = buildReferencesResponse(plan, fileContents);
+		expect(response.definitionContext).toBeNull();
+		// The location itself is still reported - only the text preview is
+		// withheld, so the frontend can still say *where* it is.
+		expect(response.definition).toEqual({
+			path: "a.ts",
+			line: 3,
+			charStart: 9,
+			charEnd: 19,
+		});
+	});
+
+	test("no definition means no context, not an error", () => {
+		const response = buildReferencesResponse(basePlan(null), new Map());
+		expect(response.definitionContext).toBeNull();
+	});
+
+	test("a definition's file missing from fileContents reports definitionContext: null", () => {
+		const plan = basePlan({
+			path: "gone.ts",
+			line: 0,
+			charStart: 0,
+			charEnd: 3,
+		});
+		const response = buildReferencesResponse(plan, new Map());
+		expect(response.definitionContext).toBeNull();
+	});
+
+	test("clamps the context window at the start of the file", () => {
+		const fileContents = new Map([
+			[
+				"a.ts",
+				encode("function myFunction() {}\nline1\nline2\nline3\nline4\n"),
+			],
+		]);
+		const plan = basePlan({ path: "a.ts", line: 0, charStart: 9, charEnd: 19 });
+		const response = buildReferencesResponse(plan, fileContents);
+		expect(response.definitionContext?.startLine).toBe(0);
+		expect(response.definitionContext?.lines[0]).toBe(
+			"function myFunction() {}",
+		);
+	});
+
+	test("clamps the context window at the end of the file", () => {
+		// No trailing newline, unlike the other fixtures — deliberately, so
+		// the last array element from `.split("\n")` is the real last line
+		// rather than the usual trailing empty string a real file's final
+		// newline produces, keeping this assertion about clamping alone.
+		const fileContents = new Map([
+			["a.ts", encode("line0\nline1\nfunction myFunction() {}")],
+		]);
+		const plan = basePlan({ path: "a.ts", line: 2, charStart: 9, charEnd: 19 });
+		const response = buildReferencesResponse(plan, fileContents);
+		expect(response.definitionContext?.lines.at(-1)).toBe(
+			"function myFunction() {}",
+		);
+	});
+
+	test("a local symbol's definition is checked with the weaker identifier-shape fallback, not exact-match against its numeric displayName", () => {
+		const fileContents = new Map([
+			["a.ts", encode("function outer() {\n  const total = 1;\n}\n")],
+		]);
+		const plan = basePlan(
+			{ path: "a.ts", line: 1, charStart: 8, charEnd: 13 },
+			true,
+		);
+		const response = buildReferencesResponse(plan, fileContents);
+		expect(response.definitionContext).not.toBeNull();
+	});
+});

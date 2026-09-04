@@ -53,6 +53,7 @@ import {
 	buildReferencesPlan,
 	buildReferencesResponse,
 	isCodeIndexUnsupported,
+	readWorktreeFileContents,
 	resolveCodeIndexStatus,
 	resolveQueryableIndex,
 	startCodeIndexBuild,
@@ -1675,6 +1676,7 @@ export function attachRouter(
 						displayName: "",
 						documentation: [],
 						definition: null,
+						definitionContext: null,
 						files: [],
 						totalReferenceCount: 0,
 						returnedReferenceCount: 0,
@@ -1683,14 +1685,23 @@ export function attachRouter(
 
 				const plan = buildReferencesPlan(index, input.symbolKey);
 				const paths = [
-					...new Set(plan.returnedLocations.map((location) => location.path)),
+					...new Set([
+						...plan.returnedLocations.map((location) => location.path),
+						...(plan.definition === null ? [] : [plan.definition.path]),
+					]),
 				];
-				// Best-effort: a read failure here shouldn't hide the reference
-				// locations themselves, only their line-text preview (see
-				// `groupReferencesByFile`'s doc comment in `code-index/state.ts`).
-				const fileContents = yield* store
-					.readCurrentFileContents(input.sessionId, paths)
-					.pipe(Effect.catch(() => Effect.succeed(new Map())));
+				// Worktree-unconditional, never `Store.readCurrentContent`'s
+				// `includeUncommitted`-gated path — scip-typescript always indexes
+				// the working tree, so reading previews any other way would
+				// describe a different revision than the one the index's
+				// positions were computed against (see `readWorktreeFileContents`'
+				// own doc comment in `code-index/state.ts`). Best-effort: a read
+				// failure here shouldn't hide the reference locations themselves,
+				// only their line-text/context preview.
+				const fileContents = yield* readWorktreeFileContents(
+					repoRoot,
+					paths,
+				).pipe(Effect.catch(() => Effect.succeed(new Map())));
 				return buildReferencesResponse(plan, fileContents);
 			}),
 		},
