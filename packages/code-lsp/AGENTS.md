@@ -20,6 +20,10 @@ a client that only ever asks one-shot questions.
   Every path in and out is a plain filesystem path — `file://` URIs never leak into or out of this API.
 - `resolveTsLspBinary()` (`src/binary.ts`) — resolves the absolute path to the platform `tsc` binary.
   Exported mainly so a caller can check it independently of spawning.
+- `resolveProjectRoot(filePath)` (`src/project-root.ts`) — walks up from `filePath` to the nearest
+  ancestor directory holding a `tsconfig.json`, `null` if none. The piece "One project root per
+  server" (below) says a caller must own; it lives here anyway (see that section) since it's pure
+  and this package's own integration test already proved the scoping it exists for matters.
 
 ## File map
 
@@ -30,6 +34,8 @@ a client that only ever asks one-shot questions.
 - `src/semantic-tokens.ts` — `decodeSemanticTokens`: the delta-encoding decode against a negotiated
   legend.
 - `src/binary.ts` — `resolveTsLspBinary`: dev vs. compiled binary resolution (see gotcha below).
+- `src/project-root.ts` — `resolveProjectRoot`: the nearest-`tsconfig.json` upward walk described
+  above.
 - `src/client.ts` — the process lifecycle (spawn, wire the stdin/stdout pumps, `initialize`, graceful
   shutdown) and the four query methods, composing everything above. The one file that touches
   `ChildProcessSpawner`.
@@ -38,17 +44,18 @@ a client that only ever asks one-shot questions.
 
 ## One project root per server
 
-`spawnLspServer` takes a root and nothing else — it does not walk the filesystem to find the nearest
-`tsconfig.json` for a queried path, and it does not pool or key servers by root. A caller that wants
-"one server per tsconfig project, lazily spawned" (the sidecar's `apps/desktop/sidecar/code-index/`
-layer) owns that on top of this package. This split exists because reference counts are **not stable
-across project loads**: querying a symbol from a fresh server scoped to its own project gives a
-different (and correct) count than querying the same symbol after a *different* project has already
-cold-loaded in the same server — the most-recently-loaded project scopes the query. Verified against
-this repo: `packages/settings/src/store.ts`'s `SettingsStore` gives 24 references in 4 files from a
-server rooted at `packages/settings` alone; a server that has also loaded a second project can give a
-different count for the same query. `test/client.test.ts`'s repo-integration test pins the 24/4
-numbers as a regression check.
+`spawnLspServer` takes a root and nothing else — it does not pool or key servers by root, and it
+never calls `resolveProjectRoot` itself. A caller still has to decide *which* root to spawn against,
+and to pool/bound however many it ends up spawning — the sidecar's
+`apps/desktop/sidecar/code-index/state.ts` owns that (a capacity-bounded, LRU-evicted registry keyed
+by exactly the roots `resolveProjectRoot` resolves to). This split exists because reference counts
+are **not stable across project loads**: querying a symbol from a fresh server scoped to its own
+project gives a different (and correct) count than querying the same symbol after a *different*
+project has already cold-loaded in the same server — the most-recently-loaded project scopes the
+query. Verified against this repo: `packages/settings/src/store.ts`'s `SettingsStore` gives 24
+references in 4 files from a server rooted at `packages/settings` alone; a server that has also
+loaded a second project can give a different count for the same query. `test/client.test.ts`'s
+repo-integration test pins the 24/4 numbers as a regression check.
 
 ## Gotchas
 
