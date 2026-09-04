@@ -1,4 +1,4 @@
-import { join } from "node:path";
+import { join, relative } from "node:path";
 import { Effect, Stream } from "effect";
 import { FileSystem } from "effect/FileSystem";
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
@@ -21,9 +21,10 @@ const SKIPPED_DIRECTORY_NAMES = new Set([
 	"coverage",
 ]);
 
+/** Any tsconfig variant — `tsconfig.json`, `tsconfig.base.json`, etc. Deliberately lenient: this only backs the "does this repo have any TypeScript project at all" presence check, not "which directories can scip-typescript index as standalone projects" (see `EXACT_TSCONFIG_FILENAME` below for that, stricter, question). A hyphenated name like `tsconfig-library.json` — a shared base meant to be `extends`ed, not a project of its own — does not match this pattern (no literal dot before the variant suffix), which is exactly the distinction that matters. */
 const TSCONFIG_NAME = /^tsconfig(\..+)?\.json$/;
 
-/** Caps how many directories a single `detectTsConfigPresence` walk will visit — a correctness backstop against a pathological repo layout, not a limit expected to bite in practice (a real tsconfig, if any, is almost always within the first few levels). */
+/** Caps how many directories a single filesystem walk (`detectTsConfigPresence` or `collectTsConfigProjectRoots`) will visit — a correctness backstop against a pathological repo layout, not a limit expected to bite in practice (real tsconfigs, if any, are almost always within the first few levels). */
 const MAX_DIRECTORIES_VISITED = 4_000;
 
 const walkForTsConfig = (
@@ -81,14 +82,109 @@ const isPnpmWorkspace = (
 		.exists(join(repoRoot, "pnpm-workspace.yaml"))
 		.pipe(Effect.catch(() => Effect.succeed(false)));
 
+/** The one name `tsc -p <dir>` (and therefore scip-typescript's own per-project indexing) actually resolves — unlike `TSCONFIG_NAME`'s lenient presence check, a directory only works as a standalone project root here if it has exactly this file, not a differently-named variant meant to be `extends`ed into one. */
+const EXACT_TSCONFIG_FILENAME = "tsconfig.json";
+
+/** `repoRoot` itself is `""` under `node:path`'s `relative`, not `"."` — scip-typescript's own project-display-name logic treats `"."` as special (`projectDisplayName = projectRoot === '.' ? options.cwd : projectRoot`), so this is the one place that distinction has to be made by hand. */
+const toProjectArg = (repoRoot: string, projectDir: string): string => {
+	const rel = relative(repoRoot, projectDir);
+	return rel === "" ? "." : rel;
+};
+
+/**
+ * Every directory under `repoRoot` (skipping the same build/dependency
+ * directories `detectTsConfigPresence` skips) that has its own exact
+ * `tsconfig.json` — the project roots scip-typescript can actually index,
+ * returned as `-p`-style relative paths from `repoRoot`. Unlike
+ * `detectTsConfigPresence`, this walks the *entire* tree up to the budget
+ * rather than stopping at the first match, since every project matters
+ * here, not just whether one exists. Continues descending into a directory
+ * even after finding a project there — nested project references
+ * (`packages/foo/tools/tsconfig.json` under `packages/foo/tsconfig.json`,
+ * say) are real, and scip-typescript's own `indexedProjects` de-dup (shared
+ * across every project passed to one invocation) makes listing an
+ * already-reachable nested project harmless rather than a double-index.
+ */
+const collectTsConfigProjectRoots = (
+	fs: FileSystem,
+	repoRoot: string,
+	path: string,
+	budget: { remaining: number },
+): Effect.Effect<ReadonlyArray<string>> =>
+	Effect.gen(function* () {
+		if (budget.remaining <= 0) return [];
+		budget.remaining -= 1;
+
+		const entries = yield* fs
+			.readDirectory(path)
+			.pipe(Effect.catch(() => Effect.succeed(null)));
+		if (entries === null) return [];
+
+		const ownProject = entries.includes(EXACT_TSCONFIG_FILENAME)
+			? [toProjectArg(repoRoot, path)]
+			: [];
+
+		const nested: Array<string> = [];
+		for (const entry of entries) {
+			if (SKIPPED_DIRECTORY_NAMES.has(entry)) continue;
+			const found = yield* collectTsConfigProjectRoots(
+				fs,
+				repoRoot,
+				join(path, entry),
+				budget,
+			);
+			nested.push(...found);
+		}
+
+		return [...ownProject, ...nested];
+	});
+
+/**
+ * The `scip-typescript index` arguments that select which project(s) to
+ * index — three layouts, in priority order:
+ *
+ * 1. A pnpm workspace (`pnpm-workspace.yaml` present) — `--pnpm-workspaces`,
+ *    scip-typescript's own workspace enumeration (`pnpm ls -r ...`
+ *    internally). One process, no walk needed on this package's side.
+ * 2. Otherwise, every directory under `repoRoot` with its own
+ *    `tsconfig.json`, passed as explicit positional project arguments in
+ *    one invocation. This covers a plain single-project repo (the walk
+ *    finds exactly `repoRoot` itself, i.e. `["."]` — identical to today's
+ *    implicit no-args behavior) *and* npm/yarn/bun workspaces and any other
+ *    layout whose tsconfigs simply live in subdirectories, uniformly, with
+ *    no separate "is this a workspace" detection needed.
+ *
+ * `--yarn-workspaces`/`--yarn-berry-workspaces` were considered and
+ * rejected: verified live, they don't read `package.json`'s `workspaces`
+ * field directly — they shell out to a real `yarn workspaces list`/`info`,
+ * which fails outright (`yarn: command not found`) on any machine without
+ * yarn installed, which is the common case for an npm/bun-based repo. The
+ * explicit-project-list form does not have this problem: verified live
+ * against a real bun workspace (three projects, no root tsconfig, no
+ * `pnpm-workspace.yaml`) that every document's `relativePath` comes back
+ * correctly rebased onto `repoRoot` — scip-typescript computes it from its
+ * own single `--cwd`, not from each project's own root, so no manual
+ * merging of multiple `.scip` outputs is needed either.
+ */
+export const resolveWorkspaceArgs = (
+	repoRoot: string,
+): Effect.Effect<ReadonlyArray<string>, never, FileSystem> =>
+	Effect.gen(function* () {
+		const fs = yield* FileSystem;
+		if (yield* isPnpmWorkspace(fs, repoRoot)) return ["--pnpm-workspaces"];
+
+		return yield* collectTsConfigProjectRoots(fs, repoRoot, repoRoot, {
+			remaining: MAX_DIRECTORIES_VISITED,
+		});
+	});
+
 /**
  * Spawns scip-typescript against `repoRoot`, writing the resulting index to
- * `outputPath`. Passes `--pnpm-workspaces` only when `repoRoot` actually has
- * a `pnpm-workspace.yaml` — nisi reviews arbitrary repos, not just its own,
- * so this stays correct for a plain single-project repo instead of always
- * assuming a pnpm workspace. Only a nonzero exit code (or a failure to spawn
- * at all) is treated as failure — scip-typescript's own stderr chatter
- * (e.g. an empty root `tsconfig.json` `files` array) is not.
+ * `outputPath`. See {@link resolveWorkspaceArgs} for how the project(s) to
+ * index are chosen. Only a nonzero exit code (or a failure to spawn at all)
+ * is treated as failure — scip-typescript's own stderr chatter (e.g. an
+ * empty root `tsconfig.json` `files` array, or one project among several
+ * failing while the rest still index fine) is not.
  */
 export const buildIndex = (
 	repoRoot: string,
@@ -100,13 +196,12 @@ export const buildIndex = (
 > =>
 	Effect.scoped(
 		Effect.gen(function* () {
-			const fs = yield* FileSystem;
 			const target = yield* resolveSpawnTarget();
-			const usesPnpmWorkspaces = yield* isPnpmWorkspace(fs, repoRoot);
+			const workspaceArgs = yield* resolveWorkspaceArgs(repoRoot);
 
 			const invocation = spawnInvocationFor(target, [
 				"index",
-				...(usesPnpmWorkspaces ? ["--pnpm-workspaces"] : []),
+				...workspaceArgs,
 				"--output",
 				outputPath,
 			]);

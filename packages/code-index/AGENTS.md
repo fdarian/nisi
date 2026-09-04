@@ -23,10 +23,20 @@ structure, and answers position→symbol and symbol→occurrence queries against
 - `src/indexer.ts` — spawns scip-typescript against a repo root (`effect/unstable/process`, same
   `ChildProcess.make` + `Effect.scoped` + concurrent stdout/stderr/exitCode shape as
   `packages/git/src/exec.ts`). Only a nonzero exit code is a failure — scip-typescript's one
-  harmless stderr line about an empty root `tsconfig.json` `files` array is not. Passes
-  `--pnpm-workspaces` only when the target repo root has a `pnpm-workspace.yaml`; otherwise no
-  workspace flag, so this stays correct for whatever repo nisi is reviewing, not just itself.
-  `detectTsConfigPresence` backs the contract's `unsupported` status.
+  harmless stderr line about an empty root `tsconfig.json` `files` array is not.
+  `detectTsConfigPresence` backs the contract's `unsupported` status — lenient, matches any
+  `tsconfig*.json` anywhere. `resolveWorkspaceArgs` decides what to actually pass to `index`:
+  `--pnpm-workspaces` when `pnpm-workspace.yaml` exists (one process, scip-typescript's own `pnpm
+  ls -r` enumeration); otherwise every directory under the repo root with its own exact
+  `tsconfig.json`, passed as explicit positional project arguments in one invocation
+  (`collectTsConfigProjectRoots`) — covers a plain single-project repo (resolves to `["."]`) and
+  npm/yarn/bun workspaces and any other layout whose tsconfigs simply live in subdirectories,
+  uniformly, with no separate workspace-file detection needed for those. `--yarn-workspaces` is
+  deliberately not used for a yarn/npm/bun-declared `workspaces` field — verified live, it shells
+  out to a real `yarn workspaces list`/`info` rather than reading `package.json` directly, and
+  fails outright on any machine without yarn installed. Passing multiple explicit projects in one
+  invocation needs no manual multi-`.scip` merging either: scip-typescript computes every
+  document's `relativePath` from its single shared `--cwd`, not from each project's own root.
 - `src/bootstrap.ts` — resolves what to spawn: `NISI_SCIP_TYPESCRIPT_BIN` or a bare
   `scip-typescript` already on `PATH` (checked via `@repo/bin-resolver`), spawned directly; failing
   that, a pinned copy of `@sourcegraph/scip-typescript@0.4.0` installed into

@@ -250,7 +250,26 @@ const runCodeIndexBuild = (
 		}),
 	);
 
-const describeBuildFailure = (
+/**
+ * scip-typescript reports one failing project per line as `- <project>
+ * (<reason>)` (its own `console.error` call in `main.ts`) — a sensible
+ * bullet when several projects' worth of errors print together, but a
+ * stray leading dash once this becomes the *entire* message shown to a
+ * user (the sidecar's own "Code index build failed:" prefix already frames
+ * it — see `IndexStatusBanner`/`StatusBannerRow` in
+ * `code-index-peek-panel.tsx`). Strips just that bullet from each line;
+ * everything past it is scip-typescript's own wording, still the most
+ * specific explanation available for a real compile/config error.
+ */
+const cleanScipTypescriptStderr = (stderr: string): string =>
+	stderr
+		.trim()
+		.split("\n")
+		.map((line) => line.replace(/^-\s+/, ""))
+		.join("\n")
+		.trim();
+
+export const describeBuildFailure = (
 	failure:
 		| ScipTypescriptInstallError
 		| ScipTypescriptIndexError
@@ -258,10 +277,12 @@ const describeBuildFailure = (
 		| ScipDecodeError,
 ): string => {
 	switch (failure._tag) {
-		case "ScipTypescriptIndexError":
-			return failure.stderr.trim().length > 0
-				? failure.stderr.trim()
+		case "ScipTypescriptIndexError": {
+			const cleaned = cleanScipTypescriptStderr(failure.stderr);
+			return cleaned.length > 0
+				? cleaned
 				: `scip-typescript exited with code ${failure.exitCode}`;
+		}
 		case "ScipTypescriptInstallError":
 			return `couldn't provision scip-typescript (${failure.step}): ${String(failure.cause)}`;
 		case "CodeIndexCacheError":

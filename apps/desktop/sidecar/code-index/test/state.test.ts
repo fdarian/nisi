@@ -1,6 +1,13 @@
 import { describe, expect, test } from "bun:test";
 import {
+	CodeIndexCacheError,
+	ScipDecodeError,
+	ScipTypescriptIndexError,
+	ScipTypescriptInstallError,
+} from "@repo/code-index";
+import {
 	buildReferencesResponse,
+	describeBuildFailure,
 	groupReferencesByFile,
 } from "../state.ts";
 
@@ -301,5 +308,73 @@ describe("buildReferencesResponse - definitionContext", () => {
 		);
 		const response = buildReferencesResponse(plan, fileContents);
 		expect(response.definitionContext).not.toBeNull();
+	});
+});
+
+/**
+ * Regression tests for the error-text bug found alongside the furl
+ * indexer gap: scip-typescript reports one failing project per line as
+ * `- <project> (<reason>)` (its own bullet-list `console.error`), which
+ * read as a stray leading dash once the sidecar showed it verbatim as the
+ * *entire* "Code index build failed: ..." message.
+ */
+describe("describeBuildFailure", () => {
+	test("strips scip-typescript's own leading bullet dash from stderr", () => {
+		const failure = new ScipTypescriptIndexError({
+			exitCode: 1,
+			stderr: "- /Users/example/repo (missing tsconfig.json)",
+			cause: new Error("test"),
+		});
+		expect(describeBuildFailure(failure)).toBe(
+			"/Users/example/repo (missing tsconfig.json)",
+		);
+	});
+
+	test("strips a bullet dash from every line of a multi-project failure", () => {
+		const failure = new ScipTypescriptIndexError({
+			exitCode: 1,
+			stderr:
+				"- /repo/apps/a (missing tsconfig.json)\n- /repo/apps/b (missing tsconfig.json)",
+			cause: new Error("test"),
+		});
+		expect(describeBuildFailure(failure)).toBe(
+			"/repo/apps/a (missing tsconfig.json)\n/repo/apps/b (missing tsconfig.json)",
+		);
+	});
+
+	test("leaves stderr with no leading dash untouched", () => {
+		const failure = new ScipTypescriptIndexError({
+			exitCode: 2,
+			stderr: "error TS18002: something else entirely",
+			cause: new Error("test"),
+		});
+		expect(describeBuildFailure(failure)).toBe(
+			"error TS18002: something else entirely",
+		);
+	});
+
+	test("falls back to the exit code when stderr is empty", () => {
+		const failure = new ScipTypescriptIndexError({
+			exitCode: 127,
+			stderr: "",
+			cause: new Error("test"),
+		});
+		expect(describeBuildFailure(failure)).toBe(
+			"scip-typescript exited with code 127",
+		);
+	});
+
+	test("formats install/cache/decode failures with their own step context", () => {
+		expect(
+			describeBuildFailure(
+				new ScipTypescriptInstallError({ step: "install", cause: "boom" }),
+			),
+		).toContain("install");
+		expect(
+			describeBuildFailure(new CodeIndexCacheError({ cause: "boom" })),
+		).toContain("cache");
+		expect(
+			describeBuildFailure(new ScipDecodeError({ raw: "1 bytes", cause: "boom" })),
+		).toContain("decode");
 	});
 });
