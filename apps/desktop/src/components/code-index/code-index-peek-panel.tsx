@@ -93,6 +93,60 @@ export function CodeIndexPeekPanel({
 					charEnd: target.charEnd,
 				});
 
+	// Whether `previewLocation` is itself a claim the (possibly working-tree-
+	// stale) index made, as opposed to the raw clicked position echoed back
+	// with nothing to verify against — see `CodeIndexPeekTarget.occurrence`'s
+	// doc comment. Only the former needs `SourcePreview` to verify anything.
+	const previewIsIndexClaim = target.occurrence !== undefined;
+
+	const fileQuery = useQuery(
+		orpc.file.get.queryOptions({
+			input: { sessionId, path: previewLocation.path },
+		}),
+	);
+
+	// Same drift check `groupReferencesByFile` (`apps/desktop/sidecar/code-index/state.ts`)
+	// runs server-side for each reference, mirrored here for the one location
+	// the sidecar never gets a chance to verify itself: the definition slot,
+	// which this component alone resolves and slices against a `file.get`
+	// fetch. `references.displayName` is the same ground truth the sidecar
+	// checks reference locations against; there's no `isLocal` flag on the
+	// wire to also mirror its weaker fallback for local symbols exactly, so
+	// this accepts either an exact name match or a plausible identifier
+	// shape — strict enough to catch the reported bug class (drifting onto
+	// punctuation, JSX, blank lines), lenient enough not to flag every local
+	// symbol's preview as unavailable just because its "display name" (a
+	// scip-typescript per-document counter, not real text) can never equal
+	// real source.
+	const definitionContentLines =
+		fileQuery.data === undefined
+			? undefined
+			: fileQuery.data.content.split("\n");
+	const definitionLineText = definitionContentLines?.[previewLocation.line];
+	// `undefined` while we can't yet say either way (still loading the file
+	// or the references query that supplies `displayName`) — distinct from
+	// `false` (checked, and it failed) so the preview can keep showing its
+	// loading state instead of flashing "unavailable" and then correcting.
+	const definitionIsFresh: boolean | undefined = !previewIsIndexClaim
+		? true
+		: fileQuery.isLoading || referencesQuery.isLoading
+			? undefined
+			: definitionLineText === undefined
+				? false
+				: isSliceFresh(
+						definitionLineText.slice(
+							previewLocation.charStart,
+							previewLocation.charEnd,
+						),
+						references?.displayName,
+					);
+
+	const hasDriftedReference =
+		references?.files.some((file) =>
+			file.references.some((reference) => reference.lineText === null),
+		) ?? false;
+	const driftDetected = definitionIsFresh === false || hasDriftedReference;
+
 	const openReference = (path: string, line: number) => {
 		openFile(path, line + 1); // SCIP's 0-based line -> @pierre/diffs' 1-based
 		onClose();
@@ -120,6 +174,7 @@ export function CodeIndexPeekPanel({
 			</div>
 
 			<IndexStatusBanner
+				driftDetected={driftDetected}
 				isBuildStarting={indexStatus.isBuildStarting}
 				onBuild={indexStatus.build}
 				status={indexStatus.status}
@@ -130,10 +185,10 @@ export function CodeIndexPeekPanel({
 					<SourcePreview
 						charEnd={previewLocation.charEnd}
 						charStart={previewLocation.charStart}
+						content={fileQuery.data?.content}
+						isFresh={definitionIsFresh}
+						isLoading={fileQuery.isLoading}
 						line={previewLocation.line}
-						orpc={orpc}
-						path={previewLocation.path}
-						sessionId={sessionId}
 					/>
 				</div>
 				<div className="w-72 shrink-0">
@@ -166,6 +221,30 @@ export function CodeIndexPeekPanel({
 	);
 }
 
+/** A real JS/TS source identifier — mirrors the sidecar's own `SIMPLE_IDENTIFIER` (`apps/desktop/sidecar/code-index/state.ts`), the weak fallback for a symbol whose display name can't be trusted as real source text. */
+const SIMPLE_IDENTIFIER = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
+
+/**
+ * Whether `slice` (a location's own `[charStart, charEnd)` text) still looks
+ * like the symbol the index claims it is — the same drift check
+ * `apps/desktop/sidecar/code-index/state.ts`'s `isLocationStale` runs for
+ * every reference location, applied here to the one location the sidecar
+ * doesn't verify itself (see `CodeIndexPeekPanel`'s own doc comment on
+ * `definitionIsFresh`). An empty/undefined `displayName` means there's
+ * nothing to exact-match against, so this falls back to the identifier-shape
+ * check alone.
+ */
+function isSliceFresh(slice: string, displayName: string | undefined): boolean {
+	if (
+		displayName !== undefined &&
+		displayName !== "" &&
+		slice === displayName
+	) {
+		return true;
+	}
+	return SIMPLE_IDENTIFIER.test(slice);
+}
+
 function PathLabel({ path }: { path: string }): React.ReactElement {
 	const { dirname, basename } = splitPath(path);
 	return (
@@ -182,12 +261,41 @@ function IndexStatusBanner({
 	status,
 	onBuild,
 	isBuildStarting,
+	driftDetected,
 }: {
 	status: CodeIndexStatus | undefined;
 	onBuild: () => void;
 	isBuildStarting: boolean;
+	/**
+	 * True when this peek's own data disagrees with the index (a reference's
+	 * `lineText` came back `null`, or the definition slice didn't match the
+	 * symbol's name) even though `status` itself says `"ready"` — `status`
+	 * only tracks *committed* head-sha movement (see `CodeIndexStatus`'s own
+	 * doc comment on `packages/sidecar-api/src/code-index.ts`), so an edited-
+	 * but-uncommitted file can drift every line number under a `"ready"`
+	 * index with nothing in `status` ever reflecting it. This is the one
+	 * signal that exists for that case — not a new procedure, just noticing
+	 * what this peek's own responses already disagree about.
+	 */
+	driftDetected: boolean;
 }): React.ReactElement | null {
-	if (status === undefined || status.status === "ready") return null;
+	if (status === undefined) return null;
+	if (status.status === "ready") {
+		if (!driftDetected) return null;
+		return (
+			<StatusBannerRow
+				action={{
+					label: "Rebuild",
+					onClick: onBuild,
+					pending: isBuildStarting,
+				}}
+				icon={<AlertTriangleIcon className="size-3.5" />}
+			>
+				This preview looks out of date with your working tree — rebuild the
+				index?
+			</StatusBannerRow>
+		);
+	}
 	if (status.status === "building") {
 		return (
 			<StatusBannerRow icon={<Spinner className="size-3.5" />}>
@@ -265,26 +373,29 @@ function StatusBannerRow({
 	);
 }
 
+/**
+ * Purely presentational — `CodeIndexPeekPanel` owns the `file.get` fetch and
+ * the drift verdict (`definitionIsFresh`) so it can factor the *same*
+ * verdict into `IndexStatusBanner`'s rebuild affordance; this only renders
+ * whichever state it's handed.
+ */
 function SourcePreview({
-	sessionId,
-	orpc,
-	path,
+	isLoading,
+	content,
+	isFresh,
 	line,
 	charStart,
 	charEnd,
 }: {
-	sessionId: string;
-	orpc: SidecarQueryUtils;
-	path: string;
+	isLoading: boolean;
+	content: string | undefined;
+	/** `undefined` while still verifying (waiting on `file.get` and/or `codeIndex.references`); `false` once verified and the slice didn't match — see `CodeIndexPeekPanel`'s own doc comment on `definitionIsFresh`. */
+	isFresh: boolean | undefined;
 	line: number;
 	charStart: number;
 	charEnd: number;
 }): React.ReactElement {
-	const fileQuery = useQuery(
-		orpc.file.get.queryOptions({ input: { sessionId, path } }),
-	);
-
-	if (fileQuery.isLoading) {
+	if (isLoading || isFresh === undefined) {
 		return (
 			<div className="flex items-center gap-2 py-4 text-muted-foreground">
 				<Spinner className="size-3.5" />
@@ -292,13 +403,20 @@ function SourcePreview({
 			</div>
 		);
 	}
-	if (fileQuery.data === undefined) {
+	if (content === undefined) {
 		return (
 			<div className="py-4 text-muted-foreground">Couldn't load source.</div>
 		);
 	}
+	if (!isFresh) {
+		return (
+			<div className="py-4 text-center text-muted-foreground italic">
+				Preview unavailable — this file changed since the index was built.
+			</div>
+		);
+	}
 
-	const contentLines = fileQuery.data.content.split("\n");
+	const contentLines = content.split("\n");
 	const startLine = Math.max(0, line - CONTEXT_LINES_BEFORE);
 	const endLine = Math.min(contentLines.length - 1, line + CONTEXT_LINES_AFTER);
 
