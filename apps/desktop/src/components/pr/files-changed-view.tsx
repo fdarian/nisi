@@ -1,13 +1,16 @@
 "use client";
 
+import type { CodeIndexStatus } from "@repo/sidecar-api";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import {
+	AlertTriangleIcon,
 	Columns2Icon,
 	RefreshCwIcon,
 	RowsIcon,
 	SlidersHorizontalIcon,
 } from "lucide-react";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCodeIndexStatus } from "#/components/code-index/use-code-index-status";
 import type { DiffPaneHandle } from "#/components/diff-pane/diff-pane";
 import { DiffPane } from "#/components/diff-pane/diff-pane";
 import { EditorPickerPalette } from "#/components/editor-picker-palette";
@@ -23,6 +26,7 @@ import {
 	DropdownMenuSeparator,
 	DropdownMenuTrigger,
 } from "#/components/ui/menu";
+import { Spinner } from "#/components/ui/spinner";
 import { toastManager } from "#/components/ui/toast";
 import { ToggleGroup, ToggleGroupItem } from "#/components/ui/toggle-group";
 import type { EditorInfo } from "#/hooks/use-available-editors";
@@ -45,6 +49,7 @@ import type {
 } from "#/lib/pr-data";
 import { pullRequestUrl, useFileContents } from "#/lib/pr-data";
 import {
+	useSessionCodeIndexEnabled,
 	useSessionCurrentMatchIndex,
 	useSessionFilterQuery,
 	useSessionForcedPaths,
@@ -170,6 +175,32 @@ export function FilesChangedView({
 	const [wrapLines, setWrapLines] = useWrapLines(orpc);
 	const [preferredEditor, setPreferredEditor] = usePreferredEditor(orpc);
 	const { editors, loadEditors } = useAvailableEditors();
+	// SCIP code-navigation's own opt-in — session-scoped and defaults off
+	// every time (`SessionUiState.codeIndexEnabled`'s doc comment), unlike the
+	// settings-data.ts prefs above. `codeIndexStatus` is fetched only while
+	// the toggle is on (`enabled` param below) — see `useCodeIndexStatus`'s
+	// own doc comment for why "off" has to mean zero requests, not just a
+	// skipped fetch. Its cache keeps reporting the *last known* status even
+	// after the query goes back to disabled, which is what lets `isUnsupported`
+	// below stay true (hiding the checkbox for good, this session) once
+	// discovered, rather than resetting the moment the toggle flips off.
+	const [codeIndexEnabled, setCodeIndexEnabled] = useSessionCodeIndexEnabled(
+		session.id,
+	);
+	const codeIndexStatus = useCodeIndexStatus(
+		orpc,
+		session.id,
+		codeIndexEnabled,
+	);
+	const isCodeIndexUnsupported =
+		codeIndexStatus.status?.status === "unsupported";
+	// Self-corrects the toggle the moment "unsupported" is discovered, rather
+	// than leaving it silently on for a repo this feature can never work in —
+	// `useCodeIndexInteractions` would otherwise keep paying the per-token
+	// wrapping cost the toggle exists to gate (see its own `tokenInteractionsActive`).
+	useEffect(() => {
+		if (isCodeIndexUnsupported) setCodeIndexEnabled(false);
+	}, [isCodeIndexUnsupported, setCodeIndexEnabled]);
 	const [editorPickerOpen, setEditorPickerOpen] = useState(false);
 
 	const viewedCount = useMemo(
@@ -649,6 +680,23 @@ export function FilesChangedView({
 									>
 										Hide reviewed
 									</DropdownMenuCheckboxItem>
+									{!isCodeIndexUnsupported && (
+										<>
+											<DropdownMenuCheckboxItem
+												checked={codeIndexEnabled}
+												onCheckedChange={setCodeIndexEnabled}
+											>
+												Enable code reference
+											</DropdownMenuCheckboxItem>
+											{codeIndexEnabled && (
+												<CodeIndexStatusRow
+													isBuildStarting={codeIndexStatus.isBuildStarting}
+													onBuild={codeIndexStatus.build}
+													status={codeIndexStatus.status}
+												/>
+											)}
+										</>
+									)}
 									<DropdownMenuCheckboxItem
 										checked={wrapLines}
 										onCheckedChange={setWrapLines}
@@ -711,6 +759,75 @@ export function FilesChangedView({
 				open={editorPickerOpen}
 			/>
 		</>
+	);
+}
+
+/**
+ * The "Enable code reference" checkbox's own inline state — flipping the
+ * toggle on is the natural moment to learn a ~14s build is needed and start
+ * one, rather than only surfacing that behind the ⌘-click gesture (which a
+ * user who just found this checkbox has no way to know exists yet). Renders
+ * nothing for `undefined` (status hasn't resolved yet) or `"ready"` (nothing
+ * to do) — same states `code-index-peek-panel.tsx`'s own `IndexStatusBanner`
+ * treats as "nothing to show", intentionally mirrored rather than shared,
+ * since that one lives inside a wider peek panel and this one inside a
+ * narrow dropdown row.
+ */
+function CodeIndexStatusRow({
+	status,
+	onBuild,
+	isBuildStarting,
+}: {
+	status: CodeIndexStatus | undefined;
+	onBuild: () => void;
+	isBuildStarting: boolean;
+}): React.ReactElement | null {
+	if (status === undefined || status.status === "ready") return null;
+
+	const message =
+		status.status === "building"
+			? "Building code index…"
+			: status.status === "absent"
+				? "Code index not built yet."
+				: status.status === "stale"
+					? "Code index is out of date."
+					: `Code index build failed${status.failureMessage ? `: ${status.failureMessage}` : "."}`;
+	const actionLabel =
+		status.status === "absent"
+			? "Build"
+			: status.status === "stale"
+				? "Rebuild"
+				: status.status === "failed"
+					? "Retry"
+					: null;
+
+	return (
+		<div className="flex items-center gap-2 px-2 py-1.5 text-muted-foreground text-xs">
+			{status.status === "building" ? (
+				<Spinner className="size-3.5 shrink-0" />
+			) : (
+				<AlertTriangleIcon className="size-3.5 shrink-0" />
+			)}
+			<span className="min-w-0 flex-1 truncate">{message}</span>
+			{actionLabel && (
+				<Button
+					className="h-6 shrink-0 px-2"
+					loading={isBuildStarting}
+					// Building shouldn't dismiss the dropdown the checkbox above just
+					// opened — same reasoning as `diff-file-header.tsx`'s Reviewed
+					// checkbox stopping propagation, just for "closes the menu"
+					// instead of "toggles collapse".
+					onClick={(event) => {
+						event.stopPropagation();
+						onBuild();
+					}}
+					size="xs"
+					variant="outline"
+				>
+					{actionLabel}
+				</Button>
+			)}
+		</div>
 	);
 }
 
