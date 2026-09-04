@@ -789,17 +789,13 @@ function CodeIndexStatusRow({
 			? "Building code index…"
 			: status.status === "absent"
 				? "Code index not built yet."
-				: status.status === "stale"
-					? "Code index is out of date."
-					: `Code index build failed${status.failureMessage ? `: ${status.failureMessage}` : "."}`;
+				: `Code index build failed${status.failureMessage ? `: ${status.failureMessage}` : "."}`;
 	const actionLabel =
 		status.status === "absent"
 			? "Build"
-			: status.status === "stale"
-				? "Rebuild"
-				: status.status === "failed"
-					? "Retry"
-					: null;
+			: status.status === "failed"
+				? "Retry"
+				: null;
 
 	return (
 		<div className="flex items-center gap-2 px-2 py-1.5 text-muted-foreground text-xs">

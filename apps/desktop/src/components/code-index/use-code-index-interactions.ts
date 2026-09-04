@@ -50,7 +50,7 @@ import type { SidecarQueryUtils } from "#/lib/backend-context";
  * means the click genuinely wasn't on an indexed symbol.
  */
 const INDEX_NOT_READY_STATUSES: ReadonlySet<CodeIndexStatus["status"]> =
-	new Set(["absent", "stale", "building", "failed"]);
+	new Set(["absent", "building", "failed"]);
 
 /** Class toggled directly on a token's `HTMLElement` — `@pierre/diffs` has no keyed decoration API, so this is the supported way to style one token (see `InteractionManager`'s own doc). Styled via `extraCSS`/`unsafeCSS` in each pane's `CodeViewOptions` — see `CODE_INDEX_TOKEN_CSS` below. */
 export const CODE_INDEX_TOKEN_ACTIVE_CLASS = "nisi-code-index-token-active";
@@ -74,7 +74,7 @@ export const CODE_INDEX_TOKEN_CSS = `
  * its source preview on when `occurrence` is `undefined`.
  *
  * `occurrence` is optional, not defaulted to a placeholder: a ⌘-click while
- * the index is `absent`/`stale`/`building`/`failed` still opens the peek
+ * the index is `absent`/`building`/`failed` still opens the peek
  * (`handleTokenClick`, below) so its build/rebuild affordance is reachable,
  * but there's genuinely no occurrence to report in that case — inventing one
  * would be a lie the panel would have to un-tell.

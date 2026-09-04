@@ -259,10 +259,10 @@ export const startCodeIndexBuild = async (
 /**
  * `status`'s full derivation: unsupported gates everything else (no
  * `tsconfig.json` anywhere means nothing here could ever work), then
- * `buildStates` decides `absent`/`building`/`ready`/`failed` directly —
- * `"stale"` is never emitted (see `packages/sidecar-api/src/code-index.ts`'s
- * own doc comment on why that state doesn't apply to a server that always
- * reads live files off disk). `indexedHeadSha` mirrors `headSha` exactly
+ * `buildStates` decides `absent`/`building`/`ready`/`failed` directly — no
+ * `"stale"` state exists to derive (see `packages/sidecar-api/src/code-index.ts`'s
+ * own doc comment on why that doesn't apply to a server that always reads
+ * live files off disk). `indexedHeadSha` mirrors `headSha` exactly
  * when `ready`, since there is no separate "index" revision to disagree
  * with it anymore; `documentCount` is always `null` (LSP has no equivalent
  * "how many files did this cover" number — a per-file question, not an

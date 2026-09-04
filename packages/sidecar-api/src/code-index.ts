@@ -2,7 +2,7 @@ import { oc } from "@orpc/contract";
 import { Schema } from "effect";
 
 /**
- * `status`'s outcome, six mutually exclusive states rather than a
+ * `status`'s outcome, five mutually exclusive states rather than a
  * boolean-plus-flags pile, since the UI needs to render a genuinely
  * different affordance for each. Backed by a live `tsc --lsp --stdio`
  * process per tsconfig project (`@repo/code-lsp`), not a static on-disk
@@ -14,20 +14,19 @@ import { Schema } from "effect";
  * initializing a server (a spinner, no new `build` needed); `ready` — that
  * spawn/initialize last succeeded; `failed` — it last failed (a binary
  * resolution or process-spawn problem — see `describeBuildFailure`).
- * **`stale` is never emitted.** It existed only for a static index that
+ * There is no `"stale"` state: that existed only for a static index that
  * could disagree with a repo that moved past the head it was built for — a
  * live server has no such staleness to report, since it answers every query
  * by reading the file straight off disk at query time (see
- * `CodeIndexReference.lineText`'s own doc comment below). The literal stays
- * in this schema only so the wire type doesn't change shape out from under
- * any code that still matches on it.
+ * `CodeIndexReference.lineText`'s own doc comment below). Dropped outright
+ * rather than kept unreachable, since nothing on either side of the wire
+ * could ever emit or need to match it.
  */
 export const CodeIndexStatusKind = Schema.Literals([
 	"unsupported",
 	"absent",
 	"building",
 	"ready",
-	"stale",
 	"failed",
 ]);
 export type CodeIndexStatusKind = Schema.Schema.Type<

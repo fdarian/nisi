@@ -13,14 +13,16 @@
  * Both panes read through the sidecar's one worktree-unconditional path
  * (`readWorktreeFileContents`, `apps/desktop/sidecar/code-index/state.ts`)
  * rather than `file.get` (which honours the `includeUncommitted` diff-
- * scoping preference) — scip-typescript always indexes the working tree, so
- * a preview read any other way could describe a different revision than the
- * one the index's positions were computed against, which reads as drift
- * with no way to ever clear it by rebuilding. See that module's own doc
- * comment on `readWorktreeFileContents` for the full reasoning; this
- * component itself does no drift verification of its own anymore — the
- * sidecar's is authoritative and this only renders what it reports
- * (`definitionContext: null` means "no reliable preview", not "empty").
+ * scoping preference) — the LSP server always reads the working tree, so a
+ * preview read any other way could describe a different revision than the
+ * one the server's positions were computed against. There's no drift to
+ * detect or rebuild past here, unlike the static SCIP index this feature
+ * used to sit on: both the positions and this preview's text come from the
+ * same live read, at query time, every time (see that module's own doc
+ * comment on `readWorktreeFileContents`). A `null` `lineText`/
+ * `definitionContext` still means "couldn't read this" — a deleted file, or
+ * a position past the end of a file that got shorter mid-request — just not
+ * "the index disagrees with your working tree."
  *
  * Clicking a reference row opens that file in a real file-viewer tab
  * (`useSessionOpenFiles`' `openFile(path, line)`) rather than swapping the
@@ -84,21 +86,6 @@ export function CodeIndexPeekPanel({
 	// location known before the index (or the query) has answered anything.
 	const previewPath = references?.definition?.path ?? target.path;
 
-	// True when this peek's own data disagrees with the index (a reference's
-	// `lineText` came back `null`, or a resolvable `definition`'s
-	// `definitionContext` did) even though `status` itself says `"ready"` —
-	// see `IndexStatusBanner`'s own doc comment for why this matters and
-	// `codeIndex.references`' contract doc for what `null` means on each.
-	const hasDriftedReference =
-		references?.files.some((file) =>
-			file.references.some((reference) => reference.lineText === null),
-		) ?? false;
-	const definitionDrifted =
-		references !== undefined &&
-		references.definition !== null &&
-		references.definitionContext === null;
-	const driftDetected = definitionDrifted || hasDriftedReference;
-
 	const openReference = (path: string, line: number) => {
 		openFile(path, line + 1); // SCIP's 0-based line -> @pierre/diffs' 1-based
 		onClose();
@@ -126,7 +113,6 @@ export function CodeIndexPeekPanel({
 			</div>
 
 			<IndexStatusBanner
-				driftDetected={driftDetected}
 				isBuildStarting={indexStatus.isBuildStarting}
 				onBuild={indexStatus.build}
 				status={indexStatus.status}
@@ -186,43 +172,13 @@ function IndexStatusBanner({
 	status,
 	onBuild,
 	isBuildStarting,
-	driftDetected,
 }: {
 	status: CodeIndexStatus | undefined;
 	onBuild: () => void;
 	isBuildStarting: boolean;
-	/**
-	 * True when this peek's own data disagrees with the index (a reference's
-	 * `lineText` came back `null`, or a resolvable `definition`'s
-	 * `definitionContext` did — both verified worktree-unconditionally,
-	 * server-side, in `apps/desktop/sidecar/code-index/state.ts`) even
-	 * though `status` itself says `"ready"` — `status` only tracks
-	 * *committed* head-sha movement (see `CodeIndexStatus`'s own doc comment
-	 * on `packages/sidecar-api/src/code-index.ts`), so an edited-but-
-	 * uncommitted file can drift every line number under a `"ready"` index
-	 * with nothing in `status` ever reflecting it. This is the one signal
-	 * that exists for that case — not a new procedure, just noticing what
-	 * this peek's own response already disagrees about.
-	 */
-	driftDetected: boolean;
 }): React.ReactElement | null {
 	if (status === undefined) return null;
-	if (status.status === "ready") {
-		if (!driftDetected) return null;
-		return (
-			<StatusBannerRow
-				action={{
-					label: "Rebuild",
-					onClick: onBuild,
-					pending: isBuildStarting,
-				}}
-				icon={<AlertTriangleIcon className="size-3.5" />}
-			>
-				This preview looks out of date with your working tree — rebuild the
-				index?
-			</StatusBannerRow>
-		);
-	}
+	if (status.status === "ready") return null;
 	if (status.status === "building") {
 		return (
 			<StatusBannerRow icon={<Spinner className="size-3.5" />}>
@@ -241,20 +197,6 @@ function IndexStatusBanner({
 				icon={<AlertTriangleIcon className="size-3.5" />}
 			>
 				Code index hasn't been built yet — results may be incomplete.
-			</StatusBannerRow>
-		);
-	}
-	if (status.status === "stale") {
-		return (
-			<StatusBannerRow
-				action={{
-					label: "Rebuild",
-					onClick: onBuild,
-					pending: isBuildStarting,
-				}}
-				icon={<AlertTriangleIcon className="size-3.5" />}
-			>
-				Index is out of date with the current head.
 			</StatusBannerRow>
 		);
 	}
@@ -349,7 +291,7 @@ function SourcePreview({
 	if (references.definitionContext === null) {
 		return (
 			<div className="py-4 text-center text-muted-foreground italic">
-				Preview unavailable — this file changed since the index was built.
+				Preview unavailable — couldn't read this file.
 			</div>
 		);
 	}
@@ -469,7 +411,7 @@ function FileReferenceGroup({
 							<span className="min-w-0 flex-1 truncate whitespace-pre font-mono text-[0.6875rem] text-muted-foreground">
 								{reference.lineText === null ? (
 									<span className="italic">
-										preview unavailable — file changed since indexing
+										preview unavailable — couldn't read this file
 									</span>
 								) : (
 									reference.lineText.trim()
