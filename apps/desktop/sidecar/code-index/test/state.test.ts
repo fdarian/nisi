@@ -3,6 +3,7 @@ import { LspProcessError, TsLspBinaryResolutionError } from "@repo/code-lsp";
 import {
 	buildReferencesResponse,
 	describeBuildFailure,
+	findImportIdentifierSpans,
 	groupReferencesByFile,
 } from "../state.ts";
 
@@ -238,5 +239,108 @@ describe("describeBuildFailure", () => {
 		});
 		expect(describeBuildFailure(spawnFailure)).toContain("start");
 		expect(describeBuildFailure(initializeFailure)).toContain("initialize");
+	});
+});
+
+/**
+ * Pure line-scan coverage for `buildFileOccurrencesResponse`'s import-line
+ * supplement — fast, no LSP process involved. Whether a candidate this scan
+ * finds actually *resolves* (the part that talks to a real server) is
+ * `test/import-occurrences.test.ts`'s job instead; this only pins which
+ * positions get offered up as candidates.
+ */
+describe("findImportIdentifierSpans", () => {
+	const spanText = (
+		text: string,
+		span: { line: number; charStart: number; charEnd: number },
+	) => text.split("\n")[span.line]?.slice(span.charStart, span.charEnd);
+
+	test("finds every binding in a type-only named import", () => {
+		const text = 'import type { Greeting, Farewell } from "./values.ts";\n';
+		const spans = findImportIdentifierSpans(text);
+		expect(spans.map((span) => spanText(text, span))).toEqual([
+			"Greeting",
+			"Farewell",
+		]);
+	});
+
+	test("finds the binding in a plain value import", () => {
+		const text = 'import { greet } from "./values.ts";\n';
+		const spans = findImportIdentifierSpans(text);
+		expect(spans.map((span) => spanText(text, span))).toEqual(["greet"]);
+	});
+
+	test("finds both sides of an aliased named import, but not the `as` keyword", () => {
+		const text = 'import { foo as bar } from "./values.ts";\n';
+		const spans = findImportIdentifierSpans(text);
+		expect(spans.map((span) => spanText(text, span))).toEqual(["foo", "bar"]);
+	});
+
+	test("finds a default import's local binding", () => {
+		const text = 'import Greeter from "./values.ts";\n';
+		const spans = findImportIdentifierSpans(text);
+		expect(spans.map((span) => spanText(text, span))).toEqual(["Greeter"]);
+	});
+
+	test("finds a namespace import's local binding, but not the `as` keyword", () => {
+		const text = 'import * as values from "./values.ts";\n';
+		const spans = findImportIdentifierSpans(text);
+		expect(spans.map((span) => spanText(text, span))).toEqual(["values"]);
+	});
+
+	test("a side-effect-only import has no bindings to find", () => {
+		const text = 'import "./styles.css";\n';
+		expect(findImportIdentifierSpans(text)).toEqual([]);
+	});
+
+	test("does not treat words inside the module specifier string as candidates", () => {
+		const text = 'import { greet } from "./greet-utils.ts";\n';
+		const spans = findImportIdentifierSpans(text);
+		// Only the binding itself — not "greet" or "utils" from the specifier.
+		expect(spans).toHaveLength(1);
+		expect(spanText(text, spans[0] as (typeof spans)[number])).toBe("greet");
+	});
+
+	test("a multi-line named import block is scanned across every line", () => {
+		const text = [
+			"import type {",
+			"\tLspLocation,",
+			"\tLspProcessError,",
+			'} from "@repo/code-lsp";',
+			"",
+		].join("\n");
+		const spans = findImportIdentifierSpans(text);
+		expect(spans.map((span) => spanText(text, span))).toEqual([
+			"LspLocation",
+			"LspProcessError",
+		]);
+	});
+
+	test("does not scan a non-import line, even one that mentions 'import'", () => {
+		const text = 'const message = "this is not an import statement";\n';
+		expect(findImportIdentifierSpans(text)).toEqual([]);
+	});
+
+	test("resumes scanning ordinary code after an import statement closes", () => {
+		const text = [
+			'import { greet } from "./values.ts";',
+			"",
+			"export function run() {",
+			'\treturn greet("world");',
+			"}",
+			"",
+		].join("\n");
+		const spans = findImportIdentifierSpans(text);
+		// Only the import's own binding — nothing from the function body below it.
+		expect(spans).toHaveLength(1);
+		expect(spanText(text, spans[0] as (typeof spans)[number])).toBe("greet");
+	});
+
+	test("stops at MAX_IMPORT_SPAN_PROBES for a pathologically large import block", () => {
+		const names = Array.from({ length: 500 }, (_, i) => `name${i}`);
+		const text = `import {\n${names.map((n) => `\t${n},`).join("\n")}\n} from "./huge.ts";\n`;
+		const spans = findImportIdentifierSpans(text);
+		expect(spans.length).toBeLessThanOrEqual(200);
+		expect(spans.length).toBeGreaterThan(0);
 	});
 });

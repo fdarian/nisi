@@ -381,6 +381,14 @@ export const readWorktreeFileContents = (
  * number, or operator at all — every token it returns is already a real
  * identifier occurrence, so there's nothing to filter out the way a
  * hand-picked "symbol-ish token types" allowlist would otherwise need to.
+ *
+ * `semanticTokensFull` was separately verified (twice, independently) to
+ * emit **zero tokens on any import line** — both `import type { X }` and a
+ * plain value import — even though the same symbol gets a normal token at
+ * its usage site later in the file. {@link resolveImportOccurrences}
+ * supplements exactly that gap, so ⌘-hover still lights up identifiers
+ * inside imports (dense in a review diff) the way the old SCIP-backed
+ * implementation did.
  */
 export const buildFileOccurrencesResponse = (
 	repoRoot: string,
@@ -401,7 +409,7 @@ export const buildFileOccurrencesResponse = (
 				Effect.catch(() => Effect.succeed<ReadonlyArray<SemanticToken>>([])),
 			);
 
-		return tokens.map(
+		const tokenOccurrences = tokens.map(
 			(token): CodeIndexOccurrence => ({
 				line: token.range.start.line,
 				charStart: token.range.start.character,
@@ -413,7 +421,190 @@ export const buildFileOccurrencesResponse = (
 				),
 			}),
 		);
+
+		const importOccurrences = yield* resolveImportOccurrences(
+			server,
+			absolutePath,
+			path,
+			tokenOccurrences,
+		);
+
+		return [...tokenOccurrences, ...importOccurrences];
 	});
+
+/**
+ * Hard ceiling on how many import-line identifier candidates a single
+ * {@link buildFileOccurrencesResponse} call will probe — the explicit cost
+ * bound a pathological file (a barrel file re-exporting hundreds of names)
+ * needs, since {@link findImportIdentifierSpans} otherwise has no reason to
+ * stop early. At the concurrency below and this package's own measured
+ * warm-`definition` latency (~13ms, `packages/code-lsp/AGENTS.md`), even the
+ * full cap resolves in a few hundred milliseconds, not a stacked-up queue.
+ */
+const MAX_IMPORT_SPAN_PROBES = 200;
+
+/**
+ * How many `definition` probes for import-line candidates are in flight at
+ * once. Not `"unbounded"` like `buildReferencesPlan`'s fixed 3-way
+ * `Effect.all` below — this fires one request per *candidate identifier*,
+ * up to {@link MAX_IMPORT_SPAN_PROBES}, so an unbounded burst against one
+ * server process is an avoidable spike rather than a fixed, small fan-out.
+ */
+const IMPORT_SPAN_PROBE_CONCURRENCY = 16;
+
+/**
+ * The import-line supplement to {@link buildFileOccurrencesResponse}'s
+ * semantic-token pass (see that function's own doc comment for why one is
+ * needed at all). Reads `absolutePath`'s current worktree bytes — the same
+ * source `readWorktreeFileContents` reads elsewhere in this module, so a
+ * worktree read failure degrades to "nothing to add" rather than failing
+ * the whole occurrence set, matching every other degrade-to-empty posture
+ * here — finds candidate identifier spans with
+ * {@link findImportIdentifierSpans}, and confirms each with a concurrent
+ * `definition` probe: only a span a probe actually resolved becomes an
+ * occurrence. Never fabricated — a candidate that doesn't resolve (a
+ * keyword the line scan missed, a word that only existed inside the module
+ * specifier string) is silently dropped, not reported with a guessed or
+ * empty definition. `existingOccurrences` is consulted only to skip a
+ * position semantic tokens already covered, so a future looser server
+ * response can't double-count a position.
+ */
+const resolveImportOccurrences = (
+	server: LspServer,
+	absolutePath: string,
+	path: string,
+	existingOccurrences: ReadonlyArray<CodeIndexOccurrence>,
+): Effect.Effect<ReadonlyArray<CodeIndexOccurrence>> =>
+	Effect.gen(function* () {
+		const content = yield* readWorktreeBlobContent(absolutePath).pipe(
+			Effect.catch(() => Effect.succeed(Option.none<Uint8Array>())),
+		);
+		if (Option.isNone(content)) return [];
+
+		const text = new TextDecoder().decode(content.value);
+		const coveredPositions = new Set(
+			existingOccurrences.map(
+				(occurrence) => `${occurrence.line}:${occurrence.charStart}`,
+			),
+		);
+		const candidates = findImportIdentifierSpans(text).filter(
+			(span) => !coveredPositions.has(`${span.line}:${span.charStart}`),
+		);
+
+		const resolvedSpans = yield* Effect.forEach(
+			candidates,
+			(span) =>
+				server
+					.definition(absolutePath, {
+						line: span.line,
+						character: span.charStart,
+					})
+					.pipe(
+						Effect.map((locations) => (locations.length > 0 ? span : null)),
+						Effect.catch(() => Effect.succeed(null)),
+					),
+			{ concurrency: IMPORT_SPAN_PROBE_CONCURRENCY },
+		);
+
+		return resolvedSpans
+			.filter((span) => span !== null)
+			.map(
+				(span): CodeIndexOccurrence => ({
+					line: span.line,
+					charStart: span.charStart,
+					charEnd: span.charEnd,
+					symbolKey: encodeSymbolKey(path, span.line, span.charStart),
+				}),
+			);
+	});
+
+/** A JS/TS identifier, matched as a whole token — same character class {@link IDENTIFIER_CHAR} (further down this module) checks one character at a time, just as a `g`-flagged whole-token pattern here since {@link findImportIdentifierSpans} needs every match's own position via `matchAll`. */
+const IMPORT_IDENTIFIER_PATTERN = /[A-Za-z_$][A-Za-z0-9_$]*/g;
+
+/** Reserved words that can appear on an import line but are never themselves an identifier binding (`import type { X as Y } from "..."`) — skipped so a candidate probe isn't wasted on the language's own syntax. */
+const IMPORT_LINE_KEYWORDS = new Set([
+	"import",
+	"type",
+	"from",
+	"as",
+	"default",
+]);
+
+/**
+ * Blanks out quoted content (module specifiers, and any string that happens
+ * to contain identifier-shaped substrings) before token-scanning a line —
+ * avoids wasting a `definition` probe on words that only exist inside
+ * `"..."`. Preserves every character's original column by replacing with
+ * same-length spaces, so positions found afterward via
+ * {@link IMPORT_IDENTIFIER_PATTERN} still line up with the real line.
+ * Doesn't need to be a real tokenizer (no escaped-quote edge cases beyond a
+ * simple backslash check) — a missed edge case only costs one wasted probe,
+ * per {@link findImportIdentifierSpans}'s own doc comment.
+ */
+const blankQuotedContent = (line: string): string =>
+	line.replace(/(['"`])(?:\\.|(?!\1)[^\\])*\1/g, (match) =>
+		" ".repeat(match.length),
+	);
+
+/**
+ * Every identifier-shaped token on `text`'s import statements (type-only and
+ * value imports alike — named, default, and namespace bindings), found via
+ * a plain line scan rather than a real parser: nothing here needs to be
+ * exact, since {@link resolveImportOccurrences} only keeps a candidate once
+ * a live `definition` probe actually resolves it — a wrong guess (a
+ * keyword, or a word that only existed inside the module specifier string)
+ * costs exactly one probe that resolves to nothing, never a bad result.
+ * Bounded by {@link MAX_IMPORT_SPAN_PROBES} so a pathological import block
+ * can't turn one `fileOccurrences` call into an unbounded number of probes.
+ */
+export const findImportIdentifierSpans = (
+	text: string,
+): ReadonlyArray<{
+	readonly line: number;
+	readonly charStart: number;
+	readonly charEnd: number;
+}> => {
+	const spans: Array<{
+		readonly line: number;
+		readonly charStart: number;
+		readonly charEnd: number;
+	}> = [];
+	const lines = text.split("\n");
+	let inImportStatement = false;
+
+	for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
+		const line = lines[lineIndex] as string;
+
+		if (!inImportStatement) {
+			const trimmed = line.trimStart();
+			if (!/^import\b/.test(trimmed)) continue;
+			// A side-effect-only import (`import "./styles.css";`) binds no
+			// identifier at all — nothing here to scan.
+			if (/^import\s*['"]/.test(trimmed)) continue;
+			inImportStatement = true;
+		}
+
+		for (const match of blankQuotedContent(line).matchAll(
+			IMPORT_IDENTIFIER_PATTERN,
+		)) {
+			const word = match[0];
+			if (IMPORT_LINE_KEYWORDS.has(word)) continue;
+			spans.push({
+				line: lineIndex,
+				charStart: match.index,
+				charEnd: match.index + word.length,
+			});
+			if (spans.length >= MAX_IMPORT_SPAN_PROBES) return spans;
+		}
+
+		// The module specifier closes the statement (with or without a
+		// trailing semicolon) — everything through this line has been
+		// scanned, so later lines start a fresh (or no) import statement.
+		if (/from\s*['"][^'"]*['"]/.test(line)) inImportStatement = false;
+	}
+
+	return spans;
+};
 
 const SYMBOL_KEY_PATTERN = /^(.*):(\d+):(\d+)$/;
 
