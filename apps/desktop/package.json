@@ -53,6 +53,7 @@
 		"@pierre/trees": "1.0.0-beta.6",
 		"@repo/bin-resolver": "workspace:*",
 		"@repo/code-index": "workspace:*",
+		"@repo/code-lsp": "workspace:*",
 		"@repo/db": "workspace:*",
 		"@repo/git": "workspace:*",
 		"@repo/harness-local": "workspace:*",

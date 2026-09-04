@@ -154,16 +154,21 @@ seam" for the port/token handshake this boots into.
 - `walkthrough/` — Phase 3's wiring layer. See its own AGENTS.md.
 - `chat/` — the quick-chat popup's read-only `HarnessAgent` conversations, one per thread. See its
   own AGENTS.md.
-- `code-index/state.ts` — the `codeIndex.*` handlers' process-lifetime state: which repo roots have
-  a build in flight or a just-failed one (`buildStates`, gone on restart — same reasoning as
-  `generation-log.ts`'s map), the one decoded `@repo/code-index` `CodeIndex` kept resident per repo
-  root (`decodedIndexes`, decoding being real work over tens of thousands of occurrences), and a
-  memoized `tsconfig*.json`-presence check per repo (`tsConfigPresence`) backing `status`'s
-  `unsupported` outcome. `resolveCodeIndexStatus`/`startCodeIndexBuild` are this module's read/act
-  split, same shape as `walkthrough.activeGeneration`/`walkthrough.generate` — `startCodeIndexBuild`
-  registers `"building"` synchronously before any `await`, so two racing `build` calls for the same
-  repo can't both start one. `@repo/code-index` itself stays pure (decode/query/indexer/cache
-  primitives, no in-memory state) — this file is where that state actually lives.
+- `code-index/state.ts` — the `codeIndex.*` handlers' process-lifetime state, backed by
+  `@repo/code-lsp`'s TypeScript 7 native LSP client rather than a prebuilt index. (A SCIP-index-based
+  implementation of this same feature lives on branch `claude/nisi-implementation-cfea93`, for
+  comparison.) `CodeLspPool` is a `Context.Service` wrapping one `ScopedCache` of live
+  `tsc --lsp --stdio` processes, keyed by tsconfig project root and
+  capacity-bounded with LRU eviction (`MAX_LIVE_LSP_SERVERS`) — part of `index.ts`'s `MainLayer`, so
+  every server dies with the sidecar the same way every other `Effect.acquireRelease` resource does.
+  `buildStates` (repo-root-keyed, gone on restart — same reasoning as `generation-log.ts`'s map)
+  tracks only `status`/`build`'s own repo-level spawn/initialize outcome; it has no bearing on
+  whether `fileOccurrences`/`references` work, since each spawns its own per-file project's server
+  from `CodeLspPool` lazily, regardless. `resolveCodeIndexStatus`/`startCodeIndexBuild` are this
+  module's read/act split, same shape as `walkthrough.activeGeneration`/`walkthrough.generate`.
+  `@repo/code-lsp` itself stays pure protocol/process-lifecycle code with no pooling of its own — see
+  that package's AGENTS.md, "One project root per server" — this file is where the pooling and every
+  other piece of process-lifetime state actually lives.
 - `updater/` — macOS Homebrew-cask auto-update. `service.ts`'s `Updater` owns a `Ref<UpdateState>`
   and is the only writer of it: `startChecks()` (forked from `index.ts`'s boot program, same shape as
   `startLivePolling` above) drives `idle ⇄ available` on an hourly `Schedule`, stopping for good the

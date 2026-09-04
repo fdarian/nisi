@@ -1,296 +1,226 @@
-import { join } from "node:path";
-import {
-	buildIndex,
-	type CodeIndex,
-	CodeIndexCacheError,
-	decodeIndex,
-	definitionsOf,
-	detectTsConfigPresence,
-	displayNameOf,
-	documentationOf,
-	findCachedIndex,
-	hasDefinition,
-	isLocalSymbolKey,
-	mostRecentCachedIndex,
-	occurrencesInDocument,
-	readIndexBytes,
-	referenceCount,
-	referencesOf,
-	type ScipDecodeError,
-	type ScipTypescriptIndexError,
-	type ScipTypescriptInstallError,
-	type SymbolKey,
-	writeIndex,
-} from "@repo/code-index";
-import { getDataDirConfig } from "@repo/db";
+import { join, relative } from "node:path";
+import type {
+	LspLocation,
+	LspProcessError,
+	LspServer,
+	SemanticToken,
+	TsLspBinaryResolutionError,
+} from "@repo/code-lsp";
+import { resolveProjectRoot, spawnLspServer } from "@repo/code-lsp";
 import { readWorktreeBlobContent, type WorktreeReadFailed } from "@repo/git";
 import type {
 	CodeIndexFileReferences,
 	CodeIndexOccurrence,
+	CodeIndexReference,
 	CodeIndexReferencesResult,
 	CodeIndexSourceContext,
 	CodeIndexStatus,
 } from "@repo/sidecar-api";
-import type { Context } from "effect";
-import { Effect, Option, Result } from "effect";
+import { Context, Effect, Layer, Option, Result, ScopedCache } from "effect";
 import { FileSystem } from "effect/FileSystem";
-import type { ChildProcessSpawner } from "effect/unstable/process";
 import type { AppServices } from "../services.ts";
 
 /**
- * The latest transient (not derivable from the on-disk cache) build outcome
- * per repo root — `"ready"`/`"stale"`/`"absent"` are always re-derived from
- * `@repo/code-index`'s cache instead, so nothing here needs to track them.
- * Gone on sidecar restart, same as `generation-log.ts`'s map — there's no
- * in-flight build left to reattach to after a restart anyway.
+ * How many TS7 LSP server processes stay live at once, across every
+ * tsconfig project this sidecar has queried since boot (the pool is
+ * process-lifetime, not per-session — see `CodeLspPool` below). Capacity-
+ * bounded, least-recently-used eviction, via `ScopedCache`. Measured
+ * footprint (spiked before this file was written, against this repo):
+ * 235 MB resident for one loaded project, 685 MB once a second one loads —
+ * three servers could therefore approach ~1.1 GB resident, the ceiling this
+ * cap accepts in exchange for not respawning (and re-cold-loading a whole
+ * project, up to ~1s per that same spike's numbers) every time a reviewer
+ * bounces between more than a couple of packages' files. Deliberately
+ * small: a large monorepo can have far more tsconfig projects than this,
+ * and an unbounded registry would grow without limit as a reviewer opens
+ * files spread across all of them.
  */
-const buildStates = new Map<
-	string,
-	| { readonly kind: "building" }
-	| { readonly kind: "failed"; readonly message: string }
->();
+const MAX_LIVE_LSP_SERVERS = 3;
 
 /**
- * The one decoded `CodeIndex` kept in memory per repo root, at whatever head
- * sha it was last decoded for. Decoding is real work (a single pass over
- * tens of thousands of occurrences — see `@repo/code-index`'s `decodeIndex`
- * doc), so a query following a `status` check that just decoded the same
- * repo+sha reuses it instead of repeating the pass. Superseded (not
- * accumulated) on every decode — only ever one repo root's worth of index
- * data needs to be resident at a time per repo, and holding stale entries
- * for repos nobody's looking at anymore would just leak memory.
+ * The sidecar's one registry of live `tsc --lsp --stdio` processes, keyed by
+ * tsconfig project root (`@repo/code-lsp`'s `resolveProjectRoot` — one
+ * server per project, never a shared/broader one; see that package's
+ * AGENTS.md, "One project root per server", for why a shared server would
+ * silently give wrong reference counts). Backed by `ScopedCache`: a `get`
+ * for an unspawned root spawns and initializes it, concurrent `get`s for the
+ * same root share the one in-flight spawn — this *is* the "register
+ * in-flight state synchronously before any await" guarantee
+ * `generation-log.ts` hand-rolls with a `Map`, just provided by the cache
+ * itself instead — and capacity eviction closes the evicted entry's own
+ * scope, which is exactly `spawnLspServer`'s `Effect.acquireRelease`
+ * release: a clean `shutdown`/`exit` handshake, not a `kill -9`. The cache's
+ * own scope is this layer's, which `index.ts`'s `MainLayer` ties to the
+ * sidecar's whole run — every live server dies with the sidecar, the same
+ * posture `Effect.acquireRelease` gives every other resource there (compare
+ * `updater/restart-helper.ts`'s `handle.unref`, the one deliberate exception
+ * that survives it).
  */
-const decodedIndexes = new Map<
-	string,
-	{ readonly headSha: string; readonly index: CodeIndex }
->();
+export class CodeLspPool extends Context.Service<CodeLspPool>()("CodeLspPool", {
+	make: Effect.gen(function* () {
+		return yield* ScopedCache.make({
+			lookup: (projectRoot: string) => spawnLspServer(projectRoot),
+			capacity: MAX_LIVE_LSP_SERVERS,
+		});
+	}),
+}) {
+	static layer = Layer.effect(CodeLspPool, CodeLspPool.make);
+}
+
+/** `ScopedCache.get`, degraded to `null` on a spawn/initialize failure rather than propagating — both `fileOccurrences` and `references` already treat "nothing available" as a legitimate empty response (see their contract doc comments), so a broken server for one project shouldn't fail those calls, only `status`/`build` (which query the cache through `runCodeIndexBuild` instead, where the failure is exactly the information being reported). */
+const getServer = (
+	pool: ScopedCache.ScopedCache<
+		string,
+		LspServer,
+		TsLspBinaryResolutionError | LspProcessError
+	>,
+	projectRoot: string,
+): Effect.Effect<LspServer | null> =>
+	ScopedCache.get(pool, projectRoot).pipe(
+		Effect.catch(() => Effect.succeed(null)),
+	);
+
+/** Directories never worth descending into while looking for a `tsconfig.json` — build output and dependency trees, which can be enormous and never contain a project's own config. Mirrors the equivalent skip list the deleted `@repo/code-index` package used for the same reason. */
+const SKIPPED_DIRECTORY_NAMES = new Set([
+	"node_modules",
+	".git",
+	"dist",
+	"build",
+	"out",
+	".turbo",
+	".next",
+	".cache",
+	"coverage",
+]);
+
+/** Caps a single filesystem walk — a correctness backstop against a pathological repo layout, not a limit expected to bite in practice. */
+const MAX_DIRECTORIES_VISITED = 4_000;
+
+const TSCONFIG_FILENAME = "tsconfig.json";
+
+/** Depth-first, alphabetical-first-match walk down from `path` for the first directory holding an exact `tsconfig.json` — sorted so the same repo always resolves the same "primary" project across runs. */
+const findTsConfigProjectRoot = (
+	fs: FileSystem,
+	path: string,
+	budget: { remaining: number },
+): Effect.Effect<string | null> =>
+	Effect.gen(function* () {
+		if (budget.remaining <= 0) return null;
+		budget.remaining -= 1;
+
+		const entries = yield* fs
+			.readDirectory(path)
+			.pipe(Effect.catch(() => Effect.succeed(null)));
+		if (entries === null) return null;
+
+		if (entries.includes(TSCONFIG_FILENAME)) return path;
+
+		for (const entry of [...entries].sort()) {
+			if (SKIPPED_DIRECTORY_NAMES.has(entry)) continue;
+			const found = yield* findTsConfigProjectRoot(
+				fs,
+				join(path, entry),
+				budget,
+			);
+			if (found !== null) return found;
+		}
+		return null;
+	});
+
+/** Repos already resolved to a "primary" project root (or confirmed to have none) — a directory walk on every `status` poll (roughly once a second while a build runs) would be wasteful for a fact that doesn't change within a running session. */
+const primaryProjectRootByRepo = new Map<string, string | null>();
 
 /**
- * Repos already confirmed to have a `tsconfig*.json` somewhere, or confirmed
- * not to — a directory walk on every `status` poll (roughly once a second
- * while a build runs) would be wasteful for a fact that doesn't change
- * within a running session.
+ * The one tsconfig project root `status`/`build` warm and report on for a
+ * repo — chosen deterministically (alphabetically-first match from a
+ * top-down walk, skipping build/dependency directories) since neither
+ * procedure carries a specific file to scope a query to the way
+ * `fileOccurrences`/`references` do (`@repo/code-lsp`'s `resolveProjectRoot`,
+ * walking *up* from a queried file, is what those use instead — see that
+ * package's AGENTS.md). This project won't necessarily be the one a later
+ * `fileOccurrences` call for some other file resolves to — `build`'s job
+ * under LSP is "prove the environment can spawn/initialize a real project
+ * and keep one warm", not "index the whole repo" (there is no such thing
+ * anymore; see this file's own top-of-module note). `null` when the repo
+ * has no `tsconfig.json` anywhere, which is also what `isCodeIndexUnsupported`
+ * answers.
  */
-const tsConfigPresence = new Map<string, boolean>();
+const resolvePrimaryProjectRoot = (
+	repoRoot: string,
+): Effect.Effect<string | null, never, FileSystem> =>
+	Effect.gen(function* () {
+		const cached = primaryProjectRootByRepo.get(repoRoot);
+		if (cached !== undefined) return cached;
+		const fs = yield* FileSystem;
+		const found = yield* findTsConfigProjectRoot(fs, repoRoot, {
+			remaining: MAX_DIRECTORIES_VISITED,
+		});
+		primaryProjectRootByRepo.set(repoRoot, found);
+		return found;
+	});
 
 /** Exported so `http.ts`'s `build` handler gates on the exact same (memoized) answer `resolveCodeIndexStatus` derives `"unsupported"` from — one source of truth for "does this repo have a tsconfig anywhere." */
 export const isCodeIndexUnsupported = (
 	repoRoot: string,
 ): Effect.Effect<boolean, never, FileSystem> =>
-	Effect.gen(function* () {
-		const cached = tsConfigPresence.get(repoRoot);
-		if (cached !== undefined) return !cached;
-		const present = yield* detectTsConfigPresence(repoRoot);
-		tsConfigPresence.set(repoRoot, present);
-		return !present;
-	});
-
-/** Decodes (or reuses an already-decoded) `CodeIndex` for `repoRoot` at exactly `headSha`. */
-const getOrDecodeIndex = (
-	dataDir: string,
-	repoRoot: string,
-	headSha: string,
-): Effect.Effect<
-	CodeIndex,
-	CodeIndexCacheError | ScipDecodeError,
-	FileSystem
-> =>
-	Effect.gen(function* () {
-		const cached = decodedIndexes.get(repoRoot);
-		if (cached !== undefined && cached.headSha === headSha) return cached.index;
-
-		const bytes = yield* readIndexBytes(dataDir, repoRoot, headSha);
-		const index = yield* decodeIndex(bytes);
-		decodedIndexes.set(repoRoot, { headSha, index });
-		return index;
-	});
+	resolvePrimaryProjectRoot(repoRoot).pipe(Effect.map((root) => root === null));
 
 /**
- * The `CodeIndex` to actually query for `fileOccurrences`/`references` — the
- * current head's index when it's cached (the `"ready"` case), otherwise the
- * most recent cached one regardless of head sha (the `"stale"` case, still
- * useful data), otherwise `null` when nothing has ever built successfully.
- * Best-effort: a cache or decode failure here degrades to `null` rather than
- * failing the call, since both `fileOccurrences` and `references` already
- * treat "nothing available" as a legitimate empty response, not an error —
- * see their contract doc comments.
+ * The latest transient (never persisted — there is nothing to persist,
+ * unlike the old on-disk SCIP cache) build outcome per repo root.
+ * `"ready"`/`"failed"` here describe `runCodeIndexBuild`'s *own* warm-up
+ * spawn (see `resolvePrimaryProjectRoot`), not "is code navigation usable at
+ * all" — `fileOccurrences`/`references` lazily spawn their own per-file
+ * servers regardless of what's recorded here, so a `"failed"` build doesn't
+ * block them the way a failed SCIP build used to. Gone on sidecar restart,
+ * same as `generation-log.ts`'s map — there's no in-flight build left to
+ * reattach to after a restart anyway.
  */
-export const resolveQueryableIndex = (
-	repoRoot: string,
-	headSha: string,
-): Effect.Effect<CodeIndex | null, never, FileSystem> =>
-	Effect.gen(function* () {
-		const dataDir = yield* getDataDirConfig().pipe(Effect.orDie);
-		const ready = yield* findCachedIndex(dataDir, repoRoot, headSha).pipe(
-			Effect.catch(() => Effect.succeed(Option.none())),
-		);
-		const info = Option.isSome(ready)
-			? Option.some(ready.value)
-			: yield* mostRecentCachedIndex(dataDir, repoRoot).pipe(
-					Effect.catch(() => Effect.succeed(Option.none())),
-				);
-		if (Option.isNone(info)) return null;
-
-		return yield* getOrDecodeIndex(dataDir, repoRoot, info.value.headSha).pipe(
-			Effect.catch(() => Effect.succeed(null)),
-		);
-	});
-
-/**
- * `status`'s full derivation: unsupported gates everything else, an
- * in-flight or just-failed build takes priority over what the cache alone
- * would say (a rebuild in progress should read `"building"`, not `"stale"`),
- * and otherwise the cache decides `"ready"` vs `"stale"` vs `"absent"` by
- * comparing `headSha` against what's actually cached.
- */
-export const resolveCodeIndexStatus = (
-	repoRoot: string,
-	headSha: string,
-): Effect.Effect<CodeIndexStatus, never, FileSystem> =>
-	Effect.gen(function* () {
-		if (yield* isCodeIndexUnsupported(repoRoot)) {
-			return {
-				status: "unsupported",
-				headSha,
-				indexedHeadSha: null,
-				generatedAt: null,
-				documentCount: null,
-				failureMessage: null,
-			} satisfies CodeIndexStatus;
-		}
-
-		const dataDir = yield* getDataDirConfig().pipe(Effect.orDie);
-		const buildState = buildStates.get(repoRoot);
-		if (buildState !== undefined) {
-			const info = yield* mostRecentCachedIndex(dataDir, repoRoot).pipe(
-				Effect.catch(() => Effect.succeed(Option.none())),
-			);
-			return {
-				status: buildState.kind,
-				headSha,
-				indexedHeadSha: Option.isSome(info) ? info.value.headSha : null,
-				generatedAt: Option.isSome(info) ? info.value.generatedAt : null,
-				documentCount: null,
-				failureMessage:
-					buildState.kind === "failed" ? buildState.message : null,
-			} satisfies CodeIndexStatus;
-		}
-
-		const ready = yield* findCachedIndex(dataDir, repoRoot, headSha).pipe(
-			Effect.catch(() => Effect.succeed(Option.none())),
-		);
-		if (Option.isSome(ready)) {
-			const index = yield* getOrDecodeIndex(dataDir, repoRoot, headSha).pipe(
-				Effect.option,
-			);
-			return {
-				status: "ready",
-				headSha,
-				indexedHeadSha: headSha,
-				generatedAt: ready.value.generatedAt,
-				documentCount: Option.isSome(index) ? index.value.documentCount : null,
-				failureMessage: null,
-			} satisfies CodeIndexStatus;
-		}
-
-		const stale = yield* mostRecentCachedIndex(dataDir, repoRoot).pipe(
-			Effect.catch(() => Effect.succeed(Option.none())),
-		);
-		if (Option.isSome(stale)) {
-			return {
-				status: "stale",
-				headSha,
-				indexedHeadSha: stale.value.headSha,
-				generatedAt: stale.value.generatedAt,
-				documentCount: null,
-				failureMessage: null,
-			} satisfies CodeIndexStatus;
-		}
-
-		return {
-			status: "absent",
-			headSha,
-			indexedHeadSha: null,
-			generatedAt: null,
-			documentCount: null,
-			failureMessage: null,
-		} satisfies CodeIndexStatus;
-	});
-
-/** Runs scip-typescript into a scratch file, caches the result on disk, and decodes it into the in-memory query cache — the actual work behind {@link startCodeIndexBuild}. */
-const runCodeIndexBuild = (
-	repoRoot: string,
-	headSha: string,
-): Effect.Effect<
-	void,
-	| ScipTypescriptInstallError
-	| ScipTypescriptIndexError
-	| CodeIndexCacheError
-	| ScipDecodeError,
-	FileSystem | ChildProcessSpawner.ChildProcessSpawner
-> =>
-	Effect.scoped(
-		Effect.gen(function* () {
-			const dataDir = yield* getDataDirConfig().pipe(Effect.orDie);
-			const fs = yield* FileSystem;
-			const scratchDir = yield* fs
-				.makeTempDirectoryScoped()
-				.pipe(Effect.mapError((cause) => new CodeIndexCacheError({ cause })));
-			const outputPath = join(scratchDir, "index.scip");
-
-			yield* buildIndex(repoRoot, outputPath);
-
-			const bytes = yield* fs
-				.readFile(outputPath)
-				.pipe(Effect.mapError((cause) => new CodeIndexCacheError({ cause })));
-			yield* writeIndex(dataDir, repoRoot, headSha, bytes);
-
-			const index = yield* decodeIndex(bytes);
-			decodedIndexes.set(repoRoot, { headSha, index });
-		}),
-	);
-
-/**
- * scip-typescript reports one failing project per line as `- <project>
- * (<reason>)` (its own `console.error` call in `main.ts`) — a sensible
- * bullet when several projects' worth of errors print together, but a
- * stray leading dash once this becomes the *entire* message shown to a
- * user (the sidecar's own "Code index build failed:" prefix already frames
- * it — see `IndexStatusBanner`/`StatusBannerRow` in
- * `code-index-peek-panel.tsx`). Strips just that bullet from each line;
- * everything past it is scip-typescript's own wording, still the most
- * specific explanation available for a real compile/config error.
- */
-const cleanScipTypescriptStderr = (stderr: string): string =>
-	stderr
-		.trim()
-		.split("\n")
-		.map((line) => line.replace(/^-\s+/, ""))
-		.join("\n")
-		.trim();
+const buildStates = new Map<
+	string,
+	| { readonly kind: "building" }
+	| { readonly kind: "ready"; readonly at: number }
+	| { readonly kind: "failed"; readonly message: string }
+>();
 
 export const describeBuildFailure = (
-	failure:
-		| ScipTypescriptInstallError
-		| ScipTypescriptIndexError
-		| CodeIndexCacheError
-		| ScipDecodeError,
+	failure: TsLspBinaryResolutionError | LspProcessError,
 ): string => {
 	switch (failure._tag) {
-		case "ScipTypescriptIndexError": {
-			const cleaned = cleanScipTypescriptStderr(failure.stderr);
-			return cleaned.length > 0
-				? cleaned
-				: `scip-typescript exited with code ${failure.exitCode}`;
-		}
-		case "ScipTypescriptInstallError":
-			return `couldn't provision scip-typescript (${failure.step}): ${String(failure.cause)}`;
-		case "CodeIndexCacheError":
-			return `couldn't write the index to the cache: ${String(failure.cause)}`;
-		case "ScipDecodeError":
-			return `couldn't decode the generated index: ${String(failure.cause)}`;
+		case "TsLspBinaryResolutionError":
+			return `couldn't resolve the TypeScript language server binary (${failure.strategy}): ${String(failure.cause)}`;
+		case "LspProcessError":
+			return failure.step === "spawn"
+				? `TypeScript language server failed to start: ${String(failure.cause)}`
+				: `TypeScript language server failed to initialize: ${String(failure.cause)}`;
 	}
 };
+
+/** The actual work behind {@link startCodeIndexBuild}: resolves the repo's primary project (see `resolvePrimaryProjectRoot`) and forces a fresh spawn/initialize for it via `ScopedCache.refresh` — a real, reusable server on success, sharing the same pool `fileOccurrences`/`references` draw from, not a throwaway health check. */
+const runCodeIndexBuild = (
+	repoRoot: string,
+): Effect.Effect<
+	void,
+	TsLspBinaryResolutionError | LspProcessError,
+	CodeLspPool | FileSystem
+> =>
+	Effect.gen(function* () {
+		const projectRoot = yield* resolvePrimaryProjectRoot(repoRoot);
+		if (projectRoot === null) {
+			// http.ts's `build` handler already checks `isCodeIndexUnsupported`
+			// (backed by this exact same memoized lookup) before ever calling
+			// `startCodeIndexBuild` — reaching this branch means that gate and
+			// this resolution disagreed, a bug in this file rather than
+			// something a caller could act on.
+			return yield* Effect.die(
+				new Error(
+					`runCodeIndexBuild called for ${repoRoot}, which resolved no tsconfig project — the UNSUPPORTED gate in http.ts should have refused this first`,
+				),
+			);
+		}
+		const pool = yield* CodeLspPool;
+		yield* ScopedCache.refresh(pool, projectRoot);
+	});
 
 /**
  * Starts a build for `repoRoot` and returns once it's registered, well
@@ -308,7 +238,6 @@ export const describeBuildFailure = (
  */
 export const startCodeIndexBuild = async (
 	repoRoot: string,
-	headSha: string,
 	mainContext: Context.Context<AppServices>,
 ): Promise<void> => {
 	if (buildStates.get(repoRoot)?.kind === "building") return;
@@ -316,39 +245,86 @@ export const startCodeIndexBuild = async (
 
 	void (async () => {
 		const result = await Effect.runPromise(
-			Effect.provide(
-				Effect.result(runCodeIndexBuild(repoRoot, headSha)),
-				mainContext,
-			),
+			Effect.provide(Effect.result(runCodeIndexBuild(repoRoot)), mainContext),
 		);
-		if (Result.isSuccess(result)) {
-			buildStates.delete(repoRoot);
-			return;
-		}
-		buildStates.set(repoRoot, {
-			kind: "failed",
-			message: describeBuildFailure(result.failure),
-		});
+		buildStates.set(
+			repoRoot,
+			Result.isSuccess(result)
+				? { kind: "ready", at: Date.now() }
+				: { kind: "failed", message: describeBuildFailure(result.failure) },
+		);
 	})();
 };
 
-/** Every occurrence in `path` from `index`, in the shape `codeIndex.fileOccurrences` reports — empty when `index` has no document for `path` (a non-TypeScript file, or one outside the indexed workspace). */
-export const buildFileOccurrencesResponse = (
-	index: CodeIndex,
-	path: string,
-): ReadonlyArray<CodeIndexOccurrence> => {
-	const occurrences = occurrencesInDocument(index, path);
-	if (occurrences === undefined) return [];
-	return occurrences.map((occurrence) => ({
-		line: occurrence.range.startLine,
-		charStart: occurrence.range.startChar,
-		charEnd: occurrence.range.endChar,
-		symbolKey: occurrence.symbolKey,
-		isDefinition: occurrence.isDefinition,
-		hasDefinition: hasDefinition(index, occurrence.symbolKey),
-		referenceCount: referenceCount(index, occurrence.symbolKey),
-	}));
-};
+/**
+ * `status`'s full derivation: unsupported gates everything else (no
+ * `tsconfig.json` anywhere means nothing here could ever work), then
+ * `buildStates` decides `absent`/`building`/`ready`/`failed` directly —
+ * `"stale"` is never emitted (see `packages/sidecar-api/src/code-index.ts`'s
+ * own doc comment on why that state doesn't apply to a server that always
+ * reads live files off disk). `indexedHeadSha` mirrors `headSha` exactly
+ * when `ready`, since there is no separate "index" revision to disagree
+ * with it anymore; `documentCount` is always `null` (LSP has no equivalent
+ * "how many files did this cover" number — a per-file question, not an
+ * index-wide one); `generatedAt` is when the primary project's server was
+ * last successfully initialized.
+ */
+export const resolveCodeIndexStatus = (
+	repoRoot: string,
+	headSha: string,
+): Effect.Effect<CodeIndexStatus, never, FileSystem> =>
+	Effect.gen(function* () {
+		if (yield* isCodeIndexUnsupported(repoRoot)) {
+			return {
+				status: "unsupported",
+				headSha,
+				indexedHeadSha: null,
+				generatedAt: null,
+				documentCount: null,
+				failureMessage: null,
+			} satisfies CodeIndexStatus;
+		}
+
+		const state = buildStates.get(repoRoot);
+		if (state === undefined) {
+			return {
+				status: "absent",
+				headSha,
+				indexedHeadSha: null,
+				generatedAt: null,
+				documentCount: null,
+				failureMessage: null,
+			} satisfies CodeIndexStatus;
+		}
+		if (state.kind === "building") {
+			return {
+				status: "building",
+				headSha,
+				indexedHeadSha: null,
+				generatedAt: null,
+				documentCount: null,
+				failureMessage: null,
+			} satisfies CodeIndexStatus;
+		}
+		if (state.kind === "ready") {
+			return {
+				status: "ready",
+				headSha,
+				indexedHeadSha: headSha,
+				generatedAt: state.at,
+				documentCount: null,
+				failureMessage: null,
+			} satisfies CodeIndexStatus;
+		}
+		return {
+			status: "failed",
+			headSha,
+			indexedHeadSha: null,
+			generatedAt: null,
+			documentCount: null,
+			failureMessage: state.message,
+		} satisfies CodeIndexStatus;
+	});
 
 /** How many reference locations a single `references` call returns — a widely-referenced symbol (an exported type, a common utility) can have thousands; `totalReferenceCount` on the response still reports the real total so the UI can render "showing N of M." */
 export const MAX_RETURNED_REFERENCES = 200;
@@ -358,17 +334,14 @@ export const MAX_RETURNED_REFERENCES = 200;
  * `includeUncommitted`/`worktreeEligible` gate. `Store.readCurrentContent`
  * (the sidecar's one gate for "what does this path look like right now" —
  * `apps/desktop/sidecar/store.ts`) exists for diff/review semantics, where
- * "current" is a user preference (`includeUncommitted`). scip-typescript has
- * no such preference: it indexes whatever's physically on disk at
- * `repoRoot`, full stop (see `@repo/code-index`'s AGENTS.md). Reading a
- * code-index preview through the settings-gated path would describe a
- * *different* revision than the one the index's positions were computed
- * against whenever `includeUncommitted` is off and the worktree is dirty —
- * indistinguishable from genuine drift, and unrecoverable by rebuilding
- * (rebuilding re-indexes the same dirty tree; the preview would keep
- * reading the last commit; the mismatch would never clear). This function
- * is what `groupReferencesByFile`/`buildDefinitionContext` are read
- * through instead, so both halves of a peek agree on their source.
+ * "current" is a user preference (`includeUncommitted`). The LSP server has
+ * no such preference: it reads whatever's physically on disk at `repoRoot`,
+ * full stop (see `@repo/code-lsp`'s AGENTS.md — no `textDocument/didOpen`,
+ * ever). Reading a code-index preview through the settings-gated path would
+ * describe a *different* revision than the one the server's positions were
+ * computed against whenever `includeUncommitted` is off and the worktree is
+ * dirty. This function is what `groupReferencesByFile`/`buildDefinitionContext`
+ * are read through instead, so both halves of a peek agree on their source.
  *
  * Absent paths (deleted, never existed) are simply missing from the
  * result — same "absence is a value" contract `readWorktreeBlobContent`
@@ -395,164 +368,273 @@ export const readWorktreeFileContents = (
 	});
 
 /**
- * Everything `codeIndex.references` needs about `symbolKey` from `index`
- * alone — source line text isn't decided here since that needs a file read
- * (`readWorktreeFileContents`), which lives at the http.ts call site, not
- * in this state module. A `symbolKey` the index doesn't recognize (stale
- * from an old index, e.g.) degrades to the all-empty result below rather
- * than a special case — every field here is already exactly what an
- * unrecognized key naturally produces (no display name, no documentation,
- * no definition, zero references).
+ * Every occurrence in `path`, in the shape `codeIndex.fileOccurrences`
+ * reports — empty when `path` has no tsconfig project above it, or when its
+ * project's server fails to spawn/initialize (same "absence is a value, not
+ * an error" contract the old SCIP-backed version had for a repo with no
+ * index built yet).
+ *
+ * No filtering by semantic-token type: verified empirically (a probe
+ * against `@repo/code-lsp`'s own fixture, and consistent with that
+ * package's AGENTS.md — "TS's classifier only labels named bindings") that
+ * `semanticTokensFull` never emits a token for a keyword, string, comment,
+ * number, or operator at all — every token it returns is already a real
+ * identifier occurrence, so there's nothing to filter out the way a
+ * hand-picked "symbol-ish token types" allowlist would otherwise need to.
  */
-export const buildReferencesPlan = (
-	index: CodeIndex,
+export const buildFileOccurrencesResponse = (
+	repoRoot: string,
+	path: string,
+): Effect.Effect<ReadonlyArray<CodeIndexOccurrence>, never, CodeLspPool> =>
+	Effect.gen(function* () {
+		const absolutePath = join(repoRoot, path);
+		const projectRoot = resolveProjectRoot(absolutePath);
+		if (projectRoot === null) return [];
+
+		const pool = yield* CodeLspPool;
+		const server = yield* getServer(pool, projectRoot);
+		if (server === null) return [];
+
+		const tokens = yield* server
+			.semanticTokensFull(absolutePath)
+			.pipe(
+				Effect.catch(() => Effect.succeed<ReadonlyArray<SemanticToken>>([])),
+			);
+
+		return tokens.map(
+			(token): CodeIndexOccurrence => ({
+				line: token.range.start.line,
+				charStart: token.range.start.character,
+				charEnd: token.range.end.character,
+				symbolKey: encodeSymbolKey(
+					path,
+					token.range.start.line,
+					token.range.start.character,
+				),
+				isDefinition:
+					token.tokenModifiers.includes("declaration") ||
+					token.tokenModifiers.includes("definition"),
+				// Every returned token is a named binding (see this function's
+				// own doc comment) — TS's classifier never tags anything else,
+				// so "would Go to Definition find something" is unconditionally
+				// true here, unlike SCIP's own per-symbol computed answer.
+				hasDefinition: true,
+			}),
+		);
+	});
+
+const SYMBOL_KEY_PATTERN = /^(.*):(\d+):(\d+)$/;
+
+/**
+ * `path:line:char` — `path` repo-relative (matching every other `path` field
+ * on the wire contract), `line`/`char` the occurrence's own 0-based start
+ * position exactly as `semanticTokensFull` reported it (never a click
+ * position, or the position of some other point on the token — see
+ * `@repo/code-lsp`'s AGENTS.md gotcha on why only a semantic token's own
+ * position is safe to query). Opaque to the frontend
+ * (`packages/sidecar-api/src/code-index.ts`'s own doc comment on
+ * `symbolKey`) — this module is the only encoder/decoder.
+ */
+const encodeSymbolKey = (
+	path: string,
+	line: number,
+	character: number,
+): string => `${path}:${line}:${character}`;
+
+const decodeSymbolKey = (
 	symbolKey: string,
 ): {
-	readonly displayName: string;
-	/** Whether `symbolKey` is a local symbol — see `groupReferencesByFile`'s doc comment on why this changes how (or whether) drift can be detected for its locations. */
-	readonly isLocal: boolean;
-	readonly documentation: ReadonlyArray<string>;
-	readonly definition: {
-		readonly path: string;
-		readonly line: number;
-		readonly charStart: number;
-		readonly charEnd: number;
-	} | null;
-	readonly totalReferenceCount: number;
-	readonly returnedLocations: ReadonlyArray<{
-		readonly path: string;
-		readonly line: number;
-		readonly charStart: number;
-		readonly charEnd: number;
-	}>;
-} => {
-	const key = symbolKey as SymbolKey;
-	const definitions = definitionsOf(index, key);
-	const references = referencesOf(index, key);
-	const firstDefinition = definitions[0];
-
+	readonly path: string;
+	readonly line: number;
+	readonly character: number;
+} | null => {
+	const match = SYMBOL_KEY_PATTERN.exec(symbolKey);
+	if (match === null) return null;
 	return {
-		displayName: displayNameOf(index, key) ?? "",
-		isLocal: isLocalSymbolKey(key),
-		documentation: documentationOf(index, key),
-		definition:
-			firstDefinition === undefined
-				? null
-				: {
-						path: firstDefinition.path,
-						line: firstDefinition.range.startLine,
-						charStart: firstDefinition.range.startChar,
-						charEnd: firstDefinition.range.endChar,
-					},
-		totalReferenceCount: references.length,
-		returnedLocations: references
-			.slice(0, MAX_RETURNED_REFERENCES)
-			.map((location) => ({
-				path: location.path,
-				line: location.range.startLine,
-				charStart: location.range.startChar,
-				charEnd: location.range.endChar,
-			})),
+		path: match[1] as string,
+		line: Number(match[2]),
+		character: Number(match[3]),
 	};
 };
 
-/**
- * A real JS/TS source identifier — `_`/`$`/letters/digits, first character
- * not a digit. Used only as {@link isLocationStale}'s weak fallback for a
- * local symbol, whose `displayName` is scip-typescript's own per-document
- * counter (`"0"`, `"1"`, ...) rather than real text — this can't confirm the
- * slice is *the* expected token the way an exact `displayName` match can
- * for a global symbol, but it does catch gross drift (landing mid-JSX-tag,
- * on punctuation, on a blank line), which is what actually showed up live.
- */
-const SIMPLE_IDENTIFIER = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
+/** A single go-to-definition/find-references location, repo-relative — the shape both `definition` and each `references` entry reduce to before this module hands them to the wire contract's `CodeIndexLocation`/`CodeIndexReference` shapes. */
+type CodeLocation = {
+	readonly path: string;
+	readonly line: number;
+	readonly charStart: number;
+	readonly charEnd: number;
+};
+
+const toCodeLocation = (
+	repoRoot: string,
+	location: LspLocation,
+): CodeLocation => ({
+	path: relative(repoRoot, location.path),
+	line: location.range.start.line,
+	charStart: location.range.start.character,
+	charEnd: location.range.end.character,
+});
+
+const sameLocation = (a: CodeLocation, b: CodeLocation | null): boolean =>
+	b !== null &&
+	a.path === b.path &&
+	a.line === b.line &&
+	a.charStart === b.charStart &&
+	a.charEnd === b.charEnd;
 
 /**
- * Whether `location`'s own `[charStart, charEnd)` slice of `lineText` still
- * looks like the symbol it's supposed to be — the drift detector this
- * module needs because the on-disk cache's staleness check
- * (`resolveCodeIndexStatus`) only tracks *committed* head-sha movement.
- * scip-typescript indexes the working tree at build time; any edit to the
- * file after that — committed or not — can shift every later line without
- * ever moving `headSha`, so a `"ready"` (or `"stale"`-but-still-queried)
- * index can silently disagree with what's actually on disk at a specific
- * position. Live-verified: a stale index recorded a `CodeIndexReference`
- * occurrence at line 382 of a file that had since gained ~20 lines above
- * it, so line 382 in the *current* file was a `</CollapsibleTrigger>` JSX
- * close tag — a different, unrelated line, not an off-by-one.
- *
- * A global symbol's `displayName` is real source text (the last descriptor
- * in its SCIP symbol string — see `symbol.ts`'s `deriveDisplayName`), so an
- * exact match against the slice is a reliable check. A local symbol has no
- * such ground truth, so it only gets the weaker {@link SIMPLE_IDENTIFIER}
- * sanity check.
+ * Everything `codeIndex.references` needs about `symbolKey`, resolved
+ * against a live LSP server — source line text isn't decided here since
+ * that needs a file read (`readWorktreeFileContents`), which lives at the
+ * `http.ts` call site alongside `buildReferencesResponse`, not in this
+ * module. A `symbolKey` this module can't decode, or whose file has no
+ * tsconfig project above it, or whose project's server fails to
+ * spawn/initialize, degrades to {@link EMPTY_REFERENCES_PLAN} rather than a
+ * special case — every field there is already exactly what an unrecognized
+ * key naturally produces (no display name, no documentation, no definition,
+ * zero references).
  */
-const isLocationStale = (
-	lineText: string,
-	charStart: number,
-	charEnd: number,
-	displayName: string,
-	isLocal: boolean,
-): boolean => {
-	const slice = lineText.slice(charStart, charEnd);
-	return isLocal ? !SIMPLE_IDENTIFIER.test(slice) : slice !== displayName;
+export const buildReferencesPlan = (
+	repoRoot: string,
+	symbolKey: string,
+): Effect.Effect<ReferencesPlan, never, CodeLspPool> =>
+	Effect.gen(function* () {
+		const decoded = decodeSymbolKey(symbolKey);
+		if (decoded === null) return EMPTY_REFERENCES_PLAN;
+
+		const absolutePath = join(repoRoot, decoded.path);
+		const projectRoot = resolveProjectRoot(absolutePath);
+		if (projectRoot === null) return EMPTY_REFERENCES_PLAN;
+
+		const pool = yield* CodeLspPool;
+		const server = yield* getServer(pool, projectRoot);
+		if (server === null) return EMPTY_REFERENCES_PLAN;
+
+		const position = { line: decoded.line, character: decoded.character };
+		const [definitions, rawReferences, hover] = yield* Effect.all(
+			[
+				server
+					.definition(absolutePath, position)
+					.pipe(
+						Effect.catch(() => Effect.succeed<ReadonlyArray<LspLocation>>([])),
+					),
+				server
+					.references(absolutePath, position)
+					.pipe(
+						Effect.catch(() => Effect.succeed<ReadonlyArray<LspLocation>>([])),
+					),
+				server
+					.hover(absolutePath, position)
+					.pipe(Effect.catch(() => Effect.succeed(null))),
+			],
+			{ concurrency: "unbounded" },
+		);
+
+		const firstDefinition = definitions[0];
+		const definition =
+			firstDefinition === undefined
+				? null
+				: toCodeLocation(repoRoot, firstDefinition);
+
+		// `references` answers the definition's own location alongside every
+		// usage (`@repo/code-lsp`'s fixed `includeDeclaration: true`) —
+		// filtered back out here so "references" means "used elsewhere",
+		// matching what the peek panel already renders the definition as
+		// separately (`code-index-peek-panel.tsx`'s left pane).
+		const usageLocations = rawReferences
+			.map((location) => toCodeLocation(repoRoot, location))
+			.filter((location) => !sameLocation(location, definition));
+
+		return {
+			symbolPath: decoded.path,
+			symbolLine: decoded.line,
+			symbolChar: decoded.character,
+			documentation: hover === null ? [] : [hover.contents],
+			definition,
+			totalReferenceCount: usageLocations.length,
+			returnedLocations: usageLocations.slice(0, MAX_RETURNED_REFERENCES),
+		} satisfies ReferencesPlan;
+	});
+
+type ReferencesPlan = {
+	/** The queried occurrence's own repo-relative path/position — carried through so `buildReferencesResponse` can derive `displayName` from the live source text, the same live-read source `groupReferencesByFile`/`buildDefinitionContext` use for everything else. */
+	readonly symbolPath: string;
+	readonly symbolLine: number;
+	readonly symbolChar: number;
+	readonly documentation: ReadonlyArray<string>;
+	readonly definition: CodeLocation | null;
+	readonly totalReferenceCount: number;
+	readonly returnedLocations: ReadonlyArray<CodeLocation>;
+};
+
+const EMPTY_REFERENCES_PLAN: ReferencesPlan = {
+	symbolPath: "",
+	symbolLine: 0,
+	symbolChar: 0,
+	documentation: [],
+	definition: null,
+	totalReferenceCount: 0,
+	returnedLocations: [],
+};
+
+/** A real JS/TS identifier character — used only to find where an identifier ends once {@link readIdentifierAt} already knows where it starts (a `symbolKey`/definition position is always a token's own start, per `encodeSymbolKey`'s doc comment), never to verify anything. */
+const IDENTIFIER_CHAR = /[A-Za-z0-9_$]/;
+
+/** The identifier text starting at `(line, character)` in `path`'s current content — `references`' `displayName`, read live off whatever `fileContents` holds (always `readWorktreeFileContents`'s output; see that function's own doc comment). `""` when the file wasn't fetched or the position is past the end of its content — same "absence is a value" posture as everything else in this module, never a placeholder like `"?"`. */
+const readIdentifierAt = (
+	fileContents: ReadonlyMap<string, Uint8Array>,
+	path: string,
+	line: number,
+	character: number,
+): string => {
+	const bytes = fileContents.get(path);
+	if (bytes === undefined) return "";
+	const lineText = new TextDecoder().decode(bytes).split("\n")[line];
+	if (lineText === undefined) return "";
+	let end = character;
+	while (
+		end < lineText.length &&
+		IDENTIFIER_CHAR.test(lineText[end] as string)
+	) {
+		end += 1;
+	}
+	return lineText.slice(character, end);
 };
 
 /**
- * Groups `plan.returnedLocations` by file, attaching each one's source line
- * text from `fileContents` — `lineText` is `null` whenever it can't be
- * trusted: the read failed (the path is gone, or genuinely unreadable), the
- * line itself doesn't exist in the current content (the file got shorter),
- * or {@link isLocationStale} finds the expected symbol isn't actually at
- * that position anymore. The location itself (path/line/char) is kept and
- * shown regardless — "no reliable preview" is reported honestly (`null`)
- * rather than papered over with whatever text happens to sit at that
- * position, or with a fake empty-string fallback that's indistinguishable
- * from a genuinely blank line.
+ * Groups `locations` by file, attaching each one's source line text from
+ * `fileContents` — `lineText` is `null` only when the read genuinely can't
+ * back it (the path wasn't fetched, or the line doesn't exist in the
+ * current content). Unlike the SCIP-backed version this replaces, there is
+ * no drift check here: the LSP server answered these positions against the
+ * same live worktree bytes `fileContents` holds (both go through
+ * `readWorktreeFileContents`), so a mismatch between the two isn't possible
+ * the way it was for a static, potentially-hours-old on-disk index — see
+ * this module's own top-of-file note and `packages/sidecar-api/src/code-index.ts`'s
+ * updated doc comment on `CodeIndexReference.lineText`.
  */
 export const groupReferencesByFile = (
-	returnedLocations: ReturnType<
-		typeof buildReferencesPlan
-	>["returnedLocations"],
+	locations: ReadonlyArray<CodeLocation>,
 	fileContents: ReadonlyMap<string, Uint8Array>,
-	displayName: string,
-	isLocal: boolean,
 ): ReadonlyArray<CodeIndexFileReferences> => {
 	const decoder = new TextDecoder();
-	const byPath = new Map<
-		string,
-		Array<CodeIndexFileReferences["references"][number]>
-	>();
+	const byPath = new Map<string, Array<CodeIndexReference>>();
 
-	for (const location of returnedLocations) {
+	for (const location of locations) {
 		const bytes = fileContents.get(location.path);
-		const rawLine =
+		const lineText =
 			bytes === undefined
 				? undefined
 				: decoder.decode(bytes).split("\n")[location.line];
-		const lineText =
-			rawLine === undefined ||
-			isLocationStale(
-				rawLine,
-				location.charStart,
-				location.charEnd,
-				displayName,
-				isLocal,
-			)
-				? null
-				: rawLine;
-		const existing = byPath.get(location.path);
-		const entry = {
+		const entry: CodeIndexReference = {
 			line: location.line,
 			charStart: location.charStart,
 			charEnd: location.charEnd,
-			lineText,
+			lineText: lineText ?? null,
 		};
-		if (existing === undefined) {
-			byPath.set(location.path, [entry]);
-		} else {
-			existing.push(entry);
-		}
+		const existing = byPath.get(location.path);
+		if (existing === undefined) byPath.set(location.path, [entry]);
+		else existing.push(entry);
 	}
 
 	return [...byPath.entries()].map(([path, references]) => ({
@@ -566,19 +648,15 @@ const DEFINITION_CONTEXT_LINES_BEFORE = 3;
 const DEFINITION_CONTEXT_LINES_AFTER = 4;
 
 /**
- * `plan.definition`'s surrounding source lines, drift-checked the same way
- * `groupReferencesByFile` checks each reference location — `null` when
- * there's no definition to begin with, its file couldn't be read, or
- * {@link isLocationStale} finds the expected symbol isn't actually at that
- * position anymore in `fileContents` (which must itself come from
- * {@link readWorktreeFileContents} — a mismatched source here is exactly
- * what produces a false drift verdict that a rebuild could never clear).
+ * `definition`'s surrounding source lines from `fileContents` (always
+ * `readWorktreeFileContents`'s output) — `null` when there's no definition
+ * to begin with, or its file wasn't fetched. No drift check, for the same
+ * reason `groupReferencesByFile` no longer has one — see that function's
+ * doc comment.
  */
 const buildDefinitionContext = (
-	definition: ReturnType<typeof buildReferencesPlan>["definition"],
+	definition: CodeLocation | null,
 	fileContents: ReadonlyMap<string, Uint8Array>,
-	displayName: string,
-	isLocal: boolean,
 ): CodeIndexSourceContext | null => {
 	if (definition === null) return null;
 
@@ -588,17 +666,6 @@ const buildDefinitionContext = (
 	const contentLines = new TextDecoder().decode(bytes).split("\n");
 	const targetLine = contentLines[definition.line];
 	if (targetLine === undefined) return null;
-	if (
-		isLocationStale(
-			targetLine,
-			definition.charStart,
-			definition.charEnd,
-			displayName,
-			isLocal,
-		)
-	) {
-		return null;
-	}
 
 	const startLine = Math.max(
 		0,
@@ -614,30 +681,25 @@ const buildDefinitionContext = (
 /**
  * Assembles the full `codeIndex.references` wire response from a plan and
  * its resolved file contents — `fileContents` must be read via
- * {@link readWorktreeFileContents} (never `Store.readCurrentContent`'s
- * `includeUncommitted`-gated path), and must include `plan.definition`'s
- * own path alongside every `returnedLocations` path, or `definitionContext`
- * degrades to `null` for a file that was simply never fetched.
+ * {@link readWorktreeFileContents}, and must include `plan.symbolPath` (for
+ * `displayName`) alongside `plan.definition`'s own path and every
+ * `returnedLocations` path, or the corresponding piece silently degrades to
+ * its own "couldn't read this" value (`""` / `null`).
  */
 export const buildReferencesResponse = (
-	plan: ReturnType<typeof buildReferencesPlan>,
+	plan: ReferencesPlan,
 	fileContents: ReadonlyMap<string, Uint8Array>,
 ): CodeIndexReferencesResult => ({
-	displayName: plan.displayName,
+	displayName: readIdentifierAt(
+		fileContents,
+		plan.symbolPath,
+		plan.symbolLine,
+		plan.symbolChar,
+	),
 	documentation: plan.documentation,
 	definition: plan.definition,
-	definitionContext: buildDefinitionContext(
-		plan.definition,
-		fileContents,
-		plan.displayName,
-		plan.isLocal,
-	),
-	files: groupReferencesByFile(
-		plan.returnedLocations,
-		fileContents,
-		plan.displayName,
-		plan.isLocal,
-	),
+	definitionContext: buildDefinitionContext(plan.definition, fileContents),
+	files: groupReferencesByFile(plan.returnedLocations, fileContents),
 	totalReferenceCount: plan.totalReferenceCount,
 	returnedReferenceCount: plan.returnedLocations.length,
 });

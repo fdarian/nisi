@@ -2,6 +2,7 @@ import type { BunServices } from "@effect/platform-bun";
 import type { ReviewStore } from "@repo/review";
 import type { RepoMergeMethodStore, SettingsStore } from "@repo/settings";
 import type { ChatSessions } from "./chat/sessions.ts";
+import type { CodeLspPool } from "./code-index/state.ts";
 import type { HarnessModelCache } from "./harness/model-store.ts";
 import type { SessionWatch } from "./session-watch.ts";
 import type { Store } from "./store.ts";
@@ -25,4 +26,5 @@ export type AppServices =
 	| Updater
 	| ChatSessions
 	| HarnessModelCache
+	| CodeLspPool
 	| BunServices.BunServices;

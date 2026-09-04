@@ -229,6 +229,9 @@ importers:
       '@repo/code-index':
         specifier: workspace:*
         version: link:../../packages/code-index
+      '@repo/code-lsp':
+        specifier: workspace:*
+        version: link:../../packages/code-lsp
       '@repo/db':
         specifier: workspace:*
         version: link:../../packages/db

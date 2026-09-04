@@ -55,7 +55,6 @@ import {
 	isCodeIndexUnsupported,
 	readWorktreeFileContents,
 	resolveCodeIndexStatus,
-	resolveQueryableIndex,
 	startCodeIndexBuild,
 } from "./code-index/state.ts";
 import {
@@ -1631,7 +1630,6 @@ export function attachRouter(
 					input.sessionId,
 					errors,
 				);
-				const headSha = yield* resolveCodeIndexHeadSha(repoRoot, errors);
 				const unsupported = yield* isCodeIndexUnsupported(repoRoot);
 				if (unsupported) {
 					return yield* Effect.fail(
@@ -1640,9 +1638,7 @@ export function attachRouter(
 						}),
 					);
 				}
-				yield* Effect.promise(() =>
-					startCodeIndexBuild(repoRoot, headSha, mainContext),
-				);
+				yield* Effect.promise(() => startCodeIndexBuild(repoRoot, mainContext));
 			}),
 			fileOccurrences: authed.codeIndex.fileOccurrences.effect(function* ({
 				input,
@@ -1654,10 +1650,7 @@ export function attachRouter(
 					input.sessionId,
 					errors,
 				);
-				const headSha = yield* resolveCodeIndexHeadSha(repoRoot, errors);
-				const index = yield* resolveQueryableIndex(repoRoot, headSha);
-				if (index === null) return [];
-				return buildFileOccurrencesResponse(index, input.path);
+				return yield* buildFileOccurrencesResponse(repoRoot, input.path);
 			}),
 			references: authed.codeIndex.references.effect(function* ({
 				input,
@@ -1669,31 +1662,19 @@ export function attachRouter(
 					input.sessionId,
 					errors,
 				);
-				const headSha = yield* resolveCodeIndexHeadSha(repoRoot, errors);
-				const index = yield* resolveQueryableIndex(repoRoot, headSha);
-				if (index === null) {
-					return {
-						displayName: "",
-						documentation: [],
-						definition: null,
-						definitionContext: null,
-						files: [],
-						totalReferenceCount: 0,
-						returnedReferenceCount: 0,
-					};
-				}
 
-				const plan = buildReferencesPlan(index, input.symbolKey);
+				const plan = yield* buildReferencesPlan(repoRoot, input.symbolKey);
 				const paths = [
 					...new Set([
+						plan.symbolPath,
 						...plan.returnedLocations.map((location) => location.path),
 						...(plan.definition === null ? [] : [plan.definition.path]),
 					]),
 				];
 				// Worktree-unconditional, never `Store.readCurrentContent`'s
-				// `includeUncommitted`-gated path — scip-typescript always indexes
+				// `includeUncommitted`-gated path — the LSP server always reads
 				// the working tree, so reading previews any other way would
-				// describe a different revision than the one the index's
+				// describe a different revision than the one the server's
 				// positions were computed against (see `readWorktreeFileContents`'
 				// own doc comment in `code-index/state.ts`). Best-effort: a read
 				// failure here shouldn't hide the reference locations themselves,
