@@ -22,10 +22,11 @@ import type {
 import {
 	CodeView,
 	type CodeViewHandle,
+	useWorkerPool,
 	type WorkerInitializationRenderOptions,
 	WorkerPoolContextProvider,
 } from "@pierre/diffs/react";
-import { useCallback, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import {
 	diffCodeViewLayout,
 	diffItemMetrics,
@@ -124,6 +125,34 @@ function useSeparatorClickForwarding() {
 			attachedNodeRef.current = node;
 		}
 	}, []);
+}
+
+/**
+ * `WorkerPoolContextProvider`'s own `highlighterOptions` prop only takes
+ * effect at the shared worker pool's *creation* — `getOrCreateWorkerPoolSingleton`
+ * (confirmed live: toggling `useTokenTransformer` on and pointing a fresh
+ * `highlighterOptions` object at an already-mounted `WorkerPoolContextProvider`
+ * changed nothing, since the pool is a module-level singleton keyed by
+ * nothing, not React state — every `DiffCodeView` in the whole app, across
+ * every open PR tab, shares the one pool the first mount created).
+ * `WorkerPoolManager.setRenderOptions` is the sanctioned way to reconfigure
+ * an *already-running* pool instead of tearing it down (which would be a
+ * much bigger, global disruption for what's meant to be a per-session
+ * toggle) — this component's only job is calling it whenever
+ * `useTokenTransformer` actually changes, from inside the provider's own
+ * subtree (`useWorkerPool` only resolves there). Renders nothing.
+ */
+function WorkerPoolOptionsSync({
+	useTokenTransformer,
+}: {
+	useTokenTransformer: boolean;
+}): null {
+	const pool = useWorkerPool();
+	useEffect(() => {
+		if (pool === undefined) return;
+		void pool.setRenderOptions({ useTokenTransformer });
+	}, [pool, useTokenTransformer]);
+	return null;
 }
 
 /** The theme/layout/metrics knobs every `CodeView` instance in the app shares — `diffStyle`, `theme`, `overflow`, `onPostRender` and `extraCSS` are what vary per pane. */
@@ -229,6 +258,9 @@ export function DiffCodeView<Metadata>({
 			highlighterOptions={highlighterOptions}
 			poolOptions={workerPoolOptions}
 		>
+			<WorkerPoolOptionsSync
+				useTokenTransformer={highlighterOptions.useTokenTransformer}
+			/>
 			<CodeView
 				className={className}
 				containerRef={separatorClickForwardingRef}

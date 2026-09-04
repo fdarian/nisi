@@ -64,6 +64,7 @@ import type {
 	ReviewStateEntry,
 } from "#/lib/pr-data";
 import {
+	useSessionCodeIndexEnabled,
 	useSessionExpandedHiddenPaths,
 	useSessionFileCollapseOverrides,
 } from "#/lib/session-ui-store";
@@ -460,8 +461,18 @@ export function DiffPane({
 }: DiffPaneProps): React.ReactElement {
 	const codeViewRef =
 		useRef<CodeViewHandle<DiffAnnotationMetadata, undefined>>(null);
-	const diffTheme = useDiffTheme(orpc, { tokenInteractions: true });
-	const codeIndex = useCodeIndexInteractions({ sessionId, orpc, codeViewRef });
+	const [codeIndexEnabled] = useSessionCodeIndexEnabled(sessionId);
+	const codeIndex = useCodeIndexInteractions({
+		sessionId,
+		orpc,
+		codeViewRef,
+		enabled: codeIndexEnabled,
+	});
+	// See `FileView`'s matching comment: `useDiffTheme` needs
+	// `codeIndex.tokenInteractionsActive`, not the raw enable flag.
+	const diffTheme = useDiffTheme(orpc, {
+		tokenInteractions: codeIndex.tokenInteractionsActive,
+	});
 	const fileDiffCache = useRef(new Map<string, CachedFileDiff>());
 	const hiddenFileAnnotationCache = useRef(
 		new Map<string, CachedHiddenFileAnnotation>(),
@@ -688,9 +699,20 @@ export function DiffPane({
 			// `resolveFileDiff`).
 			const peekVersionSuffix =
 				codeIndex.peekTarget?.path === file.path
-					? `peek:${codeIndex.peekTarget.occurrence.symbolKey}:${codeIndex.peekTarget.lineNumber}`
+					? `peek:${codeIndex.peekTarget.occurrence?.symbolKey ?? "unresolved"}:${codeIndex.peekTarget.lineNumber}:${codeIndex.peekTarget.charStart}`
 					: "no-peek";
-			const baseVersionInput = `${file.fingerprint}:${diffStyle}:${reviewStatus}:${cardCollapsed ? "card-collapsed" : "card-expanded"}:${peekVersionSuffix}`;
+			// Folded in so flipping "Enable code reference" forces every
+			// currently-rendered file to re-request its render from the worker
+			// pool — `WorkerPoolOptionsSync` (`diff-code-view.tsx`) updates the
+			// pool's own `useTokenTransformer` setting, but pierre still skips
+			// re-rendering any item whose `version` it already has (same
+			// "version match -> keep old record" optimization `resolveFileDiff`'s
+			// own doc comment describes) unless something *else* about that item
+			// changed too.
+			const codeIndexVersionSuffix = codeIndex.tokenInteractionsActive
+				? "code-index-on"
+				: "code-index-off";
+			const baseVersionInput = `${file.fingerprint}:${diffStyle}:${reviewStatus}:${cardCollapsed ? "card-collapsed" : "card-expanded"}:${peekVersionSuffix}:${codeIndexVersionSuffix}`;
 
 			if (file.binary) {
 				nextItems.push({
@@ -930,6 +952,7 @@ export function DiffPane({
 		expandedHiddenPaths,
 		fileCollapse.overrides,
 		codeIndex.peekTarget,
+		codeIndex.tokenInteractionsActive,
 	]);
 
 	// Item ids are the file path directly (`id: file.path` above) — resolving

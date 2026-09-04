@@ -41,7 +41,10 @@ import { Toolbar } from "#/components/ui/toolbar";
 import { useDiffSelection } from "#/hooks/use-diff-selection";
 import type { SidecarQueryUtils } from "#/lib/backend-context";
 import { hashItemVersion } from "#/lib/item-version";
-import { useSessionFileScrollTarget } from "#/lib/session-ui-store";
+import {
+	useSessionCodeIndexEnabled,
+	useSessionFileScrollTarget,
+} from "#/lib/session-ui-store";
 import { splitPath } from "#/lib/tree-paths";
 
 type FileViewProps = {
@@ -95,13 +98,26 @@ export function FileView({
 		orpc.file.get.queryOptions({ input: { sessionId, path } }),
 	);
 	const basename = splitPath(path).basename;
-	const diffTheme = useDiffTheme(orpc, { tokenInteractions: true });
 	const markdownFile = isMarkdownPath(path);
 	const [mode, setMode] = useState<FileViewMode>("preview");
 
 	const codeViewRef =
 		useRef<CodeViewHandle<CodeIndexPeekAnnotationMetadata, undefined>>(null);
-	const codeIndex = useCodeIndexInteractions({ sessionId, orpc, codeViewRef });
+	const [codeIndexEnabled] = useSessionCodeIndexEnabled(sessionId);
+	const codeIndex = useCodeIndexInteractions({
+		sessionId,
+		orpc,
+		codeViewRef,
+		enabled: codeIndexEnabled,
+	});
+	// `useDiffTheme` needs `codeIndex.tokenInteractionsActive` (not the raw
+	// enable flag) so the highlighter drops token wrapping the moment the
+	// feature turns out unsupported, not just when the user disables it —
+	// see `WorkerPoolOptionsSync` (`diff-code-view.tsx`) for how a change
+	// here reconfigures the already-running worker pool live.
+	const diffTheme = useDiffTheme(orpc, {
+		tokenInteractions: codeIndex.tokenInteractionsActive,
+	});
 	const resolveSelectionItemPath = useCallback(
 		(itemId: string) => (itemId === path ? path : undefined),
 		[path],
@@ -173,12 +189,17 @@ export function FileView({
 					`${path}:${query.data.content.length}:${
 						peekTarget === null
 							? "no-peek"
-							: `peek:${peekTarget.occurrence.symbolKey}:${peekTarget.lineNumber}`
-					}`,
+							: `peek:${peekTarget.occurrence?.symbolKey ?? "unresolved"}:${peekTarget.lineNumber}:${peekTarget.charStart}`
+					}:${codeIndex.tokenInteractionsActive ? "code-index-on" : "code-index-off"}`,
 				),
 			},
 		];
-	}, [path, query.data, codeIndex.peekTarget]);
+	}, [
+		path,
+		query.data,
+		codeIndex.peekTarget,
+		codeIndex.tokenInteractionsActive,
+	]);
 
 	const codeViewOptions = useMemo(
 		() => ({
@@ -296,5 +317,5 @@ export function FileView({
 				</>
 			)}
 		</div>
-	);
+	)
 }
