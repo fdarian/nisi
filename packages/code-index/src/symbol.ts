@@ -332,3 +332,14 @@ export const symbolKeyOf = (documentPath: string, symbol: string): SymbolKey =>
 	(isLocalSymbol(symbol)
 		? ["local", documentPath, symbol].join(KEY_DELIMITER)
 		: ["global", symbol].join(KEY_DELIMITER)) as SymbolKey;
+
+/**
+ * Whether `key` (a value `symbolKeyOf` produced) was built from a local
+ * symbol — the composite-key equivalent of `isLocalSymbol`, for a caller
+ * that only ever sees the opaque key (e.g. the sidecar's `references`
+ * handler, which needs to know whether `displayNameOf`'s answer for this
+ * key is real source text or just scip-typescript's per-document counter —
+ * see `deriveDisplayName`'s doc comment).
+ */
+export const isLocalSymbolKey = (key: SymbolKey): boolean =>
+	key.startsWith(`local${KEY_DELIMITER}`);

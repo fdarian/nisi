@@ -413,7 +413,13 @@ function FileReferenceGroup({
 								{reference.line + 1}
 							</span>
 							<span className="min-w-0 flex-1 truncate whitespace-pre font-mono text-[0.6875rem] text-muted-foreground">
-								{reference.lineText.trim()}
+								{reference.lineText === null ? (
+									<span className="italic">
+										preview unavailable — file changed since indexing
+									</span>
+								) : (
+									reference.lineText.trim()
+								)}
 							</span>
 						</button>
 					))}

@@ -70,12 +70,26 @@ export const CodeIndexLocation = Schema.Struct({
 });
 export type CodeIndexLocation = Schema.Schema.Type<typeof CodeIndexLocation>;
 
-/** One reference occurrence plus its source line's text — carried here rather than making the frontend fetch each file separately, since the peek preview needs to render immediately for every entry in the list. */
+/**
+ * One reference occurrence plus its source line's text — carried here rather
+ * than making the frontend fetch each file separately, since the peek
+ * preview needs to render immediately for every entry in the list.
+ *
+ * `lineText` is `null` when the sidecar can't vouch for it: scip-typescript
+ * indexes the working tree at build time, and the cache's staleness check
+ * only tracks *committed* head-sha movement (see `CodeIndexStatus`'s doc) —
+ * an edit to the file after the index was built (committed or not) can
+ * shift every later line without ever moving `headSha`, so a `"ready"`
+ * index can still disagree with what's actually on disk for a specific
+ * location. The sidecar detects this per location (comparing the occurrence's
+ * `[charStart, charEnd)` slice against the symbol's own name) rather than
+ * ever rendering text it knows doesn't match.
+ */
 export const CodeIndexReference = Schema.Struct({
 	line: Schema.Number,
 	charStart: Schema.Number,
 	charEnd: Schema.Number,
-	lineText: Schema.String,
+	lineText: Schema.NullOr(Schema.String),
 });
 export type CodeIndexReference = Schema.Schema.Type<typeof CodeIndexReference>;
 

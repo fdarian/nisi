@@ -34,6 +34,7 @@ export {
 	type DescriptorSuffix,
 	deriveDisplayName,
 	isLocalSymbol,
+	isLocalSymbolKey,
 	type ParsedSymbol,
 	parseSymbol,
 	type SymbolKey,

@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
 	deriveDisplayName,
 	isLocalSymbol,
+	isLocalSymbolKey,
 	parseSymbol,
 	symbolKeyOf,
 } from "../src/symbol.ts";
@@ -120,5 +121,15 @@ describe("symbolKeyOf", () => {
 		const localKey = symbolKeyOf("a.ts", "local 5");
 		const globalKey = symbolKeyOf("a.ts", METHOD_SYMBOL);
 		expect(localKey).not.toBe(globalKey);
+	});
+});
+
+describe("isLocalSymbolKey", () => {
+	test("true for a key built from a local symbol", () => {
+		expect(isLocalSymbolKey(symbolKeyOf("a.ts", "local 5"))).toBe(true);
+	});
+
+	test("false for a key built from a global symbol", () => {
+		expect(isLocalSymbolKey(symbolKeyOf("a.ts", METHOD_SYMBOL))).toBe(false);
 	});
 });

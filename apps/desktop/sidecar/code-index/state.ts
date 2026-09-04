@@ -10,6 +10,7 @@ import {
 	documentationOf,
 	findCachedIndex,
 	hasDefinition,
+	isLocalSymbolKey,
 	mostRecentCachedIndex,
 	occurrencesInDocument,
 	readIndexBytes,
@@ -344,6 +345,8 @@ export const buildReferencesPlan = (
 	symbolKey: string,
 ): {
 	readonly displayName: string;
+	/** Whether `symbolKey` is a local symbol — see `groupReferencesByFile`'s doc comment on why this changes how (or whether) drift can be detected for its locations. */
+	readonly isLocal: boolean;
 	readonly documentation: ReadonlyArray<string>;
 	readonly definition: {
 		readonly path: string;
@@ -366,6 +369,7 @@ export const buildReferencesPlan = (
 
 	return {
 		displayName: displayNameOf(index, key) ?? "",
+		isLocal: isLocalSymbolKey(key),
 		documentation: documentationOf(index, key),
 		definition:
 			firstDefinition === undefined
@@ -389,17 +393,66 @@ export const buildReferencesPlan = (
 };
 
 /**
+ * A real JS/TS source identifier — `_`/`$`/letters/digits, first character
+ * not a digit. Used only as {@link isLocationStale}'s weak fallback for a
+ * local symbol, whose `displayName` is scip-typescript's own per-document
+ * counter (`"0"`, `"1"`, ...) rather than real text — this can't confirm the
+ * slice is *the* expected token the way an exact `displayName` match can
+ * for a global symbol, but it does catch gross drift (landing mid-JSX-tag,
+ * on punctuation, on a blank line), which is what actually showed up live.
+ */
+const SIMPLE_IDENTIFIER = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
+
+/**
+ * Whether `location`'s own `[charStart, charEnd)` slice of `lineText` still
+ * looks like the symbol it's supposed to be — the drift detector this
+ * module needs because the on-disk cache's staleness check
+ * (`resolveCodeIndexStatus`) only tracks *committed* head-sha movement.
+ * scip-typescript indexes the working tree at build time; any edit to the
+ * file after that — committed or not — can shift every later line without
+ * ever moving `headSha`, so a `"ready"` (or `"stale"`-but-still-queried)
+ * index can silently disagree with what's actually on disk at a specific
+ * position. Live-verified: a stale index recorded a `CodeIndexReference`
+ * occurrence at line 382 of a file that had since gained ~20 lines above
+ * it, so line 382 in the *current* file was a `</CollapsibleTrigger>` JSX
+ * close tag — a different, unrelated line, not an off-by-one.
+ *
+ * A global symbol's `displayName` is real source text (the last descriptor
+ * in its SCIP symbol string — see `symbol.ts`'s `deriveDisplayName`), so an
+ * exact match against the slice is a reliable check. A local symbol has no
+ * such ground truth, so it only gets the weaker {@link SIMPLE_IDENTIFIER}
+ * sanity check.
+ */
+const isLocationStale = (
+	lineText: string,
+	charStart: number,
+	charEnd: number,
+	displayName: string,
+	isLocal: boolean,
+): boolean => {
+	const slice = lineText.slice(charStart, charEnd);
+	return isLocal ? !SIMPLE_IDENTIFIER.test(slice) : slice !== displayName;
+};
+
+/**
  * Groups `plan.returnedLocations` by file, attaching each one's source line
- * text from `fileContents` — `undefined`/a missing entry (the read failed,
- * or the path is gone) degrades to an empty `lineText` rather than dropping
- * the location: the position itself is still accurate and worth showing
- * even without a preview.
+ * text from `fileContents` — `lineText` is `null` whenever it can't be
+ * trusted: the read failed (the path is gone, or genuinely unreadable), the
+ * line itself doesn't exist in the current content (the file got shorter),
+ * or {@link isLocationStale} finds the expected symbol isn't actually at
+ * that position anymore. The location itself (path/line/char) is kept and
+ * shown regardless — "no reliable preview" is reported honestly (`null`)
+ * rather than papered over with whatever text happens to sit at that
+ * position, or with a fake empty-string fallback that's indistinguishable
+ * from a genuinely blank line.
  */
 export const groupReferencesByFile = (
 	returnedLocations: ReturnType<
 		typeof buildReferencesPlan
 	>["returnedLocations"],
 	fileContents: ReadonlyMap<string, Uint8Array>,
+	displayName: string,
+	isLocal: boolean,
 ): ReadonlyArray<CodeIndexFileReferences> => {
 	const decoder = new TextDecoder();
 	const byPath = new Map<
@@ -409,10 +462,21 @@ export const groupReferencesByFile = (
 
 	for (const location of returnedLocations) {
 		const bytes = fileContents.get(location.path);
-		const lineText =
+		const rawLine =
 			bytes === undefined
-				? ""
-				: (decoder.decode(bytes).split("\n")[location.line] ?? "");
+				? undefined
+				: decoder.decode(bytes).split("\n")[location.line];
+		const lineText =
+			rawLine === undefined ||
+			isLocationStale(
+				rawLine,
+				location.charStart,
+				location.charEnd,
+				displayName,
+				isLocal,
+			)
+				? null
+				: rawLine;
 		const existing = byPath.get(location.path);
 		const entry = {
 			line: location.line,
@@ -441,7 +505,12 @@ export const buildReferencesResponse = (
 	displayName: plan.displayName,
 	documentation: plan.documentation,
 	definition: plan.definition,
-	files: groupReferencesByFile(plan.returnedLocations, fileContents),
+	files: groupReferencesByFile(
+		plan.returnedLocations,
+		fileContents,
+		plan.displayName,
+		plan.isLocal,
+	),
 	totalReferenceCount: plan.totalReferenceCount,
 	returnedReferenceCount: plan.returnedLocations.length,
 });
