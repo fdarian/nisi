@@ -63,10 +63,6 @@ export type CodeIndexStatus = Schema.Schema.Type<typeof CodeIndexStatus>;
  * as `references`' input, never parsed client-side (it's an encoded
  * `path:line:char` position now, not a SCIP symbol string — still opaque to
  * every caller either way, so this is not a breaking change to this schema).
- * `hasDefinition` is `true` unconditionally: every occurrence here came from
- * a real semantic token (`textDocument/semanticTokens/full`), and
- * TypeScript's own token classifier only ever labels named bindings — see
- * `apps/desktop/sidecar/code-index/state.ts`'s `buildFileOccurrencesResponse`.
  * There is no `referenceCount` field — the SCIP index computed it for free
  * as an index-wide number; an LSP server would need one `references` round
  * trip per token to answer it, and nothing on the frontend reads it (verified
@@ -74,15 +70,18 @@ export type CodeIndexStatus = Schema.Schema.Type<typeof CodeIndexStatus>;
  * populated with a fabricated `0`. The peek panel's reference count
  * (`CodeIndexReferencesResult.totalReferenceCount`) is unaffected — that one
  * *is* the result of a real `references` call, made only once a symbol is
- * actually opened.
+ * actually opened. `isDefinition`/`hasDefinition` were dropped the same way:
+ * `hasDefinition` was `true` unconditionally (every occurrence came from a
+ * real semantic token, and TypeScript's own token classifier only ever
+ * labels named bindings), `isDefinition` was computed but never read on the
+ * frontend — verified with a repo-wide grep before removing either, not
+ * assumed.
  */
 export const CodeIndexOccurrence = Schema.Struct({
 	line: Schema.Number,
 	charStart: Schema.Number,
 	charEnd: Schema.Number,
 	symbolKey: Schema.String,
-	isDefinition: Schema.Boolean,
-	hasDefinition: Schema.Boolean,
 });
 export type CodeIndexOccurrence = Schema.Schema.Type<
 	typeof CodeIndexOccurrence

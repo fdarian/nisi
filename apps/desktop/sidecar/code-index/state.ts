@@ -411,14 +411,6 @@ export const buildFileOccurrencesResponse = (
 					token.range.start.line,
 					token.range.start.character,
 				),
-				isDefinition:
-					token.tokenModifiers.includes("declaration") ||
-					token.tokenModifiers.includes("definition"),
-				// Every returned token is a named binding (see this function's
-				// own doc comment) — TS's classifier never tags anything else,
-				// so "would Go to Definition find something" is unconditionally
-				// true here, unlike SCIP's own per-symbol computed answer.
-				hasDefinition: true,
 			}),
 		);
 	});
