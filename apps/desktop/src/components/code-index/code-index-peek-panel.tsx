@@ -37,6 +37,7 @@ import type {
 import { useQuery } from "@tanstack/react-query";
 import { AlertTriangleIcon, XIcon } from "lucide-react";
 import { useMemo, useState } from "react";
+import ReactMarkdown, { type Components } from "react-markdown";
 import type { CodeIndexPeekTarget } from "#/components/code-index/use-code-index-interactions";
 import { useCodeIndexStatus } from "#/components/code-index/use-code-index-status";
 import { Badge } from "#/components/ui/badge";
@@ -120,6 +121,9 @@ export function CodeIndexPeekPanel({
 
 			<div className="flex min-h-0 flex-1 divide-x">
 				<div className="min-w-0 flex-1 overflow-auto p-2">
+					{references !== undefined && (
+						<DefinitionDocumentation documentation={references.documentation} />
+					)}
 					<SourcePreview
 						hasOccurrence={target.occurrence !== undefined}
 						isLoading={referencesQuery.isLoading}
@@ -241,6 +245,78 @@ function StatusBannerRow({
 		</div>
 	);
 }
+
+/**
+ * The peeked symbol's signature and JSDoc prose, straight from the LSP's
+ * `textDocument/hover` — `documentation` is `[]` when the server found
+ * nothing there (most local symbols carry no doc comment; not an error) or
+ * a single markdown string otherwise: a fenced ```typescript signature
+ * block, then whatever prose followed it. Rendered above `SourcePreview` in
+ * the same scrollable column, through the same `react-markdown` this app
+ * already uses for the walkthrough narrative and the PR description
+ * (`narrative-pane.tsx`/`description-pane.tsx`) — this only adds a `pre`/
+ * `code` override neither of those needs, since their markdown never
+ * contains a fenced code block.
+ */
+function DefinitionDocumentation({
+	documentation,
+}: {
+	documentation: readonly string[];
+}): React.ReactElement | null {
+	if (documentation.length === 0) return null;
+	return (
+		<div className="mb-2 flex flex-col gap-2 border-b pb-2 text-foreground leading-relaxed">
+			{documentation.map((entry) => (
+				<ReactMarkdown components={documentationMarkdownComponents} key={entry}>
+					{entry}
+				</ReactMarkdown>
+			))}
+		</div>
+	);
+}
+
+/** Same overrides `description-pane.tsx`'s `useMarkdownComponents` uses for prose, plus `pre`/`code` for the signature's own fenced block — styled like `SourcePreview`'s `<pre>` (`font-mono`) and `ReferencesTree`'s row chrome (`rounded`/`bg-muted`) rather than inventing a new treatment. A plain object, not a hook: unlike `narrative-pane.tsx`'s version, nothing here depends on per-render props. */
+const documentationMarkdownComponents: Components = {
+	p: (props) => <p className="text-foreground" {...props} />,
+	ul: (props) => <ul className="list-disc space-y-1 pl-5" {...props} />,
+	ol: (props) => <ol className="list-decimal space-y-1 pl-5" {...props} />,
+	strong: (props) => (
+		<strong className="font-semibold text-foreground" {...props} />
+	),
+	a: ({ href, children }) => (
+		<a
+			className="underline underline-offset-2"
+			href={href}
+			rel="noreferrer"
+			target="_blank"
+		>
+			{children}
+		</a>
+	),
+	pre: (props) => (
+		<pre
+			className="overflow-x-auto rounded-md bg-muted px-2 py-1.5 font-mono text-[0.8125em] leading-5"
+			{...props}
+		/>
+	),
+	// Fenced blocks (the signature) carry a `language-xxx` className from
+	// react-markdown; inline spans don't — `pre` above already supplies the
+	// fenced block's own background/padding, so a fenced `code` renders
+	// plain here rather than doubling up on the inline chip treatment.
+	code: ({ className, children, ...props }) =>
+		className === undefined ? (
+			<code
+				className="rounded bg-muted px-1 py-0.5 font-mono text-[0.8125em]"
+				{...props}
+			>
+				{children}
+			</code>
+		) : (
+			<code className={className} {...props}>
+				{children}
+			</code>
+		),
+};
 
 /**
  * Purely presentational — `CodeIndexPeekPanel` owns the `codeIndex.references`
