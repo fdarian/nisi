@@ -27,6 +27,7 @@ import {
 	DIFF_VIEWED_HOST_CLASS,
 	diffCardChromeCSS,
 	diffCardHeaderClassName,
+	useDiffTheme,
 } from "#/components/diff-pane/diff-view-theme";
 import { Badge } from "#/components/ui/badge";
 import { Checkbox } from "#/components/ui/checkbox";
@@ -116,6 +117,8 @@ export function ReferencePane({
 	block,
 	changedPaths,
 }: ReferencePaneProps): React.ReactElement {
+	const diffTheme = useDiffTheme(orpc);
+
 	const filesByPath = useMemo(
 		() => new Map(files.map((file) => [file.path, file] as const)),
 		[files],
@@ -273,12 +276,13 @@ export function ReferencePane({
 		() =>
 			buildDiffCodeViewOptions<ReferenceAnnotationMetadata>({
 				extraCSS: diffCardChromeCSS,
+				theme: diffTheme.theme,
 				onPostRender: (node, _instance, _phase, context) => {
 					const status = statusByItemId.get(context.item.id);
 					node.classList.toggle(DIFF_VIEWED_HOST_CLASS, status === "reviewed");
 				},
 			}),
-		[statusByItemId],
+		[statusByItemId, diffTheme],
 	);
 
 	if (block === null) {
@@ -314,6 +318,7 @@ export function ReferencePane({
 					"min-h-0 w-full flex-1 overflow-auto overscroll-contain px-3 [contain:strict]",
 					"[&_diffs-container]:[clip-path:inset(0_round_var(--radius-xl))]",
 				)}
+				highlighterOptions={diffTheme.highlighterOptions}
 				items={items}
 				options={codeViewOptions}
 				renderAnnotation={renderAnnotation}

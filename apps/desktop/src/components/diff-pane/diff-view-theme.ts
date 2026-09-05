@@ -11,20 +11,184 @@
  * the outer document, so no inline style on the light-DOM host is needed
  * either.
  */
-import type { CodeViewLayout } from "@pierre/diffs";
+import type { CodeViewLayout, ThemesType } from "@pierre/diffs";
+import type { WorkerInitializationRenderOptions } from "@pierre/diffs/react";
+import { themes } from "@pierre/theming/themes";
+import { useMemo } from "react";
+import type { SidecarQueryUtils } from "#/lib/backend-context";
+import { useDiffThemeDark, useDiffThemeLight } from "#/lib/settings-data";
 import { cn } from "#/lib/utils";
 
-export const DIFF_VIEW_THEME = {
-	dark: "github-dark",
-	light: "github-light",
-} as const;
-
-export const diffHighlighterOptions = {
-	maxLineDiffLength: 2000,
-	theme: DIFF_VIEW_THEME,
-	tokenizeMaxLineLength: 20_000,
-	useTokenTransformer: false,
+/** One selectable diff syntax theme — an id `@pierre/theming`'s registry resolves, plus a human label for the Settings picker. */
+export type DiffThemeOption = {
+	id: string;
+	label: string;
 };
+
+/**
+ * Explicit id → label map for every plain shiki-collection theme id
+ * `@pierre/theming`'s `themes.getThemeNames()` can return that has no Pierre
+ * `displayName` of its own — the 10 Pierre themes (`pierre-light*`/
+ * `pierre-dark*`) do carry one (`themes.getThemes()`'s `displayName` field),
+ * every one of these 65 shiki ids doesn't. Pulled from each theme's own
+ * `displayName` field in `@shikijs/themes` (the transitive package
+ * `@pierre/theming` re-exports these from) — not mechanically title-cased,
+ * which mangles ids like `catppuccin-mocha` (→ "Catppuccin Mocha", not
+ * "Catppuccin  Mocha"/"CATPPUCCIN MOCHA") and `vitesse-black`. This is a
+ * complete, hand-verified enumeration of every id the collection actually
+ * returns as of `@pierre/theming@1.0.1` — `themeOptionLabel` below throws
+ * rather than falling back to a guessed label if a future bump adds an id
+ * this map doesn't know about yet.
+ */
+const SHIKI_THEME_LABELS: Record<string, string> = {
+	// Light
+	"ayu-light": "Ayu Light",
+	"catppuccin-latte": "Catppuccin Latte",
+	"everforest-light": "Everforest Light",
+	"github-light": "GitHub Light",
+	"github-light-default": "GitHub Light Default",
+	"github-light-high-contrast": "GitHub Light High Contrast",
+	"gruvbox-light-hard": "Gruvbox Light Hard",
+	"gruvbox-light-medium": "Gruvbox Light Medium",
+	"gruvbox-light-soft": "Gruvbox Light Soft",
+	"horizon-bright": "Horizon Bright",
+	"kanagawa-lotus": "Kanagawa Lotus",
+	"light-plus": "Light Plus",
+	"material-theme-lighter": "Material Theme Lighter",
+	"min-light": "Min Light",
+	"night-owl-light": "Night Owl Light",
+	"one-light": "One Light",
+	"rose-pine-dawn": "Rosé Pine Dawn",
+	"slack-ochin": "Slack Ochin",
+	"snazzy-light": "Snazzy Light",
+	"solarized-light": "Solarized Light",
+	"vitesse-light": "Vitesse Light",
+	// Dark
+	andromeeda: "Andromeeda",
+	"aurora-x": "Aurora X",
+	"ayu-dark": "Ayu Dark",
+	"ayu-mirage": "Ayu Mirage",
+	"catppuccin-frappe": "Catppuccin Frappé",
+	"catppuccin-macchiato": "Catppuccin Macchiato",
+	"catppuccin-mocha": "Catppuccin Mocha",
+	"dark-plus": "Dark Plus",
+	dracula: "Dracula Theme",
+	"dracula-soft": "Dracula Theme Soft",
+	"everforest-dark": "Everforest Dark",
+	"github-dark": "GitHub Dark",
+	"github-dark-default": "GitHub Dark Default",
+	"github-dark-dimmed": "GitHub Dark Dimmed",
+	"github-dark-high-contrast": "GitHub Dark High Contrast",
+	"gruvbox-dark-hard": "Gruvbox Dark Hard",
+	"gruvbox-dark-medium": "Gruvbox Dark Medium",
+	"gruvbox-dark-soft": "Gruvbox Dark Soft",
+	horizon: "Horizon",
+	houston: "Houston",
+	"kanagawa-dragon": "Kanagawa Dragon",
+	"kanagawa-wave": "Kanagawa Wave",
+	laserwave: "LaserWave",
+	"material-theme": "Material Theme",
+	"material-theme-darker": "Material Theme Darker",
+	"material-theme-ocean": "Material Theme Ocean",
+	"material-theme-palenight": "Material Theme Palenight",
+	"min-dark": "Min Dark",
+	monokai: "Monokai",
+	"night-owl": "Night Owl",
+	nord: "Nord",
+	"one-dark-pro": "One Dark Pro",
+	plastic: "Plastic",
+	poimandres: "Poimandres",
+	red: "Red",
+	"rose-pine": "Rosé Pine",
+	"rose-pine-moon": "Rosé Pine Moon",
+	"slack-dark": "Slack Dark",
+	"solarized-dark": "Solarized Dark",
+	"synthwave-84": "Synthwave '84",
+	"tokyo-night": "Tokyo Night",
+	vesper: "Vesper",
+	"vitesse-black": "Vitesse Black",
+	"vitesse-dark": "Vitesse Dark",
+};
+
+function themeOptionLabel(id: string, displayName: string | undefined): string {
+	if (displayName !== undefined) return displayName;
+	const label = SHIKI_THEME_LABELS[id];
+	if (label === undefined) {
+		throw new Error(
+			`diff-view-theme: no label registered for theme id "${id}"`,
+		);
+	}
+	return label;
+}
+
+function buildDiffThemeOptions(
+	colorScheme: "light" | "dark",
+): DiffThemeOption[] {
+	const displayNameById = new Map(
+		themes
+			.getThemes({ colorScheme })
+			.map((descriptor) => [descriptor.name, descriptor.displayName] as const),
+	);
+	return themes.getThemeNames({ colorScheme }).map((id) => ({
+		id,
+		label: themeOptionLabel(id, displayNameById.get(id)),
+	}));
+}
+
+/** Every light-mode theme id `@pierre/theming`'s collection offers — feeds the Settings page's light-theme `Select`. */
+export const DIFF_THEME_LIGHT_OPTIONS: readonly DiffThemeOption[] =
+	buildDiffThemeOptions("light");
+/** Dark-mode counterpart of `DIFF_THEME_LIGHT_OPTIONS` above. */
+export const DIFF_THEME_DARK_OPTIONS: readonly DiffThemeOption[] =
+	buildDiffThemeOptions("dark");
+
+/** The two knobs every `CodeView`/highlighter instance needs, given the pair `useDiffTheme` below assembles. */
+export function buildDiffHighlighterOptions(
+	theme: ThemesType,
+): WorkerInitializationRenderOptions {
+	return {
+		maxLineDiffLength: 2000,
+		theme,
+		tokenizeMaxLineLength: 20_000,
+		useTokenTransformer: false,
+	};
+}
+
+/** `useDiffTheme`'s return shape — see its doc comment. */
+export type DiffTheme = {
+	theme: ThemesType;
+	highlighterOptions: WorkerInitializationRenderOptions;
+};
+
+/**
+ * The user's current `diffThemeLight`/`diffThemeDark` setting (`@repo/settings`,
+ * defaulting to `github-light`/`github-dark`), assembled once into the two
+ * shapes every `CodeView` consumer needs: the `ThemesType` pair for
+ * `buildDiffCodeViewOptions`'s `theme` override, and the highlighter options
+ * (`buildDiffHighlighterOptions` above) for `diff-code-view.tsx`'s
+ * `WorkerPoolContextProvider` pre-warm. Those two call sites must be built
+ * from the *same* `ThemesType` value so they never silently drift apart —
+ * this hook is the one place that derives both from `diffThemeLight`/
+ * `diffThemeDark`, so `diff-pane.tsx` and `reference-pane.tsx` share one
+ * memoized pair instead of each assembling — and risking diverging — its
+ * own.
+ */
+export function useDiffTheme(orpc: SidecarQueryUtils): DiffTheme {
+	const [diffThemeLight] = useDiffThemeLight(orpc);
+	const [diffThemeDark] = useDiffThemeDark(orpc);
+	const theme = useMemo<ThemesType>(
+		() => ({ light: diffThemeLight, dark: diffThemeDark }),
+		[diffThemeLight, diffThemeDark],
+	);
+	const highlighterOptions = useMemo(
+		() => buildDiffHighlighterOptions(theme),
+		[theme],
+	);
+	return useMemo(
+		() => ({ theme, highlighterOptions }),
+		[theme, highlighterOptions],
+	);
+}
 
 export const diffCodeViewLayout: CodeViewLayout = {
 	gap: 12,

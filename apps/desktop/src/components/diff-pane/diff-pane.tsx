@@ -29,6 +29,7 @@ import {
 	DIFF_LOADING_HOST_CLASS,
 	DIFF_VIEWED_HOST_CLASS,
 	diffCardChromeCSS,
+	useDiffTheme,
 } from "#/components/diff-pane/diff-view-theme";
 import { Button } from "#/components/ui/button";
 import {
@@ -424,6 +425,7 @@ export function DiffPane({
 	ref,
 }: DiffPaneProps): React.ReactElement {
 	const codeViewRef = useRef<CodeViewHandle<DiffAnnotationMetadata>>(null);
+	const diffTheme = useDiffTheme(orpc);
 	const fileDiffCache = useRef(new Map<string, CachedFileDiff>());
 	const hiddenFileAnnotationCache = useRef(
 		new Map<string, CachedHiddenFileAnnotation>(),
@@ -1011,6 +1013,7 @@ export function DiffPane({
 				enableLineSelection: true,
 				extraCSS: diffCardChromeCSS + highlightCSS,
 				overflow: wrapLines ? "wrap" : "scroll",
+				theme: diffTheme.theme,
 				onPostRender: (node, _instance, phase, context) => {
 					const meta = itemMetadata.get(context.item.id);
 					node.classList.toggle(DIFF_VIEWED_HOST_CLASS, meta?.viewed === true);
@@ -1024,7 +1027,14 @@ export function DiffPane({
 					);
 				},
 			}),
-		[diffStyle, wrapLines, itemMetadata, highlightCSS, onItemPostRender],
+		[
+			diffStyle,
+			wrapLines,
+			diffTheme,
+			itemMetadata,
+			highlightCSS,
+			onItemPostRender,
+		],
 	);
 
 	// Scrolls the pane to a target inside one item, retrying across frames
@@ -1312,6 +1322,7 @@ export function DiffPane({
 					"min-h-0 w-full flex-1 overflow-auto overscroll-contain px-3 [contain:strict]",
 					"[&_diffs-container]:[clip-path:inset(0_round_var(--radius-xl))]",
 				)}
+				highlighterOptions={diffTheme.highlighterOptions}
 				items={items}
 				onScroll={handleScroll}
 				onSelectedLinesChange={diffSelection.onSelectedLinesChange}

@@ -59,6 +59,10 @@ export type Settings = {
 	readonly lastChatHarness: string | null;
 	/** Model id paired with `lastChatHarness` above. */
 	readonly lastChatModel: string | null;
+	/** `@pierre/theming` theme id for the diff pane in light mode — see `db/schema.ts`'s `diffThemeLight` doc. */
+	readonly diffThemeLight: string;
+	/** Dark-mode counterpart of `diffThemeLight` above. */
+	readonly diffThemeDark: string;
 };
 
 export type SettingsUpdate = Partial<Settings>;
@@ -89,6 +93,8 @@ export const DEFAULT_SETTINGS: Settings = {
 	wrapLines: false,
 	lastChatHarness: null,
 	lastChatModel: null,
+	diffThemeLight: "github-light",
+	diffThemeDark: "github-dark",
 };
 
 const toSettings = (row: SettingsRow): Settings => ({
@@ -105,6 +111,8 @@ const toSettings = (row: SettingsRow): Settings => ({
 	wrapLines: row.wrapLines,
 	lastChatHarness: row.lastChatHarness,
 	lastChatModel: row.lastChatModel,
+	diffThemeLight: row.diffThemeLight,
+	diffThemeDark: row.diffThemeDark,
 });
 
 const toRepoPathMapping = (row: RepoPathRow): RepoPathMapping => ({
@@ -166,6 +174,8 @@ export class SettingsStore extends Context.Service<SettingsStore>()(
 						wrapLines: next.wrapLines,
 						lastChatHarness: next.lastChatHarness,
 						lastChatModel: next.lastChatModel,
+						diffThemeLight: next.diffThemeLight,
+						diffThemeDark: next.diffThemeDark,
 						updatedAt: new Date(),
 					};
 
