@@ -13,13 +13,19 @@
 
 import { ORPCError } from "@orpc/client";
 import type { CodeViewItem } from "@pierre/diffs";
+import type { CodeViewHandle } from "@pierre/diffs/react";
 import { useQuery } from "@tanstack/react-query";
 import { AlertTriangleIcon } from "lucide-react";
-import { useMemo } from "react";
+import { useCallback, useMemo, useRef } from "react";
 import {
 	buildDiffCodeViewOptions,
 	DiffCodeView,
 } from "#/components/diff-pane/diff-code-view";
+import { DiffSelectionPopover } from "#/components/diff-pane/diff-selection-popover";
+import {
+	diffCodeViewLayout,
+	diffItemMetrics,
+} from "#/components/diff-pane/diff-view-theme";
 import {
 	Empty,
 	EmptyDescription,
@@ -27,6 +33,7 @@ import {
 	EmptyTitle,
 } from "#/components/ui/empty";
 import { Spinner } from "#/components/ui/spinner";
+import { useDiffSelection } from "#/hooks/use-diff-selection";
 import type { SidecarQueryUtils } from "#/lib/backend-context";
 import { hashItemVersion } from "#/lib/item-version";
 import { splitPath } from "#/lib/tree-paths";
@@ -73,6 +80,19 @@ export function FileView({
 	);
 	const { basename } = splitPath(path);
 
+	const codeViewRef = useRef<CodeViewHandle<undefined>>(null);
+	const resolveSelectionItemPath = useCallback(
+		(itemId: string) => (itemId === path ? path : undefined),
+		[path],
+	);
+	const diffSelection = useDiffSelection({
+		codeViewRef,
+		resolveItemPath: resolveSelectionItemPath,
+	});
+	const handleScroll = useCallback(() => {
+		diffSelection.refreshAnchorRect();
+	}, [diffSelection.refreshAnchorRect]);
+
 	const items = useMemo<readonly CodeViewItem<undefined>[]>(() => {
 		if (query.data === undefined) return [];
 		return [
@@ -86,7 +106,20 @@ export function FileView({
 	}, [path, query.data]);
 
 	const codeViewOptions = useMemo(
-		() => buildDiffCodeViewOptions<undefined>({}),
+		() => ({
+			...buildDiffCodeViewOptions<undefined>({
+				enableLineSelection: true,
+				extraCSS: `
+					:host {
+						--diffs-light-bg: transparent;
+						--diffs-dark-bg: transparent;
+					}
+				`,
+			}),
+			disableFileHeader: true,
+			itemMetrics: { ...diffItemMetrics, paddingBottom: 0 },
+			layout: { ...diffCodeViewLayout, paddingBottom: 0 },
+		}),
 		[],
 	);
 
@@ -114,11 +147,24 @@ export function FileView({
 	}
 
 	return (
-		<DiffCodeView
-			className="min-h-0 w-full flex-1 overflow-auto overscroll-contain"
-			items={items}
-			options={codeViewOptions}
-			renderAnnotation={() => null}
-		/>
+		<>
+			<DiffCodeView
+				className="min-h-0 w-full flex-1 overflow-auto overscroll-contain"
+				items={items}
+				onScroll={handleScroll}
+				onSelectedLinesChange={diffSelection.onSelectedLinesChange}
+				options={codeViewOptions}
+				ref={codeViewRef}
+				renderAnnotation={() => null}
+				selectedLines={diffSelection.selectedLines}
+			/>
+			<DiffSelectionPopover
+				anchorRect={diffSelection.anchorRect}
+				onDismiss={diffSelection.clearSelection}
+				orpc={orpc}
+				reference={diffSelection.reference}
+				sessionId={sessionId}
+			/>
+		</>
 	);
 }
