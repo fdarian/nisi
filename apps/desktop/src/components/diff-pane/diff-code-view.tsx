@@ -185,10 +185,10 @@ type DiffCodeViewProps<Metadata> = {
 	 * Pre-warms the shared worker-pool highlighter (`WorkerPoolContextProvider`,
 	 * a module-level singleton — see `getOrCreateWorkerPoolSingleton` in
 	 * `@pierre/diffs`) with the theme pair it should have ready before first
-	 * paint. Build with `diff-view-theme.ts`'s `buildDiffHighlighterOptions`
-	 * from the *same* `ThemesType` passed to `buildDiffCodeViewOptions`'s
-	 * `theme` — the caller is responsible for keeping the two in sync so the
-	 * pre-warmed theme and the per-item rendered theme never drift apart.
+	 * paint. Source this from `diff-view-theme.ts`'s `useDiffTheme` alongside
+	 * `buildDiffCodeViewOptions`'s `theme` — that hook derives both from the
+	 * same `ThemesType` value so the pre-warmed theme and the per-item
+	 * rendered theme never drift apart.
 	 */
 	highlighterOptions: WorkerInitializationRenderOptions;
 	/** Forwarded straight to `CodeView`'s own `onScroll` — fires for both user-driven and programmatic scrolling; telling the two apart is the caller's job (see `DiffPane`'s scroll-report suppression). */

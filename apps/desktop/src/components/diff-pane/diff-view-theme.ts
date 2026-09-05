@@ -14,6 +14,9 @@
 import type { CodeViewLayout, ThemesType } from "@pierre/diffs";
 import type { WorkerInitializationRenderOptions } from "@pierre/diffs/react";
 import { themes } from "@pierre/theming/themes";
+import { useMemo } from "react";
+import type { SidecarQueryUtils } from "#/lib/backend-context";
+import { useDiffThemeDark, useDiffThemeLight } from "#/lib/settings-data";
 import { cn } from "#/lib/utils";
 
 /** One selectable diff syntax theme — an id `@pierre/theming`'s registry resolves, plus a human label for the Settings picker. */
@@ -139,14 +142,7 @@ export const DIFF_THEME_LIGHT_OPTIONS: readonly DiffThemeOption[] =
 export const DIFF_THEME_DARK_OPTIONS: readonly DiffThemeOption[] =
 	buildDiffThemeOptions("dark");
 
-/**
- * The two knobs every `CodeView`/highlighter instance needs, built from the
- * user's current `diffThemeLight`/`diffThemeDark` setting (`@repo/settings`,
- * defaulting to `github-light`/`github-dark`) rather than a hardcoded pair —
- * `buildDiffCodeViewOptions`'s `theme` override and `diff-code-view.tsx`'s
- * `WorkerPoolContextProvider` highlighter pre-warm must both be built from
- * the *same* `ThemesType` value so they never silently drift apart.
- */
+/** The two knobs every `CodeView`/highlighter instance needs, given the pair `useDiffTheme` below assembles. */
 export function buildDiffHighlighterOptions(
 	theme: ThemesType,
 ): WorkerInitializationRenderOptions {
@@ -156,6 +152,42 @@ export function buildDiffHighlighterOptions(
 		tokenizeMaxLineLength: 20_000,
 		useTokenTransformer: false,
 	};
+}
+
+/** `useDiffTheme`'s return shape — see its doc comment. */
+export type DiffTheme = {
+	theme: ThemesType;
+	highlighterOptions: WorkerInitializationRenderOptions;
+};
+
+/**
+ * The user's current `diffThemeLight`/`diffThemeDark` setting (`@repo/settings`,
+ * defaulting to `github-light`/`github-dark`), assembled once into the two
+ * shapes every `CodeView` consumer needs: the `ThemesType` pair for
+ * `buildDiffCodeViewOptions`'s `theme` override, and the highlighter options
+ * (`buildDiffHighlighterOptions` above) for `diff-code-view.tsx`'s
+ * `WorkerPoolContextProvider` pre-warm. Those two call sites must be built
+ * from the *same* `ThemesType` value so they never silently drift apart —
+ * this hook is the one place that derives both from `diffThemeLight`/
+ * `diffThemeDark`, so `diff-pane.tsx` and `reference-pane.tsx` share one
+ * memoized pair instead of each assembling — and risking diverging — its
+ * own.
+ */
+export function useDiffTheme(orpc: SidecarQueryUtils): DiffTheme {
+	const [diffThemeLight] = useDiffThemeLight(orpc);
+	const [diffThemeDark] = useDiffThemeDark(orpc);
+	const theme = useMemo<ThemesType>(
+		() => ({ light: diffThemeLight, dark: diffThemeDark }),
+		[diffThemeLight, diffThemeDark],
+	);
+	const highlighterOptions = useMemo(
+		() => buildDiffHighlighterOptions(theme),
+		[theme],
+	);
+	return useMemo(
+		() => ({ theme, highlighterOptions }),
+		[theme, highlighterOptions],
+	);
 }
 
 export const diffCodeViewLayout: CodeViewLayout = {
