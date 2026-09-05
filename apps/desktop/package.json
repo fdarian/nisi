@@ -48,7 +48,7 @@
 		"@orpc/experimental-effect": "2.0.0-beta.21",
 		"@orpc/server": "2.0.0-beta.21",
 		"@orpc/tanstack-query": "2.0.0-beta.21",
-		"@pierre/diffs": "1.3.6",
+		"@pierre/diffs": "1.4.1",
 		"@pierre/trees": "1.0.0-beta.6",
 		"@repo/bin-resolver": "workspace:*",
 		"@repo/db": "workspace:*",

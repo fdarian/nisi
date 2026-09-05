@@ -80,7 +80,7 @@ slow (roughly 13–28s) while nisi installs a pinned copy of it; every run after
   `pnpm-workspace.yaml`; `@orpc/*` versions are pinned per-package.
 - Patches in `patches/` register under `patchedDependencies` in `pnpm-workspace.yaml`, never
   `package.json` — pnpm 10+ silently ignores that key there with no warning. Patch filenames use
-  percent-encoding for the scope slash (`@pierre%2Fdiffs@1.3.6.patch`); on pnpm 12 rc8,
+  percent-encoding for the scope slash (`@pierre%2Fdiffs@1.4.1.patch`); on pnpm 12 rc8,
   `pnpm patch-commit` writes double-underscore names instead (`@pierre__diffs@...`) and rewrites
   `patchedDependencies` to match — rename the file back and revert the workspace-config diff after
   committing a patch. On the same pnpm 12 rc8, `pnpm patch-commit` can also corrupt the generated

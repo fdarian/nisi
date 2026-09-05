@@ -136,8 +136,8 @@ export function buildDiffCodeViewOptions<Metadata>(overrides: {
 	 * revision when this changes, no remount needed. Defaults to `'scroll'`,
 	 * `@pierre/diffs`' own default.
 	 */
-	overflow?: CodeViewOptions<Metadata>["overflow"];
-	onPostRender?: CodeViewOptions<Metadata>["onPostRender"];
+	overflow?: CodeViewOptions<Metadata, undefined>["overflow"];
+	onPostRender?: CodeViewOptions<Metadata, undefined>["onPostRender"];
 	/** Appended to `diffViewUnsafeCSS` inside each item's shadow root — for styling only one pane's items, e.g. `diffCardChromeCSS`. */
 	extraCSS?: string;
 	/**
@@ -148,7 +148,7 @@ export function buildDiffCodeViewOptions<Metadata>(overrides: {
 	 * paint a highlight that never does anything.
 	 */
 	enableLineSelection?: boolean;
-}): CodeViewOptions<Metadata> {
+}): CodeViewOptions<Metadata, undefined> {
 	return {
 		diffIndicators: "bars",
 		diffStyle: overrides.diffStyle ?? "unified",
@@ -170,7 +170,7 @@ export function buildDiffCodeViewOptions<Metadata>(overrides: {
 type DiffCodeViewProps<Metadata> = {
 	className: string;
 	items: readonly CodeViewItem<Metadata>[];
-	options: CodeViewOptions<Metadata>;
+	options: CodeViewOptions<Metadata, undefined>;
 	/** Forwarded straight to `CodeView`'s own `onScroll` — fires for both user-driven and programmatic scrolling; telling the two apart is the caller's job (see `DiffPane`'s scroll-report suppression). */
 	onScroll?: (scrollTop: number, viewer: CodeViewInstance<Metadata>) => void;
 	renderAnnotation: (
@@ -186,7 +186,7 @@ type DiffCodeViewProps<Metadata> = {
 	 */
 	selectedLines?: CodeViewLineSelection | null;
 	onSelectedLinesChange?: (selection: CodeViewLineSelection | null) => void;
-	ref?: React.Ref<CodeViewHandle<Metadata>>;
+	ref?: React.Ref<CodeViewHandle<Metadata, undefined>>;
 };
 
 export function DiffCodeView<Metadata>({

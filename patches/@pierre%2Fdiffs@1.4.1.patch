@@ -1,12 +1,13 @@
 diff --git a/dist/components/CodeView.js b/dist/components/CodeView.js
-index 051e7d0a211c0cdf32badbd4ff836f04df1ff511..9425e308bce351d740cd9cdcff48a2354480dc75 100644
+index f0d18c5..50475c7 100644
 --- a/dist/components/CodeView.js
 +++ b/dist/components/CodeView.js
-@@ -457,10 +457,10 @@ var CodeView = class CodeView {
+@@ -486,11 +486,11 @@ var CodeView = class CodeView {
  		this.footer.height = 0;
  		this.root = void 0;
  		this.container = void 0;
 +		if (window.__INSTANCE === this) window.__INSTANCE = void 0;
+ 		if (resetFailed) throw resetFailure;
  	}
  	cleanAllRenderedItems() {
 -		if (this.renderState.firstIndex === -1) return;
@@ -15,10 +16,16 @@ index 051e7d0a211c0cdf32badbd4ff836f04df1ff511..9425e308bce351d740cd9cdcff48a235
  			const item = this.items[index];
  			if (item == null) throw new Error(`CodeView.cleanAllRenderedItems: Item does not exist at index: ${index}`);
  			this.releaseRenderedItem(item);
-@@ -1147,6 +1147,11 @@ var CodeView = class CodeView {
+@@ -1277,6 +1277,17 @@ var CodeView = class CodeView {
  			if (removedItems.size === 0) return;
  			firstDirtyIndex = Math.max(nextItems.length - 1, 0);
  		}
++		// capturePendingLayoutAnchor() no-ops while a scrollTo() animation is in flight
++		// (pendingScrollTarget != null) — correct as long as the target survives. But if the
++		// item being scrolled to is removed here (e.g. ticking Reviewed with Hide Reviewed on
++		// hides the very file mid-animation), that target can never resolve, so the guard never
++		// clears and scroll-anchoring never runs again, collapsing scrollTop to 0. Clear it (and
++		// any in-flight scrollAnimation) when the removed-items set covers the pending target's id.
 +		const { pendingScrollTarget } = this;
 +		if (pendingScrollTarget != null && pendingScrollTarget.type !== "position" && !nextIdToItem.has(pendingScrollTarget.id)) {
 +			this.pendingScrollTarget = void 0;
@@ -27,7 +34,7 @@ index 051e7d0a211c0cdf32badbd4ff836f04df1ff511..9425e308bce351d740cd9cdcff48a235
  		this.capturePendingLayoutAnchor(nextIdToItem);
  		for (let index = 0; index < previousItems.length; index++) {
  			const removedItem = previousItems[index];
-@@ -1590,8 +1595,11 @@ var CodeView = class CodeView {
+@@ -1720,8 +1731,11 @@ var CodeView = class CodeView {
  		this.renderState.stickyTop = stickyTop;
  		this.renderState.stickyBottom = stickyBottom;
  		this.stickyOffset.style.height = `${stickyTop}px`;
