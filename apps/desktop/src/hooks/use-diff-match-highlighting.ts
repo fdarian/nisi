@@ -25,7 +25,7 @@ import type { DiffMatch } from "#/lib/diff-search";
 
 type UseDiffMatchHighlightingOptions<LAnnotation> = {
 	/** The same `CodeViewHandle` ref the pane hands to `<DiffCodeView>` — used only to look up an already-rendered item's shadow root when bootstrapping the "current match" highlight for a target that isn't mounted yet (see the effect below). */
-	codeViewRef: React.RefObject<CodeViewHandle<LAnnotation> | null>;
+	codeViewRef: React.RefObject<CodeViewHandle<LAnnotation, undefined> | null>;
 	/** Keyed by path — the same shape `DiffPane` already threads through for narrowing (`keywordMatchesByPath`). */
 	keywordMatchesByPath: ReadonlyMap<string, readonly DiffMatch[]>;
 	/** The match `n`/`N`/Enter last parked on — highlighted distinctly via a higher-priority `::highlight()`. `undefined` means nothing is "current" (keyword mode off, or no navigation yet). */
