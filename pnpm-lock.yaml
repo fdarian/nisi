@@ -220,6 +220,9 @@ importers:
       '@pierre/diffs':
         specifier: 1.4.1
         version: 1.4.1(patch_hash=fa1f52b731b25e050d6d79d275018baefca09728610b44695126feae8ad45a18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+      '@pierre/theming':
+        specifier: 1.0.1
+        version: 1.0.1(@pierre/theme@2.0.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(shiki@4.4.3)
       '@pierre/trees':
         specifier: 1.0.0-beta.6
         version: 1.0.0-beta.6(@pierre/theme@2.0.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(shiki@4.4.3)

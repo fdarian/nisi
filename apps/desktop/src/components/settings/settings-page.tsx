@@ -12,6 +12,10 @@ import {
 } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useCallback } from "react";
+import {
+	DIFF_THEME_DARK_OPTIONS,
+	DIFF_THEME_LIGHT_OPTIONS,
+} from "#/components/diff-pane/diff-view-theme";
 import { Button } from "#/components/ui/button";
 import {
 	Card,
@@ -54,6 +58,8 @@ import { useAvailableEditors } from "#/hooks/use-available-editors";
 import type { SidecarQueryUtils } from "#/lib/backend-context";
 import { useBackendContext } from "#/lib/backend-context";
 import {
+	useDiffThemeDark,
+	useDiffThemeLight,
 	usePreferredEditor,
 	useUpdateSettings,
 	useWalkthroughEnabled,
@@ -229,6 +235,8 @@ function AppearanceSection({
 	const { theme, setTheme } = useTheme();
 	const [preferredEditor, setPreferredEditor] = usePreferredEditor(orpc);
 	const { editors, loadEditors } = useAvailableEditors();
+	const [diffThemeLight, setDiffThemeLight] = useDiffThemeLight(orpc);
+	const [diffThemeDark, setDiffThemeDark] = useDiffThemeDark(orpc);
 
 	return (
 		<SettingsSection title="Appearance">
@@ -255,6 +263,69 @@ function AppearanceSection({
 						<MonitorIcon />
 					</ToggleGroupItem>
 				</ToggleGroup>
+			</SettingsRow>
+			<SettingsRow
+				description="Syntax colors for the diff view — one theme per appearance."
+				title="Diff theme"
+			>
+				<div className="flex items-center gap-2">
+					<div className="flex items-center gap-1.5">
+						<SunIcon className="size-3.5 text-muted-foreground" />
+						<Select
+							items={DIFF_THEME_LIGHT_OPTIONS.map((option) => ({
+								value: option.id,
+								label: option.label,
+							}))}
+							onValueChange={(value: string | null) => {
+								if (value !== null) setDiffThemeLight(value);
+							}}
+							value={diffThemeLight}
+						>
+							<SelectTrigger
+								aria-label="Light diff theme"
+								className="w-40"
+								size="sm"
+							>
+								<SelectValue />
+							</SelectTrigger>
+							<SelectContent>
+								{DIFF_THEME_LIGHT_OPTIONS.map((option) => (
+									<SelectItem key={option.id} value={option.id}>
+										{option.label}
+									</SelectItem>
+								))}
+							</SelectContent>
+						</Select>
+					</div>
+					<div className="flex items-center gap-1.5">
+						<MoonIcon className="size-3.5 text-muted-foreground" />
+						<Select
+							items={DIFF_THEME_DARK_OPTIONS.map((option) => ({
+								value: option.id,
+								label: option.label,
+							}))}
+							onValueChange={(value: string | null) => {
+								if (value !== null) setDiffThemeDark(value);
+							}}
+							value={diffThemeDark}
+						>
+							<SelectTrigger
+								aria-label="Dark diff theme"
+								className="w-40"
+								size="sm"
+							>
+								<SelectValue />
+							</SelectTrigger>
+							<SelectContent>
+								{DIFF_THEME_DARK_OPTIONS.map((option) => (
+									<SelectItem key={option.id} value={option.id}>
+										{option.label}
+									</SelectItem>
+								))}
+							</SelectContent>
+						</Select>
+					</div>
+				</div>
 			</SettingsRow>
 			<SettingsRow
 				description="Press o, then e, to open the selected file in this editor."

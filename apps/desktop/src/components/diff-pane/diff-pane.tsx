@@ -8,6 +8,7 @@ import type {
 	DiffLineAnnotation,
 	FileDiffMetadata,
 	LineAnnotation,
+	ThemesType,
 } from "@pierre/diffs";
 import { parsePatchFiles } from "@pierre/diffs";
 import type { CodeViewHandle } from "@pierre/diffs/react";
@@ -26,6 +27,7 @@ import {
 import { DiffFileHeader } from "#/components/diff-pane/diff-file-header";
 import { DiffSelectionPopover } from "#/components/diff-pane/diff-selection-popover";
 import {
+	buildDiffHighlighterOptions,
 	DIFF_LOADING_HOST_CLASS,
 	DIFF_VIEWED_HOST_CLASS,
 	diffCardChromeCSS,
@@ -61,6 +63,7 @@ import {
 	useSessionFileCollapseOverrides,
 } from "#/lib/session-ui-store";
 import type { DiffStyleMode } from "#/lib/settings-data";
+import { useDiffThemeDark, useDiffThemeLight } from "#/lib/settings-data";
 import { cn } from "#/lib/utils";
 
 /** Why a file's whole body is hidden behind a "Show diff" placeholder by default — see `resolveHiddenFileReason`. */
@@ -425,6 +428,23 @@ export function DiffPane({
 }: DiffPaneProps): React.ReactElement {
 	const codeViewRef =
 		useRef<CodeViewHandle<DiffAnnotationMetadata, undefined>>(null);
+	const [diffThemeLight] = useDiffThemeLight(orpc);
+	const [diffThemeDark] = useDiffThemeDark(orpc);
+	/**
+	 * Shared by `buildDiffCodeViewOptions`'s `theme` override below and the
+	 * `highlighterOptions` handed to `DiffCodeView` — both must see the exact
+	 * same pair (see `diff-view-theme.ts`'s `buildDiffHighlighterOptions` doc),
+	 * so this is computed once and threaded to both rather than each deriving
+	 * its own `{ light, dark }` object from the two settings independently.
+	 */
+	const diffTheme = useMemo<ThemesType>(
+		() => ({ light: diffThemeLight, dark: diffThemeDark }),
+		[diffThemeLight, diffThemeDark],
+	);
+	const highlighterOptions = useMemo(
+		() => buildDiffHighlighterOptions(diffTheme),
+		[diffTheme],
+	);
 	const fileDiffCache = useRef(new Map<string, CachedFileDiff>());
 	const hiddenFileAnnotationCache = useRef(
 		new Map<string, CachedHiddenFileAnnotation>(),
@@ -1013,6 +1033,7 @@ export function DiffPane({
 					enableLineSelection: true,
 					extraCSS: diffCardChromeCSS + highlightCSS,
 					overflow: wrapLines ? "wrap" : "scroll",
+					theme: diffTheme,
 					onPostRender: (node, _instance, phase, context) => {
 						const meta = itemMetadata.get(context.item.id);
 						node.classList.toggle(
@@ -1029,7 +1050,14 @@ export function DiffPane({
 						);
 					},
 				}),
-			[diffStyle, wrapLines, itemMetadata, highlightCSS, onItemPostRender],
+			[
+				diffStyle,
+				wrapLines,
+				diffTheme,
+				itemMetadata,
+				highlightCSS,
+				onItemPostRender,
+			],
 		);
 
 	// Scrolls the pane to a target inside one item, retrying across frames
@@ -1317,6 +1345,7 @@ export function DiffPane({
 					"min-h-0 w-full flex-1 overflow-auto overscroll-contain px-3 [contain:strict]",
 					"[&_diffs-container]:[clip-path:inset(0_round_var(--radius-xl))]",
 				)}
+				highlighterOptions={highlighterOptions}
 				items={items}
 				onScroll={handleScroll}
 				onSelectedLinesChange={diffSelection.onSelectedLinesChange}
