@@ -16,6 +16,7 @@ import {
 	DIFF_THEME_DARK_OPTIONS,
 	DIFF_THEME_LIGHT_OPTIONS,
 } from "#/components/diff-pane/diff-view-theme";
+import { DiffThemePreview } from "#/components/settings/diff-theme-preview";
 import { Button } from "#/components/ui/button";
 import {
 	Card,
@@ -198,6 +199,21 @@ function SettingsSection({
 	);
 }
 
+function SettingsRowHeader({
+	title,
+	description,
+}: {
+	title: string;
+	description: string;
+}): React.ReactElement {
+	return (
+		<div className="flex flex-col gap-0.5">
+			<span className="font-medium text-foreground text-sm">{title}</span>
+			<span className="text-muted-foreground text-sm">{description}</span>
+		</div>
+	);
+}
+
 function SettingsRow({
 	title,
 	description,
@@ -209,10 +225,33 @@ function SettingsRow({
 }): React.ReactElement {
 	return (
 		<div className="flex items-center justify-between gap-6 py-3 first:pt-0 last:pb-0">
-			<div className="flex flex-col gap-0.5">
-				<span className="font-medium text-foreground text-sm">{title}</span>
-				<span className="text-muted-foreground text-sm">{description}</span>
-			</div>
+			<SettingsRowHeader description={description} title={title} />
+			{children}
+		</div>
+	);
+}
+
+/**
+ * Same header as `SettingsRow`, but `children` render as a full-width block
+ * beneath it instead of beside it — for a row whose content can't fit
+ * inline (the Diff theme row's two-column select+preview grid below). A
+ * second component sharing `SettingsRowHeader` rather than a layout prop on
+ * `SettingsRow`: the two containers don't share a shape, one is
+ * `items-center justify-between` (title and children side by side), this is
+ * `flex-col` (title, then children underneath).
+ */
+function SettingsRowStacked({
+	title,
+	description,
+	children,
+}: {
+	title: string;
+	description: string;
+	children: React.ReactNode;
+}): React.ReactElement {
+	return (
+		<div className="flex flex-col gap-3 py-3 first:pt-0 last:pb-0">
+			<SettingsRowHeader description={description} title={title} />
 			{children}
 		</div>
 	);
@@ -264,69 +303,75 @@ function AppearanceSection({
 					</ToggleGroupItem>
 				</ToggleGroup>
 			</SettingsRow>
-			<SettingsRow
+			<SettingsRowStacked
 				description="Syntax colors for the diff view — one theme per appearance."
 				title="Diff theme"
 			>
-				<div className="flex items-center gap-2">
-					<div className="flex items-center gap-1.5">
-						<SunIcon className="size-3.5 text-muted-foreground" />
-						<Select
-							items={DIFF_THEME_LIGHT_OPTIONS.map((option) => ({
-								value: option.id,
-								label: option.label,
-							}))}
-							onValueChange={(value: string | null) => {
-								if (value !== null) setDiffThemeLight(value);
-							}}
-							value={diffThemeLight}
-						>
-							<SelectTrigger
-								aria-label="Light diff theme"
-								className="w-40"
-								size="sm"
+				<div className="grid grid-cols-2 gap-4">
+					<div className="flex flex-col gap-2">
+						<div className="flex items-center gap-1.5">
+							<SunIcon className="size-3.5 text-muted-foreground" />
+							<Select
+								items={DIFF_THEME_LIGHT_OPTIONS.map((option) => ({
+									value: option.id,
+									label: option.label,
+								}))}
+								onValueChange={(value: string | null) => {
+									if (value !== null) setDiffThemeLight(value);
+								}}
+								value={diffThemeLight}
 							>
-								<SelectValue />
-							</SelectTrigger>
-							<SelectContent>
-								{DIFF_THEME_LIGHT_OPTIONS.map((option) => (
-									<SelectItem key={option.id} value={option.id}>
-										{option.label}
-									</SelectItem>
-								))}
-							</SelectContent>
-						</Select>
+								<SelectTrigger
+									aria-label="Light diff theme"
+									className="w-full"
+									size="sm"
+								>
+									<SelectValue />
+								</SelectTrigger>
+								<SelectContent>
+									{DIFF_THEME_LIGHT_OPTIONS.map((option) => (
+										<SelectItem key={option.id} value={option.id}>
+											{option.label}
+										</SelectItem>
+									))}
+								</SelectContent>
+							</Select>
+						</div>
+						<DiffThemePreview pin="light" theme={diffThemeLight} />
 					</div>
-					<div className="flex items-center gap-1.5">
-						<MoonIcon className="size-3.5 text-muted-foreground" />
-						<Select
-							items={DIFF_THEME_DARK_OPTIONS.map((option) => ({
-								value: option.id,
-								label: option.label,
-							}))}
-							onValueChange={(value: string | null) => {
-								if (value !== null) setDiffThemeDark(value);
-							}}
-							value={diffThemeDark}
-						>
-							<SelectTrigger
-								aria-label="Dark diff theme"
-								className="w-40"
-								size="sm"
+					<div className="flex flex-col gap-2">
+						<div className="flex items-center gap-1.5">
+							<MoonIcon className="size-3.5 text-muted-foreground" />
+							<Select
+								items={DIFF_THEME_DARK_OPTIONS.map((option) => ({
+									value: option.id,
+									label: option.label,
+								}))}
+								onValueChange={(value: string | null) => {
+									if (value !== null) setDiffThemeDark(value);
+								}}
+								value={diffThemeDark}
 							>
-								<SelectValue />
-							</SelectTrigger>
-							<SelectContent>
-								{DIFF_THEME_DARK_OPTIONS.map((option) => (
-									<SelectItem key={option.id} value={option.id}>
-										{option.label}
-									</SelectItem>
-								))}
-							</SelectContent>
-						</Select>
+								<SelectTrigger
+									aria-label="Dark diff theme"
+									className="w-full"
+									size="sm"
+								>
+									<SelectValue />
+								</SelectTrigger>
+								<SelectContent>
+									{DIFF_THEME_DARK_OPTIONS.map((option) => (
+										<SelectItem key={option.id} value={option.id}>
+											{option.label}
+										</SelectItem>
+									))}
+								</SelectContent>
+							</Select>
+						</div>
+						<DiffThemePreview pin="dark" theme={diffThemeDark} />
 					</div>
 				</div>
-			</SettingsRow>
+			</SettingsRowStacked>
 			<SettingsRow
 				description="Press o, then e, to open the selected file in this editor."
 				title="Preferred editor"
