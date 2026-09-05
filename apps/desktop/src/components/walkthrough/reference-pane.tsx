@@ -44,6 +44,7 @@ import {
 import { hashItemVersion } from "#/lib/item-version";
 import type { FileChange, FileContentReview } from "#/lib/pr-data";
 import { useFileContents, useSetRangeViewed } from "#/lib/pr-data";
+import { useSessionOpenFiles } from "#/lib/session-ui-store";
 import { splitPath } from "#/lib/tree-paths";
 import { cn } from "#/lib/utils";
 import type {
@@ -51,7 +52,12 @@ import type {
 	WalkthroughReferenceBlock,
 } from "#/lib/walkthrough-data";
 
-type ReferenceAnnotationMetadata = { type: "error"; message: string };
+/** `action`, when present, renders as a button below the message — the out-of-diff case's "Open file" affordance (see `ReferencePane`'s `itemGroups` loop) is the only caller that supplies one today. */
+type ReferenceAnnotationMetadata = {
+	type: "error";
+	message: string;
+	action?: { label: string; onClick: () => void };
+};
 
 /** How much of one path's target ranges (within the selected block) are currently reviewed — drives the per-file checkbox's checked/indeterminate state. */
 type GroupReviewStatus = "reviewed" | "partial" | "unreviewed";
@@ -137,6 +143,12 @@ export function ReferencePane({
 	);
 	const fileContents = useFileContents(orpc, sessionId, paths, NO_FORCED_PATHS);
 	const setRangeViewed = useSetRangeViewed(orpc, sessionId);
+	// A reference block can point at a path outside the current diff entirely
+	// (renamed since generation, or just never touched by this PR) — `openFile`
+	// is that case's escape hatch: the file-viewer tab (`file-view.tsx`) reads
+	// straight off `headRef`'s tree/worktree, not the diff, so it can still
+	// show the file the diff-scoped error below can't.
+	const { openFile } = useSessionOpenFiles(sessionId);
 
 	const { items, statusByItemId } = useMemo(() => {
 		const nextItems: Array<CodeViewItem<ReferenceAnnotationMetadata>> = [];
@@ -150,6 +162,7 @@ export function ReferencePane({
 						itemId,
 						group.path,
 						"This file isn't part of the current diff.",
+						{ label: "Open file", onClick: () => openFile(group.path) },
 					),
 				);
 				continue;
@@ -202,7 +215,7 @@ export function ReferencePane({
 		}
 
 		return { items: nextItems, statusByItemId: nextStatus };
-	}, [itemGroups, filesByPath, fileContents]);
+	}, [itemGroups, filesByPath, fileContents, openFile]);
 
 	const renderCustomHeader = useCallback(
 		(item: CodeViewItem<ReferenceAnnotationMetadata>) => {
@@ -240,8 +253,17 @@ export function ReferencePane({
 				| LineAnnotation<ReferenceAnnotationMetadata>
 				| DiffLineAnnotation<ReferenceAnnotationMetadata>,
 		) => (
-			<div className="px-3 py-6 text-center text-destructive-foreground text-xs">
-				{annotation.metadata.message}
+			<div className="flex flex-col items-center gap-2 px-3 py-6 text-center text-destructive-foreground text-xs">
+				<span>{annotation.metadata.message}</span>
+				{annotation.metadata.action && (
+					<button
+						className="rounded border px-1.5 py-0.5 font-medium text-foreground hover:bg-accent"
+						onClick={annotation.metadata.action.onClick}
+						type="button"
+					>
+						{annotation.metadata.action.label}
+					</button>
+				)}
 			</div>
 		),
 		[],
@@ -305,13 +327,14 @@ function errorItem(
 	id: string,
 	path: string,
 	message: string,
+	action?: { label: string; onClick: () => void },
 ): CodeViewItem<ReferenceAnnotationMetadata> {
 	return {
 		id,
 		type: "file",
 		file: { name: path, contents: " ", lang: "text", cacheKey: `error:${id}` },
 		annotations: [
-			{ lineNumber: 1, metadata: { type: "error", message } },
+			{ lineNumber: 1, metadata: { type: "error", message, action } },
 		] satisfies LineAnnotation<ReferenceAnnotationMetadata>[],
 		version: hashItemVersion(`error:${id}`),
 	};

@@ -51,6 +51,15 @@ type SessionUiState = {
 	expandedHiddenPaths: ReadonlySet<string>;
 	fileCollapseOverrides: ReadonlyMap<string, boolean>;
 	activeTab: string;
+	/**
+	 * Paths currently open as whole-file viewer tabs (`file-view.tsx`),
+	 * insertion-ordered — `PrViewTabStrip` renders them in this order after
+	 * the static Overview/Walkthrough/Files Changed tabs. Each renders under
+	 * the tab id `fileTabId(path)`; `activeTab` holds that id while a file
+	 * tab is selected, same as it holds `"overview"`/`"files"`/`"walkthrough"`
+	 * for the static ones.
+	 */
+	openFiles: readonly string[];
 	walkthroughSelection: WalkthroughSelection | null;
 	/** Browser-style back/forward history (⌘[/⌘]) over `selectedPath` — see `#/lib/file-history.ts` for the transition semantics. Always a fresh, immutable value from that module's pure functions, never mutated in place. */
 	fileHistory: FileHistoryState;
@@ -77,6 +86,7 @@ function createDefaultSessionUiState(): SessionUiState {
 		expandedHiddenPaths: new Set(),
 		fileCollapseOverrides: new Map(),
 		activeTab: "files",
+		openFiles: EMPTY_OPEN_FILES,
 		walkthroughSelection: null,
 		undoStack: [],
 		fileHistory: EMPTY_FILE_HISTORY,
@@ -87,6 +97,17 @@ function createDefaultSessionUiState(): SessionUiState {
 const EMPTY_FORCED_PATHS: ReadonlySet<string> = new Set();
 const EMPTY_EXPANDED_HIDDEN_PATHS: ReadonlySet<string> = new Set();
 const EMPTY_FILE_COLLAPSE_OVERRIDES: ReadonlyMap<string, boolean> = new Map();
+const EMPTY_OPEN_FILES: readonly string[] = [];
+
+/** The tab id an open file's `TabsContent`/`TabsTrigger` renders under — namespaced so it can never collide with a static tab's own `"overview"`/`"walkthrough"`/`"files"` value. */
+export function fileTabId(path: string): string {
+	return `file:${path}`;
+}
+
+/** `fileTabId`'s inverse — `null` when `tabId` isn't a file tab at all (one of the static tabs). */
+export function fileTabPath(tabId: string): string | null {
+	return tabId.startsWith("file:") ? tabId.slice("file:".length) : null;
+}
 
 type SessionUiStore = {
 	sessions: ReadonlyMap<string, SessionUiState>;
@@ -103,6 +124,10 @@ type SessionUiStore = {
 	) => void;
 	clearFileCollapseOverride: (sessionId: string, path: string) => void;
 	setActiveTab: (sessionId: string, tab: string) => void;
+	/** Opens `path`'s viewer tab, activating it — idempotent: an already-open path is just activated, not duplicated in `openFiles`. */
+	openFile: (sessionId: string, path: string) => void;
+	/** Closes `path`'s viewer tab. Falls back `activeTab` to `"files"` only when `path`'s tab was the active one — closing a background file tab leaves whatever's currently active alone. */
+	closeFile: (sessionId: string, path: string) => void;
 	setWalkthroughSelection: (
 		sessionId: string,
 		selection: WalkthroughSelection | null,
@@ -216,6 +241,30 @@ function createSessionUiStore(): StoreApi<SessionUiStore> {
 					...session,
 					activeTab: tab,
 				})),
+			})),
+		openFile: (sessionId, path) =>
+			set((state) => ({
+				sessions: withSession(state.sessions, sessionId, (session) => ({
+					...session,
+					openFiles: session.openFiles.includes(path)
+						? session.openFiles
+						: [...session.openFiles, path],
+					activeTab: fileTabId(path),
+				})),
+			})),
+		closeFile: (sessionId, path) =>
+			set((state) => ({
+				sessions: withSession(state.sessions, sessionId, (session) => {
+					if (!session.openFiles.includes(path)) return session;
+					const wasActive = session.activeTab === fileTabId(path);
+					return {
+						...session,
+						openFiles: session.openFiles.filter(
+							(openPath) => openPath !== path,
+						),
+						activeTab: wasActive ? "files" : session.activeTab,
+					};
+				}),
 			})),
 		setWalkthroughSelection: (sessionId, selection) =>
 			set((state) => ({
@@ -483,6 +532,33 @@ export function useSessionActiveTab(
 export function useSetActiveTab(): (sessionId: string, tab: string) => void {
 	const store = useSessionUiStore();
 	return useStore(store, (state) => state.setActiveTab);
+}
+
+/** Insertion-ordered open file-viewer tabs, plus `openFile`/`closeFile` — see `SessionUiState.openFiles`'s doc comment. */
+export function useSessionOpenFiles(sessionId: string): {
+	openFiles: readonly string[];
+	openFile: (path: string) => void;
+	closeFile: (path: string) => void;
+} {
+	const store = useSessionUiStore();
+	const openFiles = useStore(
+		store,
+		(state) => state.sessions.get(sessionId)?.openFiles ?? EMPTY_OPEN_FILES,
+	);
+	const openFileAction = useStore(store, (state) => state.openFile);
+	const closeFileAction = useStore(store, (state) => state.closeFile);
+	const openFile = useCallback(
+		(path: string) => openFileAction(sessionId, path),
+		[openFileAction, sessionId],
+	);
+	const closeFile = useCallback(
+		(path: string) => closeFileAction(sessionId, path),
+		[closeFileAction, sessionId],
+	);
+	return useMemo(
+		() => ({ openFiles, openFile, closeFile }),
+		[openFiles, openFile, closeFile],
+	);
 }
 
 export function useSessionWalkthroughSelection(

@@ -227,6 +227,13 @@ export function createMockOrpc(data: MockOrpcData = {}): SidecarQueryUtils {
 					content: fileContents[request.path] ?? null,
 				})),
 		},
+		// No story exercises the file-viewer tabs yet — same "keep
+		// `SidecarClient` satisfied" reasoning as `chat` above.
+		file: {
+			get: async () => {
+				throw new Error("file.get has no story fixture yet");
+			},
+		},
 		review: {
 			setViewed: async () => undefined,
 			setRangeViewed: async () => undefined,

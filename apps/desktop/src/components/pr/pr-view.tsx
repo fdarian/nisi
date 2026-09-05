@@ -1,9 +1,10 @@
 "use client";
 
-import { AlertTriangleIcon } from "lucide-react";
+import { AlertTriangleIcon, XIcon } from "lucide-react";
 import { useMemo } from "react";
 import { useDevToolScope } from "#/components/devtool/dev-tool-context";
 import { useRefetchToasts } from "#/components/devtool/use-refetch-toasts";
+import { FileView } from "#/components/pr/file-view";
 import { FilesChangedView } from "#/components/pr/files-changed-view";
 import { OverviewView } from "#/components/pr/overview/overview-view";
 import { PrHeader } from "#/components/pr/pr-header";
@@ -14,7 +15,13 @@ import {
 	EmptyTitle,
 } from "#/components/ui/empty";
 import { Spinner } from "#/components/ui/spinner";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "#/components/ui/tabs";
+import {
+	Tabs,
+	TabsContent,
+	TabsList,
+	TabsPrimitive,
+	TabsTrigger,
+} from "#/components/ui/tabs";
 import { WalkthroughView } from "#/components/walkthrough/walkthrough-view";
 import type { KeyBindings } from "#/hooks/use-key-bindings";
 import { useKeyBindings } from "#/hooks/use-key-bindings";
@@ -30,10 +37,15 @@ import {
 	useSetFileViewed,
 } from "#/lib/pr-data";
 import {
+	fileTabId,
+	fileTabPath,
 	useSessionActiveTab,
+	useSessionOpenFiles,
 	useSessionWalkthroughSelection,
 } from "#/lib/session-ui-store";
 import { useWalkthroughEnabled } from "#/lib/settings-data";
+import { splitPath } from "#/lib/tree-paths";
+import { cn } from "#/lib/utils";
 
 type PrViewProps = {
 	session: Session;
@@ -85,6 +97,9 @@ export function PrView({
 	// as `activeTab` above, survive the whole tab suspending and resuming).
 	const [walkthroughSelection, setWalkthroughSelection] =
 		useSessionWalkthroughSelection(session.id);
+	// The dynamic file-viewer tabs (`file-view.tsx`) rendered after the static
+	// ones in `PrViewTabStrip` — see `SessionUiState.openFiles`'s doc comment.
+	const { openFiles, openFile, closeFile } = useSessionOpenFiles(session.id);
 
 	// Gates the sidecar's 2s worktree poller (`live-poll.ts`) to exactly the
 	// sessions someone could actually see a result from — window focused,
@@ -154,7 +169,10 @@ export function PrView({
 				value={tabsValue}
 			>
 				<PrViewTabStrip
+					activeTab={activeTab}
 					isSelectedTab={isSelectedTab}
+					onCloseFile={closeFile}
+					openFiles={openFiles}
 					setActiveTab={setActiveTab}
 					tabs={tabs}
 				/>
@@ -175,6 +193,7 @@ export function PrView({
 						<FilesChangedView
 							files={files}
 							hasPendingChanges={hasPendingChanges}
+							onOpenFile={openFile}
 							onRefresh={refreshFileChanges}
 							orpc={orpc}
 							reviewState={reviewState}
@@ -195,6 +214,15 @@ export function PrView({
 						/>
 					</TabsContent>
 				)}
+				{openFiles.map((path) => (
+					<TabsContent
+						className="flex min-h-0 flex-1 flex-col"
+						key={path}
+						value={fileTabId(path)}
+					>
+						<FileView orpc={orpc} path={path} sessionId={session.id} />
+					</TabsContent>
+				))}
 			</Tabs>
 		</div>
 	);
@@ -210,15 +238,32 @@ type PrViewTab = { value: string; label: string };
  * setting, so there's no longer a "hide the whole strip" case. The digit
  * bound to each tab is just its index in `tabs` (`PrView` builds that array
  * with Walkthrough already included-or-not), so collapsing from three tabs
- * to two never leaves a dead key bound to a tab that isn't showing.
+ * to two never leaves a dead key bound to a tab that isn't showing — file
+ * tabs (below) deliberately aren't part of this binding, so opening/closing
+ * one never shifts what `1`/`2`/`3` mean.
+ *
+ * `openFiles` renders as a second block after a vertical divider, inside
+ * the *same* `TabsList`/`Tabs.Root` as the static tabs — not a separate one
+ * — so `TabsList`'s shared `Tabs.Indicator` (the underline, `variant="underline"`)
+ * keeps tracking whichever tab is actually active for free: the moment a
+ * file tab is selected, the indicator moves off the static tabs onto it,
+ * which *is* "the static tabs lose their underline." Each file tab layers
+ * its own rounded filled-pill active state on top via `data-active:` classes
+ * instead of relying on that thin underline to read as "selected."
  */
 function PrViewTabStrip({
 	tabs,
+	openFiles,
+	activeTab,
 	setActiveTab,
+	onCloseFile,
 	isSelectedTab,
 }: {
+	activeTab: string;
 	tabs: readonly PrViewTab[];
+	openFiles: readonly string[];
 	setActiveTab: (tab: string) => void;
+	onCloseFile: (path: string) => void;
 	isSelectedTab: boolean;
 }): React.ReactElement {
 	const bindings: KeyBindings = {};
@@ -229,13 +274,77 @@ function PrViewTabStrip({
 
 	return (
 		<div className="border-b">
-			<TabsList className="mx-4" variant="underline">
+			<TabsList
+				className={cn(
+					"mx-4",
+					fileTabPath(activeTab) !== null &&
+						"[&_[data-slot=tab-indicator]]:hidden",
+				)}
+				variant="underline"
+			>
 				{tabs.map((tab) => (
 					<TabsTrigger key={tab.value} value={tab.value}>
 						{tab.label}
 					</TabsTrigger>
 				))}
+				{openFiles.length > 0 && (
+					<div aria-hidden className="mx-1 h-4 w-px shrink-0 bg-border" />
+				)}
+				{openFiles.map((path) => (
+					<FileViewerTab
+						key={path}
+						onClose={() => onCloseFile(path)}
+						path={path}
+					/>
+				))}
 			</TabsList>
+		</div>
+	);
+}
+
+/**
+ * One open file's tab — deliberately not the shared `TabsTrigger`
+ * (`#/components/ui/tabs`, styled for the underline variant's plain
+ * text-color active state): the design calls for a rounded filled pill
+ * instead, so this renders the underlying `TabsPrimitive.Tab` directly with
+ * its own classes. Close affordance mirrors `chat-tab.tsx`'s `ChatTab`: a
+ * sibling of the tab, absolutely positioned over its right edge rather than
+ * nested inside, so it only ever reveals on hover/focus — never pinned open
+ * just because the tab happens to be the active one.
+ */
+function FileViewerTab({
+	path,
+	onClose,
+}: {
+	path: string;
+	onClose: () => void;
+}): React.ReactElement {
+	const { basename } = splitPath(path);
+	return (
+		<div className="group relative flex shrink-0">
+			<TabsPrimitive.Tab
+				className={cn(
+					"flex h-7 select-none items-center self-center rounded-md px-3 font-medium text-muted-foreground text-xs outline-none",
+					"cursor-pointer",
+					"hover:bg-accent hover:text-foreground",
+					"data-active:bg-accent data-active:text-foreground",
+					"focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
+					"transition-[color,background-color,box-shadow]",
+				)}
+				value={fileTabId(path)}
+			>
+				<span className="max-w-40 truncate group-focus-within:mask-r-from-[calc(100%-2.25rem)] group-focus-within:mask-r-to-[calc(100%-0.75rem)] group-hover:mask-r-from-[calc(100%-2.25rem)] group-hover:mask-r-to-[calc(100%-0.75rem)]">
+					{basename}
+				</span>
+			</TabsPrimitive.Tab>
+			<button
+				aria-label={`Close ${basename}`}
+				className="cursor-pointer -translate-y-1/2 absolute top-1/2 right-1.5 rounded-full p-0.5 opacity-0 hover:bg-background/60 group-focus-within:opacity-100 group-hover:opacity-100"
+				onClick={onClose}
+				type="button"
+			>
+				<XIcon className="size-3" />
+			</button>
 		</div>
 	);
 }
