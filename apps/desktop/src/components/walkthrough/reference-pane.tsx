@@ -15,6 +15,7 @@ import type {
 	DiffLineAnnotation,
 	FileDiffMetadata,
 	LineAnnotation,
+	ThemesType,
 } from "@pierre/diffs";
 import { parsePatchFiles } from "@pierre/diffs";
 import { BookOpenIcon } from "lucide-react";
@@ -24,6 +25,7 @@ import {
 	DiffCodeView,
 } from "#/components/diff-pane/diff-code-view";
 import {
+	buildDiffHighlighterOptions,
 	DIFF_VIEWED_HOST_CLASS,
 	diffCardChromeCSS,
 	diffCardHeaderClassName,
@@ -44,6 +46,7 @@ import {
 import { hashItemVersion } from "#/lib/item-version";
 import type { FileChange, FileContentReview } from "#/lib/pr-data";
 import { useFileContents, useSetRangeViewed } from "#/lib/pr-data";
+import { useDiffThemeDark, useDiffThemeLight } from "#/lib/settings-data";
 import { splitPath } from "#/lib/tree-paths";
 import { cn } from "#/lib/utils";
 import type {
@@ -110,6 +113,18 @@ export function ReferencePane({
 	block,
 	changedPaths,
 }: ReferencePaneProps): React.ReactElement {
+	const [diffThemeLight] = useDiffThemeLight(orpc);
+	const [diffThemeDark] = useDiffThemeDark(orpc);
+	/** Shared by `codeViewOptions`'s `theme` override and `highlighterOptions` below — see `diff-pane.tsx`'s identical `diffTheme` for why both must see the same pair. */
+	const diffTheme = useMemo<ThemesType>(
+		() => ({ light: diffThemeLight, dark: diffThemeDark }),
+		[diffThemeLight, diffThemeDark],
+	);
+	const highlighterOptions = useMemo(
+		() => buildDiffHighlighterOptions(diffTheme),
+		[diffTheme],
+	);
+
 	const filesByPath = useMemo(
 		() => new Map(files.map((file) => [file.path, file] as const)),
 		[files],
@@ -251,12 +266,13 @@ export function ReferencePane({
 		() =>
 			buildDiffCodeViewOptions<ReferenceAnnotationMetadata>({
 				extraCSS: diffCardChromeCSS,
+				theme: diffTheme,
 				onPostRender: (node, _instance, _phase, context) => {
 					const status = statusByItemId.get(context.item.id);
 					node.classList.toggle(DIFF_VIEWED_HOST_CLASS, status === "reviewed");
 				},
 			}),
-		[statusByItemId],
+		[statusByItemId, diffTheme],
 	);
 
 	if (block === null) {
@@ -292,6 +308,7 @@ export function ReferencePane({
 					"min-h-0 w-full flex-1 overflow-auto overscroll-contain px-3 [contain:strict]",
 					"[&_diffs-container]:[clip-path:inset(0_round_var(--radius-xl))]",
 				)}
+				highlighterOptions={highlighterOptions}
 				items={items}
 				options={codeViewOptions}
 				renderAnnotation={renderAnnotation}

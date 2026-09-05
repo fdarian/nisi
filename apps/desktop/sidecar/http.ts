@@ -84,6 +84,8 @@ const toWireSettings = (settings: {
 	readonly wrapLines: WireSettings["wrapLines"];
 	readonly lastChatHarness: string | null;
 	readonly lastChatModel: WireSettings["lastChatModel"];
+	readonly diffThemeLight: WireSettings["diffThemeLight"];
+	readonly diffThemeDark: WireSettings["diffThemeDark"];
 }): WireSettings => ({
 	enabledHarnesses:
 		settings.enabledHarnesses === null
@@ -101,6 +103,8 @@ const toWireSettings = (settings: {
 			? null
 			: (settings.lastChatHarness as HarnessId),
 	lastChatModel: settings.lastChatModel,
+	diffThemeLight: settings.diffThemeLight,
+	diffThemeDark: settings.diffThemeDark,
 });
 
 /**

@@ -17,17 +17,17 @@ import type {
 	CodeViewOptions,
 	DiffLineAnnotation,
 	LineAnnotation,
+	ThemesType,
 } from "@pierre/diffs";
 import {
 	CodeView,
 	type CodeViewHandle,
+	type WorkerInitializationRenderOptions,
 	WorkerPoolContextProvider,
 } from "@pierre/diffs/react";
 import { useCallback, useMemo, useRef } from "react";
 import {
-	DIFF_VIEW_THEME,
 	diffCodeViewLayout,
-	diffHighlighterOptions,
 	diffItemMetrics,
 	diffViewUnsafeCSS,
 } from "#/components/diff-pane/diff-view-theme";
@@ -126,9 +126,19 @@ function useSeparatorClickForwarding() {
 	}, []);
 }
 
-/** The theme/layout/metrics knobs every `CodeView` instance in the app shares — `diffStyle`, `overflow`, `onPostRender` and `extraCSS` are what vary per pane. */
+/** The theme/layout/metrics knobs every `CodeView` instance in the app shares — `diffStyle`, `theme`, `overflow`, `onPostRender` and `extraCSS` are what vary per pane. */
 export function buildDiffCodeViewOptions<Metadata>(overrides: {
 	diffStyle?: DiffStyleMode;
+	/**
+	 * The `{ light, dark }` pair to render with — `themeType: "system"` below
+	 * is what makes `@pierre/diffs` pick between the two on its own. Sourced
+	 * from `@repo/settings`'s `diffThemeLight`/`diffThemeDark` at every call
+	 * site rather than a hardcoded constant, so a live setting change simply
+	 * re-renders this same `CodeViewOptions.theme` — a `CODE_VIEW_DIFF_OPTION_KEYS`
+	 * member, same as `overflow` below, so `CodeView` re-applies it to
+	 * already-mounted items without a remount.
+	 */
+	theme: ThemesType;
 	/**
 	 * `'wrap'` wraps long lines instead of letting them scroll horizontally —
 	 * a top-level `CodeViewOptions` key (`CODE_VIEW_DIFF_OPTION_KEYS`), so
@@ -160,7 +170,7 @@ export function buildDiffCodeViewOptions<Metadata>(overrides: {
 		onPostRender: overrides.onPostRender,
 		overflow: overrides.overflow ?? "scroll",
 		stickyHeaders: true,
-		theme: DIFF_VIEW_THEME,
+		theme: overrides.theme,
 		themeType: "system",
 		tokenizeMaxLength: 100_000,
 		unsafeCSS: `${diffViewUnsafeCSS}${overrides.extraCSS ?? ""}`,
@@ -171,6 +181,16 @@ type DiffCodeViewProps<Metadata> = {
 	className: string;
 	items: readonly CodeViewItem<Metadata>[];
 	options: CodeViewOptions<Metadata>;
+	/**
+	 * Pre-warms the shared worker-pool highlighter (`WorkerPoolContextProvider`,
+	 * a module-level singleton — see `getOrCreateWorkerPoolSingleton` in
+	 * `@pierre/diffs`) with the theme pair it should have ready before first
+	 * paint. Build with `diff-view-theme.ts`'s `buildDiffHighlighterOptions`
+	 * from the *same* `ThemesType` passed to `buildDiffCodeViewOptions`'s
+	 * `theme` — the caller is responsible for keeping the two in sync so the
+	 * pre-warmed theme and the per-item rendered theme never drift apart.
+	 */
+	highlighterOptions: WorkerInitializationRenderOptions;
 	/** Forwarded straight to `CodeView`'s own `onScroll` — fires for both user-driven and programmatic scrolling; telling the two apart is the caller's job (see `DiffPane`'s scroll-report suppression). */
 	onScroll?: (scrollTop: number, viewer: CodeViewInstance<Metadata>) => void;
 	renderAnnotation: (
@@ -191,6 +211,7 @@ type DiffCodeViewProps<Metadata> = {
 
 export function DiffCodeView<Metadata>({
 	className,
+	highlighterOptions,
 	items,
 	onScroll,
 	onSelectedLinesChange,
@@ -205,7 +226,7 @@ export function DiffCodeView<Metadata>({
 
 	return (
 		<WorkerPoolContextProvider
-			highlighterOptions={diffHighlighterOptions}
+			highlighterOptions={highlighterOptions}
 			poolOptions={workerPoolOptions}
 		>
 			<CodeView

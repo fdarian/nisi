@@ -59,6 +59,17 @@ export const Settings = Schema.Struct({
 	lastChatHarness: Schema.NullOr(HarnessId),
 	/** Model id paired with `lastChatHarness` above. */
 	lastChatModel: Schema.NullOr(Schema.String),
+	/**
+	 * `@pierre/theming` theme id for the diff pane in light mode. Loose
+	 * `Schema.String`, not a literal union — mirrors `@repo/settings`'s
+	 * `Settings.diffThemeLight`, which stays independent of `@pierre/theming`'s
+	 * registry for the same reason `preferredEditor` does; the frontend's
+	 * `diff-view-theme.ts` is where "must be one of the known theme ids" is
+	 * actually enforced.
+	 */
+	diffThemeLight: Schema.String,
+	/** Dark-mode counterpart of `diffThemeLight` above. */
+	diffThemeDark: Schema.String,
 });
 export type Settings = Schema.Schema.Type<typeof Settings>;
 
@@ -79,6 +90,8 @@ export const SettingsUpdate = Schema.Struct({
 	wrapLines: Schema.optional(Schema.Boolean),
 	lastChatHarness: Schema.optional(Schema.NullOr(HarnessId)),
 	lastChatModel: Schema.optional(Schema.NullOr(Schema.String)),
+	diffThemeLight: Schema.optional(Schema.String),
+	diffThemeDark: Schema.optional(Schema.String),
 });
 export type SettingsUpdate = Schema.Schema.Type<typeof SettingsUpdate>;
 
