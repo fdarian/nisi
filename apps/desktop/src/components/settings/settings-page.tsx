@@ -12,11 +12,7 @@ import {
 } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useCallback } from "react";
-import {
-	DIFF_THEME_DARK_OPTIONS,
-	DIFF_THEME_LIGHT_OPTIONS,
-} from "#/components/diff-pane/diff-view-theme";
-import { DiffThemePreview } from "#/components/settings/diff-theme-preview";
+import { DiffThemeColumn } from "#/components/settings/diff-theme-picker";
 import { Button } from "#/components/ui/button";
 import {
 	Card,
@@ -308,68 +304,16 @@ function AppearanceSection({
 				title="Diff theme"
 			>
 				<div className="grid grid-cols-2 gap-4">
-					<div className="flex flex-col gap-2">
-						<div className="flex items-center gap-1.5">
-							<SunIcon className="size-3.5 text-muted-foreground" />
-							<Select
-								items={DIFF_THEME_LIGHT_OPTIONS.map((option) => ({
-									value: option.id,
-									label: option.label,
-								}))}
-								onValueChange={(value: string | null) => {
-									if (value !== null) setDiffThemeLight(value);
-								}}
-								value={diffThemeLight}
-							>
-								<SelectTrigger
-									aria-label="Light diff theme"
-									className="w-full"
-									size="sm"
-								>
-									<SelectValue />
-								</SelectTrigger>
-								<SelectContent>
-									{DIFF_THEME_LIGHT_OPTIONS.map((option) => (
-										<SelectItem key={option.id} value={option.id}>
-											{option.label}
-										</SelectItem>
-									))}
-								</SelectContent>
-							</Select>
-						</div>
-						<DiffThemePreview pin="light" theme={diffThemeLight} />
-					</div>
-					<div className="flex flex-col gap-2">
-						<div className="flex items-center gap-1.5">
-							<MoonIcon className="size-3.5 text-muted-foreground" />
-							<Select
-								items={DIFF_THEME_DARK_OPTIONS.map((option) => ({
-									value: option.id,
-									label: option.label,
-								}))}
-								onValueChange={(value: string | null) => {
-									if (value !== null) setDiffThemeDark(value);
-								}}
-								value={diffThemeDark}
-							>
-								<SelectTrigger
-									aria-label="Dark diff theme"
-									className="w-full"
-									size="sm"
-								>
-									<SelectValue />
-								</SelectTrigger>
-								<SelectContent>
-									{DIFF_THEME_DARK_OPTIONS.map((option) => (
-										<SelectItem key={option.id} value={option.id}>
-											{option.label}
-										</SelectItem>
-									))}
-								</SelectContent>
-							</Select>
-						</div>
-						<DiffThemePreview pin="dark" theme={diffThemeDark} />
-					</div>
+					<DiffThemeColumn
+						onValueChange={setDiffThemeLight}
+						pin="light"
+						value={diffThemeLight}
+					/>
+					<DiffThemeColumn
+						onValueChange={setDiffThemeDark}
+						pin="dark"
+						value={diffThemeDark}
+					/>
 				</div>
 			</SettingsRowStacked>
 			<SettingsRow

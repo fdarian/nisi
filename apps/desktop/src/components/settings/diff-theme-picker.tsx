@@ -23,7 +23,19 @@
  */
 import type { FileDiffOptions } from "@pierre/diffs";
 import { PatchDiff } from "@pierre/diffs/react";
+import { MoonIcon, SunIcon } from "lucide-react";
 import { useMemo } from "react";
+import {
+	DIFF_THEME_DARK_OPTIONS,
+	DIFF_THEME_LIGHT_OPTIONS,
+} from "#/components/diff-pane/diff-view-theme";
+import {
+	Select,
+	SelectContent,
+	SelectItem,
+	SelectTrigger,
+	SelectValue,
+} from "#/components/ui/select";
 
 /**
  * A small, representative unified diff — a function whose body changes from
@@ -72,6 +84,73 @@ export function DiffThemePreview({
 	return (
 		<div className="overflow-hidden rounded-lg border">
 			<PatchDiff disableWorkerPool options={options} patch={SAMPLE_PATCH} />
+		</div>
+	);
+}
+
+/** Everything about a `DiffThemeColumn` that's derivable from `pin` alone. */
+const DIFF_THEME_COLUMN_CONFIG = {
+	light: {
+		icon: SunIcon,
+		options: DIFF_THEME_LIGHT_OPTIONS,
+		ariaLabel: "Light diff theme",
+	},
+	dark: {
+		icon: MoonIcon,
+		options: DIFF_THEME_DARK_OPTIONS,
+		ariaLabel: "Dark diff theme",
+	},
+} as const;
+
+/**
+ * One side (light or dark) of the Diff theme row in Settings > Appearance —
+ * icon, options list, and aria-label are all derived from `pin`, since the
+ * two sides only ever change together. Renders the icon + `Select` for
+ * `pin`'s theme, plus that side's `DiffThemePreview` underneath.
+ */
+export function DiffThemeColumn({
+	pin,
+	value,
+	onValueChange,
+}: {
+	pin: "light" | "dark";
+	value: string;
+	onValueChange: (value: string) => void;
+}): React.ReactElement {
+	const config = DIFF_THEME_COLUMN_CONFIG[pin];
+	const Icon = config.icon;
+
+	return (
+		<div className="flex flex-col gap-2">
+			<div className="flex items-center gap-1.5">
+				<Icon className="size-3.5 text-muted-foreground" />
+				<Select
+					items={config.options.map((option) => ({
+						value: option.id,
+						label: option.label,
+					}))}
+					onValueChange={(nextValue: string | null) => {
+						if (nextValue !== null) onValueChange(nextValue);
+					}}
+					value={value}
+				>
+					<SelectTrigger
+						aria-label={config.ariaLabel}
+						className="w-full"
+						size="sm"
+					>
+						<SelectValue />
+					</SelectTrigger>
+					<SelectContent>
+						{config.options.map((option) => (
+							<SelectItem key={option.id} value={option.id}>
+								{option.label}
+							</SelectItem>
+						))}
+					</SelectContent>
+				</Select>
+			</div>
+			<DiffThemePreview pin={pin} theme={value} />
 		</div>
 	);
 }
