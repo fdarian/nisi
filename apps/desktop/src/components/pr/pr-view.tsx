@@ -38,6 +38,7 @@ import {
 } from "#/lib/pr-data";
 import {
 	fileTabId,
+	fileTabPath,
 	useSessionActiveTab,
 	useSessionOpenFiles,
 	useSessionWalkthroughSelection,
@@ -168,6 +169,7 @@ export function PrView({
 				value={tabsValue}
 			>
 				<PrViewTabStrip
+					activeTab={activeTab}
 					isSelectedTab={isSelectedTab}
 					onCloseFile={closeFile}
 					openFiles={openFiles}
@@ -252,10 +254,12 @@ type PrViewTab = { value: string; label: string };
 function PrViewTabStrip({
 	tabs,
 	openFiles,
+	activeTab,
 	setActiveTab,
 	onCloseFile,
 	isSelectedTab,
 }: {
+	activeTab: string;
 	tabs: readonly PrViewTab[];
 	openFiles: readonly string[];
 	setActiveTab: (tab: string) => void;
@@ -270,7 +274,14 @@ function PrViewTabStrip({
 
 	return (
 		<div className="border-b">
-			<TabsList className="mx-4" variant="underline">
+			<TabsList
+				className={cn(
+					"mx-4",
+					fileTabPath(activeTab) !== null &&
+						"[&_[data-slot=tab-indicator]]:hidden",
+				)}
+				variant="underline"
+			>
 				{tabs.map((tab) => (
 					<TabsTrigger key={tab.value} value={tab.value}>
 						{tab.label}
@@ -296,9 +307,10 @@ function PrViewTabStrip({
  * (`#/components/ui/tabs`, styled for the underline variant's plain
  * text-color active state): the design calls for a rounded filled pill
  * instead, so this renders the underlying `TabsPrimitive.Tab` directly with
- * its own classes, mirroring `pr-tab-strip.tsx`'s `PrTab` for the
- * hover-reveal close button (`nativeButton={false}`/`render={<div />}` so
- * the close `<button>` can nest inside without a button-in-button).
+ * its own classes. Close affordance mirrors `chat-tab.tsx`'s `ChatTab`: a
+ * sibling of the tab, absolutely positioned over its right edge rather than
+ * nested inside, so it only ever reveals on hover/focus — never pinned open
+ * just because the tab happens to be the active one.
  */
 function FileViewerTab({
 	path,
@@ -309,33 +321,31 @@ function FileViewerTab({
 }): React.ReactElement {
 	const { basename } = splitPath(path);
 	return (
-		<TabsPrimitive.Tab
-			className={cn(
-				"group relative flex h-7 shrink-0 select-none items-center gap-1.5 self-center rounded-full px-3 font-medium text-muted-foreground text-xs outline-none",
-				"hover:bg-accent hover:text-foreground",
-				"data-active:bg-accent data-active:text-foreground",
-				"focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
-			)}
-			nativeButton={false}
-			render={<div />}
-			value={fileTabId(path)}
-		>
-			<span className="max-w-40 truncate">{basename}</span>
+		<div className="group relative flex shrink-0">
+			<TabsPrimitive.Tab
+				className={cn(
+					"flex h-7 select-none items-center self-center rounded-md px-3 font-medium text-muted-foreground text-xs outline-none",
+					"cursor-pointer",
+					"hover:bg-accent hover:text-foreground",
+					"data-active:bg-accent data-active:text-foreground",
+					"focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
+					"transition-[color,background-color,box-shadow]",
+				)}
+				value={fileTabId(path)}
+			>
+				<span className="max-w-40 truncate group-focus-within:mask-r-from-[calc(100%-2.25rem)] group-focus-within:mask-r-to-[calc(100%-0.75rem)] group-hover:mask-r-from-[calc(100%-2.25rem)] group-hover:mask-r-to-[calc(100%-0.75rem)]">
+					{basename}
+				</span>
+			</TabsPrimitive.Tab>
 			<button
 				aria-label={`Close ${basename}`}
-				className="shrink-0 rounded p-0.5 opacity-0 hover:bg-background/60 group-hover:opacity-100 group-data-active:opacity-100"
-				onClick={(event) => {
-					event.stopPropagation();
-					onClose();
-				}}
-				onPointerDown={(event) => {
-					event.stopPropagation();
-				}}
+				className="cursor-pointer -translate-y-1/2 absolute top-1/2 right-1.5 rounded-full p-0.5 opacity-0 hover:bg-background/60 group-focus-within:opacity-100 group-hover:opacity-100"
+				onClick={onClose}
 				type="button"
 			>
 				<XIcon className="size-3" />
 			</button>
-		</TabsPrimitive.Tab>
+		</div>
 	);
 }
 
