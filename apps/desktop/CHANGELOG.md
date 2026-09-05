@@ -1,5 +1,38 @@
 # @repo/desktop
 
+## 0.5.0
+
+### Minor Changes
+
+- d7cb661: ⌘⇧[ and ⌘⇧] now cycle through your open chats while the chat is open, instead of switching PR tabs.
+- c8368df: A new Overview tab shows the pull request's description next to its commits, each with its short hash and CI status.
+- 57267d7: nisi can now be opened directly from a GitHub pull request link — a companion Chrome extension hands the page straight to the app instead of you having to find and open the repo by hand.
+- af34477: PR tabs now show their status at a glance — the tab icon turns green once a pull request is ready to merge, pulses amber while CI is running, and switches to a purple merged icon after it lands.
+- 150f2c1: You can now open a file in full alongside the diff, instead of only seeing the changed lines.
+
+### Patch Changes
+
+- 5bd469d: You can now ask a chat about lines selected in a diff, with several selections attached at once.
+- 9153947: Clicking "Ask" on a diff selection now puts the cursor straight in the chat box
+- 6e07899: Long code blocks and URLs in chat replies now wrap inside the panel instead of running off the edge.
+- 8445c19: The CI status now picks up a fresh push instead of waiting for the next refresh.
+- a10ad7e: Claude Code now works as a harness in the installed app — enabling it lists its models instead of silently offering none.
+- c8f9712: ⌘W now closes the last tab instead of quitting the whole window.
+- 7bdba77: Pressing Escape in the chat composer now returns focus to the file list, so `j`/`k` immediately work to cycle files again. A second Escape closes the chat panel, and ⌘J now refocuses the composer instead of closing the panel when it's open but unfocused.
+- 8089ecb: Dragging a line selection past the top or bottom of the diff now scrolls to keep selecting.
+- 868e554: Harness model discovery no longer leaks a `claude`, `codex`, or `opencode` subprocess on every probe, and discovered models are now cached on disk for a day and served stale-while-revalidating instead of re-probing every few minutes.
+- d592782: PR header CI status, merge button, and overview commit list now stay refreshed while the tab is watched instead of going stale after settling
+- 55fbee3: The merge button now defaults to the merge method you last used in that repository.
+- 7c617f3: Merging a pull request now changes the button to Merged without briefly restoring the merge action.
+- bb41025: ⌘⇧J now always starts a new chat thread, alongside ⌘J's existing open/close toggle.
+- 217780f: Chat now starts on the model you last sent a message with, instead of an empty picker every time.
+- 4b7e2cc: The chat panel is now resizable — drag its left edge, top edge, or top-left corner. The size you pick sticks across restarts.
+- 697d576: Shift+R now marks the selected file reviewed and moves to the previous file, mirroring r's move to the next.
+- 5415ce3: Switching a branch review to its pull request now keeps your reviewed files and walkthrough instead of starting over.
+- d7cb661: ⌘1–⌘9 now switch PR tabs even while the cursor is in a text field.
+- 322801c: Use faster cn https://github.com/shadcn-ui/cn
+- 6f8430e: Opening a file in Zed now opens it inside the repo, instead of on its own with no project.
+
 ## 0.4.0
 
 ### Minor Changes
