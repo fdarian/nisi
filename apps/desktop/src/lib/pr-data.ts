@@ -945,12 +945,11 @@ export type MergePullRequestParams = {
 
 /**
  * `pullRequests.merge` — fires `gh pr merge` with the caller's chosen
- * method. On success invalidates this PR's own `mergeStatus` (flips the
- * button to "Merged") and the sessions list, mirroring `useSetRangeViewed`'s
- * fire-and-forget call-level `onSuccess` shape: unlike `useSetFileViewed`,
- * nothing elsewhere reads this mutation's `"pending"` state via
- * `useMutationState`, so there's no overlay whose timing a hook-level
- * `onSuccess` would need to protect.
+ * method. On success first writes the confirmed terminal state into this PR's
+ * `mergeStatus` cache, then refetches it and the sessions list. `gh pr merge`
+ * has already returned successfully by then, so this isn't speculative: it
+ * closes the gap where the mutation settles before the invalidated status
+ * query returns, briefly restoring the old method label in the button.
  */
 export function useMergePullRequest(orpc: SidecarQueryUtils): {
 	merge: (params: MergePullRequestParams) => void;
@@ -963,20 +962,32 @@ export function useMergePullRequest(orpc: SidecarQueryUtils): {
 	const merge = useCallback(
 		(params: MergePullRequestParams) => {
 			mutation.mutate(params, {
-				onSuccess: () => {
-					queryClient.invalidateQueries({
-						queryKey: orpc.pullRequests.mergeStatus.key({
-							input: {
-								repoRoot: params.repoRoot,
-								owner: params.owner,
-								repo: params.repo,
-								number: params.number,
-							},
+				onSuccess: async () => {
+					const mergeStatusKey = orpc.pullRequests.mergeStatus.key({
+						input: {
+							repoRoot: params.repoRoot,
+							owner: params.owner,
+							repo: params.repo,
+							number: params.number,
+						},
+					});
+
+					// A watched PR can have a status poll in flight from before the
+					// merge. Cancel it before updating the cache so its stale OPEN
+					// response cannot overwrite the confirmed MERGED state.
+					await queryClient.cancelQueries({ queryKey: mergeStatusKey });
+					queryClient.setQueryData<PullRequestMergeStatus>(
+						mergeStatusKey,
+						(status) =>
+							status === undefined ? status : { ...status, state: "MERGED" },
+					);
+
+					await Promise.all([
+						queryClient.invalidateQueries({ queryKey: mergeStatusKey }),
+						queryClient.invalidateQueries({
+							queryKey: orpc.sessions.list.queryKey(),
 						}),
-					});
-					queryClient.invalidateQueries({
-						queryKey: orpc.sessions.list.queryKey(),
-					});
+					]);
 				},
 			});
 		},
