@@ -80,7 +80,7 @@ export function FileView({
 	);
 	const { basename } = splitPath(path);
 
-	const codeViewRef = useRef<CodeViewHandle<undefined>>(null);
+	const codeViewRef = useRef<CodeViewHandle<undefined, undefined>>(null);
 	const resolveSelectionItemPath = useCallback(
 		(itemId: string) => (itemId === path ? path : undefined),
 		[path],

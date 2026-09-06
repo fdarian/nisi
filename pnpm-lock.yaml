@@ -124,7 +124,7 @@ patchedDependencies:
   '@ai-sdk/harness-codex@1.0.93': 3b003d1c9402d196b62e8ec2dc9734e7116ab4585321f1c3f096512aeddd1c51
   '@ai-sdk/harness-opencode@1.0.92': ca8793a635d82de60f14a887bc55a81e7f54d7a051c8fa3135fe8fe01ba9b0a6
   '@ai-sdk/harness@1.0.91': 7fe99bf0c691e923a900a46e9c06da2e69a22167bf0ccae94efc7e7c6d6f414d
-  '@pierre/diffs@1.3.6': 31795077ef229d3de37b63f22529a58b7df76bd4ae397647a98b36a86a81ba86
+  '@pierre/diffs@1.4.1': fa1f52b731b25e050d6d79d275018baefca09728610b44695126feae8ad45a18
 
 importers:
 
@@ -135,10 +135,10 @@ importers:
         version: 2.4.15
       '@changesets/cli':
         specifier: ^2.31.1
-        version: 2.31.1
+        version: 2.31.1(@types/node@26.4.1)
       bun:
         specifier: runtime:latest
-        version: runtime:1.4.0
+        version: runtime:1.4.2
       turbo:
         specifier: 2.9.14
         version: 2.9.14
@@ -218,8 +218,8 @@ importers:
         specifier: 2.0.0-beta.21
         version: 2.0.0-beta.21(@opentelemetry/api@1.9.0)(@tanstack/query-core@5.102.8)
       '@pierre/diffs':
-        specifier: 1.3.6
-        version: 1.3.6(patch_hash=31795077ef229d3de37b63f22529a58b7df76bd4ae397647a98b36a86a81ba86)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+        specifier: 1.4.1
+        version: 1.4.1(patch_hash=fa1f52b731b25e050d6d79d275018baefca09728610b44695126feae8ad45a18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       '@pierre/trees':
         specifier: 1.0.0-beta.6
         version: 1.0.0-beta.6(@pierre/theme@2.0.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(shiki@4.4.3)
@@ -282,7 +282,7 @@ importers:
         version: 0.2.3
       deskkit:
         specifier: github:fdarian/deskkit
-        version: https://codeload.github.com/fdarian/deskkit/tar.gz/e102596ef69da78fefe4ba6cfb0f27a9a376cdc4(@effect/platform-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(@effect/sql-sqlite-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(drizzle-orm@1.0.0-rc.5-169397b(@effect/sql-sqlite-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(@opentelemetry/api@1.9.0)(bun-types@1.4.0)(effect@4.0.0-rc.112))(effect@4.0.0-rc.112)
+        version: https://codeload.github.com/fdarian/deskkit/tar.gz/e102596ef69da78fefe4ba6cfb0f27a9a376cdc4(@effect/platform-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(@effect/sql-sqlite-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(drizzle-orm@1.0.0-rc.5-169397b(@effect/sql-sqlite-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(@opentelemetry/api@1.9.0)(bun-types@1.4.0)(effect@4.0.0-rc.112)(typebox@1.3.25)(zod@4.5.4))(effect@4.0.0-rc.112)
       devsess:
         specifier: ^0.3.0
         version: 0.3.0(drizzle-orm@1.0.0-rc.5-169397b(@effect/sql-sqlite-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(@opentelemetry/api@1.9.0)(bun-types@1.4.0)(effect@4.0.0-rc.112)(typebox@1.3.25)(zod@4.5.4))(effect@4.0.0-rc.112)
@@ -370,7 +370,7 @@ importers:
         version: 1.0.0
       drizzle-kit:
         specifier: 1.0.0-rc.4
-        version: 1.0.0-rc.4(drizzle-orm@1.0.0-rc.5-169397b(@effect/sql-sqlite-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(@opentelemetry/api@1.9.0)(bun-types@1.4.0)(effect@4.0.0-rc.112))
+        version: 1.0.0-rc.4(drizzle-orm@1.0.0-rc.5-169397b(@effect/sql-sqlite-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(@opentelemetry/api@1.9.0)(bun-types@1.4.0)(effect@4.0.0-rc.112)(typebox@1.3.25)(zod@4.5.4))
       mesurer:
         specifier: 0.1.0
         version: 0.1.0(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
@@ -433,7 +433,7 @@ importers:
         version: link:../sidecar-api
       deskkit:
         specifier: github:fdarian/deskkit
-        version: https://codeload.github.com/fdarian/deskkit/tar.gz/e102596ef69da78fefe4ba6cfb0f27a9a376cdc4(@effect/platform-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(@effect/sql-sqlite-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(drizzle-orm@1.0.0-rc.5-169397b(@effect/sql-sqlite-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(@opentelemetry/api@1.9.0)(bun-types@1.4.0)(effect@4.0.0-rc.112))(effect@4.0.0-rc.112)
+        version: https://codeload.github.com/fdarian/deskkit/tar.gz/e102596ef69da78fefe4ba6cfb0f27a9a376cdc4(@effect/platform-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(@effect/sql-sqlite-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(drizzle-orm@1.0.0-rc.5-169397b(@effect/sql-sqlite-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(@opentelemetry/api@1.9.0)(bun-types@1.4.0)(effect@4.0.0-rc.112)(typebox@1.3.25)(zod@4.5.4))(effect@4.0.0-rc.112)
       effect:
         specifier: 'catalog:'
         version: 4.0.0-rc.112
@@ -455,7 +455,7 @@ importers:
         version: 4.0.0-rc.112(effect@4.0.0-rc.112)
       deskkit:
         specifier: github:fdarian/deskkit
-        version: https://codeload.github.com/fdarian/deskkit/tar.gz/e102596ef69da78fefe4ba6cfb0f27a9a376cdc4(@effect/platform-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(@effect/sql-sqlite-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(drizzle-orm@1.0.0-rc.5-169397b(@effect/sql-sqlite-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(@opentelemetry/api@1.9.0)(bun-types@1.4.0)(effect@4.0.0-rc.112))(effect@4.0.0-rc.112)
+        version: https://codeload.github.com/fdarian/deskkit/tar.gz/e102596ef69da78fefe4ba6cfb0f27a9a376cdc4(@effect/platform-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(@effect/sql-sqlite-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(drizzle-orm@1.0.0-rc.5-169397b(@effect/sql-sqlite-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(@opentelemetry/api@1.9.0)(bun-types@1.4.0)(effect@4.0.0-rc.112)(typebox@1.3.25)(zod@4.5.4))(effect@4.0.0-rc.112)
       drizzle-orm:
         specifier: 1.0.0-rc.5-169397b
         version: 1.0.0-rc.5-169397b(@effect/sql-sqlite-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(@opentelemetry/api@1.9.0)(bun-types@1.4.0)(effect@4.0.0-rc.112)(typebox@1.3.25)(zod@4.5.4)
@@ -567,7 +567,7 @@ importers:
         version: link:../git
       deskkit:
         specifier: github:fdarian/deskkit
-        version: https://codeload.github.com/fdarian/deskkit/tar.gz/e102596ef69da78fefe4ba6cfb0f27a9a376cdc4(@effect/platform-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(@effect/sql-sqlite-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(drizzle-orm@1.0.0-rc.5-169397b(@effect/sql-sqlite-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(@opentelemetry/api@1.9.0)(bun-types@1.4.0)(effect@4.0.0-rc.112))(effect@4.0.0-rc.112)
+        version: https://codeload.github.com/fdarian/deskkit/tar.gz/e102596ef69da78fefe4ba6cfb0f27a9a376cdc4(@effect/platform-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(@effect/sql-sqlite-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(drizzle-orm@1.0.0-rc.5-169397b(@effect/sql-sqlite-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(@opentelemetry/api@1.9.0)(bun-types@1.4.0)(effect@4.0.0-rc.112)(typebox@1.3.25)(zod@4.5.4))(effect@4.0.0-rc.112)
       drizzle-orm:
         specifier: 1.0.0-rc.5-169397b
         version: 1.0.0-rc.5-169397b(@effect/sql-sqlite-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(@opentelemetry/api@1.9.0)(bun-types@1.4.0)(effect@4.0.0-rc.112)(typebox@1.3.25)(zod@4.5.4)
@@ -589,7 +589,7 @@ importers:
         version: 1.3.14
       drizzle-kit:
         specifier: 1.0.0-rc.4
-        version: 1.0.0-rc.4(drizzle-orm@1.0.0-rc.5-169397b(@effect/sql-sqlite-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(@opentelemetry/api@1.9.0)(bun-types@1.4.0)(effect@4.0.0-rc.112))
+        version: 1.0.0-rc.4(drizzle-orm@1.0.0-rc.5-169397b(@effect/sql-sqlite-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(@opentelemetry/api@1.9.0)(bun-types@1.4.0)(effect@4.0.0-rc.112)(typebox@1.3.25)(zod@4.5.4))
       typescript:
         specifier: 7.0.2
         version: 7.0.2
@@ -601,7 +601,7 @@ importers:
         version: link:../db
       deskkit:
         specifier: github:fdarian/deskkit
-        version: https://codeload.github.com/fdarian/deskkit/tar.gz/e102596ef69da78fefe4ba6cfb0f27a9a376cdc4(@effect/platform-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(@effect/sql-sqlite-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(drizzle-orm@1.0.0-rc.5-169397b(@effect/sql-sqlite-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(@opentelemetry/api@1.9.0)(bun-types@1.4.0)(effect@4.0.0-rc.112))(effect@4.0.0-rc.112)
+        version: https://codeload.github.com/fdarian/deskkit/tar.gz/e102596ef69da78fefe4ba6cfb0f27a9a376cdc4(@effect/platform-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(@effect/sql-sqlite-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(drizzle-orm@1.0.0-rc.5-169397b(@effect/sql-sqlite-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(@opentelemetry/api@1.9.0)(bun-types@1.4.0)(effect@4.0.0-rc.112)(typebox@1.3.25)(zod@4.5.4))(effect@4.0.0-rc.112)
       drizzle-orm:
         specifier: 1.0.0-rc.5-169397b
         version: 1.0.0-rc.5-169397b(@effect/sql-sqlite-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(@opentelemetry/api@1.9.0)(bun-types@1.4.0)(effect@4.0.0-rc.112)(typebox@1.3.25)(zod@4.5.4)
@@ -620,7 +620,7 @@ importers:
         version: 1.3.14
       drizzle-kit:
         specifier: 1.0.0-rc.4
-        version: 1.0.0-rc.4(drizzle-orm@1.0.0-rc.5-169397b(@effect/sql-sqlite-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(@opentelemetry/api@1.9.0)(bun-types@1.4.0)(effect@4.0.0-rc.112))
+        version: 1.0.0-rc.4(drizzle-orm@1.0.0-rc.5-169397b(@effect/sql-sqlite-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(@opentelemetry/api@1.9.0)(bun-types@1.4.0)(effect@4.0.0-rc.112)(typebox@1.3.25)(zod@4.5.4))
       typescript:
         specifier: 7.0.2
         version: 7.0.2
@@ -666,7 +666,7 @@ importers:
         version: 7.0.83(zod@4.5.4)
       deskkit:
         specifier: github:fdarian/deskkit
-        version: https://codeload.github.com/fdarian/deskkit/tar.gz/e102596ef69da78fefe4ba6cfb0f27a9a376cdc4(@effect/platform-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(@effect/sql-sqlite-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(drizzle-orm@1.0.0-rc.5-169397b(@effect/sql-sqlite-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(@opentelemetry/api@1.9.0)(bun-types@1.4.0)(effect@4.0.0-rc.112))(effect@4.0.0-rc.112)
+        version: https://codeload.github.com/fdarian/deskkit/tar.gz/e102596ef69da78fefe4ba6cfb0f27a9a376cdc4(@effect/platform-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(@effect/sql-sqlite-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(drizzle-orm@1.0.0-rc.5-169397b(@effect/sql-sqlite-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(@opentelemetry/api@1.9.0)(bun-types@1.4.0)(effect@4.0.0-rc.112)(typebox@1.3.25)(zod@4.5.4))(effect@4.0.0-rc.112)
       drizzle-orm:
         specifier: 1.0.0-rc.5-169397b
         version: 1.0.0-rc.5-169397b(@effect/sql-sqlite-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(@opentelemetry/api@1.9.0)(bun-types@1.4.0)(effect@4.0.0-rc.112)(typebox@1.3.25)(zod@4.5.4)
@@ -682,7 +682,7 @@ importers:
         version: 1.3.14
       drizzle-kit:
         specifier: 1.0.0-rc.4
-        version: 1.0.0-rc.4(drizzle-orm@1.0.0-rc.5-169397b(@effect/sql-sqlite-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(@opentelemetry/api@1.9.0)(bun-types@1.4.0)(effect@4.0.0-rc.112))
+        version: 1.0.0-rc.4(drizzle-orm@1.0.0-rc.5-169397b(@effect/sql-sqlite-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(@opentelemetry/api@1.9.0)(bun-types@1.4.0)(effect@4.0.0-rc.112)(typebox@1.3.25)(zod@4.5.4))
       typescript:
         specifier: 7.0.2
         version: 7.0.2
@@ -2390,11 +2390,16 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  '@pierre/diffs@1.3.6':
-    resolution: {integrity: sha512-a3woaW2QHy78JDxPJK0OJzwZUN4xoQLLIS/pceO8X6+L8gA5D682mP7/w3YxxEVRPXOaoe/p/RJ5Oj/3nrEzew==}
+  '@pierre/diffs@1.4.1':
+    resolution: {integrity: sha512-rzvY9FeeYdGtVcErjNsW6tnrjpMb0DvGtgCFNuMoYT8wufE+gO1ZXAzKAc2VPRBS3Rl5HELEQ38WDlis4qZHkQ==}
     peerDependencies:
       react: ^18.3.1 || ^19.0.0
       react-dom: ^18.3.1 || ^19.0.0
+    peerDependenciesMeta:
+      react:
+        optional: true
+      react-dom:
+        optional: true
 
   '@pierre/theme@2.0.0':
     resolution: {integrity: sha512-yNDd9GYLQl1mEUJR8AneJ5e4ohLIHQd/wZLWr4fagt78vS2RwwZNW530vVgHqXFAyFVcFlRmGUD5ramXH46OXw==}
@@ -3490,57 +3495,57 @@ packages:
   bun-types@1.4.0:
     resolution: {integrity: sha512-iIKw23BspnQQYd3prITOBxeUsxBHnwzX6YJfGMuNOZzeNcMmVqzIIVGRm1l69ogaPQmb4wB6BN8mA5bE9YuC5Q==}
 
-  bun@runtime:1.4.0:
+  bun@runtime:1.4.2:
     resolution:
       type: variations
       variants:
         - resolution:
             archive: zip
             bin: bun
-            integrity: sha256-xmnpf2Fk4cluBwF0jbmN+ndJKQjL2DlMdVcTSnNd44E=
+            integrity: sha256-kJh6OhbX21VtiGrD1VHnttPt8KHPQ6yu1iLoZ2vh0S8=
             prefix: bun-darwin-aarch64
             type: binary
-            url: https://github.com/oven-sh/bun/releases/download/bun-v1.4.0/bun-darwin-aarch64.zip
+            url: https://github.com/oven-sh/bun/releases/download/bun-v1.4.2/bun-darwin-aarch64.zip
           targets:
             - cpu: arm64
               os: darwin
         - resolution:
             archive: zip
             bin: bun
-            integrity: sha256-HQIRuPHcmRGCNEaHrRXnLuhvFUhFpff6R3mUzTQd2bA=
+            integrity: sha256-gFINfhdSYwjJGF0mFnmsbSd5jTgDoOn3/5Ehq4r/sBI=
             prefix: bun-darwin-x64
             type: binary
-            url: https://github.com/oven-sh/bun/releases/download/bun-v1.4.0/bun-darwin-x64.zip
+            url: https://github.com/oven-sh/bun/releases/download/bun-v1.4.2/bun-darwin-x64.zip
           targets:
             - cpu: x64
               os: darwin
         - resolution:
             archive: zip
             bin: bun
-            integrity: sha256-y/K0tK1EXr6K3epDGVN15TmaojRiKR1NyVL6Vh0BqWA=
+            integrity: sha256-pVSVjlaRxQNuV22njvtBFGZdo1TIgssMoFm71KiWtEo=
             prefix: bun-freebsd-aarch64
             type: binary
-            url: https://github.com/oven-sh/bun/releases/download/bun-v1.4.0/bun-freebsd-aarch64.zip
+            url: https://github.com/oven-sh/bun/releases/download/bun-v1.4.2/bun-freebsd-aarch64.zip
           targets:
             - cpu: arm64
               os: freebsd
         - resolution:
             archive: zip
             bin: bun
-            integrity: sha256-54noZI/nsFZ+W4YKhDD8ln5DR5Ywhgv/CQNyMGOts24=
+            integrity: sha256-7ARO2Rw3Chb15DQgjdUCCT6Y7Iajyxr/Oq0psTQm7MI=
             prefix: bun-freebsd-x64
             type: binary
-            url: https://github.com/oven-sh/bun/releases/download/bun-v1.4.0/bun-freebsd-x64.zip
+            url: https://github.com/oven-sh/bun/releases/download/bun-v1.4.2/bun-freebsd-x64.zip
           targets:
             - cpu: x64
               os: freebsd
         - resolution:
             archive: zip
             bin: bun
-            integrity: sha256-V2MAzjP/Fv/NRVvxeMLwlfnfhFxsw9AoS6HJbKDoBHM=
+            integrity: sha256-cXYLbI6jBiO4GkkHy4FdSOLqJm8uc+dRU0pEoGB5UN8=
             prefix: bun-linux-aarch64-musl
             type: binary
-            url: https://github.com/oven-sh/bun/releases/download/bun-v1.4.0/bun-linux-aarch64-musl.zip
+            url: https://github.com/oven-sh/bun/releases/download/bun-v1.4.2/bun-linux-aarch64-musl.zip
           targets:
             - cpu: arm64
               os: linux
@@ -3548,20 +3553,20 @@ packages:
         - resolution:
             archive: zip
             bin: bun
-            integrity: sha256-SxozLuhhmD65O8/m93D/+U4+MbLDiL2uo8jtNeWO7Q4=
+            integrity: sha256-VDKLvC2cjgyfiSxUTWbFeoO4QTnjSQnl7oF1jxrI/ac=
             prefix: bun-linux-aarch64
             type: binary
-            url: https://github.com/oven-sh/bun/releases/download/bun-v1.4.0/bun-linux-aarch64.zip
+            url: https://github.com/oven-sh/bun/releases/download/bun-v1.4.2/bun-linux-aarch64.zip
           targets:
             - cpu: arm64
               os: linux
         - resolution:
             archive: zip
             bin: bun
-            integrity: sha256-g7XxL9JY3Y1P3K6mXt6VQ2aqcX2rOZ4gCT7KsoDVTno=
+            integrity: sha256-SDXspZ1tpw9GdPVkL25Fncrat3NpWy7Zki0TEFeYl0I=
             prefix: bun-linux-x64-musl
             type: binary
-            url: https://github.com/oven-sh/bun/releases/download/bun-v1.4.0/bun-linux-x64-musl.zip
+            url: https://github.com/oven-sh/bun/releases/download/bun-v1.4.2/bun-linux-x64-musl.zip
           targets:
             - cpu: x64
               os: linux
@@ -3569,34 +3574,34 @@ packages:
         - resolution:
             archive: zip
             bin: bun
-            integrity: sha256-LQP7X7g6yLVnrKCigbLOGhoZ1Ij1bClo2Iw/Jekv5FI=
+            integrity: sha256-NjaPrvdSeHXV/6UuU81IAhdB8qg+tiCKjdZAaNQiqRM=
             prefix: bun-linux-x64
             type: binary
-            url: https://github.com/oven-sh/bun/releases/download/bun-v1.4.0/bun-linux-x64.zip
+            url: https://github.com/oven-sh/bun/releases/download/bun-v1.4.2/bun-linux-x64.zip
           targets:
             - cpu: x64
               os: linux
         - resolution:
             archive: zip
             bin: bun.exe
-            integrity: sha256-9HO/4t9z7ncFSMk91dOArqcSDCGOwqoa/dC7unvxjEc=
+            integrity: sha256-p6Frh2owX9ECnGbb0nAHtPYRKuiWUy9nWHhzGiHlDP0=
             prefix: bun-windows-aarch64
             type: binary
-            url: https://github.com/oven-sh/bun/releases/download/bun-v1.4.0/bun-windows-aarch64.zip
+            url: https://github.com/oven-sh/bun/releases/download/bun-v1.4.2/bun-windows-aarch64.zip
           targets:
             - cpu: arm64
               os: win32
         - resolution:
             archive: zip
             bin: bun.exe
-            integrity: sha256-5vCT052khrICYsqM3V7Wqei8nC8nW3jm06DFsozJWQE=
+            integrity: sha256-zkwXSXsvKXEqmdPVPwKN4ozULjusuFiVmefwAOSbZAU=
             prefix: bun-windows-x64
             type: binary
-            url: https://github.com/oven-sh/bun/releases/download/bun-v1.4.0/bun-windows-x64.zip
+            url: https://github.com/oven-sh/bun/releases/download/bun-v1.4.2/bun-windows-x64.zip
           targets:
             - cpu: x64
               os: win32
-    version: 1.4.0
+    version: 1.4.2
     hasBin: true
 
   bundle-name@4.1.0:
@@ -6397,7 +6402,7 @@ snapshots:
     dependencies:
       '@changesets/types': 6.1.0
 
-  '@changesets/cli@2.31.1':
+  '@changesets/cli@2.31.1(@types/node@26.4.1)':
     dependencies:
       '@changesets/apply-release-plan': 7.1.1
       '@changesets/assemble-release-plan': 6.0.10
@@ -6413,7 +6418,7 @@ snapshots:
       '@changesets/should-skip-package': 0.1.2
       '@changesets/types': 6.1.0
       '@changesets/write': 0.4.0
-      '@inquirer/external-editor': 1.0.3
+      '@inquirer/external-editor': 1.0.3(@types/node@26.4.1)
       '@manypkg/get-packages': 1.1.3
       ansi-colors: 4.1.3
       enquirer: 2.4.1
@@ -7015,10 +7020,12 @@ snapshots:
     dependencies:
       hono: 4.13.5
 
-  '@inquirer/external-editor@1.0.3':
+  '@inquirer/external-editor@1.0.3(@types/node@26.4.1)':
     dependencies:
       chardet: 2.2.0
       iconv-lite: 0.7.3
+    optionalDependencies:
+      '@types/node': 26.4.1
 
   '@joshwooding/vite-plugin-react-docgen-typescript@0.7.0(typescript@7.0.2)(vite@8.2.2(@types/node@26.4.1)(esbuild@0.28.2)(jiti@2.7.0)(yaml@2.9.0))':
     dependencies:
@@ -7677,7 +7684,7 @@ snapshots:
   '@oxc-resolver/binding-win32-x64-msvc@11.21.2':
     optional: true
 
-  '@pierre/diffs@1.3.6(patch_hash=31795077ef229d3de37b63f22529a58b7df76bd4ae397647a98b36a86a81ba86)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)':
+  '@pierre/diffs@1.4.1(patch_hash=fa1f52b731b25e050d6d79d275018baefca09728610b44695126feae8ad45a18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)':
     dependencies:
       '@pierre/theme': 2.0.0
       '@pierre/theming': 1.0.1(@pierre/theme@2.0.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(shiki@4.4.3)
@@ -7685,9 +7692,10 @@ snapshots:
       diff: 9.0.0
       hast-util-to-html: 9.0.5
       lru_map: 0.4.1
+      shiki: 4.4.3
+    optionalDependencies:
       react: 19.2.8
       react-dom: 19.2.8(react@19.2.8)
-      shiki: 4.4.3
 
   '@pierre/theme@2.0.0': {}
 
@@ -8631,7 +8639,7 @@ snapshots:
       '@types/node': 26.4.1
       undici-types: 8.10.1
 
-  bun@runtime:1.4.0: {}
+  bun@runtime:1.4.2: {}
 
   bundle-name@4.1.0:
     dependencies:
@@ -8759,7 +8767,7 @@ snapshots:
 
   dequal@2.0.3: {}
 
-  deskkit@https://codeload.github.com/fdarian/deskkit/tar.gz/e102596ef69da78fefe4ba6cfb0f27a9a376cdc4(@effect/platform-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(@effect/sql-sqlite-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(drizzle-orm@1.0.0-rc.5-169397b(@effect/sql-sqlite-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(@opentelemetry/api@1.9.0)(bun-types@1.4.0)(effect@4.0.0-rc.112))(effect@4.0.0-rc.112):
+  deskkit@https://codeload.github.com/fdarian/deskkit/tar.gz/e102596ef69da78fefe4ba6cfb0f27a9a376cdc4(@effect/platform-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(@effect/sql-sqlite-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(drizzle-orm@1.0.0-rc.5-169397b(@effect/sql-sqlite-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(@opentelemetry/api@1.9.0)(bun-types@1.4.0)(effect@4.0.0-rc.112)(typebox@1.3.25)(zod@4.5.4))(effect@4.0.0-rc.112):
     dependencies:
       '@effect/platform-bun': 4.0.0-rc.112(effect@4.0.0-rc.112)
       effect: 4.0.0-rc.112
@@ -8799,7 +8807,7 @@ snapshots:
 
   dom-accessibility-api@0.6.3: {}
 
-  drizzle-kit@1.0.0-rc.4(drizzle-orm@1.0.0-rc.5-169397b(@effect/sql-sqlite-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(@opentelemetry/api@1.9.0)(bun-types@1.4.0)(effect@4.0.0-rc.112)):
+  drizzle-kit@1.0.0-rc.4(drizzle-orm@1.0.0-rc.5-169397b(@effect/sql-sqlite-bun@4.0.0-rc.112(effect@4.0.0-rc.112))(@opentelemetry/api@1.9.0)(bun-types@1.4.0)(effect@4.0.0-rc.112)(typebox@1.3.25)(zod@4.5.4)):
     dependencies:
       '@drizzle-team/brocli': 0.12.0
       '@js-temporal/polyfill': 0.5.1

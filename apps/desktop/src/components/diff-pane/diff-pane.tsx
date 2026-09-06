@@ -423,7 +423,8 @@ export function DiffPane({
 	wrapLines,
 	ref,
 }: DiffPaneProps): React.ReactElement {
-	const codeViewRef = useRef<CodeViewHandle<DiffAnnotationMetadata>>(null);
+	const codeViewRef =
+		useRef<CodeViewHandle<DiffAnnotationMetadata, undefined>>(null);
 	const fileDiffCache = useRef(new Map<string, CachedFileDiff>());
 	const hiddenFileAnnotationCache = useRef(
 		new Map<string, CachedHiddenFileAnnotation>(),
@@ -1004,28 +1005,32 @@ export function DiffPane({
 		[onForceLoad, handleShowHiddenFile],
 	);
 
-	const codeViewOptions: CodeViewOptions<DiffAnnotationMetadata> = useMemo(
-		() =>
-			buildDiffCodeViewOptions({
-				diffStyle,
-				enableLineSelection: true,
-				extraCSS: diffCardChromeCSS + highlightCSS,
-				overflow: wrapLines ? "wrap" : "scroll",
-				onPostRender: (node, _instance, phase, context) => {
-					const meta = itemMetadata.get(context.item.id);
-					node.classList.toggle(DIFF_VIEWED_HOST_CLASS, meta?.viewed === true);
-					node.classList.toggle(
-						DIFF_LOADING_HOST_CLASS,
-						meta?.isLoading === true,
-					);
-					onItemPostRender(
-						context.item.id,
-						phase === "unmount" ? undefined : (node.shadowRoot ?? undefined),
-					);
-				},
-			}),
-		[diffStyle, wrapLines, itemMetadata, highlightCSS, onItemPostRender],
-	);
+	const codeViewOptions: CodeViewOptions<DiffAnnotationMetadata, undefined> =
+		useMemo(
+			() =>
+				buildDiffCodeViewOptions({
+					diffStyle,
+					enableLineSelection: true,
+					extraCSS: diffCardChromeCSS + highlightCSS,
+					overflow: wrapLines ? "wrap" : "scroll",
+					onPostRender: (node, _instance, phase, context) => {
+						const meta = itemMetadata.get(context.item.id);
+						node.classList.toggle(
+							DIFF_VIEWED_HOST_CLASS,
+							meta?.viewed === true,
+						);
+						node.classList.toggle(
+							DIFF_LOADING_HOST_CLASS,
+							meta?.isLoading === true,
+						);
+						onItemPostRender(
+							context.item.id,
+							phase === "unmount" ? undefined : (node.shadowRoot ?? undefined),
+						);
+					},
+				}),
+			[diffStyle, wrapLines, itemMetadata, highlightCSS, onItemPostRender],
+		);
 
 	// Scrolls the pane to a target inside one item, retrying across frames
 	// until that item is actually measured — it may not be rendered yet when

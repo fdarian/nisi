@@ -23,7 +23,7 @@ import type { DiffSelectionReference } from "#/lib/diff-reference";
 
 type UseDiffSelectionOptions<Metadata> = {
 	/** The same `CodeViewHandle` ref passed to `<DiffCodeView ref>` — used to reach a selected item's rendered shadow root (for the gutter path's anchor rect) and to resolve which item id a native text selection landed in. */
-	codeViewRef: React.RefObject<CodeViewHandle<Metadata> | null>;
+	codeViewRef: React.RefObject<CodeViewHandle<Metadata, undefined> | null>;
 	/** `CodeViewItem.id -> repo-relative path`. `DiffPane` happens to use the path as the id directly, but this hook doesn't assume that — `undefined` means "don't resolve a reference for this item" (e.g. an id this pane doesn't recognize). */
 	resolveItemPath: (itemId: string) => string | undefined;
 };
