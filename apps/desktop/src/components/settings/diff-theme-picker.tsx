@@ -71,7 +71,7 @@ export function DiffThemePreview({
 	theme: string;
 	pin: "light" | "dark";
 }): React.ReactElement {
-	const options = useMemo<FileDiffOptions<undefined>>(
+	const options = useMemo<FileDiffOptions<undefined, undefined>>(
 		() => ({
 			theme: { light: theme, dark: theme },
 			themeType: pin,

@@ -25,6 +25,7 @@ import { DiffSelectionPopover } from "#/components/diff-pane/diff-selection-popo
 import {
 	diffCodeViewLayout,
 	diffItemMetrics,
+	useDiffTheme,
 } from "#/components/diff-pane/diff-view-theme";
 import {
 	Empty,
@@ -79,6 +80,7 @@ export function FileView({
 		orpc.file.get.queryOptions({ input: { sessionId, path } }),
 	);
 	const { basename } = splitPath(path);
+	const diffTheme = useDiffTheme(orpc);
 
 	const codeViewRef = useRef<CodeViewHandle<undefined, undefined>>(null);
 	const resolveSelectionItemPath = useCallback(
@@ -115,12 +117,13 @@ export function FileView({
 						--diffs-dark-bg: transparent;
 					}
 				`,
+				theme: diffTheme.theme,
 			}),
 			disableFileHeader: true,
 			itemMetrics: { ...diffItemMetrics, paddingBottom: 0 },
 			layout: { ...diffCodeViewLayout, paddingBottom: 0 },
 		}),
-		[],
+		[diffTheme.theme],
 	);
 
 	if (query.isLoading) {
@@ -150,6 +153,7 @@ export function FileView({
 		<>
 			<DiffCodeView
 				className="min-h-0 w-full flex-1 overflow-auto overscroll-contain"
+				highlighterOptions={diffTheme.highlighterOptions}
 				items={items}
 				onScroll={handleScroll}
 				onSelectedLinesChange={diffSelection.onSelectedLinesChange}
