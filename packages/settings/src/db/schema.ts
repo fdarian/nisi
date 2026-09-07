@@ -75,6 +75,20 @@ export const settings = sqliteTable("settings", {
 	 * frontend re-validates it's still in the harness's live model list.
 	 */
 	lastChatModel: text(),
+	/**
+	 * `@pierre/theming` theme id used for the diff pane in light mode — see
+	 * `apps/desktop/src/components/diff-pane/diff-view-theme.ts`'s
+	 * `DIFF_THEME_LIGHT_OPTIONS` for the full set nisi offers. Defaults to
+	 * `"github-light"`, the value `diff-view-theme.ts` hardcoded before this
+	 * setting existed, so existing installs see no change. Plain text, not a
+	 * typed column — this package stays independent of `@pierre/theming`'s
+	 * registry, same reasoning as `enabledHarnesses` above; the frontend is
+	 * where "must be one of the known theme ids" is actually enforced. Same
+	 * `ALTER TABLE ADD COLUMN` default story as `hideReviewed` above.
+	 */
+	diffThemeLight: text().notNull().default("github-light"),
+	/** Dark-mode counterpart of `diffThemeLight` above, defaulting to `"github-dark"`. */
+	diffThemeDark: text().notNull().default("github-dark"),
 	updatedAt: integer({ mode: "timestamp_ms" })
 		.notNull()
 		.$defaultFn(() => new Date()),

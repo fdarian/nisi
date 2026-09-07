@@ -47,6 +47,15 @@ export type Settings = {
 	lastChatHarness: HarnessId | null;
 	/** Model id paired with `lastChatHarness` above. */
 	lastChatModel: string | null;
+	/**
+	 * `@pierre/theming` theme id for the diff pane in light mode — see
+	 * `#/components/diff-pane/diff-view-theme.ts`'s `DIFF_THEME_LIGHT_OPTIONS`
+	 * for the offered set. See `@repo/settings`'s `Settings.diffThemeLight` doc
+	 * for why this stays a loose `string` rather than a literal union.
+	 */
+	diffThemeLight: string;
+	/** Dark-mode counterpart of `diffThemeLight` above. */
+	diffThemeDark: string;
 };
 
 /**
@@ -67,6 +76,8 @@ const DEFAULT_SETTINGS: Settings = {
 	wrapLines: false,
 	lastChatHarness: null,
 	lastChatModel: null,
+	diffThemeLight: "github-light",
+	diffThemeDark: "github-dark",
 };
 
 /** `settings.get`, defaulting to the sidecar's own defaults while the first fetch is in flight. */
@@ -143,6 +154,36 @@ export function useDiffStyleMode(
 	);
 
 	return [settings.diffStyleMode, setMode];
+}
+
+/** Diff pane's light-mode syntax theme id — see `@repo/settings`'s `diffThemeLight`. */
+export function useDiffThemeLight(
+	orpc: SidecarQueryUtils,
+): [string, (themeId: string) => void] {
+	const { settings } = useSettings(orpc);
+	const update = useUpdateSettings(orpc);
+
+	const setDiffThemeLight = useCallback(
+		(themeId: string) => update({ diffThemeLight: themeId }),
+		[update],
+	);
+
+	return [settings.diffThemeLight, setDiffThemeLight];
+}
+
+/** Diff pane's dark-mode syntax theme id — see `@repo/settings`'s `diffThemeDark`. */
+export function useDiffThemeDark(
+	orpc: SidecarQueryUtils,
+): [string, (themeId: string) => void] {
+	const { settings } = useSettings(orpc);
+	const update = useUpdateSettings(orpc);
+
+	const setDiffThemeDark = useCallback(
+		(themeId: string) => update({ diffThemeDark: themeId }),
+		[update],
+	);
+
+	return [settings.diffThemeDark, setDiffThemeDark];
 }
 
 /** Preferred editor scheme for the "Open in editor" leader shortcut and Settings picker — see `@repo/settings`'s `preferredEditor`. */

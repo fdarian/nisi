@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useCallback } from "react";
+import { DiffThemeColumn } from "#/components/settings/diff-theme-picker";
 import { Button } from "#/components/ui/button";
 import {
 	Card,
@@ -54,6 +55,8 @@ import { useAvailableEditors } from "#/hooks/use-available-editors";
 import type { SidecarQueryUtils } from "#/lib/backend-context";
 import { useBackendContext } from "#/lib/backend-context";
 import {
+	useDiffThemeDark,
+	useDiffThemeLight,
 	usePreferredEditor,
 	useUpdateSettings,
 	useWalkthroughEnabled,
@@ -192,6 +195,21 @@ function SettingsSection({
 	);
 }
 
+function SettingsRowHeader({
+	title,
+	description,
+}: {
+	title: string;
+	description: string;
+}): React.ReactElement {
+	return (
+		<div className="flex flex-col gap-0.5">
+			<span className="font-medium text-foreground text-sm">{title}</span>
+			<span className="text-muted-foreground text-sm">{description}</span>
+		</div>
+	);
+}
+
 function SettingsRow({
 	title,
 	description,
@@ -203,10 +221,33 @@ function SettingsRow({
 }): React.ReactElement {
 	return (
 		<div className="flex items-center justify-between gap-6 py-3 first:pt-0 last:pb-0">
-			<div className="flex flex-col gap-0.5">
-				<span className="font-medium text-foreground text-sm">{title}</span>
-				<span className="text-muted-foreground text-sm">{description}</span>
-			</div>
+			<SettingsRowHeader description={description} title={title} />
+			{children}
+		</div>
+	);
+}
+
+/**
+ * Same header as `SettingsRow`, but `children` render as a full-width block
+ * beneath it instead of beside it — for a row whose content can't fit
+ * inline (the Diff theme row's two-column select+preview grid below). A
+ * second component sharing `SettingsRowHeader` rather than a layout prop on
+ * `SettingsRow`: the two containers don't share a shape, one is
+ * `items-center justify-between` (title and children side by side), this is
+ * `flex-col` (title, then children underneath).
+ */
+function SettingsRowStacked({
+	title,
+	description,
+	children,
+}: {
+	title: string;
+	description: string;
+	children: React.ReactNode;
+}): React.ReactElement {
+	return (
+		<div className="flex flex-col gap-3 py-3 first:pt-0 last:pb-0">
+			<SettingsRowHeader description={description} title={title} />
 			{children}
 		</div>
 	);
@@ -229,6 +270,8 @@ function AppearanceSection({
 	const { theme, setTheme } = useTheme();
 	const [preferredEditor, setPreferredEditor] = usePreferredEditor(orpc);
 	const { editors, loadEditors } = useAvailableEditors();
+	const [diffThemeLight, setDiffThemeLight] = useDiffThemeLight(orpc);
+	const [diffThemeDark, setDiffThemeDark] = useDiffThemeDark(orpc);
 
 	return (
 		<SettingsSection title="Appearance">
@@ -256,6 +299,23 @@ function AppearanceSection({
 					</ToggleGroupItem>
 				</ToggleGroup>
 			</SettingsRow>
+			<SettingsRowStacked
+				description="Syntax colors for the diff view — one theme per appearance."
+				title="Diff theme"
+			>
+				<div className="grid grid-cols-2 gap-4">
+					<DiffThemeColumn
+						onValueChange={setDiffThemeLight}
+						pin="light"
+						value={diffThemeLight}
+					/>
+					<DiffThemeColumn
+						onValueChange={setDiffThemeDark}
+						pin="dark"
+						value={diffThemeDark}
+					/>
+				</div>
+			</SettingsRowStacked>
 			<SettingsRow
 				description="Press o, then e, to open the selected file in this editor."
 				title="Preferred editor"

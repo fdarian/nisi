@@ -47,6 +47,8 @@ const DEFAULT_SETTINGS: Settings = {
 	wrapLines: false,
 	lastChatHarness: null,
 	lastChatModel: null,
+	diffThemeLight: "github-light",
+	diffThemeDark: "github-dark",
 };
 
 /** A plausible four-harness registry — two enabled+available with fresh models, one enabled but not found on `PATH`, one never turned on. Stories override individual entries (e.g. `EnableHarnessesPanel`'s onboarding gate wants every harness present but nothing enabled yet). */
