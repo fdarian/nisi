@@ -20,9 +20,9 @@ jobs:
       - name: Setup
         uses: ./.github/actions/setup
       - name: Fix unused imports
-        run: bunx biome lint --write --unsafe --only=correctness/noUnusedImports
+        run: pnpm biome lint --write --unsafe --only=correctness/noUnusedImports
       - name: Run formatter
-        run: bun run format
+        run: pnpm run format
       - name: Commit formatting changes
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
