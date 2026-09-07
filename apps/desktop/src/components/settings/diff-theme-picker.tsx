@@ -75,6 +75,8 @@ export function DiffThemePreview({
 		() => ({
 			theme: { light: theme, dark: theme },
 			themeType: pin,
+			/** `@pierre/diffs` defaults to `"split"`; a 4-line snippet in two columns is cramped in this preview, and the rest of the app defaults to unified (`buildDiffCodeViewOptions`). */
+			diffStyle: "unified",
 			disableFileHeader: true,
 			disableVirtualizationBuffers: true,
 		}),
