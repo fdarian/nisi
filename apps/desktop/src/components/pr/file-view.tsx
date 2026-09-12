@@ -136,22 +136,12 @@ export function FileView({
 		[diffTheme.theme],
 	);
 
-	if (query.isLoading) {
-		return (
-			<div className="relative flex min-h-0 flex-1 flex-col">
-				<Empty className="flex-1">
-					<EmptyMedia variant="icon">
-						<Spinner className="size-5" />
-					</EmptyMedia>
-					<EmptyTitle>Loading {basename}…</EmptyTitle>
-				</Empty>
-			</div>
-		);
-	}
+	const fileContent = query.data;
+	const showPreview = markdownFile && mode === "preview";
 
-	if (query.isError) {
-		return (
-			<div className="relative flex min-h-0 flex-1 flex-col">
+	return (
+		<div className="relative flex min-h-0 flex-1 flex-col">
+			{query.isError ? (
 				<Empty className="flex-1">
 					<EmptyMedia variant="icon">
 						<AlertTriangleIcon />
@@ -159,79 +149,68 @@ export function FileView({
 					<EmptyTitle>Couldn't load {basename}</EmptyTitle>
 					<EmptyDescription>{errorMessage(query.error)}</EmptyDescription>
 				</Empty>
-			</div>
-		);
-	}
-
-	const fileContent = query.data;
-	if (fileContent === undefined) {
-		return (
-			<div className="relative flex min-h-0 flex-1 flex-col">
+			) : query.isLoading || fileContent === undefined ? (
 				<Empty className="flex-1">
 					<EmptyMedia variant="icon">
 						<Spinner className="size-5" />
 					</EmptyMedia>
 					<EmptyTitle>Loading {basename}…</EmptyTitle>
 				</Empty>
-			</div>
-		);
-	}
-
-	const showPreview = markdownFile && mode === "preview";
-
-	return (
-		<div className="relative flex min-h-0 flex-1 flex-col">
-			{markdownFile && (
-				<div className="pointer-events-none absolute top-3 right-4 z-10">
-					<Toolbar className="pointer-events-auto gap-1 shadow-lg shadow-black/10 backdrop-blur-sm">
-						<ToggleGroup
-							aria-label="Markdown view mode"
-							onValueChange={(value) => {
-								const next = value[0];
-								if (next === "preview" || next === "raw") setMode(next);
-							}}
-							size="sm"
-							value={[mode]}
-							variant="outline"
-						>
-							<ToggleGroupItem aria-label="Raw markdown" value="raw">
-								Raw
-							</ToggleGroupItem>
-							<ToggleGroupItem
-								aria-label="Rendered markdown preview"
-								value="preview"
-							>
-								Preview
-							</ToggleGroupItem>
-						</ToggleGroup>
-					</Toolbar>
-				</div>
-			)}
-			{showPreview ? (
-				<MarkdownDocument
-					source={fileContent.content}
-					theme={diffTheme.theme}
-				/>
 			) : (
 				<>
-					<DiffCodeView
-						className="min-h-0 w-full flex-1 overflow-auto overscroll-contain"
-						highlighterOptions={diffTheme.highlighterOptions}
-						items={items}
-						onScroll={handleScroll}
-						onSelectedLinesChange={diffSelection.onSelectedLinesChange}
-						options={codeViewOptions}
-						ref={codeViewRef}
-						renderAnnotation={() => null}
-						selectedLines={diffSelection.selectedLines}
-					/>
-					<DiffSelectionPopover
-						anchorRect={diffSelection.anchorRect}
-						onDismiss={diffSelection.clearSelection}
-						orpc={orpc}
-						reference={diffSelection.reference}
-						sessionId={sessionId}
-					/>
+					{markdownFile && (
+						<div className="pointer-events-none absolute top-3 right-4 z-10">
+							<Toolbar className="pointer-events-auto gap-1 shadow-lg shadow-black/10 backdrop-blur-sm">
+								<ToggleGroup
+									aria-label="Markdown view mode"
+									onValueChange={(value) => {
+										const next = value[0];
+										if (next === "preview" || next === "raw") setMode(next);
+									}}
+									size="sm"
+									value={[mode]}
+									variant="outline"
+								>
+									<ToggleGroupItem aria-label="Raw markdown" value="raw">
+										Raw
+									</ToggleGroupItem>
+									<ToggleGroupItem
+										aria-label="Rendered markdown preview"
+										value="preview"
+									>
+										Preview
+									</ToggleGroupItem>
+								</ToggleGroup>
+							</Toolbar>
+						</div>
+					)}
+					{showPreview ? (
+						<MarkdownDocument
+							source={fileContent.content}
+							theme={diffTheme.theme}
+						/>
+					) : (
+						<>
+							<DiffCodeView
+								className="min-h-0 w-full flex-1 overflow-auto overscroll-contain"
+								highlighterOptions={diffTheme.highlighterOptions}
+								items={items}
+								onScroll={handleScroll}
+								onSelectedLinesChange={diffSelection.onSelectedLinesChange}
+								options={codeViewOptions}
+								ref={codeViewRef}
+								renderAnnotation={() => null}
+								selectedLines={diffSelection.selectedLines}
+							/>
+							<DiffSelectionPopover
+								anchorRect={diffSelection.anchorRect}
+								onDismiss={diffSelection.clearSelection}
+								orpc={orpc}
+								reference={diffSelection.reference}
+								sessionId={sessionId}
+							/>
+						</>
+					)}
 				</>
 			)}
 		</div>

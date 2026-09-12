@@ -49,12 +49,6 @@ const markdownSanitizeSchema: RehypeSanitizeOptions = {
 			"srcSet",
 			"width",
 		],
-		h1: [...(defaultSchema.attributes?.h1 ?? []), "id"],
-		h2: [...(defaultSchema.attributes?.h2 ?? []), "id"],
-		h3: [...(defaultSchema.attributes?.h3 ?? []), "id"],
-		h4: [...(defaultSchema.attributes?.h4 ?? []), "id"],
-		h5: [...(defaultSchema.attributes?.h5 ?? []), "id"],
-		h6: [...(defaultSchema.attributes?.h6 ?? []), "id"],
 		p: [...(defaultSchema.attributes?.p ?? []), "align", "height", "width"],
 		picture: [...(defaultSchema.attributes?.picture ?? []), "align"],
 		source: [

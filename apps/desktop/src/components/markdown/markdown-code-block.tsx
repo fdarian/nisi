@@ -115,12 +115,13 @@ export function MarkdownCodeBlock(
 		highlightState.status === "ready" &&
 		highlightState.key === highlightKey
 	) {
-		const highlightedBlock = React.createElement("div", {
-			className: codeBlockClassName,
-			// biome-ignore lint/security/noDangerouslySetInnerHtml: Shiki escapes the source text before producing this markup.
-			dangerouslySetInnerHTML: { __html: highlightState.html },
-		});
-		return highlightedBlock;
+		return (
+			<div
+				className={codeBlockClassName}
+				/* biome-ignore lint/security/noDangerouslySetInnerHtml: Shiki escapes the source text before producing this markup. */
+				dangerouslySetInnerHTML={{ __html: highlightState.html }}
+			/>
+		);
 	}
 
 	return (
