@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+	createNavigationHistory,
 	EMPTY_NAVIGATION_HISTORY,
 	type NavigationEntry,
 	type NavigationHistoryState,
@@ -17,6 +18,16 @@ function fileEntry(path: string, selectedPath: string | null): NavigationEntry {
 }
 
 const alwaysValid = () => true;
+
+describe("createNavigationHistory", () => {
+	test("seeds the initial view as the current entry", () => {
+		const initialEntry = filesEntry(null);
+		expect(createNavigationHistory(initialEntry)).toEqual({
+			entries: [initialEntry],
+			cursor: 0,
+		});
+	});
+});
 
 describe("pushNavigationHistory", () => {
 	test("appends an entry to an empty history", () => {

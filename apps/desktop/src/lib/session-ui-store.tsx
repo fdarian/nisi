@@ -28,7 +28,7 @@ import {
 import { createStore, type StoreApi, useStore } from "zustand";
 import type { SearchMode } from "#/components/files-sidebar/files-sidebar";
 import {
-	EMPTY_NAVIGATION_HISTORY,
+	createNavigationHistory,
 	type NavigationEntry,
 	type NavigationHistoryState,
 	pruneNavigationHistory,
@@ -91,7 +91,10 @@ function createDefaultSessionUiState(): SessionUiState {
 		openFiles: EMPTY_OPEN_FILES,
 		walkthroughSelection: null,
 		undoStack: [],
-		navigationHistory: EMPTY_NAVIGATION_HISTORY,
+		navigationHistory: createNavigationHistory({
+			activeTab: "files",
+			selectedPath: null,
+		}),
 	};
 }
 
@@ -697,27 +700,26 @@ export function useSessionNavigationHistory(sessionId: string): {
 			store.getState().replaceNavigationEntryAtCursor(sessionId, entry),
 		[store, sessionId],
 	);
-	const back = useCallback(
-		(isValidEntry: (entry: NavigationEntry) => boolean) => {
+	const step = useCallback(
+		(direction: 1 | -1, isValidEntry: (entry: NavigationEntry) => boolean) => {
 			const entry = store
 				.getState()
-				.stepNavigationEntry(sessionId, -1, isValidEntry);
+				.stepNavigationEntry(sessionId, direction, isValidEntry);
 			if (entry === undefined) return undefined;
 			store.getState().applyNavigationEntry(sessionId, entry);
 			return entry;
 		},
 		[store, sessionId],
 	);
+	const back = useCallback(
+		(isValidEntry: (entry: NavigationEntry) => boolean) =>
+			step(-1, isValidEntry),
+		[step],
+	);
 	const forward = useCallback(
-		(isValidEntry: (entry: NavigationEntry) => boolean) => {
-			const entry = store
-				.getState()
-				.stepNavigationEntry(sessionId, 1, isValidEntry);
-			if (entry === undefined) return undefined;
-			store.getState().applyNavigationEntry(sessionId, entry);
-			return entry;
-		},
-		[store, sessionId],
+		(isValidEntry: (entry: NavigationEntry) => boolean) =>
+			step(1, isValidEntry),
+		[step],
 	);
 	return useMemo(
 		() => ({ push, replaceAtCursor, back, forward }),

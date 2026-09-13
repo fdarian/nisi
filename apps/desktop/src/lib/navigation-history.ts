@@ -29,6 +29,12 @@ export const EMPTY_NAVIGATION_HISTORY: NavigationHistoryState = {
 
 const MAX_ENTRIES = 100;
 
+export function createNavigationHistory(
+	initialEntry: NavigationEntry,
+): NavigationHistoryState {
+	return { entries: [initialEntry], cursor: 0 };
+}
+
 function entriesEqual(left: NavigationEntry, right: NavigationEntry): boolean {
 	return (
 		left.activeTab === right.activeTab &&
