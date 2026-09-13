@@ -33,9 +33,8 @@ import type {
 	CodeIndexStatus,
 } from "@repo/sidecar-api";
 import { useQuery } from "@tanstack/react-query";
-import { AlertTriangleIcon, XIcon } from "lucide-react";
+import { AlertTriangleIcon } from "lucide-react";
 import { useMemo, useState } from "react";
-import ReactMarkdown, { type Components } from "react-markdown";
 import type { CodeIndexPeekTarget } from "#/components/code-index/use-code-index-interactions";
 import { useCodeIndexStatus } from "#/components/code-index/use-code-index-status";
 import { Badge } from "#/components/ui/badge";
@@ -114,57 +113,30 @@ function CodeIndexPeekContent({
 	});
 	const references = referencesQuery.data;
 
-	// The header's path label: the definition's own file once resolved,
-	// falling back to the clicked token's file before that — the only
-	// location known before the index (or the query) has answered anything.
-	const previewPath = references?.definition?.path ?? target.path;
-
 	const openReference = (path: string, line: number) => {
 		openFile(path, line + 1); // SCIP's 0-based line -> @pierre/diffs' 1-based
 		onClose();
 	};
 
 	return (
-		<div className="flex min-h-0 max-h-[80vh] flex-col overflow-hidden rounded-xl border bg-card text-xs shadow-sm">
-			<div className="flex items-center gap-2 border-b bg-background px-3 py-2">
-				<PathLabel path={previewPath} />
-				{references !== undefined && references.displayName !== "" && (
-					<Badge className="font-mono" size="sm" variant="outline">
-						{references.displayName}
-					</Badge>
-				)}
-				<div className="flex-1" />
-				<Button
-					aria-label="Close"
-					className="size-6"
-					onClick={onClose}
-					size="icon-xs"
-					variant="ghost"
-				>
-					<XIcon className="size-3.5" />
-				</Button>
-			</div>
-
+		<div className="flex min-h-0 max-h-[80vh] flex-col overflow-hidden rounded-xl bg-card text-xs shadow-sm">
 			<IndexStatusBanner
 				isBuildStarting={indexStatus.isBuildStarting}
 				onBuild={indexStatus.build}
 				status={indexStatus.status}
 			/>
 
-			<div className="flex min-h-0 flex-1 divide-x">
-				<div className="min-w-0 flex-1 overflow-auto p-2">
-					{references !== undefined && (
-						<DefinitionDocumentation documentation={references.documentation} />
-					)}
+			<div className="flex min-h-0 flex-1">
+				<div className="min-w-0 flex-1 overflow-auto">
 					<SourcePreview
 						hasOccurrence={target.occurrence !== undefined}
 						isLoading={referencesQuery.isLoading}
 						references={references}
 					/>
 				</div>
-				<div className="w-72 shrink-0">
+				<div className="w-80 shrink-0">
 					<ScrollArea className="max-h-72">
-						<div className="p-2">
+						<div>
 							{target.occurrence === undefined ? (
 								<div className="px-1 py-6 text-center text-muted-foreground">
 									References will appear here once the code index is built.
@@ -189,18 +161,6 @@ function CodeIndexPeekContent({
 				</div>
 			</div>
 		</div>
-	);
-}
-
-function PathLabel({ path }: { path: string }): React.ReactElement {
-	const { dirname, basename } = splitPath(path);
-	return (
-		<span className="flex min-w-0 items-baseline gap-1.5 truncate font-mono">
-			{dirname && (
-				<span className="truncate text-muted-foreground">{dirname}/</span>
-			)}
-			<span className="truncate font-medium text-foreground">{basename}</span>
-		</span>
 	);
 }
 
@@ -279,78 +239,6 @@ function StatusBannerRow({
 }
 
 /**
- * The peeked symbol's signature and JSDoc prose, straight from the LSP's
- * `textDocument/hover` — `documentation` is `[]` when the server found
- * nothing there (most local symbols carry no doc comment; not an error) or
- * a single markdown string otherwise: a fenced ```typescript signature
- * block, then whatever prose followed it. Rendered above `SourcePreview` in
- * the same scrollable column, through the same `react-markdown` this app
- * already uses for the walkthrough narrative and the PR description
- * (`narrative-pane.tsx`/`description-pane.tsx`) — this only adds a `pre`/
- * `code` override neither of those needs, since their markdown never
- * contains a fenced code block.
- */
-function DefinitionDocumentation({
-	documentation,
-}: {
-	documentation: readonly string[];
-}): React.ReactElement | null {
-	if (documentation.length === 0) return null;
-	return (
-		<div className="mb-2 flex flex-col gap-2 border-b pb-2 text-foreground leading-relaxed">
-			{documentation.map((entry) => (
-				<ReactMarkdown components={documentationMarkdownComponents} key={entry}>
-					{entry}
-				</ReactMarkdown>
-			))}
-		</div>
-	);
-}
-
-/** Same overrides `description-pane.tsx`'s `useMarkdownComponents` uses for prose, plus `pre`/`code` for the signature's own fenced block — styled like `SourcePreview`'s `<pre>` (`font-mono`) and `ReferencesTree`'s row chrome (`rounded`/`bg-muted`) rather than inventing a new treatment. A plain object, not a hook: unlike `narrative-pane.tsx`'s version, nothing here depends on per-render props. */
-const documentationMarkdownComponents: Components = {
-	p: (props) => <p className="text-foreground" {...props} />,
-	ul: (props) => <ul className="list-disc space-y-1 pl-5" {...props} />,
-	ol: (props) => <ol className="list-decimal space-y-1 pl-5" {...props} />,
-	strong: (props) => (
-		<strong className="font-semibold text-foreground" {...props} />
-	),
-	a: ({ href, children }) => (
-		<a
-			className="underline underline-offset-2"
-			href={href}
-			rel="noreferrer"
-			target="_blank"
-		>
-			{children}
-		</a>
-	),
-	pre: (props) => (
-		<pre
-			className="overflow-x-auto rounded-md bg-muted px-2 py-1.5 font-mono text-[0.8125em] leading-5"
-			{...props}
-		/>
-	),
-	// Fenced blocks (the signature) carry a `language-xxx` className from
-	// react-markdown; inline spans don't — `pre` above already supplies the
-	// fenced block's own background/padding, so a fenced `code` renders
-	// plain here rather than doubling up on the inline chip treatment.
-	code: ({ className, children, ...props }) =>
-		className === undefined ? (
-			<code
-				className="rounded bg-muted px-1 py-0.5 font-mono text-[0.8125em]"
-				{...props}
-			>
-				{children}
-			</code>
-		) : (
-			<code className={className} {...props}>
-				{children}
-			</code>
-		),
-};
-
-/**
  * Purely presentational — `CodeIndexPeekContent` owns the `codeIndex.references`
  * fetch; this only renders whichever of five states it's handed, entirely
  * from `references`' own fields (`definition`/`definitionContext`). No
@@ -408,7 +296,7 @@ function SourcePreview({
 	const context = references.definitionContext;
 
 	return (
-		<pre className="overflow-x-auto font-mono leading-5">
+		<pre className="overflow-x-auto font-mono leading-5 bg-background px-2">
 			{context.lines.map((text, offset) => {
 				const lineIndex = context.startLine + offset;
 				const isTargetLine = lineIndex === definition.line;
@@ -466,15 +354,17 @@ function ReferencesTree({
 	}
 
 	return (
-		<div className="flex flex-col gap-2">
+		<div className="flex flex-col px-1 py-2 gap-2">
 			<div className="px-1 font-medium text-muted-foreground">{countLabel}</div>
-			{result.files.map((group) => (
-				<FileReferenceGroup
-					group={group}
-					key={group.path}
-					onOpenReference={onOpenReference}
-				/>
-			))}
+			<div className="flex flex-col">
+				{result.files.map((group) => (
+					<FileReferenceGroup
+						group={group}
+						key={group.path}
+						onOpenReference={onOpenReference}
+					/>
+				))}
+			</div>
 		</div>
 	);
 }
@@ -491,7 +381,7 @@ function FileReferenceGroup({
 
 	return (
 		<Collapsible onOpenChange={setOpen} open={open}>
-			<CollapsibleTrigger className="flex w-full min-w-0 items-center gap-1.5 rounded-md px-1 py-1 text-left hover:bg-accent">
+			<CollapsibleTrigger className="flex w-full min-w-0 items-center gap-1.5 px-2 py-1 text-left hover:bg-accent rounded">
 				<span className="min-w-0 flex-1 truncate">
 					<span className="font-medium text-foreground">{basename}</span>
 					{dirname && (
@@ -504,19 +394,19 @@ function FileReferenceGroup({
 					{group.references.length}
 				</Badge>
 			</CollapsibleTrigger>
-			<CollapsiblePanel className="h-(--collapsible-panel-height) data-ending-style:h-0 data-starting-style:h-0">
-				<div className="flex flex-col gap-0.5 py-1 pl-2">
+			<CollapsiblePanel className="gap-1.5 h-(--collapsible-panel-height) data-ending-style:h-0 data-starting-style:h-0">
+				<div className="p-1 grid grid-cols-[max-content_1fr] gap-0.5">
 					{group.references.map((reference) => (
 						<button
-							className="flex min-w-0 items-baseline gap-2 rounded px-1 py-0.5 text-left hover:bg-accent"
+							className="px-1 col-span-full grid grid-cols-subgrid min-w-0 items-baseline gap-2 rounded py-0.5 text-left hover:bg-accent"
 							key={`${reference.line}:${reference.charStart}`}
 							onClick={() => onOpenReference(group.path, reference.line)}
 							type="button"
 						>
-							<span className="w-7 shrink-0 select-none text-right text-muted-foreground tabular-nums">
+							<span className="select-none text-right text-muted-foreground tabular-nums">
 								{reference.line + 1}
 							</span>
-							<span className="min-w-0 flex-1 truncate whitespace-pre font-mono text-[0.6875rem] text-muted-foreground">
+							<span className="min-w-0 truncate whitespace-pre font-mono text-[0.6875rem]">
 								{reference.lineText === null ? (
 									<span className="italic">
 										preview unavailable — couldn't read this file
