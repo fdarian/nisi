@@ -222,7 +222,7 @@ type DiffCodeViewProps<Metadata> = {
 	highlighterOptions: WorkerInitializationRenderOptions;
 	/** Forwarded straight to `CodeView`'s own `onScroll` — fires for both user-driven and programmatic scrolling; telling the two apart is the caller's job (see `DiffPane`'s scroll-report suppression). */
 	onScroll?: (scrollTop: number, viewer: CodeViewInstance<Metadata>) => void;
-	renderAnnotation: (
+	renderAnnotation?: (
 		annotation: LineAnnotation<Metadata> | DiffLineAnnotation<Metadata>,
 	) => React.ReactNode;
 	renderCustomHeader?: (item: CodeViewItem<Metadata>) => React.ReactNode;

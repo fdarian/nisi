@@ -5,7 +5,7 @@
  * verbatim by the diff pane (`diff-pane.tsx`, additions side only) and the
  * whole-file viewer (`file-view.tsx`) — both wire the same `codeViewOptions`
  * fragment into their own `CodeView` options and read `peekTarget`/`closePeek`
- * to decide whether (and where) to render a `CodeIndexPeekPanel` annotation.
+ * to decide whether to render a `CodeIndexPeekDialog` alongside the code view.
  * Nothing here renders anything itself; it only produces state and callbacks.
  *
  * `enabled` (from `useSessionCodeIndexEnabled`, defaults off every session —
@@ -66,38 +66,19 @@ export const CODE_INDEX_TOKEN_CSS = `
 `;
 
 /**
- * One resolved ⌘-click, everything `CodeIndexPeekPanel` needs to render
- * without re-deriving it from the DOM event that opened it. `charStart`/
- * `charEnd` are the clicked token's own range (0-based, SCIP's coordinate
- * space — see `occurrence-index.ts`) — carried alongside `occurrence` rather
- * than only inside it, since they're what the panel falls back to anchoring
- * its source preview on when `occurrence` is `undefined`.
+ * One resolved ⌘-click, everything `CodeIndexPeekDialog` needs to render
+ * without re-deriving it from the DOM event that opened it.
  *
  * `occurrence` is optional, not defaulted to a placeholder: a ⌘-click while
  * the index is `absent`/`building`/`failed` still opens the peek
  * (`handleTokenClick`, below) so its build/rebuild affordance is reachable,
  * but there's genuinely no occurrence to report in that case — inventing one
- * would be a lie the panel would have to un-tell.
+ * would be a lie the dialog would have to un-tell.
  */
 export type CodeIndexPeekTarget = {
-	/** The file the clicked token lives in — the peek annotation anchors here. */
+	/** The file the clicked token lives in. */
 	path: string;
-	/** 1-based — `@pierre/diffs`' own line-numbering, already converted from SCIP's 0-based `occurrence.line`. */
-	lineNumber: number;
-	charStart: number;
-	charEnd: number;
 	occurrence: CodeIndexOccurrence | undefined;
-};
-
-/**
- * The one annotation variant this feature contributes. `file-view.tsx` uses
- * it directly as its item's whole `Metadata` type (it has no other
- * annotation kind); `diff-pane.tsx` folds it into its own
- * `DiffAnnotationMetadata` union alongside its five existing variants.
- */
-export type CodeIndexPeekAnnotationMetadata = {
-	type: "code-index-peek";
-	target: CodeIndexPeekTarget;
 };
 
 function setTokenActive(element: HTMLElement, active: boolean): void {
@@ -166,7 +147,7 @@ export function useCodeIndexInteractions<Metadata>({
 	closePeek: () => void;
 	/**
 	 * `codeIndex.status` — exposed here too (rather than only inside
-	 * `CodeIndexPeekPanel`) since `handleTokenClick`'s fallback-open below
+	 * `CodeIndexPeekDialog`) since `handleTokenClick`'s fallback-open below
 	 * already needs it. `undefined` while `enabled` is false (the query
 	 * itself is disabled — see this module's own doc comment).
 	 */
@@ -349,17 +330,6 @@ export function useCodeIndexInteractions<Metadata>({
 		null,
 	);
 	const closePeek = useCallback(() => setPeekTarget(null), []);
-	// Escape dismisses the peek the same way it dismisses the diff-selection
-	// popover elsewhere in this pane — the peek is an inline annotation, not a
-	// Base UI popup, so it gets no Escape handling for free.
-	useEffect(() => {
-		if (peekTarget === null) return;
-		const handleKeyDown = (event: KeyboardEvent) => {
-			if (event.key === "Escape") closePeek();
-		};
-		window.addEventListener("keydown", handleKeyDown);
-		return () => window.removeEventListener("keydown", handleKeyDown);
-	}, [peekTarget, closePeek]);
 
 	const resolvePath = useCallback(
 		(event: { composedPath(): EventTarget[] }): string | undefined => {
@@ -428,9 +398,6 @@ export function useCodeIndexInteractions<Metadata>({
 			event.preventDefault();
 			setPeekTarget({
 				path,
-				lineNumber: props.lineNumber,
-				charStart: props.lineCharStart,
-				charEnd: props.lineCharEnd,
 				occurrence,
 			});
 		},

@@ -19,11 +19,7 @@ import {
 	useMemo,
 	useRef,
 } from "react";
-import { CodeIndexPeekPanel } from "#/components/code-index/code-index-peek-panel";
-import type {
-	CodeIndexPeekAnnotationMetadata,
-	CodeIndexPeekTarget,
-} from "#/components/code-index/use-code-index-interactions";
+import { CodeIndexPeekDialog } from "#/components/code-index/code-index-peek-panel";
 import { useCodeIndexInteractions } from "#/components/code-index/use-code-index-interactions";
 import {
 	buildDiffCodeViewOptions,
@@ -80,8 +76,7 @@ type DiffAnnotationMetadata =
 	| { type: "load-file"; path: string; stillTooLarge: boolean }
 	| { type: "hidden-file"; path: string; reason: HiddenFileReason }
 	| { type: "reviewed-empty" }
-	| { type: "loading" }
-	| CodeIndexPeekAnnotationMetadata;
+	| { type: "loading" };
 
 /**
  * Noise reduction, unrelated to review state. A `"generated"` file's body is
@@ -180,33 +175,6 @@ const LOADING_ANNOTATIONS: LineAnnotation<DiffAnnotationMetadata>[] = [
  * silent exception for "empty is fine."
  */
 const EMPTY_DIFF_ANNOTATIONS: DiffLineAnnotation<DiffAnnotationMetadata>[] = [];
-
-/**
- * Appends the open code-index peek's annotation onto `base` for exactly the
- * one file it targets — `base` (usually `EMPTY_DIFF_ANNOTATIONS` or
- * `resolveLoadFileAnnotations`'s cached array) is returned unchanged for
- * every other file, preserving its identity so pierre never resets that
- * file's layout cache for a peek opening/closing somewhere else (see this
- * file's own identity-stability doc comment above `BINARY_ANNOTATIONS`).
- * Additions-side only — the peek can only ever have been opened from an
- * additions-side token (`useCodeIndexInteractions` ignores deletions-side
- * clicks entirely), so there's no ambiguity about which side to anchor to.
- */
-function withPeekAnnotation(
-	base: DiffLineAnnotation<DiffAnnotationMetadata>[],
-	path: string,
-	peekTarget: CodeIndexPeekTarget | null,
-): DiffLineAnnotation<DiffAnnotationMetadata>[] {
-	if (peekTarget === null || peekTarget.path !== path) return base;
-	return [
-		...base,
-		{
-			side: "additions",
-			lineNumber: peekTarget.lineNumber,
-			metadata: { type: "code-index-peek", target: peekTarget },
-		},
-	];
-}
 
 /**
  * The pane's imperative seam, for the one thing its props can't express:
@@ -691,16 +659,6 @@ export function DiffPane({
 			// in here only invalidated two items per click and dragged the whole
 			// memo (and every file's parse below) along with it. Selection reaches
 			// the pane through `scrollToPath`, not through rendering.
-			// Folded into `baseVersionInput` (not left for `withPeekAnnotation`
-			// alone) so `hashItemVersion` actually changes for the one file whose
-			// annotations `withPeekAnnotation` is about to touch — pierre keys its
-			// own re-sync off `version`, not off `annotations`' reference, for an
-			// item whose version is unchanged (see this file's own doc comment on
-			// `resolveFileDiff`).
-			const peekVersionSuffix =
-				codeIndex.peekTarget?.path === file.path
-					? `peek:${codeIndex.peekTarget.occurrence?.symbolKey ?? "unresolved"}:${codeIndex.peekTarget.lineNumber}:${codeIndex.peekTarget.charStart}`
-					: "no-peek";
 			// Folded in so flipping "Enable code reference" forces every
 			// currently-rendered file to re-request its render from the worker
 			// pool — `WorkerPoolOptionsSync` (`diff-code-view.tsx`) updates the
@@ -712,7 +670,7 @@ export function DiffPane({
 			const codeIndexVersionSuffix = codeIndex.tokenInteractionsActive
 				? "code-index-on"
 				: "code-index-off";
-			const baseVersionInput = `${file.fingerprint}:${diffStyle}:${reviewStatus}:${cardCollapsed ? "card-collapsed" : "card-expanded"}:${peekVersionSuffix}:${codeIndexVersionSuffix}`;
+			const baseVersionInput = `${file.fingerprint}:${diffStyle}:${reviewStatus}:${cardCollapsed ? "card-collapsed" : "card-expanded"}:${codeIndexVersionSuffix}`;
 
 			if (file.binary) {
 				nextItems.push({
@@ -813,11 +771,7 @@ export function DiffPane({
 						id: file.path,
 						type: "diff",
 						fileDiff: keywordFileDiff,
-						annotations: withPeekAnnotation(
-							EMPTY_DIFF_ANNOTATIONS,
-							file.path,
-							codeIndex.peekTarget,
-						),
+						annotations: EMPTY_DIFF_ANNOTATIONS,
 						collapsed: cardCollapsed,
 						version: hashItemVersion(
 							`${baseVersionInput}:keyword:${matchSignature}`,
@@ -903,17 +857,13 @@ export function DiffPane({
 				continue;
 			}
 
-			const annotations = withPeekAnnotation(
-				content.truncated
-					? resolveLoadFileAnnotations(
-							loadFileAnnotationCache.current,
-							file,
-							forcedPaths.has(file.path),
-						)
-					: EMPTY_DIFF_ANNOTATIONS,
-				file.path,
-				codeIndex.peekTarget,
-			);
+			const annotations = content.truncated
+				? resolveLoadFileAnnotations(
+						loadFileAnnotationCache.current,
+						file,
+						forcedPaths.has(file.path),
+					)
+				: EMPTY_DIFF_ANNOTATIONS;
 
 			nextItems.push({
 				id: file.path,
@@ -951,7 +901,6 @@ export function DiffPane({
 		forcedPaths,
 		expandedHiddenPaths,
 		fileCollapse.overrides,
-		codeIndex.peekTarget,
 		codeIndex.tokenInteractionsActive,
 	]);
 
@@ -1060,16 +1009,6 @@ export function DiffPane({
 					</div>
 				);
 			}
-			if (metadata.type === "code-index-peek") {
-				return (
-					<CodeIndexPeekPanel
-						onClose={codeIndex.closePeek}
-						orpc={orpc}
-						sessionId={sessionId}
-						target={metadata.target}
-					/>
-				);
-			}
 			if (metadata.stillTooLarge) {
 				return (
 					<div className="px-3 py-2 text-muted-foreground text-xs">
@@ -1091,7 +1030,7 @@ export function DiffPane({
 				</div>
 			);
 		},
-		[onForceLoad, handleShowHiddenFile, codeIndex.closePeek, orpc, sessionId],
+		[onForceLoad, handleShowHiddenFile],
 	);
 
 	const codeViewOptions: CodeViewOptions<DiffAnnotationMetadata, undefined> =
@@ -1431,6 +1370,12 @@ export function DiffPane({
 				renderAnnotation={renderAnnotation}
 				renderCustomHeader={renderCustomHeader}
 				selectedLines={diffSelection.selectedLines}
+			/>
+			<CodeIndexPeekDialog
+				onClose={codeIndex.closePeek}
+				orpc={orpc}
+				sessionId={sessionId}
+				target={codeIndex.peekTarget}
 			/>
 			<DiffSelectionPopover
 				anchorRect={diffSelection.anchorRect}

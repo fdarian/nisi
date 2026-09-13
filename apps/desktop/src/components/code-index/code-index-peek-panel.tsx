@@ -1,14 +1,12 @@
 "use client";
 
 /**
- * The VS Code-style "peek references" panel — rendered inline, anchored to
- * the clicked token's own line via `renderAnnotation` (`file-view.tsx`/
- * `diff-pane.tsx`), not a floating popover. Left: ~8 lines of source context
- * around the *definition* — `codeIndex.references`' own `definitionContext`,
- * not a separate `file.get` fetch. Right: a collapsible tree of files, each
- * listing its referencing lines — `CodeIndexReferencesResult.files` already
- * arrives grouped by file, so this only has to render that shape, not build
- * it.
+ * The VS Code-style "peek references" dialog. Left: ~8 lines of source
+ * context around the *definition* — `codeIndex.references`' own
+ * `definitionContext`, not a separate `file.get` fetch. Right: a collapsible
+ * tree of files, each listing its referencing lines —
+ * `CodeIndexReferencesResult.files` already arrives grouped by file, so this
+ * only has to render that shape, not build it.
  *
  * Both panes read through the sidecar's one worktree-unconditional path
  * (`readWorktreeFileContents`, `apps/desktop/sidecar/code-index/state.ts`)
@@ -47,6 +45,7 @@ import {
 	CollapsiblePanel,
 	CollapsibleTrigger,
 } from "#/components/ui/collapsible";
+import { Dialog, DialogContent, DialogTitle } from "#/components/ui/dialog";
 import { ScrollArea } from "#/components/ui/scroll-area";
 import { Spinner } from "#/components/ui/spinner";
 import type { SidecarQueryUtils } from "#/lib/backend-context";
@@ -54,19 +53,52 @@ import { useSessionOpenFiles } from "#/lib/session-ui-store";
 import { splitPath } from "#/lib/tree-paths";
 import { cn } from "#/lib/utils";
 
-type CodeIndexPeekPanelProps = {
+type CodeIndexPeekDialogProps = {
+	sessionId: string;
+	orpc: SidecarQueryUtils;
+	target: CodeIndexPeekTarget | null;
+	onClose: () => void;
+};
+
+export function CodeIndexPeekDialog(
+	props: CodeIndexPeekDialogProps,
+): React.ReactElement | null {
+	if (props.target === null) return null;
+	return (
+		<Dialog
+			onOpenChange={(open) => {
+				if (!open) props.onClose();
+			}}
+			open
+		>
+			<DialogContent className="max-w-5xl p-0" showCloseButton={false}>
+				<DialogTitle className="sr-only">
+					Code references for {props.target.path}
+				</DialogTitle>
+				<CodeIndexPeekContent
+					onClose={props.onClose}
+					orpc={props.orpc}
+					sessionId={props.sessionId}
+					target={props.target}
+				/>
+			</DialogContent>
+		</Dialog>
+	);
+}
+
+type CodeIndexPeekContentProps = {
 	sessionId: string;
 	orpc: SidecarQueryUtils;
 	target: CodeIndexPeekTarget;
 	onClose: () => void;
 };
 
-export function CodeIndexPeekPanel({
+function CodeIndexPeekContent({
 	sessionId,
 	orpc,
 	target,
 	onClose,
-}: CodeIndexPeekPanelProps): React.ReactElement {
+}: CodeIndexPeekContentProps): React.ReactElement {
 	const { openFile } = useSessionOpenFiles(sessionId);
 	const indexStatus = useCodeIndexStatus(orpc, sessionId);
 
@@ -93,7 +125,7 @@ export function CodeIndexPeekPanel({
 	};
 
 	return (
-		<div className="my-1.5 flex min-h-0 flex-col overflow-hidden rounded-xl border bg-card text-xs shadow-sm">
+		<div className="flex min-h-0 max-h-[80vh] flex-col overflow-hidden rounded-xl border bg-card text-xs shadow-sm">
 			<div className="flex items-center gap-2 border-b bg-background px-3 py-2">
 				<PathLabel path={previewPath} />
 				{references !== undefined && references.displayName !== "" && (
@@ -319,7 +351,7 @@ const documentationMarkdownComponents: Components = {
 };
 
 /**
- * Purely presentational — `CodeIndexPeekPanel` owns the `codeIndex.references`
+ * Purely presentational — `CodeIndexPeekContent` owns the `codeIndex.references`
  * fetch; this only renders whichever of five states it's handed, entirely
  * from `references`' own fields (`definition`/`definitionContext`). No
  * client-side drift verification happens here anymore — the sidecar's is

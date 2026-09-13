@@ -10,13 +10,12 @@
  */
 
 import { ORPCError } from "@orpc/client";
-import type { CodeViewItem, LineAnnotation } from "@pierre/diffs";
+import type { CodeViewItem } from "@pierre/diffs";
 import type { CodeViewHandle } from "@pierre/diffs/react";
 import { useQuery } from "@tanstack/react-query";
 import { AlertTriangleIcon } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { CodeIndexPeekPanel } from "#/components/code-index/code-index-peek-panel";
-import type { CodeIndexPeekAnnotationMetadata } from "#/components/code-index/use-code-index-interactions";
+import { CodeIndexPeekDialog } from "#/components/code-index/code-index-peek-panel";
 import { useCodeIndexInteractions } from "#/components/code-index/use-code-index-interactions";
 import {
 	buildDiffCodeViewOptions,
@@ -86,9 +85,6 @@ function errorMessage(error: unknown): string {
 	);
 }
 
-/** No open peek in this tab — see the identity-stability reasoning in `diff-pane.tsx`'s own annotation-array doc comment; a fresh `[]` literal on every render would reset this item's measured layout for no reason. */
-const EMPTY_ANNOTATIONS: LineAnnotation<CodeIndexPeekAnnotationMetadata>[] = [];
-
 export function FileView({
 	sessionId,
 	path,
@@ -101,8 +97,7 @@ export function FileView({
 	const markdownFile = isMarkdownPath(path);
 	const [mode, setMode] = useState<FileViewMode>("preview");
 
-	const codeViewRef =
-		useRef<CodeViewHandle<CodeIndexPeekAnnotationMetadata, undefined>>(null);
+	const codeViewRef = useRef<CodeViewHandle<undefined, undefined>>(null);
 	const [codeIndexEnabled] = useSessionCodeIndexEnabled(sessionId);
 	const codeIndex = useCodeIndexInteractions({
 		sessionId,
@@ -161,49 +156,23 @@ export function FileView({
 		};
 	}, [pendingScrollLine, query.data, path, clearPendingScrollLine]);
 
-	const items = useMemo<
-		readonly CodeViewItem<CodeIndexPeekAnnotationMetadata>[]
-	>(() => {
+	const items = useMemo<readonly CodeViewItem<undefined>[]>(() => {
 		if (query.data === undefined) return [];
-		const peekTarget =
-			codeIndex.peekTarget?.path === path ? codeIndex.peekTarget : null;
-		const annotations =
-			peekTarget === null
-				? EMPTY_ANNOTATIONS
-				: [
-						{
-							lineNumber: peekTarget.lineNumber,
-							metadata: {
-								type: "code-index-peek" as const,
-								target: peekTarget,
-							},
-						},
-					];
 		return [
 			{
 				id: path,
 				type: "file",
 				file: { name: path, contents: query.data.content, cacheKey: path },
-				annotations,
 				version: hashItemVersion(
-					`${path}:${query.data.content.length}:${
-						peekTarget === null
-							? "no-peek"
-							: `peek:${peekTarget.occurrence?.symbolKey ?? "unresolved"}:${peekTarget.lineNumber}:${peekTarget.charStart}`
-					}:${codeIndex.tokenInteractionsActive ? "code-index-on" : "code-index-off"}`,
+					`${path}:${query.data.content.length}:${codeIndex.tokenInteractionsActive ? "code-index-on" : "code-index-off"}`,
 				),
 			},
 		];
-	}, [
-		path,
-		query.data,
-		codeIndex.peekTarget,
-		codeIndex.tokenInteractionsActive,
-	]);
+	}, [path, query.data, codeIndex.tokenInteractionsActive]);
 
 	const codeViewOptions = useMemo(
 		() => ({
-			...buildDiffCodeViewOptions<CodeIndexPeekAnnotationMetadata>({
+			...buildDiffCodeViewOptions<undefined>({
 				enableLineSelection: true,
 				extraCSS: `
 					:host {
@@ -295,14 +264,6 @@ export function FileView({
 								onSelectedLinesChange={diffSelection.onSelectedLinesChange}
 								options={codeViewOptions}
 								ref={codeViewRef}
-								renderAnnotation={(annotation) => (
-									<CodeIndexPeekPanel
-										onClose={codeIndex.closePeek}
-										orpc={orpc}
-										sessionId={sessionId}
-										target={annotation.metadata.target}
-									/>
-								)}
 								selectedLines={diffSelection.selectedLines}
 							/>
 							<DiffSelectionPopover
@@ -314,8 +275,14 @@ export function FileView({
 							/>
 						</>
 					)}
+					<CodeIndexPeekDialog
+						onClose={codeIndex.closePeek}
+						orpc={orpc}
+						sessionId={sessionId}
+						target={codeIndex.peekTarget}
+					/>
 				</>
 			)}
 		</div>
-	)
+	);
 }
