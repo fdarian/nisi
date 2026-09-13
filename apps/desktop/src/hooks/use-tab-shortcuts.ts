@@ -27,21 +27,28 @@ type TabShortcutsOptions = {
 	onCloseTab: (tabId: string) => void;
 	onCloseOtherTabs: (tabId: string) => void;
 	/**
-	 * Consulted first on ⌘⇧]/⌘⇧[, before tab cycling. Return `true` if
-	 * something else (the chat popup) already handled the chord; return
-	 * `false`, or omit this prop, to fall through to tab cycling. `"next"` is
-	 * ⌘⇧], `"previous"` is ⌘⇧[.
+	 * Consulted first on ⌘⇧]/⌘⇧[, before the full-file and PR tab cycling.
+	 * Return `true` if the chat popup handled the chord; return `false`, or
+	 * omit this prop, to pass it to the next tier. `"next"` is ⌘⇧],
+	 * `"previous"` is ⌘⇧[.
 	 */
 	onChatThreadShortcut?: (direction: "next" | "previous") => boolean;
+	/**
+	 * Consulted after `onChatThreadShortcut` and before PR tab cycling on
+	 * ⌘⇧]/⌘⇧[. Return `true` if the active full-file view handled the chord;
+	 * return `false`, or omit this prop, to fall through to PR tab cycling.
+	 */
+	onFullFileTabShortcut?: (direction: "next" | "previous") => boolean;
 };
 
 /**
  * Every tab keybinding in one place, mounted where the tab state lives
  * (`app-shell.tsx`): ⌘⇧] / ⌘⇧[ to step (wrapping), ⌘1…⌘9 to jump, ⌘W to
  * close, and ⌘⌥W to close every tab but the active one. ⌘⇧]/⌘⇧[ aren't
- * unconditionally tab-cycling, though — `onChatThreadShortcut` gets first
- * refusal, so the same chord steps the chat popup's active thread instead
- * whenever the caller says it owns the combo.
+ * unconditionally tab-cycling, though — the active chat popup gets first
+ * refusal, then the active full-file view, so the same chord steps the
+ * highest-priority open view instead whenever the caller says it owns the
+ * combo.
  *
  * None of this checks whether focus is in a text field, unlike the bare
  * single-key bindings in `use-key-bindings.ts` (`j`/`k`/`/`, etc.) — every
@@ -67,15 +74,23 @@ export function useTabShortcuts({
 	onCloseTab,
 	onCloseOtherTabs,
 	onChatThreadShortcut,
+	onFullFileTabShortcut,
 }: TabShortcutsOptions): void {
 	useEffect(() => {
 		const handleKeyDown = (event: KeyboardEvent) => {
-			// Chat gets first refusal on the bracket chord — see
-			// `onChatThreadShortcut`'s doc comment above.
+			// Chat gets first refusal, followed by the active full-file view — see
+			// the two callback doc comments above.
 			const bracketDirection = resolveBracketDirection(event);
 			if (
 				bracketDirection !== undefined &&
 				onChatThreadShortcut?.(bracketDirection)
+			) {
+				event.preventDefault();
+				return;
+			}
+			if (
+				bracketDirection !== undefined &&
+				onFullFileTabShortcut?.(bracketDirection)
 			) {
 				event.preventDefault();
 				return;
@@ -116,6 +131,7 @@ export function useTabShortcuts({
 		onCloseTab,
 		onCloseOtherTabs,
 		onChatThreadShortcut,
+		onFullFileTabShortcut,
 	]);
 }
 
@@ -132,8 +148,9 @@ function isCloseOtherTabsChord(event: KeyboardEvent): boolean {
 /**
  * ⌘⇧]/⌘⇧['s direction, or `undefined` for any other chord — the single
  * place that decodes those two key codes, called both from `handleKeyDown`
- * (to offer the chord to `onChatThreadShortcut` first) and from
- * `resolveTargetIndex` below (to fall back to tab cycling).
+ * (to offer the chord to `onChatThreadShortcut` and
+ * `onFullFileTabShortcut` first) and from `resolveTargetIndex` below (to
+ * fall back to PR tab cycling).
  */
 function resolveBracketDirection(
 	event: KeyboardEvent,

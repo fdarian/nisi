@@ -109,6 +109,23 @@ export function fileTabPath(tabId: string): string | null {
 	return tabId.startsWith("file:") ? tabId.slice("file:".length) : null;
 }
 
+/** Returns the next active file-viewer tab, or `undefined` when the current view is not an open file tab. */
+export function cycleFileTab(
+	activeTab: string,
+	openFiles: readonly string[],
+	direction: "next" | "previous",
+): string | undefined {
+	const activePath = fileTabPath(activeTab);
+	if (activePath === null) return undefined;
+	const activeIndex = openFiles.indexOf(activePath);
+	if (activeIndex < 0) return undefined;
+	const step = direction === "next" ? 1 : -1;
+	const nextIndex = (activeIndex + step + openFiles.length) % openFiles.length;
+	return openFiles[nextIndex] === undefined
+		? undefined
+		: fileTabId(openFiles[nextIndex]);
+}
+
 type SessionUiStore = {
 	sessions: ReadonlyMap<string, SessionUiState>;
 	setSelectedPath: (sessionId: string, path: string | null) => void;
@@ -124,6 +141,8 @@ type SessionUiStore = {
 	) => void;
 	clearFileCollapseOverride: (sessionId: string, path: string) => void;
 	setActiveTab: (sessionId: string, tab: string) => void;
+	/** Steps the active file-viewer tab to the next/previous open file, wrapping — returns `false` when the session is not focused on an open file-viewer tab. */
+	cycleFileTab: (sessionId: string, direction: "next" | "previous") => boolean;
 	/** Opens `path`'s viewer tab, activating it — idempotent: an already-open path is just activated, not duplicated in `openFiles`. */
 	openFile: (sessionId: string, path: string) => void;
 	/** Closes `path`'s viewer tab. Falls back `activeTab` to `"files"` only when `path`'s tab was the active one — closing a background file tab leaves whatever's currently active alone. */
@@ -242,6 +261,23 @@ function createSessionUiStore(): StoreApi<SessionUiStore> {
 					activeTab: tab,
 				})),
 			})),
+		cycleFileTab: (sessionId, direction) => {
+			const session = get().sessions.get(sessionId);
+			if (session === undefined) return false;
+			const nextTab = cycleFileTab(
+				session.activeTab,
+				session.openFiles,
+				direction,
+			);
+			if (nextTab === undefined) return false;
+			set((state) => ({
+				sessions: withSession(state.sessions, sessionId, (current) => ({
+					...current,
+					activeTab: nextTab,
+				})),
+			}));
+			return true;
+		},
 		openFile: (sessionId, path) =>
 			set((state) => ({
 				sessions: withSession(state.sessions, sessionId, (session) => ({
@@ -532,6 +568,15 @@ export function useSessionActiveTab(
 export function useSetActiveTab(): (sessionId: string, tab: string) => void {
 	const store = useSessionUiStore();
 	return useStore(store, (state) => state.setActiveTab);
+}
+
+/** Unbound file-viewer tab cycling for the app shell's middle shortcut tier — returns `false` when the active session is not focused on an open file tab. */
+export function useCycleFileTab(): (
+	sessionId: string,
+	direction: "next" | "previous",
+) => boolean {
+	const store = useSessionUiStore();
+	return useStore(store, (state) => state.cycleFileTab);
 }
 
 /** Insertion-ordered open file-viewer tabs, plus `openFile`/`closeFile` — see `SessionUiState.openFiles`'s doc comment. */
