@@ -132,17 +132,17 @@ describe("buildReferencesResponse", () => {
 	});
 
 	describe("definitionContext", () => {
-		test("a definition gets a padded context window (3 lines before, 4 after)", () => {
+		test("a definition gets a padded context window (10 lines before, 10 after)", () => {
 			const fileContents = new Map([
 				[
 					"a.ts",
 					encode(
-						"line0\nline1\nline2\nfunction myFunction() {}\nline4\nline5\nline6\nline7\nline8\n",
+						"line0\nline1\nline2\nline3\nline4\nline5\nline6\nline7\nline8\nline9\nfunction myFunction() {}\nline11\nline12\nline13\nline14\nline15\nline16\nline17\nline18\nline19\nline20\nline21\n",
 					),
 				],
 			]);
 			const plan = basePlan({
-				definition: { path: "a.ts", line: 3, charStart: 9, charEnd: 19 },
+				definition: { path: "a.ts", line: 10, charStart: 9, charEnd: 19 },
 			});
 			const response = buildReferencesResponse(plan, fileContents);
 			expect(response.definitionContext).toEqual({
@@ -151,11 +151,24 @@ describe("buildReferencesResponse", () => {
 					"line0",
 					"line1",
 					"line2",
-					"function myFunction() {}",
+					"line3",
 					"line4",
 					"line5",
 					"line6",
 					"line7",
+					"line8",
+					"line9",
+					"function myFunction() {}",
+					"line11",
+					"line12",
+					"line13",
+					"line14",
+					"line15",
+					"line16",
+					"line17",
+					"line18",
+					"line19",
+					"line20",
 				],
 			});
 		});

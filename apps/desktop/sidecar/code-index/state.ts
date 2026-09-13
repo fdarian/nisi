@@ -826,9 +826,9 @@ export const groupReferencesByFile = (
 	}));
 };
 
-/** Lines of context padded around the definition's own line — the peek panel shows roughly 8 lines total (3 before, the target line, 4 after). Mirrors what `code-index-peek-panel.tsx` used to slice client-side before this moved server-side. */
-const DEFINITION_CONTEXT_LINES_BEFORE = 3;
-const DEFINITION_CONTEXT_LINES_AFTER = 4;
+/** Lines of context padded around the definition's own line — enough for the dialog's source preview to show roughly 21 lines total without another worktree read. */
+const DEFINITION_CONTEXT_LINES_BEFORE = 10;
+const DEFINITION_CONTEXT_LINES_AFTER = 10;
 
 /**
  * `definition`'s surrounding source lines from `fileContents` (always
