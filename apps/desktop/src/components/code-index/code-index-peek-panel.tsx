@@ -36,6 +36,7 @@ import type {
 import { useQuery } from "@tanstack/react-query";
 import { AlertTriangleIcon } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
+import { CodeIndexReferenceLine } from "#/components/code-index/code-index-reference-line";
 import type { CodeIndexPeekTarget } from "#/components/code-index/use-code-index-interactions";
 import { useCodeIndexStatus } from "#/components/code-index/use-code-index-status";
 import {
@@ -221,6 +222,7 @@ function CodeIndexPeekContent({
 								</div>
 							) : (
 								<ReferencesTree
+									diffTheme={diffTheme}
 									groupHeaderRefs={groupHeaderRefs}
 									onOpenReference={openReference}
 									result={references}
@@ -472,10 +474,12 @@ function SourcePreview({
 }
 
 function ReferencesTree({
+	diffTheme,
 	groupHeaderRefs,
 	result,
 	onOpenReference,
 }: {
+	diffTheme: DiffTheme;
 	groupHeaderRefs: React.MutableRefObject<Array<HTMLButtonElement | null>>;
 	result: CodeIndexReferencesResult;
 	onOpenReference: (path: string, line: number) => void;
@@ -501,6 +505,7 @@ function ReferencesTree({
 			<div className="flex flex-col">
 				{result.files.map((group, index) => (
 					<FileReferenceGroup
+						diffTheme={diffTheme}
 						group={group}
 						groupIndex={index}
 						headerRef={(element) => {
@@ -516,11 +521,13 @@ function ReferencesTree({
 }
 
 function FileReferenceGroup({
+	diffTheme,
 	group,
 	groupIndex,
 	headerRef,
 	onOpenReference,
 }: {
+	diffTheme: DiffTheme;
 	group: { path: string; references: readonly CodeIndexReference[] };
 	groupIndex: number;
 	headerRef: React.Ref<HTMLButtonElement>;
@@ -560,15 +567,11 @@ function FileReferenceGroup({
 								<span className="select-none text-right text-muted-foreground tabular-nums">
 									{reference.line + 1}
 								</span>
-								<span className="min-w-0 truncate whitespace-pre font-mono text-[0.6875rem]">
-									{reference.lineText === null ? (
-										<span className="italic">
-											preview unavailable — couldn't read this file
-										</span>
-									) : (
-										reference.lineText.trim()
-									)}
-								</span>
+								<CodeIndexReferenceLine
+									diffTheme={diffTheme}
+									path={group.path}
+									reference={reference}
+								/>
 							</button>
 						))}
 					</div>
