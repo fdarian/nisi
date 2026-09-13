@@ -259,7 +259,7 @@ export function DiffCodeView<Metadata>({
 			poolOptions={workerPoolOptions}
 		>
 			<WorkerPoolOptionsSync
-				useTokenTransformer={highlighterOptions.useTokenTransformer}
+				useTokenTransformer={highlighterOptions.useTokenTransformer ?? false}
 			/>
 			<CodeView
 				className={className}

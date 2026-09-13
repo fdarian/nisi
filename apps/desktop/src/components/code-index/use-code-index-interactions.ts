@@ -142,7 +142,7 @@ type UseCodeIndexInteractionsOptions<Metadata> = {
 	sessionId: string;
 	orpc: SidecarQueryUtils;
 	/** The `CodeView` this hook drives — read only for `getInstance().getRenderedItems()`, to resolve which file a token event belongs to. */
-	codeViewRef: React.RefObject<CodeViewHandle<Metadata> | null>;
+	codeViewRef: React.RefObject<CodeViewHandle<Metadata, undefined> | null>;
 	/** From `useSessionCodeIndexEnabled` — the whole feature's real on/off switch. See this module's own doc comment for exactly what turns off. */
 	enabled: boolean;
 };
@@ -155,7 +155,7 @@ export function useCodeIndexInteractions<Metadata>({
 }: UseCodeIndexInteractionsOptions<Metadata>): {
 	/** Spread into the pane's own `CodeViewOptions` — `{}` while `enabled` is false. */
 	codeViewOptions: Pick<
-		CodeViewOptions<Metadata>,
+		CodeViewOptions<Metadata, undefined>,
 		"onTokenEnter" | "onTokenLeave" | "onTokenClick" | "useTokenTransformer"
 	>;
 	/** Appended to `unsafeCSS`/`extraCSS` — see `CODE_INDEX_TOKEN_CSS`. Empty while `enabled` is false. */
@@ -439,7 +439,7 @@ export function useCodeIndexInteractions<Metadata>({
 
 	const codeViewOptions = useMemo(():
 		| Pick<
-				CodeViewOptions<Metadata>,
+				CodeViewOptions<Metadata, undefined>,
 				"onTokenEnter" | "onTokenLeave" | "onTokenClick" | "useTokenTransformer"
 		  >
 		| typeof DISABLED_CODE_VIEW_OPTIONS => {
@@ -473,7 +473,7 @@ export function useCodeIndexInteractions<Metadata>({
 			onTokenLeave: handleTokenLeave,
 			onTokenClick: handleTokenClick,
 		} as Pick<
-			CodeViewOptions<Metadata>,
+			CodeViewOptions<Metadata, undefined>,
 			"onTokenEnter" | "onTokenLeave" | "onTokenClick" | "useTokenTransformer"
 		>;
 	}, [active, handleTokenEnter, handleTokenLeave, handleTokenClick]);
