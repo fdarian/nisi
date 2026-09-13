@@ -40,6 +40,7 @@ import { useSessions } from "#/lib/pr-data";
 import {
 	SessionUiProvider,
 	useClearSessionUiState,
+	useCycleFileTab,
 	useSetActiveTab,
 } from "#/lib/session-ui-store";
 import { cn } from "#/lib/utils";
@@ -258,6 +259,7 @@ function AppShellReady({
 	const activeChatPopupOpen = useChatPopupOpen(activeSessionId);
 	const activeChatPopupMinimized = useChatPopupMinimized(activeSessionId);
 	const cycleActiveThread = useCycleActiveThread();
+	const cycleFileTab = useCycleFileTab();
 	const handleChatThreadShortcut = useCallback(
 		(direction: "next" | "previous"): boolean => {
 			if (activeSessionId === null) return false;
@@ -272,10 +274,18 @@ function AppShellReady({
 			cycleActiveThread,
 		],
 	);
+	const handleFullFileTabShortcut = useCallback(
+		(direction: "next" | "previous"): boolean => {
+			if (activeSessionId === null) return false;
+			return cycleFileTab(activeSessionId, direction);
+		},
+		[activeSessionId, cycleFileTab],
+	);
 	useTabShortcuts({
 		activeTabId: activeSessionId,
 		onActivateTab: setRequestedActiveSessionId,
 		onChatThreadShortcut: handleChatThreadShortcut,
+		onFullFileTabShortcut: handleFullFileTabShortcut,
 		onCloseOtherTabs: handleCloseOtherSessions,
 		onCloseTab: handleCloseSession,
 		tabIds: sessionIds,
