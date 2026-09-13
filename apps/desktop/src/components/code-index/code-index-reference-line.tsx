@@ -105,26 +105,23 @@ function tokenStyle(token: ThemedToken): CSSProperties {
 	};
 }
 
-function HighlightedReferenceTokens({
-	tokens,
-	occurrence,
-}: {
+function HighlightedReferenceTokens(props: {
 	tokens: readonly ThemedToken[];
 	occurrence: { end: number; start: number } | undefined;
 }): ReactElement {
 	return (
 		<>
-			{tokens.map((token) => {
+			{props.tokens.map((token) => {
 				const tokenStart = token.offset;
 				const tokenEnd = token.offset + token.content.length;
 				const overlapStart =
-					occurrence === undefined
+					props.occurrence === undefined
 						? tokenStart
-						: Math.max(tokenStart, occurrence.start);
+						: Math.max(tokenStart, props.occurrence.start);
 				const overlapEnd =
-					occurrence === undefined
+					props.occurrence === undefined
 						? tokenStart
-						: Math.min(tokenEnd, occurrence.end);
+						: Math.min(tokenEnd, props.occurrence.end);
 				const hasOccurrence = overlapStart < overlapEnd;
 
 				return (
