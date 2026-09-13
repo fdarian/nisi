@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * The VS Code-style "peek references" dialog. Left: ~8 lines of source
+ * The VS Code-style "peek references" dialog. Left: ~21 lines of source
  * context around the *definition* — `codeIndex.references`' own
  * `definitionContext`, not a separate `file.get` fetch. Right: a collapsible
  * tree of files, each listing its referencing lines —
@@ -27,6 +27,7 @@
  * left preview in place — the left pane always shows the definition, never a
  * per-row-selectable preview.
  */
+import type { CodeViewItem } from "@pierre/diffs";
 import type {
 	CodeIndexReference,
 	CodeIndexReferencesResult,
@@ -34,9 +35,19 @@ import type {
 } from "@repo/sidecar-api";
 import { useQuery } from "@tanstack/react-query";
 import { AlertTriangleIcon } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import type { CodeIndexPeekTarget } from "#/components/code-index/use-code-index-interactions";
 import { useCodeIndexStatus } from "#/components/code-index/use-code-index-status";
+import {
+	buildDiffCodeViewOptions,
+	DiffCodeView,
+} from "#/components/diff-pane/diff-code-view";
+import {
+	type DiffTheme,
+	diffCodeViewLayout,
+	diffItemMetrics,
+	useDiffTheme,
+} from "#/components/diff-pane/diff-view-theme";
 import { Badge } from "#/components/ui/badge";
 import { Button } from "#/components/ui/button";
 import {
@@ -48,9 +59,9 @@ import { Dialog, DialogContent, DialogTitle } from "#/components/ui/dialog";
 import { ScrollArea } from "#/components/ui/scroll-area";
 import { Spinner } from "#/components/ui/spinner";
 import type { SidecarQueryUtils } from "#/lib/backend-context";
+import { hashItemVersion } from "#/lib/item-version";
 import { useSessionOpenFiles } from "#/lib/session-ui-store";
 import { splitPath } from "#/lib/tree-paths";
-import { cn } from "#/lib/utils";
 
 type CodeIndexPeekDialogProps = {
 	sessionId: string;
@@ -62,6 +73,55 @@ type CodeIndexPeekDialogProps = {
 export function CodeIndexPeekDialog(
 	props: CodeIndexPeekDialogProps,
 ): React.ReactElement | null {
+	const groupHeaderRefs = useRef<Array<HTMLButtonElement | null>>([]);
+
+	/** Mirrors the pull-request palette's Ctrl+N/P arrow mapping: clamp at the first/last item. Only group headers participate, so reference rows never become keyboard-navigation targets. */
+	const handleGroupNavigation = (event: React.KeyboardEvent) => {
+		if (!event.ctrlKey || event.metaKey || event.altKey || event.shiftKey) {
+			return;
+		}
+		const key = event.key.toLowerCase();
+		if (key !== "n" && key !== "p") return;
+
+		const direction = key === "n" ? 1 : -1;
+		const headers = groupHeaderRefs.current;
+		if (headers.length === 0) return;
+
+		const activeElement = document.activeElement;
+		const activeGroup =
+			activeElement instanceof HTMLElement
+				? activeElement.closest("[data-code-index-group]")
+				: null;
+		const activeGroupValue = activeGroup?.getAttribute("data-code-index-group");
+		const activeGroupIndex =
+			activeGroupValue === null || activeGroupValue === undefined
+				? undefined
+				: Number(activeGroupValue);
+		const hasActiveGroup =
+			activeGroupIndex !== undefined &&
+			Number.isInteger(activeGroupIndex) &&
+			activeGroupIndex >= 0 &&
+			activeGroupIndex < headers.length;
+		const firstIndex = hasActiveGroup
+			? activeGroupIndex + direction
+			: direction > 0
+				? 0
+				: headers.length - 1;
+
+		event.preventDefault();
+		for (
+			let index = firstIndex;
+			index >= 0 && index < headers.length;
+			index += direction
+		) {
+			const header = headers[index];
+			if (header !== null && header !== undefined) {
+				header.focus();
+				return;
+			}
+		}
+	};
+
 	if (props.target === null) return null;
 	return (
 		<Dialog
@@ -70,7 +130,11 @@ export function CodeIndexPeekDialog(
 			}}
 			open
 		>
-			<DialogContent className="max-w-5xl p-0" showCloseButton={false}>
+			<DialogContent
+				className="max-w-6xl p-0"
+				onKeyDown={handleGroupNavigation}
+				showCloseButton={false}
+			>
 				<DialogTitle className="sr-only">
 					Code references for {props.target.path}
 				</DialogTitle>
@@ -79,6 +143,7 @@ export function CodeIndexPeekDialog(
 					orpc={props.orpc}
 					sessionId={props.sessionId}
 					target={props.target}
+					groupHeaderRefs={groupHeaderRefs}
 				/>
 			</DialogContent>
 		</Dialog>
@@ -90,6 +155,7 @@ type CodeIndexPeekContentProps = {
 	orpc: SidecarQueryUtils;
 	target: CodeIndexPeekTarget;
 	onClose: () => void;
+	groupHeaderRefs: React.MutableRefObject<Array<HTMLButtonElement | null>>;
 };
 
 function CodeIndexPeekContent({
@@ -97,9 +163,11 @@ function CodeIndexPeekContent({
 	orpc,
 	target,
 	onClose,
+	groupHeaderRefs,
 }: CodeIndexPeekContentProps): React.ReactElement {
 	const { openFile } = useSessionOpenFiles(sessionId);
 	const indexStatus = useCodeIndexStatus(orpc, sessionId);
+	const diffTheme = useDiffTheme(orpc);
 
 	// `target.occurrence` is `undefined` when the peek was opened via
 	// `handleTokenClick`'s not-ready fallback (no index to resolve a symbol
@@ -119,23 +187,24 @@ function CodeIndexPeekContent({
 	};
 
 	return (
-		<div className="flex min-h-0 max-h-[80vh] flex-col overflow-hidden rounded-xl bg-card text-xs shadow-sm">
+		<div className="flex min-h-0 max-h-[85vh] flex-col overflow-hidden rounded-xl bg-card text-xs shadow-sm">
 			<IndexStatusBanner
 				isBuildStarting={indexStatus.isBuildStarting}
 				onBuild={indexStatus.build}
 				status={indexStatus.status}
 			/>
 
-			<div className="flex min-h-0 flex-1">
-				<div className="min-w-0 flex-1 overflow-auto">
+			<div className="flex min-h-0">
+				<div className="min-w-0 flex-1">
 					<SourcePreview
+						diffTheme={diffTheme}
 						hasOccurrence={target.occurrence !== undefined}
 						isLoading={referencesQuery.isLoading}
 						references={references}
 					/>
 				</div>
-				<div className="w-80 shrink-0">
-					<ScrollArea className="max-h-72">
+				<div className="relative min-h-0 w-96 shrink-0 border-l">
+					<ScrollArea className="absolute inset-0">
 						<div>
 							{target.occurrence === undefined ? (
 								<div className="px-1 py-6 text-center text-muted-foreground">
@@ -152,6 +221,7 @@ function CodeIndexPeekContent({
 								</div>
 							) : (
 								<ReferencesTree
+									groupHeaderRefs={groupHeaderRefs}
 									onOpenReference={openReference}
 									result={references}
 								/>
@@ -247,16 +317,108 @@ function StatusBannerRow({
  * component never has a "wrong text, unverified" state to guard against,
  * only "no reliable preview" (`definitionContext: null`).
  */
+const SOURCE_PREVIEW_BASE_CSS = `
+	:host {
+		--diffs-light-bg: transparent;
+		--diffs-dark-bg: transparent;
+	}
+`;
+
+function buildSourcePreviewCSS(targetLine: number | undefined): string {
+	if (targetLine === undefined) return SOURCE_PREVIEW_BASE_CSS;
+	return `${SOURCE_PREVIEW_BASE_CSS}
+	[data-line="${targetLine}"],
+	[data-column-number="${targetLine}"] {
+		background-color: color-mix(in lab, var(--diffs-bg) 92%, var(--diffs-modified-base));
+	}
+`;
+}
+
+function updateSourcePreviewLineNumbers(
+	node: HTMLElement,
+	startLine: number,
+): void {
+	const shadowRoot = node.shadowRoot;
+	if (shadowRoot === null) return;
+
+	for (const column of shadowRoot.querySelectorAll<HTMLElement>(
+		"[data-column-number]",
+	)) {
+		const value = column.getAttribute("data-column-number");
+		if (value === null) continue;
+		const lineNumber = Number(value);
+		if (!Number.isInteger(lineNumber)) continue;
+		const content = column.querySelector("[data-line-number-content]");
+		if (!(content instanceof HTMLElement)) continue;
+		content.textContent = String(lineNumber + startLine);
+	}
+}
+
 function SourcePreview({
+	diffTheme,
 	hasOccurrence,
 	isLoading,
 	references,
 }: {
+	diffTheme: DiffTheme;
 	/** `target.occurrence !== undefined` — `false` means the index wasn't ready at all when this peek was opened, so there's no `symbolKey` to have asked `codeIndex.references` about in the first place. */
 	hasOccurrence: boolean;
 	isLoading: boolean;
 	references: CodeIndexReferencesResult | undefined;
 }): React.ReactElement {
+	const sourcePreview = useMemo(() => {
+		if (
+			references === undefined ||
+			references.definition === null ||
+			references.definitionContext === null
+		) {
+			return undefined;
+		}
+		return {
+			context: references.definitionContext,
+			definition: references.definition,
+			targetLine:
+				references.definition.line - references.definitionContext.startLine + 1,
+		};
+	}, [references]);
+	const sourceItem = useMemo<CodeViewItem<undefined> | undefined>(() => {
+		if (sourcePreview === undefined) return undefined;
+		const id = `code-index-definition:${sourcePreview.definition.path}:${sourcePreview.context.startLine}`;
+		const contents = sourcePreview.context.lines.join("\n");
+		const version = hashItemVersion(`${id}:${contents}`);
+		return {
+			file: {
+				cacheKey: `${id}:${version}`,
+				contents,
+				name: sourcePreview.definition.path,
+			},
+			id,
+			type: "file",
+			version,
+		};
+	}, [sourcePreview]);
+	const sourceOptions = useMemo(
+		() => ({
+			...buildDiffCodeViewOptions<undefined>({
+				extraCSS: buildSourcePreviewCSS(sourcePreview?.targetLine),
+				onPostRender: (node, _instance, phase) => {
+					if (phase !== "unmount" && sourcePreview !== undefined) {
+						updateSourcePreviewLineNumbers(
+							node,
+							sourcePreview.context.startLine,
+						);
+					}
+				},
+				theme: diffTheme.theme,
+			}),
+			disableFileHeader: true,
+			disableVirtualizationBuffers: true,
+			itemMetrics: { ...diffItemMetrics, paddingBottom: 0 },
+			layout: { ...diffCodeViewLayout, paddingBottom: 0 },
+		}),
+		[diffTheme.theme, sourcePreview],
+	);
+
 	if (!hasOccurrence) {
 		return (
 			<div className="py-4 text-center text-muted-foreground">
@@ -291,50 +453,30 @@ function SourcePreview({
 			</div>
 		);
 	}
-
-	const definition = references.definition;
-	const context = references.definitionContext;
+	if (sourceItem === undefined) {
+		return (
+			<div className="py-4 text-center text-muted-foreground italic">
+				Preview unavailable — couldn't read this file.
+			</div>
+		);
+	}
 
 	return (
-		<pre className="overflow-x-auto font-mono leading-5 bg-background px-2">
-			{context.lines.map((text, offset) => {
-				const lineIndex = context.startLine + offset;
-				const isTargetLine = lineIndex === definition.line;
-				return (
-					<div
-						className={cn(
-							"flex gap-3 px-1",
-							isTargetLine && "rounded bg-primary/8",
-						)}
-						key={lineIndex}
-					>
-						<span className="w-8 shrink-0 select-none text-right text-muted-foreground tabular-nums">
-							{lineIndex + 1}
-						</span>
-						<span className="whitespace-pre">
-							{isTargetLine ? (
-								<>
-									{text.slice(0, definition.charStart)}
-									<mark className="rounded-[3px] bg-primary/25 text-inherit">
-										{text.slice(definition.charStart, definition.charEnd)}
-									</mark>
-									{text.slice(definition.charEnd)}
-								</>
-							) : (
-								text
-							)}
-						</span>
-					</div>
-				);
-			})}
-		</pre>
+		<DiffCodeView
+			className="min-h-0 max-h-[72vh] w-full overflow-auto overscroll-contain"
+			highlighterOptions={diffTheme.highlighterOptions}
+			items={[sourceItem]}
+			options={sourceOptions}
+		/>
 	);
 }
 
 function ReferencesTree({
+	groupHeaderRefs,
 	result,
 	onOpenReference,
 }: {
+	groupHeaderRefs: React.MutableRefObject<Array<HTMLButtonElement | null>>;
 	result: CodeIndexReferencesResult;
 	onOpenReference: (path: string, line: number) => void;
 }): React.ReactElement {
@@ -357,9 +499,13 @@ function ReferencesTree({
 		<div className="flex flex-col px-1 py-2 gap-2">
 			<div className="px-1 font-medium text-muted-foreground">{countLabel}</div>
 			<div className="flex flex-col">
-				{result.files.map((group) => (
+				{result.files.map((group, index) => (
 					<FileReferenceGroup
 						group={group}
+						groupIndex={index}
+						headerRef={(element) => {
+							groupHeaderRefs.current[index] = element;
+						}}
 						key={group.path}
 						onOpenReference={onOpenReference}
 					/>
@@ -371,54 +517,63 @@ function ReferencesTree({
 
 function FileReferenceGroup({
 	group,
+	groupIndex,
+	headerRef,
 	onOpenReference,
 }: {
 	group: { path: string; references: readonly CodeIndexReference[] };
+	groupIndex: number;
+	headerRef: React.Ref<HTMLButtonElement>;
 	onOpenReference: (path: string, line: number) => void;
 }): React.ReactElement {
 	const [open, setOpen] = useState(true);
 	const { dirname, basename } = splitPath(group.path);
 
 	return (
-		<Collapsible onOpenChange={setOpen} open={open}>
-			<CollapsibleTrigger className="flex w-full min-w-0 items-center gap-1.5 px-2 py-1 text-left hover:bg-accent rounded">
-				<span className="min-w-0 flex-1 truncate">
-					<span className="font-medium text-foreground">{basename}</span>
-					{dirname && (
-						<span className="ml-1.5 truncate text-muted-foreground">
-							{dirname}
-						</span>
-					)}
-				</span>
-				<Badge size="sm" variant="secondary">
-					{group.references.length}
-				</Badge>
-			</CollapsibleTrigger>
-			<CollapsiblePanel className="gap-1.5 h-(--collapsible-panel-height) data-ending-style:h-0 data-starting-style:h-0">
-				<div className="p-1 grid grid-cols-[max-content_1fr] gap-0.5">
-					{group.references.map((reference) => (
-						<button
-							className="px-1 col-span-full grid grid-cols-subgrid min-w-0 items-baseline gap-2 rounded py-0.5 text-left hover:bg-accent"
-							key={`${reference.line}:${reference.charStart}`}
-							onClick={() => onOpenReference(group.path, reference.line)}
-							type="button"
-						>
-							<span className="select-none text-right text-muted-foreground tabular-nums">
-								{reference.line + 1}
+		<div data-code-index-group={groupIndex}>
+			<Collapsible onOpenChange={setOpen} open={open}>
+				<CollapsibleTrigger
+					className="flex w-full min-w-0 items-center gap-1.5 rounded px-2 py-1 text-left hover:bg-accent"
+					ref={headerRef}
+				>
+					<span className="min-w-0 flex-1 truncate">
+						<span className="font-medium text-foreground">{basename}</span>
+						{dirname && (
+							<span className="ml-1.5 truncate text-muted-foreground">
+								{dirname}
 							</span>
-							<span className="min-w-0 truncate whitespace-pre font-mono text-[0.6875rem]">
-								{reference.lineText === null ? (
-									<span className="italic">
-										preview unavailable — couldn't read this file
-									</span>
-								) : (
-									reference.lineText.trim()
-								)}
-							</span>
-						</button>
-					))}
-				</div>
-			</CollapsiblePanel>
-		</Collapsible>
+						)}
+					</span>
+					<Badge size="sm" variant="secondary">
+						{group.references.length}
+					</Badge>
+				</CollapsibleTrigger>
+				<CollapsiblePanel className="gap-1.5 h-(--collapsible-panel-height) data-ending-style:h-0 data-starting-style:h-0">
+					<div className="p-1 grid grid-cols-[max-content_1fr] gap-0.5">
+						{group.references.map((reference) => (
+							<button
+								className="px-1 col-span-full grid grid-cols-subgrid min-w-0 items-baseline gap-2 rounded py-0.5 text-left hover:bg-accent"
+								key={`${reference.line}:${reference.charStart}`}
+								onClick={() => onOpenReference(group.path, reference.line)}
+								type="button"
+							>
+								<span className="select-none text-right text-muted-foreground tabular-nums">
+									{reference.line + 1}
+								</span>
+								<span className="min-w-0 truncate whitespace-pre font-mono text-[0.6875rem]">
+									{reference.lineText === null ? (
+										<span className="italic">
+											preview unavailable — couldn't read this file
+										</span>
+									) : (
+										reference.lineText.trim()
+									)}
+								</span>
+							</button>
+						))}
+					</div>
+				</CollapsiblePanel>
+			</Collapsible>
+		</div>
 	);
 }
