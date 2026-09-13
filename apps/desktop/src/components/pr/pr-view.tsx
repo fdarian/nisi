@@ -25,6 +25,7 @@ import {
 import { WalkthroughView } from "#/components/walkthrough/walkthrough-view";
 import type { KeyBindings } from "#/hooks/use-key-bindings";
 import { useKeyBindings } from "#/hooks/use-key-bindings";
+import { useNavigationShortcuts } from "#/hooks/use-navigation-shortcuts";
 import { useWindowFocused } from "#/hooks/use-window-focused";
 import type { SidecarQueryUtils } from "#/lib/backend-context";
 import type { Session } from "#/lib/pr-data";
@@ -100,6 +101,16 @@ export function PrView({
 	// The dynamic file-viewer tabs (`file-view.tsx`) rendered after the static
 	// ones in `PrViewTabStrip` — see `SessionUiState.openFiles`'s doc comment.
 	const { openFiles, openFile, closeFile } = useSessionOpenFiles(session.id);
+	const filePaths = useMemo(
+		() => new Set(files.map((file) => file.path)),
+		[files],
+	);
+	useNavigationShortcuts({
+		enabled: isSelectedTab,
+		filePaths,
+		openFiles,
+		sessionId: session.id,
+	});
 
 	// Gates the sidecar's 2s worktree poller (`live-poll.ts`) to exactly the
 	// sessions someone could actually see a result from — window focused,
