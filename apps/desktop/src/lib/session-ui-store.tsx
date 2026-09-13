@@ -28,12 +28,14 @@ import {
 import { createStore, type StoreApi, useStore } from "zustand";
 import type { SearchMode } from "#/components/files-sidebar/files-sidebar";
 import {
-	EMPTY_FILE_HISTORY,
-	type FileHistoryState,
-	pushFileHistory,
-	replaceFileHistoryAtCursor,
-	stepFileHistory,
-} from "#/lib/file-history";
+	EMPTY_NAVIGATION_HISTORY,
+	type NavigationEntry,
+	type NavigationHistoryState,
+	pruneNavigationHistory,
+	pushNavigationHistory,
+	replaceNavigationHistoryAtCursor,
+	stepNavigationHistory,
+} from "#/lib/navigation-history";
 import type { WalkthroughSelection } from "#/lib/walkthrough-data";
 
 /** One `r` keypress's undo record — mirrors `files-changed-view.tsx`'s local type of the same name. */
@@ -61,8 +63,8 @@ type SessionUiState = {
 	 */
 	openFiles: readonly string[];
 	walkthroughSelection: WalkthroughSelection | null;
-	/** Browser-style back/forward history (⌘[/⌘]) over `selectedPath` — see `#/lib/file-history.ts` for the transition semantics. Always a fresh, immutable value from that module's pure functions, never mutated in place. */
-	fileHistory: FileHistoryState;
+	/** Browser-style back/forward history (⌘[/⌘]) for this PR session — see `#/lib/navigation-history.ts` for transition semantics. Always a fresh, immutable value from that module's pure functions, never mutated in place. */
+	navigationHistory: NavigationHistoryState;
 	/**
 	 * The `r`/`u` undo stack. A plain mutable array, not reactive state —
 	 * nothing renders off it, the same reasoning `files-changed-view.tsx`'s
@@ -89,7 +91,7 @@ function createDefaultSessionUiState(): SessionUiState {
 		openFiles: EMPTY_OPEN_FILES,
 		walkthroughSelection: null,
 		undoStack: [],
-		fileHistory: EMPTY_FILE_HISTORY,
+		navigationHistory: EMPTY_NAVIGATION_HISTORY,
 	};
 }
 
@@ -134,16 +136,21 @@ type SessionUiStore = {
 	) => void;
 	pushUndo: (sessionId: string, record: ReviewedToggleRecord) => void;
 	popUndo: (sessionId: string) => ReviewedToggleRecord | undefined;
-	/** Explicit-selection push (see `pushFileHistory`) — the site for any deliberate jump: sidebar click, `j`/`k`, undo landing on a file. */
-	pushHistoryPath: (sessionId: string, path: string) => void;
-	/** Scroll-drift replace (see `replaceFileHistoryAtCursor`) — overwrites the entry at the cursor, never truncates. */
-	replaceHistoryPathAtCursor: (sessionId: string, path: string) => void;
-	/** Moves the history cursor one step (see `stepFileHistory`), skipping stale paths. Returns the path landed on, or `undefined` for a no-op. */
-	stepHistoryPath: (
+	/** Records a deliberate view transition, truncating any forward entries. */
+	pushNavigationEntry: (sessionId: string, entry: NavigationEntry) => void;
+	/** Replaces the current entry for scroll drift without truncating forward entries. */
+	replaceNavigationEntryAtCursor: (
+		sessionId: string,
+		entry: NavigationEntry,
+	) => void;
+	/** Moves the history cursor and prunes invalid entries. Returns the entry landed on, or `undefined` at a boundary. */
+	stepNavigationEntry: (
 		sessionId: string,
 		direction: 1 | -1,
-		isValidPath: (path: string) => boolean,
-	) => string | undefined;
+		isValidEntry: (entry: NavigationEntry) => boolean,
+	) => NavigationEntry | undefined;
+	/** Applies a replayed entry without recording another history transition. */
+	applyNavigationEntry: (sessionId: string, entry: NavigationEntry) => void;
 	/** Drops a closed tab's state entirely — call once a session actually closes (`useClearSessionUiState`), or the map grows for the app's whole lifetime. */
 	clearSession: (sessionId: string) => void;
 };
@@ -237,32 +244,67 @@ function createSessionUiStore(): StoreApi<SessionUiStore> {
 			})),
 		setActiveTab: (sessionId, tab) =>
 			set((state) => ({
-				sessions: withSession(state.sessions, sessionId, (session) => ({
-					...session,
-					activeTab: tab,
-				})),
+				sessions: withSession(state.sessions, sessionId, (session) => {
+					if (session.activeTab === tab) return session;
+					return {
+						...session,
+						activeTab: tab,
+						navigationHistory: pushNavigationHistory(
+							session.navigationHistory,
+							{
+								activeTab: tab,
+								selectedPath: session.selectedPath,
+							},
+						),
+					};
+				}),
 			})),
 		openFile: (sessionId, path) =>
 			set((state) => ({
-				sessions: withSession(state.sessions, sessionId, (session) => ({
-					...session,
-					openFiles: session.openFiles.includes(path)
-						? session.openFiles
-						: [...session.openFiles, path],
-					activeTab: fileTabId(path),
-				})),
+				sessions: withSession(state.sessions, sessionId, (session) => {
+					const tab = fileTabId(path);
+					if (session.activeTab === tab) return session;
+					return {
+						...session,
+						openFiles: session.openFiles.includes(path)
+							? session.openFiles
+							: [...session.openFiles, path],
+						activeTab: tab,
+						navigationHistory: pushNavigationHistory(
+							session.navigationHistory,
+							{ activeTab: tab, selectedPath: session.selectedPath },
+						),
+					};
+				}),
 			})),
 		closeFile: (sessionId, path) =>
 			set((state) => ({
 				sessions: withSession(state.sessions, sessionId, (session) => {
 					if (!session.openFiles.includes(path)) return session;
-					const wasActive = session.activeTab === fileTabId(path);
-					return {
+					const closedTab = fileTabId(path);
+					const wasActive = session.activeTab === closedTab;
+					const navigationHistory = pruneNavigationHistory(
+						session.navigationHistory,
+						(entry) => entry.activeTab !== closedTab,
+					);
+					const next = {
 						...session,
 						openFiles: session.openFiles.filter(
 							(openPath) => openPath !== path,
 						),
 						activeTab: wasActive ? "files" : session.activeTab,
+						navigationHistory,
+					};
+					if (!wasActive) return next;
+					return {
+						...next,
+						navigationHistory: replaceNavigationHistoryAtCursor(
+							navigationHistory,
+							{
+								activeTab: "files",
+								selectedPath: session.selectedPath,
+							},
+						),
 					};
 				}),
 			})),
@@ -288,37 +330,64 @@ function createSessionUiStore(): StoreApi<SessionUiStore> {
 			});
 		},
 		popUndo: (sessionId) => get().sessions.get(sessionId)?.undoStack.pop(),
-		pushHistoryPath: (sessionId, path) =>
+		pushNavigationEntry: (sessionId, entry) =>
 			set((state) => ({
 				sessions: withSession(state.sessions, sessionId, (session) => ({
 					...session,
-					fileHistory: pushFileHistory(session.fileHistory, path),
+					navigationHistory: pushNavigationHistory(
+						session.navigationHistory,
+						entry,
+					),
 				})),
 			})),
-		replaceHistoryPathAtCursor: (sessionId, path) =>
+		replaceNavigationEntryAtCursor: (sessionId, entry) =>
 			set((state) => ({
 				sessions: withSession(state.sessions, sessionId, (session) => ({
 					...session,
-					fileHistory: replaceFileHistoryAtCursor(session.fileHistory, path),
+					navigationHistory: replaceNavigationHistoryAtCursor(
+						session.navigationHistory,
+						entry,
+					),
 				})),
 			})),
-		stepHistoryPath: (sessionId, direction, isValidPath) => {
+		stepNavigationEntry: (sessionId, direction, isValidEntry) => {
 			const session = get().sessions.get(sessionId);
 			if (session === undefined) return undefined;
-			const result = stepFileHistory(
-				session.fileHistory,
+			const result = stepNavigationHistory(
+				session.navigationHistory,
 				direction,
-				isValidPath,
+				isValidEntry,
 			);
-			if (result === undefined) return undefined;
-			set((state) => ({
-				sessions: withSession(state.sessions, sessionId, (s) => ({
-					...s,
-					fileHistory: result.state,
-				})),
-			}));
-			return result.path;
+			if (result.state !== session.navigationHistory) {
+				set((state) => ({
+					sessions: withSession(state.sessions, sessionId, (s) => ({
+						...s,
+						navigationHistory: result.state,
+					})),
+				}));
+			}
+			return result.entry;
 		},
+		applyNavigationEntry: (sessionId, entry) =>
+			set((state) => ({
+				sessions: withSession(state.sessions, sessionId, (session) => {
+					const filePath = fileTabPath(entry.activeTab);
+					if (filePath !== null && !session.openFiles.includes(filePath)) {
+						return session;
+					}
+					if (
+						session.activeTab === entry.activeTab &&
+						session.selectedPath === entry.selectedPath
+					) {
+						return session;
+					}
+					return {
+						...session,
+						activeTab: entry.activeTab,
+						selectedPath: entry.selectedPath,
+					};
+				}),
+			})),
 		clearSession: (sessionId) =>
 			set((state) => {
 				if (!state.sessions.has(sessionId)) return state;
@@ -603,37 +672,51 @@ export function useSessionUndoStack(sessionId: string): {
 }
 
 /**
- * ⌘[/⌘] back/forward history over `selectedPath` — imperative, non-reactive
- * (mirrors `useSessionUndoStack` above), since nothing renders off the
- * history stack itself; only its effects (`selectedPath` changing) do.
- * `back`/`forward` take `isValidPath` so the caller decides what "stale"
- * means (see `stepFileHistory`) without this hook depending on the current
- * file list.
+ * Per-session ⌘[/⌘] navigation history. The stack is imperative because no
+ * component renders the cursor itself; replay applies the selected sub-tab
+ * and Files Changed path without recording another entry.
  */
-export function useSessionFileHistory(sessionId: string): {
-	push: (path: string) => void;
-	replaceAtCursor: (path: string) => void;
-	back: (isValidPath: (path: string) => boolean) => string | undefined;
-	forward: (isValidPath: (path: string) => boolean) => string | undefined;
+export function useSessionNavigationHistory(sessionId: string): {
+	push: (entry: NavigationEntry) => void;
+	replaceAtCursor: (entry: NavigationEntry) => void;
+	back: (
+		isValidEntry: (entry: NavigationEntry) => boolean,
+	) => NavigationEntry | undefined;
+	forward: (
+		isValidEntry: (entry: NavigationEntry) => boolean,
+	) => NavigationEntry | undefined;
 } {
 	const store = useSessionUiStore();
 	const push = useCallback(
-		(path: string) => store.getState().pushHistoryPath(sessionId, path),
+		(entry: NavigationEntry) =>
+			store.getState().pushNavigationEntry(sessionId, entry),
 		[store, sessionId],
 	);
 	const replaceAtCursor = useCallback(
-		(path: string) =>
-			store.getState().replaceHistoryPathAtCursor(sessionId, path),
+		(entry: NavigationEntry) =>
+			store.getState().replaceNavigationEntryAtCursor(sessionId, entry),
 		[store, sessionId],
 	);
 	const back = useCallback(
-		(isValidPath: (path: string) => boolean) =>
-			store.getState().stepHistoryPath(sessionId, -1, isValidPath),
+		(isValidEntry: (entry: NavigationEntry) => boolean) => {
+			const entry = store
+				.getState()
+				.stepNavigationEntry(sessionId, -1, isValidEntry);
+			if (entry === undefined) return undefined;
+			store.getState().applyNavigationEntry(sessionId, entry);
+			return entry;
+		},
 		[store, sessionId],
 	);
 	const forward = useCallback(
-		(isValidPath: (path: string) => boolean) =>
-			store.getState().stepHistoryPath(sessionId, 1, isValidPath),
+		(isValidEntry: (entry: NavigationEntry) => boolean) => {
+			const entry = store
+				.getState()
+				.stepNavigationEntry(sessionId, 1, isValidEntry);
+			if (entry === undefined) return undefined;
+			store.getState().applyNavigationEntry(sessionId, entry);
+			return entry;
+		},
 		[store, sessionId],
 	);
 	return useMemo(
