@@ -113,13 +113,13 @@ describe("spawnLspServer against the real repo", () => {
 	const storeTs = join(settingsRoot, "src", "store.ts");
 
 	test("references on SettingsStore's declaration finds exactly 24 references across 4 files, scoped to its own tsconfig project", async () => {
-		// Line 124, column 14 (1-based) === { line: 123, character: 13 } (0-based)
+		// Line 132, column 14 (1-based) === { line: 131, character: 13 } (0-based)
 		// on `export class SettingsStore extends ...` — verified against a
 		// fresh server rooted at packages/settings alone (not the repo root)
 		// before writing this test; see this package's AGENTS.md on why the
 		// server root matters for a stable count (gotcha 4).
 		const locations = await withServer(settingsRoot, (server) =>
-			server.references(storeTs, { line: 123, character: 13 }),
+			server.references(storeTs, { line: 131, character: 13 }),
 		);
 
 		expect(locations).toHaveLength(24);
