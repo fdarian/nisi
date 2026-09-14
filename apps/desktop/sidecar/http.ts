@@ -1644,7 +1644,7 @@ export function attachRouter(
 				// positions were computed against (see `readWorktreeFileContents`'
 				// own doc comment in `code-index/state.ts`). Best-effort: a read
 				// failure here shouldn't hide the reference locations themselves,
-				// only their line-text/context preview.
+				// only their line-text preview.
 				const fileContents = yield* readWorktreeFileContents(
 					repoRoot,
 					paths,

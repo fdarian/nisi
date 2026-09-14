@@ -2,7 +2,7 @@
 
 /**
  * The VS Code-style "peek references" dialog. Left: the selected reference's
- * source line (or the definition context before a row is selected). Right: a
+ * source context (or the definition context before a row is selected). Right: a
  * collapsible tree of files, each listing its referencing lines —
  * `CodeIndexReferencesResult.files` already arrives grouped by file, so this
  * only has to render that shape, not build it.

@@ -67,7 +67,8 @@ type SessionUiState = {
 	 * A file tab opened with a target line (e.g. from a code-index peek's
 	 * "open file" action) that hasn't been consumed by its `FileView` yet —
 	 * see `useSessionFileScrollTarget`'s doc comment. Cleared by the consumer
-	 * once it scrolls there, not by `openFile` itself, so a target line
+	 * once it has scrolled there and applied its token highlight, not by
+	 * `openFile` itself, so a target line
 	 * survives whatever render passes happen between the tab opening and the
 	 * file's content actually loading.
 	 */
@@ -770,7 +771,7 @@ export function useSessionOpenFiles(sessionId: string): {
 	);
 }
 
-/** A code-index target set by `openFile(path, target)` and consumed once the file viewer has scrolled to it. */
+/** A code-index target set by `openFile(path, target)` and consumed once the file viewer has scrolled to it and applied the exact token highlight. */
 export function useSessionFileReferenceTarget(
 	sessionId: string,
 	path: string,

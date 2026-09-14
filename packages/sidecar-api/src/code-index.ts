@@ -42,8 +42,8 @@ export type CodeIndexLocation = Schema.Schema.Type<typeof CodeIndexLocation>;
  * A window of source lines around a code location — `lines[0]` is
  * `startLine` (0-based), so the location's own line is
  * `lines[location.line - startLine]`. The sidecar reads this from the same
- * worktree bytes that produced the LSP location, so the preview does not need
- * a second frontend file request.
+ * worktree bytes that produced the LSP location; `referenceContext` exposes
+ * this window on demand without making the frontend read files directly.
  */
 export const CodeIndexSourceContext = Schema.Struct({
 	startLine: Schema.Number,
