@@ -156,11 +156,13 @@ seam" for the port/token handshake this boots into.
   own AGENTS.md.
 - `code-index/state.ts` — the `codeIndex.*` handlers' process-lifetime state, backed by
   `@repo/code-lsp`'s TypeScript 7 native LSP client rather than a prebuilt index. (A SCIP-index-based
-  implementation of this same feature lives on branch `claude/nisi-implementation-cfea93`, for
-  comparison.) `CodeLspPool` is a `Context.Service` wrapping one `ScopedCache` of live
-  `tsc --lsp --stdio` processes, keyed by tsconfig project root and
-  capacity-bounded with LRU eviction (`MAX_LIVE_LSP_SERVERS`) — part of `index.ts`'s `MainLayer`, so
-  every server dies with the sidecar the same way every other `Effect.acquireRelease` resource does.
+	implementation of this same feature lives on branch `claude/nisi-implementation-cfea93`, for
+	comparison.) `CodeLspPool` is a `Context.Service` wrapping one reference-counted map of live
+	`tsc --lsp --stdio` processes, keyed by tsconfig project root and capacity-bounded by evicting
+	only idle entries (`MAX_LIVE_LSP_SERVERS`) — part of `index.ts`'s `MainLayer`, so every server dies
+	with the sidecar the same way every other `Effect.acquireRelease` resource does. Each occurrence or
+	references operation holds a scoped lease for its entire LSP request sequence; a full pool of leased
+	servers waits for a lease to release before admitting another root.
   `buildStates` (repo-root-keyed, gone on restart — same reasoning as `generation-log.ts`'s map)
   tracks only `status`/`build`'s own repo-level spawn/initialize outcome; it has no bearing on
   whether `fileOccurrences`/`references` work, since each spawns its own per-file project's server
