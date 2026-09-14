@@ -1,10 +1,9 @@
 "use client";
 
 /**
- * The VS Code-style "peek references" dialog. Left: ~21 lines of source
- * context around the *definition* — `codeIndex.references`' own
- * `definitionContext`, not a separate `file.get` fetch. Right: a collapsible
- * tree of files, each listing its referencing lines —
+ * The VS Code-style "peek references" dialog. Left: the selected reference's
+ * source line (or the definition context before a row is selected). Right: a
+ * collapsible tree of files, each listing its referencing lines —
  * `CodeIndexReferencesResult.files` already arrives grouped by file, so this
  * only has to render that shape, not build it.
  *
@@ -22,9 +21,9 @@
  * "the index disagrees with your working tree."
  *
  * Clicking a reference row opens that file in a real file-viewer tab
- * (`useSessionOpenFiles`' `openFile(path, line)`) rather than swapping the
- * left preview in place — the left pane always shows the definition, never a
- * per-row-selectable preview.
+ * (`useSessionOpenFiles`' `openFile(path, line)`). Keyboard selection keeps
+ * the same row highlighted and drives the source preview until the row is
+ * opened.
  */
 import type { CodeViewItem } from "@pierre/diffs";
 import type {
@@ -33,8 +32,17 @@ import type {
 } from "@repo/sidecar-api";
 import { useQuery } from "@tanstack/react-query";
 import { AlertTriangleIcon } from "lucide-react";
-import { useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CodeIndexReferenceLine } from "#/components/code-index/code-index-reference-line";
+import {
+	flattenVisibleReferences,
+	initialReferenceIndex,
+	moveReferenceIndex,
+	type ReferenceNavigationGroup,
+	referenceNavigationGroup,
+	referenceRowId,
+	type VisibleReference,
+} from "#/components/code-index/code-index-reference-navigation";
 import type { CodeIndexPeekTarget } from "#/components/code-index/use-code-index-interactions";
 import {
 	buildDiffCodeViewOptions,
@@ -60,6 +68,7 @@ import type { SidecarQueryUtils } from "#/lib/backend-context";
 import { hashItemVersion } from "#/lib/item-version";
 import { useSessionOpenFiles } from "#/lib/session-ui-store";
 import { splitPath } from "#/lib/tree-paths";
+import { cn } from "#/lib/utils";
 
 type CodeIndexPeekDialogProps = {
 	sessionId: string;
@@ -71,55 +80,6 @@ type CodeIndexPeekDialogProps = {
 export function CodeIndexPeekDialog(
 	props: CodeIndexPeekDialogProps,
 ): React.ReactElement | null {
-	const groupHeaderRefs = useRef<Array<HTMLButtonElement | null>>([]);
-
-	/** Mirrors the pull-request palette's Ctrl+N/P arrow mapping: clamp at the first/last item. Only group headers participate, so reference rows never become keyboard-navigation targets. */
-	const handleGroupNavigation = (event: React.KeyboardEvent) => {
-		if (!event.ctrlKey || event.metaKey || event.altKey || event.shiftKey) {
-			return;
-		}
-		const key = event.key.toLowerCase();
-		if (key !== "n" && key !== "p") return;
-
-		const direction = key === "n" ? 1 : -1;
-		const headers = groupHeaderRefs.current;
-		if (headers.length === 0) return;
-
-		const activeElement = document.activeElement;
-		const activeGroup =
-			activeElement instanceof HTMLElement
-				? activeElement.closest("[data-code-index-group]")
-				: null;
-		const activeGroupValue = activeGroup?.getAttribute("data-code-index-group");
-		const activeGroupIndex =
-			activeGroupValue === null || activeGroupValue === undefined
-				? undefined
-				: Number(activeGroupValue);
-		const hasActiveGroup =
-			activeGroupIndex !== undefined &&
-			Number.isInteger(activeGroupIndex) &&
-			activeGroupIndex >= 0 &&
-			activeGroupIndex < headers.length;
-		const firstIndex = hasActiveGroup
-			? activeGroupIndex + direction
-			: direction > 0
-				? 0
-				: headers.length - 1;
-
-		event.preventDefault();
-		for (
-			let index = firstIndex;
-			index >= 0 && index < headers.length;
-			index += direction
-		) {
-			const header = headers[index];
-			if (header !== null && header !== undefined) {
-				header.focus();
-				return;
-			}
-		}
-	};
-
 	if (props.target === null) return null;
 	return (
 		<Dialog
@@ -128,11 +88,7 @@ export function CodeIndexPeekDialog(
 			}}
 			open
 		>
-			<DialogContent
-				className="max-w-6xl p-0"
-				onKeyDown={handleGroupNavigation}
-				showCloseButton={false}
-			>
+			<DialogContent className="max-w-6xl p-0" showCloseButton={false}>
 				<DialogTitle className="sr-only">
 					Code references for {props.target.path}
 				</DialogTitle>
@@ -141,7 +97,6 @@ export function CodeIndexPeekDialog(
 					orpc={props.orpc}
 					sessionId={props.sessionId}
 					target={props.target}
-					groupHeaderRefs={groupHeaderRefs}
 				/>
 			</DialogContent>
 		</Dialog>
@@ -153,7 +108,6 @@ type CodeIndexPeekContentProps = {
 	orpc: SidecarQueryUtils;
 	target: CodeIndexPeekTarget;
 	onClose: () => void;
-	groupHeaderRefs: React.MutableRefObject<Array<HTMLButtonElement | null>>;
 };
 
 function CodeIndexPeekContent({
@@ -161,10 +115,13 @@ function CodeIndexPeekContent({
 	orpc,
 	target,
 	onClose,
-	groupHeaderRefs,
 }: CodeIndexPeekContentProps): React.ReactElement {
 	const { openFile } = useSessionOpenFiles(sessionId);
 	const diffTheme = useDiffTheme(orpc);
+	const [openGroupStates, setOpenGroupStates] = useState<
+		ReadonlyMap<string, boolean>
+	>(() => new Map());
+	const [selectedIndex, setSelectedIndex] = useState<number | undefined>();
 
 	const referencesQuery = useQuery({
 		...orpc.codeIndex.references.queryOptions({
@@ -174,6 +131,54 @@ function CodeIndexPeekContent({
 		retryOnMount: true,
 	});
 	const references = referencesQuery.data;
+	const groups = useMemo<readonly ReferenceNavigationGroup[]>(() => {
+		if (references === undefined) return [];
+		return references.files.map((group) =>
+			referenceNavigationGroup(group, openGroupStates.get(group.path) ?? true),
+		);
+	}, [openGroupStates, references]);
+	const visibleReferences = useMemo(
+		() => flattenVisibleReferences(groups),
+		[groups],
+	);
+	const selectedReference =
+		selectedIndex === undefined ? undefined : visibleReferences[selectedIndex];
+
+	useEffect(() => {
+		if (references === undefined) {
+			setOpenGroupStates(new Map());
+			setSelectedIndex(undefined);
+			return;
+		}
+
+		const initialGroups = references.files.map((group) =>
+			referenceNavigationGroup(group, true),
+		);
+		const initialReferences = flattenVisibleReferences(initialGroups);
+		setOpenGroupStates(
+			new Map(references.files.map((group) => [group.path, true] as const)),
+		);
+		setSelectedIndex(initialReferenceIndex(initialReferences, target));
+	}, [references, target]);
+
+	useEffect(() => {
+		if (selectedIndex === undefined) return;
+		if (selectedIndex < visibleReferences.length) return;
+		setSelectedIndex(
+			visibleReferences.length === 0 ? undefined : visibleReferences.length - 1,
+		);
+	}, [selectedIndex, visibleReferences.length]);
+
+	const handleGroupOpenChange = useCallback((path: string, open: boolean) => {
+		setOpenGroupStates((current) => {
+			const next = new Map(current);
+			next.set(path, open);
+			return next;
+		});
+	}, []);
+	const handleSelectionChange = useCallback((index: number) => {
+		setSelectedIndex(index);
+	}, []);
 
 	const openReference = (path: string, line: number) => {
 		openFile(path, line + 1); // LSP's 0-based line -> @pierre/diffs' 1-based
@@ -188,6 +193,7 @@ function CodeIndexPeekContent({
 						diffTheme={diffTheme}
 						isLoading={referencesQuery.isLoading}
 						references={references}
+						selectedReference={selectedReference}
 					/>
 				</div>
 				<div className="relative min-h-0 w-96 shrink-0 border-l">
@@ -225,9 +231,13 @@ function CodeIndexPeekContent({
 							) : (
 								<ReferencesTree
 									diffTheme={diffTheme}
-									groupHeaderRefs={groupHeaderRefs}
+									groups={groups}
+									onGroupOpenChange={handleGroupOpenChange}
+									onSelectedIndexChange={handleSelectionChange}
 									onOpenReference={openReference}
 									result={references}
+									selectedIndex={selectedIndex}
+									visibleReferences={visibleReferences}
 								/>
 							)}
 						</div>
@@ -240,12 +250,10 @@ function CodeIndexPeekContent({
 
 /**
  * Purely presentational — `CodeIndexPeekContent` owns the `codeIndex.references`
- * fetch; this only renders the result it is handed, entirely
- * from `references`' own fields (`definition`/`definitionContext`). No
- * client-side drift verification happens here anymore — the sidecar's is
- * authoritative (see this file's top-of-module doc comment) — so this
- * component never has a "wrong text, unverified" state to guard against,
- * only "no reliable preview" (`definitionContext: null`).
+ * fetch; this renders the selected row's live line when there is one, and
+ * falls back to the response's definition context before selection settles.
+ * No client-side drift verification happens here anymore — the sidecar's is
+ * authoritative (see this file's top-of-module doc comment).
  */
 const SOURCE_PREVIEW_BASE_CSS = `
 	:host {
@@ -288,12 +296,27 @@ function SourcePreview({
 	diffTheme,
 	isLoading,
 	references,
+	selectedReference,
 }: {
 	diffTheme: DiffTheme;
 	isLoading: boolean;
 	references: CodeIndexReferencesResult | undefined;
+	selectedReference: VisibleReference | undefined;
 }): React.ReactElement {
 	const sourcePreview = useMemo(() => {
+		if (selectedReference !== undefined) {
+			const lineText = selectedReference.reference.lineText;
+			if (lineText === null) return undefined;
+			return {
+				context: {
+					startLine: selectedReference.reference.line,
+					lines: [lineText],
+				},
+				kind: "reference" as const,
+				path: selectedReference.path,
+				targetLine: 1,
+			};
+		}
 		if (
 			references === undefined ||
 			references.definition === null ||
@@ -303,21 +326,22 @@ function SourcePreview({
 		}
 		return {
 			context: references.definitionContext,
-			definition: references.definition,
+			kind: "definition" as const,
+			path: references.definition.path,
 			targetLine:
 				references.definition.line - references.definitionContext.startLine + 1,
 		};
-	}, [references]);
+	}, [references, selectedReference]);
 	const sourceItem = useMemo<CodeViewItem<undefined> | undefined>(() => {
 		if (sourcePreview === undefined) return undefined;
-		const id = `code-index-definition:${sourcePreview.definition.path}:${sourcePreview.context.startLine}`;
+		const id = `code-index-${sourcePreview.kind}:${sourcePreview.path}:${sourcePreview.context.startLine}`;
 		const contents = sourcePreview.context.lines.join("\n");
 		const version = hashItemVersion(`${id}:${contents}`);
 		return {
 			file: {
 				cacheKey: `${id}:${version}`,
 				contents,
-				name: sourcePreview.definition.path,
+				name: sourcePreview.path,
 			},
 			id,
 			type: "file",
@@ -359,14 +383,24 @@ function SourcePreview({
 			<div className="py-4 text-muted-foreground">Couldn't load source.</div>
 		);
 	}
-	if (references.definition === null) {
+	if (selectedReference !== undefined && sourcePreview === undefined) {
+		return (
+			<div className="py-4 text-center text-muted-foreground italic">
+				Preview unavailable — couldn't read this file.
+			</div>
+		);
+	}
+	if (selectedReference === undefined && references.definition === null) {
 		return (
 			<div className="py-4 text-center text-muted-foreground">
 				No definition found for this symbol.
 			</div>
 		);
 	}
-	if (references.definitionContext === null) {
+	if (
+		selectedReference === undefined &&
+		references.definitionContext === null
+	) {
 		return (
 			<div className="py-4 text-center text-muted-foreground italic">
 				Preview unavailable — couldn't read this file.
@@ -393,15 +427,79 @@ function SourcePreview({
 
 function ReferencesTree({
 	diffTheme,
-	groupHeaderRefs,
+	groups,
+	onGroupOpenChange,
 	result,
 	onOpenReference,
+	onSelectedIndexChange,
+	selectedIndex,
+	visibleReferences,
 }: {
 	diffTheme: DiffTheme;
-	groupHeaderRefs: React.MutableRefObject<Array<HTMLButtonElement | null>>;
+	groups: readonly ReferenceNavigationGroup[];
+	onGroupOpenChange: (path: string, open: boolean) => void;
 	result: CodeIndexReferencesResult;
 	onOpenReference: (path: string, line: number) => void;
+	onSelectedIndexChange: (index: number) => void;
+	selectedIndex: number | undefined;
+	visibleReferences: readonly VisibleReference[];
 }): React.ReactElement {
+	const referenceRefs = useRef(new Map<string, HTMLButtonElement>());
+	const registerReferenceRef = useCallback(
+		(id: string, element: HTMLButtonElement | null) => {
+			if (element === null) referenceRefs.current.delete(id);
+			else referenceRefs.current.set(id, element);
+		},
+		[],
+	);
+	const handleReferenceKeyDown = useCallback(
+		(event: React.KeyboardEvent<HTMLDivElement>) => {
+			const key = event.key.toLowerCase();
+			const isCtrlNext =
+				event.ctrlKey &&
+				!event.metaKey &&
+				!event.altKey &&
+				!event.shiftKey &&
+				key === "n";
+			const isCtrlPrevious =
+				event.ctrlKey &&
+				!event.metaKey &&
+				!event.altKey &&
+				!event.shiftKey &&
+				key === "p";
+			const isArrow =
+				!event.ctrlKey &&
+				!event.metaKey &&
+				!event.altKey &&
+				!event.shiftKey &&
+				(event.key === "ArrowDown" || event.key === "ArrowUp");
+			if (!isCtrlNext && !isCtrlPrevious && !isArrow) return;
+
+			const direction: -1 | 1 =
+				isCtrlPrevious || event.key === "ArrowUp" ? -1 : 1;
+			const nextIndex = moveReferenceIndex(
+				selectedIndex,
+				direction,
+				visibleReferences.length,
+			);
+			if (nextIndex === undefined) return;
+
+			event.preventDefault();
+			onSelectedIndexChange(nextIndex);
+		},
+		[onSelectedIndexChange, selectedIndex, visibleReferences.length],
+	);
+
+	useEffect(() => {
+		if (selectedIndex === undefined) return;
+		const selectedReference = visibleReferences[selectedIndex];
+		if (selectedReference === undefined) return;
+		const selectedRow = referenceRefs.current.get(selectedReference.id);
+		if (selectedRow === undefined) return;
+		selectedRow.scrollIntoView({ block: "nearest" });
+		selectedRow.focus({ preventScroll: true });
+	}, [selectedIndex, visibleReferences]);
+
 	const countLabel = useMemo(() => {
 		if (result.returnedReferenceCount === result.totalReferenceCount) {
 			return `References (${result.totalReferenceCount})`;
@@ -418,19 +516,28 @@ function ReferencesTree({
 	}
 
 	return (
-		<div className="flex flex-col px-1 py-2 gap-2">
+		<div
+			className="flex flex-col px-1 py-2 gap-2"
+			onKeyDown={handleReferenceKeyDown}
+			role="application"
+			tabIndex={-1}
+		>
 			<div className="px-1 font-medium text-muted-foreground">{countLabel}</div>
 			<div className="flex flex-col">
 				{result.files.map((group, index) => (
 					<FileReferenceGroup
 						diffTheme={diffTheme}
 						group={group}
-						groupIndex={index}
-						headerRef={(element) => {
-							groupHeaderRefs.current[index] = element;
-						}}
 						key={group.path}
+						open={groups[index]?.open ?? true}
+						onGroupOpenChange={(open) => onGroupOpenChange(group.path, open)}
 						onOpenReference={onOpenReference}
+						onSelectedIndexChange={onSelectedIndexChange}
+						registerReferenceRef={registerReferenceRef}
+						selectedIndex={selectedIndex}
+						visibleReferences={visibleReferences.filter(
+							(item) => item.groupIndex === index,
+						)}
 					/>
 				))}
 			</div>
@@ -441,31 +548,37 @@ function ReferencesTree({
 function FileReferenceGroup({
 	diffTheme,
 	group,
-	groupIndex,
-	headerRef,
+	open,
+	onGroupOpenChange,
 	onOpenReference,
+	onSelectedIndexChange,
+	registerReferenceRef,
+	selectedIndex,
+	visibleReferences,
 }: {
 	diffTheme: DiffTheme;
 	group: { path: string; references: readonly CodeIndexReference[] };
-	groupIndex: number;
-	headerRef: React.Ref<HTMLButtonElement>;
+	open: boolean;
+	onGroupOpenChange: (open: boolean) => void;
 	onOpenReference: (path: string, line: number) => void;
+	onSelectedIndexChange: (index: number) => void;
+	registerReferenceRef: (id: string, element: HTMLButtonElement | null) => void;
+	selectedIndex: number | undefined;
+	visibleReferences: readonly VisibleReference[];
 }): React.ReactElement {
-	const [open, setOpen] = useState(true);
-	const { dirname, basename } = splitPath(group.path);
+	const pathParts = splitPath(group.path);
 
 	return (
-		<div data-code-index-group={groupIndex}>
-			<Collapsible onOpenChange={setOpen} open={open}>
-				<CollapsibleTrigger
-					className="flex w-full min-w-0 items-center gap-1.5 rounded px-2 py-1 text-left hover:bg-accent"
-					ref={headerRef}
-				>
+		<div>
+			<Collapsible onOpenChange={onGroupOpenChange} open={open}>
+				<CollapsibleTrigger className="flex w-full min-w-0 items-center gap-1.5 rounded px-2 py-1 text-left hover:bg-accent">
 					<span className="min-w-0 flex-1 truncate">
-						<span className="font-medium text-foreground">{basename}</span>
-						{dirname && (
+						<span className="font-medium text-foreground">
+							{pathParts.basename}
+						</span>
+						{pathParts.dirname && (
 							<span className="ml-1.5 truncate text-muted-foreground">
-								{dirname}
+								{pathParts.dirname}
 							</span>
 						)}
 					</span>
@@ -474,24 +587,53 @@ function FileReferenceGroup({
 					</Badge>
 				</CollapsibleTrigger>
 				<CollapsiblePanel className="gap-1.5 h-(--collapsible-panel-height) data-ending-style:h-0 data-starting-style:h-0">
-					<div className="p-1 grid grid-cols-[max-content_1fr] gap-0.5">
-						{group.references.map((reference) => (
-							<button
-								className="px-1 col-span-full grid grid-cols-subgrid min-w-0 items-baseline gap-2 rounded py-0.5 text-left hover:bg-accent"
-								key={`${reference.line}:${reference.charStart}`}
-								onClick={() => onOpenReference(group.path, reference.line)}
-								type="button"
-							>
-								<span className="select-none text-right text-muted-foreground tabular-nums">
-									{reference.line + 1}
-								</span>
-								<CodeIndexReferenceLine
-									diffTheme={diffTheme}
-									path={group.path}
-									reference={reference}
-								/>
-							</button>
-						))}
+					<div
+						aria-label={`References in ${group.path}`}
+						className="p-1 grid grid-cols-[max-content_1fr] gap-0.5"
+						role="listbox"
+					>
+						{group.references.map((reference, referenceIndex) => {
+							const visibleReference = visibleReferences[referenceIndex];
+							const isSelected =
+								visibleReference !== undefined &&
+								visibleReference.index === selectedIndex;
+							const id = referenceRowId(group.path, reference, referenceIndex);
+
+							return (
+								<button
+									aria-selected={isSelected}
+									className={cn(
+										"px-1 col-span-full grid grid-cols-subgrid min-w-0 items-baseline gap-2 rounded py-0.5 text-left hover:bg-accent focus:outline-none focus-visible:outline-none focus-visible:ring-0",
+										isSelected && "bg-accent",
+									)}
+									id={id}
+									key={id}
+									onClick={() => {
+										if (visibleReference !== undefined) {
+											onSelectedIndexChange(visibleReference.index);
+										}
+										onOpenReference(group.path, reference.line);
+									}}
+									ref={(element) => {
+										if (visibleReference !== undefined) {
+											registerReferenceRef(id, element);
+										}
+									}}
+									role="option"
+									tabIndex={isSelected ? 0 : -1}
+									type="button"
+								>
+									<span className="select-none text-right text-muted-foreground tabular-nums">
+										{reference.line + 1}
+									</span>
+									<CodeIndexReferenceLine
+										diffTheme={diffTheme}
+										path={group.path}
+										reference={reference}
+									/>
+								</button>
+							);
+						})}
 					</div>
 				</CollapsiblePanel>
 			</Collapsible>
