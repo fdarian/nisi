@@ -17,6 +17,10 @@ import type {
 	CodeIndexSourceContext,
 } from "@repo/sidecar-api";
 import {
+	CODE_INDEX_SOURCE_CONTEXT_LINES_AFTER,
+	CODE_INDEX_SOURCE_CONTEXT_LINES_BEFORE,
+} from "@repo/sidecar-api";
+import {
 	Cause,
 	Context,
 	Effect,
@@ -717,10 +721,6 @@ export const groupReferencesByFile = (
 	}));
 };
 
-/** Lines of context padded around a code location — enough for the dialog's source preview to show roughly 21 lines total. */
-const SOURCE_CONTEXT_LINES_BEFORE = 10;
-const SOURCE_CONTEXT_LINES_AFTER = 10;
-
 /**
  * A location's surrounding source lines from `fileContents` (always
  * `readWorktreeFileContents`'s output) — `null` when its file wasn't fetched
@@ -739,10 +739,13 @@ export function buildSourceContext(
 	const targetLine = contentLines[location.line];
 	if (targetLine === undefined) return null;
 
-	const startLine = Math.max(0, location.line - SOURCE_CONTEXT_LINES_BEFORE);
+	const startLine = Math.max(
+		0,
+		location.line - CODE_INDEX_SOURCE_CONTEXT_LINES_BEFORE,
+	);
 	const endLine = Math.min(
 		contentLines.length - 1,
-		location.line + SOURCE_CONTEXT_LINES_AFTER,
+		location.line + CODE_INDEX_SOURCE_CONTEXT_LINES_AFTER,
 	);
 	return { startLine, lines: contentLines.slice(startLine, endLine + 1) };
 }

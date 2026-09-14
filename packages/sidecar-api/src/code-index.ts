@@ -38,6 +38,14 @@ export const CodeIndexLocation = Schema.Struct({
 });
 export type CodeIndexLocation = Schema.Schema.Type<typeof CodeIndexLocation>;
 
+/** Number of source lines padded before and after a code-index location. */
+export const CODE_INDEX_SOURCE_CONTEXT_LINES_BEFORE = 10;
+export const CODE_INDEX_SOURCE_CONTEXT_LINES_AFTER = 10;
+export const CODE_INDEX_SOURCE_CONTEXT_LINE_COUNT =
+	CODE_INDEX_SOURCE_CONTEXT_LINES_BEFORE +
+	CODE_INDEX_SOURCE_CONTEXT_LINES_AFTER +
+	1;
+
 /**
  * A window of source lines around a code location — `lines[0]` is
  * `startLine` (0-based), so the location's own line is

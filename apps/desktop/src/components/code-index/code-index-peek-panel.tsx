@@ -32,6 +32,7 @@ import type {
 	CodeIndexReferencesResult,
 	CodeIndexSourceContext,
 } from "@repo/sidecar-api";
+import { CODE_INDEX_SOURCE_CONTEXT_LINE_COUNT } from "@repo/sidecar-api";
 import { keepPreviousData, useQueries, useQuery } from "@tanstack/react-query";
 import { AlertTriangleIcon } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -53,6 +54,7 @@ import {
 	DiffCodeView,
 } from "#/components/diff-pane/diff-code-view";
 import {
+	DIFF_CODE_LINE_HEIGHT,
 	type DiffTheme,
 	diffCodeViewLayout,
 	diffItemMetrics,
@@ -114,6 +116,9 @@ type CodeIndexPeekContentProps = {
 	target: CodeIndexPeekTarget;
 	onClose: () => void;
 };
+
+const CODE_INDEX_SOURCE_PREVIEW_HEIGHT =
+	CODE_INDEX_SOURCE_CONTEXT_LINE_COUNT * DIFF_CODE_LINE_HEIGHT;
 
 function CodeIndexPeekContent({
 	sessionId,
@@ -249,8 +254,11 @@ function CodeIndexPeekContent({
 
 	return (
 		<div className="flex min-h-0 max-h-[85vh] flex-col overflow-hidden rounded-xl bg-card text-xs shadow-sm">
-			<div className="flex min-h-0">
-				<div className="min-w-0 flex-1">
+			<div
+				className="flex min-h-0"
+				style={{ height: CODE_INDEX_SOURCE_PREVIEW_HEIGHT }}
+			>
+				<div className="min-h-0 min-w-0 flex-1 overflow-hidden">
 					<SourcePreview
 						diffTheme={diffTheme}
 						isLoading={referencesQuery.isLoading}
@@ -266,7 +274,7 @@ function CodeIndexPeekContent({
 						onRetrySelectedContext={() => void selectedContextQuery.refetch()}
 					/>
 				</div>
-				<div className="relative min-h-0 w-96 shrink-0 border-l">
+				<div className="relative h-full min-h-0 w-96 shrink-0 border-l">
 					<ScrollArea className="absolute inset-0">
 						<div>
 							{referencesQuery.isLoading ? (
@@ -556,7 +564,7 @@ function SourcePreview({
 
 	return (
 		<DiffCodeView
-			className="min-h-0 max-h-[72vh] w-full overflow-auto overscroll-contain"
+			className="h-full min-h-0 w-full overflow-auto overscroll-contain"
 			highlighterOptions={diffTheme.highlighterOptions}
 			items={[sourceItem]}
 			options={sourceOptions}

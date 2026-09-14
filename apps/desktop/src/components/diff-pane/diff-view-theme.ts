@@ -227,6 +227,9 @@ export const diffCodeViewLayout: CodeViewLayout = {
 	paddingTop: 0,
 };
 
+/** The fixed line box used by `diffViewUnsafeCSS` and the references preview. */
+export const DIFF_CODE_LINE_HEIGHT = 20;
+
 export const diffItemMetrics = {
 	diffHeaderHeight: 44,
 	/**
@@ -405,7 +408,7 @@ export const diffViewUnsafeCSS = `
 		--diffs-font-family: var(--font-mono);
 		--diffs-header-font-family: var(--font-sans);
 		--diffs-font-size: 12.5px;
-		--diffs-line-height: 20px;
+		--diffs-line-height: ${DIFF_CODE_LINE_HEIGHT}px;
 		/**
 		 * Intentionally the panel's own \`--background\`, not \`--code\` (which
 		 * tracks \`--card\` — see index.css). \`--code\` is what the pierre
