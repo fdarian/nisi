@@ -180,6 +180,7 @@ function CodeIndexPeekContent({
 		}),
 		enabled: target.occurrence !== undefined,
 		retry: false,
+		retryOnMount: true,
 	});
 	const references = referencesQuery.data;
 
