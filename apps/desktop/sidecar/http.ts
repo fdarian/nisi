@@ -30,7 +30,7 @@ import type {
 } from "@repo/sidecar-api";
 import { contract } from "@repo/sidecar-api";
 import type { Context } from "effect";
-import { Effect } from "effect";
+import { Cause, Effect } from "effect";
 import {
 	ChatSessionNotFound,
 	resolveChatPromptContext,
@@ -261,6 +261,18 @@ export function attachRouter(
 			yield* sessionWatch.remove(sessionId);
 		});
 
+	const forkCloseSessionSideEffects = (sessionId: string) =>
+		closeSessionSideEffects(sessionId).pipe(
+			Effect.provide(mainContext),
+			Effect.catchAllCause((cause) =>
+				Effect.logError("session close teardown failed", {
+					sessionId,
+					cause: Cause.pretty(cause),
+				}),
+			),
+			Effect.forkDetach,
+		);
+
 	const implementer = implement(contract).$context<ServerContext>();
 
 	const authed = implementer.use(({ context, next, errors }) => {
@@ -364,11 +376,11 @@ export function attachRouter(
 						),
 					),
 				);
-				yield* closeSessionSideEffects(input.sessionId);
 				emit({ type: "session-closed", sessionId: input.sessionId });
 				yield* Effect.logInfo("session closed", {
 					sessionId: input.sessionId,
 				});
+				yield* forkCloseSessionSideEffects(input.sessionId);
 			}),
 			switchToPr: authed.sessions.switchToPr.effect(function* ({
 				input,
