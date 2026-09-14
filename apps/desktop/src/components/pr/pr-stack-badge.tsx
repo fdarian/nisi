@@ -154,7 +154,7 @@ export function PrStackBadge(
 					))}
 					<div className="mt-2 flex items-center gap-2 border-t px-2 pt-2">
 						<span className="size-3 shrink-0 rounded-full border border-muted-foreground" />
-						<span className="font-mono text-muted-foreground text-xs">
+						<span className="rounded bg-muted px-1.5 py-0.5 font-mono text-muted-foreground text-xs">
 							{stack.baseRefName}
 						</span>
 					</div>
