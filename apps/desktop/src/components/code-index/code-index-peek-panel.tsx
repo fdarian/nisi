@@ -121,7 +121,9 @@ function CodeIndexPeekContent({
 	const [openGroupStates, setOpenGroupStates] = useState<
 		ReadonlyMap<string, boolean>
 	>(() => new Map());
-	const [selectedIndex, setSelectedIndex] = useState<number | undefined>();
+	const [selectedReferenceId, setSelectedReferenceId] = useState<
+		string | undefined
+	>();
 
 	const referencesQuery = useQuery({
 		...orpc.codeIndex.references.queryOptions({
@@ -141,13 +143,20 @@ function CodeIndexPeekContent({
 		() => flattenVisibleReferences(groups),
 		[groups],
 	);
+	const selectedIndex = useMemo(() => {
+		if (selectedReferenceId === undefined) return undefined;
+		const index = visibleReferences.findIndex(
+			(item) => item.id === selectedReferenceId,
+		);
+		return index === -1 ? undefined : index;
+	}, [selectedReferenceId, visibleReferences]);
 	const selectedReference =
 		selectedIndex === undefined ? undefined : visibleReferences[selectedIndex];
 
 	useEffect(() => {
 		if (references === undefined) {
 			setOpenGroupStates(new Map());
-			setSelectedIndex(undefined);
+			setSelectedReferenceId(undefined);
 			return;
 		}
 
@@ -155,19 +164,22 @@ function CodeIndexPeekContent({
 			referenceNavigationGroup(group, true),
 		);
 		const initialReferences = flattenVisibleReferences(initialGroups);
+		const initialIndex = initialReferenceIndex(initialReferences, target);
+		const initialReference =
+			initialIndex === undefined ? undefined : initialReferences[initialIndex];
 		setOpenGroupStates(
 			new Map(references.files.map((group) => [group.path, true] as const)),
 		);
-		setSelectedIndex(initialReferenceIndex(initialReferences, target));
+		setSelectedReferenceId(initialReference?.id);
 	}, [references, target]);
 
 	useEffect(() => {
-		if (selectedIndex === undefined) return;
-		if (selectedIndex < visibleReferences.length) return;
-		setSelectedIndex(
-			visibleReferences.length === 0 ? undefined : visibleReferences.length - 1,
-		);
-	}, [selectedIndex, visibleReferences.length]);
+		if (selectedReferenceId === undefined) return;
+		if (visibleReferences.some((item) => item.id === selectedReferenceId)) {
+			return;
+		}
+		setSelectedReferenceId(visibleReferences[0]?.id);
+	}, [selectedReferenceId, visibleReferences]);
 
 	const handleGroupOpenChange = useCallback((path: string, open: boolean) => {
 		setOpenGroupStates((current) => {
@@ -176,9 +188,12 @@ function CodeIndexPeekContent({
 			return next;
 		});
 	}, []);
-	const handleSelectionChange = useCallback((index: number) => {
-		setSelectedIndex(index);
-	}, []);
+	const handleSelectionChange = useCallback(
+		(index: number) => {
+			setSelectedReferenceId(visibleReferences[index]?.id);
+		},
+		[visibleReferences],
+	);
 
 	const openReference = (path: string, line: number) => {
 		openFile(path, line + 1); // LSP's 0-based line -> @pierre/diffs' 1-based
