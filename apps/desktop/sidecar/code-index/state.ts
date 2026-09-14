@@ -7,7 +7,7 @@ import type {
 	LspServer,
 	TsLspBinaryResolutionError,
 } from "@repo/code-lsp";
-import { resolveProjectRoot, spawnLspServer } from "@repo/code-lsp";
+import { spawnLspServer } from "@repo/code-lsp";
 import { readWorktreeBlobContent, type WorktreeReadFailed } from "@repo/git";
 import type {
 	CodeIndexFileReferences,
@@ -29,28 +29,22 @@ import {
 import type * as Scope from "effect/Scope";
 
 /**
- * How many TS7 LSP server processes stay live at once, across every
- * tsconfig project this sidecar has queried since boot (the pool is
- * process-lifetime, not per-session — see `CodeLspPool` below). Capacity-
- * bounded eviction of idle servers, via `RcMap`. Measured
- * footprint (spiked before this file was written, against this repo):
- * 235 MB resident for one loaded project, 685 MB once a second one loads —
- * three servers could therefore approach ~1.1 GB resident, the ceiling this
- * cap accepts in exchange for not respawning (and re-cold-loading a whole
- * project, up to ~1s per that same spike's numbers) every time a reviewer
- * bounces between more than a couple of packages' files. Deliberately
- * small: a large monorepo can have far more tsconfig projects than this,
- * and an unbounded registry would grow without limit as a reviewer opens
- * files spread across all of them.
+ * How many TS7 LSP server processes stay live at once, across all open
+ * worktree roots (the pool is process-lifetime, not per-session — see
+ * `CodeLspPool` below). A root server can reach roughly 773 MiB resident in
+ * this repository after its relevant documents are opened; two such servers
+ * keep the worst measured footprint around 1.5 GiB while still allowing two
+ * repositories to be reviewed concurrently. Capacity-bounded eviction keeps
+ * a large number of open PRs from growing an unbounded process registry, and
+ * a full pool of leased servers waits rather than evicting an active server.
  */
-const MAX_LIVE_LSP_SERVERS = 3;
+const MAX_LIVE_LSP_SERVERS = 2;
 
 /**
  * The sidecar's one registry of live `tsc --lsp --stdio` processes, keyed by
- * tsconfig project root (`@repo/code-lsp`'s `resolveProjectRoot` — one
- * server per project, never a shared/broader one; see that package's
- * AGENTS.md, "One project root per server", for why a shared server would
- * silently give wrong reference counts). `RcMap` shares an in-flight spawn
+ * the exact worktree root resolved by `Store.resolveSessionRepoRoot`. One
+ * root server owns the repository's project service, so references can see
+ * projects loaded from multiple packages. `RcMap` shares an in-flight spawn
  * for the same root and reference-counts each operation's scoped lease. The
  * small admission lock only protects capacity inspection and idle eviction;
  * it is not held while an LSP request runs. The map's own scope is this
@@ -63,7 +57,7 @@ const MAX_LIVE_LSP_SERVERS = 3;
 export class CodeLspPool extends Context.Service<CodeLspPool>()("CodeLspPool", {
 	make: Effect.gen(function* () {
 		const resources = yield* RcMap.make({
-			lookup: (projectRoot: string) => spawnLspServer(projectRoot),
+			lookup: (repoRoot: string) => spawnLspServer(repoRoot),
 			capacity: MAX_LIVE_LSP_SERVERS,
 			idleTimeToLive: "5 minutes",
 		});
@@ -80,7 +74,8 @@ type CodeLspFailure =
 	| TsLspBinaryResolutionError
 	| LspProcessError
 	| LspRequestError
-	| LspProtocolError;
+	| LspProtocolError
+	| WorktreeReadFailed;
 
 export type CodeLspPoolValue = {
 	readonly resources: RcMap.RcMap<
@@ -93,7 +88,7 @@ export type CodeLspPoolValue = {
 
 const findPoolEntry = (
 	pool: CodeLspPoolValue,
-	projectRoot: string,
+	repoRoot: string,
 ):
 	| RcMap.State.Entry<
 			LspServer,
@@ -103,7 +98,7 @@ const findPoolEntry = (
 	const state = pool.resources.state;
 	if (state._tag === "Closed") return undefined;
 	for (const pair of state.map) {
-		if (pair[0] === projectRoot) return pair[1];
+		if (pair[0] === repoRoot) return pair[1];
 	}
 	return undefined;
 };
@@ -128,21 +123,21 @@ const poolSize = (pool: CodeLspPoolValue): number => {
 /** Acquires one scoped lease, evicting only an idle server when the bounded pool is full. A full pool of leased servers waits until one operation releases its lease. */
 const acquireCodeLspServer = (
 	pool: CodeLspPoolValue,
-	projectRoot: string,
+	repoRoot: string,
 	refresh: boolean,
 ): Effect.Effect<LspServer, CodeLspFailure, Scope.Scope> =>
 	Effect.gen(function* () {
 		while (true) {
 			const lease = yield* pool.admissionLock.withPermit(
 				Effect.gen(function* () {
-					const entry = findPoolEntry(pool, projectRoot);
+					const entry = findPoolEntry(pool, repoRoot);
 					if (refresh && entry !== undefined) {
 						if (entry.refCount > 0) return Option.none<LspServer>();
-						yield* RcMap.invalidate(pool.resources, projectRoot);
+						yield* RcMap.invalidate(pool.resources, repoRoot);
 					}
 
 					if (
-						findPoolEntry(pool, projectRoot) === undefined &&
+						findPoolEntry(pool, repoRoot) === undefined &&
 						poolSize(pool) >= pool.resources.capacity
 					) {
 						const idleRoot = findIdlePoolRoot(pool);
@@ -150,7 +145,7 @@ const acquireCodeLspServer = (
 						yield* RcMap.invalidate(pool.resources, idleRoot);
 					}
 
-					return yield* RcMap.get(pool.resources, projectRoot).pipe(
+					return yield* RcMap.get(pool.resources, repoRoot).pipe(
 						Effect.map(Option.some),
 						Effect.catchIf(Cause.isExceededCapacityError, () =>
 							Effect.succeed(Option.none<LspServer>()),
@@ -165,28 +160,28 @@ const acquireCodeLspServer = (
 
 const invalidateIdleCodeLspServer = (
 	pool: CodeLspPoolValue,
-	projectRoot: string,
+	repoRoot: string,
 ): Effect.Effect<void> =>
 	pool.admissionLock.withPermit(
 		Effect.gen(function* () {
-			const entry = findPoolEntry(pool, projectRoot);
+			const entry = findPoolEntry(pool, repoRoot);
 			if (entry === undefined || entry.refCount > 0) return;
-			yield* RcMap.invalidate(pool.resources, projectRoot);
+			yield* RcMap.invalidate(pool.resources, repoRoot);
 		}),
 	);
 
 export const withCodeLspServer = <
 	A,
-	E extends LspRequestError | LspProtocolError,
+	E extends LspRequestError | LspProtocolError | WorktreeReadFailed,
 >(
 	pool: CodeLspPoolValue,
-	projectRoot: string,
+	repoRoot: string,
 	use: (server: LspServer) => Effect.Effect<A, E>,
 	refresh = false,
 ): Effect.Effect<A, E | CodeLspFailure> => {
 	const operation = Effect.scoped<A, E | CodeLspFailure, Scope.Scope>(
 		Effect.gen(function* () {
-			const server = yield* acquireCodeLspServer(pool, projectRoot, refresh);
+			const server = yield* acquireCodeLspServer(pool, repoRoot, refresh);
 			return yield* use(server);
 		}),
 	);
@@ -194,7 +189,7 @@ export const withCodeLspServer = <
 		Effect.onExit((exit) =>
 			Exit.isSuccess(exit)
 				? Effect.void
-				: invalidateIdleCodeLspServer(pool, projectRoot),
+				: invalidateIdleCodeLspServer(pool, repoRoot),
 		),
 	);
 };
@@ -211,6 +206,8 @@ export const describeCodeIndexFailure = (failure: CodeLspFailure): string => {
 			return `TypeScript language server request ${failure.method} failed (${failure.reason}): ${String(failure.cause)}`;
 		case "LspProtocolError":
 			return `TypeScript language server returned an invalid response: ${String(failure.cause)}`;
+		case "WorktreeReadFailed":
+			return `failed to read ${failure.path} for TypeScript language server: ${String(failure.cause)}`;
 	}
 };
 
@@ -224,8 +221,9 @@ export const MAX_RETURNED_REFERENCES = 200;
  * `apps/desktop/sidecar/store.ts`) exists for diff/review semantics, where
  * "current" is a user preference (`includeUncommitted`). The LSP server has
  * no such preference: it reads whatever's physically on disk at `repoRoot`,
- * full stop (see `@repo/code-lsp`'s AGENTS.md — no `textDocument/didOpen`,
- * ever). Reading a code-index preview through the settings-gated path would
+ * full stop (see `@repo/code-lsp`'s AGENTS.md — the LSP client receives the
+ * same bytes through `openDocument` before project-sensitive queries). Reading
+ * a code-index preview through the settings-gated path would
  * describe a *different* revision than the one the server's positions were
  * computed against whenever `includeUncommitted` is off and the worktree is
  * dirty. This function is what `groupReferencesByFile`/`buildDefinitionContext`
@@ -255,11 +253,26 @@ export const readWorktreeFileContents = (
 		return contents;
 	});
 
+const openWorktreeDocument = (
+	server: LspServer,
+	absolutePath: string,
+): Effect.Effect<Option.Option<Uint8Array>, WorktreeReadFailed> =>
+	Effect.gen(function* () {
+		const content = yield* readWorktreeBlobContent(absolutePath);
+		if (Option.isNone(content)) return content;
+		yield* server.openDocument(
+			absolutePath,
+			new TextDecoder().decode(content.value),
+		);
+		return content;
+	});
+
 /**
  * Every occurrence in `path`, in the shape `codeIndex.fileOccurrences`
- * reports — empty when `path` has no tsconfig project above it. A server
- * startup or request failure remains an error so the caller can retry rather
- * than caching a transient failure as this file's permanent answer.
+ * reports. The root-scoped server decides whether the file belongs to a
+ * configured or inferred TypeScript project; a server startup, worktree-read,
+ * or request failure remains an error so the caller can retry rather than
+ * caching a transient failure as this file's permanent answer.
  *
  * No filtering by semantic-token type: verified empirically (a probe
  * against `@repo/code-lsp`'s own fixture, and consistent with that
@@ -287,12 +300,10 @@ export const buildFileOccurrencesResponse = (
 > =>
 	Effect.gen(function* () {
 		const absolutePath = join(repoRoot, path);
-		const projectRoot = resolveProjectRoot(absolutePath);
-		if (projectRoot === null) return [];
-
 		const pool = yield* CodeLspPool;
-		return yield* withCodeLspServer(pool, projectRoot, (server) =>
+		return yield* withCodeLspServer(pool, repoRoot, (server) =>
 			Effect.gen(function* () {
+				const content = yield* openWorktreeDocument(server, absolutePath);
 				const tokens = yield* server.semanticTokensFull(absolutePath);
 
 				const tokenOccurrences = tokens.map(
@@ -313,6 +324,7 @@ export const buildFileOccurrencesResponse = (
 					absolutePath,
 					path,
 					tokenOccurrences,
+					content,
 				);
 
 				return [...tokenOccurrences, ...importOccurrences];
@@ -343,11 +355,9 @@ const IMPORT_SPAN_PROBE_CONCURRENCY = 16;
 /**
  * The import-line supplement to {@link buildFileOccurrencesResponse}'s
  * semantic-token pass (see that function's own doc comment for why one is
- * needed at all). Reads `absolutePath`'s current worktree bytes — the same
- * source `readWorktreeFileContents` reads elsewhere in this module, so a
- * worktree read failure degrades to "nothing to add" rather than failing
- * the whole occurrence set, matching every other degrade-to-empty posture
- * here — finds candidate identifier spans with
+ * needed at all). Uses the current worktree bytes already read while opening
+ * `absolutePath` — the same source `readWorktreeFileContents` reads elsewhere
+ * in this module — and finds candidate identifier spans with
  * {@link findImportIdentifierSpans}, and confirms each with a concurrent
  * `definition` probe: only a span a probe actually resolved becomes an
  * occurrence. Never fabricated — a candidate that doesn't resolve (a
@@ -362,14 +372,12 @@ const resolveImportOccurrences = (
 	absolutePath: string,
 	path: string,
 	existingOccurrences: ReadonlyArray<CodeIndexOccurrence>,
+	content: Option.Option<Uint8Array>,
 ): Effect.Effect<
 	ReadonlyArray<CodeIndexOccurrence>,
 	LspRequestError | LspProtocolError
 > =>
 	Effect.gen(function* () {
-		const content = yield* readWorktreeBlobContent(absolutePath).pipe(
-			Effect.catch(() => Effect.succeed(Option.none<Uint8Array>())),
-		);
 		if (Option.isNone(content)) return [];
 
 		const text = new TextDecoder().decode(content.value);
@@ -560,10 +568,13 @@ const sameLocation = (a: CodeLocation, b: CodeLocation | null): boolean =>
  * against a live LSP server — source line text isn't decided here since
  * that needs a file read (`readWorktreeFileContents`), which lives at the
  * `http.ts` call site alongside `buildReferencesResponse`, not in this
- * module. A `symbolKey` this module can't decode, or whose file has no
- * tsconfig project above it, returns {@link EMPTY_REFERENCES_PLAN}. A server
- * startup or request failure is propagated so the caller can retry instead
- * of caching an incomplete plan as a successful empty result.
+ * module. A `symbolKey` this module can't decode returns
+ * {@link EMPTY_REFERENCES_PLAN}. The queried document is opened on the
+ * root-scoped server before the project-sensitive requests, making project
+ * discovery independent of which package happened to be queried first. A
+ * server startup, worktree-read, or request failure is propagated so the
+ * caller can retry instead of caching an incomplete plan as a successful
+ * empty result.
  */
 export const buildReferencesPlan = (
 	repoRoot: string,
@@ -574,12 +585,10 @@ export const buildReferencesPlan = (
 		if (decoded === null) return EMPTY_REFERENCES_PLAN;
 
 		const absolutePath = join(repoRoot, decoded.path);
-		const projectRoot = resolveProjectRoot(absolutePath);
-		if (projectRoot === null) return EMPTY_REFERENCES_PLAN;
-
 		const pool = yield* CodeLspPool;
-		return yield* withCodeLspServer(pool, projectRoot, (server) =>
+		return yield* withCodeLspServer(pool, repoRoot, (server) =>
 			Effect.gen(function* () {
+				yield* openWorktreeDocument(server, absolutePath);
 				const position = {
 					line: decoded.line,
 					character: decoded.character,

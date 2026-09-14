@@ -6,7 +6,6 @@ export {
 	LspRequestError,
 	TsLspBinaryResolutionError,
 } from "./errors.ts";
-export { resolveProjectRoot } from "./project-root.ts";
 export type {
 	JsonRpcErrorPayload,
 	JsonRpcId,

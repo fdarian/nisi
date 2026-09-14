@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { BunServices } from "@effect/platform-bun";
 import { Effect } from "effect";
 import { type LspServer, spawnLspServer } from "../src/client.ts";
+import type { LspLocation } from "../src/protocol.ts";
 
 /**
  * Integration tests — these spawn the real `tsc --lsp --stdio` binary
@@ -109,29 +110,123 @@ describe("spawnLspServer against a tiny self-contained fixture", () => {
 describe("spawnLspServer against the real repo", () => {
 	// This package lives at <repoRoot>/packages/code-lsp/test/client.test.ts.
 	const repoRoot = join(import.meta.dir, "..", "..", "..");
-	const settingsRoot = join(repoRoot, "packages", "settings");
-	const storeTs = join(settingsRoot, "src", "store.ts");
+	const settingsStore = join(
+		repoRoot,
+		"packages",
+		"settings",
+		"src",
+		"store.ts",
+	);
+	const settingsFiles = [
+		settingsStore,
+		join(repoRoot, "packages", "settings", "src", "index.ts"),
+		join(repoRoot, "packages", "settings", "test", "fixtures.ts"),
+		join(repoRoot, "packages", "settings", "test", "store.test.ts"),
+	] as const;
+	const sidecarFiles = [
+		join(repoRoot, "apps", "desktop", "sidecar", "store.ts"),
+		join(repoRoot, "apps", "desktop", "sidecar", "test", "store.test.ts"),
+		join(repoRoot, "apps", "desktop", "sidecar", "live-poll.ts"),
+		join(repoRoot, "apps", "desktop", "sidecar", "services.ts"),
+		join(repoRoot, "apps", "desktop", "sidecar", "index.ts"),
+		join(repoRoot, "apps", "desktop", "sidecar", "http.ts"),
+		join(repoRoot, "apps", "desktop", "sidecar", "walkthrough", "context.ts"),
+	] as const;
+	const relevantFiles = [...settingsFiles, ...sidecarFiles];
+	const nestedTokenFiles = [
+		join(repoRoot, "packages", "settings", "src", "store.ts"),
+		join(repoRoot, "packages", "review", "src", "index.ts"),
+		join(repoRoot, "apps", "desktop", "src", "lib", "session-ui-store.tsx"),
+		join(repoRoot, "apps", "desktop", "sidecar", "http.ts"),
+	] as const;
 
-	test("references on SettingsStore's declaration finds exactly 24 references across 4 files, scoped to its own tsconfig project", async () => {
-		// Line 132, column 14 (1-based) === { line: 131, character: 13 } (0-based)
-		// on `export class SettingsStore extends ...` — verified against a
-		// fresh server rooted at packages/settings alone (not the repo root)
-		// before writing this test; see this package's AGENTS.md on why the
-		// server root matters for a stable count (gotcha 4).
-		const locations = await withServer(settingsRoot, (server) =>
-			server.references(storeTs, { line: 131, character: 13 }),
+	const openDocuments = (
+		server: LspServer,
+		paths: ReadonlyArray<string>,
+	): Effect.Effect<void> =>
+		Effect.forEach(
+			paths,
+			(path) =>
+				Effect.promise(() => Bun.file(path).text()).pipe(
+					Effect.flatMap((text) => server.openDocument(path, text)),
+				),
+			{ discard: true },
 		);
 
-		expect(locations).toHaveLength(24);
+	const referencesAfterOpening = (
+		paths: ReadonlyArray<string>,
+	): Promise<ReadonlyArray<LspLocation>> =>
+		withServer(repoRoot, (server) =>
+			Effect.gen(function* () {
+				yield* openDocuments(server, paths);
+				return yield* server.references(settingsStore, {
+					line: 131,
+					character: 13,
+				});
+			}),
+		);
 
+	const countByPath = (
+		locations: ReadonlyArray<LspLocation>,
+	): Map<string, number> => {
 		const byPath = new Map<string, number>();
 		for (const location of locations) {
 			byPath.set(location.path, (byPath.get(location.path) ?? 0) + 1);
 		}
-		expect(byPath.size).toBe(4);
-		expect(byPath.get(storeTs)).toBe(4);
-		expect(byPath.get(join(settingsRoot, "src", "index.ts"))).toBe(1);
-		expect(byPath.get(join(settingsRoot, "test", "fixtures.ts"))).toBe(2);
-		expect(byPath.get(join(settingsRoot, "test", "store.test.ts"))).toBe(17);
+		return byPath;
+	};
+
+	test("root-scoped semantic tokens cover nested packages without didOpen", async () => {
+		const counts = await withServer(repoRoot, (server) =>
+			Effect.forEach(
+				nestedTokenFiles,
+				(path) =>
+					server
+						.semanticTokensFull(path)
+						.pipe(Effect.map((tokens) => tokens.length)),
+				{ concurrency: "unbounded" },
+			),
+		);
+
+		for (const count of counts) expect(count).toBeGreaterThan(0);
+	});
+
+	test("root-scoped references stay complete and order-independent across packages", async () => {
+		const cold = await referencesAfterOpening(relevantFiles);
+		const warm = await referencesAfterOpening([...relevantFiles].reverse());
+
+		expect(cold).toHaveLength(46);
+		expect(warm).toHaveLength(cold.length);
+		expect(warm).toEqual(cold);
+
+		const byPath = countByPath(cold);
+		expect(byPath).toEqual(
+			new Map([
+				[join(repoRoot, "apps", "desktop", "sidecar", "http.ts"), 5],
+				[join(repoRoot, "apps", "desktop", "sidecar", "index.ts"), 2],
+				[join(repoRoot, "apps", "desktop", "sidecar", "live-poll.ts"), 2],
+				[join(repoRoot, "apps", "desktop", "sidecar", "services.ts"), 2],
+				[join(repoRoot, "apps", "desktop", "sidecar", "store.ts"), 3],
+				[
+					join(repoRoot, "apps", "desktop", "sidecar", "test", "store.test.ts"),
+					5,
+				],
+				[
+					join(
+						repoRoot,
+						"apps",
+						"desktop",
+						"sidecar",
+						"walkthrough",
+						"context.ts",
+					),
+					3,
+				],
+				[join(repoRoot, "packages", "settings", "src", "index.ts"), 1],
+				[settingsStore, 4],
+				[join(repoRoot, "packages", "settings", "test", "fixtures.ts"), 2],
+				[join(repoRoot, "packages", "settings", "test", "store.test.ts"), 17],
+			]),
+		);
 	}, 30_000);
 });

@@ -1,4 +1,4 @@
-import { basename } from "node:path";
+import { basename, extname } from "node:path";
 import {
 	Cause,
 	Deferred,
@@ -8,6 +8,7 @@ import {
 	Queue,
 	Ref,
 	type Scope,
+	Semaphore,
 	Stream,
 } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
@@ -46,6 +47,8 @@ import {
  */
 export type LspServer = {
 	readonly rootPath: string;
+	/** Sends `didOpen` on first use and a full `didChange` thereafter. */
+	readonly openDocument: (path: string, text: string) => Effect.Effect<void>;
 	readonly semanticTokensFull: (
 		path: string,
 	) => Effect.Effect<
@@ -140,13 +143,18 @@ const CLIENT_CAPABILITIES = {
 
 type PendingMap = Map<number, Deferred.Deferred<unknown, JsonRpcErrorPayload>>;
 
-/** Everything `releaseServer` needs that `LspServer` itself doesn't expose — kept separate so the public type stays exactly the four queries. */
+type LspNotification = (method: string, params: unknown) => Effect.Effect<void>;
+
+type OpenDocument = (path: string, text: string) => Effect.Effect<void>;
+
+/** Everything `releaseServer` needs that `LspServer` itself doesn't expose. */
 type InternalServer = {
 	readonly rootPath: string;
 	readonly handle: ChildProcessSpawner.ChildProcessHandle;
 	readonly readerFiber: Fiber.Fiber<void, never>;
 	readonly writerFiber: Fiber.Fiber<void, never>;
 	readonly request: ReturnType<typeof makeRequest>;
+	readonly openDocument: OpenDocument;
 	readonly legend: SemanticTokensLegend;
 };
 
@@ -155,10 +163,8 @@ type InternalServer = {
  * `initialize`/`initialized` handshake, and returns a ready-to-query
  * `LspServer` — scoped, so the process (and its stdio pump fibers) are torn
  * down when the caller's `Scope` closes; see `releaseServer` for the
- * shutdown sequence. Deliberately never sends `textDocument/didOpen` for
- * anything queried through the returned server — this package's AGENTS.md
- * documents why that's safe (the server reads files off disk given
- * `rootUri`) and measurably faster.
+ * shutdown sequence. `openDocument` supplies the document text when a caller
+ * needs deterministic project loading for a cross-project operation.
  */
 export const spawnLspServer = (
 	rootPath: string,
@@ -169,7 +175,12 @@ export const spawnLspServer = (
 > =>
 	Effect.acquireRelease(acquireServer(rootPath), releaseServer).pipe(
 		Effect.map((server) =>
-			buildLspServer(server.rootPath, server.request, server.legend),
+			buildLspServer(
+				server.rootPath,
+				server.request,
+				server.openDocument,
+				server.legend,
+			),
 		),
 	);
 
@@ -196,6 +207,41 @@ const acquireServer = (
 		const pending = yield* Ref.make<PendingMap>(new Map());
 		const nextId = yield* Ref.make(0);
 		const inboundBuffer = yield* Ref.make<Buffer>(Buffer.alloc(0));
+		const openDocuments = yield* Ref.make(new Map<string, number>());
+		const notificationLock = Semaphore.makeUnsafe(1);
+		const notify: LspNotification = (method, params) =>
+			Queue.offer(outbound, encodeFrame({ jsonrpc: "2.0", method, params }));
+		const openDocument: OpenDocument = (path, text) =>
+			notificationLock.withPermit(
+				Effect.gen(function* () {
+					const update = yield* Ref.modify(openDocuments, (documents) => {
+						const previousVersion = documents.get(path);
+						const version = (previousVersion ?? 0) + 1;
+						const next = new Map(documents);
+						next.set(path, version);
+						return [
+							{ isChange: previousVersion !== undefined, version },
+							next,
+						] as const;
+					});
+					const uri = pathToUri(path);
+					if (!update.isChange) {
+						yield* notify("textDocument/didOpen", {
+							textDocument: {
+								uri,
+								languageId: languageIdForPath(path),
+								version: update.version,
+								text,
+							},
+						});
+						return;
+					}
+					yield* notify("textDocument/didChange", {
+						textDocument: { uri, version: update.version },
+						contentChanges: [{ text }],
+					});
+				}),
+			);
 
 		// `forkScoped`, not a bare fork: these pumps must live exactly as long
 		// as the `Scope` this whole server is acquired against, independent of
@@ -248,12 +294,17 @@ const acquireServer = (
 		const legend = yield* Effect.sync(() => extractLegend(initializeResult));
 		yield* Effect.sync(() => assertUtf16PositionEncoding(initializeResult));
 
-		yield* Queue.offer(
-			outbound,
-			encodeFrame({ jsonrpc: "2.0", method: "initialized", params: {} }),
-		);
+		yield* notify("initialized", {});
 
-		return { rootPath, handle, readerFiber, writerFiber, request, legend };
+		return {
+			rootPath,
+			handle,
+			readerFiber,
+			writerFiber,
+			request,
+			openDocument,
+			legend,
+		};
 	});
 
 /**
@@ -455,9 +506,11 @@ const decodeResult = <A>(
 const buildLspServer = (
 	rootPath: string,
 	request: ReturnType<typeof makeRequest>,
+	openDocument: OpenDocument,
 	legend: SemanticTokensLegend,
 ): LspServer => ({
 	rootPath,
+	openDocument,
 	semanticTokensFull: (path) =>
 		request("textDocument/semanticTokens/full", {
 			textDocument: { uri: pathToUri(path) },
@@ -487,3 +540,20 @@ const buildLspServer = (
 			position,
 		}).pipe(Effect.flatMap((result) => decodeResult(result, decodeHover))),
 });
+
+const languageIdForPath = (path: string): string => {
+	switch (extname(path).toLowerCase()) {
+		case ".tsx":
+			return "typescriptreact";
+		case ".js":
+		case ".mjs":
+		case ".cjs":
+			return "javascript";
+		case ".jsx":
+			return "javascriptreact";
+		case ".json":
+			return "json";
+		default:
+			return "typescript";
+	}
+};

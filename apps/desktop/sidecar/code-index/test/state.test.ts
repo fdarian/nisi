@@ -20,6 +20,7 @@ const encode = (text: string): Uint8Array => new TextEncoder().encode(text);
 test("same-root LSP leases allow operations to overlap", async () => {
 	const fakeServer: LspServer = {
 		rootPath: "root",
+		openDocument: () => Effect.void,
 		semanticTokensFull: () => Effect.succeed([]),
 		references: () => Effect.succeed([]),
 		definition: () => Effect.succeed([]),
@@ -63,9 +64,62 @@ test("same-root LSP leases allow operations to overlap", async () => {
 	expect(maximumActive).toBe(2);
 });
 
+test("different worktree roots use separate live servers", async () => {
+	const spawnedRoots: string[] = [];
+	let active = 0;
+	let maximumActive = 0;
+	const lookup = (
+		root: string,
+	): Effect.Effect<LspServer, LspProcessError | TsLspBinaryResolutionError> =>
+		Effect.sync(() => {
+			spawnedRoots.push(root);
+			return {
+				rootPath: root,
+				openDocument: () => Effect.void,
+				semanticTokensFull: () => Effect.succeed([]),
+				references: () => Effect.succeed([]),
+				definition: () => Effect.succeed([]),
+				hover: () => Effect.succeed(null),
+			};
+		});
+
+	const program = Effect.scoped(
+		Effect.gen(function* () {
+			const resources = yield* RcMap.make({
+				lookup,
+				capacity: 2,
+				idleTimeToLive: "5 minutes",
+			});
+			const pool = {
+				resources,
+				admissionLock: Semaphore.makeUnsafe(1),
+			} satisfies CodeLspPoolValue;
+			const operation = (root: string) =>
+				withCodeLspServer(pool, root, () =>
+					Effect.gen(function* () {
+						active += 1;
+						maximumActive = Math.max(maximumActive, active);
+						yield* Effect.promise(
+							() => new Promise<void>((resolve) => setTimeout(resolve, 75)),
+						);
+						active -= 1;
+					}),
+				);
+			yield* Effect.all([operation("repo-a"), operation("repo-b")], {
+				concurrency: "unbounded",
+			});
+		}),
+	);
+
+	await Effect.runPromise(program);
+	expect(maximumActive).toBe(2);
+	expect(spawnedRoots.sort()).toEqual(["repo-a", "repo-b"]);
+});
+
 test("a failed lease is surfaced and the next operation gets a fresh server", async () => {
 	const fakeServer: LspServer = {
 		rootPath: "root",
+		openDocument: () => Effect.void,
 		semanticTokensFull: () => Effect.succeed([]),
 		references: () => Effect.succeed([]),
 		definition: () => Effect.succeed([]),

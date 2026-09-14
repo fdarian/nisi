@@ -2,28 +2,25 @@
 
 A JSON-RPC-over-stdio client for TypeScript 7's native LSP server (`<tsc> --lsp --stdio`) —
 `references`, `definition`, `hover`, and `semanticTokens/full` against a live process, no index
-built or cached anywhere. One server process per project root (per `tsconfig.json` directory), not
-per repo: `spawnLspServer(rootPath)` spawns, completes `initialize`/`initialized`, and returns an
-`LspServer` scoped to the caller's `Scope` — the process (and its stdio pump fibers) dies when that
-scope closes. Pure otherwise: no oRPC, no SQLite, no filesystem walking to find a `tsconfig.json`
-(that's the caller's job — see "One project root per server" below).
+built or cached anywhere. One server process per repository/worktree root: `spawnLspServer(rootPath)`
+spawns, completes `initialize`/`initialized`, and returns an `LspServer` scoped to the caller's
+`Scope` — the process (and its stdio pump fibers) dies when that scope closes. Pure otherwise: no
+oRPC, no SQLite, and no filesystem walking to rediscover a caller's worktree root.
 
-Nothing here ever sends `textDocument/didOpen`. The server reads files straight off disk given
-`rootUri`/`workspaceFolders`, which is both simpler and faster than tracking open-document state for
-a client that only ever asks one-shot questions.
+Queries read files straight off disk by default. `openDocument(path, text)` is available when a
+caller needs deterministic TypeScript project loading: its first call sends `textDocument/didOpen`,
+and later calls send a full `textDocument/didChange` with the current text.
 
 ## Public API
 
 - `spawnLspServer(rootPath): Effect<LspServer, TsLspBinaryResolutionError | LspProcessError, Scope | ChildProcessSpawner>`
-  — the only constructor. `LspServer` exposes `semanticTokensFull(path)`, `references(path, position)`,
-  `definition(path, position)`, and `hover(path, position)`, all `Effect<_, LspRequestError | LspProtocolError>`.
-  Every path in and out is a plain filesystem path — `file://` URIs never leak into or out of this API.
+  — the only constructor. `LspServer` exposes `openDocument(path, text)`,
+  `semanticTokensFull(path)`, `references(path, position)`, `definition(path, position)`, and
+  `hover(path, position)`. Query methods return `Effect<_, LspRequestError | LspProtocolError>`;
+  `openDocument` is a notification and returns `Effect<void>`. Every path in and out is a plain
+  filesystem path — `file://` URIs never leak into or out of this API.
 - `resolveTsLspBinary()` (`src/binary.ts`) — resolves the absolute path to the platform `tsc` binary.
   Exported mainly so a caller can check it independently of spawning.
-- `resolveProjectRoot(filePath)` (`src/project-root.ts`) — walks up from `filePath` to the nearest
-  ancestor directory holding a `tsconfig.json`, `null` if none. The piece "One project root per
-  server" (below) says a caller must own; it lives here anyway (see that section) since it's pure
-  and this package's own integration test already proved the scoping it exists for matters.
 
 ## File map
 
@@ -34,28 +31,41 @@ a client that only ever asks one-shot questions.
 - `src/semantic-tokens.ts` — `decodeSemanticTokens`: the delta-encoding decode against a negotiated
   legend.
 - `src/binary.ts` — `resolveTsLspBinary`: dev vs. compiled binary resolution (see gotcha below).
-- `src/project-root.ts` — `resolveProjectRoot`: the nearest-`tsconfig.json` upward walk described
-  above.
 - `src/client.ts` — the process lifecycle (spawn, wire the stdin/stdout pumps, `initialize`, graceful
-  shutdown) and the four query methods, composing everything above. The one file that touches
-  `ChildProcessSpawner`.
+  shutdown), document-open notifications, and the four query methods, composing everything above.
+  The one file that touches `ChildProcessSpawner`.
 - `src/errors.ts` — `TsLspBinaryResolutionError`, `LspProcessError`, `LspProtocolError`,
   `LspRequestError`.
 
-## One project root per server
+## One repository root per server
 
-`spawnLspServer` takes a root and nothing else — it does not pool or key servers by root, and it
-never calls `resolveProjectRoot` itself. A caller still has to decide *which* root to spawn against,
-and to pool/bound however many it ends up spawning — the sidecar's
-`apps/desktop/sidecar/code-index/state.ts` owns that (a capacity-bounded, LRU-evicted registry keyed
-by exactly the roots `resolveProjectRoot` resolves to). This split exists because reference counts
-are **not stable across project loads**: querying a symbol from a fresh server scoped to its own
-project gives a different (and correct) count than querying the same symbol after a *different*
-project has already cold-loaded in the same server — the most-recently-loaded project scopes the
-query. Verified against this repo: `packages/settings/src/store.ts`'s `SettingsStore` gives 24
-references in 4 files from a server rooted at `packages/settings` alone; a server that has also
-loaded a second project can give a different count for the same query. `test/client.test.ts`'s
-repo-integration test pins the 24/4 numbers as a regression check.
+`spawnLspServer` takes the repository/worktree root and nothing else — it does not pool or key
+servers itself. The sidecar passes the exact root already resolved by
+`Store.resolveSessionRepoRoot` and owns the capacity-bounded, lease-aware pool. A root server's
+project service can load projects from every package in that worktree, so splitting by nearest
+`tsconfig.json` would make cross-package references incomplete.
+
+The root-server spike against this repository established the loading rule. `semanticTokensFull`
+returned tokens for nested `packages/*`, `apps/desktop/src`, and `apps/desktop/sidecar` files without
+`didOpen`. References were not stable on a cold server: `SettingsStore` returned 24 locations in 4
+settings files; querying other packages first produced 32 locations in 6 files (and a narrower
+three-file warm-up produced 8). Sending `openDocument` for the 11 relevant files before querying
+returned 46 locations in 11 files, and opening those same files in reverse order returned the same
+46 locations. The regression in `test/client.test.ts` pins that cross-package, order-independent
+result rather than the old 24/4 project-local count.
+
+This is how tsgo's project service is exposed through LSP: a document request/open causes its
+project tree to load, while `references` searches the projects currently loaded by the
+cross-project orchestrator. The LSP surface has no cheap "load every configured project" request;
+the internal all-project-tree operation is intended for expensive operations such as file rename.
+The sidecar therefore opens each queried worktree document before semantic-token and reference
+work. As a reviewer visits more diff files, their projects are opened on the same root server; the
+server's own empty result remains the answer for a file it cannot associate with a project (there is
+no project-membership field in these LSP responses).
+
+The same spike measured about 206 MiB RSS for a cold root server and about 773 MiB after those 11
+documents were opened (the TypeScript automatic-acquisition helper was a separate child). The pool
+keeps two roots live; see the sidecar state comment for the memory rationale.
 
 ## Gotchas
 
@@ -80,6 +90,11 @@ repo-integration test pins the 24/4 numbers as a regression check.
   answering empty.** Only query positions that came from a `semanticTokensFull` token. Genuinely
   out-of-range positions and syntax-broken files *do* answer cleanly (`references` on nowhere gives
   `[]`; `hover` on unresolvable code can give `null`) — nothing here treats that as an error.
+- **Open documents are the project-loading signal.** `semanticTokensFull` can read a nested file from
+  disk without an open notification, but cross-project `references` only sees project trees tsgo has
+  loaded. Call `openDocument` with the current full text before a project-sensitive query; the client
+  sends `didOpen` once per path and full-text `didChange` updates thereafter, with a small lock around
+  notification ordering only. Query requests themselves remain concurrent.
 - **`typescript/lib/getExePath.js` isn't importable as a bare specifier.** It resolves the platform
   `tsc` binary but isn't listed in `typescript`'s own `package.json` `exports` map, so
   `import("typescript/lib/getExePath.js")` is rejected outright. `resolveDevBinary` (`binary.ts`)

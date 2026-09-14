@@ -129,7 +129,7 @@ describe("buildFileOccurrencesResponse against a real fixture with imports", () 
 		expect(result.fromImportSite.totalReferenceCount).toBeGreaterThan(0);
 	}, 30_000);
 
-	test("keeps concurrent occurrence requests alive across project roots", async () => {
+	test("keeps concurrent occurrence requests alive across packages on one root", async () => {
 		const program = Effect.all(
 			FILES_FROM_FOUR_PROJECTS.map((path) =>
 				buildFileOccurrencesResponse(REPO_ROOT, path).pipe(

@@ -158,16 +158,20 @@ seam" for the port/token handshake this boots into.
   `@repo/code-lsp`'s TypeScript 7 native LSP client rather than a prebuilt index. (A SCIP-index-based
 	implementation of this same feature lives on branch `claude/nisi-implementation-cfea93`, for
 	comparison.) `CodeLspPool` is a `Context.Service` wrapping one reference-counted map of live
-	`tsc --lsp --stdio` processes, keyed by tsconfig project root and capacity-bounded by evicting
-	only idle entries (`MAX_LIVE_LSP_SERVERS`) — part of `index.ts`'s `MainLayer`, so every server dies
-	with the sidecar the same way every other `Effect.acquireRelease` resource does. Each occurrence or
-	references operation holds a scoped lease for its entire LSP request sequence; a full pool of leased
-	servers waits for a lease to release before admitting another root.
-  `fileOccurrences`/`references` resolve each queried file or symbol to its own project root and
-  acquire a lease from `CodeLspPool` lazily; there is no repo-wide index state or warm-up step.
-  `@repo/code-lsp` itself stays pure protocol/process-lifecycle code with no pooling of its own — see
-  that package's AGENTS.md, "One project root per server" — this file is where the pooling and every
-  other piece of process-lifetime state actually lives.
+	`tsc --lsp --stdio` processes, keyed by the exact worktree root already resolved by
+	`Store.resolveSessionRepoRoot` and capacity-bounded by evicting only idle entries
+	(`MAX_LIVE_LSP_SERVERS`) — part of `index.ts`'s `MainLayer`, so every server dies with the sidecar
+	the same way every other `Effect.acquireRelease` resource does. Each occurrence or references
+	operation holds a scoped lease for its entire LSP request sequence; a full pool of leased servers
+	waits for a lease to release before admitting another root. The pool keeps two roots live: a fully
+	opened root reached roughly 773 MiB RSS in the repository spike, so two allows concurrent reviews
+	without accepting an unbounded multi-gigabyte process set.
+  `fileOccurrences`/`references` acquire a root lease lazily and send the current file through
+  `@repo/code-lsp`'s `openDocument` before querying. That `didOpen`/full-change signal makes project
+  loading deterministic across packages as files are visited; there is no separate build, index, or
+  warm-up state. `@repo/code-lsp` itself stays pure protocol/process-lifecycle code with no pooling
+  of its own — see that package's AGENTS.md, "One repository root per server" — this file is where the
+  pooling and every other piece of process-lifetime state actually lives.
 - `updater/` — macOS Homebrew-cask auto-update. `service.ts`'s `Updater` owns a `Ref<UpdateState>`
   and is the only writer of it: `startChecks()` (forked from `index.ts`'s boot program, same shape as
   `startLivePolling` above) drives `idle ⇄ available` on an hourly `Schedule`, stopping for good the
