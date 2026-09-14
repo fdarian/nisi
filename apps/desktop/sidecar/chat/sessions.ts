@@ -36,6 +36,16 @@ type ThreadEntry = {
 	readonly pending: Promise<LiveChatSession>;
 };
 
+export type ChatThreadCloseFailure = {
+	readonly sessionId: string;
+	readonly threadId: string;
+	readonly error: unknown;
+};
+
+export type ChatThreadCloseFailureReporter = (
+	failure: ChatThreadCloseFailure,
+) => void;
+
 export type ChatSessionParams = {
 	readonly sessionId: string;
 	readonly threadId: string;
@@ -145,20 +155,27 @@ export class ChatSessions extends Context.Service<ChatSessions>()(
 			 * processes) and forgets it — called on `chat.closeThread` and, for
 			 * every thread scoped to a review session, on `sessions.close`
 			 * (`closeChatThreadsForSession` below). A no-op when nothing's live for
-			 * `threadId`. Tolerates a construction that never finished
-			 * (`agent.createSession()` failed, or is still in flight when
-			 * disposed) — there's nothing live to stop in that case, so it's
-			 * dropped rather than left to reject a caller that's only trying to
-			 * clean up.
+			 * `threadId`. Bookkeeping is removed before awaiting construction, so a
+			 * later-resolving session is still stopped without keeping the thread
+			 * indexed during teardown.
 			 */
-			const closeChatThread = async (threadId: string): Promise<void> => {
+			const closeChatThread = async (
+				threadId: string,
+				reportFailure: ChatThreadCloseFailureReporter,
+			): Promise<void> => {
 				const entry = liveThreads.get(threadId);
 				if (entry === undefined) return;
 				liveThreads.delete(threadId);
 				untrackThread(entry.sessionId, threadId);
-				const live = await entry.pending.catch(() => undefined);
-				if (live === undefined) return;
-				await live.session.stop();
+				await entry.pending
+					.then((live) => live.session.stop())
+					.catch((error) => {
+						reportFailure({
+							sessionId: entry.sessionId,
+							threadId,
+							error,
+						});
+					});
 			};
 
 			/**
@@ -170,11 +187,14 @@ export class ChatSessions extends Context.Service<ChatSessions>()(
 			 */
 			const closeChatThreadsForSession = async (
 				sessionId: string,
+				reportFailure: ChatThreadCloseFailureReporter,
 			): Promise<void> => {
 				const threadIds = threadsBySession.get(sessionId);
 				if (threadIds === undefined) return;
-				await Promise.all(
-					[...threadIds].map((threadId) => closeChatThread(threadId)),
+				await Promise.allSettled(
+					[...threadIds].map((threadId) =>
+						closeChatThread(threadId, reportFailure),
+					),
 				);
 			};
 
@@ -219,15 +239,17 @@ export const getOrCreateChatSession = (
 export const closeChatThread = (
 	threadId: string,
 	mainContext: Context.Context<AppServices>,
+	reportFailure: ChatThreadCloseFailureReporter,
 ): Promise<void> =>
 	runEffect(ChatSessions, mainContext).then((chatSessions) =>
-		chatSessions.closeChatThread(threadId),
+		chatSessions.closeChatThread(threadId, reportFailure),
 	);
 
 export const closeChatThreadsForSession = (
 	sessionId: string,
 	mainContext: Context.Context<AppServices>,
+	reportFailure: ChatThreadCloseFailureReporter,
 ): Promise<void> =>
 	runEffect(ChatSessions, mainContext).then((chatSessions) =>
-		chatSessions.closeChatThreadsForSession(sessionId),
+		chatSessions.closeChatThreadsForSession(sessionId, reportFailure),
 	);

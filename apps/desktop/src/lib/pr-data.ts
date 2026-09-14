@@ -193,7 +193,32 @@ export function useSessions(
 } {
 	const queryClient = useQueryClient();
 	const sessionsQuery = useQuery(orpc.sessions.list.queryOptions());
-	const closeMutation = useMutation(orpc.sessions.close.mutationOptions());
+	const closeMutation = useMutation({
+		...orpc.sessions.close.mutationOptions(),
+		onMutate: async (variables) => {
+			const sessionsKey = orpc.sessions.list.queryKey();
+			await queryClient.cancelQueries({ queryKey: sessionsKey });
+			const previousSessions =
+				queryClient.getQueryData<readonly Session[]>(sessionsKey);
+			queryClient.setQueryData<readonly Session[]>(sessionsKey, (current) =>
+				current === undefined
+					? current
+					: current.filter((session) => session.id !== variables.sessionId),
+			);
+			return { previousSessions };
+		},
+		onError: (_error, _variables, context) => {
+			if (context === undefined) return;
+			queryClient.setQueryData<readonly Session[]>(
+				orpc.sessions.list.queryKey(),
+				context.previousSessions,
+			);
+		},
+		onSettled: () =>
+			queryClient.invalidateQueries({
+				queryKey: orpc.sessions.list.queryKey(),
+			}),
+	});
 
 	// The CLI opening (or an idle tab closing) a session out from under a
 	// running app is exactly what `events.subscribe` exists for — a live
@@ -217,18 +242,9 @@ export function useSessions(
 
 	const closeSession = useCallback(
 		(sessionId: string) => {
-			closeMutation.mutate(
-				{ sessionId },
-				{
-					onSuccess: () => {
-						queryClient.invalidateQueries({
-							queryKey: orpc.sessions.list.queryKey(),
-						});
-					},
-				},
-			);
+			closeMutation.mutate({ sessionId });
 		},
-		[closeMutation, queryClient, orpc],
+		[closeMutation],
 	);
 
 	return {

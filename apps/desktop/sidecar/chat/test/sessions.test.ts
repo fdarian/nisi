@@ -18,6 +18,10 @@ import { Effect } from "effect";
  * calls.
  */
 let nextCreateSessionShouldFail = false;
+let nextCreateSessionShouldWait = false;
+let resolvePendingCreateSession:
+	| ((session: FakeHarnessAgentSession) => void)
+	| undefined;
 
 class FakeHarnessAgentSession {
 	readonly stop = mock(async () => ({}) as never);
@@ -32,6 +36,11 @@ class FakeHarnessAgent {
 	async createSession(): Promise<FakeHarnessAgentSession> {
 		if (nextCreateSessionShouldFail) {
 			throw new Error("simulated createSession failure");
+		}
+		if (nextCreateSessionShouldWait) {
+			return new Promise((resolve) => {
+				resolvePendingCreateSession = resolve;
+			});
 		}
 		return this.lastSession;
 	}
@@ -56,6 +65,8 @@ const paramsFor = (sessionId: string, threadId: string) => ({
 	instructions: "test instructions",
 });
 
+const reportFailure = (_failure: unknown): void => {};
+
 /**
  * A fresh service instance per test — `ChatSessions.make` is a plain
  * `Effect.sync`, so running it synchronously is enough to get a real
@@ -65,6 +76,8 @@ let chatSessions: InstanceType<typeof ChatSessions>;
 
 beforeEach(() => {
 	nextCreateSessionShouldFail = false;
+	nextCreateSessionShouldWait = false;
+	resolvePendingCreateSession = undefined;
 	chatSessions = Effect.runSync(ChatSessions.make);
 });
 
@@ -114,7 +127,7 @@ describe("closeChatThreadsForSession", () => {
 			paramsFor(otherSessionId, otherThread),
 		);
 
-		await chatSessions.closeChatThreadsForSession(sessionId);
+		await chatSessions.closeChatThreadsForSession(sessionId, reportFailure);
 
 		expect(liveA.session.stop).toHaveBeenCalledTimes(1);
 		expect(liveB.session.stop).toHaveBeenCalledTimes(1);
@@ -131,11 +144,14 @@ describe("closeChatThreadsForSession", () => {
 
 	test("is a no-op for a session with no live threads", async () => {
 		await expect(
-			chatSessions.closeChatThreadsForSession(uniqueId("session")),
+			chatSessions.closeChatThreadsForSession(
+				uniqueId("session"),
+				reportFailure,
+			),
 		).resolves.toBeUndefined();
 	});
 
-	test("tolerates a thread whose construction never resolved", async () => {
+	test("reports a thread whose construction rejected", async () => {
 		const sessionId = uniqueId("session");
 		const threadId = uniqueId("thread");
 
@@ -148,15 +164,47 @@ describe("closeChatThreadsForSession", () => {
 		).rejects.toThrow();
 
 		await expect(
-			chatSessions.closeChatThreadsForSession(sessionId),
+			chatSessions.closeChatThreadsForSession(sessionId, reportFailure),
 		).resolves.toBeUndefined();
+	});
+
+	test("closes promptly while construction is pending and stops a late session", async () => {
+		const sessionId = uniqueId("session");
+		const threadId = uniqueId("thread");
+
+		nextCreateSessionShouldWait = true;
+		const pending = chatSessions.getOrCreateChatSession(
+			paramsFor(sessionId, threadId),
+		);
+		const resolve = resolvePendingCreateSession;
+		if (resolve === undefined) {
+			throw new Error("fake createSession did not expose its resolver");
+		}
+
+		const closing = chatSessions.closeChatThreadsForSession(
+			sessionId,
+			reportFailure,
+		);
+		await expect(
+			chatSessions.closeChatThreadsForSession(sessionId, reportFailure),
+		).resolves.toBeUndefined();
+
+		const lateSession = new FakeHarnessAgentSession();
+		resolve(lateSession);
+		const live = await pending;
+		expect(live.session).toBe(lateSession);
+		await closing;
+		await new Promise<void>((resolveNextTick) =>
+			setTimeout(resolveNextTick, 0),
+		);
+		expect(lateSession.stop).toHaveBeenCalledTimes(1);
 	});
 });
 
 describe("closeChatThread", () => {
 	test("is a no-op for an unknown threadId", async () => {
 		await expect(
-			chatSessions.closeChatThread(uniqueId("thread")),
+			chatSessions.closeChatThread(uniqueId("thread"), reportFailure),
 		).resolves.toBeUndefined();
 	});
 
@@ -165,11 +213,11 @@ describe("closeChatThread", () => {
 		const threadId = uniqueId("thread");
 
 		await chatSessions.getOrCreateChatSession(paramsFor(sessionId, threadId));
-		await chatSessions.closeChatThread(threadId);
+		await chatSessions.closeChatThread(threadId, reportFailure);
 
 		// Nothing left under `sessionId` to dispose a second time.
 		await expect(
-			chatSessions.closeChatThreadsForSession(sessionId),
+			chatSessions.closeChatThreadsForSession(sessionId, reportFailure),
 		).resolves.toBeUndefined();
 	});
 });
