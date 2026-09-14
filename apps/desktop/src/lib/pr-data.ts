@@ -242,18 +242,9 @@ export function useSessions(
 
 	const closeSession = useCallback(
 		(sessionId: string) => {
-			closeMutation.mutate(
-				{ sessionId },
-				{
-					onSuccess: () => {
-						queryClient.invalidateQueries({
-							queryKey: orpc.sessions.list.queryKey(),
-						});
-					},
-				},
-			);
+			closeMutation.mutate({ sessionId });
 		},
-		[closeMutation, queryClient, orpc],
+		[closeMutation],
 	);
 
 	return {
