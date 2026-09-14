@@ -95,8 +95,8 @@ export function initialReferenceIndex(
 		if (item.path !== target.path) return false;
 		if (item.reference.line !== target.occurrence.line) return false;
 		return (
-			item.reference.charStart <= target.occurrence.charEnd &&
-			item.reference.charEnd >= target.occurrence.charStart
+			item.reference.charStart < target.occurrence.charEnd &&
+			item.reference.charEnd > target.occurrence.charStart
 		);
 	});
 
