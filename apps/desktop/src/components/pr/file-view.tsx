@@ -198,7 +198,7 @@ export function FileView({
 		}
 		setActiveReferenceTarget(pendingReferenceTarget);
 		let frame: number | null = null;
-		let scrollRequested = false;
+		let revealRequested = false;
 		const tryScroll = () => {
 			const handle = codeViewRef.current;
 			const viewer = handle?.getInstance();
@@ -210,20 +210,35 @@ export function FileView({
 				frame = requestAnimationFrame(tryScroll);
 				return;
 			}
-			if (!scrollRequested) {
+			if (!revealRequested) {
 				handle.scrollTo({
 					type: "line",
 					id: path,
 					lineNumber: codeIndexDisplayedLine(pendingReferenceTarget),
-					align: "center",
-					behavior: "smooth",
+					align: "nearest",
+					behavior: "instant",
 				});
-				scrollRequested = true;
+				revealRequested = true;
 			}
 			if (!referenceHighlight.tryApplyTarget(pendingReferenceTarget)) {
 				frame = requestAnimationFrame(tryScroll);
 				return;
 			}
+			if (viewer.getHeight() === 0 || viewer.getScrollHeight() === 0) {
+				frame = requestAnimationFrame(tryScroll);
+				return;
+			}
+			// The first scroll only brings a virtualized row into the render
+			// window. Center after the row is mounted so CodeView has a real
+			// viewport and line layout to align against; this is deliberately a
+			// single final correction rather than a polling scroll loop.
+			handle.scrollTo({
+				type: "line",
+				id: path,
+				lineNumber: codeIndexDisplayedLine(pendingReferenceTarget),
+				align: "center",
+				behavior: "instant",
+			});
 			clearPendingReferenceTarget();
 		};
 		tryScroll();
