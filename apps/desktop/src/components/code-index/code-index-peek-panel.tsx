@@ -453,7 +453,7 @@ function ReferencesTree({
 		[],
 	);
 	const handleReferenceKeyDown = useCallback(
-		(event: React.KeyboardEvent<HTMLDivElement>) => {
+		(event: React.KeyboardEvent<HTMLElement>) => {
 			const key = event.key.toLowerCase();
 			const isCtrlNext =
 				event.ctrlKey &&
@@ -516,12 +516,12 @@ function ReferencesTree({
 	}
 
 	return (
-		<div
-			className="flex flex-col px-1 py-2 gap-2"
+		<fieldset
+			className="m-0 flex min-w-0 flex-col border-0 px-1 py-2 gap-2"
 			onKeyDown={handleReferenceKeyDown}
-			role="application"
 			tabIndex={-1}
 		>
+			<legend className="sr-only">References</legend>
 			<div className="px-1 font-medium text-muted-foreground">{countLabel}</div>
 			<div className="flex flex-col">
 				{result.files.map((group, index) => (
@@ -541,7 +541,7 @@ function ReferencesTree({
 					/>
 				))}
 			</div>
-		</div>
+		</fieldset>
 	);
 }
 
