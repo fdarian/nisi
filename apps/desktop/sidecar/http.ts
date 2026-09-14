@@ -16,7 +16,6 @@ import {
 	type GitCommandError,
 	markPullRequestReady,
 	mergePullRequest,
-	resolveHeadSha,
 	resolveUnpushedCommitCount,
 	searchPullRequests,
 	type WorktreeReadFailed,
@@ -53,10 +52,7 @@ import {
 	buildReferencesPlan,
 	buildReferencesResponse,
 	describeCodeIndexFailure,
-	isCodeIndexUnsupported,
 	readWorktreeFileContents,
-	resolveCodeIndexStatus,
-	startCodeIndexBuild,
 } from "./code-index/state.ts";
 import {
 	emit,
@@ -279,9 +275,7 @@ export function attachRouter(
 
 	/**
 	 * Every `codeIndex.*` handler starts by resolving `sessionId` to a live
-	 * repo root, then that repo's current head sha — shared here since all
-	 * four procedures declare the same `NOT_FOUND`/`INTERNAL_SERVER_ERROR`
-	 * codes for it. Mirrors `file.get`'s own repo-root-resolution catch
+	 * repo root. Mirrors `file.get`'s own repo-root-resolution catch
 	 * chain (`SessionNotFound` → `NOT_FOUND`, `GitCommandError`/
 	 * `WorktreeRelocationFailed` → `INTERNAL_SERVER_ERROR`); `ReviewStoreError`/
 	 * `SettingsStoreError` are left as uncaught defects, same as there —
@@ -332,22 +326,6 @@ export function attachRouter(
 						}),
 					),
 			}),
-		);
-
-	const resolveCodeIndexHeadSha = <EInternal>(
-		repoRoot: string,
-		errors: {
-			readonly INTERNAL_SERVER_ERROR: (input: { message: string }) => EInternal;
-		},
-	) =>
-		resolveHeadSha(repoRoot).pipe(
-			Effect.catchTag("GitCommandError", (cause) =>
-				Effect.fail(
-					errors.INTERNAL_SERVER_ERROR({
-						message: formatGitCommandError(cause),
-					}),
-				),
-			),
 		);
 
 	const implementer = implement(contract).$context<ServerContext>();
@@ -1611,36 +1589,6 @@ export function attachRouter(
 			}),
 		},
 		codeIndex: {
-			status: authed.codeIndex.status.effect(function* ({ input, errors }) {
-				const store = yield* Store;
-				const repoRoot = yield* resolveCodeIndexRepoRoot(
-					store.resolveSessionRepoRoot(input.sessionId),
-					input.sessionId,
-					errors,
-				);
-				const headSha = yield* resolveCodeIndexHeadSha(repoRoot, errors);
-				return yield* resolveCodeIndexStatus(repoRoot, headSha);
-			}),
-			// A build already running for this repo is a no-op — `startCodeIndexBuild`
-			// itself guards on that (see its own doc comment) — so this handler's
-			// only real branch is `UNSUPPORTED` (no tsconfig anywhere in the repo).
-			build: authed.codeIndex.build.effect(function* ({ input, errors }) {
-				const store = yield* Store;
-				const repoRoot = yield* resolveCodeIndexRepoRoot(
-					store.resolveSessionRepoRoot(input.sessionId),
-					input.sessionId,
-					errors,
-				);
-				const unsupported = yield* isCodeIndexUnsupported(repoRoot);
-				if (unsupported) {
-					return yield* Effect.fail(
-						errors.UNSUPPORTED({
-							message: `no tsconfig.json found anywhere in ${repoRoot}`,
-						}),
-					);
-				}
-				yield* Effect.promise(() => startCodeIndexBuild(repoRoot, mainContext));
-			}),
 			fileOccurrences: authed.codeIndex.fileOccurrences.effect(function* ({
 				input,
 				errors,

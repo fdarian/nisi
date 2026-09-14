@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * Owns every piece of ⌘-hover/⌘-click state for SCIP code navigation, shared
+ * Owns every piece of ⌘-hover/⌘-click state for LSP code navigation, shared
  * verbatim by the diff pane (`diff-pane.tsx`, additions side only) and the
  * whole-file viewer (`file-view.tsx`) — both wire the same `codeViewOptions`
  * fragment into their own `CodeView` options and read `peekTarget`/`closePeek`
@@ -10,8 +10,8 @@
  *
  * `enabled` (from `useSessionCodeIndexEnabled`, defaults off every session —
  * see `session-ui-store.tsx`) is a real gate, not just a flag that skips the
- * callbacks: when it's false, this hook makes no `codeIndex.status` request,
- * requests no file's occurrences, attaches no keydown/keyup listeners, and
+ * callbacks: when it's false, this hook requests no file's occurrences,
+ * attaches no keydown/keyup listeners, and
  * its returned `codeViewOptions` is `{}` — spreading in nothing, so the
  * consumer's own `CodeView` never even learns these callbacks exist. The one
  * piece a caller must *also* gate itself is `useTokenTransformer` at the
@@ -28,7 +28,7 @@ import type {
 	TokenEventBase,
 } from "@pierre/diffs";
 import type { CodeViewHandle } from "@pierre/diffs/react";
-import type { CodeIndexOccurrence, CodeIndexStatus } from "@repo/sidecar-api";
+import type { CodeIndexOccurrence } from "@repo/sidecar-api";
 import { useQueries, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -36,21 +36,7 @@ import {
 	findOccurrenceForToken,
 	type OccurrenceIndex,
 } from "#/components/code-index/occurrence-index";
-import { useCodeIndexStatus } from "#/components/code-index/use-code-index-status";
 import type { SidecarQueryUtils } from "#/lib/backend-context";
-
-/**
- * Statuses `handleTokenClick` (below) treats as "the index exists in some
- * form, or could — a ⌘-click should still surface the peek so its
- * build/rebuild affordance is reachable" — mirrors `code-index-peek-panel.tsx`'s
- * `IndexStatusBanner`, which already renders a distinct affordance for each.
- * `unsupported` is deliberately excluded — the feature stays invisible there
- * by design (no tsconfig means nothing here could ever resolve); `ready`
- * is excluded too, since a `ready` index that still failed to match a token
- * means the click genuinely wasn't on an indexed symbol.
- */
-const INDEX_NOT_READY_STATUSES: ReadonlySet<CodeIndexStatus["status"]> =
-	new Set(["absent", "building", "failed"]);
 
 /** Class toggled directly on a token's `HTMLElement` — `@pierre/diffs` has no keyed decoration API, so this is the supported way to style one token (see `InteractionManager`'s own doc). Styled via `extraCSS`/`unsafeCSS` in each pane's `CodeViewOptions` — see `CODE_INDEX_TOKEN_CSS` below. */
 export const CODE_INDEX_TOKEN_ACTIVE_CLASS = "nisi-code-index-token-active";
@@ -69,16 +55,14 @@ export const CODE_INDEX_TOKEN_CSS = `
  * One resolved ⌘-click, everything `CodeIndexPeekDialog` needs to render
  * without re-deriving it from the DOM event that opened it.
  *
- * `occurrence` is optional, not defaulted to a placeholder: a ⌘-click while
- * the index is `absent`/`building`/`failed` still opens the peek
- * (`handleTokenClick`, below) so its build/rebuild affordance is reachable,
- * but there's genuinely no occurrence to report in that case — inventing one
- * would be a lie the dialog would have to un-tell.
+ * The occurrence is resolved from the file's lazy response before a ⌘-click
+ * opens the peek, so the dialog always has the symbol key needed for its
+ * references request.
  */
 export type CodeIndexPeekTarget = {
 	/** The file the clicked token lives in. */
 	path: string;
-	occurrence: CodeIndexOccurrence | undefined;
+	occurrence: CodeIndexOccurrence;
 };
 
 function setTokenActive(element: HTMLElement, active: boolean): void {
@@ -146,38 +130,14 @@ export function useCodeIndexInteractions<Metadata>({
 	peekTarget: CodeIndexPeekTarget | null;
 	closePeek: () => void;
 	/**
-	 * `codeIndex.status` — exposed here too (rather than only inside
-	 * `CodeIndexPeekDialog`) since `handleTokenClick`'s fallback-open below
-	 * already needs it. `undefined` while `enabled` is false (the query
-	 * itself is disabled — see this module's own doc comment).
-	 */
-	indexStatus: CodeIndexStatus | undefined;
-	buildIndex: () => void;
-	isBuildStarting: boolean;
-	/**
-	 * `enabled` narrowed by "and not a known-`unsupported` repo" — what the
-	 * consumer's own `<DiffCodeView highlighterOptions>` choice
+	 * Whether the consumer's own `<DiffCodeView highlighterOptions>` choice
 	 * (`diffHighlighterOptions` vs. `diffHighlighterOptionsWithTokenInteractions`,
-	 * `diff-view-theme.ts`) should actually key off, since paying the
-	 * per-token `data-char` wrapping cost for a repo this feature could never
-	 * work in would be exactly the waste the toggle exists to avoid.
+	 * `diff-view-theme.ts`) should pay the per-token `data-char` wrapping cost.
 	 */
 	tokenInteractionsActive: boolean;
 } {
-	const indexStatusQuery = useCodeIndexStatus(orpc, sessionId, enabled);
 	const queryClient = useQueryClient();
-	// The toggle being on isn't the whole story once status resolves: an
-	// `unsupported` repo (no tsconfig) has nothing this feature could ever
-	// index, so every `fileOccurrences` request would just come back empty —
-	// harmless, but exactly the waste the toggle exists to avoid. `active`
-	// self-corrects the moment that's known, without needing the toggle
-	// itself flipped back off (`files-changed-view.tsx` does that
-	// separately, once, so the checkbox stays hidden from then on). Stays
-	// `true` until the status query actually resolves — a brief window right
-	// after enabling where a few `fileOccurrences` requests could still fire
-	// for an unsupported repo before this narrows; self-limiting, not worth
-	// blocking on.
-	const active = enabled && indexStatusQuery.status?.status !== "unsupported";
+	const active = enabled;
 
 	// Paths whose occurrences have been requested — grows via
 	// `notifyItemRendered` (called from each pane's own `onPostRender`), so a
@@ -409,22 +369,14 @@ export function useCodeIndexInteractions<Metadata>({
 							props.lineCharStart,
 							props.lineCharEnd,
 						);
-			// No occurrence match doesn't necessarily mean "not a symbol" — it
-			// can just as easily mean "no index to match against yet". Surface
-			// the peek anyway when the index is in one of those recoverable
-			// states, so its build/rebuild affordance is reachable from a ⌘-click
-			// even before an index has ever been built.
-			const indexNotReady =
-				indexStatusQuery.status !== undefined &&
-				INDEX_NOT_READY_STATUSES.has(indexStatusQuery.status.status);
-			if (occurrence === undefined && !indexNotReady) return;
+			if (occurrence === undefined) return;
 			event.preventDefault();
 			setPeekTarget({
 				path,
 				occurrence,
 			});
 		},
-		[active, resolvePath, occurrenceIndexByPath, indexStatusQuery.status],
+		[active, resolvePath, occurrenceIndexByPath],
 	);
 
 	const codeViewOptions = useMemo(():
@@ -474,9 +426,6 @@ export function useCodeIndexInteractions<Metadata>({
 		notifyItemRendered,
 		peekTarget,
 		closePeek,
-		indexStatus: indexStatusQuery.status,
-		buildIndex: indexStatusQuery.build,
-		isBuildStarting: indexStatusQuery.isBuildStarting,
 		tokenInteractionsActive: active,
 	};
 }

@@ -1,15 +1,14 @@
 import { describe, expect, test } from "bun:test";
 import type { LspServer } from "@repo/code-lsp";
 import {
-	LspProcessError,
+	type LspProcessError,
 	LspRequestError,
-	TsLspBinaryResolutionError,
+	type TsLspBinaryResolutionError,
 } from "@repo/code-lsp";
 import { Effect, RcMap, Semaphore } from "effect";
 import {
 	buildReferencesResponse,
 	type CodeLspPoolValue,
-	describeBuildFailure,
 	findImportIdentifierSpans,
 	groupReferencesByFile,
 	withCodeLspServer,
@@ -334,30 +333,6 @@ describe("buildReferencesResponse", () => {
 				"function myFunction() {}",
 			);
 		});
-	});
-});
-
-describe("describeBuildFailure", () => {
-	test("formats a binary resolution failure with its own strategy", () => {
-		const failure = new TsLspBinaryResolutionError({
-			strategy: "dev-get-exe-path",
-			cause: new Error("boom"),
-		});
-		expect(describeBuildFailure(failure)).toContain("dev-get-exe-path");
-		expect(describeBuildFailure(failure)).toContain("resolve");
-	});
-
-	test("formats a spawn failure distinctly from an initialize failure", () => {
-		const spawnFailure = new LspProcessError({
-			step: "spawn",
-			cause: new Error("ENOENT"),
-		});
-		const initializeFailure = new LspProcessError({
-			step: "initialize",
-			cause: new Error("timeout"),
-		});
-		expect(describeBuildFailure(spawnFailure)).toContain("start");
-		expect(describeBuildFailure(initializeFailure)).toContain("initialize");
 	});
 });
 

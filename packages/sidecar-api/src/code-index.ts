@@ -2,62 +2,6 @@ import { oc } from "@orpc/contract";
 import { Schema } from "effect";
 
 /**
- * `status`'s outcome, five mutually exclusive states rather than a
- * boolean-plus-flags pile, since the UI needs to render a genuinely
- * different affordance for each. Backed by a live `tsc --lsp --stdio`
- * process per tsconfig project (`@repo/code-lsp`), not a static on-disk
- * index — see `apps/desktop/sidecar/code-index/state.ts` for the exact
- * derivation. `unsupported` — no `tsconfig.json` anywhere in the repo, so
- * there's no project for a server to spawn against at all (no build button);
- * `absent` — supported, but `build` has never been called this session (a
- * "build index" prompt); `building` — a `build` call is spawning/
- * initializing a server (a spinner, no new `build` needed); `ready` — that
- * spawn/initialize last succeeded; `failed` — it last failed (a binary
- * resolution or process-spawn problem — see `describeBuildFailure`).
- * There is no `"stale"` state: that existed only for a static index that
- * could disagree with a repo that moved past the head it was built for — a
- * live server has no such staleness to report, since it answers every query
- * by reading the file straight off disk at query time (see
- * `CodeIndexReference.lineText`'s own doc comment below). Dropped outright
- * rather than kept unreachable, since nothing on either side of the wire
- * could ever emit or need to match it.
- */
-export const CodeIndexStatusKind = Schema.Literals([
-	"unsupported",
-	"absent",
-	"building",
-	"ready",
-	"failed",
-]);
-export type CodeIndexStatusKind = Schema.Schema.Type<
-	typeof CodeIndexStatusKind
->;
-
-/**
- * `indexedHeadSha`/`generatedAt` describe the last successful `build` for
- * this repo's primary tsconfig project, if any — both `null` for
- * `unsupported`/`absent`/`failed` (nothing has ever succeeded to describe;
- * see `apps/desktop/sidecar/code-index/state.ts`'s `buildStates`, which
- * doesn't retain a prior success once a later `build` fails, unlike the old
- * on-disk cache this replaced). `indexedHeadSha` mirrors `headSha` exactly
- * whenever it's populated — there's no separate index revision to disagree
- * with it anymore, since a live server always answers against whatever's on
- * disk right now, not a snapshot taken at some earlier head. `documentCount`
- * is always `null` — the LSP server has no "how many files does this cover"
- * concept to report; every query is scoped to one file or one symbol, never
- * the whole project. `failureMessage` is populated only for `failed`.
- */
-export const CodeIndexStatus = Schema.Struct({
-	status: CodeIndexStatusKind,
-	headSha: Schema.String,
-	indexedHeadSha: Schema.NullOr(Schema.String),
-	generatedAt: Schema.NullOr(Schema.Number),
-	documentCount: Schema.NullOr(Schema.Number),
-	failureMessage: Schema.NullOr(Schema.String),
-});
-export type CodeIndexStatus = Schema.Schema.Type<typeof CodeIndexStatus>;
-
-/**
  * One occurrence in a file — `symbolKey` is an opaque token, meaningful only
  * as `references`' input, never parsed client-side (it's an encoded
  * `path:line:char` position now, not a SCIP symbol string — still opaque to
@@ -106,8 +50,7 @@ export type CodeIndexLocation = Schema.Schema.Type<typeof CodeIndexLocation>;
  * the LSP server that produced this location and the worktree read that
  * produced `lineText` both read the same live file off disk, at query time —
  * unlike the SCIP index this replaced, which was built once and could
- * silently disagree with a file edited afterward. See `CodeIndexStatus`'s
- * own doc comment on why `"stale"` is retired for the same reason.
+ * silently disagree with a file edited afterward.
  */
 export const CodeIndexReference = Schema.Struct({
 	line: Schema.Number,
@@ -177,42 +120,6 @@ export type CodeIndexReferencesResult = Schema.Schema.Type<
 >;
 
 export const codeIndexContract = {
-	/**
-	 * A pure read — safe to call on every mount/tab-focus. Never builds
-	 * anything itself; the frontend calls `build` separately and polls this
-	 * to watch progress, the same "read vs. act" split as
-	 * `walkthrough.activeGeneration` vs. `walkthrough.generate`.
-	 */
-	status: oc
-		.input(Schema.Struct({ sessionId: Schema.String }))
-		.output(CodeIndexStatus)
-		.errors({ NOT_FOUND: {}, INTERNAL_SERVER_ERROR: {} }),
-	/**
-	 * Spawns/initializes a `tsc --lsp --stdio` server for `sessionId`'s
-	 * repo's primary tsconfig project and returns immediately — `status` is
-	 * what reports progress. A second `build` call while one's already
-	 * running for this repo is a no-op, not an error: the existing attempt
-	 * keeps going and the caller just polls the same `status` every other
-	 * caller would. Not a streaming procedure on purpose — a cold spawn plus
-	 * `initialize` is on the order of tens of milliseconds (measured against
-	 * `@repo/code-lsp`), cheap enough polled once a second that it doesn't
-	 * earn the `eventIterator`/async-generator handler shape
-	 * `walkthrough.generate` needs for genuinely live, multi-event progress.
-	 * `fileOccurrences`/`references` don't depend on
-	 * this having been called at all — each spawns its own project's server
-	 * lazily on first use regardless (see
-	 * `apps/desktop/sidecar/code-index/state.ts`) — `build` only exists to
-	 * give the UI something to show progress against and to keep one
-	 * concrete project warm ahead of time.
-	 */
-	build: oc
-		.input(Schema.Struct({ sessionId: Schema.String }))
-		.output(Schema.Void)
-		.errors({
-			NOT_FOUND: {},
-			UNSUPPORTED: {},
-			INTERNAL_SERVER_ERROR: {},
-		}),
 	/**
 	 * Every occurrence in one file, fetched once per opened file so a hover
 	 * is a purely local lookup against the response rather than a round trip

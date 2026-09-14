@@ -163,11 +163,8 @@ seam" for the port/token handshake this boots into.
 	with the sidecar the same way every other `Effect.acquireRelease` resource does. Each occurrence or
 	references operation holds a scoped lease for its entire LSP request sequence; a full pool of leased
 	servers waits for a lease to release before admitting another root.
-  `buildStates` (repo-root-keyed, gone on restart — same reasoning as `generation-log.ts`'s map)
-  tracks only `status`/`build`'s own repo-level spawn/initialize outcome; it has no bearing on
-  whether `fileOccurrences`/`references` work, since each spawns its own per-file project's server
-  from `CodeLspPool` lazily, regardless. `resolveCodeIndexStatus`/`startCodeIndexBuild` are this
-  module's read/act split, same shape as `walkthrough.activeGeneration`/`walkthrough.generate`.
+  `fileOccurrences`/`references` resolve each queried file or symbol to its own project root and
+  acquire a lease from `CodeLspPool` lazily; there is no repo-wide index state or warm-up step.
   `@repo/code-lsp` itself stays pure protocol/process-lifecycle code with no pooling of its own — see
   that package's AGENTS.md, "One project root per server" — this file is where the pooling and every
   other piece of process-lifetime state actually lives.

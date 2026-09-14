@@ -14,9 +14,8 @@
  * scoping preference) — the LSP server always reads the working tree, so a
  * preview read any other way could describe a different revision than the
  * one the server's positions were computed against. There's no drift to
- * detect or rebuild past here, unlike the static SCIP index this feature
- * used to sit on: both the positions and this preview's text come from the
- * same live read, at query time, every time (see that module's own doc
+ * detect a stale index here: both the positions and this preview's text come
+ * from the same live read, at query time, every time (see that module's own doc
  * comment on `readWorktreeFileContents`). A `null` `lineText`/
  * `definitionContext` still means "couldn't read this" — a deleted file, or
  * a position past the end of a file that got shorter mid-request — just not
@@ -31,14 +30,12 @@ import type { CodeViewItem } from "@pierre/diffs";
 import type {
 	CodeIndexReference,
 	CodeIndexReferencesResult,
-	CodeIndexStatus,
 } from "@repo/sidecar-api";
 import { useQuery } from "@tanstack/react-query";
 import { AlertTriangleIcon } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
 import { CodeIndexReferenceLine } from "#/components/code-index/code-index-reference-line";
 import type { CodeIndexPeekTarget } from "#/components/code-index/use-code-index-interactions";
-import { useCodeIndexStatus } from "#/components/code-index/use-code-index-status";
 import {
 	buildDiffCodeViewOptions,
 	DiffCodeView,
@@ -167,41 +164,28 @@ function CodeIndexPeekContent({
 	groupHeaderRefs,
 }: CodeIndexPeekContentProps): React.ReactElement {
 	const { openFile } = useSessionOpenFiles(sessionId);
-	const indexStatus = useCodeIndexStatus(orpc, sessionId);
 	const diffTheme = useDiffTheme(orpc);
 
-	// `target.occurrence` is `undefined` when the peek was opened via
-	// `handleTokenClick`'s not-ready fallback (no index to resolve a symbol
-	// against yet) — there's no `symbolKey` to look references up by in that
-	// case, so the query stays disabled rather than firing with a made-up one.
 	const referencesQuery = useQuery({
 		...orpc.codeIndex.references.queryOptions({
-			input: { sessionId, symbolKey: target.occurrence?.symbolKey ?? "" },
+			input: { sessionId, symbolKey: target.occurrence.symbolKey },
 		}),
-		enabled: target.occurrence !== undefined,
 		retry: false,
 		retryOnMount: true,
 	});
 	const references = referencesQuery.data;
 
 	const openReference = (path: string, line: number) => {
-		openFile(path, line + 1); // SCIP's 0-based line -> @pierre/diffs' 1-based
+		openFile(path, line + 1); // LSP's 0-based line -> @pierre/diffs' 1-based
 		onClose();
 	};
 
 	return (
 		<div className="flex min-h-0 max-h-[85vh] flex-col overflow-hidden rounded-xl bg-card text-xs shadow-sm">
-			<IndexStatusBanner
-				isBuildStarting={indexStatus.isBuildStarting}
-				onBuild={indexStatus.build}
-				status={indexStatus.status}
-			/>
-
 			<div className="flex min-h-0">
 				<div className="min-w-0 flex-1">
 					<SourcePreview
 						diffTheme={diffTheme}
-						hasOccurrence={target.occurrence !== undefined}
 						isLoading={referencesQuery.isLoading}
 						references={references}
 					/>
@@ -209,14 +193,30 @@ function CodeIndexPeekContent({
 				<div className="relative min-h-0 w-96 shrink-0 border-l">
 					<ScrollArea className="absolute inset-0">
 						<div>
-							{target.occurrence === undefined ? (
-								<div className="px-1 py-6 text-center text-muted-foreground">
-									References will appear here once the code index is built.
-								</div>
-							) : referencesQuery.isLoading ? (
+							{referencesQuery.isLoading ? (
 								<div className="flex items-center justify-center gap-2 py-6 text-muted-foreground">
 									<Spinner className="size-3.5" />
 									Loading references…
+								</div>
+							) : referencesQuery.isError ? (
+								<div className="flex flex-col items-center gap-2 px-3 py-6 text-center text-muted-foreground">
+									<div className="flex items-center gap-2 text-warning-foreground">
+										<AlertTriangleIcon className="size-3.5 shrink-0" />
+										<span>Couldn't load references.</span>
+									</div>
+									<span className="max-w-full break-words">
+										{referencesQuery.error instanceof Error
+											? referencesQuery.error.message
+											: String(referencesQuery.error)}
+									</span>
+									<Button
+										loading={referencesQuery.isFetching}
+										onClick={() => void referencesQuery.refetch()}
+										size="xs"
+										variant="outline"
+									>
+										Retry
+									</Button>
 								</div>
 							) : references === undefined ? (
 								<div className="flex items-center gap-2 py-6 text-center text-muted-foreground">
@@ -238,83 +238,9 @@ function CodeIndexPeekContent({
 	);
 }
 
-function IndexStatusBanner({
-	status,
-	onBuild,
-	isBuildStarting,
-}: {
-	status: CodeIndexStatus | undefined;
-	onBuild: () => void;
-	isBuildStarting: boolean;
-}): React.ReactElement | null {
-	if (status === undefined) return null;
-	if (status.status === "ready") return null;
-	if (status.status === "building") {
-		return (
-			<StatusBannerRow icon={<Spinner className="size-3.5" />}>
-				Building index…
-			</StatusBannerRow>
-		);
-	}
-	if (status.status === "absent") {
-		return (
-			<StatusBannerRow
-				action={{
-					label: "Build index",
-					onClick: onBuild,
-					pending: isBuildStarting,
-				}}
-				icon={<AlertTriangleIcon className="size-3.5" />}
-			>
-				Code index hasn't been built yet — results may be incomplete.
-			</StatusBannerRow>
-		);
-	}
-	if (status.status === "failed") {
-		return (
-			<StatusBannerRow
-				action={{ label: "Retry", onClick: onBuild, pending: isBuildStarting }}
-				icon={<AlertTriangleIcon className="size-3.5" />}
-			>
-				Last build failed
-				{status.failureMessage ? `: ${status.failureMessage}` : "."}
-			</StatusBannerRow>
-		);
-	}
-	return null;
-}
-
-function StatusBannerRow({
-	icon,
-	children,
-	action,
-}: {
-	icon: React.ReactNode;
-	children: React.ReactNode;
-	action?: { label: string; onClick: () => void; pending: boolean };
-}): React.ReactElement {
-	return (
-		<div className="flex items-center gap-2 border-b bg-warning/8 px-3 py-1.5 text-warning-foreground">
-			{icon}
-			<span className="min-w-0 flex-1 truncate">{children}</span>
-			{action && (
-				<Button
-					className="h-6 px-2"
-					loading={action.pending}
-					onClick={action.onClick}
-					size="xs"
-					variant="outline"
-				>
-					{action.label}
-				</Button>
-			)}
-		</div>
-	);
-}
-
 /**
  * Purely presentational — `CodeIndexPeekContent` owns the `codeIndex.references`
- * fetch; this only renders whichever of five states it's handed, entirely
+ * fetch; this only renders the result it is handed, entirely
  * from `references`' own fields (`definition`/`definitionContext`). No
  * client-side drift verification happens here anymore — the sidecar's is
  * authoritative (see this file's top-of-module doc comment) — so this
@@ -360,13 +286,10 @@ function updateSourcePreviewLineNumbers(
 
 function SourcePreview({
 	diffTheme,
-	hasOccurrence,
 	isLoading,
 	references,
 }: {
 	diffTheme: DiffTheme;
-	/** `target.occurrence !== undefined` — `false` means the index wasn't ready at all when this peek was opened, so there's no `symbolKey` to have asked `codeIndex.references` about in the first place. */
-	hasOccurrence: boolean;
 	isLoading: boolean;
 	references: CodeIndexReferencesResult | undefined;
 }): React.ReactElement {
@@ -423,13 +346,6 @@ function SourcePreview({
 		[diffTheme.theme, sourcePreview],
 	);
 
-	if (!hasOccurrence) {
-		return (
-			<div className="py-4 text-center text-muted-foreground">
-				A definition preview will appear here once the code index is built.
-			</div>
-		);
-	}
 	if (isLoading) {
 		return (
 			<div className="flex items-center gap-2 py-4 text-muted-foreground">

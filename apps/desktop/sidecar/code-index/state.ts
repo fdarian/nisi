@@ -15,7 +15,6 @@ import type {
 	CodeIndexReference,
 	CodeIndexReferencesResult,
 	CodeIndexSourceContext,
-	CodeIndexStatus,
 } from "@repo/sidecar-api";
 import {
 	Cause,
@@ -25,12 +24,9 @@ import {
 	Layer,
 	Option,
 	RcMap,
-	Result,
 	Semaphore,
 } from "effect";
-import { FileSystem } from "effect/FileSystem";
 import type * as Scope from "effect/Scope";
-import type { AppServices } from "../services.ts";
 
 /**
  * How many TS7 LSP server processes stay live at once, across every
@@ -203,109 +199,6 @@ export const withCodeLspServer = <
 	);
 };
 
-/** Directories never worth descending into while looking for a `tsconfig.json` — build output and dependency trees, which can be enormous and never contain a project's own config. Mirrors the equivalent skip list the deleted `@repo/code-index` package used for the same reason. */
-const SKIPPED_DIRECTORY_NAMES = new Set([
-	"node_modules",
-	".git",
-	"dist",
-	"build",
-	"out",
-	".turbo",
-	".next",
-	".cache",
-	"coverage",
-]);
-
-/** Caps a single filesystem walk — a correctness backstop against a pathological repo layout, not a limit expected to bite in practice. */
-const MAX_DIRECTORIES_VISITED = 4_000;
-
-const TSCONFIG_FILENAME = "tsconfig.json";
-
-/** Depth-first, alphabetical-first-match walk down from `path` for the first directory holding an exact `tsconfig.json` — sorted so the same repo always resolves the same "primary" project across runs. */
-const findTsConfigProjectRoot = (
-	fs: FileSystem,
-	path: string,
-	budget: { remaining: number },
-): Effect.Effect<string | null> =>
-	Effect.gen(function* () {
-		if (budget.remaining <= 0) return null;
-		budget.remaining -= 1;
-
-		const entries = yield* fs
-			.readDirectory(path)
-			.pipe(Effect.catch(() => Effect.succeed(null)));
-		if (entries === null) return null;
-
-		if (entries.includes(TSCONFIG_FILENAME)) return path;
-
-		for (const entry of [...entries].sort()) {
-			if (SKIPPED_DIRECTORY_NAMES.has(entry)) continue;
-			const found = yield* findTsConfigProjectRoot(
-				fs,
-				join(path, entry),
-				budget,
-			);
-			if (found !== null) return found;
-		}
-		return null;
-	});
-
-/** Repos already resolved to a "primary" project root (or confirmed to have none) — a directory walk on every `status` poll (roughly once a second while a build runs) would be wasteful for a fact that doesn't change within a running session. */
-const primaryProjectRootByRepo = new Map<string, string | null>();
-
-/**
- * The one tsconfig project root `status`/`build` warm and report on for a
- * repo — chosen deterministically (alphabetically-first match from a
- * top-down walk, skipping build/dependency directories) since neither
- * procedure carries a specific file to scope a query to the way
- * `fileOccurrences`/`references` do (`@repo/code-lsp`'s `resolveProjectRoot`,
- * walking *up* from a queried file, is what those use instead — see that
- * package's AGENTS.md). This project won't necessarily be the one a later
- * `fileOccurrences` call for some other file resolves to — `build`'s job
- * under LSP is "prove the environment can spawn/initialize a real project
- * and keep one warm", not "index the whole repo" (there is no such thing
- * anymore; see this file's own top-of-module note). `null` when the repo
- * has no `tsconfig.json` anywhere, which is also what `isCodeIndexUnsupported`
- * answers.
- */
-const resolvePrimaryProjectRoot = (
-	repoRoot: string,
-): Effect.Effect<string | null, never, FileSystem> =>
-	Effect.gen(function* () {
-		const cached = primaryProjectRootByRepo.get(repoRoot);
-		if (cached !== undefined) return cached;
-		const fs = yield* FileSystem;
-		const found = yield* findTsConfigProjectRoot(fs, repoRoot, {
-			remaining: MAX_DIRECTORIES_VISITED,
-		});
-		primaryProjectRootByRepo.set(repoRoot, found);
-		return found;
-	});
-
-/** Exported so `http.ts`'s `build` handler gates on the exact same (memoized) answer `resolveCodeIndexStatus` derives `"unsupported"` from — one source of truth for "does this repo have a tsconfig anywhere." */
-export const isCodeIndexUnsupported = (
-	repoRoot: string,
-): Effect.Effect<boolean, never, FileSystem> =>
-	resolvePrimaryProjectRoot(repoRoot).pipe(Effect.map((root) => root === null));
-
-/**
- * The latest transient (never persisted — there is nothing to persist,
- * unlike the old on-disk SCIP cache) build outcome per repo root.
- * `"ready"`/`"failed"` here describe `runCodeIndexBuild`'s *own* warm-up
- * spawn (see `resolvePrimaryProjectRoot`), not "is code navigation usable at
- * all" — `fileOccurrences`/`references` lazily spawn their own per-file
- * servers regardless of what's recorded here, so a `"failed"` build doesn't
- * block them the way a failed SCIP build used to. Gone on sidecar restart,
- * same as `generation-log.ts`'s map — there's no in-flight build left to
- * reattach to after a restart anyway.
- */
-const buildStates = new Map<
-	string,
-	| { readonly kind: "building" }
-	| { readonly kind: "ready"; readonly at: number }
-	| { readonly kind: "failed"; readonly message: string }
->();
-
 export const describeCodeIndexFailure = (failure: CodeLspFailure): string => {
 	switch (failure._tag) {
 		case "TsLspBinaryResolutionError":
@@ -320,136 +213,6 @@ export const describeCodeIndexFailure = (failure: CodeLspFailure): string => {
 			return `TypeScript language server returned an invalid response: ${String(failure.cause)}`;
 	}
 };
-
-export const describeBuildFailure = (
-	failure: TsLspBinaryResolutionError | LspProcessError,
-): string => describeCodeIndexFailure(failure);
-
-/** The actual work behind {@link startCodeIndexBuild}: resolves the repo's primary project (see `resolvePrimaryProjectRoot`) and forces a fresh spawn/initialize for it, waiting for an in-flight operation to release its lease first — a real, reusable server on success, sharing the same pool `fileOccurrences`/`references` draw from, not a throwaway health check. */
-const runCodeIndexBuild = (
-	repoRoot: string,
-): Effect.Effect<void, CodeLspFailure, CodeLspPool | FileSystem> =>
-	Effect.gen(function* () {
-		const projectRoot = yield* resolvePrimaryProjectRoot(repoRoot);
-		if (projectRoot === null) {
-			// http.ts's `build` handler already checks `isCodeIndexUnsupported`
-			// (backed by this exact same memoized lookup) before ever calling
-			// `startCodeIndexBuild` — reaching this branch means that gate and
-			// this resolution disagreed, a bug in this file rather than
-			// something a caller could act on.
-			return yield* Effect.die(
-				new Error(
-					`runCodeIndexBuild called for ${repoRoot}, which resolved no tsconfig project — the UNSUPPORTED gate in http.ts should have refused this first`,
-				),
-			);
-		}
-		const pool = yield* CodeLspPool;
-		yield* withCodeLspServer(pool, projectRoot, () => Effect.void, true);
-	});
-
-/**
- * Starts a build for `repoRoot` and returns once it's registered, well
- * before the build itself finishes — `resolveCodeIndexStatus` is how a
- * caller watches progress from here. A repo already `"building"` is a
- * no-op: the existing run keeps going, nothing new is started. The
- * synchronous `buildStates.set` below, before any `await`, is what makes
- * that race-free — two `build` calls landing back to back both see whichever
- * state the first one set before either yields to the event loop.
- *
- * Uses `Effect.result` rather than letting a failure reject the promise —
- * unwrapping a rejected `Effect.runPromise`'s cause to find a specific
- * tagged error is exactly the Effect-internals-poking this sidesteps, same
- * reasoning as `walkthrough/generate.ts`'s `resolveContext`.
- */
-export const startCodeIndexBuild = async (
-	repoRoot: string,
-	mainContext: Context.Context<AppServices>,
-): Promise<void> => {
-	if (buildStates.get(repoRoot)?.kind === "building") return;
-	buildStates.set(repoRoot, { kind: "building" });
-
-	void (async () => {
-		const result = await Effect.runPromise(
-			Effect.provide(Effect.result(runCodeIndexBuild(repoRoot)), mainContext),
-		);
-		buildStates.set(
-			repoRoot,
-			Result.isSuccess(result)
-				? { kind: "ready", at: Date.now() }
-				: { kind: "failed", message: describeCodeIndexFailure(result.failure) },
-		);
-	})();
-};
-
-/**
- * `status`'s full derivation: unsupported gates everything else (no
- * `tsconfig.json` anywhere means nothing here could ever work), then
- * `buildStates` decides `absent`/`building`/`ready`/`failed` directly — no
- * `"stale"` state exists to derive (see `packages/sidecar-api/src/code-index.ts`'s
- * own doc comment on why that doesn't apply to a server that always reads
- * live files off disk). `indexedHeadSha` mirrors `headSha` exactly
- * when `ready`, since there is no separate "index" revision to disagree
- * with it anymore; `documentCount` is always `null` (LSP has no equivalent
- * "how many files did this cover" number — a per-file question, not an
- * index-wide one); `generatedAt` is when the primary project's server was
- * last successfully initialized.
- */
-export const resolveCodeIndexStatus = (
-	repoRoot: string,
-	headSha: string,
-): Effect.Effect<CodeIndexStatus, never, FileSystem> =>
-	Effect.gen(function* () {
-		if (yield* isCodeIndexUnsupported(repoRoot)) {
-			return {
-				status: "unsupported",
-				headSha,
-				indexedHeadSha: null,
-				generatedAt: null,
-				documentCount: null,
-				failureMessage: null,
-			} satisfies CodeIndexStatus;
-		}
-
-		const state = buildStates.get(repoRoot);
-		if (state === undefined) {
-			return {
-				status: "absent",
-				headSha,
-				indexedHeadSha: null,
-				generatedAt: null,
-				documentCount: null,
-				failureMessage: null,
-			} satisfies CodeIndexStatus;
-		}
-		if (state.kind === "building") {
-			return {
-				status: "building",
-				headSha,
-				indexedHeadSha: null,
-				generatedAt: null,
-				documentCount: null,
-				failureMessage: null,
-			} satisfies CodeIndexStatus;
-		}
-		if (state.kind === "ready") {
-			return {
-				status: "ready",
-				headSha,
-				indexedHeadSha: headSha,
-				generatedAt: state.at,
-				documentCount: null,
-				failureMessage: null,
-			} satisfies CodeIndexStatus;
-		}
-		return {
-			status: "failed",
-			headSha,
-			indexedHeadSha: null,
-			generatedAt: null,
-			documentCount: null,
-			failureMessage: state.message,
-		} satisfies CodeIndexStatus;
-	});
 
 /** How many reference locations a single `references` call returns — a widely-referenced symbol (an exported type, a common utility) can have thousands; `totalReferenceCount` on the response still reports the real total so the UI can render "showing N of M." */
 export const MAX_RETURNED_REFERENCES = 200;
