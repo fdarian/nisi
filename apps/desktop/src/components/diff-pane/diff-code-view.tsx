@@ -32,6 +32,7 @@ import {
 	diffViewUnsafeCSS,
 } from "#/components/diff-pane/diff-view-theme";
 import type { DiffStyleMode } from "#/lib/settings-data";
+import { cn } from "#/lib/utils";
 
 function useDiffWorkerPoolOptions() {
 	return useMemo(
@@ -230,7 +231,7 @@ export function DiffCodeView<Metadata>({
 			poolOptions={workerPoolOptions}
 		>
 			<CodeView
-				className={className}
+				className={cn("outline-none", className)}
 				containerRef={separatorClickForwardingRef}
 				items={items}
 				onScroll={onScroll}
