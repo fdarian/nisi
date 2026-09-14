@@ -16,7 +16,15 @@ import type {
 	CodeIndexSourceContext,
 	CodeIndexStatus,
 } from "@repo/sidecar-api";
-import { Context, Effect, Layer, Option, Result, ScopedCache } from "effect";
+import {
+	Context,
+	Effect,
+	Layer,
+	Option,
+	Result,
+	ScopedCache,
+	Semaphore,
+} from "effect";
 import { FileSystem } from "effect/FileSystem";
 import type { AppServices } from "../services.ts";
 
@@ -67,6 +75,17 @@ export class CodeLspPool extends Context.Service<CodeLspPool>()("CodeLspPool", {
 	static layer = Layer.effect(CodeLspPool, CodeLspPool.make);
 }
 
+/**
+ * `ScopedCache` closes the least-recently-used entry as soon as a new root
+ * exceeds its capacity. Since `LspServer` requests keep using the returned
+ * object after `ScopedCache.get` completes, that eviction can tear down a
+ * server in the middle of `semanticTokensFull`/`references` and turn a valid
+ * response into an indistinguishable empty result. Hold one permit from the
+ * cache lookup through all requests that use that server; the cache remains
+ * bounded, and eviction can only happen between complete LSP operations.
+ */
+const codeLspOperationLock = Semaphore.makeUnsafe(1);
+
 /** `ScopedCache.get`, degraded to `null` on a spawn/initialize failure rather than propagating — both `fileOccurrences` and `references` already treat "nothing available" as a legitimate empty response (see their contract doc comments), so a broken server for one project shouldn't fail those calls, only `status`/`build` (which query the cache through `runCodeIndexBuild` instead, where the failure is exactly the information being reported). */
 const getServer = (
 	pool: ScopedCache.ScopedCache<
@@ -78,6 +97,23 @@ const getServer = (
 ): Effect.Effect<LspServer | null> =>
 	ScopedCache.get(pool, projectRoot).pipe(
 		Effect.catch(() => Effect.succeed(null)),
+	);
+
+const withCodeLspServer = <A>(
+	pool: ScopedCache.ScopedCache<
+		string,
+		LspServer,
+		TsLspBinaryResolutionError | LspProcessError
+	>,
+	projectRoot: string,
+	use: (server: LspServer) => Effect.Effect<A>,
+): Effect.Effect<Option.Option<A>> =>
+	codeLspOperationLock.withPermit(
+		Effect.gen(function* () {
+			const server = yield* getServer(pool, projectRoot);
+			if (server === null) return Option.none<A>();
+			return Option.some(yield* use(server));
+		}),
 	);
 
 /** Directories never worth descending into while looking for a `tsconfig.json` — build output and dependency trees, which can be enormous and never contain a project's own config. Mirrors the equivalent skip list the deleted `@repo/code-index` package used for the same reason. */
@@ -219,7 +255,9 @@ const runCodeIndexBuild = (
 			);
 		}
 		const pool = yield* CodeLspPool;
-		yield* ScopedCache.refresh(pool, projectRoot);
+		yield* codeLspOperationLock.withPermit(
+			ScopedCache.refresh(pool, projectRoot),
+		);
 	});
 
 /**
@@ -400,36 +438,41 @@ export const buildFileOccurrencesResponse = (
 		if (projectRoot === null) return [];
 
 		const pool = yield* CodeLspPool;
-		const server = yield* getServer(pool, projectRoot);
-		if (server === null) return [];
+		const result = yield* withCodeLspServer(pool, projectRoot, (server) =>
+			Effect.gen(function* () {
+				const tokens = yield* server
+					.semanticTokensFull(absolutePath)
+					.pipe(
+						Effect.catch(() =>
+							Effect.succeed<ReadonlyArray<SemanticToken>>([]),
+						),
+					);
 
-		const tokens = yield* server
-			.semanticTokensFull(absolutePath)
-			.pipe(
-				Effect.catch(() => Effect.succeed<ReadonlyArray<SemanticToken>>([])),
-			);
+				const tokenOccurrences = tokens.map(
+					(token): CodeIndexOccurrence => ({
+						line: token.range.start.line,
+						charStart: token.range.start.character,
+						charEnd: token.range.end.character,
+						symbolKey: encodeSymbolKey(
+							path,
+							token.range.start.line,
+							token.range.start.character,
+						),
+					}),
+				);
 
-		const tokenOccurrences = tokens.map(
-			(token): CodeIndexOccurrence => ({
-				line: token.range.start.line,
-				charStart: token.range.start.character,
-				charEnd: token.range.end.character,
-				symbolKey: encodeSymbolKey(
+				const importOccurrences = yield* resolveImportOccurrences(
+					server,
+					absolutePath,
 					path,
-					token.range.start.line,
-					token.range.start.character,
-				),
+					tokenOccurrences,
+				);
+
+				return [...tokenOccurrences, ...importOccurrences];
 			}),
 		);
-
-		const importOccurrences = yield* resolveImportOccurrences(
-			server,
-			absolutePath,
-			path,
-			tokenOccurrences,
-		);
-
-		return [...tokenOccurrences, ...importOccurrences];
+		if (Option.isNone(result)) return [];
+		return result.value;
 	});
 
 /**
@@ -690,53 +733,63 @@ export const buildReferencesPlan = (
 		if (projectRoot === null) return EMPTY_REFERENCES_PLAN;
 
 		const pool = yield* CodeLspPool;
-		const server = yield* getServer(pool, projectRoot);
-		if (server === null) return EMPTY_REFERENCES_PLAN;
+		const result = yield* withCodeLspServer(pool, projectRoot, (server) =>
+			Effect.gen(function* () {
+				const position = {
+					line: decoded.line,
+					character: decoded.character,
+				};
+				const [definitions, rawReferences, hover] = yield* Effect.all(
+					[
+						server
+							.definition(absolutePath, position)
+							.pipe(
+								Effect.catch(() =>
+									Effect.succeed<ReadonlyArray<LspLocation>>([]),
+								),
+							),
+						server
+							.references(absolutePath, position)
+							.pipe(
+								Effect.catch(() =>
+									Effect.succeed<ReadonlyArray<LspLocation>>([]),
+								),
+							),
+						server
+							.hover(absolutePath, position)
+							.pipe(Effect.catch(() => Effect.succeed(null))),
+					],
+					{ concurrency: "unbounded" },
+				);
 
-		const position = { line: decoded.line, character: decoded.character };
-		const [definitions, rawReferences, hover] = yield* Effect.all(
-			[
-				server
-					.definition(absolutePath, position)
-					.pipe(
-						Effect.catch(() => Effect.succeed<ReadonlyArray<LspLocation>>([])),
-					),
-				server
-					.references(absolutePath, position)
-					.pipe(
-						Effect.catch(() => Effect.succeed<ReadonlyArray<LspLocation>>([])),
-					),
-				server
-					.hover(absolutePath, position)
-					.pipe(Effect.catch(() => Effect.succeed(null))),
-			],
-			{ concurrency: "unbounded" },
+				const firstDefinition = definitions[0];
+				const definition =
+					firstDefinition === undefined
+						? null
+						: toCodeLocation(repoRoot, firstDefinition);
+
+				// `references` answers the definition's own location alongside every
+				// usage (`@repo/code-lsp`'s fixed `includeDeclaration: true`) —
+				// filtered back out here so "references" means "used elsewhere",
+				// matching what the peek panel already renders the definition as
+				// separately (`code-index-peek-panel.tsx`'s left pane).
+				const usageLocations = rawReferences
+					.map((location) => toCodeLocation(repoRoot, location))
+					.filter((location) => !sameLocation(location, definition));
+
+				return {
+					symbolPath: decoded.path,
+					symbolLine: decoded.line,
+					symbolChar: decoded.character,
+					documentation: hover === null ? [] : [hover.contents],
+					definition,
+					totalReferenceCount: usageLocations.length,
+					returnedLocations: usageLocations.slice(0, MAX_RETURNED_REFERENCES),
+				} satisfies ReferencesPlan;
+			}),
 		);
-
-		const firstDefinition = definitions[0];
-		const definition =
-			firstDefinition === undefined
-				? null
-				: toCodeLocation(repoRoot, firstDefinition);
-
-		// `references` answers the definition's own location alongside every
-		// usage (`@repo/code-lsp`'s fixed `includeDeclaration: true`) —
-		// filtered back out here so "references" means "used elsewhere",
-		// matching what the peek panel already renders the definition as
-		// separately (`code-index-peek-panel.tsx`'s left pane).
-		const usageLocations = rawReferences
-			.map((location) => toCodeLocation(repoRoot, location))
-			.filter((location) => !sameLocation(location, definition));
-
-		return {
-			symbolPath: decoded.path,
-			symbolLine: decoded.line,
-			symbolChar: decoded.character,
-			documentation: hover === null ? [] : [hover.contents],
-			definition,
-			totalReferenceCount: usageLocations.length,
-			returnedLocations: usageLocations.slice(0, MAX_RETURNED_REFERENCES),
-		} satisfies ReferencesPlan;
+		if (Option.isNone(result)) return EMPTY_REFERENCES_PLAN;
+		return result.value;
 	});
 
 type ReferencesPlan = {

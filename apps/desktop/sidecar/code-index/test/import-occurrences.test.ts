@@ -19,6 +19,13 @@ import {
 
 const FIXTURE_ROOT = join(import.meta.dir, "fixtures", "import-project");
 const CONSUMER_PATH = "src/consumer.ts";
+const REPO_ROOT = join(import.meta.dir, "..", "..", "..", "..", "..");
+const FILES_FROM_FOUR_PROJECTS = [
+	"packages/settings/src/store.ts",
+	"packages/git/src/exec.ts",
+	"packages/review/src/index.ts",
+	"apps/desktop/src/components/code-index/occurrence-index.ts",
+] as const;
 
 const TestLayer = CodeLspPool.layer.pipe(Layer.provideMerge(BunServices.layer));
 
@@ -120,5 +127,24 @@ describe("buildFileOccurrencesResponse against a real fixture with imports", () 
 		// definition itself plus every call site), so an empty-both-sides
 		// false positive can't slip through the equality checks above.
 		expect(result.fromImportSite.totalReferenceCount).toBeGreaterThan(0);
+	}, 30_000);
+
+	test("keeps concurrent occurrence requests alive across project roots", async () => {
+		const program = Effect.all(
+			FILES_FROM_FOUR_PROJECTS.map((path) =>
+				buildFileOccurrencesResponse(REPO_ROOT, path).pipe(
+					Effect.map((occurrences) => ({ path, count: occurrences.length })),
+				),
+			),
+			{ concurrency: "unbounded" },
+		);
+
+		const results = await runWithPool(program);
+		for (const result of results) {
+			expect(
+				result.count,
+				`${result.path} should have semantic occurrences`,
+			).toBeGreaterThan(0);
+		}
 	}, 30_000);
 });
