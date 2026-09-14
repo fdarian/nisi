@@ -51,6 +51,7 @@ import {
 	buildFileOccurrencesResponse,
 	buildReferencesPlan,
 	buildReferencesResponse,
+	buildSourceContext,
 	describeCodeIndexFailure,
 	readWorktreeFileContents,
 } from "./code-index/state.ts";
@@ -1649,6 +1650,32 @@ export function attachRouter(
 					paths,
 				).pipe(Effect.catch(() => Effect.succeed(new Map())));
 				return buildReferencesResponse(plan, fileContents);
+			}),
+			referenceContext: authed.codeIndex.referenceContext.effect(function* ({
+				input,
+				errors,
+			}) {
+				const store = yield* Store;
+				const repoRoot = yield* resolveCodeIndexRepoRoot(
+					store.resolveSessionRepoRoot(input.sessionId),
+					input.sessionId,
+					errors,
+				);
+				const fileContents = yield* readWorktreeFileContents(repoRoot, [
+					input.path,
+				]).pipe(
+					Effect.catch((failure) =>
+						Effect.fail(
+							errors.INTERNAL_SERVER_ERROR({
+								message: describeCodeIndexFailure(failure),
+							}),
+						),
+					),
+				);
+				return buildSourceContext(
+					{ path: input.path, line: input.line },
+					fileContents,
+				);
 			}),
 		},
 	});

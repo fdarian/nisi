@@ -15,10 +15,11 @@
  * one the server's positions were computed against. There's no drift to
  * detect a stale index here: both the positions and this preview's text come
  * from the same live read, at query time, every time (see that module's own doc
- * comment on `readWorktreeFileContents`). A `null` `lineText`/`context`/
+ * comment on `readWorktreeFileContents`). A `null` `lineText` or
  * `definitionContext` still means "couldn't read this" — a deleted file, or
  * a position past the end of a file that got shorter mid-request — just not
- * "the index disagrees with your working tree."
+ * "the index disagrees with your working tree." Reference context is fetched
+ * on demand by `codeIndex.referenceContext`.
  *
  * Clicking a reference row opens that file in a real file-viewer tab
  * (`useSessionOpenFiles`' `openFile(path, line)`). Keyboard selection keeps
@@ -29,8 +30,9 @@ import type { CodeViewItem } from "@pierre/diffs";
 import type {
 	CodeIndexReference,
 	CodeIndexReferencesResult,
+	CodeIndexSourceContext,
 } from "@repo/sidecar-api";
-import { useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQueries, useQuery } from "@tanstack/react-query";
 import { AlertTriangleIcon } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CodeIndexReferenceLine } from "#/components/code-index/code-index-reference-line";
@@ -38,7 +40,9 @@ import {
 	flattenVisibleReferences,
 	initialReferenceIndex,
 	moveReferenceIndex,
+	REFERENCE_CONTEXT_PREFETCH_RADIUS,
 	type ReferenceNavigationGroup,
+	referenceContextWindow,
 	referenceNavigationGroup,
 	referenceRowId,
 	type VisibleReference,
@@ -153,6 +157,48 @@ function CodeIndexPeekContent({
 	}, [selectedReferenceId, visibleReferences]);
 	const selectedReference =
 		selectedIndex === undefined ? undefined : visibleReferences[selectedIndex];
+	const contextWindow = useMemo(
+		() =>
+			referenceContextWindow(
+				visibleReferences,
+				selectedIndex,
+				REFERENCE_CONTEXT_PREFETCH_RADIUS,
+			),
+		[selectedIndex, visibleReferences],
+	);
+	const selectedContextPath = selectedReference?.path ?? target.path;
+	const selectedContextLine =
+		selectedReference?.reference.line ?? target.occurrence.line;
+	const selectedContextQuery = useQuery({
+		...orpc.codeIndex.referenceContext.queryOptions({
+			input: {
+				sessionId,
+				path: selectedContextPath,
+				line: selectedContextLine,
+			},
+		}),
+		enabled: selectedReference !== undefined,
+		gcTime: 0,
+		placeholderData: keepPreviousData,
+		retry: false,
+	});
+	const prefetchReferences = useMemo(
+		() => contextWindow.filter((item) => item.id !== selectedReference?.id),
+		[contextWindow, selectedReference?.id],
+	);
+	useQueries({
+		queries: prefetchReferences.map((item) => ({
+			...orpc.codeIndex.referenceContext.queryOptions({
+				input: {
+					sessionId,
+					path: item.path,
+					line: item.reference.line,
+				},
+			}),
+			gcTime: 0,
+			retry: false,
+		})),
+	});
 
 	useEffect(() => {
 		if (references === undefined) {
@@ -210,6 +256,14 @@ function CodeIndexPeekContent({
 						isLoading={referencesQuery.isLoading}
 						references={references}
 						selectedReference={selectedReference}
+						selectedContext={selectedContextQuery.data}
+						selectedContextError={selectedContextQuery.error}
+						selectedContextIsError={selectedContextQuery.isError}
+						selectedContextIsFetching={selectedContextQuery.isFetching}
+						selectedContextIsPlaceholder={
+							selectedContextQuery.isPlaceholderData
+						}
+						onRetrySelectedContext={() => void selectedContextQuery.refetch()}
 					/>
 				</div>
 				<div className="relative min-h-0 w-96 shrink-0 border-l">
@@ -313,23 +367,31 @@ function SourcePreview({
 	isLoading,
 	references,
 	selectedReference,
+	selectedContext,
+	selectedContextError,
+	selectedContextIsError,
+	selectedContextIsFetching,
+	selectedContextIsPlaceholder,
+	onRetrySelectedContext,
 }: {
 	diffTheme: DiffTheme;
 	isLoading: boolean;
 	references: CodeIndexReferencesResult | undefined;
 	selectedReference: VisibleReference | undefined;
+	selectedContext: CodeIndexSourceContext | null | undefined;
+	selectedContextError: unknown;
+	selectedContextIsError: boolean;
+	selectedContextIsFetching: boolean;
+	selectedContextIsPlaceholder: boolean;
+	onRetrySelectedContext: () => void;
 }): React.ReactElement {
-	const sourcePreview = useMemo(() => {
-		if (selectedReference !== undefined) {
-			const context = selectedReference.reference.context;
-			if (context === null) return undefined;
-			return {
-				context,
-				kind: "reference" as const,
-				path: selectedReference.path,
-				targetLine: selectedReference.reference.line - context.startLine + 1,
-			};
-		}
+	type SourcePreviewModel = {
+		context: CodeIndexSourceContext;
+		kind: "definition" | "reference";
+		path: string;
+		targetLine: number;
+	};
+	const definitionPreview = useMemo<SourcePreviewModel | undefined>(() => {
 		if (
 			references === undefined ||
 			references.definition === null ||
@@ -339,12 +401,45 @@ function SourcePreview({
 		}
 		return {
 			context: references.definitionContext,
-			kind: "definition" as const,
+			kind: "definition",
 			path: references.definition.path,
 			targetLine:
 				references.definition.line - references.definitionContext.startLine + 1,
 		};
-	}, [references, selectedReference]);
+	}, [references]);
+	const [sourcePreview, setSourcePreview] = useState<
+		SourcePreviewModel | undefined
+	>();
+	useEffect(() => {
+		if (selectedReference === undefined) {
+			setSourcePreview(definitionPreview);
+			return;
+		}
+		if (
+			selectedContextIsError ||
+			selectedContextIsPlaceholder ||
+			selectedContext === undefined
+		) {
+			return;
+		}
+		setSourcePreview(
+			selectedContext === null
+				? undefined
+				: {
+						context: selectedContext,
+						kind: "reference",
+						path: selectedReference.path,
+						targetLine:
+							selectedReference.reference.line - selectedContext.startLine + 1,
+					},
+		);
+	}, [
+		definitionPreview,
+		selectedContext,
+		selectedContextIsError,
+		selectedContextIsPlaceholder,
+		selectedReference,
+	]);
 	const sourceItem = useMemo<CodeViewItem<undefined> | undefined>(() => {
 		if (sourcePreview === undefined) return undefined;
 		const id = `code-index-${sourcePreview.kind}:${sourcePreview.path}:${sourcePreview.context.startLine}`;
@@ -391,6 +486,29 @@ function SourcePreview({
 			</div>
 		);
 	}
+	if (selectedReference !== undefined && selectedContextIsError) {
+		return (
+			<div className="flex flex-col items-center gap-2 px-3 py-6 text-center text-muted-foreground">
+				<div className="flex items-center gap-2 text-warning-foreground">
+					<AlertTriangleIcon className="size-3.5 shrink-0" />
+					<span>Couldn't load source context.</span>
+				</div>
+				<span className="max-w-full break-words">
+					{selectedContextError instanceof Error
+						? selectedContextError.message
+						: String(selectedContextError)}
+				</span>
+				<Button
+					loading={selectedContextIsFetching}
+					onClick={onRetrySelectedContext}
+					size="xs"
+					variant="outline"
+				>
+					Retry
+				</Button>
+			</div>
+		);
+	}
 	if (references === undefined) {
 		return (
 			<div className="py-4 text-muted-foreground">Couldn't load source.</div>
@@ -421,6 +539,14 @@ function SourcePreview({
 		);
 	}
 	if (sourceItem === undefined) {
+		if (selectedReference !== undefined && selectedContextIsFetching) {
+			return (
+				<div className="flex items-center gap-2 py-4 text-muted-foreground">
+					<Spinner className="size-3.5" />
+					Loading source…
+				</div>
+			);
+		}
 		return (
 			<div className="py-4 text-center text-muted-foreground italic">
 				Preview unavailable — couldn't read this file.

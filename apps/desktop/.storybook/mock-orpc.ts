@@ -310,6 +310,7 @@ export function createMockOrpc(data: MockOrpcData = {}): SidecarQueryUtils {
 		codeIndex: {
 			fileOccurrences: neverSettles,
 			references: neverSettles,
+			referenceContext: neverSettles,
 		},
 	};
 

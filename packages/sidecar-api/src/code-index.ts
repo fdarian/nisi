@@ -54,9 +54,9 @@ export type CodeIndexSourceContext = Schema.Schema.Type<
 >;
 
 /**
- * One reference occurrence plus its source line and context — carried here
- * rather than making the frontend fetch each file separately, since the peek
- * preview needs to render immediately for every entry in the list.
+ * One reference occurrence plus its source line. The selected row's padded
+ * context is fetched lazily through `referenceContext`, so a large references
+ * response does not carry the same 21 source lines once per row.
  *
  * `lineText` is `null` only when the sidecar genuinely couldn't read it —
  * the file is gone, or the recorded line no longer exists in a file that
@@ -65,16 +65,13 @@ export type CodeIndexSourceContext = Schema.Schema.Type<
  * the LSP server that produced this location and the worktree read that
  * produced `lineText` both read the same live file off disk, at query time —
  * unlike the SCIP index this replaced, which was built once and could
- * silently disagree with a file edited afterward. `context` is `null` for
- * the same read failure, while otherwise containing the padded source window
- * used by the preview.
+ * silently disagree with a file edited afterward.
  */
 export const CodeIndexReference = Schema.Struct({
 	line: Schema.Number,
 	charStart: Schema.Number,
 	charEnd: Schema.Number,
 	lineText: Schema.NullOr(Schema.String),
-	context: Schema.NullOr(CodeIndexSourceContext),
 });
 export type CodeIndexReference = Schema.Schema.Type<typeof CodeIndexReference>;
 
@@ -94,9 +91,9 @@ export type CodeIndexFileReferences = Schema.Schema.Type<
  * symbol (an exported type, a common utility) can have thousands.
  *
  * `definitionContext` is `null` both when there's no `definition` to begin
- * with and when there is one but its file couldn't be read. Each reference's
- * `context` has the same meaning for that row. The location itself stays
- * populated either way; only the text preview is withheld.
+ * with and when there is one but its file couldn't be read. Reference context
+ * is loaded on demand through `referenceContext`; a missing file is a
+ * legitimate `null` result while a read failure is an error.
  */
 export const CodeIndexReferencesResult = Schema.Struct({
 	displayName: Schema.String,
@@ -138,5 +135,22 @@ export const codeIndexContract = {
 			Schema.Struct({ sessionId: Schema.String, symbolKey: Schema.String }),
 		)
 		.output(CodeIndexReferencesResult)
+		.errors({ NOT_FOUND: {}, INTERNAL_SERVER_ERROR: {} }),
+	/**
+	 * Returns the padded source window for one reference row. The sidecar reads
+	 * the current worktree on demand, so the references list stays small and a
+	 * preview failure can be retried independently of the LSP references call.
+	 * A path or line that no longer exists returns `null`; an actual read failure
+	 * is `INTERNAL_SERVER_ERROR`.
+	 */
+	referenceContext: oc
+		.input(
+			Schema.Struct({
+				sessionId: Schema.String,
+				path: Schema.String,
+				line: Schema.Number,
+			}),
+		)
+		.output(Schema.NullOr(CodeIndexSourceContext))
 		.errors({ NOT_FOUND: {}, INTERNAL_SERVER_ERROR: {} }),
 };

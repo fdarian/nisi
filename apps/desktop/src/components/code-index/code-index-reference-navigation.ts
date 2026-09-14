@@ -19,6 +19,9 @@ export type VisibleReference = {
 	reference: CodeIndexReference;
 };
 
+/** Number of visible rows kept observed around the selected reference. */
+export const REFERENCE_CONTEXT_PREFETCH_RADIUS = 3;
+
 export function referenceNavigationGroup(
 	group: CodeIndexFileReferences,
 	open: boolean,
@@ -83,6 +86,17 @@ export function moveReferenceIndex(
 				: count - 1
 			: currentIndex + direction;
 	return Math.min(count - 1, Math.max(0, start));
+}
+
+export function referenceContextWindow(
+	visibleReferences: readonly VisibleReference[],
+	selectedIndex: number | undefined,
+	radius = REFERENCE_CONTEXT_PREFETCH_RADIUS,
+): readonly VisibleReference[] {
+	if (selectedIndex === undefined || visibleReferences.length === 0) return [];
+	const start = Math.max(0, selectedIndex - radius);
+	const end = Math.min(visibleReferences.length, selectedIndex + radius + 1);
+	return visibleReferences.slice(start, end);
 }
 
 export function initialReferenceIndex(

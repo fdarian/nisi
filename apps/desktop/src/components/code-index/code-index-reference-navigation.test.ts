@@ -3,6 +3,8 @@ import {
 	flattenVisibleReferences,
 	initialReferenceIndex,
 	moveReferenceIndex,
+	REFERENCE_CONTEXT_PREFETCH_RADIUS,
+	referenceContextWindow,
 	referenceNavigationGroup,
 } from "#/components/code-index/code-index-reference-navigation";
 import type { CodeIndexPeekTarget } from "#/components/code-index/use-code-index-interactions";
@@ -12,21 +14,18 @@ const firstReference = {
 	charStart: 2,
 	charEnd: 13,
 	lineText: "const first = value;",
-	context: null,
 };
 const secondReference = {
 	line: 9,
 	charStart: 4,
 	charEnd: 10,
 	lineText: "return value;",
-	context: null,
 };
 const thirdReference = {
 	line: 2,
 	charStart: 0,
 	charEnd: 6,
 	lineText: "value();",
-	context: null,
 };
 
 const target = (
@@ -88,5 +87,37 @@ describe("reference navigation", () => {
 		expect(
 			initialReferenceIndex(visibleReferences, target("missing.ts", 1, 0)),
 		).toBe(0);
+	});
+
+	test("keeps the selected row and a bounded visible-row prefetch window", () => {
+		const visibleReferences = flattenVisibleReferences([
+			referenceNavigationGroup(
+				{
+					path: "a.ts",
+					references: [
+						firstReference,
+						secondReference,
+						thirdReference,
+						firstReference,
+						secondReference,
+						thirdReference,
+					],
+				},
+				true,
+			),
+		]);
+
+		expect(
+			referenceContextWindow(visibleReferences, 3).map((item) => item.index),
+		).toEqual(
+			[0, 1, 2, 3, 4, 5].slice(
+				Math.max(0, 3 - REFERENCE_CONTEXT_PREFETCH_RADIUS),
+				Math.min(6, 3 + REFERENCE_CONTEXT_PREFETCH_RADIUS + 1),
+			),
+		);
+		expect(
+			referenceContextWindow(visibleReferences, 0).map((item) => item.index),
+		).toEqual([0, 1, 2, 3]);
+		expect(referenceContextWindow(visibleReferences, undefined)).toEqual([]);
 	});
 });

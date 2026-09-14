@@ -676,10 +676,12 @@ const readIdentifierAt = (
 };
 
 /**
- * Groups `locations` by file, attaching each one's source line and padded
- * context from `fileContents` — either field is `null` only when the read
- * genuinely can't back it (the path wasn't fetched, or the line doesn't
- * exist in the current content). Unlike the SCIP-backed version this
+ * Groups `locations` by file, attaching each one's source line from
+ * `fileContents` — `lineText` is `null` only when the read genuinely can't
+ * back it (the path wasn't fetched, or the line doesn't exist in the current
+ * content). Padded reference context is fetched separately by
+ * `codeIndex.referenceContext`, so a large references response does not carry
+ * 21 lines for every row. Unlike the SCIP-backed version this
  * replaces, there is no drift check here: the LSP server answered these
  * positions against the same live worktree bytes `fileContents` holds (both
  * go through `readWorktreeFileContents`), so a mismatch between the two isn't
@@ -703,7 +705,6 @@ export const groupReferencesByFile = (
 			charStart: location.charStart,
 			charEnd: location.charEnd,
 			lineText: lineText ?? null,
-			context: buildSourceContext(location, fileContents),
 		};
 		const existing = byPath.get(location.path);
 		if (existing === undefined) byPath.set(location.path, [entry]);
@@ -716,7 +717,7 @@ export const groupReferencesByFile = (
 	}));
 };
 
-/** Lines of context padded around a code location — enough for the dialog's source preview to show roughly 21 lines total without another worktree read. */
+/** Lines of context padded around a code location — enough for the dialog's source preview to show roughly 21 lines total. */
 const SOURCE_CONTEXT_LINES_BEFORE = 10;
 const SOURCE_CONTEXT_LINES_AFTER = 10;
 
@@ -727,8 +728,8 @@ const SOURCE_CONTEXT_LINES_AFTER = 10;
  * `groupReferencesByFile` no longer has one — see that function's doc
  * comment.
  */
-function buildSourceContext(
-	location: CodeLocation,
+export function buildSourceContext(
+	location: Pick<CodeLocation, "path" | "line">,
 	fileContents: ReadonlyMap<string, Uint8Array>,
 ): CodeIndexSourceContext | null {
 	const bytes = fileContents.get(location.path);
