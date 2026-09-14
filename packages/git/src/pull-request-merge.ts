@@ -229,6 +229,7 @@ const isNotMergeableFailure = (stderr: string): boolean => {
 const NOT_FOUND_MARKERS = [
 	"could not resolve to a pullrequest",
 	"no pull requests found",
+	"not found",
 ] as const;
 
 const isNotFoundFailure = (stderr: string): boolean => {
