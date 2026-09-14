@@ -196,28 +196,47 @@ export function FileView({
 		if (pendingReferenceTarget === undefined || query.data === undefined) {
 			return;
 		}
+		setActiveReferenceTarget(pendingReferenceTarget);
 		let frame: number | null = null;
+		let scrollRequested = false;
 		const tryScroll = () => {
 			const handle = codeViewRef.current;
-			if (handle?.getInstance()?.getTopForItem(path) === undefined) {
+			const viewer = handle?.getInstance();
+			if (
+				handle === null ||
+				viewer === undefined ||
+				viewer.getTopForItem(path) === undefined
+			) {
 				frame = requestAnimationFrame(tryScroll);
 				return;
 			}
-			setActiveReferenceTarget(pendingReferenceTarget);
-			handle.scrollTo({
-				type: "line",
-				id: path,
-				lineNumber: codeIndexDisplayedLine(pendingReferenceTarget),
-				align: "center",
-				behavior: "smooth",
-			});
+			if (!scrollRequested) {
+				handle.scrollTo({
+					type: "line",
+					id: path,
+					lineNumber: codeIndexDisplayedLine(pendingReferenceTarget),
+					align: "center",
+					behavior: "smooth",
+				});
+				scrollRequested = true;
+			}
+			if (!referenceHighlight.tryApplyTarget(pendingReferenceTarget)) {
+				frame = requestAnimationFrame(tryScroll);
+				return;
+			}
 			clearPendingReferenceTarget();
 		};
 		tryScroll();
 		return () => {
 			if (frame !== null) cancelAnimationFrame(frame);
 		};
-	}, [clearPendingReferenceTarget, pendingReferenceTarget, path, query.data]);
+	}, [
+		clearPendingReferenceTarget,
+		path,
+		pendingReferenceTarget,
+		query.data,
+		referenceHighlight.tryApplyTarget,
+	]);
 
 	const items = useMemo<readonly CodeViewItem<undefined>[]>(() => {
 		if (query.data === undefined) return [];

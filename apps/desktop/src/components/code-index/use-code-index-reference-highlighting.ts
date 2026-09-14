@@ -43,6 +43,7 @@ export function useCodeIndexReferenceHighlighting<Metadata>(
 ): {
 	highlightCSS: string;
 	onItemPostRender: (path: string, shadowRoot: ShadowRoot | undefined) => void;
+	tryApplyTarget: (target: CodeIndexReferenceTarget) => boolean;
 } {
 	const codeViewRef = props.codeViewRef;
 	const target = props.target;
@@ -75,8 +76,11 @@ export function useCodeIndexReferenceHighlighting<Metadata>(
 	}, [highlightName]);
 
 	const applyTarget = useCallback(
-		(path: string, shadowRoot: ShadowRoot): boolean => {
-			const current = targetRef.current;
+		(
+			current: CodeIndexReferenceTarget,
+			path: string,
+			shadowRoot: ShadowRoot,
+		): boolean => {
 			const highlight = highlightRef.current;
 			if (
 				current === undefined ||
@@ -101,6 +105,21 @@ export function useCodeIndexReferenceHighlighting<Metadata>(
 		},
 		[],
 	);
+	const tryApplyTarget = useCallback(
+		(current: CodeIndexReferenceTarget): boolean => {
+			const item = codeViewRef.current
+				?.getInstance()
+				?.getRenderedItems()
+				.find((candidate) => candidate.id === current.path);
+			if (item === undefined) return false;
+			if (!SUPPORTS_HIGHLIGHT_API) return true;
+			const shadowRoot = item.element.shadowRoot;
+			return (
+				shadowRoot !== null && applyTarget(current, current.path, shadowRoot)
+			);
+		},
+		[applyTarget, codeViewRef],
+	);
 
 	const onItemPostRender = useCallback(
 		(path: string, shadowRoot: ShadowRoot | undefined) => {
@@ -111,7 +130,7 @@ export function useCodeIndexReferenceHighlighting<Metadata>(
 				highlightRef.current?.clear();
 				return;
 			}
-			applyTarget(path, shadowRoot);
+			applyTarget(current, path, shadowRoot);
 		},
 		[applyTarget],
 	);
@@ -122,15 +141,8 @@ export function useCodeIndexReferenceHighlighting<Metadata>(
 			highlightRef.current?.clear();
 			return;
 		}
-		pollUntilReady(() => {
-			const item = codeViewRef.current
-				?.getInstance()
-				?.getRenderedItems()
-				.find((candidate) => candidate.id === target.path);
-			const shadowRoot = item?.element.shadowRoot;
-			return shadowRoot != null && applyTarget(target.path, shadowRoot);
-		}, frameRef);
-	}, [applyTarget, codeViewRef, target]);
+		pollUntilReady(() => tryApplyTarget(target), frameRef);
+	}, [target, tryApplyTarget]);
 
 	useEffect(
 		() => () => {
@@ -139,5 +151,5 @@ export function useCodeIndexReferenceHighlighting<Metadata>(
 		[],
 	);
 
-	return { highlightCSS, onItemPostRender };
+	return { highlightCSS, onItemPostRender, tryApplyTarget };
 }
