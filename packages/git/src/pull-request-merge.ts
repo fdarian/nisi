@@ -6,6 +6,7 @@ import {
 	GhOutputDecodeError,
 	GhPullRequestReadyFailed,
 	GhRateLimited,
+	GhStackMergeFailed,
 	type GitCommandError,
 	GitHubUnreachable,
 	NoMergeMethodsEnabled,
@@ -15,6 +16,7 @@ import {
 	PullRequestNotFound,
 	PullRequestNotMergeable,
 	type PullRequestReadyError,
+	type PullRequestStackMergeError,
 	type RepoMergeMethodsError,
 } from "./errors.ts";
 import { ghResult } from "./exec.ts";
@@ -284,6 +286,171 @@ export const mergePullRequest = (
 			number,
 			reason: result.stderr.trim() || `gh pr merge exited ${result.exitCode}`,
 		});
+	});
+
+const AsyncMergeDetails = Schema.Struct({
+	message: Schema.String,
+	uuid: Schema.optional(Schema.String),
+	sha: Schema.optional(Schema.String),
+	merge_method: Schema.optional(Schema.String),
+	merge_action: Schema.optional(Schema.String),
+	expected_head_sha: Schema.optional(Schema.String),
+});
+
+const AsyncMergeResponse = Schema.Struct({
+	status: Schema.Literals(["pending", "merged", "failed"]),
+	details: AsyncMergeDetails,
+});
+
+const decodeAsyncMergeResponse = (command: string, raw: string) =>
+	Schema.decodeUnknownEffect(Schema.fromJsonString(AsyncMergeResponse))(
+		raw,
+	).pipe(
+		Effect.mapError(
+			(cause) => new GhOutputDecodeError({ command, raw, cause }),
+		),
+	);
+
+const stackMergeHeaders = [
+	"-H",
+	"Accept: application/vnd.github+json",
+	"-H",
+	"X-GitHub-Api-Version: 2026-03-10",
+] as const;
+
+const stackMergeFailure = (
+	repoRoot: string,
+	owner: string,
+	repo: string,
+	number: number,
+	reason: string,
+) => new GhStackMergeFailed({ repoRoot, owner, repo, number, reason });
+
+const pollStackMerge = (
+	repoRoot: string,
+	owner: string,
+	repo: string,
+	number: number,
+	uuid: string,
+): Effect.Effect<
+	void,
+	PullRequestStackMergeError | GitCommandError,
+	ChildProcessSpawner.ChildProcessSpawner
+> =>
+	Effect.gen(function* () {
+		const result = yield* ghResult(repoRoot, [
+			"api",
+			`repos/${owner}/${repo}/pulls/${number}/merge-async/${uuid}`,
+			...stackMergeHeaders,
+		]);
+
+		if (result.exitCode !== 0) {
+			return yield* stackMergeFailure(
+				repoRoot,
+				owner,
+				repo,
+				number,
+				result.stderr.trim() ||
+					`GitHub merge polling exited ${result.exitCode}`,
+			);
+		}
+
+		const response = yield* decodeAsyncMergeResponse(
+			"gh api merge-async poll",
+			result.stdout,
+		);
+		if (response.status === "merged") return;
+		if (response.status === "failed") {
+			return yield* stackMergeFailure(
+				repoRoot,
+				owner,
+				repo,
+				number,
+				response.details.message,
+			);
+		}
+
+		yield* Effect.sleep("1 second");
+		yield* pollStackMerge(repoRoot, owner, repo, number, uuid);
+	});
+
+/** Merges a stacked PR through GitHub's async endpoint and waits for its terminal result. */
+export const mergeStackPullRequest = (
+	repoRoot: string,
+	owner: string,
+	repo: string,
+	number: number,
+	method: MergeMethod,
+): Effect.Effect<
+	void,
+	PullRequestStackMergeError | GitCommandError,
+	ChildProcessSpawner.ChildProcessSpawner
+> =>
+	Effect.gen(function* () {
+		const result = yield* ghResult(repoRoot, [
+			"api",
+			"--method",
+			"PUT",
+			`repos/${owner}/${repo}/pulls/${number}/merge-async`,
+			...stackMergeHeaders,
+			"-f",
+			`merge_method=${method}`,
+		]);
+
+		if (result.exitCode !== 0) {
+			if (isAuthFailure(result)) {
+				return yield* new GhNotAuthenticated({
+					reason: result.stderr.trim() || "gh is not authenticated",
+				});
+			}
+			if (isNotFoundFailure(result.stderr)) {
+				return yield* new PullRequestNotFound({
+					repoRoot,
+					number,
+					reason: result.stderr.trim(),
+				});
+			}
+			if (isNotMergeableFailure(result.stderr)) {
+				return yield* new PullRequestNotMergeable({
+					repoRoot,
+					number,
+					reason: result.stderr.trim(),
+				});
+			}
+			return yield* stackMergeFailure(
+				repoRoot,
+				owner,
+				repo,
+				number,
+				result.stderr.trim() ||
+					`GitHub merge request exited ${result.exitCode}`,
+			);
+		}
+
+		const response = yield* decodeAsyncMergeResponse(
+			"gh api merge-async",
+			result.stdout,
+		);
+		if (response.status === "merged") return;
+		if (response.status === "failed") {
+			return yield* stackMergeFailure(
+				repoRoot,
+				owner,
+				repo,
+				number,
+				response.details.message,
+			);
+		}
+
+		const uuid = response.details.uuid;
+		if (uuid === undefined) {
+			return yield* new GhOutputDecodeError({
+				command: "gh api merge-async",
+				raw: result.stdout,
+				cause: new Error("GitHub returned a pending merge without a UUID"),
+			});
+		}
+		yield* pollStackMerge(repoRoot, owner, repo, number, uuid);
 	});
 
 /**
