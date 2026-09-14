@@ -229,13 +229,16 @@ const isNotMergeableFailure = (stderr: string): boolean => {
 const NOT_FOUND_MARKERS = [
 	"could not resolve to a pullrequest",
 	"no pull requests found",
-	"not found",
 ] as const;
 
 const isNotFoundFailure = (stderr: string): boolean => {
 	const lower = stderr.toLowerCase();
 	return NOT_FOUND_MARKERS.some((marker) => lower.includes(marker));
 };
+
+/** `gh api` includes the HTTP status in its failure line; keep REST 404 handling scoped to stack merges. */
+const isAsyncMergeNotFoundFailure = (stderr: string): boolean =>
+	/\bHTTP 404\b/i.test(stderr);
 
 /**
  * `gh pr merge <number> --merge|--squash|--rebase`. Failure is classified in
@@ -346,6 +349,13 @@ const pollStackMerge = (
 		]);
 
 		if (result.exitCode !== 0) {
+			if (isAsyncMergeNotFoundFailure(result.stderr)) {
+				return yield* new PullRequestNotFound({
+					repoRoot,
+					number,
+					reason: result.stderr.trim(),
+				});
+			}
 			return yield* stackMergeFailure(
 				repoRoot,
 				owner,
@@ -404,7 +414,7 @@ export const mergeStackPullRequest = (
 					reason: result.stderr.trim() || "gh is not authenticated",
 				});
 			}
-			if (isNotFoundFailure(result.stderr)) {
+			if (isAsyncMergeNotFoundFailure(result.stderr)) {
 				return yield* new PullRequestNotFound({
 					repoRoot,
 					number,
