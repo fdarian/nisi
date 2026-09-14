@@ -1,4 +1,4 @@
-import { Effect, Schema } from "effect";
+import { Effect, Option, Schema } from "effect";
 import type { ChildProcessSpawner } from "effect/unstable/process";
 import {
 	GhMergeFailed,
@@ -322,6 +322,10 @@ const stackMergeHeaders = [
 	"X-GitHub-Api-Version: 2026-03-10",
 ] as const;
 
+const STACK_MERGE_TIMEOUT = "2 minutes";
+const STACK_MERGE_TIMEOUT_MESSAGE =
+	"GitHub is still processing the merge after 2 minutes; try again later.";
+
 const stackMergeFailure = (
 	repoRoot: string,
 	owner: string,
@@ -396,8 +400,8 @@ export const mergeStackPullRequest = (
 	void,
 	PullRequestStackMergeError | GitCommandError,
 	ChildProcessSpawner.ChildProcessSpawner
-> =>
-	Effect.gen(function* () {
+> => {
+	const merge = Effect.gen(function* () {
 		const result = yield* ghResult(repoRoot, [
 			"api",
 			"--method",
@@ -463,6 +467,24 @@ export const mergeStackPullRequest = (
 		}
 		yield* pollStackMerge(repoRoot, owner, repo, number, uuid);
 	});
+
+	return merge.pipe(
+		Effect.timeoutOption(STACK_MERGE_TIMEOUT),
+		Effect.flatMap((result) =>
+			Option.isNone(result)
+				? Effect.fail(
+						stackMergeFailure(
+							repoRoot,
+							owner,
+							repo,
+							number,
+							STACK_MERGE_TIMEOUT_MESSAGE,
+						),
+					)
+				: Effect.succeed(result.value),
+		),
+	);
+};
 
 /**
  * `gh pr ready <number>` — flips a draft PR to ready for review. Failure is
