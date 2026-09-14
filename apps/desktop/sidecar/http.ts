@@ -344,7 +344,7 @@ export function attachRouter(
 				"clear-generation",
 				Effect.sync(() => clearGeneration(sessionId)),
 			);
-			const chatClose = yield* runCloseStep(
+			yield* runCloseStep(
 				sessionId,
 				"close-chat-threads",
 				Effect.promise(() =>
@@ -355,15 +355,6 @@ export function attachRouter(
 					),
 				),
 			);
-			if (chatClose.status === "completed") {
-				for (const failure of chatClose.value) {
-					yield* Effect.logWarning("chat thread close rejected", {
-						sessionId: failure.sessionId,
-						threadId: failure.threadId,
-						cause: describeCloseFailure(failure.error),
-					});
-				}
-			}
 
 			// Otherwise a closed session's id lingers in the watch registry
 			// forever — nothing else ever removes it, since the frontend's own
