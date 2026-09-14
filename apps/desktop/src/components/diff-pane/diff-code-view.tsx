@@ -32,6 +32,10 @@ import {
 	diffItemMetrics,
 	diffViewUnsafeCSS,
 } from "#/components/diff-pane/diff-view-theme";
+import {
+	createTokenInteractionLeaseRegistry,
+	type TokenInteractionLeaseRegistry,
+} from "#/components/diff-pane/token-interaction-leases";
 import type { DiffStyleMode } from "#/lib/settings-data";
 
 function useDiffWorkerPoolOptions() {
@@ -128,20 +132,27 @@ function useSeparatorClickForwarding() {
 }
 
 /**
- * `WorkerPoolContextProvider`'s own `highlighterOptions` prop only takes
- * effect at the shared worker pool's *creation* — `getOrCreateWorkerPoolSingleton`
- * (confirmed live: toggling `useTokenTransformer` on and pointing a fresh
- * `highlighterOptions` object at an already-mounted `WorkerPoolContextProvider`
- * changed nothing, since the pool is a module-level singleton keyed by
- * nothing, not React state — every `DiffCodeView` in the whole app, across
- * every open PR tab, shares the one pool the first mount created).
- * `WorkerPoolManager.setRenderOptions` is the sanctioned way to reconfigure
- * an *already-running* pool instead of tearing it down (which would be a
- * much bigger, global disruption for what's meant to be a per-session
- * toggle) — this component's only job is calling it whenever
- * `useTokenTransformer` actually changes, from inside the provider's own
- * subtree (`useWorkerPool` only resolves there). Renders nothing.
+ * `WorkerPoolContextProvider` wraps a module-level singleton, so its render
+ * options are global even though each `DiffCodeView` has its own provider.
+ * Interactive views lease the token transformer; a non-interactive preview
+ * must not turn it off while one of those leases is still held. The pool only
+ * returns to the cheaper mode after the last interactive view unmounts.
  */
+const tokenInteractionLeasesByPool = new WeakMap<
+	object,
+	TokenInteractionLeaseRegistry
+>();
+
+function tokenInteractionLeasesFor(
+	pool: object,
+): TokenInteractionLeaseRegistry {
+	const current = tokenInteractionLeasesByPool.get(pool);
+	if (current !== undefined) return current;
+	const next = createTokenInteractionLeaseRegistry();
+	tokenInteractionLeasesByPool.set(pool, next);
+	return next;
+}
+
 function WorkerPoolOptionsSync({
 	useTokenTransformer,
 }: {
@@ -150,7 +161,13 @@ function WorkerPoolOptionsSync({
 	const pool = useWorkerPool();
 	useEffect(() => {
 		if (pool === undefined) return;
-		void pool.setRenderOptions({ useTokenTransformer });
+		const leases = tokenInteractionLeasesFor(pool);
+		const release = useTokenTransformer ? leases.acquire() : undefined;
+		void pool.setRenderOptions({ useTokenTransformer: leases.hasLease() });
+		return () => {
+			release?.();
+			void pool.setRenderOptions({ useTokenTransformer: leases.hasLease() });
+		};
 	}, [pool, useTokenTransformer]);
 	return null;
 }

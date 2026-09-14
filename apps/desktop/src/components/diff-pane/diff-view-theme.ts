@@ -163,9 +163,10 @@ export const DIFF_THEME_DARK_OPTIONS: readonly DiffThemeOption[] =
  * `InteractionManager.resolvePointerTarget` (which hit-tests against
  * `data-char`) never resolves a token target and the callbacks silently
  * never fire — not an occurrence-matching bug, a missing-attribute one.
- * Opt-in per consumer, not the default: `reference-pane.tsx` shares the same
- * `DiffCodeView` component and has no token-interaction feature, and token
- * wrapping adds real per-token DOM overhead.
+ * Non-interactive consumers still request the cheaper default. `DiffCodeView`
+ * coordinates that request with leases because its worker pool is shared:
+ * while any interactive consumer is mounted, the pool keeps token metadata
+ * enabled for every view that renders through it.
  */
 export function buildDiffHighlighterOptions(
 	theme: ThemesType,
