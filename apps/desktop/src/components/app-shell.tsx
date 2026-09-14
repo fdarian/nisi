@@ -385,10 +385,7 @@ function AppShellReady({
 				))}
 			</FramePanel>
 
-			<div
-				className="relative flex min-h-2 items-center"
-				data-tauri-drag-region="false"
-			>
+			<div className="relative flex min-h-2 items-center">
 				<DevTool />
 
 				<div className="grow" />
