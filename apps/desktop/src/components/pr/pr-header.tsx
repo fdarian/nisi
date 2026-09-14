@@ -31,6 +31,7 @@ import {
 import { cn } from "#/lib/utils";
 import { PrCiStatus } from "./pr-ci-status";
 import { PrMergeButton } from "./pr-merge-button";
+import { PrStackBadge } from "./pr-stack-badge";
 
 type PrHeaderProps = {
 	orpc: SidecarQueryUtils;
@@ -118,7 +119,16 @@ export function PrHeader({
 						<BreadcrumbItem>
 							<BreadcrumbPage className="text-muted-foreground">
 								{target.kind === "pr" ? (
-									`#${target.number}`
+									<>
+										<span>#{target.number}</span>
+										<PrStackBadge
+											number={target.number}
+											orpc={orpc}
+											owner={target.owner}
+											repo={target.repo}
+											watched={watched}
+										/>
+									</>
 								) : (
 									<>
 										vs <span className="font-mono">{target.baseRef}</span>

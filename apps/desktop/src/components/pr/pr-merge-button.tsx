@@ -21,9 +21,11 @@ import type {
 import {
 	useMergePullRequest,
 	usePullRequestMergeStatus,
+	usePullRequestStack,
 	useUnpushedCommitsCheck,
 } from "#/lib/pr-data";
 import { cn } from "#/lib/utils";
+import { deriveStackMerge } from "./pr-merge-label";
 import { UnpushedCommitsDialog } from "./unpushed-commits-dialog";
 
 type PrMergeButtonProps = {
@@ -40,6 +42,12 @@ const METHOD_LABEL: Record<MergeMethod, string> = {
 	merge: "Merge pull request",
 	squash: "Squash and merge",
 	rebase: "Rebase and merge",
+};
+
+const METHOD_STACK_LABEL: Record<MergeMethod, string> = {
+	merge: "Merge stack",
+	squash: "Squash and merge stack",
+	rebase: "Rebase and merge stack",
 };
 
 const METHOD_MENU_LABEL: Record<MergeMethod, string> = {
@@ -164,7 +172,12 @@ export function PrMergeButton({
 		{ repoRoot, owner, repo, number },
 		watched,
 	);
-	const { merge, isPending: isMerging } = useMergePullRequest(orpc);
+	const stackQuery = usePullRequestStack(
+		orpc,
+		{ owner, repo, number },
+		watched,
+	);
+	const { merge, mergeStack, isPending: isMerging } = useMergePullRequest(orpc);
 	const { check: checkUnpushedCommits, isPending: isCheckingUnpushed } =
 		useUnpushedCommitsCheck(orpc);
 
@@ -188,6 +201,7 @@ export function PrMergeButton({
 		null,
 	);
 	const method = selectedMethod ?? statusQuery.data?.defaultMethod ?? null;
+	const stackMerge = deriveStackMerge(stackQuery.data, number);
 
 	const { label, disabled, title } = resolveButtonState(
 		statusQuery.data,
@@ -200,8 +214,13 @@ export function PrMergeButton({
 
 	const performMerge = useCallback(() => {
 		if (method === null) return;
-		merge({ repoRoot, owner, repo, number, method });
-	}, [merge, repoRoot, owner, repo, number, method]);
+		const params = { repoRoot, owner, repo, number, method };
+		if (stackMerge === null) {
+			merge(params);
+			return;
+		}
+		mergeStack(params);
+	}, [merge, mergeStack, repoRoot, owner, repo, number, method, stackMerge]);
 
 	// Fires a *fresh* `unpushedCommits` round trip on every click — the whole
 	// point is catching commits made moments before clicking merge, so
@@ -230,6 +249,10 @@ export function PrMergeButton({
 
 	const allowedMethods = statusQuery.data?.allowedMethods ?? [];
 	const showMethodPicker = allowedMethods.length > 1;
+	const buttonLabel =
+		!disabled && stackMerge !== null && method !== null
+			? METHOD_STACK_LABEL[method]
+			: label;
 
 	return (
 		<>
@@ -241,7 +264,12 @@ export function PrMergeButton({
 					title={title}
 					variant="outline"
 				>
-					{label}
+					{buttonLabel}
+					{!disabled && stackMerge !== null && (
+						<span className="rounded-full bg-muted px-1.5 py-0.5 font-mono text-[10px] tabular-nums">
+							{stackMerge.count}
+						</span>
+					)}
 				</Button>
 				{showMethodPicker && (
 					<>

@@ -5,7 +5,11 @@
  * `MarkReadyMenuItem`).
  */
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import type { PullRequestMergeStatus, SessionTarget } from "#/lib/pr-data";
+import type {
+	PullRequestMergeStatus,
+	PullRequestStack,
+	SessionTarget,
+} from "#/lib/pr-data";
 import { createMockOrpc } from "../../../.storybook/mock-orpc";
 import { PrHeader } from "./pr-header";
 
@@ -26,6 +30,33 @@ const PR_TARGET: SessionTarget = {
 	headRef: "feature-42",
 	owner: "acme",
 	repo: "widgets",
+};
+
+const STACK: PullRequestStack = {
+	number: 7,
+	size: 2,
+	baseRefName: "main",
+	position: 2,
+	entries: [
+		{
+			position: 1,
+			number: 41,
+			title: "Add the data layer",
+			headRefName: "stack/one",
+			baseRefName: "main",
+			state: "OPEN",
+			isDraft: false,
+		},
+		{
+			position: 2,
+			number: 42,
+			title: "Add widgets",
+			headRefName: "stack/two",
+			baseRefName: "stack/one",
+			state: "OPEN",
+			isDraft: false,
+		},
+	],
 };
 
 const meta: Meta<typeof PrHeader> = {
@@ -59,5 +90,13 @@ export const ReadyPullRequest: Story = {
 	args: {
 		target: PR_TARGET,
 		orpc: createMockOrpc({ mergeStatus: BASE_STATUS }),
+	},
+};
+
+/** A stacked PR — the breadcrumb badge opens the stack navigator. */
+export const StackedPullRequest: Story = {
+	args: {
+		target: PR_TARGET,
+		orpc: createMockOrpc({ mergeStatus: BASE_STATUS, stack: STACK }),
 	},
 };
