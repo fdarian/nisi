@@ -25,7 +25,7 @@ import {
 	useUnpushedCommitsCheck,
 } from "#/lib/pr-data";
 import { cn } from "#/lib/utils";
-import { deriveStackMerge } from "./pr-merge-label";
+import { deriveStackMerge } from "./pr-stack-merge";
 import { UnpushedCommitsDialog } from "./unpushed-commits-dialog";
 
 type PrMergeButtonProps = {

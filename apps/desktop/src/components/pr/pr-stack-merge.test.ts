@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { PullRequestStack } from "#/lib/pr-data";
-import { deriveStackMerge } from "./pr-merge-label";
+import { deriveStackMerge } from "./pr-stack-merge";
 
 const STACK: PullRequestStack = {
 	number: 7,
