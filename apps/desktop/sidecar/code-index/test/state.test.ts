@@ -1,14 +1,15 @@
 import { describe, expect, test } from "bun:test";
 import type { LspServer } from "@repo/code-lsp";
 import {
-	type LspProcessError,
+	LspProcessError,
 	LspRequestError,
-	type TsLspBinaryResolutionError,
+	TsLspBinaryResolutionError,
 } from "@repo/code-lsp";
 import { Effect, RcMap, Semaphore } from "effect";
 import {
 	buildReferencesResponse,
 	type CodeLspPoolValue,
+	describeCodeIndexFailure,
 	findImportIdentifierSpans,
 	groupReferencesByFile,
 	withCodeLspServer,
@@ -112,6 +113,37 @@ test("a failed lease is surfaced and the next operation gets a fresh server", as
 	expect(result.first._tag).toBe("Failure");
 	expect(result.second).toBe("retried");
 	expect(lookups).toBe(2);
+});
+
+describe("describeCodeIndexFailure", () => {
+	test("formats binary resolution and process failures for request errors", () => {
+		const binaryFailure = new TsLspBinaryResolutionError({
+			strategy: "dev-get-exe-path",
+			cause: new Error("missing binary"),
+		});
+		const spawnFailure = new LspProcessError({
+			step: "spawn",
+			cause: new Error("ENOENT"),
+		});
+		const initializeFailure = new LspProcessError({
+			step: "initialize",
+			cause: new Error("timeout"),
+		});
+		const requestFailure = new LspRequestError({
+			method: "textDocument/references",
+			reason: "timeout",
+			cause: new Error("deadline exceeded"),
+		});
+
+		expect(describeCodeIndexFailure(binaryFailure)).toContain(
+			"dev-get-exe-path",
+		);
+		expect(describeCodeIndexFailure(spawnFailure)).toContain("start");
+		expect(describeCodeIndexFailure(initializeFailure)).toContain("initialize");
+		expect(describeCodeIndexFailure(requestFailure)).toContain(
+			"textDocument/references",
+		);
+	});
 });
 
 /**
