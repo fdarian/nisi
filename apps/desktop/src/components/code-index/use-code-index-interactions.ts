@@ -29,7 +29,7 @@ import type {
 } from "@pierre/diffs";
 import type { CodeViewHandle } from "@pierre/diffs/react";
 import type { CodeIndexOccurrence, CodeIndexStatus } from "@repo/sidecar-api";
-import { useQueries } from "@tanstack/react-query";
+import { useQueries, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
 	buildOccurrenceIndex,
@@ -165,6 +165,7 @@ export function useCodeIndexInteractions<Metadata>({
 	tokenInteractionsActive: boolean;
 } {
 	const indexStatusQuery = useCodeIndexStatus(orpc, sessionId, enabled);
+	const queryClient = useQueryClient();
 	// The toggle being on isn't the whole story once status resolves: an
 	// `unsupported` repo (no tsconfig) has nothing this feature could ever
 	// index, so every `fileOccurrences` request would just come back empty —
@@ -202,6 +203,20 @@ export function useCodeIndexInteractions<Metadata>({
 		() => Array.from(requestedPaths),
 		[requestedPaths],
 	);
+	const retryFailedOccurrences = useCallback(
+		(path: string) => {
+			const queryOptions = orpc.codeIndex.fileOccurrences.queryOptions({
+				input: { sessionId, path },
+			});
+			const state = queryClient.getQueryState(queryOptions.queryKey);
+			if (state?.status !== "error") return;
+			void queryClient.refetchQueries({
+				queryKey: queryOptions.queryKey,
+				exact: true,
+			});
+		},
+		[orpc, queryClient, sessionId],
+	);
 	// `combine` (not a bare `.map(q => q.data)` over `useQueries`' own result)
 	// for the same reason `pr-data.ts`'s `useFileContents` needs it: plain
 	// `useQueries` with no `combine` hands back a fresh array every render
@@ -228,11 +243,12 @@ export function useCodeIndexInteractions<Metadata>({
 	);
 	const occurrenceIndexByPath = useQueries({
 		combine: combineOccurrenceIndexByPath,
-		queries: requestedPathList.map((path) =>
-			orpc.codeIndex.fileOccurrences.queryOptions({
+		queries: requestedPathList.map((path) => ({
+			...orpc.codeIndex.fileOccurrences.queryOptions({
 				input: { sessionId, path },
 			}),
-		),
+			retry: false,
+		})),
 	});
 
 	// The token currently under the pointer, regardless of whether it matched
@@ -347,6 +363,7 @@ export function useCodeIndexInteractions<Metadata>({
 			const path = resolvePath(event);
 			if (path === undefined) return;
 			notifyItemRendered(path);
+			retryFailedOccurrences(path);
 			rawHoverRef.current = {
 				element: props.tokenElement,
 				path,
@@ -356,7 +373,13 @@ export function useCodeIndexInteractions<Metadata>({
 			};
 			recomputeHoveredOccurrence();
 		},
-		[active, resolvePath, notifyItemRendered, recomputeHoveredOccurrence],
+		[
+			active,
+			notifyItemRendered,
+			recomputeHoveredOccurrence,
+			resolvePath,
+			retryFailedOccurrences,
+		],
 	);
 
 	const handleTokenLeave = useCallback((props: TokenProps) => {

@@ -52,6 +52,7 @@ import {
 	buildFileOccurrencesResponse,
 	buildReferencesPlan,
 	buildReferencesResponse,
+	describeCodeIndexFailure,
 	isCodeIndexUnsupported,
 	readWorktreeFileContents,
 	resolveCodeIndexStatus,
@@ -1650,7 +1651,15 @@ export function attachRouter(
 					input.sessionId,
 					errors,
 				);
-				return yield* buildFileOccurrencesResponse(repoRoot, input.path);
+				return yield* buildFileOccurrencesResponse(repoRoot, input.path).pipe(
+					Effect.catch((failure) =>
+						Effect.fail(
+							errors.INTERNAL_SERVER_ERROR({
+								message: describeCodeIndexFailure(failure),
+							}),
+						),
+					),
+				);
 			}),
 			references: authed.codeIndex.references.effect(function* ({
 				input,
@@ -1663,7 +1672,15 @@ export function attachRouter(
 					errors,
 				);
 
-				const plan = yield* buildReferencesPlan(repoRoot, input.symbolKey);
+				const plan = yield* buildReferencesPlan(repoRoot, input.symbolKey).pipe(
+					Effect.catch((failure) =>
+						Effect.fail(
+							errors.INTERNAL_SERVER_ERROR({
+								message: describeCodeIndexFailure(failure),
+							}),
+						),
+					),
+				);
 				const paths = [
 					...new Set([
 						plan.symbolPath,

@@ -1,13 +1,119 @@
 import { describe, expect, test } from "bun:test";
-import { LspProcessError, TsLspBinaryResolutionError } from "@repo/code-lsp";
+import type { LspServer } from "@repo/code-lsp";
+import {
+	LspProcessError,
+	LspRequestError,
+	TsLspBinaryResolutionError,
+} from "@repo/code-lsp";
+import { Effect, RcMap, Semaphore } from "effect";
 import {
 	buildReferencesResponse,
+	type CodeLspPoolValue,
 	describeBuildFailure,
 	findImportIdentifierSpans,
 	groupReferencesByFile,
+	withCodeLspServer,
 } from "../state.ts";
 
 const encode = (text: string): Uint8Array => new TextEncoder().encode(text);
+
+test("same-root LSP leases allow operations to overlap", async () => {
+	const fakeServer: LspServer = {
+		rootPath: "root",
+		semanticTokensFull: () => Effect.succeed([]),
+		references: () => Effect.succeed([]),
+		definition: () => Effect.succeed([]),
+		hover: () => Effect.succeed(null),
+	};
+	const lookup = (
+		_root: string,
+	): Effect.Effect<LspServer, LspProcessError | TsLspBinaryResolutionError> =>
+		Effect.succeed(fakeServer);
+	let active = 0;
+	let maximumActive = 0;
+
+	const program = Effect.scoped(
+		Effect.gen(function* () {
+			const resources = yield* RcMap.make({
+				lookup,
+				capacity: 3,
+				idleTimeToLive: "5 minutes",
+			});
+			const pool = {
+				resources,
+				admissionLock: Semaphore.makeUnsafe(1),
+			} satisfies CodeLspPoolValue;
+			const operation = withCodeLspServer(pool, "root", () =>
+				Effect.gen(function* () {
+					active += 1;
+					maximumActive = Math.max(maximumActive, active);
+					yield* Effect.promise(
+						() => new Promise<void>((resolve) => setTimeout(resolve, 75)),
+					);
+					active -= 1;
+				}),
+			);
+			yield* Effect.all([operation, operation], {
+				concurrency: "unbounded",
+			});
+		}),
+	);
+
+	await Effect.runPromise(program);
+	expect(maximumActive).toBe(2);
+});
+
+test("a failed lease is surfaced and the next operation gets a fresh server", async () => {
+	const fakeServer: LspServer = {
+		rootPath: "root",
+		semanticTokensFull: () => Effect.succeed([]),
+		references: () => Effect.succeed([]),
+		definition: () => Effect.succeed([]),
+		hover: () => Effect.succeed(null),
+	};
+	let lookups = 0;
+	const lookup = (
+		_root: string,
+	): Effect.Effect<LspServer, LspProcessError | TsLspBinaryResolutionError> =>
+		Effect.sync(() => {
+			lookups += 1;
+			return fakeServer;
+		});
+
+	const program = Effect.scoped(
+		Effect.gen(function* () {
+			const resources = yield* RcMap.make({
+				lookup,
+				capacity: 3,
+				idleTimeToLive: "5 minutes",
+			});
+			const pool = {
+				resources,
+				admissionLock: Semaphore.makeUnsafe(1),
+			} satisfies CodeLspPoolValue;
+			const first = yield* Effect.result(
+				withCodeLspServer(pool, "root", () =>
+					Effect.fail(
+						new LspRequestError({
+							method: "textDocument/semanticTokens/full",
+							reason: "timeout",
+							cause: new Error("temporary failure"),
+						}),
+					),
+				),
+			);
+			const second = yield* withCodeLspServer(pool, "root", () =>
+				Effect.succeed("retried"),
+			);
+			return { first, second };
+		}),
+	);
+
+	const result = await Effect.runPromise(program);
+	expect(result.first._tag).toBe("Failure");
+	expect(result.second).toBe("retried");
+	expect(lookups).toBe(2);
+});
 
 /**
  * Unlike the SCIP-backed version this replaces, `groupReferencesByFile` no

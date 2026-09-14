@@ -2,8 +2,9 @@ import { join, relative } from "node:path";
 import type {
 	LspLocation,
 	LspProcessError,
+	LspProtocolError,
+	LspRequestError,
 	LspServer,
-	SemanticToken,
 	TsLspBinaryResolutionError,
 } from "@repo/code-lsp";
 import { resolveProjectRoot, spawnLspServer } from "@repo/code-lsp";
@@ -17,22 +18,25 @@ import type {
 	CodeIndexStatus,
 } from "@repo/sidecar-api";
 import {
+	Cause,
 	Context,
 	Effect,
+	Exit,
 	Layer,
 	Option,
+	RcMap,
 	Result,
-	ScopedCache,
 	Semaphore,
 } from "effect";
 import { FileSystem } from "effect/FileSystem";
+import type * as Scope from "effect/Scope";
 import type { AppServices } from "../services.ts";
 
 /**
  * How many TS7 LSP server processes stay live at once, across every
  * tsconfig project this sidecar has queried since boot (the pool is
  * process-lifetime, not per-session — see `CodeLspPool` below). Capacity-
- * bounded, least-recently-used eviction, via `ScopedCache`. Measured
+ * bounded eviction of idle servers, via `RcMap`. Measured
  * footprint (spiked before this file was written, against this repo):
  * 235 MB resident for one loaded project, 685 MB once a second one loads —
  * three servers could therefore approach ~1.1 GB resident, the ceiling this
@@ -50,71 +54,154 @@ const MAX_LIVE_LSP_SERVERS = 3;
  * tsconfig project root (`@repo/code-lsp`'s `resolveProjectRoot` — one
  * server per project, never a shared/broader one; see that package's
  * AGENTS.md, "One project root per server", for why a shared server would
- * silently give wrong reference counts). Backed by `ScopedCache`: a `get`
- * for an unspawned root spawns and initializes it, concurrent `get`s for the
- * same root share the one in-flight spawn — this *is* the "register
- * in-flight state synchronously before any await" guarantee
- * `generation-log.ts` hand-rolls with a `Map`, just provided by the cache
- * itself instead — and capacity eviction closes the evicted entry's own
- * scope, which is exactly `spawnLspServer`'s `Effect.acquireRelease`
- * release: a clean `shutdown`/`exit` handshake, not a `kill -9`. The cache's
- * own scope is this layer's, which `index.ts`'s `MainLayer` ties to the
- * sidecar's whole run — every live server dies with the sidecar, the same
- * posture `Effect.acquireRelease` gives every other resource there (compare
+ * silently give wrong reference counts). `RcMap` shares an in-flight spawn
+ * for the same root and reference-counts each operation's scoped lease. The
+ * small admission lock only protects capacity inspection and idle eviction;
+ * it is not held while an LSP request runs. The map's own scope is this
+ * layer's, which `index.ts`'s `MainLayer` ties to the sidecar's whole run —
+ * every live server dies with the sidecar, the same posture
+ * `Effect.acquireRelease` gives every other resource there (compare
  * `updater/restart-helper.ts`'s `handle.unref`, the one deliberate exception
  * that survives it).
  */
 export class CodeLspPool extends Context.Service<CodeLspPool>()("CodeLspPool", {
 	make: Effect.gen(function* () {
-		return yield* ScopedCache.make({
+		const resources = yield* RcMap.make({
 			lookup: (projectRoot: string) => spawnLspServer(projectRoot),
 			capacity: MAX_LIVE_LSP_SERVERS,
+			idleTimeToLive: "5 minutes",
 		});
+		return {
+			resources,
+			admissionLock: Semaphore.makeUnsafe(1),
+		};
 	}),
 }) {
 	static layer = Layer.effect(CodeLspPool, CodeLspPool.make);
 }
 
-/**
- * `ScopedCache` closes the least-recently-used entry as soon as a new root
- * exceeds its capacity. Since `LspServer` requests keep using the returned
- * object after `ScopedCache.get` completes, that eviction can tear down a
- * server in the middle of `semanticTokensFull`/`references` and turn a valid
- * response into an indistinguishable empty result. Hold one permit from the
- * cache lookup through all requests that use that server; the cache remains
- * bounded, and eviction can only happen between complete LSP operations.
- */
-const codeLspOperationLock = Semaphore.makeUnsafe(1);
+type CodeLspFailure =
+	| TsLspBinaryResolutionError
+	| LspProcessError
+	| LspRequestError
+	| LspProtocolError;
 
-/** `ScopedCache.get`, degraded to `null` on a spawn/initialize failure rather than propagating — both `fileOccurrences` and `references` already treat "nothing available" as a legitimate empty response (see their contract doc comments), so a broken server for one project shouldn't fail those calls, only `status`/`build` (which query the cache through `runCodeIndexBuild` instead, where the failure is exactly the information being reported). */
-const getServer = (
-	pool: ScopedCache.ScopedCache<
+export type CodeLspPoolValue = {
+	readonly resources: RcMap.RcMap<
 		string,
 		LspServer,
-		TsLspBinaryResolutionError | LspProcessError
-	>,
-	projectRoot: string,
-): Effect.Effect<LspServer | null> =>
-	ScopedCache.get(pool, projectRoot).pipe(
-		Effect.catch(() => Effect.succeed(null)),
-	);
+		TsLspBinaryResolutionError | LspProcessError | Cause.ExceededCapacityError
+	>;
+	readonly admissionLock: Semaphore.Semaphore;
+};
 
-const withCodeLspServer = <A>(
-	pool: ScopedCache.ScopedCache<
-		string,
-		LspServer,
-		TsLspBinaryResolutionError | LspProcessError
-	>,
+const findPoolEntry = (
+	pool: CodeLspPoolValue,
 	projectRoot: string,
-	use: (server: LspServer) => Effect.Effect<A>,
-): Effect.Effect<Option.Option<A>> =>
-	codeLspOperationLock.withPermit(
+):
+	| RcMap.State.Entry<
+			LspServer,
+			TsLspBinaryResolutionError | LspProcessError | Cause.ExceededCapacityError
+	  >
+	| undefined => {
+	const state = pool.resources.state;
+	if (state._tag === "Closed") return undefined;
+	for (const pair of state.map) {
+		if (pair[0] === projectRoot) return pair[1];
+	}
+	return undefined;
+};
+
+const findIdlePoolRoot = (pool: CodeLspPoolValue): string | undefined => {
+	const state = pool.resources.state;
+	if (state._tag === "Closed") return undefined;
+	for (const pair of state.map) {
+		if (pair[1].refCount === 0) return pair[0];
+	}
+	return undefined;
+};
+
+const poolSize = (pool: CodeLspPoolValue): number => {
+	const state = pool.resources.state;
+	if (state._tag === "Closed") return 0;
+	let size = 0;
+	for (const _ of state.map) size += 1;
+	return size;
+};
+
+/** Acquires one scoped lease, evicting only an idle server when the bounded pool is full. A full pool of leased servers waits until one operation releases its lease. */
+const acquireCodeLspServer = (
+	pool: CodeLspPoolValue,
+	projectRoot: string,
+	refresh: boolean,
+): Effect.Effect<LspServer, CodeLspFailure, Scope.Scope> =>
+	Effect.gen(function* () {
+		while (true) {
+			const lease = yield* pool.admissionLock.withPermit(
+				Effect.gen(function* () {
+					const entry = findPoolEntry(pool, projectRoot);
+					if (refresh && entry !== undefined) {
+						if (entry.refCount > 0) return Option.none<LspServer>();
+						yield* RcMap.invalidate(pool.resources, projectRoot);
+					}
+
+					if (
+						findPoolEntry(pool, projectRoot) === undefined &&
+						poolSize(pool) >= pool.resources.capacity
+					) {
+						const idleRoot = findIdlePoolRoot(pool);
+						if (idleRoot === undefined) return Option.none<LspServer>();
+						yield* RcMap.invalidate(pool.resources, idleRoot);
+					}
+
+					return yield* RcMap.get(pool.resources, projectRoot).pipe(
+						Effect.map(Option.some),
+						Effect.catchIf(Cause.isExceededCapacityError, () =>
+							Effect.succeed(Option.none<LspServer>()),
+						),
+					);
+				}),
+			);
+			if (Option.isSome(lease)) return lease.value;
+			yield* Effect.sleep("50 millis");
+		}
+	});
+
+const invalidateIdleCodeLspServer = (
+	pool: CodeLspPoolValue,
+	projectRoot: string,
+): Effect.Effect<void> =>
+	pool.admissionLock.withPermit(
 		Effect.gen(function* () {
-			const server = yield* getServer(pool, projectRoot);
-			if (server === null) return Option.none<A>();
-			return Option.some(yield* use(server));
+			const entry = findPoolEntry(pool, projectRoot);
+			if (entry === undefined || entry.refCount > 0) return;
+			yield* RcMap.invalidate(pool.resources, projectRoot);
 		}),
 	);
+
+export const withCodeLspServer = <
+	A,
+	E extends LspRequestError | LspProtocolError,
+>(
+	pool: CodeLspPoolValue,
+	projectRoot: string,
+	use: (server: LspServer) => Effect.Effect<A, E>,
+	refresh = false,
+): Effect.Effect<A, E | CodeLspFailure> => {
+	const operation = Effect.scoped<A, E | CodeLspFailure, Scope.Scope>(
+		Effect.gen(function* () {
+			const server = yield* acquireCodeLspServer(pool, projectRoot, refresh);
+			return yield* use(server);
+		}),
+	);
+	return operation.pipe(
+		Effect.onExit((exit) =>
+			Exit.isSuccess(exit)
+				? Effect.void
+				: invalidateIdleCodeLspServer(pool, projectRoot),
+		),
+	);
+};
 
 /** Directories never worth descending into while looking for a `tsconfig.json` — build output and dependency trees, which can be enormous and never contain a project's own config. Mirrors the equivalent skip list the deleted `@repo/code-index` package used for the same reason. */
 const SKIPPED_DIRECTORY_NAMES = new Set([
@@ -219,9 +306,7 @@ const buildStates = new Map<
 	| { readonly kind: "failed"; readonly message: string }
 >();
 
-export const describeBuildFailure = (
-	failure: TsLspBinaryResolutionError | LspProcessError,
-): string => {
+export const describeCodeIndexFailure = (failure: CodeLspFailure): string => {
 	switch (failure._tag) {
 		case "TsLspBinaryResolutionError":
 			return `couldn't resolve the TypeScript language server binary (${failure.strategy}): ${String(failure.cause)}`;
@@ -229,17 +314,21 @@ export const describeBuildFailure = (
 			return failure.step === "spawn"
 				? `TypeScript language server failed to start: ${String(failure.cause)}`
 				: `TypeScript language server failed to initialize: ${String(failure.cause)}`;
+		case "LspRequestError":
+			return `TypeScript language server request ${failure.method} failed (${failure.reason}): ${String(failure.cause)}`;
+		case "LspProtocolError":
+			return `TypeScript language server returned an invalid response: ${String(failure.cause)}`;
 	}
 };
 
-/** The actual work behind {@link startCodeIndexBuild}: resolves the repo's primary project (see `resolvePrimaryProjectRoot`) and forces a fresh spawn/initialize for it via `ScopedCache.refresh` — a real, reusable server on success, sharing the same pool `fileOccurrences`/`references` draw from, not a throwaway health check. */
+export const describeBuildFailure = (
+	failure: TsLspBinaryResolutionError | LspProcessError,
+): string => describeCodeIndexFailure(failure);
+
+/** The actual work behind {@link startCodeIndexBuild}: resolves the repo's primary project (see `resolvePrimaryProjectRoot`) and forces a fresh spawn/initialize for it, waiting for an in-flight operation to release its lease first — a real, reusable server on success, sharing the same pool `fileOccurrences`/`references` draw from, not a throwaway health check. */
 const runCodeIndexBuild = (
 	repoRoot: string,
-): Effect.Effect<
-	void,
-	TsLspBinaryResolutionError | LspProcessError,
-	CodeLspPool | FileSystem
-> =>
+): Effect.Effect<void, CodeLspFailure, CodeLspPool | FileSystem> =>
 	Effect.gen(function* () {
 		const projectRoot = yield* resolvePrimaryProjectRoot(repoRoot);
 		if (projectRoot === null) {
@@ -255,9 +344,7 @@ const runCodeIndexBuild = (
 			);
 		}
 		const pool = yield* CodeLspPool;
-		yield* codeLspOperationLock.withPermit(
-			ScopedCache.refresh(pool, projectRoot),
-		);
+		yield* withCodeLspServer(pool, projectRoot, () => Effect.void, true);
 	});
 
 /**
@@ -289,7 +376,7 @@ export const startCodeIndexBuild = async (
 			repoRoot,
 			Result.isSuccess(result)
 				? { kind: "ready", at: Date.now() }
-				: { kind: "failed", message: describeBuildFailure(result.failure) },
+				: { kind: "failed", message: describeCodeIndexFailure(result.failure) },
 		);
 	})();
 };
@@ -407,10 +494,9 @@ export const readWorktreeFileContents = (
 
 /**
  * Every occurrence in `path`, in the shape `codeIndex.fileOccurrences`
- * reports — empty when `path` has no tsconfig project above it, or when its
- * project's server fails to spawn/initialize (same "absence is a value, not
- * an error" contract the old SCIP-backed version had for a repo with no
- * index built yet).
+ * reports — empty when `path` has no tsconfig project above it. A server
+ * startup or request failure remains an error so the caller can retry rather
+ * than caching a transient failure as this file's permanent answer.
  *
  * No filtering by semantic-token type: verified empirically (a probe
  * against `@repo/code-lsp`'s own fixture, and consistent with that
@@ -431,22 +517,20 @@ export const readWorktreeFileContents = (
 export const buildFileOccurrencesResponse = (
 	repoRoot: string,
 	path: string,
-): Effect.Effect<ReadonlyArray<CodeIndexOccurrence>, never, CodeLspPool> =>
+): Effect.Effect<
+	ReadonlyArray<CodeIndexOccurrence>,
+	CodeLspFailure,
+	CodeLspPool
+> =>
 	Effect.gen(function* () {
 		const absolutePath = join(repoRoot, path);
 		const projectRoot = resolveProjectRoot(absolutePath);
 		if (projectRoot === null) return [];
 
 		const pool = yield* CodeLspPool;
-		const result = yield* withCodeLspServer(pool, projectRoot, (server) =>
+		return yield* withCodeLspServer(pool, projectRoot, (server) =>
 			Effect.gen(function* () {
-				const tokens = yield* server
-					.semanticTokensFull(absolutePath)
-					.pipe(
-						Effect.catch(() =>
-							Effect.succeed<ReadonlyArray<SemanticToken>>([]),
-						),
-					);
+				const tokens = yield* server.semanticTokensFull(absolutePath);
 
 				const tokenOccurrences = tokens.map(
 					(token): CodeIndexOccurrence => ({
@@ -471,8 +555,6 @@ export const buildFileOccurrencesResponse = (
 				return [...tokenOccurrences, ...importOccurrences];
 			}),
 		);
-		if (Option.isNone(result)) return [];
-		return result.value;
 	});
 
 /**
@@ -517,7 +599,10 @@ const resolveImportOccurrences = (
 	absolutePath: string,
 	path: string,
 	existingOccurrences: ReadonlyArray<CodeIndexOccurrence>,
-): Effect.Effect<ReadonlyArray<CodeIndexOccurrence>> =>
+): Effect.Effect<
+	ReadonlyArray<CodeIndexOccurrence>,
+	LspRequestError | LspProtocolError
+> =>
 	Effect.gen(function* () {
 		const content = yield* readWorktreeBlobContent(absolutePath).pipe(
 			Effect.catch(() => Effect.succeed(Option.none<Uint8Array>())),
@@ -544,7 +629,6 @@ const resolveImportOccurrences = (
 					})
 					.pipe(
 						Effect.map((locations) => (locations.length > 0 ? span : null)),
-						Effect.catch(() => Effect.succeed(null)),
 					),
 			{ concurrency: IMPORT_SPAN_PROBE_CONCURRENCY },
 		);
@@ -714,16 +798,14 @@ const sameLocation = (a: CodeLocation, b: CodeLocation | null): boolean =>
  * that needs a file read (`readWorktreeFileContents`), which lives at the
  * `http.ts` call site alongside `buildReferencesResponse`, not in this
  * module. A `symbolKey` this module can't decode, or whose file has no
- * tsconfig project above it, or whose project's server fails to
- * spawn/initialize, degrades to {@link EMPTY_REFERENCES_PLAN} rather than a
- * special case — every field there is already exactly what an unrecognized
- * key naturally produces (no display name, no documentation, no definition,
- * zero references).
+ * tsconfig project above it, returns {@link EMPTY_REFERENCES_PLAN}. A server
+ * startup or request failure is propagated so the caller can retry instead
+ * of caching an incomplete plan as a successful empty result.
  */
 export const buildReferencesPlan = (
 	repoRoot: string,
 	symbolKey: string,
-): Effect.Effect<ReferencesPlan, never, CodeLspPool> =>
+): Effect.Effect<ReferencesPlan, CodeLspFailure, CodeLspPool> =>
 	Effect.gen(function* () {
 		const decoded = decodeSymbolKey(symbolKey);
 		if (decoded === null) return EMPTY_REFERENCES_PLAN;
@@ -733,7 +815,7 @@ export const buildReferencesPlan = (
 		if (projectRoot === null) return EMPTY_REFERENCES_PLAN;
 
 		const pool = yield* CodeLspPool;
-		const result = yield* withCodeLspServer(pool, projectRoot, (server) =>
+		return yield* withCodeLspServer(pool, projectRoot, (server) =>
 			Effect.gen(function* () {
 				const position = {
 					line: decoded.line,
@@ -741,23 +823,9 @@ export const buildReferencesPlan = (
 				};
 				const [definitions, rawReferences, hover] = yield* Effect.all(
 					[
-						server
-							.definition(absolutePath, position)
-							.pipe(
-								Effect.catch(() =>
-									Effect.succeed<ReadonlyArray<LspLocation>>([]),
-								),
-							),
-						server
-							.references(absolutePath, position)
-							.pipe(
-								Effect.catch(() =>
-									Effect.succeed<ReadonlyArray<LspLocation>>([]),
-								),
-							),
-						server
-							.hover(absolutePath, position)
-							.pipe(Effect.catch(() => Effect.succeed(null))),
+						server.definition(absolutePath, position),
+						server.references(absolutePath, position),
+						server.hover(absolutePath, position),
 					],
 					{ concurrency: "unbounded" },
 				);
@@ -788,8 +856,6 @@ export const buildReferencesPlan = (
 				} satisfies ReferencesPlan;
 			}),
 		);
-		if (Option.isNone(result)) return EMPTY_REFERENCES_PLAN;
-		return result.value;
 	});
 
 type ReferencesPlan = {

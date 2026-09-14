@@ -217,11 +217,11 @@ export const codeIndexContract = {
 	 * Every occurrence in one file, fetched once per opened file so a hover
 	 * is a purely local lookup against the response rather than a round trip
 	 * per token — that's the whole reason this is shaped per-file instead of
-	 * per-position. Empty (not an error) both for a file with no TypeScript
-	 * symbols and for a file with no tsconfig project above it, or whose
-	 * project's server failed to spawn — `status` reports the repo-level
-	 * picture, but this procedure itself never fails just because indexing
-	 * isn't available for the requested file.
+	 * per-position. Empty (not an error) for a file with no TypeScript symbols
+	 * or no tsconfig project above it. A server spawn/initialize or request
+	 * failure is `INTERNAL_SERVER_ERROR`, so a transient LSP failure is
+	 * distinguishable from a genuine empty result and can be retried by the
+	 * caller.
 	 */
 	fileOccurrences: oc
 		.input(Schema.Struct({ sessionId: Schema.String, path: Schema.String }))
@@ -229,10 +229,10 @@ export const codeIndexContract = {
 		.errors({ NOT_FOUND: {}, INTERNAL_SERVER_ERROR: {} }),
 	/**
 	 * `symbolKey` is always one echoed back by a prior `fileOccurrences`
-	 * call. A `symbolKey` this sidecar can no longer resolve (malformed, or
-	 * its file's project can't be found/spawned) degrades to an empty result
-	 * rather than an error — the same "absence is a value, not a failure"
-	 * choice `fileOccurrences` makes for a file with nothing indexable.
+	 * call. A malformed key, or a key whose file has no tsconfig project above
+	 * it, produces an empty result because there is no symbol to resolve. A
+	 * server spawn/initialize or request failure is `INTERNAL_SERVER_ERROR`,
+	 * rather than an empty plan that could be cached as a successful lookup.
 	 */
 	references: oc
 		.input(

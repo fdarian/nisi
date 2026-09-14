@@ -179,6 +179,7 @@ function CodeIndexPeekContent({
 			input: { sessionId, symbolKey: target.occurrence?.symbolKey ?? "" },
 		}),
 		enabled: target.occurrence !== undefined,
+		retry: false,
 	});
 	const references = referencesQuery.data;
 
