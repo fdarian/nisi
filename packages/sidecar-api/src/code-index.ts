@@ -39,8 +39,23 @@ export const CodeIndexLocation = Schema.Struct({
 export type CodeIndexLocation = Schema.Schema.Type<typeof CodeIndexLocation>;
 
 /**
- * One reference occurrence plus its source line's text — carried here rather
- * than making the frontend fetch each file separately, since the peek
+ * A window of source lines around a code location — `lines[0]` is
+ * `startLine` (0-based), so the location's own line is
+ * `lines[location.line - startLine]`. The sidecar reads this from the same
+ * worktree bytes that produced the LSP location, so the preview does not need
+ * a second frontend file request.
+ */
+export const CodeIndexSourceContext = Schema.Struct({
+	startLine: Schema.Number,
+	lines: Schema.Array(Schema.String),
+});
+export type CodeIndexSourceContext = Schema.Schema.Type<
+	typeof CodeIndexSourceContext
+>;
+
+/**
+ * One reference occurrence plus its source line and context — carried here
+ * rather than making the frontend fetch each file separately, since the peek
  * preview needs to render immediately for every entry in the list.
  *
  * `lineText` is `null` only when the sidecar genuinely couldn't read it —
@@ -50,13 +65,16 @@ export type CodeIndexLocation = Schema.Schema.Type<typeof CodeIndexLocation>;
  * the LSP server that produced this location and the worktree read that
  * produced `lineText` both read the same live file off disk, at query time —
  * unlike the SCIP index this replaced, which was built once and could
- * silently disagree with a file edited afterward.
+ * silently disagree with a file edited afterward. `context` is `null` for
+ * the same read failure, while otherwise containing the padded source window
+ * used by the preview.
  */
 export const CodeIndexReference = Schema.Struct({
 	line: Schema.Number,
 	charStart: Schema.Number,
 	charEnd: Schema.Number,
 	lineText: Schema.NullOr(Schema.String),
+	context: Schema.NullOr(CodeIndexSourceContext),
 });
 export type CodeIndexReference = Schema.Schema.Type<typeof CodeIndexReference>;
 
@@ -69,31 +87,6 @@ export type CodeIndexFileReferences = Schema.Schema.Type<
 >;
 
 /**
- * A window of source lines around `CodeIndexReferencesResult.definition` —
- * `lines[0]` is `startLine` (0-based), so the definition's own line is
- * `lines[definition.line - startLine]`. Carried here rather than making the
- * frontend fetch the whole file itself: a separate `file.get` call reads
- * through `Store.readCurrentContent`'s `includeUncommitted` gate, which is a
- * *diff-scoping* preference with no authority over what the LSP server's
- * positions mean — it always reads the working tree, so a preview read any
- * other way could describe a different revision than the one `definition`'s
- * position was resolved against. This field is always read the same
- * worktree-unconditional way `CodeIndexReference.lineText` is (`@repo/git`'s
- * `readWorktreeBlobContent`, via `readWorktreeFileContents` in
- * `apps/desktop/sidecar/code-index/state.ts`), so both halves of a peek
- * agree on their source. `null` only when there's no `definition` at all,
- * or its file couldn't be read — see `CodeIndexReferencesResult`'s own doc
- * comment.
- */
-export const CodeIndexSourceContext = Schema.Struct({
-	startLine: Schema.Number,
-	lines: Schema.Array(Schema.String),
-});
-export type CodeIndexSourceContext = Schema.Schema.Type<
-	typeof CodeIndexSourceContext
->;
-
-/**
  * `returnedReferenceCount` vs. `totalReferenceCount` is what lets the UI
  * render "showing N of M" rather than silently truncating — the sidecar
  * caps how many reference locations a single call returns (see
@@ -101,10 +94,9 @@ export type CodeIndexSourceContext = Schema.Schema.Type<
  * symbol (an exported type, a common utility) can have thousands.
  *
  * `definitionContext` is `null` both when there's no `definition` to begin
- * with and when there is one but its file couldn't be read — same "no
- * reliable preview" meaning `CodeIndexReference.lineText: null` carries;
- * `definition` itself stays populated either way; only the *text* preview
- * is withheld.
+ * with and when there is one but its file couldn't be read. Each reference's
+ * `context` has the same meaning for that row. The location itself stays
+ * populated either way; only the text preview is withheld.
  */
 export const CodeIndexReferencesResult = Schema.Struct({
 	displayName: Schema.String,

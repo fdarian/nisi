@@ -15,7 +15,7 @@
  * one the server's positions were computed against. There's no drift to
  * detect a stale index here: both the positions and this preview's text come
  * from the same live read, at query time, every time (see that module's own doc
- * comment on `readWorktreeFileContents`). A `null` `lineText`/
+ * comment on `readWorktreeFileContents`). A `null` `lineText`/`context`/
  * `definitionContext` still means "couldn't read this" — a deleted file, or
  * a position past the end of a file that got shorter mid-request — just not
  * "the index disagrees with your working tree."
@@ -65,6 +65,7 @@ import { Dialog, DialogContent, DialogTitle } from "#/components/ui/dialog";
 import { ScrollArea } from "#/components/ui/scroll-area";
 import { Spinner } from "#/components/ui/spinner";
 import type { SidecarQueryUtils } from "#/lib/backend-context";
+import { codeIndexReferenceTarget } from "#/lib/code-index-navigation";
 import { hashItemVersion } from "#/lib/item-version";
 import { useSessionOpenFiles } from "#/lib/session-ui-store";
 import { splitPath } from "#/lib/tree-paths";
@@ -195,8 +196,8 @@ function CodeIndexPeekContent({
 		[visibleReferences],
 	);
 
-	const openReference = (path: string, line: number) => {
-		openFile(path, line + 1); // LSP's 0-based line -> @pierre/diffs' 1-based
+	const openReference = (path: string, reference: CodeIndexReference) => {
+		openFile(path, codeIndexReferenceTarget(path, reference));
 		onClose();
 	};
 
@@ -320,16 +321,13 @@ function SourcePreview({
 }): React.ReactElement {
 	const sourcePreview = useMemo(() => {
 		if (selectedReference !== undefined) {
-			const lineText = selectedReference.reference.lineText;
-			if (lineText === null) return undefined;
+			const context = selectedReference.reference.context;
+			if (context === null) return undefined;
 			return {
-				context: {
-					startLine: selectedReference.reference.line,
-					lines: [lineText],
-				},
+				context,
 				kind: "reference" as const,
 				path: selectedReference.path,
-				targetLine: 1,
+				targetLine: selectedReference.reference.line - context.startLine + 1,
 			};
 		}
 		if (
@@ -454,7 +452,7 @@ function ReferencesTree({
 	groups: readonly ReferenceNavigationGroup[];
 	onGroupOpenChange: (path: string, open: boolean) => void;
 	result: CodeIndexReferencesResult;
-	onOpenReference: (path: string, line: number) => void;
+	onOpenReference: (path: string, reference: CodeIndexReference) => void;
 	onSelectedIndexChange: (index: number) => void;
 	selectedIndex: number | undefined;
 	visibleReferences: readonly VisibleReference[];
@@ -575,7 +573,7 @@ function FileReferenceGroup({
 	group: { path: string; references: readonly CodeIndexReference[] };
 	open: boolean;
 	onGroupOpenChange: (open: boolean) => void;
-	onOpenReference: (path: string, line: number) => void;
+	onOpenReference: (path: string, reference: CodeIndexReference) => void;
 	onSelectedIndexChange: (index: number) => void;
 	registerReferenceRef: (id: string, element: HTMLButtonElement | null) => void;
 	selectedIndex: number | undefined;
@@ -627,7 +625,7 @@ function FileReferenceGroup({
 										if (visibleReference !== undefined) {
 											onSelectedIndexChange(visibleReference.index);
 										}
-										onOpenReference(group.path, reference.line);
+										onOpenReference(group.path, reference);
 									}}
 									ref={(element) => {
 										if (visibleReference !== undefined) {

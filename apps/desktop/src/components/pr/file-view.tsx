@@ -17,6 +17,7 @@ import { AlertTriangleIcon } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CodeIndexPeekDialog } from "#/components/code-index/code-index-peek-panel";
 import { useCodeIndexInteractions } from "#/components/code-index/use-code-index-interactions";
+import { useCodeIndexReferenceHighlighting } from "#/components/code-index/use-code-index-reference-highlighting";
 import {
 	buildDiffCodeViewOptions,
 	DiffCodeView,
@@ -39,9 +40,14 @@ import { ToggleGroup, ToggleGroupItem } from "#/components/ui/toggle-group";
 import { Toolbar } from "#/components/ui/toolbar";
 import { useDiffSelection } from "#/hooks/use-diff-selection";
 import type { SidecarQueryUtils } from "#/lib/backend-context";
+import {
+	type CodeIndexReferenceTarget,
+	codeIndexDisplayedLine,
+} from "#/lib/code-index-navigation";
 import { hashItemVersion } from "#/lib/item-version";
 import {
 	useSessionCodeIndexEnabled,
+	useSessionFileReferenceTarget,
 	useSessionFileScrollTarget,
 } from "#/lib/session-ui-store";
 import { splitPath } from "#/lib/tree-paths";
@@ -105,6 +111,29 @@ export function FileView({
 		codeViewRef,
 		enabled: codeIndexEnabled,
 	});
+	const [pendingReferenceTarget, clearPendingReferenceTarget] =
+		useSessionFileReferenceTarget(sessionId, path);
+	const [activeReferenceTarget, setActiveReferenceTarget] = useState<
+		CodeIndexReferenceTarget | undefined
+	>();
+	const clearReferenceHighlight = useCallback(() => {
+		setActiveReferenceTarget(undefined);
+	}, []);
+	const codeContainerRef = useRef<HTMLDivElement>(null);
+	useEffect(() => {
+		const node = codeContainerRef.current;
+		if (node === null) return;
+		node.addEventListener("pointerdown", clearReferenceHighlight);
+		node.addEventListener("keydown", clearReferenceHighlight);
+		return () => {
+			node.removeEventListener("pointerdown", clearReferenceHighlight);
+			node.removeEventListener("keydown", clearReferenceHighlight);
+		};
+	}, [clearReferenceHighlight]);
+	const referenceHighlight = useCodeIndexReferenceHighlighting({
+		codeViewRef,
+		target: activeReferenceTarget,
+	});
 	// `useDiffTheme` needs `codeIndex.tokenInteractionsActive` (not the raw
 	// enable flag) so the highlighter drops token wrapping the moment the
 	// feature turns out unsupported, not just when the user disables it —
@@ -124,6 +153,13 @@ export function FileView({
 	const handleScroll = useCallback(() => {
 		diffSelection.refreshAnchorRect();
 	}, [diffSelection.refreshAnchorRect]);
+	const handleSelectedLinesChange = useCallback(
+		(selection: Parameters<typeof diffSelection.onSelectedLinesChange>[0]) => {
+			clearReferenceHighlight();
+			diffSelection.onSelectedLinesChange(selection);
+		},
+		[clearReferenceHighlight, diffSelection.onSelectedLinesChange],
+	);
 
 	// A tab opened with a target line (a code-index peek's "open file" action,
 	// or a walkthrough reference) scrolls there once its content is actually
@@ -156,6 +192,33 @@ export function FileView({
 		};
 	}, [pendingScrollLine, query.data, path, clearPendingScrollLine]);
 
+	useEffect(() => {
+		if (pendingReferenceTarget === undefined || query.data === undefined) {
+			return;
+		}
+		let frame: number | null = null;
+		const tryScroll = () => {
+			const handle = codeViewRef.current;
+			if (handle?.getInstance()?.getTopForItem(path) === undefined) {
+				frame = requestAnimationFrame(tryScroll);
+				return;
+			}
+			setActiveReferenceTarget(pendingReferenceTarget);
+			handle.scrollTo({
+				type: "line",
+				id: path,
+				lineNumber: codeIndexDisplayedLine(pendingReferenceTarget),
+				align: "center",
+				behavior: "smooth",
+			});
+			clearPendingReferenceTarget();
+		};
+		tryScroll();
+		return () => {
+			if (frame !== null) cancelAnimationFrame(frame);
+		};
+	}, [clearPendingReferenceTarget, pendingReferenceTarget, path, query.data]);
+
 	const items = useMemo<readonly CodeViewItem<undefined>[]>(() => {
 		if (query.data === undefined) return [];
 		return [
@@ -179,10 +242,15 @@ export function FileView({
 						--diffs-light-bg: transparent;
 						--diffs-dark-bg: transparent;
 					}
+					${referenceHighlight.highlightCSS}
 					${codeIndex.tokenCSS}
 				`,
 				theme: diffTheme.theme,
-				onPostRender: (_node, _instance, phase, context) => {
+				onPostRender: (node, _instance, phase, context) => {
+					referenceHighlight.onItemPostRender(
+						context.item.id,
+						phase === "unmount" ? undefined : (node.shadowRoot ?? undefined),
+					);
 					if (phase !== "unmount") {
 						codeIndex.notifyItemRendered(context.item.id);
 					}
@@ -195,6 +263,8 @@ export function FileView({
 		}),
 		[
 			diffTheme.theme,
+			referenceHighlight.highlightCSS,
+			referenceHighlight.onItemPostRender,
 			codeIndex.tokenCSS,
 			codeIndex.notifyItemRendered,
 			codeIndex.codeViewOptions,
@@ -256,16 +326,18 @@ export function FileView({
 						/>
 					) : (
 						<>
-							<DiffCodeView
-								className="min-h-0 w-full flex-1 overflow-auto overscroll-contain"
-								highlighterOptions={diffTheme.highlighterOptions}
-								items={items}
-								onScroll={handleScroll}
-								onSelectedLinesChange={diffSelection.onSelectedLinesChange}
-								options={codeViewOptions}
-								ref={codeViewRef}
-								selectedLines={diffSelection.selectedLines}
-							/>
+							<div className="flex min-h-0 flex-1" ref={codeContainerRef}>
+								<DiffCodeView
+									className="min-h-0 w-full flex-1 overflow-auto overscroll-contain"
+									highlighterOptions={diffTheme.highlighterOptions}
+									items={items}
+									onScroll={handleScroll}
+									onSelectedLinesChange={handleSelectedLinesChange}
+									options={codeViewOptions}
+									ref={codeViewRef}
+									selectedLines={diffSelection.selectedLines}
+								/>
+							</div>
 							<DiffSelectionPopover
 								anchorRect={diffSelection.anchorRect}
 								onDismiss={diffSelection.clearSelection}

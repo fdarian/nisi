@@ -226,12 +226,25 @@ describe("groupReferencesByFile", () => {
 			{
 				path: "a.ts",
 				references: [
-					{ line: 0, charStart: 6, charEnd: 9, lineText: "const foo = 1;" },
+					{
+						line: 0,
+						charStart: 6,
+						charEnd: 9,
+						lineText: "const foo = 1;",
+						context: {
+							startLine: 0,
+							lines: ["const foo = 1;", "const foo2 = foo;", ""],
+						},
+					},
 					{
 						line: 1,
 						charStart: 29,
 						charEnd: 32,
 						lineText: "const foo2 = foo;",
+						context: {
+							startLine: 0,
+							lines: ["const foo = 1;", "const foo2 = foo;", ""],
+						},
 					},
 				],
 			},
@@ -314,12 +327,33 @@ describe("buildReferencesResponse", () => {
 						charStart: 6,
 						charEnd: 13,
 						lineText: "const drifted = 1;",
+						context: {
+							startLine: 0,
+							lines: ["const drifted = 1;", ""],
+						},
 					},
 				],
 			},
 		]);
 		expect(response.returnedReferenceCount).toBe(1);
 		expect(response.totalReferenceCount).toBe(1);
+	});
+
+	test("attaches the same padded context window to each reference", () => {
+		const lines = Array.from({ length: 25 }, (_value, index) => `line${index}`);
+		const plan = basePlan({
+			symbolPath: "a.ts",
+			returnedLocations: [{ path: "a.ts", line: 12, charStart: 0, charEnd: 5 }],
+		});
+		const response = buildReferencesResponse(
+			plan,
+			new Map([["a.ts", encode(lines.join("\n"))]]),
+		);
+
+		expect(response.files[0]?.references[0]?.context).toEqual({
+			startLine: 2,
+			lines: lines.slice(2, 23),
+		});
 	});
 
 	describe("definitionContext", () => {

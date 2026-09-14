@@ -1,0 +1,143 @@
+"use client";
+
+import type { CodeViewHandle } from "@pierre/diffs/react";
+import { useCallback, useEffect, useId, useMemo, useRef } from "react";
+import {
+	type CodeIndexReferenceTarget,
+	codeIndexDisplayedLine,
+	codeIndexTargetLength,
+} from "#/lib/code-index-navigation";
+import {
+	buildMatchRange,
+	findFileLineRowElement,
+	pollUntilReady,
+	SUPPORTS_HIGHLIGHT_API,
+} from "#/lib/diff-match-dom";
+
+function referenceHighlightCSS(name: string): string {
+	// Matches the reference-row mark (`bg-primary/25`) and the ⌘-hover
+	// underline, while the Custom Highlight range spans syntax-token nodes.
+	return `
+		::highlight(${name}) {
+			background-color: color-mix(in srgb, var(--color-primary) 25%, transparent);
+			text-decoration: underline;
+			text-decoration-thickness: 2px;
+			text-underline-offset: 3px;
+		}
+	`;
+}
+
+type UseCodeIndexReferenceHighlightingOptions<Metadata> = {
+	codeViewRef: React.RefObject<CodeViewHandle<Metadata, undefined> | null>;
+	target: CodeIndexReferenceTarget | undefined;
+};
+
+/**
+ * Keeps one exact LSP character range highlighted in a CodeView item. It
+ * reuses the same CSS Custom Highlight and virtualized-row polling primitives
+ * as keyword search, so syntax-token DOM can be replaced without losing the
+ * range. The caller owns the target lifetime and clears it on user focus.
+ */
+export function useCodeIndexReferenceHighlighting<Metadata>(
+	props: UseCodeIndexReferenceHighlightingOptions<Metadata>,
+): {
+	highlightCSS: string;
+	onItemPostRender: (path: string, shadowRoot: ShadowRoot | undefined) => void;
+} {
+	const codeViewRef = props.codeViewRef;
+	const target = props.target;
+	const instanceId = useId().replace(/[^a-zA-Z0-9]/g, "");
+	const highlightName = useMemo(
+		() => `nisi-code-index-reference-${instanceId}`,
+		[instanceId],
+	);
+	const highlightCSS = useMemo(
+		() => referenceHighlightCSS(highlightName),
+		[highlightName],
+	);
+	const highlightRef = useRef<Highlight | undefined>(undefined);
+	const frameRef = useRef<number | null>(null);
+	const targetRef = useRef<CodeIndexReferenceTarget | undefined>(target);
+
+	useEffect(() => {
+		targetRef.current = target;
+	}, [target]);
+
+	useEffect(() => {
+		if (!SUPPORTS_HIGHLIGHT_API) return;
+		const highlight = new Highlight();
+		highlightRef.current = highlight;
+		CSS.highlights.set(highlightName, highlight);
+		return () => {
+			CSS.highlights.delete(highlightName);
+			highlightRef.current = undefined;
+		};
+	}, [highlightName]);
+
+	const applyTarget = useCallback(
+		(path: string, shadowRoot: ShadowRoot): boolean => {
+			const current = targetRef.current;
+			const highlight = highlightRef.current;
+			if (
+				current === undefined ||
+				current.path !== path ||
+				highlight === undefined
+			) {
+				return false;
+			}
+			const row = findFileLineRowElement(
+				shadowRoot,
+				codeIndexDisplayedLine(current),
+			);
+			const length = codeIndexTargetLength(current);
+			const range =
+				row === undefined || length === undefined
+					? undefined
+					: buildMatchRange(row, current.charStart, length);
+			if (range === undefined) return false;
+			highlight.clear();
+			highlight.add(range);
+			return true;
+		},
+		[],
+	);
+
+	const onItemPostRender = useCallback(
+		(path: string, shadowRoot: ShadowRoot | undefined) => {
+			if (!SUPPORTS_HIGHLIGHT_API) return;
+			const current = targetRef.current;
+			if (current === undefined || current.path !== path) return;
+			if (shadowRoot === undefined) {
+				highlightRef.current?.clear();
+				return;
+			}
+			applyTarget(path, shadowRoot);
+		},
+		[applyTarget],
+	);
+
+	useEffect(() => {
+		if (!SUPPORTS_HIGHLIGHT_API) return;
+		if (target === undefined) {
+			highlightRef.current?.clear();
+			return;
+		}
+		pollUntilReady(() => {
+			const item = codeViewRef.current
+				?.getInstance()
+				?.getRenderedItems()
+				.find((candidate) => candidate.id === target.path);
+			const shadowRoot = item?.element.shadowRoot;
+			return shadowRoot != null && applyTarget(target.path, shadowRoot);
+		}, frameRef);
+	}, [applyTarget, codeViewRef, target]);
+
+	useEffect(
+		() => () => {
+			if (frameRef.current !== null) cancelAnimationFrame(frameRef.current);
+		},
+		[],
+	);
+
+	return { highlightCSS, onItemPostRender };
+}

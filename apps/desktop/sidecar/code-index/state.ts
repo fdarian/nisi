@@ -676,16 +676,14 @@ const readIdentifierAt = (
 };
 
 /**
- * Groups `locations` by file, attaching each one's source line text from
- * `fileContents` — `lineText` is `null` only when the read genuinely can't
- * back it (the path wasn't fetched, or the line doesn't exist in the
- * current content). Unlike the SCIP-backed version this replaces, there is
- * no drift check here: the LSP server answered these positions against the
- * same live worktree bytes `fileContents` holds (both go through
- * `readWorktreeFileContents`), so a mismatch between the two isn't possible
- * the way it was for a static, potentially-hours-old on-disk index — see
- * this module's own top-of-file note and `packages/sidecar-api/src/code-index.ts`'s
- * updated doc comment on `CodeIndexReference.lineText`.
+ * Groups `locations` by file, attaching each one's source line and padded
+ * context from `fileContents` — either field is `null` only when the read
+ * genuinely can't back it (the path wasn't fetched, or the line doesn't
+ * exist in the current content). Unlike the SCIP-backed version this
+ * replaces, there is no drift check here: the LSP server answered these
+ * positions against the same live worktree bytes `fileContents` holds (both
+ * go through `readWorktreeFileContents`), so a mismatch between the two isn't
+ * possible the way it was for a static, potentially-hours-old on-disk index.
  */
 export const groupReferencesByFile = (
 	locations: ReadonlyArray<CodeLocation>,
@@ -705,6 +703,7 @@ export const groupReferencesByFile = (
 			charStart: location.charStart,
 			charEnd: location.charEnd,
 			lineText: lineText ?? null,
+			context: buildSourceContext(location, fileContents),
 		};
 		const existing = byPath.get(location.path);
 		if (existing === undefined) byPath.set(location.path, [entry]);
@@ -717,40 +716,41 @@ export const groupReferencesByFile = (
 	}));
 };
 
-/** Lines of context padded around the definition's own line — enough for the dialog's source preview to show roughly 21 lines total without another worktree read. */
-const DEFINITION_CONTEXT_LINES_BEFORE = 10;
-const DEFINITION_CONTEXT_LINES_AFTER = 10;
+/** Lines of context padded around a code location — enough for the dialog's source preview to show roughly 21 lines total without another worktree read. */
+const SOURCE_CONTEXT_LINES_BEFORE = 10;
+const SOURCE_CONTEXT_LINES_AFTER = 10;
 
 /**
- * `definition`'s surrounding source lines from `fileContents` (always
- * `readWorktreeFileContents`'s output) — `null` when there's no definition
- * to begin with, or its file wasn't fetched. No drift check, for the same
- * reason `groupReferencesByFile` no longer has one — see that function's
- * doc comment.
+ * A location's surrounding source lines from `fileContents` (always
+ * `readWorktreeFileContents`'s output) — `null` when its file wasn't fetched
+ * or its line no longer exists. No drift check, for the same reason
+ * `groupReferencesByFile` no longer has one — see that function's doc
+ * comment.
  */
-const buildDefinitionContext = (
-	definition: CodeLocation | null,
+function buildSourceContext(
+	location: CodeLocation,
 	fileContents: ReadonlyMap<string, Uint8Array>,
-): CodeIndexSourceContext | null => {
-	if (definition === null) return null;
-
-	const bytes = fileContents.get(definition.path);
+): CodeIndexSourceContext | null {
+	const bytes = fileContents.get(location.path);
 	if (bytes === undefined) return null;
 
 	const contentLines = new TextDecoder().decode(bytes).split("\n");
-	const targetLine = contentLines[definition.line];
+	const targetLine = contentLines[location.line];
 	if (targetLine === undefined) return null;
 
-	const startLine = Math.max(
-		0,
-		definition.line - DEFINITION_CONTEXT_LINES_BEFORE,
-	);
+	const startLine = Math.max(0, location.line - SOURCE_CONTEXT_LINES_BEFORE);
 	const endLine = Math.min(
 		contentLines.length - 1,
-		definition.line + DEFINITION_CONTEXT_LINES_AFTER,
+		location.line + SOURCE_CONTEXT_LINES_AFTER,
 	);
 	return { startLine, lines: contentLines.slice(startLine, endLine + 1) };
-};
+}
+
+const buildDefinitionContext = (
+	definition: CodeLocation | null,
+	fileContents: ReadonlyMap<string, Uint8Array>,
+): CodeIndexSourceContext | null =>
+	definition === null ? null : buildSourceContext(definition, fileContents);
 
 /**
  * Assembles the full `codeIndex.references` wire response from a plan and

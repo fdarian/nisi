@@ -12,18 +12,21 @@ const firstReference = {
 	charStart: 2,
 	charEnd: 13,
 	lineText: "const first = value;",
+	context: null,
 };
 const secondReference = {
 	line: 9,
 	charStart: 4,
 	charEnd: 10,
 	lineText: "return value;",
+	context: null,
 };
 const thirdReference = {
 	line: 2,
 	charStart: 0,
 	charEnd: 6,
 	lineText: "value();",
+	context: null,
 };
 
 const target = (
