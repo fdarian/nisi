@@ -328,7 +328,7 @@ export function FileView({
 						<>
 							<div className="flex min-h-0 flex-1" ref={codeContainerRef}>
 								<DiffCodeView
-									className="min-h-0 w-full flex-1 overflow-auto overscroll-contain"
+									className="min-h-0 w-full flex-1 overflow-auto overscroll-contain outline-none"
 									highlighterOptions={diffTheme.highlighterOptions}
 									items={items}
 									onScroll={handleScroll}
