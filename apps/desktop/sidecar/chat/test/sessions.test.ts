@@ -18,6 +18,10 @@ import { Effect } from "effect";
  * calls.
  */
 let nextCreateSessionShouldFail = false;
+let nextCreateSessionShouldWait = false;
+let resolvePendingCreateSession:
+	| ((session: FakeHarnessAgentSession) => void)
+	| undefined;
 
 class FakeHarnessAgentSession {
 	readonly stop = mock(async () => ({}) as never);
@@ -32,6 +36,11 @@ class FakeHarnessAgent {
 	async createSession(): Promise<FakeHarnessAgentSession> {
 		if (nextCreateSessionShouldFail) {
 			throw new Error("simulated createSession failure");
+		}
+		if (nextCreateSessionShouldWait) {
+			return new Promise((resolve) => {
+				resolvePendingCreateSession = resolve;
+			});
 		}
 		return this.lastSession;
 	}
@@ -65,6 +74,8 @@ let chatSessions: InstanceType<typeof ChatSessions>;
 
 beforeEach(() => {
 	nextCreateSessionShouldFail = false;
+	nextCreateSessionShouldWait = false;
+	resolvePendingCreateSession = undefined;
 	chatSessions = Effect.runSync(ChatSessions.make);
 });
 
@@ -132,7 +143,7 @@ describe("closeChatThreadsForSession", () => {
 	test("is a no-op for a session with no live threads", async () => {
 		await expect(
 			chatSessions.closeChatThreadsForSession(uniqueId("session")),
-		).resolves.toBeUndefined();
+		).resolves.toHaveLength(0);
 	});
 
 	test("tolerates a thread whose construction never resolved", async () => {
@@ -149,7 +160,35 @@ describe("closeChatThreadsForSession", () => {
 
 		await expect(
 			chatSessions.closeChatThreadsForSession(sessionId),
-		).resolves.toBeUndefined();
+		).resolves.toHaveLength(0);
+	});
+
+	test("closes promptly while construction is pending and stops a late session", async () => {
+		const sessionId = uniqueId("session");
+		const threadId = uniqueId("thread");
+
+		nextCreateSessionShouldWait = true;
+		const pending = chatSessions.getOrCreateChatSession(
+			paramsFor(sessionId, threadId),
+		);
+		const resolve = resolvePendingCreateSession;
+		if (resolve === undefined) {
+			throw new Error("fake createSession did not expose its resolver");
+		}
+
+		const startedAt = performance.now();
+		const failures = await chatSessions.closeChatThreadsForSession(sessionId);
+		expect(performance.now() - startedAt).toBeLessThan(500);
+		expect(failures).toHaveLength(0);
+
+		const lateSession = new FakeHarnessAgentSession();
+		resolve(lateSession);
+		const live = await pending;
+		expect(live.session).toBe(lateSession);
+		await new Promise<void>((resolveNextTick) =>
+			setTimeout(resolveNextTick, 0),
+		);
+		expect(lateSession.stop).toHaveBeenCalledTimes(1);
 	});
 });
 
@@ -170,6 +209,6 @@ describe("closeChatThread", () => {
 		// Nothing left under `sessionId` to dispose a second time.
 		await expect(
 			chatSessions.closeChatThreadsForSession(sessionId),
-		).resolves.toBeUndefined();
+		).resolves.toHaveLength(0);
 	});
 });

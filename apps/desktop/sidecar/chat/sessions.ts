@@ -36,6 +36,48 @@ type ThreadEntry = {
 	readonly pending: Promise<LiveChatSession>;
 };
 
+export type ChatThreadCloseFailure = {
+	readonly sessionId: string;
+	readonly threadId: string;
+	readonly error: unknown;
+};
+
+export type ChatThreadCloseFailureReporter = (
+	failure: ChatThreadCloseFailure,
+) => void;
+
+type ChatSessionConstructionResult =
+	| { readonly status: "resolved"; readonly session: LiveChatSession }
+	| { readonly status: "rejected"; readonly error: unknown }
+	| { readonly status: "timed-out" };
+
+const CHAT_SESSION_CLOSE_GRACE_MS = 100;
+
+const waitForChatSession = (
+	pending: Promise<LiveChatSession>,
+): Promise<ChatSessionConstructionResult> => {
+	let timer: ReturnType<typeof setTimeout> | undefined;
+	const construction = pending.then(
+		(session): ChatSessionConstructionResult => ({
+			status: "resolved",
+			session,
+		}),
+		(error): ChatSessionConstructionResult => ({
+			status: "rejected",
+			error,
+		}),
+	);
+	const timeout = new Promise<ChatSessionConstructionResult>((resolve) => {
+		timer = setTimeout(
+			() => resolve({ status: "timed-out" }),
+			CHAT_SESSION_CLOSE_GRACE_MS,
+		);
+	});
+	return Promise.race([construction, timeout]).finally(() => {
+		if (timer !== undefined) clearTimeout(timer);
+	});
+};
+
 export type ChatSessionParams = {
 	readonly sessionId: string;
 	readonly threadId: string;
@@ -151,14 +193,44 @@ export class ChatSessions extends Context.Service<ChatSessions>()(
 			 * dropped rather than left to reject a caller that's only trying to
 			 * clean up.
 			 */
-			const closeChatThread = async (threadId: string): Promise<void> => {
+			const closeChatThread = async (
+				threadId: string,
+				reportFailure?: ChatThreadCloseFailureReporter,
+			): Promise<void> => {
 				const entry = liveThreads.get(threadId);
 				if (entry === undefined) return;
 				liveThreads.delete(threadId);
 				untrackThread(entry.sessionId, threadId);
-				const live = await entry.pending.catch(() => undefined);
-				if (live === undefined) return;
-				await live.session.stop();
+				const result = await waitForChatSession(entry.pending);
+				if (result.status === "timed-out") {
+					void entry.pending.then(
+						(live) => {
+							void live.session.stop().then(undefined, (error) =>
+								reportFailure?.({
+									sessionId: entry.sessionId,
+									threadId,
+									error,
+								}),
+							);
+						},
+						(error) =>
+							reportFailure?.({
+								sessionId: entry.sessionId,
+								threadId,
+								error,
+							}),
+					);
+					return;
+				}
+				if (result.status === "rejected") {
+					reportFailure?.({
+						sessionId: entry.sessionId,
+						threadId,
+						error: result.error,
+					});
+					return;
+				}
+				await result.session.session.stop();
 			};
 
 			/**
@@ -170,12 +242,31 @@ export class ChatSessions extends Context.Service<ChatSessions>()(
 			 */
 			const closeChatThreadsForSession = async (
 				sessionId: string,
-			): Promise<void> => {
+				reportFailure?: ChatThreadCloseFailureReporter,
+			): Promise<ReadonlyArray<ChatThreadCloseFailure>> => {
 				const threadIds = threadsBySession.get(sessionId);
-				if (threadIds === undefined) return;
-				await Promise.all(
-					[...threadIds].map((threadId) => closeChatThread(threadId)),
+				if (threadIds === undefined) return [];
+				const pending = [...threadIds].map((threadId) => ({
+					threadId,
+					promise: closeChatThread(threadId, reportFailure),
+				}));
+				const settled = await Promise.allSettled(
+					pending.map((entry) => entry.promise),
 				);
+				const failures: Array<ChatThreadCloseFailure> = [];
+				for (let index = 0; index < pending.length; index += 1) {
+					const entry = pending[index];
+					const result = settled[index];
+					if (entry === undefined || result === undefined) continue;
+					if (result.status === "rejected") {
+						failures.push({
+							sessionId,
+							threadId: entry.threadId,
+							error: result.reason,
+						});
+					}
+				}
+				return failures;
 			};
 
 			return {
@@ -219,15 +310,17 @@ export const getOrCreateChatSession = (
 export const closeChatThread = (
 	threadId: string,
 	mainContext: Context.Context<AppServices>,
+	reportFailure?: ChatThreadCloseFailureReporter,
 ): Promise<void> =>
 	runEffect(ChatSessions, mainContext).then((chatSessions) =>
-		chatSessions.closeChatThread(threadId),
+		chatSessions.closeChatThread(threadId, reportFailure),
 	);
 
 export const closeChatThreadsForSession = (
 	sessionId: string,
 	mainContext: Context.Context<AppServices>,
-): Promise<void> =>
+	reportFailure?: ChatThreadCloseFailureReporter,
+): Promise<ReadonlyArray<ChatThreadCloseFailure>> =>
 	runEffect(ChatSessions, mainContext).then((chatSessions) =>
-		chatSessions.closeChatThreadsForSession(sessionId),
+		chatSessions.closeChatThreadsForSession(sessionId, reportFailure),
 	);

@@ -30,13 +30,14 @@ import type {
 } from "@repo/sidecar-api";
 import { contract } from "@repo/sidecar-api";
 import type { Context } from "effect";
-import { Cause, Effect } from "effect";
+import { Cause, Effect, Option } from "effect";
 import {
 	ChatSessionNotFound,
 	resolveChatPromptContext,
 } from "./chat/context.ts";
 import { buildChatInstructions } from "./chat/prompt.ts";
 import {
+	type ChatThreadCloseFailure,
 	closeChatThread,
 	closeChatThreadsForSession,
 	getOrCreateChatSession,
@@ -229,6 +230,90 @@ export function attachRouter(
 		effect: Effect.Effect<A, never, AppServices>,
 	) => Effect.runPromise(Effect.provide(effect, mainContext));
 
+	const SESSION_CLOSE_STEP_TIMEOUT_MS = 5_000;
+
+	type CloseStepState<A> =
+		| { readonly status: "completed"; readonly value: A }
+		| { readonly status: "timed-out" }
+		| { readonly status: "failed"; readonly cause: string };
+
+	type CloseStepOutcome<A> =
+		| {
+				readonly status: "completed";
+				readonly value: A;
+				readonly durationMs: number;
+		  }
+		| { readonly status: "timed-out"; readonly durationMs: number }
+		| {
+				readonly status: "failed";
+				readonly cause: string;
+				readonly durationMs: number;
+		  };
+
+	const runCloseStep = <A>(
+		sessionId: string,
+		step: string,
+		effect: Effect.Effect<A, unknown, never>,
+	): Effect.Effect<CloseStepOutcome<A>, never, never> =>
+		Effect.gen(function* () {
+			const startedAt = Date.now();
+			const outcome = yield* effect.pipe(
+				Effect.timeoutOption(SESSION_CLOSE_STEP_TIMEOUT_MS),
+				Effect.map(
+					(value): CloseStepState<A> =>
+						Option.isNone(value)
+							? { status: "timed-out" }
+							: { status: "completed", value: value.value },
+				),
+				Effect.catchCause((cause) =>
+					Effect.succeed<CloseStepState<A>>({
+						status: "failed",
+						cause: Cause.pretty(cause),
+					}),
+				),
+			);
+			const durationMs = Date.now() - startedAt;
+			if (outcome.status === "timed-out") {
+				yield* Effect.logWarning("session close teardown phase timed out", {
+					sessionId,
+					step,
+					durationMs,
+				});
+				return { status: "timed-out", durationMs };
+			}
+			if (outcome.status === "failed") {
+				yield* Effect.logWarning("session close teardown phase failed", {
+					sessionId,
+					step,
+					durationMs,
+					cause: outcome.cause,
+				});
+				return { status: "failed", cause: outcome.cause, durationMs };
+			}
+			yield* Effect.logInfo("session close teardown phase finished", {
+				sessionId,
+				step,
+				durationMs,
+			});
+			return { status: "completed", value: outcome.value, durationMs };
+		});
+
+	const describeCloseFailure = (error: unknown): string =>
+		error instanceof Error ? error.message : String(error);
+
+	const reportChatCloseFailure = (failure: ChatThreadCloseFailure): void => {
+		Effect.runFork(
+			Effect.provide(
+				Effect.logWarning("chat thread close failed after session close", {
+					sessionId: failure.sessionId,
+					threadId: failure.threadId,
+					cause: describeCloseFailure(failure.error),
+				}),
+				mainContext,
+			),
+		);
+	};
+
 	/**
 	 * The non-domain teardown a session's closure needs beyond
 	 * `Store.closeSession`'s own `closedAt` write — its sandbox session
@@ -240,31 +325,66 @@ export function attachRouter(
 	 */
 	const closeSessionSideEffects = (sessionId: string) =>
 		Effect.gen(function* () {
+			const startedAt = Date.now();
+			yield* Effect.logInfo("session close teardown started", { sessionId });
 			const sessionWatch = yield* SessionWatch;
-			// A closed tab's sandbox session (spawned processes, leased port)
-			// has no other owner — release it here rather than leaking it for
-			// the sidecar's lifetime. Its retained generation log goes with
-			// it — nothing left to reattach to once the session itself is gone.
-			yield* Effect.promise(() => stopLiveSession(sessionId));
-			clearGeneration(sessionId);
-			// Chat threads are scoped per PR tab (see `chat/sessions.ts`) — a
-			// closed tab's threads have no other owner either, same reasoning
-			// as `stopLiveSession` above.
-			yield* Effect.promise(() =>
-				closeChatThreadsForSession(sessionId, mainContext),
+
+			yield* runCloseStep(
+				sessionId,
+				"abort-generation",
+				Effect.sync(() => abortGeneration(sessionId)),
 			);
+			yield* runCloseStep(
+				sessionId,
+				"stop-live-session",
+				Effect.promise(() => stopLiveSession(sessionId)),
+			);
+			yield* runCloseStep(
+				sessionId,
+				"clear-generation",
+				Effect.sync(() => clearGeneration(sessionId)),
+			);
+			const chatClose = yield* runCloseStep(
+				sessionId,
+				"close-chat-threads",
+				Effect.promise(() =>
+					closeChatThreadsForSession(
+						sessionId,
+						mainContext,
+						reportChatCloseFailure,
+					),
+				),
+			);
+			if (chatClose.status === "completed") {
+				for (const failure of chatClose.value) {
+					yield* Effect.logWarning("chat thread close rejected", {
+						sessionId: failure.sessionId,
+						threadId: failure.threadId,
+						cause: describeCloseFailure(failure.error),
+					});
+				}
+			}
+
 			// Otherwise a closed session's id lingers in the watch registry
 			// forever — nothing else ever removes it, since the frontend's own
 			// unmount-time `setWatching(false)` races this close and isn't
 			// guaranteed to land first (or at all, if the tab close came from
 			// elsewhere — the CLI, another window).
-			yield* sessionWatch.remove(sessionId);
+			yield* runCloseStep(
+				sessionId,
+				"remove-watch",
+				sessionWatch.remove(sessionId),
+			);
+			yield* Effect.logInfo("session close teardown finished", {
+				sessionId,
+				durationMs: Date.now() - startedAt,
+			});
 		});
 
 	const forkCloseSessionSideEffects = (sessionId: string) =>
 		closeSessionSideEffects(sessionId).pipe(
 			Effect.provide(mainContext),
-			Effect.catchAllCause((cause) =>
+			Effect.catchCause((cause) =>
 				Effect.logError("session close teardown failed", {
 					sessionId,
 					cause: Cause.pretty(cause),
@@ -943,7 +1063,7 @@ export function attachRouter(
 			}),
 			closeThread: authed.chat.closeThread.effect(function* ({ input }) {
 				yield* Effect.promise(() =>
-					closeChatThread(input.threadId, mainContext),
+					closeChatThread(input.threadId, mainContext, reportChatCloseFailure),
 				);
 			}),
 		},
