@@ -350,7 +350,10 @@ function AppShellReady({
 				sessions={sessions}
 				suspendedSessionIds={tabSuspension.suspendedSessionIds}
 			/>
-			<FramePanel className={cn(INSET_PANE_CLASS, "my-0")}>
+			<FramePanel
+				className={cn(INSET_PANE_CLASS, "my-0")}
+				data-tauri-drag-region="false"
+			>
 				{sessions.map((session) => (
 					<TabsPrimitive.Panel
 						className="flex min-h-0 flex-1 flex-col outline-none"
@@ -382,7 +385,10 @@ function AppShellReady({
 				))}
 			</FramePanel>
 
-			<div className="relative flex min-h-2 items-center">
+			<div
+				className="relative flex min-h-2 items-center"
+				data-tauri-drag-region="false"
+			>
 				<DevTool />
 
 				<div className="grow" />
