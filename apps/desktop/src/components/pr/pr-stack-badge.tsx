@@ -7,13 +7,13 @@ import {
 	GitPullRequestIcon,
 	LayersIcon,
 } from "lucide-react";
-import { useState } from "react";
 import {
 	Popover,
 	PopoverPopup,
 	PopoverTitle,
 	PopoverTrigger,
 } from "#/components/ui/popover";
+import { useDismissOnInactive } from "#/hooks/use-dismiss-on-inactive";
 import type { SidecarQueryUtils } from "#/lib/backend-context";
 import type { PullRequestStackEntry } from "#/lib/pr-data";
 import { usePullRequestStack } from "#/lib/pr-data";
@@ -114,7 +114,7 @@ function StackEntryRow(props: {
 export function PrStackBadge(
 	props: PrStackBadgeProps,
 ): React.ReactElement | null {
-	const [open, setOpen] = useState(false);
+	const [open, setOpen] = useDismissOnInactive(props.watched);
 	const stackQuery = usePullRequestStack(
 		props.orpc,
 		{ owner: props.owner, repo: props.repo, number: props.number },

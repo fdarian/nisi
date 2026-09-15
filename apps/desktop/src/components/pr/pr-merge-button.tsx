@@ -12,6 +12,7 @@ import {
 	DropdownMenuRadioItem,
 	DropdownMenuTrigger,
 } from "#/components/ui/menu";
+import { useDismissOnInactive } from "#/hooks/use-dismiss-on-inactive";
 import type { SidecarQueryUtils } from "#/lib/backend-context";
 import type {
 	MergeMethod,
@@ -200,6 +201,7 @@ export function PrMergeButton({
 	const [selectedMethod, setSelectedMethod] = useState<MergeMethod | null>(
 		null,
 	);
+	const [methodMenuOpen, setMethodMenuOpen] = useDismissOnInactive(watched);
 	const method = selectedMethod ?? statusQuery.data?.defaultMethod ?? null;
 	const stackMerge = deriveStackMerge(stackQuery.data, number);
 
@@ -274,7 +276,10 @@ export function PrMergeButton({
 				{showMethodPicker && (
 					<>
 						<GroupSeparator />
-						<DropdownMenu>
+						<DropdownMenu
+							onOpenChange={setMethodMenuOpen}
+							open={methodMenuOpen}
+						>
 							<DropdownMenuTrigger
 								aria-label="Select merge method"
 								className={cn(

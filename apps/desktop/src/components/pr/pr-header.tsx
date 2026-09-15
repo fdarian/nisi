@@ -22,6 +22,7 @@ import {
 	openInEditor,
 	useAvailableEditors,
 } from "#/hooks/use-available-editors";
+import { useDismissOnInactive } from "#/hooks/use-dismiss-on-inactive";
 import type { SidecarQueryUtils } from "#/lib/backend-context";
 import type { SessionTarget } from "#/lib/pr-data";
 import {
@@ -109,6 +110,7 @@ export function PrHeader({
 	const repoNameSegments = repoRoot.split("/");
 	const repoName = repoNameSegments[repoNameSegments.length - 1] || repoRoot;
 	const { editors, loadEditors } = useAvailableEditors();
+	const [overflowMenuOpen, setOverflowMenuOpen] = useDismissOnInactive(watched);
 
 	return (
 		<div className="flex items-center gap-3 border-b px-4 py-2.5">
@@ -180,8 +182,10 @@ export function PrHeader({
 			)}
 			<DropdownMenu
 				onOpenChange={(open) => {
+					setOverflowMenuOpen(open);
 					if (open) loadEditors();
 				}}
+				open={overflowMenuOpen}
 			>
 				<DropdownMenuTrigger
 					aria-label="More actions"
