@@ -116,7 +116,7 @@ export function PrHeader({
 		<div className="flex items-center gap-3 border-b px-4 py-2.5">
 			<div className="flex min-w-0 flex-1 flex-col gap-0.5">
 				<Breadcrumb>
-					<BreadcrumbList className="text-xs">
+					<BreadcrumbList className="text-xs h-6">
 						<BreadcrumbItem>
 							{target.kind === "pr"
 								? `${target.owner}/${target.repo}`
