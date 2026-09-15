@@ -69,13 +69,13 @@ import {
 } from "#/components/ui/collapsible";
 import { Dialog, DialogContent, DialogTitle } from "#/components/ui/dialog";
 import { ScrollArea } from "#/components/ui/scroll-area";
-import { Spinner } from "#/components/ui/spinner";
 import type { SidecarQueryUtils } from "#/lib/backend-context";
 import { codeIndexReferenceTarget } from "#/lib/code-index-navigation";
 import { hashItemVersion } from "#/lib/item-version";
 import { useSessionOpenFiles } from "#/lib/session-ui-store";
 import { splitPath } from "#/lib/tree-paths";
 import { cn } from "#/lib/utils";
+import { Skeleton } from "../ui/skeleton";
 
 type CodeIndexPeekDialogProps = {
 	sessionId: string;
@@ -258,69 +258,95 @@ function CodeIndexPeekContent({
 				className="flex min-h-0"
 				style={{ height: CODE_INDEX_SOURCE_PREVIEW_HEIGHT }}
 			>
-				<div className="min-h-0 min-w-0 flex-1 overflow-hidden">
-					<SourcePreview
-						diffTheme={diffTheme}
-						isLoading={referencesQuery.isLoading}
-						references={references}
-						selectedReference={selectedReference}
-						selectedContext={selectedContextQuery.data}
-						selectedContextError={selectedContextQuery.error}
-						selectedContextIsError={selectedContextQuery.isError}
-						selectedContextIsFetching={selectedContextQuery.isFetching}
-						selectedContextIsPlaceholder={
-							selectedContextQuery.isPlaceholderData
-						}
-						onRetrySelectedContext={() => void selectedContextQuery.refetch()}
-					/>
-				</div>
-				<div className="relative h-full min-h-0 w-96 shrink-0 border-l">
-					<ScrollArea className="absolute inset-0">
-						<div>
-							{referencesQuery.isLoading ? (
-								<div className="flex items-center justify-center gap-2 py-6 text-muted-foreground">
-									<Spinner className="size-3.5" />
-									Loading references…
-								</div>
-							) : referencesQuery.isError ? (
-								<div className="flex flex-col items-center gap-2 px-3 py-6 text-center text-muted-foreground">
-									<div className="flex items-center gap-2 text-warning-foreground">
-										<AlertTriangleIcon className="size-3.5 shrink-0" />
-										<span>Couldn't load references.</span>
-									</div>
-									<span className="max-w-full break-words">
-										{referencesQuery.error instanceof Error
-											? referencesQuery.error.message
-											: String(referencesQuery.error)}
-									</span>
-									<Button
-										loading={referencesQuery.isFetching}
-										onClick={() => void referencesQuery.refetch()}
-										size="xs"
-										variant="outline"
-									>
-										Retry
-									</Button>
-								</div>
-							) : references === undefined ? (
-								<div className="flex items-center gap-2 py-6 text-center text-muted-foreground">
-									Couldn't load references.
-								</div>
-							) : (
-								<ReferencesTree
-									diffTheme={diffTheme}
-									groups={groups}
-									onGroupOpenChange={handleGroupOpenChange}
-									onSelectedIndexChange={handleSelectionChange}
-									onOpenReference={openReference}
-									result={references}
-									selectedIndex={selectedIndex}
-									visibleReferences={visibleReferences}
-								/>
-							)}
+				{referencesQuery.isLoading ? (
+					<div className="w-full h-full flex flex-col items-center justify-center gap-4 px-3 py-8">
+						<div
+							aria-hidden
+							className="flex w-40 flex-col items-center gap-2 opacity-40"
+						>
+							<Skeleton className="h-2 w-full" />
+							<Skeleton className="h-2 w-2/3" />
+							<Skeleton className="h-2 w-full" />
+							<Skeleton className="h-2 w-2/3" />
 						</div>
-					</ScrollArea>
-				</div>
+						<div className="flex flex-col items-center gap-3">
+							<p className="text-center text-muted-foreground text-sm">
+								Loading reference...
+							</p>
+						</div>
+						<div
+							aria-hidden
+							className="flex w-40 flex-col items-center gap-2 opacity-40"
+						>
+							<Skeleton className="h-2 w-3/4" />
+							<Skeleton className="h-2 w-1/2" />
+							<Skeleton className="h-2 w-3/4" />
+							<Skeleton className="h-2 w-1/2" />
+						</div>
+					</div>
+				) : (
+					<>
+						<div className="min-h-0 min-w-0 flex-1 overflow-hidden">
+							<SourcePreview
+								diffTheme={diffTheme}
+								references={references}
+								selectedReference={selectedReference}
+								selectedContext={selectedContextQuery.data}
+								selectedContextError={selectedContextQuery.error}
+								selectedContextIsError={selectedContextQuery.isError}
+								selectedContextIsFetching={selectedContextQuery.isFetching}
+								selectedContextIsPlaceholder={
+									selectedContextQuery.isPlaceholderData
+								}
+								onRetrySelectedContext={() =>
+									void selectedContextQuery.refetch()
+								}
+							/>
+						</div>
+						<div className="relative h-full min-h-0 w-96 shrink-0 border-l">
+							<ScrollArea className="absolute inset-0">
+								<div>
+									{referencesQuery.isError ? (
+										<div className="flex flex-col items-center gap-2 px-3 py-6 text-center text-muted-foreground">
+											<div className="flex items-center gap-2 text-warning-foreground">
+												<AlertTriangleIcon className="size-3.5 shrink-0" />
+												<span>Couldn't load references.</span>
+											</div>
+											<span className="max-w-full break-words">
+												{referencesQuery.error instanceof Error
+													? referencesQuery.error.message
+													: String(referencesQuery.error)}
+											</span>
+											<Button
+												loading={referencesQuery.isFetching}
+												onClick={() => void referencesQuery.refetch()}
+												size="xs"
+												variant="outline"
+											>
+												Retry
+											</Button>
+										</div>
+									) : references === undefined ? (
+										<div className="flex items-center gap-2 py-6 text-center text-muted-foreground">
+											Couldn't load references.
+										</div>
+									) : (
+										<ReferencesTree
+											diffTheme={diffTheme}
+											groups={groups}
+											onGroupOpenChange={handleGroupOpenChange}
+											onSelectedIndexChange={handleSelectionChange}
+											onOpenReference={openReference}
+											result={references}
+											selectedIndex={selectedIndex}
+											visibleReferences={visibleReferences}
+										/>
+									)}
+								</div>
+							</ScrollArea>
+						</div>
+					</>
+				)}
 			</div>
 		</div>
 	);
@@ -371,7 +397,6 @@ function updateSourcePreviewLineNumbers(
 
 function SourcePreview({
 	diffTheme,
-	isLoading,
 	references,
 	selectedReference,
 	selectedContext,
@@ -382,7 +407,6 @@ function SourcePreview({
 	onRetrySelectedContext,
 }: {
 	diffTheme: DiffTheme;
-	isLoading: boolean;
 	references: CodeIndexReferencesResult | undefined;
 	selectedReference: VisibleReference | undefined;
 	selectedContext: CodeIndexSourceContext | null | undefined;
@@ -466,14 +490,6 @@ function SourcePreview({
 		[diffTheme.theme, sourcePreview],
 	);
 
-	if (isLoading) {
-		return (
-			<div className="flex items-center gap-2 py-4 text-muted-foreground">
-				<Spinner className="size-3.5" />
-				Loading source…
-			</div>
-		);
-	}
 	if (selectedReference !== undefined && selectedContextIsError) {
 		return (
 			<div className="flex flex-col items-center gap-2 px-3 py-6 text-center text-muted-foreground">
@@ -502,27 +518,21 @@ function SourcePreview({
 			<div className="py-4 text-muted-foreground">Couldn't load source.</div>
 		);
 	}
-	if (selectedReference !== undefined && sourcePreview === undefined) {
+	if (
+		sourceItem === undefined &&
+		selectedContext === null &&
+		!selectedContextIsPlaceholder
+	) {
 		return (
 			<div className="py-4 text-center text-muted-foreground italic">
 				Preview unavailable — couldn't read this file.
 			</div>
 		);
 	}
+	// Covers the frames before the initial selection lands, the context
+	// fetch itself, and the render before `sourcePreview`'s effect applies it.
 	if (sourceItem === undefined) {
-		if (selectedReference !== undefined && selectedContextIsFetching) {
-			return (
-				<div className="flex items-center gap-2 py-4 text-muted-foreground">
-					<Spinner className="size-3.5" />
-					Loading source…
-				</div>
-			);
-		}
-		return (
-			<div className="py-4 text-center text-muted-foreground italic">
-				Preview unavailable — couldn't read this file.
-			</div>
-		);
+		return <PreviewSkeleton />;
 	}
 
 	return (
@@ -532,6 +542,22 @@ function SourcePreview({
 			items={[sourceItem]}
 			options={sourceOptions}
 		/>
+	);
+}
+
+function PreviewSkeleton() {
+	return (
+		<div className="gap-4 px-3 py-8 flex flex-col justify-center">
+			<Skeleton className="h-2 w-full" />
+			<Skeleton className="h-2 w-2/3" />
+			<Skeleton className="h-2 w-full" />
+			<Skeleton className="h-2 w-1/3" />
+			<Skeleton className="h-2 w-2/4" />
+			<Skeleton className="h-2 w-2/3" />
+			<Skeleton className="h-2 w-2/3" />
+			<Skeleton className="h-2 w-full" />
+			<Skeleton className="h-2 w-1/3" />
+		</div>
 	);
 }
 
