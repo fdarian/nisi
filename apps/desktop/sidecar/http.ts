@@ -41,11 +41,7 @@ import {
 	resolveChatPromptContext,
 } from "./chat/context.ts";
 import { buildChatInstructions } from "./chat/prompt.ts";
-import {
-	closeChatThread,
-	closeChatThreadsForSession,
-	getOrCreateChatSession,
-} from "./chat/sessions.ts";
+import { closeChatThread, getOrCreateChatSession } from "./chat/sessions.ts";
 import { streamChatTurn } from "./chat/stream.ts";
 import {
 	buildFileOccurrencesResponse,
@@ -67,6 +63,10 @@ import {
 import { listHarnesses } from "./harness/harnesses.ts";
 import { checkSessionForChanges } from "./live-poll.ts";
 import type { AppServices } from "./services.ts";
+import {
+	forkSessionCloseSideEffects,
+	reportChatCloseFailure,
+} from "./session-close.ts";
 import { SessionWatch } from "./session-watch.ts";
 import { type SessionNotFound, Store } from "./store.ts";
 import { Updater } from "./updater/service.ts";
@@ -77,10 +77,8 @@ import {
 import {
 	abortGeneration,
 	attachToGeneration,
-	clearGeneration,
 	getGeneration,
 } from "./walkthrough/generation-log.ts";
-import { stopLiveSession } from "./walkthrough/live-sessions.ts";
 import { WalkthroughStore } from "./walkthrough/store.ts";
 
 /**
@@ -247,38 +245,6 @@ export function attachRouter(
 	) => Effect.runPromise(Effect.provide(effect, mainContext));
 
 	/**
-	 * The non-domain teardown a session's closure needs beyond
-	 * `Store.closeSession`'s own `closedAt` write — its sandbox session
-	 * (spawned processes, a leased port), retained generation log, chat
-	 * threads, and watch-registry entry have no other owner once it's gone.
-	 * Shared by `sessions.close`'s handler and `sessions.switchToPr`'s
-	 * collision path (`store.ts`'s `Store.switchToPr` already closed the
-	 * *domain* row there; this is the rest of what a genuine close needs).
-	 */
-	const closeSessionSideEffects = (sessionId: string) =>
-		Effect.gen(function* () {
-			const sessionWatch = yield* SessionWatch;
-			// A closed tab's sandbox session (spawned processes, leased port)
-			// has no other owner — release it here rather than leaking it for
-			// the sidecar's lifetime. Its retained generation log goes with
-			// it — nothing left to reattach to once the session itself is gone.
-			yield* Effect.promise(() => stopLiveSession(sessionId));
-			clearGeneration(sessionId);
-			// Chat threads are scoped per PR tab (see `chat/sessions.ts`) — a
-			// closed tab's threads have no other owner either, same reasoning
-			// as `stopLiveSession` above.
-			yield* Effect.promise(() =>
-				closeChatThreadsForSession(sessionId, mainContext),
-			);
-			// Otherwise a closed session's id lingers in the watch registry
-			// forever — nothing else ever removes it, since the frontend's own
-			// unmount-time `setWatching(false)` races this close and isn't
-			// guaranteed to land first (or at all, if the tab close came from
-			// elsewhere — the CLI, another window).
-			yield* sessionWatch.remove(sessionId);
-		});
-
-	/**
 	 * Every `codeIndex.*` handler starts by resolving `sessionId` to a live
 	 * repo root. Mirrors `file.get`'s own repo-root-resolution catch
 	 * chain (`SessionNotFound` → `NOT_FOUND`, `GitCommandError`/
@@ -436,11 +402,11 @@ export function attachRouter(
 						),
 					),
 				);
-				yield* closeSessionSideEffects(input.sessionId);
 				emit({ type: "session-closed", sessionId: input.sessionId });
 				yield* Effect.logInfo("session closed", {
 					sessionId: input.sessionId,
 				});
+				yield* forkSessionCloseSideEffects(input.sessionId, mainContext);
 			}),
 			switchToPr: authed.sessions.switchToPr.effect(function* ({
 				input,
@@ -509,7 +475,7 @@ export function attachRouter(
 					// still needs doing — same teardown `sessions.close`'s handler
 					// runs, since this source session's live walkthrough/chat/watch
 					// state has no other owner now either.
-					yield* closeSessionSideEffects(input.sessionId);
+					yield* forkSessionCloseSideEffects(input.sessionId, mainContext);
 					emit({ type: "session-closed", sessionId: input.sessionId });
 				}
 
@@ -1003,7 +969,9 @@ export function attachRouter(
 			}),
 			closeThread: authed.chat.closeThread.effect(function* ({ input }) {
 				yield* Effect.promise(() =>
-					closeChatThread(input.threadId, mainContext),
+					closeChatThread(input.threadId, mainContext, (failure) =>
+						reportChatCloseFailure(mainContext, failure),
+					),
 				);
 			}),
 		},

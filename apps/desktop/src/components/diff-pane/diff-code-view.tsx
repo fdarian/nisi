@@ -44,6 +44,7 @@ import {
 	type TokenInteractionLeaseRegistry,
 } from "#/components/diff-pane/token-interaction-leases";
 import type { DiffStyleMode } from "#/lib/settings-data";
+import { cn } from "#/lib/utils";
 
 function useDiffWorkerPoolOptions() {
 	return useMemo(
@@ -322,7 +323,7 @@ export function DiffCodeView<Metadata>({
 				useTokenTransformer={highlighterOptions.useTokenTransformer ?? false}
 			/>
 			<CodeView
-				className={className}
+				className={cn("outline-none", className)}
 				containerRef={codeViewContainerRef}
 				items={items}
 				onScroll={onScroll}
