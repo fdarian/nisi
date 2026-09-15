@@ -52,8 +52,12 @@ import {
 	buildReferencesPlan,
 	buildReferencesResponse,
 	buildSourceContext,
+	CodeLspPool,
 	describeCodeIndexFailure,
+	getCodeLspStatus,
 	readWorktreeFileContents,
+	startCodeLspServer,
+	stopCodeLspServer,
 } from "./code-index/state.ts";
 import {
 	emit,
@@ -1590,6 +1594,47 @@ export function attachRouter(
 			}),
 		},
 		codeIndex: {
+			lspStatus: authed.codeIndex.lspStatus.effect(function* ({
+				input,
+				errors,
+			}) {
+				const store = yield* Store;
+				const repoRoot = yield* resolveCodeIndexRepoRoot(
+					store.resolveSessionRepoRoot(input.sessionId),
+					input.sessionId,
+					errors,
+				);
+				const pool = yield* CodeLspPool;
+				return getCodeLspStatus(pool, repoRoot);
+			}),
+			startLsp: authed.codeIndex.startLsp.effect(function* ({ input, errors }) {
+				const store = yield* Store;
+				const repoRoot = yield* resolveCodeIndexRepoRoot(
+					store.resolveSessionRepoRoot(input.sessionId),
+					input.sessionId,
+					errors,
+				);
+				const pool = yield* CodeLspPool;
+				return yield* startCodeLspServer(pool, repoRoot).pipe(
+					Effect.catch((failure) =>
+						Effect.fail(
+							errors.INTERNAL_SERVER_ERROR({
+								message: describeCodeIndexFailure(failure),
+							}),
+						),
+					),
+				);
+			}),
+			stopLsp: authed.codeIndex.stopLsp.effect(function* ({ input, errors }) {
+				const store = yield* Store;
+				const repoRoot = yield* resolveCodeIndexRepoRoot(
+					store.resolveSessionRepoRoot(input.sessionId),
+					input.sessionId,
+					errors,
+				);
+				const pool = yield* CodeLspPool;
+				return yield* stopCodeLspServer(pool, repoRoot);
+			}),
 			fileOccurrences: authed.codeIndex.fileOccurrences.effect(function* ({
 				input,
 				errors,

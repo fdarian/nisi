@@ -75,7 +75,7 @@ type SessionUiState = {
 	pendingFileScrollLines: ReadonlyMap<string, number>;
 	pendingFileReferenceTargets: ReadonlyMap<string, CodeIndexReferenceTarget>;
 	/**
-	 * SCIP code-navigation (⌘-hover underline, ⌘-click peek) is opt-in per
+	 * LSP code-navigation (⌘-hover underline, ⌘-click peek) is opt-in per
 	 * session and defaults off *every* session, deliberately not persisted —
 	 * unlike `hideReviewed`/`wrapLines`/etc. (`settings-data.ts`), which are
 	 * sticky preferences, this one costs something real whenever it's on
@@ -819,7 +819,7 @@ export function useSessionFileScrollTarget(
 	return [targetLine, clear] as const;
 }
 
-/** The SCIP code-navigation opt-in toggle — see `SessionUiState.codeIndexEnabled`'s doc comment for why this defaults off every session rather than living in `settings-data.ts`. */
+/** The LSP code-navigation opt-in intent — see `SessionUiState.codeIndexEnabled`'s doc comment for why this defaults off every session rather than living in `settings-data.ts`. */
 export function useSessionCodeIndexEnabled(
 	sessionId: string,
 ): readonly [boolean, (enabled: boolean) => void] {

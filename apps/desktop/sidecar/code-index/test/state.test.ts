@@ -5,18 +5,98 @@ import {
 	LspRequestError,
 	TsLspBinaryResolutionError,
 } from "@repo/code-lsp";
-import { Effect, RcMap, Semaphore } from "effect";
+import { Effect, Fiber, RcMap, Semaphore } from "effect";
 import {
 	buildReferencesResponse,
 	buildSourceContext,
 	type CodeLspPoolValue,
+	deriveCodeLspStatus,
 	describeCodeIndexFailure,
 	findImportIdentifierSpans,
+	getCodeLspStatus,
 	groupReferencesByFile,
+	startCodeLspServer,
+	stopCodeLspServer,
 	withCodeLspServer,
 } from "../state.ts";
 
 const encode = (text: string): Uint8Array => new TextEncoder().encode(text);
+
+test("derives the three user-visible LSP states without inventing an error", () => {
+	expect(deriveCodeLspStatus(true, false, "stale")).toEqual({
+		status: "starting",
+		error: null,
+	});
+	expect(deriveCodeLspStatus(false, true, "stale")).toEqual({
+		status: "on",
+		error: null,
+	});
+	expect(deriveCodeLspStatus(false, false, "stale")).toEqual({
+		status: "off",
+		error: "stale",
+	});
+});
+
+test("start initializes a root and stop waits for its active lease", async () => {
+	const fakeServer: LspServer = {
+		rootPath: "root",
+		openDocument: () => Effect.void,
+		semanticTokensFull: () => Effect.succeed([]),
+		references: () => Effect.succeed([]),
+		definition: () => Effect.succeed([]),
+		hover: () => Effect.succeed(null),
+	};
+	let releaseOperation: (() => void) | undefined;
+	let operationStarted = false;
+	const lookup = (
+		_root: string,
+	): Effect.Effect<LspServer, LspProcessError | TsLspBinaryResolutionError> =>
+		Effect.succeed(fakeServer);
+
+	const program = Effect.scoped(
+		Effect.gen(function* () {
+			const resources = yield* RcMap.make({
+				lookup,
+				capacity: 2,
+				idleTimeToLive: "5 minutes",
+			});
+			const pool = {
+				resources,
+				admissionLock: Semaphore.makeUnsafe(1),
+			} satisfies CodeLspPoolValue;
+
+			const started = yield* startCodeLspServer(pool, "root");
+			expect(started).toEqual({ status: "on", error: null });
+			const operation = withCodeLspServer(pool, "root", () =>
+				Effect.promise(
+					() =>
+						new Promise<void>((resolve) => {
+							operationStarted = true;
+							releaseOperation = resolve;
+						}),
+				),
+			);
+			yield* Effect.forkScoped(operation);
+			while (!operationStarted) yield* Effect.sleep("5 millis");
+
+			const stopping = yield* Effect.forkScoped(
+				stopCodeLspServer(pool, "root"),
+			);
+			yield* Effect.sleep("20 millis");
+			expect(getCodeLspStatus(pool, "root").status).toBe("on");
+			if (releaseOperation === undefined) {
+				throw new Error("operation did not expose its release callback");
+			}
+			releaseOperation();
+			expect(yield* Fiber.join(stopping)).toEqual({
+				status: "off",
+				error: null,
+			});
+		}),
+	);
+
+	await Effect.runPromise(program);
+});
 
 test("same-root LSP leases allow operations to overlap", async () => {
 	const fakeServer: LspServer = {

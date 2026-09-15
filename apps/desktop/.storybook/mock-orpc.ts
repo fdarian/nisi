@@ -308,6 +308,9 @@ export function createMockOrpc(data: MockOrpcData = {}): SidecarQueryUtils {
 		// No story exercises go-to-definition/find-references yet — same
 		// reasoning as `events.subscribe` above.
 		codeIndex: {
+			lspStatus: neverSettles,
+			startLsp: neverSettles,
+			stopLsp: neverSettles,
 			fileOccurrences: neverSettles,
 			references: neverSettles,
 			referenceContext: neverSettles,

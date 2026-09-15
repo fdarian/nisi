@@ -659,7 +659,7 @@ export function DiffPane({
 			// in here only invalidated two items per click and dragged the whole
 			// memo (and every file's parse below) along with it. Selection reaches
 			// the pane through `scrollToPath`, not through rendering.
-			// Folded in so flipping "Enable code reference" forces every
+			// Folded in so starting or stopping LSP forces every
 			// currently-rendered file to re-request its render from the worker
 			// pool — `WorkerPoolOptionsSync` (`diff-code-view.tsx`) updates the
 			// pool's own `useTokenTransformer` setting, but pierre still skips

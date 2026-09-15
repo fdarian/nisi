@@ -211,6 +211,18 @@ export function useCodeIndexInteractions<Metadata>({
 		})),
 	});
 
+	// A lazily-triggered occurrence request can be the first thing that starts
+	// an evicted root server. Refresh the toolbar's status after real data lands
+	// so its dot reflects the pool entry without introducing a background poll.
+	useEffect(() => {
+		if (!active || occurrenceIndexByPath.size === 0) return;
+		void queryClient.invalidateQueries({
+			queryKey: orpc.codeIndex.lspStatus.queryKey({
+				input: { sessionId },
+			}),
+		});
+	}, [active, occurrenceIndexByPath, orpc, queryClient, sessionId]);
+
 	// The token currently under the pointer, regardless of whether it matched
 	// an occurrence yet — kept separate from `hoveredTokenRef` (below) so a
 	// `fileOccurrences` response landing *after* `onTokenEnter` already fired

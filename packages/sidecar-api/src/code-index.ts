@@ -33,6 +33,23 @@ export const CODE_INDEX_SOURCE_CONTEXT_LINE_COUNT =
 	CODE_INDEX_SOURCE_CONTEXT_LINES_AFTER +
 	1;
 
+/** The live lifecycle of the worktree-root TypeScript language server. */
+export const CodeIndexLspStatusName = Schema.Literals([
+	"off",
+	"starting",
+	"on",
+]);
+export type CodeIndexLspStatusName = Schema.Schema.Type<
+	typeof CodeIndexLspStatusName
+>;
+
+/** Server status is derived from the root-keyed lease pool; `error` is the last start failure when off. */
+export const CodeIndexLspStatus = Schema.Struct({
+	status: CodeIndexLspStatusName,
+	error: Schema.NullOr(Schema.String),
+});
+export type CodeIndexLspStatus = Schema.Schema.Type<typeof CodeIndexLspStatus>;
+
 /**
  * A window of source lines around a code location — `lines[0]` is
  * `startLine` (0-based), so the location's own line is
@@ -104,6 +121,21 @@ export type CodeIndexReferencesResult = Schema.Schema.Type<
 >;
 
 export const codeIndexContract = {
+	/** Returns the actual root-server state for this session's worktree. */
+	lspStatus: oc
+		.input(Schema.Struct({ sessionId: Schema.String }))
+		.output(CodeIndexLspStatus)
+		.errors({ NOT_FOUND: {}, INTERNAL_SERVER_ERROR: {} }),
+	/** Eagerly starts and initializes the root server, retaining it in the bounded lease pool. */
+	startLsp: oc
+		.input(Schema.Struct({ sessionId: Schema.String }))
+		.output(CodeIndexLspStatus)
+		.errors({ NOT_FOUND: {}, INTERNAL_SERVER_ERROR: {} }),
+	/** Disables this session's interaction intent at the caller and drains/terminates the root server here. */
+	stopLsp: oc
+		.input(Schema.Struct({ sessionId: Schema.String }))
+		.output(CodeIndexLspStatus)
+		.errors({ NOT_FOUND: {}, INTERNAL_SERVER_ERROR: {} }),
 	/**
 	 * Every occurrence in one file, fetched once per opened file so a hover
 	 * is a purely local lookup against the response rather than a round trip

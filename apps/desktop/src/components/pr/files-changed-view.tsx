@@ -8,6 +8,7 @@ import {
 	SlidersHorizontalIcon,
 } from "lucide-react";
 import { useCallback, useMemo, useRef, useState } from "react";
+import { CodeIndexLspControl } from "#/components/code-index/code-index-lsp-control";
 import type { DiffPaneHandle } from "#/components/diff-pane/diff-pane";
 import { DiffPane } from "#/components/diff-pane/diff-pane";
 import { EditorPickerPalette } from "#/components/editor-picker-palette";
@@ -45,7 +46,6 @@ import type {
 } from "#/lib/pr-data";
 import { pullRequestUrl, useFileContents } from "#/lib/pr-data";
 import {
-	useSessionCodeIndexEnabled,
 	useSessionCurrentMatchIndex,
 	useSessionFilterQuery,
 	useSessionForcedPaths,
@@ -171,13 +171,6 @@ export function FilesChangedView({
 	const [wrapLines, setWrapLines] = useWrapLines(orpc);
 	const [preferredEditor, setPreferredEditor] = usePreferredEditor(orpc);
 	const { editors, loadEditors } = useAvailableEditors();
-	// LSP code-navigation's own opt-in — session-scoped and defaults off every
-	// time (`SessionUiState.codeIndexEnabled`'s doc comment), unlike the
-	// settings-data.ts prefs above. Interactions query each rendered file lazily
-	// once this toggle is on.
-	const [codeIndexEnabled, setCodeIndexEnabled] = useSessionCodeIndexEnabled(
-		session.id,
-	);
 	const [editorPickerOpen, setEditorPickerOpen] = useState(false);
 
 	const viewedCount = useMemo(
@@ -627,6 +620,7 @@ export function FilesChangedView({
 									<Columns2Icon />
 								</ToggleGroupItem>
 							</ToggleGroup>
+							<CodeIndexLspControl orpc={orpc} sessionId={session.id} />
 							<DropdownMenu>
 								<DropdownMenuTrigger
 									aria-label="Files sidebar display options"
@@ -656,12 +650,6 @@ export function FilesChangedView({
 										onCheckedChange={setHideReviewed}
 									>
 										Hide reviewed
-									</DropdownMenuCheckboxItem>
-									<DropdownMenuCheckboxItem
-										checked={codeIndexEnabled}
-										onCheckedChange={setCodeIndexEnabled}
-									>
-										Enable code reference
 									</DropdownMenuCheckboxItem>
 									<DropdownMenuCheckboxItem
 										checked={wrapLines}

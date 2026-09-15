@@ -90,6 +90,44 @@ export type CodeLspPoolValue = {
 	readonly admissionLock: Semaphore.Semaphore;
 };
 
+export type CodeLspStatusName = "off" | "starting" | "on";
+
+export type CodeLspStatus = {
+	readonly status: CodeLspStatusName;
+	readonly error: string | null;
+};
+
+type CodeLspPoolLifecycle = {
+	readonly startingRoots: Set<string>;
+	readonly stoppingRoots: Set<string>;
+	readonly errors: Map<string, string>;
+};
+
+const poolLifecycles = new WeakMap<CodeLspPoolValue, CodeLspPoolLifecycle>();
+
+const getPoolLifecycle = (pool: CodeLspPoolValue): CodeLspPoolLifecycle => {
+	const existing = poolLifecycles.get(pool);
+	if (existing !== undefined) return existing;
+	const created: CodeLspPoolLifecycle = {
+		startingRoots: new Set(),
+		stoppingRoots: new Set(),
+		errors: new Map(),
+	};
+	poolLifecycles.set(pool, created);
+	return created;
+};
+
+/** Pure status mapping used by the sidecar query and its lifecycle tests. */
+export const deriveCodeLspStatus = (
+	isStarting: boolean,
+	hasLiveEntry: boolean,
+	error: string | null,
+): CodeLspStatus => {
+	if (isStarting) return { status: "starting", error: null };
+	if (hasLiveEntry) return { status: "on", error: null };
+	return { status: "off", error };
+};
+
 const findPoolEntry = (
 	pool: CodeLspPoolValue,
 	repoRoot: string,
@@ -134,6 +172,9 @@ const acquireCodeLspServer = (
 		while (true) {
 			const lease = yield* pool.admissionLock.withPermit(
 				Effect.gen(function* () {
+					if (getPoolLifecycle(pool).stoppingRoots.has(repoRoot)) {
+						return Option.none<LspServer>();
+					}
 					const entry = findPoolEntry(pool, repoRoot);
 					if (refresh && entry !== undefined) {
 						if (entry.refCount > 0) return Option.none<LspServer>();
@@ -157,7 +198,10 @@ const acquireCodeLspServer = (
 					);
 				}),
 			);
-			if (Option.isSome(lease)) return lease.value;
+			if (Option.isSome(lease)) {
+				getPoolLifecycle(pool).errors.delete(repoRoot);
+				return lease.value;
+			}
 			yield* Effect.sleep("50 millis");
 		}
 	});
@@ -172,6 +216,91 @@ const invalidateIdleCodeLspServer = (
 			if (entry === undefined || entry.refCount > 0) return;
 			yield* RcMap.invalidate(pool.resources, repoRoot);
 		}),
+	);
+
+export const getCodeLspStatus = (
+	pool: CodeLspPoolValue,
+	repoRoot: string,
+): CodeLspStatus => {
+	const lifecycle = getPoolLifecycle(pool);
+	return deriveCodeLspStatus(
+		lifecycle.startingRoots.has(repoRoot),
+		findPoolEntry(pool, repoRoot) !== undefined,
+		lifecycle.errors.get(repoRoot) ?? null,
+	);
+};
+
+/** Starts a root server eagerly while retaining the normal scoped lease semantics. */
+export const startCodeLspServer = (
+	pool: CodeLspPoolValue,
+	repoRoot: string,
+): Effect.Effect<CodeLspStatus, CodeLspFailure> =>
+	Effect.gen(function* () {
+		const lifecycle = getPoolLifecycle(pool);
+		while (true) {
+			const canStart = yield* pool.admissionLock.withPermit(
+				Effect.sync(() => !lifecycle.stoppingRoots.has(repoRoot)),
+			);
+			if (canStart) break;
+			yield* Effect.sleep("50 millis");
+		}
+		lifecycle.errors.delete(repoRoot);
+		lifecycle.startingRoots.add(repoRoot);
+		yield* Effect.scoped(acquireCodeLspServer(pool, repoRoot, false)).pipe(
+			Effect.asVoid,
+			Effect.tapError((failure) =>
+				Effect.sync(() => {
+					lifecycle.errors.set(repoRoot, describeCodeIndexFailure(failure));
+				}),
+			),
+			Effect.ensuring(
+				Effect.sync(() => {
+					lifecycle.startingRoots.delete(repoRoot);
+				}),
+			),
+		);
+		return getCodeLspStatus(pool, repoRoot);
+	});
+
+/** Marks a root as stopping, drains its leases, then closes the idle server. */
+export const stopCodeLspServer = (
+	pool: CodeLspPoolValue,
+	repoRoot: string,
+): Effect.Effect<CodeLspStatus> =>
+	Effect.gen(function* () {
+		const lifecycle = getPoolLifecycle(pool);
+		lifecycle.errors.delete(repoRoot);
+		yield* pool.admissionLock.withPermit(
+			Effect.sync(() => {
+				lifecycle.stoppingRoots.add(repoRoot);
+			}),
+		);
+		while (true) {
+			const stopped = yield* pool.admissionLock.withPermit(
+				Effect.gen(function* () {
+					const entry = findPoolEntry(pool, repoRoot);
+					if (
+						entry !== undefined &&
+						(entry.refCount > 0 || lifecycle.startingRoots.has(repoRoot))
+					) {
+						return false;
+					}
+					if (entry !== undefined) {
+						yield* RcMap.invalidate(pool.resources, repoRoot);
+					}
+					return true;
+				}),
+			);
+			if (stopped) break;
+			yield* Effect.sleep("50 millis");
+		}
+		return getCodeLspStatus(pool, repoRoot);
+	}).pipe(
+		Effect.ensuring(
+			Effect.sync(() => {
+				getPoolLifecycle(pool).stoppingRoots.delete(repoRoot);
+			}),
+		),
 	);
 
 export const withCodeLspServer = <
