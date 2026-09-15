@@ -11,6 +11,7 @@ import {
 import { Config, Effect, Layer, Option } from "effect";
 import { FileSystem } from "effect/FileSystem";
 import { ChatSessions } from "./chat/sessions.ts";
+import { CodeLspPool } from "./code-index/state.ts";
 import { HarnessModelCache } from "./harness/model-store.ts";
 import { attachRouter, bindHealthCheckServer } from "./http.ts";
 import { startLivePolling } from "./live-poll.ts";
@@ -187,7 +188,11 @@ const program = Effect.scoped(
 // data dir's confirmed sole owner. `Updater.layer` doesn't need `SqliteDb`
 // at all (its state is a Ref, not a table — see its own doc), just
 // `FileSystem`/`ChildProcessSpawner` from the same `BunServices` merge
-// everything else here already needs.
+// everything else here already needs. `CodeLspPool.layer` needs neither —
+// its own `RcMap` only needs `ChildProcessSpawner` to spawn a server
+// on a cache miss (see `code-index/state.ts`) — but lives in this same merge
+// so its live LSP server processes get the exact same "dies with the
+// sidecar" scope as everything else here, per that file's own doc comment.
 const MainLayer = Layer.mergeAll(
 	Store.layer,
 	WalkthroughStore.layer,
@@ -197,6 +202,7 @@ const MainLayer = Layer.mergeAll(
 	Updater.layer,
 	ChatSessions.layer,
 	HarnessModelCache.layer,
+	CodeLspPool.layer,
 ).pipe(
 	Layer.provideMerge(SqliteDb.layer),
 	Layer.provideMerge(BunServices.layer),

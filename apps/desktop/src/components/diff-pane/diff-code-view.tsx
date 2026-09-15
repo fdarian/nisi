@@ -22,15 +22,27 @@ import type {
 import {
 	CodeView,
 	type CodeViewHandle,
+	useWorkerPool,
 	type WorkerInitializationRenderOptions,
 	WorkerPoolContextProvider,
 } from "@pierre/diffs/react";
-import { useCallback, useMemo, useRef } from "react";
+import {
+	useCallback,
+	useEffect,
+	useLayoutEffect,
+	useMemo,
+	useRef,
+	useState,
+} from "react";
 import {
 	diffCodeViewLayout,
 	diffItemMetrics,
 	diffViewUnsafeCSS,
 } from "#/components/diff-pane/diff-view-theme";
+import {
+	createTokenInteractionLeaseRegistry,
+	type TokenInteractionLeaseRegistry,
+} from "#/components/diff-pane/token-interaction-leases";
 import type { DiffStyleMode } from "#/lib/settings-data";
 import { cn } from "#/lib/utils";
 
@@ -127,6 +139,47 @@ function useSeparatorClickForwarding() {
 	}, []);
 }
 
+/**
+ * `WorkerPoolContextProvider` wraps a module-level singleton, so its render
+ * options are global even though each `DiffCodeView` has its own provider.
+ * Interactive views lease the token transformer; a non-interactive preview
+ * must not turn it off while one of those leases is still held. The pool only
+ * returns to the cheaper mode after the last interactive view unmounts.
+ */
+const tokenInteractionLeasesByPool = new WeakMap<
+	object,
+	TokenInteractionLeaseRegistry
+>();
+
+function tokenInteractionLeasesFor(
+	pool: object,
+): TokenInteractionLeaseRegistry {
+	const current = tokenInteractionLeasesByPool.get(pool);
+	if (current !== undefined) return current;
+	const next = createTokenInteractionLeaseRegistry();
+	tokenInteractionLeasesByPool.set(pool, next);
+	return next;
+}
+
+function WorkerPoolOptionsSync({
+	useTokenTransformer,
+}: {
+	useTokenTransformer: boolean;
+}): null {
+	const pool = useWorkerPool();
+	useEffect(() => {
+		if (pool === undefined) return;
+		const leases = tokenInteractionLeasesFor(pool);
+		const release = useTokenTransformer ? leases.acquire() : undefined;
+		void pool.setRenderOptions({ useTokenTransformer: leases.hasLease() });
+		return () => {
+			release?.();
+			void pool.setRenderOptions({ useTokenTransformer: leases.hasLease() });
+		};
+	}, [pool, useTokenTransformer]);
+	return null;
+}
+
 /** The theme/layout/metrics knobs every `CodeView` instance in the app shares — `diffStyle`, `theme`, `overflow`, `onPostRender` and `extraCSS` are what vary per pane. */
 export function buildDiffCodeViewOptions<Metadata>(overrides: {
 	diffStyle?: DiffStyleMode;
@@ -194,7 +247,11 @@ type DiffCodeViewProps<Metadata> = {
 	highlighterOptions: WorkerInitializationRenderOptions;
 	/** Forwarded straight to `CodeView`'s own `onScroll` — fires for both user-driven and programmatic scrolling; telling the two apart is the caller's job (see `DiffPane`'s scroll-report suppression). */
 	onScroll?: (scrollTop: number, viewer: CodeViewInstance<Metadata>) => void;
-	renderAnnotation: (
+	/** Called after the underlying CodeView has attached its container, including when Pierre replaces that imperative instance. */
+	onCodeViewInstanceChange?: (
+		instance: CodeViewInstance<Metadata, undefined> | undefined,
+	) => void;
+	renderAnnotation?: (
 		annotation: LineAnnotation<Metadata> | DiffLineAnnotation<Metadata>,
 	) => React.ReactNode;
 	renderCustomHeader?: (item: CodeViewItem<Metadata>) => React.ReactNode;
@@ -214,6 +271,7 @@ export function DiffCodeView<Metadata>({
 	className,
 	highlighterOptions,
 	items,
+	onCodeViewInstanceChange,
 	onScroll,
 	onSelectedLinesChange,
 	options,
@@ -224,20 +282,54 @@ export function DiffCodeView<Metadata>({
 }: DiffCodeViewProps<Metadata>): React.ReactElement {
 	const workerPoolOptions = useDiffWorkerPoolOptions();
 	const separatorClickForwardingRef = useSeparatorClickForwarding();
+	const internalCodeViewRef = useRef<CodeViewHandle<
+		Metadata,
+		undefined
+	> | null>(null);
+	const [containerGeneration, setContainerGeneration] = useState(-1);
+	const codeViewContainerRef = useCallback(
+		(node: HTMLDivElement | null) => {
+			separatorClickForwardingRef(node);
+			if (onCodeViewInstanceChange !== undefined) {
+				setContainerGeneration((generation) => generation + 1);
+			}
+		},
+		[onCodeViewInstanceChange, separatorClickForwardingRef],
+	);
+	const codeViewRef = useCallback(
+		(handle: CodeViewHandle<Metadata, undefined> | null) => {
+			internalCodeViewRef.current = handle;
+			if (typeof ref === "function") {
+				ref(handle);
+			} else if (ref !== null && ref !== undefined) {
+				ref.current = handle;
+			}
+		},
+		[ref],
+	);
+	useLayoutEffect(() => {
+		if (onCodeViewInstanceChange === undefined || containerGeneration < 0) {
+			return;
+		}
+		onCodeViewInstanceChange(internalCodeViewRef.current?.getInstance());
+	}, [containerGeneration, onCodeViewInstanceChange]);
 
 	return (
 		<WorkerPoolContextProvider
 			highlighterOptions={highlighterOptions}
 			poolOptions={workerPoolOptions}
 		>
+			<WorkerPoolOptionsSync
+				useTokenTransformer={highlighterOptions.useTokenTransformer ?? false}
+			/>
 			<CodeView
 				className={cn("outline-none", className)}
-				containerRef={separatorClickForwardingRef}
+				containerRef={codeViewContainerRef}
 				items={items}
 				onScroll={onScroll}
 				onSelectedLinesChange={onSelectedLinesChange}
 				options={options}
-				ref={ref}
+				ref={codeViewRef}
 				renderAnnotation={renderAnnotation}
 				renderCustomHeader={renderCustomHeader}
 				selectedLines={selectedLines}

@@ -54,6 +54,23 @@ export function findMatchRowElement(
 	return undefined;
 }
 
+/** Locates a normal file-view row by its 1-based displayed line number. */
+export function findFileLineRowElement(
+	root: ParentNode,
+	lineNumber: number,
+): HTMLElement | undefined {
+	for (const candidate of root.querySelectorAll(
+		`[data-line="${lineNumber}"]`,
+	)) {
+		if (!(candidate instanceof HTMLElement)) continue;
+		if (candidate.getAttribute("data-line-type") === "change-deletion") {
+			continue;
+		}
+		return candidate;
+	}
+	return undefined;
+}
+
 /** Walks `root`'s text nodes in document order to find the node/local-offset pair `targetOffset` characters in — the position a `Range` boundary needs, since a match's character offset is relative to the row's whole rendered text, not any one token span inside it. */
 function resolveTextPosition(
 	root: Node,

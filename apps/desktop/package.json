@@ -20,6 +20,7 @@
 		"db:studio": "bun -b drizzle-kit studio",
 		"build:sidecar": "bun scripts/build-binary.ts sidecar/index.ts src-tauri/binaries/sidecar-aarch64-apple-darwin",
 		"build:cli": "bun scripts/build-binary.ts ../../packages/cli/src/index.ts src-tauri/binaries/nisi-cli-aarch64-apple-darwin",
+		"build:lsp": "bun scripts/build-lsp-binary.ts src-tauri/binaries/ts-lsp",
 		"storybook": "storybook dev -p 6006",
 		"build-storybook": "storybook build"
 	},
@@ -52,6 +53,7 @@
 		"@pierre/theming": "1.0.1",
 		"@pierre/trees": "1.0.0-beta.6",
 		"@repo/bin-resolver": "workspace:*",
+		"@repo/code-lsp": "workspace:*",
 		"@repo/db": "workspace:*",
 		"@repo/git": "workspace:*",
 		"@repo/harness-local": "workspace:*",
