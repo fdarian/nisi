@@ -119,7 +119,7 @@ export function PrHeader({
 						<BreadcrumbItem>
 							<BreadcrumbPage className="text-muted-foreground">
 								{target.kind === "pr" ? (
-									<>
+									<div className="flex items-center gap-1.5">
 										<span>#{target.number}</span>
 										<PrStackBadge
 											number={target.number}
@@ -128,7 +128,7 @@ export function PrHeader({
 											repo={target.repo}
 											watched={watched}
 										/>
-									</>
+									</div>
 								) : (
 									<>
 										vs <span className="font-mono">{target.baseRef}</span>

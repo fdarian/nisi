@@ -18,6 +18,8 @@ import type { SidecarQueryUtils } from "#/lib/backend-context";
 import type { PullRequestStackEntry } from "#/lib/pr-data";
 import { usePullRequestStack } from "#/lib/pr-data";
 import { useOpenPullRequest } from "#/lib/pull-requests-data";
+import { Button } from "../ui/button";
+import { Frame, FrameFooter, FramePanel } from "../ui/frame";
 
 type PrStackBadgeProps = {
 	orpc: SidecarQueryUtils;
@@ -64,33 +66,37 @@ function StackEntryRow(props: {
 }): React.ReactElement {
 	const content = (
 		<div
-			className={`relative flex min-w-0 items-start gap-2 border-l-2 px-2 py-1.5 ${
-				props.isCurrent
-					? "border-l-blue-500 bg-blue-500/10"
-					: "border-l-transparent"
-			}`}
+			className="relative min-w-0 border-l-2 pl-1 pr-1.5 data-[iscurrent=true]:border-l-blue-500 border-l-transparent"
+			data-iscurrent={props.isCurrent}
 		>
-			{props.showConnector && (
-				<span className="absolute top-6 bottom-[-0.5rem] left-[0.6875rem] w-px bg-border" />
-			)}
-			<span className="relative z-10 mt-0.5 flex size-5 shrink-0 items-center justify-center bg-popover">
-				<StateIcon entry={props.entry} />
-			</span>
-			<span className="min-w-0 flex-1">
-				<span className="block truncate font-semibold text-sm">
-					{props.entry.title}
+			<div
+				className="data-[iscurrent=true]:bg-blue-500/10 hover:bg-muted/60 rounded-md flex items-start gap-2 py-1.5 px-2"
+				data-iscurrent={props.isCurrent}
+			>
+				{props.showConnector && (
+					<div className="absolute top-[calc(--spacing(5)+--spacing(1.5)+--spacing(1))] -bottom-[calc(--spacing(1.5)-_--spacing(1))] flex w-5 justify-center">
+						<span className="w-px bg-border" />
+					</div>
+				)}
+				<span className="relative z-10 mt-0.5 flex size-5 shrink-0 items-center justify-center">
+					<StateIcon entry={props.entry} />
 				</span>
-				<span className="block truncate text-muted-foreground text-xs">
-					#{props.entry.number} · {props.entry.headRefName}
+				<span className="min-w-0 flex-1">
+					<span className="block truncate font-semibold text-sm">
+						{props.entry.title}
+					</span>
+					<span className="block truncate text-muted-foreground text-xs">
+						#{props.entry.number} · {props.entry.headRefName}
+					</span>
 				</span>
-			</span>
+			</div>
 		</div>
 	);
 
 	if (props.isCurrent) return content;
 	return (
 		<button
-			className="block w-full cursor-pointer text-left hover:bg-muted/60"
+			className="block w-full cursor-pointer text-left"
 			onClick={props.onOpen}
 			type="button"
 		>
@@ -118,48 +124,54 @@ export function PrStackBadge(
 	);
 
 	return (
-		<Popover onOpenChange={setOpen} open={open}>
-			<PopoverTrigger
-				aria-label={`Stack position ${stack.position} of ${stack.size}`}
-				className="inline-flex cursor-pointer items-center gap-1 text-muted-foreground text-xs hover:text-foreground"
-				type="button"
-			>
-				<span aria-hidden="true">・</span>
-				<span className="font-mono tabular-nums">
-					{stack.position}/{stack.size}
-				</span>
-				<LayersIcon className="size-3.5" />
-			</PopoverTrigger>
-			<PopoverPopup align="start" className="w-80">
-				<PopoverTitle className="mb-3 text-sm">
-					Stack #{stack.number}
-				</PopoverTitle>
-				<div className="flex flex-col">
-					{entries.map((entry, index) => (
-						<StackEntryRow
-							entry={entry}
-							isCurrent={entry.number === props.number}
-							key={entry.number}
-							onOpen={() => {
-								if (openPullRequest.isPending) return;
-								openPullRequest.open({
-									owner: props.owner,
-									repo: props.repo,
-									number: entry.number,
-								});
-								setOpen(false);
-							}}
-							showConnector={index < entries.length - 1}
-						/>
-					))}
-					<div className="mt-2 flex items-center gap-2 border-t px-2 pt-2">
-						<span className="size-3 shrink-0 rounded-full border border-muted-foreground" />
-						<span className="rounded bg-muted px-1.5 py-0.5 font-mono text-muted-foreground text-xs">
-							{stack.baseRefName}
-						</span>
-					</div>
-				</div>
-			</PopoverPopup>
-		</Popover>
+		<>
+			<span aria-hidden="true">&middot;</span>
+			<Popover onOpenChange={setOpen} open={open}>
+				<PopoverTrigger
+					aria-label={`Stack position ${stack.position} of ${stack.size}`}
+					className="inline-flex cursor-pointer items-center gap-1 text-muted-foreground text-xs hover:text-foreground"
+					render={(props) => (
+						<Button variant="secondary" size="xs" {...props}>
+							<LayersIcon aria-hidden="true" />
+							{stack.position}/{stack.size}
+						</Button>
+					)}
+				/>
+				<PopoverPopup className="rounded-2xl w-80" viewportClassName="p-0">
+					<Frame>
+						<FramePanel className="px-0 pt-4 pb-1.5">
+							<PopoverTitle className="mb-4 text-sm px-4">
+								Stack #{stack.number}
+							</PopoverTitle>
+							{entries.map((entry, index) => (
+								<StackEntryRow
+									entry={entry}
+									isCurrent={entry.number === props.number}
+									key={entry.number}
+									onOpen={() => {
+										if (openPullRequest.isPending) return;
+										openPullRequest.open({
+											owner: props.owner,
+											repo: props.repo,
+											number: entry.number,
+										});
+										setOpen(false);
+									}}
+									showConnector
+								/>
+							))}
+							<div className="flex items-center gap-2 pl-3.5 py-2">
+								<div className="w-5 flex justify-center">
+									<span className="size-3 shrink-0 rounded-full border border-muted-foreground" />
+								</div>
+								<span className="rounded bg-muted px-1.5 py-0.5 font-mono text-muted-foreground text-xs">
+									{stack.baseRefName}
+								</span>
+							</div>
+						</FramePanel>
+					</Frame>
+				</PopoverPopup>
+			</Popover>
+		</>
 	);
 }
