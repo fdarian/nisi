@@ -17,9 +17,12 @@ import {
 import type { SidecarQueryUtils } from "#/lib/backend-context";
 import type { PullRequestStackEntry } from "#/lib/pr-data";
 import { usePullRequestStack } from "#/lib/pr-data";
-import { useOpenPullRequest } from "#/lib/pull-requests-data";
+import {
+	type OpenPullRequestParams,
+	useOpenPullRequest,
+} from "#/lib/pull-requests-data";
 import { Button } from "../ui/button";
-import { Frame, FrameFooter, FramePanel } from "../ui/frame";
+import { Frame, FramePanel } from "../ui/frame";
 
 type PrStackBadgeProps = {
 	orpc: SidecarQueryUtils;
@@ -27,6 +30,8 @@ type PrStackBadgeProps = {
 	repo: string;
 	number: number;
 	watched: boolean;
+	findExistingSessionId: (params: OpenPullRequestParams) => string | undefined;
+	onSessionOpened: (sessionId: string) => void;
 };
 
 const stateIconClass = (entry: PullRequestStackEntry): string => {
@@ -115,7 +120,7 @@ export function PrStackBadge(
 		{ owner: props.owner, repo: props.repo, number: props.number },
 		props.watched,
 	);
-	const openPullRequest = useOpenPullRequest(props.orpc, () => undefined);
+	const openPullRequest = useOpenPullRequest(props.orpc, props.onSessionOpened);
 	const stack = stackQuery.data;
 	if (stack === undefined || stack === null) return null;
 
@@ -143,18 +148,26 @@ export function PrStackBadge(
 							<PopoverTitle className="mb-4 text-sm px-4">
 								Stack #{stack.number}
 							</PopoverTitle>
-							{entries.map((entry, index) => (
+							{entries.map((entry) => (
 								<StackEntryRow
 									entry={entry}
 									isCurrent={entry.number === props.number}
 									key={entry.number}
 									onOpen={() => {
 										if (openPullRequest.isPending) return;
-										openPullRequest.open({
+										const params = {
 											owner: props.owner,
 											repo: props.repo,
 											number: entry.number,
-										});
+										};
+										const existingSessionId =
+											props.findExistingSessionId(params);
+										if (existingSessionId !== undefined) {
+											props.onSessionOpened(existingSessionId);
+											setOpen(false);
+											return;
+										}
+										openPullRequest.open(params);
 										setOpen(false);
 									}}
 									showConnector

@@ -28,6 +28,7 @@ import {
 	useMarkPullRequestReady,
 	usePullRequestMergeStatus,
 } from "#/lib/pr-data";
+import type { OpenPullRequestParams } from "#/lib/pull-requests-data";
 import { cn } from "#/lib/utils";
 import { PrCiStatus } from "./pr-ci-status";
 import { PrMergeButton } from "./pr-merge-button";
@@ -43,6 +44,8 @@ type PrHeaderProps = {
 	watched: boolean;
 	/** This PR's session id — threaded straight through to `PrCiStatus`, see `usePullRequestChecks`'s `useAwaitingNewCi` (`pr-data.ts`). */
 	sessionId: string;
+	findExistingSessionId: (params: OpenPullRequestParams) => string | undefined;
+	onSessionOpened: (sessionId: string) => void;
 };
 
 type MarkReadyMenuItemProps = {
@@ -100,6 +103,8 @@ export function PrHeader({
 	onCloseTab,
 	watched,
 	sessionId,
+	findExistingSessionId,
+	onSessionOpened,
 }: PrHeaderProps): React.ReactElement {
 	const repoNameSegments = repoRoot.split("/");
 	const repoName = repoNameSegments[repoNameSegments.length - 1] || repoRoot;
@@ -127,6 +132,8 @@ export function PrHeader({
 											owner={target.owner}
 											repo={target.repo}
 											watched={watched}
+											findExistingSessionId={findExistingSessionId}
+											onSessionOpened={onSessionOpened}
 										/>
 									</div>
 								) : (

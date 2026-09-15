@@ -68,6 +68,8 @@ const meta: Meta<typeof PrHeader> = {
 		sessionId: "story-session",
 		stat: { additions: 12, deletions: 4 },
 		onCloseTab: () => {},
+		findExistingSessionId: () => undefined,
+		onSessionOpened: () => {},
 		watched: true,
 	},
 };

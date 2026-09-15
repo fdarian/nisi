@@ -37,6 +37,8 @@ import {
 } from "#/lib/chat-store";
 import { useDeepLinkOpener } from "#/lib/deep-link-data";
 import { useSessions } from "#/lib/pr-data";
+import type { OpenPullRequestParams } from "#/lib/pull-requests-data";
+import { findOpenPullRequestSessionId } from "#/lib/pull-requests-data";
 import {
 	SessionUiProvider,
 	useClearSessionUiState,
@@ -143,6 +145,11 @@ function AppShellReady({
 	useDeepLinkOpener(orpc, setRequestedActiveSessionId);
 	const tabOrder = useTabOrder(listed.sessions);
 	const sessions = tabOrder.orderedSessions;
+	const findExistingSessionId = useCallback(
+		(params: OpenPullRequestParams) =>
+			findOpenPullRequestSessionId(sessions, params),
+		[sessions],
+	);
 	const closeSession = listed.closeSession;
 	const [paletteOpen, setPaletteOpen] = useState(false);
 	const openPalette = useCallback(() => setPaletteOpen(true), []);
@@ -310,6 +317,7 @@ function AppShellReady({
 					</EmptyContent>
 				</Empty>
 				<OpenPullRequestPalette
+					findExistingSessionId={findExistingSessionId}
 					onOpenChange={setPaletteOpen}
 					onSessionOpened={setRequestedActiveSessionId}
 					open={paletteOpen}
@@ -378,6 +386,8 @@ function AppShellReady({
 							// whichever tab is selected.
 							isSelectedTab={session.id === activeSessionId}
 							onCloseTab={() => handleCloseSession(session.id)}
+							findExistingSessionId={findExistingSessionId}
+							onSessionOpened={setRequestedActiveSessionId}
 							orpc={orpc}
 							session={session}
 						/>
@@ -396,6 +406,7 @@ function AppShellReady({
 			</div>
 
 			<OpenPullRequestPalette
+				findExistingSessionId={findExistingSessionId}
 				onOpenChange={setPaletteOpen}
 				onSessionOpened={setRequestedActiveSessionId}
 				open={paletteOpen}
