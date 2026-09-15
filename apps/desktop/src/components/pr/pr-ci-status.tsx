@@ -102,5 +102,5 @@ export function PrCiStatus({
 
 	if (checksQuery.data === undefined) return null;
 
-	return <CiStatus checks={toCiChecks(checksQuery.data)} />;
+	return <CiStatus checks={toCiChecks(checksQuery.data)} watched={watched} />;
 }

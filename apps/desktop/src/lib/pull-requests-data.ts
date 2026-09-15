@@ -13,6 +13,7 @@ import { ORPCError } from "@orpc/client";
 import { keepPreviousData, useMutation, useQuery } from "@tanstack/react-query";
 import { open as openFolderPicker } from "@tauri-apps/plugin-dialog";
 import type { SidecarQueryUtils } from "#/lib/backend-context";
+import type { Session } from "#/lib/pr-data";
 
 /** One row the palette renders — mirrors `PullRequestSearchResult` (`packages/sidecar-api/src/pull-requests.ts`). */
 export type PullRequestSearchResult = {
@@ -82,6 +83,22 @@ export type OpenPullRequestParams = {
 	repo: string;
 	number: number;
 };
+
+/** Finds the already-open tab for a GitHub PR, if the shell knows about one. */
+export function findOpenPullRequestSessionId(
+	sessions: readonly Session[],
+	params: OpenPullRequestParams,
+): string | undefined {
+	const session = sessions.find((candidate) => {
+		if (candidate.target.kind !== "pr") return false;
+		return (
+			candidate.target.number === params.number &&
+			candidate.target.owner.toLowerCase() === params.owner.toLowerCase() &&
+			candidate.target.repo.toLowerCase() === params.repo.toLowerCase()
+		);
+	});
+	return session?.id;
+}
 
 /**
  * `pullRequests.open`'s `"needs-repo-path"` outcome resolved end-to-end: the

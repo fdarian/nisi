@@ -9,6 +9,7 @@ import {
 	DropdownMenuSeparator,
 	DropdownMenuTrigger,
 } from "#/components/ui/menu";
+import { useDismissOnInactive } from "#/hooks/use-dismiss-on-inactive";
 import { cn } from "#/lib/utils";
 
 export type CiCheckStatus =
@@ -30,6 +31,10 @@ export type CiCheck = {
 type CiStatusProps = {
 	checks: readonly CiCheck[];
 	className?: string;
+};
+
+type WatchedCiStatusProps = CiStatusProps & {
+	watched: boolean;
 };
 
 const STATUS_LABEL: Record<CiCheckStatus, string> = {
@@ -159,7 +164,9 @@ function CiChecksMenuContent({
 export function CiStatus({
 	checks,
 	className,
-}: CiStatusProps): React.ReactElement | null {
+	watched,
+}: WatchedCiStatusProps): React.ReactElement | null {
+	const [open, setOpen] = useDismissOnInactive(watched);
 	if (checks.length === 0) return null;
 
 	const step = CIRCUMFERENCE / checks.length;
@@ -169,7 +176,7 @@ export function CiStatus({
 	const summary = summarize(checks);
 
 	return (
-		<DropdownMenu>
+		<DropdownMenu onOpenChange={setOpen} open={open}>
 			<DropdownMenuTrigger
 				aria-label={`CI: ${summary}`}
 				className={cn(

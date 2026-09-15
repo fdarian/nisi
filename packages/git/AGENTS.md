@@ -25,6 +25,9 @@ unit-testable against real temp repos without booting anything. Feeds `packages/
   `CiCheckStatus` renders. A field GraphQL declares nullable comes back as that type's zero value
   (`""`/`"0001-01-01T00:00:00Z"`), never JSON `null` or an omitted key — confirmed live against
   several real PRs, not assumed from GitHub's docs.
+- `pull-request-stack.ts` / `pull-request-merge.ts` — stacked PR reads use the read-only GraphQL
+  `stack` fields; stack merges use GitHub's `PUT .../merge-async` endpoint and poll its UUID until
+  a terminal result because `gh pr merge` cannot merge a stack.
 - `classify.ts` — implementation/test/generated. Test globs are Jest's `testMatch` / Vitest's
   `include` hand-expanded out of extglob syntax into brace alternation, since `Bun.Glob` (used
   here instead of a dependency) doesn't support `?(...)`.

@@ -24,6 +24,7 @@ import type {
 	FileContent,
 	PullRequestCheck,
 	PullRequestMergeStatus,
+	PullRequestStack,
 } from "#/lib/pr-data";
 import type { Settings } from "#/lib/settings-data";
 import type {
@@ -107,6 +108,8 @@ export type MockOrpcData = {
 	mergeStatus?: PullRequestMergeStatus;
 	/** When set, `pullRequests.mergeStatus` rejects with this message instead of resolving — covers the "query failed and never once succeeded" case. Takes priority over `mergeStatus` if both are set (they shouldn't be). */
 	mergeStatusError?: string;
+	/** `pullRequests.stack`'s result — omit to leave the mock pending forever. */
+	stack?: PullRequestStack | null;
 	/** `pullRequests.checks`'s result — omit to leave the mock pending forever (`neverSettles`), same as `mergeStatus`. */
 	checks?: readonly PullRequestCheck[];
 	/** When set, `pullRequests.checks` rejects with this message instead of resolving. Takes priority over `checks` if both are set (they shouldn't be). */
@@ -176,6 +179,7 @@ export function createMockOrpc(data: MockOrpcData = {}): SidecarQueryUtils {
 	const runningGeneration = data.runningGeneration;
 	const mergeStatus = data.mergeStatus;
 	const mergeStatusError = data.mergeStatusError;
+	const stack = data.stack;
 	const checks = data.checks;
 	const checksError = data.checksError;
 
@@ -269,7 +273,9 @@ export function createMockOrpc(data: MockOrpcData = {}): SidecarQueryUtils {
 					: mergeStatus === undefined
 						? neverSettles
 						: async () => mergeStatus,
+			stack: stack === undefined ? neverSettles : async () => stack,
 			merge: async () => undefined,
+			mergeStack: async () => undefined,
 			markReady: async () => undefined,
 			checks:
 				checksError !== undefined
