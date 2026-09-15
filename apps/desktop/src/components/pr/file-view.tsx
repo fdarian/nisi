@@ -314,7 +314,10 @@ export function FileView({
 			}
 			return;
 		}
-		setActiveReferenceTarget(pendingReferenceTarget);
+		if (activeReferenceTarget !== pendingReferenceTarget) {
+			setActiveReferenceTarget(pendingReferenceTarget);
+			return;
+		}
 		if (codeViewInstance === undefined) return;
 		maybeRevealReference(codeViewInstance);
 		// A target already in the render window has no new render event when
@@ -328,6 +331,7 @@ export function FileView({
 		codeViewInstance,
 		completeReferenceReveal,
 		maybeRevealReference,
+		activeReferenceTarget,
 		pendingReferenceTarget,
 		query.data,
 		referenceHighlight.tryApplyTarget,
