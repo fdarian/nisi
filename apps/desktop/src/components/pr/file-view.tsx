@@ -298,6 +298,9 @@ export function FileView({
 
 	useEffect(() => {
 		if (pendingReferenceTarget === undefined || query.data === undefined) {
+			if (pendingReferenceTarget === undefined) {
+				referenceRevealTransactionRef.current = undefined;
+			}
 			return;
 		}
 		setActiveReferenceTarget(pendingReferenceTarget);
