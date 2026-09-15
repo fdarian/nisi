@@ -736,9 +736,6 @@ function FileReferenceGroup({
 									<span className="select-none text-right text-muted-foreground tabular-nums">
 										{reference.line + 1}
 									</span>
-									<span className="whitespace-nowrap text-[0.625rem] text-muted-foreground">
-										{reference.isDefinition ? "definition" : null}
-									</span>
 									<CodeIndexReferenceLine
 										diffTheme={diffTheme}
 										path={group.path}
