@@ -117,12 +117,14 @@ describe("buildFileOccurrencesResponse against a real fixture with imports", () 
 		expect(result.fromImportSite.totalReferenceCount).toBe(
 			result.fromUsageSite.totalReferenceCount,
 		);
-		expect(result.fromImportSite.definition).toEqual(
-			result.fromUsageSite.definition,
-		);
 		expect(result.fromImportSite.returnedLocations).toEqual(
 			result.fromUsageSite.returnedLocations,
 		);
+		expect(
+			result.fromImportSite.returnedLocations.some(
+				(location) => location.isDefinition,
+			),
+		).toBe(true);
 		// Sanity: `greet` really does have more than zero references (the
 		// definition itself plus every call site), so an empty-both-sides
 		// false positive can't slip through the equality checks above.

@@ -13,12 +13,7 @@ import { Schema } from "effect";
  * populated with a fabricated `0`. The peek panel's reference count
  * (`CodeIndexReferencesResult.totalReferenceCount`) is unaffected — that one
  * *is* the result of a real `references` call, made only once a symbol is
- * actually opened. `isDefinition`/`hasDefinition` were dropped the same way:
- * `hasDefinition` was `true` unconditionally (every occurrence came from a
- * real semantic token, and TypeScript's own token classifier only ever
- * labels named bindings), `isDefinition` was computed but never read on the
- * frontend — verified with a repo-wide grep before removing either, not
- * assumed.
+ * actually opened.
  */
 export const CodeIndexOccurrence = Schema.Struct({
 	line: Schema.Number,
@@ -29,14 +24,6 @@ export const CodeIndexOccurrence = Schema.Struct({
 export type CodeIndexOccurrence = Schema.Schema.Type<
 	typeof CodeIndexOccurrence
 >;
-
-export const CodeIndexLocation = Schema.Struct({
-	path: Schema.String,
-	line: Schema.Number,
-	charStart: Schema.Number,
-	charEnd: Schema.Number,
-});
-export type CodeIndexLocation = Schema.Schema.Type<typeof CodeIndexLocation>;
 
 /** Number of source lines padded before and after a code-index location. */
 export const CODE_INDEX_SOURCE_CONTEXT_LINES_BEFORE = 10;
@@ -62,9 +49,12 @@ export type CodeIndexSourceContext = Schema.Schema.Type<
 >;
 
 /**
- * One reference occurrence plus its source line. The selected row's padded
- * context is fetched lazily through `referenceContext`, so a large references
- * response does not carry the same 21 source lines once per row.
+ * One reference occurrence plus its source line. `isDefinition` is true only
+ * when the LSP definition response matches this location; a definition that
+ * is not present in the references response is not injected into the list.
+ * The selected row's padded context is fetched lazily through
+ * `referenceContext`, so a large references response does not carry the same
+ * 21 source lines once per row.
  *
  * `lineText` is `null` only when the sidecar genuinely couldn't read it —
  * the file is gone, or the recorded line no longer exists in a file that
@@ -80,6 +70,7 @@ export const CodeIndexReference = Schema.Struct({
 	charStart: Schema.Number,
 	charEnd: Schema.Number,
 	lineText: Schema.NullOr(Schema.String),
+	isDefinition: Schema.Boolean,
 });
 export type CodeIndexReference = Schema.Schema.Type<typeof CodeIndexReference>;
 
@@ -98,16 +89,12 @@ export type CodeIndexFileReferences = Schema.Schema.Type<
  * `apps/desktop/sidecar/code-index/state.ts`), since a widely-referenced
  * symbol (an exported type, a common utility) can have thousands.
  *
- * `definitionContext` is `null` both when there's no `definition` to begin
- * with and when there is one but its file couldn't be read. Reference context
- * is loaded on demand through `referenceContext`; a missing file is a
- * legitimate `null` result while a read failure is an error.
+ * Reference context is loaded on demand through `referenceContext`; a missing
+ * file is a legitimate `null` result while a read failure is an error.
  */
 export const CodeIndexReferencesResult = Schema.Struct({
 	displayName: Schema.String,
 	documentation: Schema.Array(Schema.String),
-	definition: Schema.NullOr(CodeIndexLocation),
-	definitionContext: Schema.NullOr(CodeIndexSourceContext),
 	files: Schema.Array(CodeIndexFileReferences),
 	totalReferenceCount: Schema.Number,
 	returnedReferenceCount: Schema.Number,

@@ -230,8 +230,8 @@ export const MAX_RETURNED_REFERENCES = 200;
  * a code-index preview through the settings-gated path would
  * describe a *different* revision than the one the server's positions were
  * computed against whenever `includeUncommitted` is off and the worktree is
- * dirty. This function is what `groupReferencesByFile`/`buildDefinitionContext`
- * are read through instead, so both halves of a peek agree on their source.
+ * dirty. This function is what `groupReferencesByFile` is read through
+ * instead, so the references list agrees with its source lines.
  *
  * Absent paths (deleted, never existed) are simply missing from the
  * result — same "absence is a value" contract `readWorktreeBlobContent`
@@ -542,7 +542,7 @@ const decodeSymbolKey = (
 	};
 };
 
-/** A single go-to-definition/find-references location, repo-relative — the shape both `definition` and each `references` entry reduce to before this module hands them to the wire contract's `CodeIndexLocation`/`CodeIndexReference` shapes. */
+/** A single LSP reference location, repo-relative, before this module adds its definition marker and source line. */
 type CodeLocation = {
 	readonly path: string;
 	readonly line: number;
@@ -607,50 +607,51 @@ export const buildReferencesPlan = (
 				);
 
 				const firstDefinition = definitions[0];
-				const definition =
+				const definitionLocation =
 					firstDefinition === undefined
 						? null
 						: toCodeLocation(repoRoot, firstDefinition);
 
-				// `references` answers the definition's own location alongside every
-				// usage (`@repo/code-lsp`'s fixed `includeDeclaration: true`) —
-				// filtered back out here so "references" means "used elsewhere",
-				// matching what the peek panel already renders the definition as
-				// separately (`code-index-peek-panel.tsx`'s left pane).
-				const usageLocations = rawReferences
-					.map((location) => toCodeLocation(repoRoot, location))
-					.filter((location) => !sameLocation(location, definition));
+				const referenceLocations = rawReferences.map((location) => {
+					const referenceLocation = toCodeLocation(repoRoot, location);
+					return {
+						...referenceLocation,
+						isDefinition: sameLocation(referenceLocation, definitionLocation),
+					};
+				});
 
 				return {
 					symbolPath: decoded.path,
 					symbolLine: decoded.line,
 					symbolChar: decoded.character,
 					documentation: hover === null ? [] : [hover.contents],
-					definition,
-					totalReferenceCount: usageLocations.length,
-					returnedLocations: usageLocations.slice(0, MAX_RETURNED_REFERENCES),
+					totalReferenceCount: referenceLocations.length,
+					returnedLocations: referenceLocations.slice(
+						0,
+						MAX_RETURNED_REFERENCES,
+					),
 				} satisfies ReferencesPlan;
 			}),
 		);
 	});
 
 type ReferencesPlan = {
-	/** The queried occurrence's own repo-relative path/position — carried through so `buildReferencesResponse` can derive `displayName` from the live source text, the same live-read source `groupReferencesByFile`/`buildDefinitionContext` use for everything else. */
+	/** The queried occurrence's own repo-relative path/position — carried through so `buildReferencesResponse` can derive `displayName` from the live source text, the same live-read source `groupReferencesByFile` uses for everything else. */
 	readonly symbolPath: string;
 	readonly symbolLine: number;
 	readonly symbolChar: number;
 	readonly documentation: ReadonlyArray<string>;
-	readonly definition: CodeLocation | null;
 	readonly totalReferenceCount: number;
-	readonly returnedLocations: ReadonlyArray<CodeLocation>;
+	readonly returnedLocations: ReadonlyArray<ReferenceLocation>;
 };
+
+type ReferenceLocation = CodeLocation & { isDefinition: boolean };
 
 const EMPTY_REFERENCES_PLAN: ReferencesPlan = {
 	symbolPath: "",
 	symbolLine: 0,
 	symbolChar: 0,
 	documentation: [],
-	definition: null,
 	totalReferenceCount: 0,
 	returnedLocations: [],
 };
@@ -692,7 +693,7 @@ const readIdentifierAt = (
  * possible the way it was for a static, potentially-hours-old on-disk index.
  */
 export const groupReferencesByFile = (
-	locations: ReadonlyArray<CodeLocation>,
+	locations: ReadonlyArray<ReferenceLocation>,
 	fileContents: ReadonlyMap<string, Uint8Array>,
 ): ReadonlyArray<CodeIndexFileReferences> => {
 	const decoder = new TextDecoder();
@@ -709,6 +710,7 @@ export const groupReferencesByFile = (
 			charStart: location.charStart,
 			charEnd: location.charEnd,
 			lineText: lineText ?? null,
+			isDefinition: location.isDefinition,
 		};
 		const existing = byPath.get(location.path);
 		if (existing === undefined) byPath.set(location.path, [entry]);
@@ -750,19 +752,13 @@ export function buildSourceContext(
 	return { startLine, lines: contentLines.slice(startLine, endLine + 1) };
 }
 
-const buildDefinitionContext = (
-	definition: CodeLocation | null,
-	fileContents: ReadonlyMap<string, Uint8Array>,
-): CodeIndexSourceContext | null =>
-	definition === null ? null : buildSourceContext(definition, fileContents);
-
 /**
  * Assembles the full `codeIndex.references` wire response from a plan and
  * its resolved file contents — `fileContents` must be read via
  * {@link readWorktreeFileContents}, and must include `plan.symbolPath` (for
- * `displayName`) alongside `plan.definition`'s own path and every
- * `returnedLocations` path, or the corresponding piece silently degrades to
- * its own "couldn't read this" value (`""` / `null`).
+ * `displayName`) alongside every `returnedLocations` path, or the
+ * corresponding piece silently degrades to its own "couldn't read this"
+ * value (`""` / `null`).
  */
 export const buildReferencesResponse = (
 	plan: ReferencesPlan,
@@ -775,8 +771,6 @@ export const buildReferencesResponse = (
 		plan.symbolChar,
 	),
 	documentation: plan.documentation,
-	definition: plan.definition,
-	definitionContext: buildDefinitionContext(plan.definition, fileContents),
 	files: groupReferencesByFile(plan.returnedLocations, fileContents),
 	totalReferenceCount: plan.totalReferenceCount,
 	returnedReferenceCount: plan.returnedLocations.length,

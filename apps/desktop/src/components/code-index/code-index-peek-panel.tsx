@@ -2,8 +2,8 @@
 
 /**
  * The VS Code-style "peek references" dialog. Left: the selected reference's
- * source context (or the definition context before a row is selected). Right: a
- * collapsible tree of files, each listing its referencing lines —
+ * source context. Right: a collapsible tree of files, each listing its
+ * referencing lines —
  * `CodeIndexReferencesResult.files` already arrives grouped by file, so this
  * only has to render that shape, not build it.
  *
@@ -15,11 +15,11 @@
  * one the server's positions were computed against. There's no drift to
  * detect a stale index here: both the positions and this preview's text come
  * from the same live read, at query time, every time (see that module's own doc
- * comment on `readWorktreeFileContents`). A `null` `lineText` or
- * `definitionContext` still means "couldn't read this" — a deleted file, or
- * a position past the end of a file that got shorter mid-request — just not
- * "the index disagrees with your working tree." Reference context is fetched
- * on demand by `codeIndex.referenceContext`.
+ * comment on `readWorktreeFileContents`). A `null` `lineText` still means
+ * "couldn't read this" — a deleted file, or a position past the end of a file
+ * that got shorter mid-request — just not "the index disagrees with your
+ * working tree." Reference context is fetched on demand by
+ * `codeIndex.referenceContext`.
  *
  * Clicking a reference row opens that file in a real file-viewer tab
  * (`useSessionOpenFiles`' `openFile(path, line)`). Keyboard selection keeps
@@ -328,9 +328,8 @@ function CodeIndexPeekContent({
 
 /**
  * Purely presentational — `CodeIndexPeekContent` owns the `codeIndex.references`
- * fetch; this renders the selected row's live line when there is one, and
- * falls back to the response's definition context before selection settles.
- * No client-side drift verification happens here anymore — the sidecar's is
+ * fetch; this renders the selected row's live line when there is one. No
+ * client-side drift verification happens here anymore — the sidecar's is
  * authoritative (see this file's top-of-module doc comment).
  */
 const SOURCE_PREVIEW_BASE_CSS = `
@@ -395,32 +394,15 @@ function SourcePreview({
 }): React.ReactElement {
 	type SourcePreviewModel = {
 		context: CodeIndexSourceContext;
-		kind: "definition" | "reference";
 		path: string;
 		targetLine: number;
 	};
-	const definitionPreview = useMemo<SourcePreviewModel | undefined>(() => {
-		if (
-			references === undefined ||
-			references.definition === null ||
-			references.definitionContext === null
-		) {
-			return undefined;
-		}
-		return {
-			context: references.definitionContext,
-			kind: "definition",
-			path: references.definition.path,
-			targetLine:
-				references.definition.line - references.definitionContext.startLine + 1,
-		};
-	}, [references]);
 	const [sourcePreview, setSourcePreview] = useState<
 		SourcePreviewModel | undefined
 	>();
 	useEffect(() => {
 		if (selectedReference === undefined) {
-			setSourcePreview(definitionPreview);
+			setSourcePreview(undefined);
 			return;
 		}
 		if (
@@ -435,14 +417,12 @@ function SourcePreview({
 				? undefined
 				: {
 						context: selectedContext,
-						kind: "reference",
 						path: selectedReference.path,
 						targetLine:
 							selectedReference.reference.line - selectedContext.startLine + 1,
 					},
 		);
 	}, [
-		definitionPreview,
 		selectedContext,
 		selectedContextIsError,
 		selectedContextIsPlaceholder,
@@ -450,7 +430,7 @@ function SourcePreview({
 	]);
 	const sourceItem = useMemo<CodeViewItem<undefined> | undefined>(() => {
 		if (sourcePreview === undefined) return undefined;
-		const id = `code-index-${sourcePreview.kind}:${sourcePreview.path}:${sourcePreview.context.startLine}`;
+		const id = `code-index-reference:${sourcePreview.path}:${sourcePreview.context.startLine}`;
 		const contents = sourcePreview.context.lines.join("\n");
 		const version = hashItemVersion(`${id}:${contents}`);
 		return {
@@ -523,23 +503,6 @@ function SourcePreview({
 		);
 	}
 	if (selectedReference !== undefined && sourcePreview === undefined) {
-		return (
-			<div className="py-4 text-center text-muted-foreground italic">
-				Preview unavailable — couldn't read this file.
-			</div>
-		);
-	}
-	if (selectedReference === undefined && references.definition === null) {
-		return (
-			<div className="py-4 text-center text-muted-foreground">
-				No definition found for this symbol.
-			</div>
-		);
-	}
-	if (
-		selectedReference === undefined &&
-		references.definitionContext === null
-	) {
 		return (
 			<div className="py-4 text-center text-muted-foreground italic">
 				Preview unavailable — couldn't read this file.
@@ -736,7 +699,7 @@ function FileReferenceGroup({
 				<CollapsiblePanel className="gap-1.5 h-(--collapsible-panel-height) data-ending-style:h-0 data-starting-style:h-0">
 					<div
 						aria-label={`References in ${group.path}`}
-						className="p-1 grid grid-cols-[max-content_1fr] gap-0.5"
+						className="p-1 grid grid-cols-[max-content_max-content_minmax(0,1fr)] gap-0.5"
 						role="listbox"
 					>
 						{group.references.map((reference, referenceIndex) => {
@@ -772,6 +735,9 @@ function FileReferenceGroup({
 								>
 									<span className="select-none text-right text-muted-foreground tabular-nums">
 										{reference.line + 1}
+									</span>
+									<span className="whitespace-nowrap text-[0.625rem] text-muted-foreground">
+										{reference.isDefinition ? "definition" : null}
 									</span>
 									<CodeIndexReferenceLine
 										diffTheme={diffTheme}

@@ -218,8 +218,20 @@ describe("groupReferencesByFile", () => {
 		]);
 		const result = groupReferencesByFile(
 			[
-				{ path: "a.ts", line: 0, charStart: 6, charEnd: 9 },
-				{ path: "a.ts", line: 1, charStart: 29, charEnd: 32 },
+				{
+					path: "a.ts",
+					line: 0,
+					charStart: 6,
+					charEnd: 9,
+					isDefinition: false,
+				},
+				{
+					path: "a.ts",
+					line: 1,
+					charStart: 29,
+					charEnd: 32,
+					isDefinition: false,
+				},
 			],
 			fileContents,
 		);
@@ -232,12 +244,14 @@ describe("groupReferencesByFile", () => {
 						charStart: 6,
 						charEnd: 9,
 						lineText: "const foo = 1;",
+						isDefinition: false,
 					},
 					{
 						line: 1,
 						charStart: 29,
 						charEnd: 32,
 						lineText: "const foo2 = foo;",
+						isDefinition: false,
 					},
 				],
 			},
@@ -246,7 +260,15 @@ describe("groupReferencesByFile", () => {
 
 	test("a missing file (path absent from fileContents) reports lineText: null", () => {
 		const result = groupReferencesByFile(
-			[{ path: "gone.ts", line: 0, charStart: 0, charEnd: 3 }],
+			[
+				{
+					path: "gone.ts",
+					line: 0,
+					charStart: 0,
+					charEnd: 3,
+					isDefinition: false,
+				},
+			],
 			new Map(),
 		);
 		expect(result[0]?.references[0]?.lineText).toBeNull();
@@ -255,7 +277,15 @@ describe("groupReferencesByFile", () => {
 	test("a line past the end of the (now-shorter) file reports lineText: null", () => {
 		const fileContents = new Map([["a.ts", encode("only one line\n")]]);
 		const result = groupReferencesByFile(
-			[{ path: "a.ts", line: 5, charStart: 0, charEnd: 3 }],
+			[
+				{
+					path: "a.ts",
+					line: 5,
+					charStart: 0,
+					charEnd: 3,
+					isDefinition: false,
+				},
+			],
 			fileContents,
 		);
 		expect(result[0]?.references[0]?.lineText).toBeNull();
@@ -268,8 +298,20 @@ describe("groupReferencesByFile", () => {
 		]);
 		const result = groupReferencesByFile(
 			[
-				{ path: "a.ts", line: 0, charStart: 6, charEnd: 9 },
-				{ path: "b.ts", line: 0, charStart: 9, charEnd: 12 },
+				{
+					path: "a.ts",
+					line: 0,
+					charStart: 6,
+					charEnd: 9,
+					isDefinition: false,
+				},
+				{
+					path: "b.ts",
+					line: 0,
+					charStart: 9,
+					charEnd: 12,
+					isDefinition: false,
+				},
 			],
 			fileContents,
 		);
@@ -285,7 +327,6 @@ describe("buildReferencesResponse", () => {
 		symbolLine: 0,
 		symbolChar: 6,
 		documentation: [],
-		definition: null,
 		totalReferenceCount: 0,
 		returnedLocations: [],
 		...overrides,
@@ -308,7 +349,15 @@ describe("buildReferencesResponse", () => {
 			symbolPath: "a.ts",
 			symbolChar: 6,
 			totalReferenceCount: 1,
-			returnedLocations: [{ path: "a.ts", line: 0, charStart: 6, charEnd: 13 }],
+			returnedLocations: [
+				{
+					path: "a.ts",
+					line: 0,
+					charStart: 6,
+					charEnd: 13,
+					isDefinition: false,
+				},
+			],
 		});
 		const response = buildReferencesResponse(plan, fileContents);
 		expect(response.files).toEqual([
@@ -320,12 +369,60 @@ describe("buildReferencesResponse", () => {
 						charStart: 6,
 						charEnd: 13,
 						lineText: "const drifted = 1;",
+						isDefinition: false,
 					},
 				],
 			},
 		]);
 		expect(response.returnedReferenceCount).toBe(1);
 		expect(response.totalReferenceCount).toBe(1);
+	});
+
+	test("includes and flags a definition returned by references", () => {
+		const fileContents = new Map([
+			["a.ts", encode("const defined = 1;\nconst usage = defined;\n")],
+		]);
+		const response = buildReferencesResponse(
+			basePlan({
+				totalReferenceCount: 2,
+				returnedLocations: [
+					{
+						path: "a.ts",
+						line: 0,
+						charStart: 6,
+						charEnd: 13,
+						isDefinition: true,
+					},
+					{
+						path: "a.ts",
+						line: 1,
+						charStart: 15,
+						charEnd: 22,
+						isDefinition: false,
+					},
+				],
+			}),
+			fileContents,
+		);
+
+		expect(response.files[0]?.references).toEqual([
+			{
+				line: 0,
+				charStart: 6,
+				charEnd: 13,
+				lineText: "const defined = 1;",
+				isDefinition: true,
+			},
+			{
+				line: 1,
+				charStart: 15,
+				charEnd: 22,
+				lineText: "const usage = defined;",
+				isDefinition: false,
+			},
+		]);
+		expect(response.totalReferenceCount).toBe(2);
+		expect(response.returnedReferenceCount).toBe(2);
 	});
 
 	test("builds a padded context window on demand", () => {
@@ -338,105 +435,6 @@ describe("buildReferencesResponse", () => {
 		).toEqual({
 			startLine: 2,
 			lines: lines.slice(2, 23),
-		});
-	});
-
-	describe("definitionContext", () => {
-		test("a definition gets a padded context window (10 lines before, 10 after)", () => {
-			const fileContents = new Map([
-				[
-					"a.ts",
-					encode(
-						"line0\nline1\nline2\nline3\nline4\nline5\nline6\nline7\nline8\nline9\nfunction myFunction() {}\nline11\nline12\nline13\nline14\nline15\nline16\nline17\nline18\nline19\nline20\nline21\n",
-					),
-				],
-			]);
-			const plan = basePlan({
-				definition: { path: "a.ts", line: 10, charStart: 9, charEnd: 19 },
-			});
-			const response = buildReferencesResponse(plan, fileContents);
-			expect(response.definitionContext).toEqual({
-				startLine: 0,
-				lines: [
-					"line0",
-					"line1",
-					"line2",
-					"line3",
-					"line4",
-					"line5",
-					"line6",
-					"line7",
-					"line8",
-					"line9",
-					"function myFunction() {}",
-					"line11",
-					"line12",
-					"line13",
-					"line14",
-					"line15",
-					"line16",
-					"line17",
-					"line18",
-					"line19",
-					"line20",
-				],
-			});
-		});
-
-		test("no definition means no context, not an error", () => {
-			const response = buildReferencesResponse(basePlan(), new Map());
-			expect(response.definitionContext).toBeNull();
-			expect(response.definition).toBeNull();
-		});
-
-		test("a definition's file missing from fileContents reports definitionContext: null", () => {
-			const plan = basePlan({
-				definition: { path: "gone.ts", line: 0, charStart: 0, charEnd: 3 },
-			});
-			const response = buildReferencesResponse(plan, new Map());
-			expect(response.definitionContext).toBeNull();
-			// The location itself is still reported — only the text preview is
-			// withheld, so the frontend can still say *where* it is.
-			expect(response.definition).toEqual({
-				path: "gone.ts",
-				line: 0,
-				charStart: 0,
-				charEnd: 3,
-			});
-		});
-
-		test("clamps the context window at the start of the file", () => {
-			const fileContents = new Map([
-				[
-					"a.ts",
-					encode("function myFunction() {}\nline1\nline2\nline3\nline4\n"),
-				],
-			]);
-			const plan = basePlan({
-				definition: { path: "a.ts", line: 0, charStart: 9, charEnd: 19 },
-			});
-			const response = buildReferencesResponse(plan, fileContents);
-			expect(response.definitionContext?.startLine).toBe(0);
-			expect(response.definitionContext?.lines[0]).toBe(
-				"function myFunction() {}",
-			);
-		});
-
-		test("clamps the context window at the end of the file", () => {
-			// No trailing newline, unlike the other fixtures — deliberately, so
-			// the last array element from `.split("\n")` is the real last line
-			// rather than the usual trailing empty string a real file's final
-			// newline produces, keeping this assertion about clamping alone.
-			const fileContents = new Map([
-				["a.ts", encode("line0\nline1\nfunction myFunction() {}")],
-			]);
-			const plan = basePlan({
-				definition: { path: "a.ts", line: 2, charStart: 9, charEnd: 19 },
-			});
-			const response = buildReferencesResponse(plan, fileContents);
-			expect(response.definitionContext?.lines.at(-1)).toBe(
-				"function myFunction() {}",
-			);
 		});
 	});
 });

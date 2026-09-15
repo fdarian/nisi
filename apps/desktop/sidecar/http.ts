@@ -1634,7 +1634,6 @@ export function attachRouter(
 					...new Set([
 						plan.symbolPath,
 						...plan.returnedLocations.map((location) => location.path),
-						...(plan.definition === null ? [] : [plan.definition.path]),
 					]),
 				];
 				// Worktree-unconditional, never `Store.readCurrentContent`'s
