@@ -26,7 +26,14 @@ import {
 	type WorkerInitializationRenderOptions,
 	WorkerPoolContextProvider,
 } from "@pierre/diffs/react";
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import {
+	useCallback,
+	useEffect,
+	useLayoutEffect,
+	useMemo,
+	useRef,
+	useState,
+} from "react";
 import {
 	diffCodeViewLayout,
 	diffItemMetrics,
@@ -239,6 +246,10 @@ type DiffCodeViewProps<Metadata> = {
 	highlighterOptions: WorkerInitializationRenderOptions;
 	/** Forwarded straight to `CodeView`'s own `onScroll` — fires for both user-driven and programmatic scrolling; telling the two apart is the caller's job (see `DiffPane`'s scroll-report suppression). */
 	onScroll?: (scrollTop: number, viewer: CodeViewInstance<Metadata>) => void;
+	/** Called after the underlying CodeView has attached its container, including when Pierre replaces that imperative instance. */
+	onCodeViewInstanceChange?: (
+		instance: CodeViewInstance<Metadata, undefined> | undefined,
+	) => void;
 	renderAnnotation?: (
 		annotation: LineAnnotation<Metadata> | DiffLineAnnotation<Metadata>,
 	) => React.ReactNode;
@@ -259,6 +270,7 @@ export function DiffCodeView<Metadata>({
 	className,
 	highlighterOptions,
 	items,
+	onCodeViewInstanceChange,
 	onScroll,
 	onSelectedLinesChange,
 	options,
@@ -269,6 +281,37 @@ export function DiffCodeView<Metadata>({
 }: DiffCodeViewProps<Metadata>): React.ReactElement {
 	const workerPoolOptions = useDiffWorkerPoolOptions();
 	const separatorClickForwardingRef = useSeparatorClickForwarding();
+	const internalCodeViewRef = useRef<CodeViewHandle<
+		Metadata,
+		undefined
+	> | null>(null);
+	const [containerGeneration, setContainerGeneration] = useState(-1);
+	const codeViewContainerRef = useCallback(
+		(node: HTMLDivElement | null) => {
+			separatorClickForwardingRef(node);
+			if (onCodeViewInstanceChange !== undefined) {
+				setContainerGeneration((generation) => generation + 1);
+			}
+		},
+		[onCodeViewInstanceChange, separatorClickForwardingRef],
+	);
+	const codeViewRef = useCallback(
+		(handle: CodeViewHandle<Metadata, undefined> | null) => {
+			internalCodeViewRef.current = handle;
+			if (typeof ref === "function") {
+				ref(handle);
+			} else if (ref !== null && ref !== undefined) {
+				ref.current = handle;
+			}
+		},
+		[ref],
+	);
+	useLayoutEffect(() => {
+		if (onCodeViewInstanceChange === undefined || containerGeneration < 0) {
+			return;
+		}
+		onCodeViewInstanceChange(internalCodeViewRef.current?.getInstance());
+	}, [containerGeneration, onCodeViewInstanceChange]);
 
 	return (
 		<WorkerPoolContextProvider
@@ -280,12 +323,12 @@ export function DiffCodeView<Metadata>({
 			/>
 			<CodeView
 				className={className}
-				containerRef={separatorClickForwardingRef}
+				containerRef={codeViewContainerRef}
 				items={items}
 				onScroll={onScroll}
 				onSelectedLinesChange={onSelectedLinesChange}
 				options={options}
-				ref={ref}
+				ref={codeViewRef}
 				renderAnnotation={renderAnnotation}
 				renderCustomHeader={renderCustomHeader}
 				selectedLines={selectedLines}

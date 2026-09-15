@@ -10,7 +10,6 @@ import {
 import {
 	buildMatchRange,
 	findFileLineRowElement,
-	pollUntilReady,
 	SUPPORTS_HIGHLIGHT_API,
 } from "#/lib/diff-match-dom";
 
@@ -34,15 +33,19 @@ type UseCodeIndexReferenceHighlightingOptions<Metadata> = {
 
 /**
  * Keeps one exact LSP character range highlighted in a CodeView item. It
- * reuses the same CSS Custom Highlight and virtualized-row polling primitives
- * as keyword search, so syntax-token DOM can be replaced without losing the
- * range. The caller owns the target lifetime and clears it on user focus.
+ * reuses the same CSS Custom Highlight and row-addressing primitives as
+ * keyword search, so syntax-token DOM can be replaced without losing the
+ * range. The caller owns the target lifetime and clears it on user focus;
+ * rendered-item notifications drive the virtualized-row retry.
  */
 export function useCodeIndexReferenceHighlighting<Metadata>(
 	props: UseCodeIndexReferenceHighlightingOptions<Metadata>,
 ): {
 	highlightCSS: string;
-	onItemPostRender: (path: string, shadowRoot: ShadowRoot | undefined) => void;
+	onItemPostRender: (
+		path: string,
+		shadowRoot: ShadowRoot | undefined,
+	) => boolean;
 	tryApplyTarget: (target: CodeIndexReferenceTarget) => boolean;
 } {
 	const codeViewRef = props.codeViewRef;
@@ -57,7 +60,6 @@ export function useCodeIndexReferenceHighlighting<Metadata>(
 		[highlightName],
 	);
 	const highlightRef = useRef<Highlight | undefined>(undefined);
-	const frameRef = useRef<number | null>(null);
 	const targetRef = useRef<CodeIndexReferenceTarget | undefined>(target);
 
 	useEffect(() => {
@@ -123,14 +125,14 @@ export function useCodeIndexReferenceHighlighting<Metadata>(
 
 	const onItemPostRender = useCallback(
 		(path: string, shadowRoot: ShadowRoot | undefined) => {
-			if (!SUPPORTS_HIGHLIGHT_API) return;
 			const current = targetRef.current;
-			if (current === undefined || current.path !== path) return;
+			if (current === undefined || current.path !== path) return false;
 			if (shadowRoot === undefined) {
 				highlightRef.current?.clear();
-				return;
+				return false;
 			}
-			applyTarget(current, path, shadowRoot);
+			if (!SUPPORTS_HIGHLIGHT_API) return true;
+			return applyTarget(current, path, shadowRoot);
 		},
 		[applyTarget],
 	);
@@ -141,15 +143,8 @@ export function useCodeIndexReferenceHighlighting<Metadata>(
 			highlightRef.current?.clear();
 			return;
 		}
-		pollUntilReady(() => tryApplyTarget(target), frameRef);
+		tryApplyTarget(target);
 	}, [target, tryApplyTarget]);
-
-	useEffect(
-		() => () => {
-			if (frameRef.current !== null) cancelAnimationFrame(frameRef.current);
-		},
-		[],
-	);
 
 	return { highlightCSS, onItemPostRender, tryApplyTarget };
 }

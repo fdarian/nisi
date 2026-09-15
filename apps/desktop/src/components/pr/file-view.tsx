@@ -10,7 +10,7 @@
  */
 
 import { ORPCError } from "@orpc/client";
-import type { CodeViewItem } from "@pierre/diffs";
+import type { CodeView as CodeViewInstance, CodeViewItem } from "@pierre/diffs";
 import type { CodeViewHandle } from "@pierre/diffs/react";
 import { useQuery } from "@tanstack/react-query";
 import { AlertTriangleIcon } from "lucide-react";
@@ -44,6 +44,16 @@ import {
 	type CodeIndexReferenceTarget,
 	codeIndexDisplayedLine,
 } from "#/lib/code-index-navigation";
+import {
+	type CodeIndexReferenceRevealTransaction,
+	canClearCodeIndexReferenceReveal,
+	codeIndexReferenceRevealTargetKey,
+	markCodeIndexReferenceApplied,
+	markCodeIndexReferenceCentered,
+	markCodeIndexReferenceRevealed,
+	shouldRevealCodeIndexReference,
+	syncCodeIndexReferenceRevealTransaction,
+} from "#/lib/code-index-reference-reveal";
 import { hashItemVersion } from "#/lib/item-version";
 import {
 	useSessionCodeIndexEnabled,
@@ -104,6 +114,21 @@ export function FileView({
 	const [mode, setMode] = useState<FileViewMode>("preview");
 
 	const codeViewRef = useRef<CodeViewHandle<undefined, undefined>>(null);
+	const [codeViewInstance, setCodeViewInstance] = useState<
+		CodeViewInstance<undefined, undefined> | undefined
+	>();
+	const referenceRevealTransactionRef =
+		useRef<
+			CodeIndexReferenceRevealTransaction<
+				CodeViewInstance<undefined, undefined>
+			>
+		>(undefined);
+	const handleCodeViewInstanceChange = useCallback(
+		(instance: CodeViewInstance<undefined, undefined> | undefined) => {
+			setCodeViewInstance(instance);
+		},
+		[],
+	);
 	const [codeIndexEnabled] = useSessionCodeIndexEnabled(sessionId);
 	const codeIndex = useCodeIndexInteractions({
 		sessionId,
@@ -134,6 +159,85 @@ export function FileView({
 		codeViewRef,
 		target: activeReferenceTarget,
 	});
+	const maybeRevealReference = useCallback(
+		(viewer: CodeViewInstance<undefined, undefined>) => {
+			if (pendingReferenceTarget === undefined) return;
+			const targetKey = codeIndexReferenceRevealTargetKey(
+				pendingReferenceTarget,
+			);
+			let transaction = syncCodeIndexReferenceRevealTransaction(
+				referenceRevealTransactionRef.current,
+				targetKey,
+				viewer,
+			);
+			if (!shouldRevealCodeIndexReference(transaction, viewer)) {
+				referenceRevealTransactionRef.current = transaction;
+				return;
+			}
+			const handle = codeViewRef.current;
+			if (handle === null || viewer.getTopForItem(path) === undefined) {
+				referenceRevealTransactionRef.current = transaction;
+				return;
+			}
+			handle.scrollTo({
+				type: "line",
+				id: path,
+				lineNumber: codeIndexDisplayedLine(pendingReferenceTarget),
+				align: "nearest",
+				behavior: "instant",
+			});
+			transaction = markCodeIndexReferenceRevealed(transaction, viewer);
+			referenceRevealTransactionRef.current = transaction;
+		},
+		[pendingReferenceTarget, path],
+	);
+	const completeReferenceReveal = useCallback(
+		(viewer: CodeViewInstance<undefined, undefined>, applied: boolean) => {
+			if (!applied || pendingReferenceTarget === undefined) return;
+			maybeRevealReference(viewer);
+			const targetKey = codeIndexReferenceRevealTargetKey(
+				pendingReferenceTarget,
+			);
+			let transaction = syncCodeIndexReferenceRevealTransaction(
+				referenceRevealTransactionRef.current,
+				targetKey,
+				viewer,
+			);
+			transaction = markCodeIndexReferenceApplied(transaction, viewer);
+			const handle = codeViewRef.current;
+			if (
+				handle === null ||
+				handle.getInstance() !== viewer ||
+				viewer.getHeight() === 0 ||
+				viewer.getScrollHeight() === 0
+			) {
+				referenceRevealTransactionRef.current = transaction;
+				return;
+			}
+			if (!transaction.revealed || transaction.centered) {
+				referenceRevealTransactionRef.current = transaction;
+				return;
+			}
+			handle.scrollTo({
+				type: "line",
+				id: path,
+				lineNumber: codeIndexDisplayedLine(pendingReferenceTarget),
+				align: "center",
+				behavior: "instant",
+			});
+			transaction = markCodeIndexReferenceCentered(transaction, viewer);
+			referenceRevealTransactionRef.current = transaction;
+			if (canClearCodeIndexReferenceReveal(transaction, viewer)) {
+				clearPendingReferenceTarget();
+			}
+		},
+		[
+			clearPendingReferenceTarget,
+			maybeRevealReference,
+			path,
+			pendingReferenceTarget,
+		],
+	);
 	// `useDiffTheme` needs `codeIndex.tokenInteractionsActive` (not the raw
 	// enable flag) so the highlighter drops token wrapping the moment the
 	// feature turns out unsupported, not just when the user disables it —
@@ -197,57 +301,16 @@ export function FileView({
 			return;
 		}
 		setActiveReferenceTarget(pendingReferenceTarget);
-		let frame: number | null = null;
-		let revealRequested = false;
-		const tryScroll = () => {
-			const handle = codeViewRef.current;
-			const viewer = handle?.getInstance();
-			if (
-				handle === null ||
-				viewer === undefined ||
-				viewer.getTopForItem(path) === undefined
-			) {
-				frame = requestAnimationFrame(tryScroll);
-				return;
-			}
-			if (!revealRequested) {
-				handle.scrollTo({
-					type: "line",
-					id: path,
-					lineNumber: codeIndexDisplayedLine(pendingReferenceTarget),
-					align: "nearest",
-					behavior: "instant",
-				});
-				revealRequested = true;
-			}
-			if (!referenceHighlight.tryApplyTarget(pendingReferenceTarget)) {
-				frame = requestAnimationFrame(tryScroll);
-				return;
-			}
-			if (viewer.getHeight() === 0 || viewer.getScrollHeight() === 0) {
-				frame = requestAnimationFrame(tryScroll);
-				return;
-			}
-			// The first scroll only brings a virtualized row into the render
-			// window. Center after the row is mounted so CodeView has a real
-			// viewport and line layout to align against; this is deliberately a
-			// single final correction rather than a polling scroll loop.
-			handle.scrollTo({
-				type: "line",
-				id: path,
-				lineNumber: codeIndexDisplayedLine(pendingReferenceTarget),
-				align: "center",
-				behavior: "instant",
-			});
-			clearPendingReferenceTarget();
-		};
-		tryScroll();
-		return () => {
-			if (frame !== null) cancelAnimationFrame(frame);
-		};
+		if (codeViewInstance === undefined) return;
+		maybeRevealReference(codeViewInstance);
+		completeReferenceReveal(
+			codeViewInstance,
+			referenceHighlight.tryApplyTarget(pendingReferenceTarget),
+		);
 	}, [
-		clearPendingReferenceTarget,
-		path,
+		codeViewInstance,
+		completeReferenceReveal,
+		maybeRevealReference,
 		pendingReferenceTarget,
 		query.data,
 		referenceHighlight.tryApplyTarget,
@@ -281,12 +344,19 @@ export function FileView({
 				`,
 				theme: diffTheme.theme,
 				onPostRender: (node, _instance, phase, context) => {
-					referenceHighlight.onItemPostRender(
+					const applied = referenceHighlight.onItemPostRender(
 						context.item.id,
 						phase === "unmount" ? undefined : (node.shadowRoot ?? undefined),
 					);
 					if (phase !== "unmount") {
 						codeIndex.notifyItemRendered(context.item.id);
+						const viewer = codeViewRef.current?.getInstance();
+						if (viewer !== undefined) {
+							maybeRevealReference(viewer);
+							if (context.item.id === path) {
+								completeReferenceReveal(viewer, applied);
+							}
+						}
 					}
 				},
 			}),
@@ -302,6 +372,9 @@ export function FileView({
 			codeIndex.tokenCSS,
 			codeIndex.notifyItemRendered,
 			codeIndex.codeViewOptions,
+			completeReferenceReveal,
+			maybeRevealReference,
+			path,
 		],
 	);
 
@@ -365,6 +438,7 @@ export function FileView({
 									className="min-h-0 w-full flex-1 overflow-auto overscroll-contain outline-none"
 									highlighterOptions={diffTheme.highlighterOptions}
 									items={items}
+									onCodeViewInstanceChange={handleCodeViewInstanceChange}
 									onScroll={handleScroll}
 									onSelectedLinesChange={handleSelectedLinesChange}
 									options={codeViewOptions}
