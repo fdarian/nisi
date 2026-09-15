@@ -733,6 +733,15 @@ export function useSetActiveTab(): (sessionId: string, tab: string) => void {
 	return useStore(store, (state) => state.setActiveTab);
 }
 
+/** The store's unbound LSP intent action, for applying a root-wide status event to every matching session. */
+export function useSetCodeIndexEnabled(): (
+	sessionId: string,
+	enabled: boolean,
+) => void {
+	const store = useSessionUiStore();
+	return useStore(store, (state) => state.setCodeIndexEnabled);
+}
+
 /** Unbound file-viewer tab cycling for the app shell's middle shortcut tier — returns `false` when the active session is not focused on an open file tab. */
 export function useCycleFileTab(): (
 	sessionId: string,

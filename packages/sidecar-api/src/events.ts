@@ -1,5 +1,6 @@
 import { eventIterator, oc } from "@orpc/contract";
 import { Schema } from "effect";
+import { CodeIndexLspStatus } from "./code-index.ts";
 import { Session } from "./sessions.ts";
 
 /**
@@ -18,6 +19,10 @@ import { Session } from "./sessions.ts";
  * session onto a PR in place. Distinct from `session-opened`: no new tab
  * should appear, and `sessions.list` needs to observe the same session's new
  * `target` rather than a second row.
+ *
+ * `code-index-lsp-status-changed` is rooted by worktree rather than session:
+ * one pooled language server can serve multiple sessions, so every window
+ * sharing that root must observe the same transition.
  */
 export const SessionEvent = Schema.Union([
 	Schema.Struct({ type: Schema.Literal("session-opened"), session: Session }),
@@ -32,6 +37,11 @@ export const SessionEvent = Schema.Union([
 	Schema.Struct({
 		type: Schema.Literal("session-updated"),
 		session: Session,
+	}),
+	Schema.Struct({
+		type: Schema.Literal("code-index-lsp-status-changed"),
+		repoRoot: Schema.String,
+		status: CodeIndexLspStatus,
 	}),
 ]);
 export type SessionEvent = Schema.Schema.Type<typeof SessionEvent>;

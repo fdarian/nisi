@@ -6,6 +6,8 @@ import {
 	TsLspBinaryResolutionError,
 } from "@repo/code-lsp";
 import { Effect, Fiber, RcMap, Semaphore } from "effect";
+import type { SidecarEvent } from "../../events.ts";
+import { subscribe } from "../../events.ts";
 import {
 	buildReferencesResponse,
 	buildSourceContext,
@@ -28,8 +30,8 @@ test("derives the three user-visible LSP states without inventing an error", () 
 		error: null,
 	});
 	expect(deriveCodeLspStatus(false, true, "stale")).toEqual({
-		status: "on",
-		error: null,
+		status: "off",
+		error: "stale",
 	});
 	expect(deriveCodeLspStatus(false, false, "stale")).toEqual({
 		status: "off",
@@ -95,7 +97,30 @@ test("start initializes a root and stop waits for its active lease", async () =>
 		}),
 	);
 
-	await Effect.runPromise(program);
+	const events: SidecarEvent[] = [];
+	const unsubscribe = subscribe((event) => events.push(event));
+	try {
+		await Effect.runPromise(program);
+	} finally {
+		unsubscribe();
+	}
+	expect(events).toEqual([
+		{
+			type: "code-index-lsp-status-changed",
+			repoRoot: "root",
+			status: { status: "starting", error: null },
+		},
+		{
+			type: "code-index-lsp-status-changed",
+			repoRoot: "root",
+			status: { status: "on", error: null },
+		},
+		{
+			type: "code-index-lsp-status-changed",
+			repoRoot: "root",
+			status: { status: "off", error: null },
+		},
+	]);
 });
 
 test("same-root LSP leases allow operations to overlap", async () => {
@@ -141,8 +166,26 @@ test("same-root LSP leases allow operations to overlap", async () => {
 		}),
 	);
 
-	await Effect.runPromise(program);
+	const events: SidecarEvent[] = [];
+	const unsubscribe = subscribe((event) => events.push(event));
+	try {
+		await Effect.runPromise(program);
+	} finally {
+		unsubscribe();
+	}
 	expect(maximumActive).toBe(2);
+	expect(events).toEqual([
+		{
+			type: "code-index-lsp-status-changed",
+			repoRoot: "root",
+			status: { status: "starting", error: null },
+		},
+		{
+			type: "code-index-lsp-status-changed",
+			repoRoot: "root",
+			status: { status: "on", error: null },
+		},
+	]);
 });
 
 test("different worktree roots use separate live servers", async () => {
@@ -195,6 +238,53 @@ test("different worktree roots use separate live servers", async () => {
 	await Effect.runPromise(program);
 	expect(maximumActive).toBe(2);
 	expect(spawnedRoots.sort()).toEqual(["repo-a", "repo-b"]);
+});
+
+test("a failed lazy startup publishes off with its error", async () => {
+	const failure = new LspProcessError({
+		step: "spawn",
+		cause: new Error("ENOENT"),
+	});
+	const lookup = (
+		_root: string,
+	): Effect.Effect<LspServer, LspProcessError | TsLspBinaryResolutionError> =>
+		Effect.fail(failure);
+
+	const program = Effect.scoped(
+		Effect.gen(function* () {
+			const resources = yield* RcMap.make({
+				lookup,
+				capacity: 2,
+				idleTimeToLive: "5 minutes",
+			});
+			const pool = {
+				resources,
+				admissionLock: Semaphore.makeUnsafe(1),
+			} satisfies CodeLspPoolValue;
+			return yield* Effect.result(
+				withCodeLspServer(pool, "root", () => Effect.succeed(undefined)),
+			);
+		}),
+	);
+	const events: SidecarEvent[] = [];
+	const unsubscribe = subscribe((event) => events.push(event));
+	const result = await Effect.runPromise(program).finally(unsubscribe);
+
+	expect(result._tag).toBe("Failure");
+	expect(events).toHaveLength(2);
+	expect(events[0]).toEqual({
+		type: "code-index-lsp-status-changed",
+		repoRoot: "root",
+		status: { status: "starting", error: null },
+	});
+	expect(events[1]).toEqual({
+		type: "code-index-lsp-status-changed",
+		repoRoot: "root",
+		status: {
+			status: "off",
+			error: "TypeScript language server failed to start: Error: ENOENT",
+		},
+	});
 });
 
 test("a failed lease is surfaced and the next operation gets a fresh server", async () => {

@@ -31,6 +31,7 @@ import {
 	Semaphore,
 } from "effect";
 import type * as Scope from "effect/Scope";
+import { emit as emitSidecarEvent } from "../events.ts";
 
 /**
  * How many TS7 LSP server processes stay live at once, across all open
@@ -60,15 +61,48 @@ const MAX_LIVE_LSP_SERVERS = 2;
  */
 export class CodeLspPool extends Context.Service<CodeLspPool>()("CodeLspPool", {
 	make: Effect.gen(function* () {
+		const lifecycle = createCodeLspPoolLifecycle();
 		const resources = yield* RcMap.make({
-			lookup: (repoRoot: string) => spawnLspServer(repoRoot),
+			lookup: (repoRoot: string) =>
+				Effect.acquireRelease(spawnLspServer(repoRoot), () =>
+					Effect.sync(() => {
+						const startupFailure =
+							lifecycle.startupFailureEvents.delete(repoRoot);
+						const suppressedCloseCount =
+							lifecycle.suppressedCloseEvents.get(repoRoot) ?? 0;
+						if (suppressedCloseCount > 1) {
+							lifecycle.suppressedCloseEvents.set(
+								repoRoot,
+								suppressedCloseCount - 1,
+							);
+						} else if (suppressedCloseCount === 1) {
+							lifecycle.suppressedCloseEvents.delete(repoRoot);
+						}
+						const error = lifecycle.errors.get(repoRoot) ?? null;
+						lifecycle.errors.delete(repoRoot);
+						if (
+							lifecycle.stoppingRoots.has(repoRoot) ||
+							startupFailure ||
+							suppressedCloseCount > 0
+						) {
+							return;
+						}
+						emitSidecarEvent({
+							type: "code-index-lsp-status-changed",
+							repoRoot,
+							status: { status: "off", error },
+						});
+					}),
+				),
 			capacity: MAX_LIVE_LSP_SERVERS,
 			idleTimeToLive: "5 minutes",
 		});
-		return {
+		const pool = {
 			resources,
 			admissionLock: Semaphore.makeUnsafe(1),
 		};
+		poolLifecycles.set(pool, lifecycle);
+		return pool;
 	}),
 }) {
 	static layer = Layer.effect(CodeLspPool, CodeLspPool.make);
@@ -101,18 +135,25 @@ type CodeLspPoolLifecycle = {
 	readonly startingRoots: Set<string>;
 	readonly stoppingRoots: Set<string>;
 	readonly errors: Map<string, string>;
+	readonly startupFailureEvents: Set<string>;
+	/** Request failures replace an idle entry so the next hover retries; they do not turn the user's enabled intent off. */
+	readonly suppressedCloseEvents: Map<string, number>;
 };
 
 const poolLifecycles = new WeakMap<CodeLspPoolValue, CodeLspPoolLifecycle>();
 
+const createCodeLspPoolLifecycle = (): CodeLspPoolLifecycle => ({
+	startingRoots: new Set(),
+	stoppingRoots: new Set(),
+	errors: new Map(),
+	startupFailureEvents: new Set(),
+	suppressedCloseEvents: new Map(),
+});
+
 const getPoolLifecycle = (pool: CodeLspPoolValue): CodeLspPoolLifecycle => {
 	const existing = poolLifecycles.get(pool);
 	if (existing !== undefined) return existing;
-	const created: CodeLspPoolLifecycle = {
-		startingRoots: new Set(),
-		stoppingRoots: new Set(),
-		errors: new Map(),
-	};
+	const created = createCodeLspPoolLifecycle();
 	poolLifecycles.set(pool, created);
 	return created;
 };
@@ -124,6 +165,7 @@ export const deriveCodeLspStatus = (
 	error: string | null,
 ): CodeLspStatus => {
 	if (isStarting) return { status: "starting", error: null };
+	if (error !== null) return { status: "off", error };
 	if (hasLiveEntry) return { status: "on", error: null };
 	return { status: "off", error };
 };
@@ -162,6 +204,18 @@ const poolSize = (pool: CodeLspPoolValue): number => {
 	return size;
 };
 
+const publishCodeLspStatus = (
+	repoRoot: string,
+	status: CodeLspStatus,
+): Effect.Effect<void> =>
+	Effect.sync(() =>
+		emitSidecarEvent({
+			type: "code-index-lsp-status-changed",
+			repoRoot,
+			status,
+		}),
+	);
+
 /** Acquires one scoped lease, evicting only an idle server when the bounded pool is full. A full pool of leased servers waits until one operation releases its lease. */
 const acquireCodeLspServer = (
 	pool: CodeLspPoolValue,
@@ -170,57 +224,99 @@ const acquireCodeLspServer = (
 ): Effect.Effect<LspServer, CodeLspFailure, Scope.Scope> =>
 	Effect.gen(function* () {
 		let markedStarting = false;
-		while (true) {
-			const lease = yield* pool.admissionLock.withPermit(
-				Effect.gen(function* () {
-					const lifecycle = getPoolLifecycle(pool);
-					if (
-						lifecycle.stoppingRoots.has(repoRoot) &&
-						!lifecycle.startingRoots.has(repoRoot)
-					) {
-						return Option.none<LspServer>();
-					}
-					const entry = findPoolEntry(pool, repoRoot);
-					if (refresh && entry !== undefined) {
-						if (entry.refCount > 0) return Option.none<LspServer>();
-						yield* RcMap.invalidate(pool.resources, repoRoot);
-					}
+		const lifecycle = getPoolLifecycle(pool);
+		const operation = Effect.gen(function* () {
+			while (true) {
+				const lease = yield* pool.admissionLock.withPermit(
+					Effect.gen(function* () {
+						if (
+							lifecycle.stoppingRoots.has(repoRoot) &&
+							!lifecycle.startingRoots.has(repoRoot)
+						) {
+							return Option.none<LspServer>();
+						}
+						const entry = findPoolEntry(pool, repoRoot);
+						if (refresh && entry !== undefined) {
+							if (entry.refCount > 0) return Option.none<LspServer>();
+							yield* RcMap.invalidate(pool.resources, repoRoot);
+						}
 
-					if (
-						findPoolEntry(pool, repoRoot) === undefined &&
-						poolSize(pool) >= pool.resources.capacity
-					) {
-						const idleRoot = findIdlePoolRoot(pool);
-						if (idleRoot === undefined) return Option.none<LspServer>();
-						yield* RcMap.invalidate(pool.resources, idleRoot);
-					}
+						const missingEntry = findPoolEntry(pool, repoRoot) === undefined;
+						if (missingEntry && poolSize(pool) >= pool.resources.capacity) {
+							const idleRoot = findIdlePoolRoot(pool);
+							if (idleRoot === undefined) return Option.none<LspServer>();
+							yield* RcMap.invalidate(pool.resources, idleRoot);
+						}
 
-					if (!lifecycle.startingRoots.has(repoRoot)) {
-						lifecycle.startingRoots.add(repoRoot);
-						markedStarting = true;
-					}
-					return yield* RcMap.get(pool.resources, repoRoot).pipe(
-						Effect.map(Option.some),
-						Effect.catchIf(Cause.isExceededCapacityError, () =>
-							Effect.succeed(Option.none<LspServer>()),
-						),
-						Effect.ensuring(
-							Effect.sync(() => {
-								if (markedStarting) {
+						if (
+							findPoolEntry(pool, repoRoot) === undefined &&
+							!lifecycle.startingRoots.has(repoRoot)
+						) {
+							lifecycle.startingRoots.add(repoRoot);
+							lifecycle.startupFailureEvents.delete(repoRoot);
+							markedStarting = true;
+							yield* publishCodeLspStatus(repoRoot, {
+								status: "starting",
+								error: null,
+							});
+						}
+
+						return yield* RcMap.get(pool.resources, repoRoot).pipe(
+							Effect.map(Option.some),
+							Effect.catchIf(Cause.isExceededCapacityError, () =>
+								Effect.succeed(Option.none<LspServer>()),
+							),
+							Effect.tap((result) => {
+								if (Option.isNone(result) || !markedStarting) {
+									return Effect.void;
+								}
+								lifecycle.startingRoots.delete(repoRoot);
+								markedStarting = false;
+								lifecycle.errors.delete(repoRoot);
+								return publishCodeLspStatus(repoRoot, {
+									status: "on",
+									error: null,
+								});
+							}),
+							Effect.tapError((failure) =>
+								Effect.sync(() => {
+									const error = describeCodeIndexFailure(failure);
+									lifecycle.errors.set(repoRoot, error);
+									if (lifecycle.startupFailureEvents.has(repoRoot)) return;
+									lifecycle.startupFailureEvents.add(repoRoot);
 									lifecycle.startingRoots.delete(repoRoot);
 									markedStarting = false;
-								}
-							}),
-						),
-					);
-				}),
-			);
-			if (Option.isSome(lease)) {
-				getPoolLifecycle(pool).errors.delete(repoRoot);
-				return lease.value;
+									emitSidecarEvent({
+										type: "code-index-lsp-status-changed",
+										repoRoot,
+										status: { status: "off", error },
+									});
+								}),
+							),
+						);
+					}),
+				);
+				if (Option.isSome(lease)) {
+					lifecycle.errors.delete(repoRoot);
+					return lease.value;
+				}
+				yield* Effect.sleep("50 millis");
 			}
-			yield* Effect.sleep("50 millis");
-		}
+		});
+		return yield* operation.pipe(
+			Effect.ensuring(
+				Effect.sync(() => {
+					if (!markedStarting) return;
+					lifecycle.startingRoots.delete(repoRoot);
+					markedStarting = false;
+					emitSidecarEvent({
+						type: "code-index-lsp-status-changed",
+						repoRoot,
+						status: { status: "off", error: null },
+					});
+				}),
+			),
+		);
 	});
 
 const invalidateIdleCodeLspServer = (
@@ -231,7 +327,23 @@ const invalidateIdleCodeLspServer = (
 		Effect.gen(function* () {
 			const entry = findPoolEntry(pool, repoRoot);
 			if (entry === undefined || entry.refCount > 0) return;
-			yield* RcMap.invalidate(pool.resources, repoRoot);
+			const lifecycle = getPoolLifecycle(pool);
+			const suppressedCloseCount =
+				lifecycle.suppressedCloseEvents.get(repoRoot) ?? 0;
+			lifecycle.suppressedCloseEvents.set(repoRoot, suppressedCloseCount + 1);
+			yield* RcMap.invalidate(pool.resources, repoRoot).pipe(
+				Effect.ensuring(
+					Effect.sync(() => {
+						const currentCount =
+							lifecycle.suppressedCloseEvents.get(repoRoot) ?? 0;
+						if (currentCount > 1) {
+							lifecycle.suppressedCloseEvents.set(repoRoot, currentCount - 1);
+						} else {
+							lifecycle.suppressedCloseEvents.delete(repoRoot);
+						}
+					}),
+				),
+			);
 		}),
 	);
 
@@ -262,18 +374,12 @@ export const startCodeLspServer = (
 			yield* Effect.sleep("50 millis");
 		}
 		lifecycle.errors.delete(repoRoot);
-		lifecycle.startingRoots.add(repoRoot);
 		yield* Effect.scoped(acquireCodeLspServer(pool, repoRoot, false)).pipe(
 			Effect.asVoid,
-			Effect.tapError((failure) =>
-				Effect.sync(() => {
-					lifecycle.errors.set(repoRoot, describeCodeIndexFailure(failure));
-				}),
-			),
-			Effect.ensuring(
-				Effect.sync(() => {
-					lifecycle.startingRoots.delete(repoRoot);
-				}),
+			Effect.onExit((exit) =>
+				Exit.isSuccess(exit)
+					? Effect.void
+					: invalidateIdleCodeLspServer(pool, repoRoot),
 			),
 		);
 		return getCodeLspStatus(pool, repoRoot);
@@ -311,6 +417,8 @@ export const stopCodeLspServer = (
 			if (stopped) break;
 			yield* Effect.sleep("50 millis");
 		}
+		lifecycle.startupFailureEvents.delete(repoRoot);
+		yield* publishCodeLspStatus(repoRoot, { status: "off", error: null });
 		return getCodeLspStatus(pool, repoRoot);
 	}).pipe(
 		Effect.ensuring(

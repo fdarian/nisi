@@ -2,8 +2,8 @@ import type {
 	CodeIndexLspStatus,
 	CodeIndexLspStatusName,
 } from "@repo/sidecar-api";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useCallback } from "react";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import { useCallback, useEffect } from "react";
 import { toastManager } from "#/components/ui/toast";
 import type { SidecarQueryUtils } from "#/lib/backend-context";
 
@@ -16,9 +16,7 @@ export type CodeIndexLspControlState = {
 
 export const codeIndexLspStatusForControl = (
 	status: CodeIndexLspStatus | undefined,
-	starting: boolean,
 ): CodeIndexLspStatusName => {
-	if (starting) return "starting";
 	return status?.status ?? "off";
 };
 
@@ -27,48 +25,41 @@ export function useCodeIndexLspControl(
 	sessionId: string,
 	setEnabled: (enabled: boolean) => void,
 ): CodeIndexLspControlState {
-	const queryClient = useQueryClient();
 	const input = { sessionId };
 	const statusQuery = useQuery({
 		...orpc.codeIndex.lspStatus.queryOptions({ input }),
-		refetchInterval: (query) =>
-			query.state.data?.status === "starting" ? 250 : false,
 		retry: false,
 	});
-	const statusKey = orpc.codeIndex.lspStatus.queryKey({ input });
+	useEffect(() => {
+		const currentStatus = statusQuery.data?.status;
+		if (currentStatus === undefined) return;
+		setEnabled(currentStatus !== "off");
+	}, [setEnabled, statusQuery.data?.status]);
 	const startMutation = useMutation({
 		...orpc.codeIndex.startLsp.mutationOptions(),
 		onError: (error) => {
 			setEnabled(false);
-			void queryClient.invalidateQueries({ queryKey: statusKey });
 			toastManager.add({
 				title: "Couldn't start LSP",
 				description: error instanceof Error ? error.message : String(error),
 				type: "error",
 			});
 		},
-		onSuccess: (status) => {
-			queryClient.setQueryData(statusKey, status);
-		},
 	});
 	const stopMutation = useMutation({
 		...orpc.codeIndex.stopLsp.mutationOptions(),
 		onError: (error) => {
-			void queryClient.invalidateQueries({ queryKey: statusKey });
+			setEnabled(true);
 			toastManager.add({
 				title: "Couldn't stop LSP",
 				description: error instanceof Error ? error.message : String(error),
 				type: "error",
 			});
 		},
-		onSuccess: (status) => {
-			queryClient.setQueryData(statusKey, status);
-		},
 	});
-	const starting = startMutation.isPending;
-	const status = codeIndexLspStatusForControl(statusQuery.data, starting);
+	const status = codeIndexLspStatusForControl(statusQuery.data);
 	const toggle = useCallback(() => {
-		if (stopMutation.isPending) return;
+		if (startMutation.isPending || stopMutation.isPending) return;
 		if (status === "off") {
 			setEnabled(true);
 			startMutation.mutate({ sessionId });
