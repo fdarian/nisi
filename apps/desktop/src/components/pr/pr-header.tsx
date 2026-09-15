@@ -8,7 +8,7 @@ import {
 	BreadcrumbPage,
 	BreadcrumbSeparator,
 } from "#/components/ui/breadcrumb";
-import { Button, buttonVariants } from "#/components/ui/button";
+import { Button } from "#/components/ui/button";
 import {
 	DropdownMenu,
 	DropdownMenuContent,
@@ -28,7 +28,6 @@ import {
 	useMarkPullRequestReady,
 	usePullRequestMergeStatus,
 } from "#/lib/pr-data";
-import { cn } from "#/lib/utils";
 import { PrCiStatus } from "./pr-ci-status";
 import { PrMergeButton } from "./pr-merge-button";
 
