@@ -165,7 +165,7 @@ export function FileView({
 			const targetKey = codeIndexReferenceRevealTargetKey(
 				pendingReferenceTarget,
 			);
-			let transaction = syncCodeIndexReferenceRevealTransaction(
+			const transaction = syncCodeIndexReferenceRevealTransaction(
 				referenceRevealTransactionRef.current,
 				targetKey,
 				viewer,
@@ -179,6 +179,9 @@ export function FileView({
 				referenceRevealTransactionRef.current = transaction;
 				return;
 			}
+			// The item layout exists before its virtualized line rows do. This
+			// first, instance-scoped scroll asks CodeView to render the target;
+			// centering waits for that item's post-render callback below.
 			handle.scrollTo({
 				type: "line",
 				id: path,
@@ -186,8 +189,10 @@ export function FileView({
 				align: "nearest",
 				behavior: "instant",
 			});
-			transaction = markCodeIndexReferenceRevealed(transaction, viewer);
-			referenceRevealTransactionRef.current = transaction;
+			referenceRevealTransactionRef.current = markCodeIndexReferenceRevealed(
+				transaction,
+				viewer,
+			);
 		},
 		[pendingReferenceTarget, path],
 	);
@@ -198,12 +203,15 @@ export function FileView({
 			const targetKey = codeIndexReferenceRevealTargetKey(
 				pendingReferenceTarget,
 			);
-			let transaction = syncCodeIndexReferenceRevealTransaction(
+			const syncedTransaction = syncCodeIndexReferenceRevealTransaction(
 				referenceRevealTransactionRef.current,
 				targetKey,
 				viewer,
 			);
-			transaction = markCodeIndexReferenceApplied(transaction, viewer);
+			const transaction = markCodeIndexReferenceApplied(
+				syncedTransaction,
+				viewer,
+			);
 			const handle = codeViewRef.current;
 			if (
 				handle === null ||
@@ -225,9 +233,12 @@ export function FileView({
 				align: "center",
 				behavior: "instant",
 			});
-			transaction = markCodeIndexReferenceCentered(transaction, viewer);
-			referenceRevealTransactionRef.current = transaction;
-			if (canClearCodeIndexReferenceReveal(transaction, viewer)) {
+			const centeredTransaction = markCodeIndexReferenceCentered(
+				transaction,
+				viewer,
+			);
+			referenceRevealTransactionRef.current = centeredTransaction;
+			if (canClearCodeIndexReferenceReveal(centeredTransaction, viewer)) {
 				clearPendingReferenceTarget();
 			}
 		},
@@ -306,6 +317,9 @@ export function FileView({
 		setActiveReferenceTarget(pendingReferenceTarget);
 		if (codeViewInstance === undefined) return;
 		maybeRevealReference(codeViewInstance);
+		// A target already in the render window has no new render event when
+		// selection changes, so perform one immediate DOM check as well. Cold
+		// and virtualized targets complete through onPostRender instead.
 		completeReferenceReveal(
 			codeViewInstance,
 			referenceHighlight.tryApplyTarget(pendingReferenceTarget),

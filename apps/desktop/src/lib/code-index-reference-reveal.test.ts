@@ -21,42 +21,41 @@ const target: CodeIndexReferenceTarget = {
 describe("code-index reference reveal transactions", () => {
 	test("tracks reveal, application, centering, and completion", () => {
 		const targetKey = codeIndexReferenceRevealTargetKey(target);
-		let transaction =
+		const pending =
 			createCodeIndexReferenceRevealTransaction<string>(targetKey);
-		transaction = syncCodeIndexReferenceRevealTransaction(
-			transaction,
+		const attached = syncCodeIndexReferenceRevealTransaction(
+			pending,
 			targetKey,
 			"first",
 		);
 
-		expect(shouldRevealCodeIndexReference(transaction, "first")).toBe(true);
-		transaction = markCodeIndexReferenceRevealed(transaction, "first");
-		transaction = markCodeIndexReferenceApplied(transaction, "first");
-		transaction = markCodeIndexReferenceCentered(transaction, "first");
+		const revealed = markCodeIndexReferenceRevealed(attached, "first");
+		const applied = markCodeIndexReferenceApplied(revealed, "first");
+		const centered = markCodeIndexReferenceCentered(applied, "first");
 
-		expect(shouldRevealCodeIndexReference(transaction, "first")).toBe(false);
-		expect(canClearCodeIndexReferenceReveal(transaction, "first")).toBe(true);
+		expect(shouldRevealCodeIndexReference(centered, "first")).toBe(false);
+		expect(canClearCodeIndexReferenceReveal(centered, "first")).toBe(true);
 	});
 
 	test("requires a second reveal when the CodeView instance is replaced", () => {
 		const targetKey = codeIndexReferenceRevealTargetKey(target);
-		let transaction = syncCodeIndexReferenceRevealTransaction(
+		const attached = syncCodeIndexReferenceRevealTransaction(
 			createCodeIndexReferenceRevealTransaction<string>(targetKey),
 			targetKey,
 			"first",
 		);
-		transaction = markCodeIndexReferenceRevealed(transaction, "first");
+		const revealed = markCodeIndexReferenceRevealed(attached, "first");
 
-		transaction = syncCodeIndexReferenceRevealTransaction(
-			transaction,
+		const replacement = syncCodeIndexReferenceRevealTransaction(
+			revealed,
 			targetKey,
 			"replacement",
 		);
 
-		expect(shouldRevealCodeIndexReference(transaction, "replacement")).toBe(
+		expect(shouldRevealCodeIndexReference(replacement, "replacement")).toBe(
 			true,
 		);
-		expect(canClearCodeIndexReferenceReveal(transaction, "replacement")).toBe(
+		expect(canClearCodeIndexReferenceReveal(replacement, "replacement")).toBe(
 			false,
 		);
 	});
