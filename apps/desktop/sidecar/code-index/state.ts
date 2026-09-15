@@ -169,10 +169,15 @@ const acquireCodeLspServer = (
 	refresh: boolean,
 ): Effect.Effect<LspServer, CodeLspFailure, Scope.Scope> =>
 	Effect.gen(function* () {
+		let markedStarting = false;
 		while (true) {
 			const lease = yield* pool.admissionLock.withPermit(
 				Effect.gen(function* () {
-					if (getPoolLifecycle(pool).stoppingRoots.has(repoRoot)) {
+					const lifecycle = getPoolLifecycle(pool);
+					if (
+						lifecycle.stoppingRoots.has(repoRoot) &&
+						!lifecycle.startingRoots.has(repoRoot)
+					) {
 						return Option.none<LspServer>();
 					}
 					const entry = findPoolEntry(pool, repoRoot);
@@ -190,10 +195,22 @@ const acquireCodeLspServer = (
 						yield* RcMap.invalidate(pool.resources, idleRoot);
 					}
 
+					if (!lifecycle.startingRoots.has(repoRoot)) {
+						lifecycle.startingRoots.add(repoRoot);
+						markedStarting = true;
+					}
 					return yield* RcMap.get(pool.resources, repoRoot).pipe(
 						Effect.map(Option.some),
 						Effect.catchIf(Cause.isExceededCapacityError, () =>
 							Effect.succeed(Option.none<LspServer>()),
+						),
+						Effect.ensuring(
+							Effect.sync(() => {
+								if (markedStarting) {
+									lifecycle.startingRoots.delete(repoRoot);
+									markedStarting = false;
+								}
+							}),
 						),
 					);
 				}),
@@ -280,8 +297,8 @@ export const stopCodeLspServer = (
 				Effect.gen(function* () {
 					const entry = findPoolEntry(pool, repoRoot);
 					if (
-						entry !== undefined &&
-						(entry.refCount > 0 || lifecycle.startingRoots.has(repoRoot))
+						lifecycle.startingRoots.has(repoRoot) ||
+						(entry !== undefined && entry.refCount > 0)
 					) {
 						return false;
 					}
