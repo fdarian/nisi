@@ -294,7 +294,7 @@ function PrViewTabStrip({
 		<div className="border-b flex items-center justify-between pr-6.5">
 			<TabsList
 				className={cn(
-					"mx-4",
+					"-translate-x-2.5 mx-4",
 					fileTabPath(activeTab) !== null &&
 						"[&_[data-slot=tab-indicator]]:hidden",
 				)}
