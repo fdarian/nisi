@@ -28,27 +28,31 @@ export function CodeIndexLspControl(props: {
 	const tooltip = control.status === "off" ? "Start LSP" : "Stop LSP";
 
 	return (
-		<Tooltip>
-			<TooltipTrigger
-				render={
-					<Button
-						aria-label={tooltip}
-						onClick={control.toggle}
-						size="icon-sm"
-						variant="ghost"
-					>
-						<span
-							aria-hidden="true"
-							className={cn(
-								"size-2 shrink-0 rounded-full",
-								STATUS_DOT_CLASS[control.status],
-							)}
-						/>
-						<Server />
-					</Button>
-				}
+		<div className="flex items-center gap-0.5">
+			<span
+				aria-hidden="true"
+				className={cn(
+					"size-1 shrink-0 rounded-full",
+					STATUS_DOT_CLASS[control.status],
+				)}
 			/>
-			<TooltipPopup>{tooltip}</TooltipPopup>
-		</Tooltip>
+			<Tooltip>
+				<TooltipTrigger
+					render={
+						<Button
+							aria-label={tooltip}
+							onClick={control.toggle}
+							size="icon-xs"
+							variant="ghost"
+							className="data-[status=off]:text-muted-foreground"
+							data-status={control.status}
+						>
+							<Server />
+						</Button>
+					}
+				/>
+				<TooltipPopup>{tooltip}</TooltipPopup>
+			</Tooltip>
+		</div>
 	);
 }

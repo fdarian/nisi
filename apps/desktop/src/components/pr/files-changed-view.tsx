@@ -8,7 +8,6 @@ import {
 	SlidersHorizontalIcon,
 } from "lucide-react";
 import { useCallback, useMemo, useRef, useState } from "react";
-import { CodeIndexLspControl } from "#/components/code-index/code-index-lsp-control";
 import type { DiffPaneHandle } from "#/components/diff-pane/diff-pane";
 import { DiffPane } from "#/components/diff-pane/diff-pane";
 import { EditorPickerPalette } from "#/components/editor-picker-palette";
@@ -620,7 +619,6 @@ export function FilesChangedView({
 									<Columns2Icon />
 								</ToggleGroupItem>
 							</ToggleGroup>
-							<CodeIndexLspControl orpc={orpc} sessionId={session.id} />
 							<DropdownMenu>
 								<DropdownMenuTrigger
 									aria-label="Files sidebar display options"
