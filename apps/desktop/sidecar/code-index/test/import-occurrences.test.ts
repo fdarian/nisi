@@ -1,5 +1,6 @@
-import { describe, expect, test } from "bun:test";
-import { join } from "node:path";
+import { afterAll, describe, expect, test } from "bun:test";
+import { dirname, join } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { BunServices } from "@effect/platform-bun";
 import { Effect, Layer } from "effect";
 import {
@@ -20,6 +21,28 @@ import {
 const FIXTURE_ROOT = join(import.meta.dir, "fixtures", "import-project");
 const CONSUMER_PATH = "src/consumer.ts";
 const REPO_ROOT = join(import.meta.dir, "..", "..", "..", "..", "..");
+
+const previousTsLspBinary = process.env.NISI_TS_LSP_BIN;
+if (previousTsLspBinary === undefined || previousTsLspBinary.length === 0) {
+	const typescriptPackageJson = fileURLToPath(
+		import.meta.resolve("typescript/package.json"),
+	);
+	const typescriptDir = dirname(typescriptPackageJson);
+	const getExePathModule: { readonly default: () => string } = await import(
+		pathToFileURL(join(typescriptDir, "lib", "getExePath.js")).href
+	);
+	// This integration test must not turn a fixture without local dependencies into a network test.
+	process.env.NISI_TS_LSP_BIN = getExePathModule.default();
+}
+
+afterAll(() => {
+	if (previousTsLspBinary === undefined) {
+		delete process.env.NISI_TS_LSP_BIN;
+		return;
+	}
+	process.env.NISI_TS_LSP_BIN = previousTsLspBinary;
+});
+
 const FILES_FROM_FOUR_PROJECTS = [
 	"packages/settings/src/store.ts",
 	"packages/git/src/exec.ts",
