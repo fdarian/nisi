@@ -287,6 +287,54 @@ test("a failed lazy startup publishes off with its error", async () => {
 	});
 });
 
+test("an interrupted startup publishes an error instead of a clean stop", async () => {
+	const lookup = (
+		_root: string,
+	): Effect.Effect<LspServer, LspProcessError | TsLspBinaryResolutionError> =>
+		Effect.never;
+	const events: SidecarEvent[] = [];
+	const program = Effect.scoped(
+		Effect.gen(function* () {
+			const resources = yield* RcMap.make({
+				lookup,
+				capacity: 2,
+				idleTimeToLive: "5 minutes",
+			});
+			const pool = {
+				resources,
+				admissionLock: Semaphore.makeUnsafe(1),
+			} satisfies CodeLspPoolValue;
+			const starting = yield* Effect.forkScoped(
+				startCodeLspServer(pool, "root"),
+			);
+			while (events.length === 0) yield* Effect.sleep("5 millis");
+			yield* Fiber.interrupt(starting);
+		}),
+	);
+	const unsubscribe = subscribe((event) => events.push(event));
+	try {
+		await Effect.runPromise(program);
+	} finally {
+		unsubscribe();
+	}
+	expect(events).toEqual([
+		{
+			type: "code-index-lsp-status-changed",
+			repoRoot: "root",
+			status: { status: "starting", error: null },
+		},
+		{
+			type: "code-index-lsp-status-changed",
+			repoRoot: "root",
+			status: {
+				status: "off",
+				error:
+					"TypeScript language server startup was cancelled before it finished",
+			},
+		},
+	]);
+});
+
 test("a failed lease is surfaced and the next operation gets a fresh server", async () => {
 	const fakeServer: LspServer = {
 		rootPath: "root",
@@ -343,7 +391,7 @@ test("a failed lease is surfaced and the next operation gets a fresh server", as
 describe("describeCodeIndexFailure", () => {
 	test("formats binary resolution and process failures for request errors", () => {
 		const binaryFailure = new TsLspBinaryResolutionError({
-			strategy: "dev-get-exe-path",
+			strategy: "integrity-mismatch",
 			cause: new Error("missing binary"),
 		});
 		const spawnFailure = new LspProcessError({
@@ -361,7 +409,7 @@ describe("describeCodeIndexFailure", () => {
 		});
 
 		expect(describeCodeIndexFailure(binaryFailure)).toContain(
-			"dev-get-exe-path",
+			"integrity-mismatch",
 		);
 		expect(describeCodeIndexFailure(spawnFailure)).toContain("start");
 		expect(describeCodeIndexFailure(initializeFailure)).toContain("initialize");

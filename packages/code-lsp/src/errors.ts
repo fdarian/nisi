@@ -2,16 +2,20 @@ import { Schema } from "effect";
 
 /**
  * Couldn't find an absolute path for the TypeScript 7 native LSP binary to
- * spawn — see `binary.ts` for the two strategies this can fail at
- * (`"dev-get-exe-path"`: `typescript/lib/getExePath.js` itself threw, e.g.
- * the platform package isn't installed; `"compiled-resource"`: no `ts-lsp`
- * binary found under the compiled app's bundled `Contents/Resources/ts-lsp/`
- * directory). `NISI_TS_LSP_BIN` bypasses both — see this package's AGENTS.md.
+ * spawn. `NISI_TS_LSP_BIN` bypasses resolution entirely. Download failures,
+ * unsupported platforms, and integrity mismatches preserve their distinct
+ * strategy so callers can show the actual cause to the user.
  */
 export class TsLspBinaryResolutionError extends Schema.TaggedError<TsLspBinaryResolutionError>()(
 	"TsLspBinaryResolutionError",
 	{
-		strategy: Schema.Literals(["dev-get-exe-path", "compiled-resource"]),
+		strategy: Schema.Literals([
+			"unsupported-platform",
+			"download",
+			"integrity-mismatch",
+			"extract",
+			"cache",
+		]),
 		cause: Schema.Defect(),
 	},
 ) {}

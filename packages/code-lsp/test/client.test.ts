@@ -1,14 +1,26 @@
-import { describe, expect, test } from "bun:test";
-import { join } from "node:path";
+import { afterAll, describe, expect, test } from "bun:test";
+import {
+	chmodSync,
+	copyFileSync,
+	mkdirSync,
+	mkdtempSync,
+	readdirSync,
+	realpathSync,
+	rmSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
+import { basename, dirname, join } from "node:path";
+import { pathToFileURL } from "node:url";
 import { BunServices } from "@effect/platform-bun";
 import { Effect } from "effect";
 import { type LspServer, spawnLspServer } from "../src/client.ts";
 import type { LspLocation } from "../src/protocol.ts";
+import { TS_LSP_VERSION } from "../src/ts-lsp-download.ts";
 
 /**
  * Integration tests — these spawn the real `tsc --lsp --stdio` binary
- * (resolved via `binary.ts`'s dev path, since `bun test` never runs
- * compiled) and talk to it over stdio. Slower and less hermetic than the
+ * (resolved from a test-populated pinned cache) and talk to it over stdio.
+ * Slower and less hermetic than the
  * pure unit tests in `protocol.test.ts`/`semantic-tokens.test.ts`, but
  * nothing short of a real server proves the framing, correlation, and
  * request/response wiring in `client.ts` actually work end to end.
@@ -17,6 +29,29 @@ import type { LspLocation } from "../src/protocol.ts";
 const TINY_PROJECT_ROOT = join(import.meta.dir, "fixtures", "tiny-project");
 const GREETER_TS = join(TINY_PROJECT_ROOT, "src", "greeter.ts");
 const MAIN_TS = join(TINY_PROJECT_ROOT, "src", "main.ts");
+const TEST_CACHE_DIR = mkdtempSync(join(tmpdir(), "nisi-code-lsp-test-"));
+
+const populateTestCache = async (): Promise<void> => {
+	const typescriptDir = realpathSync(
+		join(import.meta.dir, "..", "node_modules", "typescript"),
+	);
+	const getExePathModule: { readonly default: () => string } = await import(
+		pathToFileURL(join(typescriptDir, "lib", "getExePath.js")).href
+	);
+	const installedBinary = getExePathModule.default();
+	const installedLibDir = dirname(installedBinary);
+	const targetDir = join(TEST_CACHE_DIR, TS_LSP_VERSION);
+	mkdirSync(targetDir, { recursive: true });
+	copyFileSync(installedBinary, join(targetDir, basename(installedBinary)));
+	for (const name of readdirSync(installedLibDir)) {
+		if (!name.endsWith(".d.ts")) continue;
+		copyFileSync(join(installedLibDir, name), join(targetDir, name));
+	}
+	chmodSync(join(targetDir, basename(installedBinary)), 0o755);
+};
+
+await populateTestCache();
+afterAll(() => rmSync(TEST_CACHE_DIR, { recursive: true, force: true }));
 
 const withServer = <A, E>(
 	rootPath: string,
@@ -25,7 +60,7 @@ const withServer = <A, E>(
 	Effect.runPromise(
 		Effect.scoped(
 			Effect.gen(function* () {
-				const server = yield* spawnLspServer(rootPath);
+				const server = yield* spawnLspServer(rootPath, TEST_CACHE_DIR);
 				return yield* use(server);
 			}),
 		).pipe(Effect.provide(BunServices.layer)),

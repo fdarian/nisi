@@ -11,6 +11,7 @@ import {
 	Semaphore,
 	Stream,
 } from "effect";
+import type { FileSystem } from "effect/FileSystem";
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
 import { resolveTsLspBinary } from "./binary.ts";
 import {
@@ -168,12 +169,13 @@ type InternalServer = {
  */
 export const spawnLspServer = (
 	rootPath: string,
+	cacheDir: string,
 ): Effect.Effect<
 	LspServer,
 	TsLspBinaryResolutionError | LspProcessError,
-	Scope.Scope | ChildProcessSpawner.ChildProcessSpawner
+	Scope.Scope | ChildProcessSpawner.ChildProcessSpawner | FileSystem
 > =>
-	Effect.acquireRelease(acquireServer(rootPath), releaseServer).pipe(
+	Effect.acquireRelease(acquireServer(rootPath, cacheDir), releaseServer).pipe(
 		Effect.map((server) =>
 			buildLspServer(
 				server.rootPath,
@@ -186,13 +188,14 @@ export const spawnLspServer = (
 
 const acquireServer = (
 	rootPath: string,
+	cacheDir: string,
 ): Effect.Effect<
 	InternalServer,
 	TsLspBinaryResolutionError | LspProcessError,
-	ChildProcessSpawner.ChildProcessSpawner | Scope.Scope
+	ChildProcessSpawner.ChildProcessSpawner | Scope.Scope | FileSystem
 > =>
 	Effect.gen(function* () {
-		const binary = yield* resolveTsLspBinary();
+		const binary = yield* resolveTsLspBinary(rootPath, cacheDir);
 
 		const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
 		const handle = yield* spawner

@@ -188,11 +188,11 @@ const program = Effect.scoped(
 // data dir's confirmed sole owner. `Updater.layer` doesn't need `SqliteDb`
 // at all (its state is a Ref, not a table — see its own doc), just
 // `FileSystem`/`ChildProcessSpawner` from the same `BunServices` merge
-// everything else here already needs. `CodeLspPool.layer` needs neither —
-// its own `RcMap` only needs `ChildProcessSpawner` to spawn a server
-// on a cache miss (see `code-index/state.ts`) — but lives in this same merge
-// so its live LSP server processes get the exact same "dies with the
-// sidecar" scope as everything else here, per that file's own doc comment.
+// everything else here already needs. `CodeLspPool.layer` also reads the
+// data-dir config to pass `<data dir>/lsp/ts` to `@repo/code-lsp`; its cache
+// installer uses those same platform services and its live LSP server
+// processes get the exact same "dies with the sidecar" scope as everything
+// else here, per that file's own doc comment.
 const MainLayer = Layer.mergeAll(
 	Store.layer,
 	WalkthroughStore.layer,

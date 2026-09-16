@@ -8,6 +8,7 @@ import type {
 	TsLspBinaryResolutionError,
 } from "@repo/code-lsp";
 import { spawnLspServer } from "@repo/code-lsp";
+import { getDataDirConfig } from "@repo/db";
 import { readWorktreeBlobContent, type WorktreeReadFailed } from "@repo/git";
 import type {
 	CodeIndexFileReferences,
@@ -62,9 +63,11 @@ const MAX_LIVE_LSP_SERVERS = 2;
 export class CodeLspPool extends Context.Service<CodeLspPool>()("CodeLspPool", {
 	make: Effect.gen(function* () {
 		const lifecycle = createCodeLspPoolLifecycle();
+		const dataDir = yield* getDataDirConfig();
+		const tsLspCacheDir = join(dataDir, "lsp", "ts");
 		const resources = yield* RcMap.make({
 			lookup: (repoRoot: string) =>
-				Effect.acquireRelease(spawnLspServer(repoRoot), () =>
+				Effect.acquireRelease(spawnLspServer(repoRoot, tsLspCacheDir), () =>
 					Effect.sync(() => {
 						const startupFailure =
 							lifecycle.startupFailureEvents.delete(repoRoot);
@@ -304,11 +307,23 @@ const acquireCodeLspServer = (
 			}
 		});
 		return yield* operation.pipe(
-			Effect.ensuring(
+			Effect.onExit((exit) =>
 				Effect.sync(() => {
 					if (!markedStarting) return;
 					lifecycle.startingRoots.delete(repoRoot);
 					markedStarting = false;
+					if (Exit.isFailure(exit) && Cause.hasInterruptsOnly(exit.cause)) {
+						const error =
+							"TypeScript language server startup was cancelled before it finished";
+						lifecycle.errors.set(repoRoot, error);
+						lifecycle.startupFailureEvents.add(repoRoot);
+						emitSidecarEvent({
+							type: "code-index-lsp-status-changed",
+							repoRoot,
+							status: { status: "off", error },
+						});
+						return;
+					}
 					emitSidecarEvent({
 						type: "code-index-lsp-status-changed",
 						repoRoot,
