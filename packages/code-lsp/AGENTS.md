@@ -117,9 +117,10 @@ keeps two roots live; see the sidecar state comment for the memory rationale.
   populated by atomic rename. A process-wide single-flight map shares one install across different
   worktree roots.
 - **Bump the pinned release deliberately.** Update `TS_LSP_VERSION`, replace every platform integrity
-  value in `src/ts-lsp-download.ts` from the matching `pnpm-lock.yaml` entries, run the package tests
-  with a stubbed downloader, and refresh `packages/code-lsp/test/client.test.ts`'s populated cache
-  fixture if the package layout changes.
+  value in `src/ts-lsp-download.ts` from the matching `pnpm-lock.yaml` entries, then run
+  `test/ts-lsp-download.test.ts` and the package tests. That test discovers the lockfile, checks all
+  20 first-resolution integrity entries, and fails if a package or lockfile is missing. Refresh
+  `test/client.test.ts`'s populated cache fixture if the package layout changes.
 - **The stdin/stdout pump fibers are `forkScoped`, and graceful shutdown writes straight to
   `handle.stdin` rather than through the outbound queue.** Routing the `shutdown`/`exit` frames
   through the same queue the pump fiber drains would race scope teardown: forked-fiber interruption

@@ -17,7 +17,7 @@ type TsLspRelease = {
 };
 
 /** These values mirror the TypeScript 7.0.2 platform packages in pnpm-lock.yaml. */
-const TS_LSP_RELEASES: Readonly<Record<string, TsLspRelease>> = {
+export const TS_LSP_RELEASES: Readonly<Record<string, TsLspRelease>> = {
 	"aix/ppc64": {
 		packageName: "@typescript/typescript-aix-ppc64",
 		integrity:
@@ -41,7 +41,7 @@ const TS_LSP_RELEASES: Readonly<Record<string, TsLspRelease>> = {
 	"freebsd/x64": {
 		packageName: "@typescript/typescript-freebsd-x64",
 		integrity:
-			"sha512-UMGDx5sTpzNw3WiPebH7l90IWfJggEd+egHt/q6p7/Cm3zqoVxkGXt+3DxPIw8CcmvAB0j3sVVfbhX+M4Tpw==",
+			"sha512-UMGDx5sTpzNw3WiPebH7l90IWfJggEd+egHt/q6p7/Cm3zqoV7VxkGXt+3DxPIw8CcmvAB0j3sVVfbhX+M4Tpw==",
 	},
 	"linux/arm64": {
 		packageName: "@typescript/typescript-linux-arm64",
@@ -66,7 +66,7 @@ const TS_LSP_RELEASES: Readonly<Record<string, TsLspRelease>> = {
 	"linux/ppc64": {
 		packageName: "@typescript/typescript-linux-ppc64",
 		integrity:
-			"sha512-DORx5b3sd/4S7eayxmFQv+A7CrkUIGRaHiwI8oiHTAI1fAPWhF4J0vAlkC8biAlHSVVwxMQ3tjZ2/DVbnQiiA==",
+			"sha512-DORx5b3sd/4S7eayxm4FQv+A7CrkUIGRaHiwI8oiHTAI1fAPWhF4J0vAlkC8biAlHSVVwxMQ3tjZ2/DVbnQiiA==",
 	},
 	"linux/riscv64": {
 		packageName: "@typescript/typescript-linux-riscv64",
