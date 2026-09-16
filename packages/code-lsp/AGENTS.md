@@ -2,10 +2,11 @@
 
 A JSON-RPC-over-stdio client for TypeScript 7's native LSP server (`<tsc> --lsp --stdio`) —
 `references`, `definition`, `hover`, and `semanticTokens/full` against a live process, no index
-built or cached anywhere. One server process per repository/worktree root: `spawnLspServer(rootPath)`
-spawns, completes `initialize`/`initialized`, and returns an `LspServer` scoped to the caller's
-`Scope` — the process (and its stdio pump fibers) dies when that scope closes. Pure otherwise: no
-oRPC, no SQLite, and no filesystem walking to rediscover a caller's worktree root.
+built or query data cached anywhere. One server process per repository/worktree root:
+`spawnLspServer(rootPath, cacheDir)` spawns, completes `initialize`/`initialized`, and returns an
+`LspServer` scoped to the caller's `Scope` — the process (and its stdio pump fibers) dies when that
+scope closes. The package receives the cache directory as a parameter and has no oRPC, SQLite, or
+app-config dependency.
 
 Queries read files straight off disk by default. `openDocument(path, text)` is available when a
 caller needs deterministic TypeScript project loading: its first call sends `textDocument/didOpen`,
@@ -13,13 +14,14 @@ and later calls send a full `textDocument/didChange` with the current text.
 
 ## Public API
 
-- `spawnLspServer(rootPath): Effect<LspServer, TsLspBinaryResolutionError | LspProcessError, Scope | ChildProcessSpawner>`
+- `spawnLspServer(rootPath, cacheDir): Effect<LspServer, TsLspBinaryResolutionError | LspProcessError, Scope | ChildProcessSpawner | FileSystem>`
   — the only constructor. `LspServer` exposes `openDocument(path, text)`,
   `semanticTokensFull(path)`, `references(path, position)`, `definition(path, position)`, and
   `hover(path, position)`. Query methods return `Effect<_, LspRequestError | LspProtocolError>`;
   `openDocument` is a notification and returns `Effect<void>`. Every path in and out is a plain
   filesystem path — `file://` URIs never leak into or out of this API.
-- `resolveTsLspBinary()` (`src/binary.ts`) — resolves the absolute path to the platform `tsc` binary.
+- `resolveTsLspBinary(rootPath, cacheDir)` (`src/binary.ts`) — resolves the absolute path to the
+  platform `tsc` binary.
   Exported mainly so a caller can check it independently of spawning.
 
 ## File map
@@ -30,7 +32,10 @@ and later calls send a full `textDocument/didChange` with the current text.
   consume (`decodeLocations`, `decodeHover`) plus `pathToUri`/`uriToPath`.
 - `src/semantic-tokens.ts` — `decodeSemanticTokens`: the delta-encoding decode against a negotiated
   legend.
-- `src/binary.ts` — `resolveTsLspBinary`: dev vs. compiled binary resolution (see gotcha below).
+- `src/binary.ts` — root-aware `resolveTsLspBinary`, including the environment override and
+  worktree-local TypeScript 7 check.
+- `src/ts-lsp-download.ts` — the pinned platform release map, SHA-512 verification, atomic cache
+  install, and process-wide single-flight for concurrent worktree starts.
 - `src/client.ts` — the process lifecycle (spawn, wire the stdin/stdout pumps, `initialize`, graceful
   shutdown), document-open notifications, and the four query methods, composing everything above.
   The one file that touches `ChildProcessSpawner`.
@@ -39,11 +44,12 @@ and later calls send a full `textDocument/didChange` with the current text.
 
 ## One repository root per server
 
-`spawnLspServer` takes the repository/worktree root and nothing else — it does not pool or key
-servers itself. The sidecar passes the exact root already resolved by
-`Store.resolveSessionRepoRoot` and owns the capacity-bounded, lease-aware pool. A root server's
-project service can load projects from every package in that worktree, so splitting by nearest
-`tsconfig.json` would make cross-package references incomplete.
+`spawnLspServer` takes the repository/worktree root and the caller-owned TypeScript cache directory —
+it does not pool or key servers itself. The sidecar passes the exact root already resolved by
+`Store.resolveSessionRepoRoot`, computes `<data dir>/lsp/ts` from `@repo/db`, and owns the
+capacity-bounded, lease-aware pool. A root server's project service can load projects from every
+package in that worktree, so splitting by nearest `tsconfig.json` would make cross-package
+references incomplete.
 
 The root-server spike against this repository established the loading rule. `semanticTokensFull`
 returned tokens for nested `packages/*`, `apps/desktop/src`, and `apps/desktop/sidecar` files without
@@ -95,47 +101,25 @@ keeps two roots live; see the sidecar state comment for the memory rationale.
   loaded. Call `openDocument` with the current full text before a project-sensitive query; the client
   sends `didOpen` once per path and full-text `didChange` updates thereafter, with a small lock around
   notification ordering only. Query requests themselves remain concurrent.
-- **`typescript/lib/getExePath.js` isn't importable as a bare specifier.** It resolves the platform
-  `tsc` binary but isn't listed in `typescript`'s own `package.json` `exports` map, so
-  `import("typescript/lib/getExePath.js")` is rejected outright. `resolveDevBinary` (`binary.ts`)
-  resolves the exported `typescript/package.json` instead, derives the sibling file's absolute path,
-  and imports *that* — subpath restrictions only gate bare-specifier resolution, not a direct
-  `file://` import.
-- **`getExePath.js` cannot run inside a `bun build --compile` binary.** It resolves its own
-  `package.json` relative to `import.meta.url`, which Bun rewrites to a virtual `file:///$bunfs/...`
-  path with nothing on disk beside it, and calls `import.meta.resolve` on a specifier computed at
-  runtime — nothing for the bundler to embed. `resolveTsLspBinary` detects compiled mode by checking
-  whether `import.meta.url` starts with `file:///$bunfs/` (verified empirically: `process.execPath`,
-  unlike `import.meta.url`/`import.meta.dir`, still returns the real on-disk path when compiled) and
-  in that case looks under the packaged app's bundled `Contents/Resources/ts-lsp/` directory instead
-  (`process.execPath` is `Contents/MacOS/sidecar`, so `resolveCompiledBinary` walks up to `Contents/`
-  and back down). That directory is built by `apps/desktop/scripts/build-lsp-binary.ts`
-  (`bun run build:lsp`) — a plain copy of the platform `tsc` binary (nothing to `bun build --compile`,
-  it's already a native executable) plus its `lib.*.d.ts` files (next bullet) — and staged into the
-  bundle by `tauri.build.conf.json`'s `bundle.macOS.files`, **not** `externalBin`. `NISI_TS_LSP_BIN`
-  bypasses both strategies.
-- **The TS7 binary needs its `lib.*.d.ts` files as direct siblings on disk, not just its own
-  executable — and that rules out Tauri's `externalBin` mechanism entirely.** Discovered empirically:
-  copying only the `tsc`/platform binary produces `panic: bundled: .../lib.d.ts does not exist; this
-  executable may be misplaced` on startup — it resolves `dirname(os.Executable())` and looks for the
-  ~110 `lib.*.d.ts` declaration files there directly, with no `CWD` or `../Resources` fallback tried.
-  `externalBin` (how `sidecar`/`nisi-cli` ship) only stages a single file, always into
-  `Contents/MacOS/` — and a second empirical finding rules that directory out even if it didn't:
-  `codesign` treats every file under `Contents/MacOS/` as a nested code object requiring its own
-  signature, so a plain-text `.d.ts` file dropped there breaks signing the *whole app*
-  (`... code object is not signed at all / In subcomponent: .../Contents/MacOS/lib.es2015.core.d.ts`,
-  reproduced against a real `tauri build`). The fix is to keep the binary and its `.d.ts` files
-  together in one directory and stage that whole directory under `Contents/Resources/ts-lsp/` instead,
-  via `bundle.macOS.files: { "Resources/ts-lsp": "binaries/ts-lsp" }` — `codesign` treats `Resources/`
-  as ordinary bundle content, not nested code, and still finds and properly signs the nested `ts-lsp`
-  executable inside it. Don't split the binary onto `externalBin` and the `.d.ts` files onto
-  `bundle.macOS.files` separately — that packages "successfully" and then panics on first spawn
-  (Contents/MacOS split) or fails to codesign at all (both under Contents/MacOS).
-- **The reviewed project does not need TypeScript installed at all, at any version.** The TS7 native
-  binary is self-contained and never consults the queried project's own `typescript` package — this is
-  strictly more available than a tool that resolves the reviewed repo's own toolchain. Don't gate
-  anything in this package on the queried project's TypeScript version or on its `node_modules` being
-  present.
+- **TS7 binary resolution has a fixed order.** `NISI_TS_LSP_BIN` wins when it is non-empty. The next
+  candidate is `<rootPath>/node_modules/typescript` only when its package version has major `7`, its
+  own `lib/getExePath.js` resolves the current platform optional package, and the returned binary has
+  sibling `.d.ts` declarations. The final candidate is the pinned cache at
+  `<cacheDir>/7.0.2/`; a local TypeScript package without its native optional package falls through
+  to this cache.
+- **The pinned release lives in `src/ts-lsp-download.ts`.** It records TypeScript `7.0.2`, the npm
+  platform package for every lockfile-supported platform, and each lockfile SHA-512 integrity value.
+  The registry tarball is verified byte-for-byte before `tar` sees it. A missing platform entry is an
+  explicit unsupported-platform failure.
+- **The TS7 executable needs its sibling declaration files.** The cache installer extracts into a
+  unique temporary directory and validates the executable plus `.d.ts` files under `package/lib`.
+  The versioned cache keeps the executable and declarations together, and the final directory is
+  populated by atomic rename. A process-wide single-flight map shares one install across different
+  worktree roots.
+- **Bump the pinned release deliberately.** Update `TS_LSP_VERSION`, replace every platform integrity
+  value in `src/ts-lsp-download.ts` from the matching `pnpm-lock.yaml` entries, run the package tests
+  with a stubbed downloader, and refresh `packages/code-lsp/test/client.test.ts`'s populated cache
+  fixture if the package layout changes.
 - **The stdin/stdout pump fibers are `forkScoped`, and graceful shutdown writes straight to
   `handle.stdin` rather than through the outbound queue.** Routing the `shutdown`/`exit` frames
   through the same queue the pump fiber drains would race scope teardown: forked-fiber interruption

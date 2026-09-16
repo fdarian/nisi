@@ -169,9 +169,9 @@ seam" for the port/token handshake this boots into.
   `fileOccurrences`/`references` acquire a root lease lazily and send the current file through
   `@repo/code-lsp`'s `openDocument` before querying. That `didOpen`/full-change signal makes project
   loading deterministic across packages as files are visited; there is no separate build, index, or
-  warm-up state. `@repo/code-lsp` itself stays pure protocol/process-lifecycle code with no pooling
-  of its own — see that package's AGENTS.md, "One repository root per server" — this file is where the
-  pooling and every other piece of process-lifetime state actually lives.
+  warm-up state. `@repo/code-lsp` owns binary resolution and its process-wide install single-flight,
+  while this service supplies `<data dir>/lsp/ts` from `@repo/db`'s data-dir config. See that package's
+  AGENTS.md, "TS7 binary resolution"; this file remains the home of pooling and other process state.
 - `updater/` — macOS Homebrew-cask auto-update. `service.ts`'s `Updater` owns a `Ref<UpdateState>`
   and is the only writer of it: `startChecks()` (forked from `index.ts`'s boot program, same shape as
   `startLivePolling` above) drives `idle ⇄ available` on an hourly `Schedule`, stopping for good the
