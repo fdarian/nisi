@@ -37,6 +37,7 @@ import {
 	useSessionWatch,
 	useSetFileViewed,
 } from "#/lib/pr-data";
+import type { OpenPullRequestParams } from "#/lib/pull-requests-data";
 import {
 	fileTabId,
 	fileTabPath,
@@ -62,6 +63,8 @@ type PrViewProps = {
 	 * regardless of which sub-tab is active. */
 	isSelectedTab: boolean;
 	onCloseTab: () => void;
+	findExistingSessionId: (params: OpenPullRequestParams) => string | undefined;
+	onSessionOpened: (sessionId: string) => void;
 };
 
 /** Renders one open PR's content: header + Overview / Walkthrough / Files Changed tabs. */
@@ -70,6 +73,8 @@ export function PrView({
 	orpc,
 	isSelectedTab,
 	onCloseTab,
+	findExistingSessionId,
+	onSessionOpened,
 }: PrViewProps): React.ReactElement {
 	const { files, isLoading, error } = useFileChanges(orpc, session.id);
 	const reviewState = useReviewState(orpc, files);
@@ -174,6 +179,8 @@ export function PrView({
 				stat={stat}
 				target={session.target}
 				watched={isHeaderWatched}
+				findExistingSessionId={findExistingSessionId}
+				onSessionOpened={onSessionOpened}
 			/>
 			<Tabs
 				className="flex min-h-0 flex-1 flex-col gap-0"

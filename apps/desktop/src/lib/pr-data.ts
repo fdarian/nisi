@@ -909,6 +909,25 @@ export type PullRequestMergeStatus = {
 	defaultMethod: MergeMethod;
 };
 
+/** Mirrors `PullRequestStack` (`packages/sidecar-api/src/pull-requests.ts`). */
+export type PullRequestStackEntry = {
+	position: number;
+	number: number;
+	title: string;
+	headRefName: string;
+	baseRefName: string;
+	state: "OPEN" | "CLOSED" | "MERGED";
+	isDraft: boolean;
+};
+
+export type PullRequestStack = {
+	number: number;
+	size: number;
+	baseRefName: string;
+	position: number;
+	entries: readonly PullRequestStackEntry[];
+};
+
 export type PullRequestMergeStatusParams = {
 	repoRoot: string;
 	owner: string;
@@ -928,6 +947,9 @@ const MERGE_STATUS_UNSETTLED_POLL_MS = 2000;
  * mistake, not just a stale badge.
  */
 const MERGE_STATUS_SETTLED_POLL_MS = 10000;
+
+/** Stack membership changes with pushes and merges, so the selected PR refreshes at the settled-CI cadence. */
+const STACK_SETTLED_POLL_MS = 60000;
 
 /**
  * `pullRequests.mergeStatus` — PR mergeability plus the repo's enabled merge
@@ -983,6 +1005,34 @@ export function usePullRequestMergeStatus(
 	return query;
 }
 
+export type PullRequestStackParams = {
+	owner: string;
+	repo: string;
+	number: number;
+};
+
+/** `pullRequests.stack` — read-only membership for the PR header badge and stack merge label. */
+export function usePullRequestStack(
+	orpc: SidecarQueryUtils,
+	params: PullRequestStackParams,
+	watched: boolean,
+): UseQueryResult<PullRequestStack | null> {
+	const queryClient = useQueryClient();
+	const query = useQuery({
+		...orpc.pullRequests.stack.queryOptions({ input: params }),
+		refetchInterval: watched ? STACK_SETTLED_POLL_MS : false,
+	});
+
+	const refresh = useCallback(() => {
+		queryClient.invalidateQueries({
+			queryKey: orpc.pullRequests.stack.key({ input: params }),
+		});
+	}, [queryClient, orpc, params]);
+	useRefreshOnWatchedEdge(watched, refresh);
+
+	return query;
+}
+
 export type MergePullRequestParams = {
 	repoRoot: string;
 	owner: string;
@@ -1001,48 +1051,78 @@ export type MergePullRequestParams = {
  */
 export function useMergePullRequest(orpc: SidecarQueryUtils): {
 	merge: (params: MergePullRequestParams) => void;
+	mergeStack: (params: MergePullRequestParams) => void;
 	isPending: boolean;
 	error: unknown;
 } {
 	const queryClient = useQueryClient();
 	const mutation = useMutation(orpc.pullRequests.merge.mutationOptions());
+	const stackMutation = useMutation(
+		orpc.pullRequests.mergeStack.mutationOptions(),
+	);
+
+	const onSuccess = useCallback(
+		async (params: MergePullRequestParams) => {
+			const mergeStatusKey = orpc.pullRequests.mergeStatus.key({
+				input: {
+					repoRoot: params.repoRoot,
+					owner: params.owner,
+					repo: params.repo,
+					number: params.number,
+				},
+			});
+			const stackKey = orpc.pullRequests.stack.key({
+				input: {
+					owner: params.owner,
+					repo: params.repo,
+					number: params.number,
+				},
+			});
+
+			// A watched PR can have status or stack polls in flight from before the
+			// merge. Cancel them before updating the cache so stale OPEN responses
+			// cannot overwrite the confirmed terminal state or old membership.
+			await Promise.all([
+				queryClient.cancelQueries({ queryKey: mergeStatusKey }),
+				queryClient.cancelQueries({ queryKey: stackKey }),
+			]);
+			queryClient.setQueryData<PullRequestMergeStatus>(
+				mergeStatusKey,
+				(status) =>
+					status === undefined ? status : { ...status, state: "MERGED" },
+			);
+
+			await Promise.all([
+				queryClient.invalidateQueries({ queryKey: mergeStatusKey }),
+				queryClient.invalidateQueries({ queryKey: stackKey }),
+				queryClient.invalidateQueries({
+					queryKey: orpc.sessions.list.queryKey(),
+				}),
+			]);
+		},
+		[queryClient, orpc],
+	);
 
 	const merge = useCallback(
 		(params: MergePullRequestParams) => {
-			mutation.mutate(params, {
-				onSuccess: async () => {
-					const mergeStatusKey = orpc.pullRequests.mergeStatus.key({
-						input: {
-							repoRoot: params.repoRoot,
-							owner: params.owner,
-							repo: params.repo,
-							number: params.number,
-						},
-					});
-
-					// A watched PR can have a status poll in flight from before the
-					// merge. Cancel it before updating the cache so its stale OPEN
-					// response cannot overwrite the confirmed MERGED state.
-					await queryClient.cancelQueries({ queryKey: mergeStatusKey });
-					queryClient.setQueryData<PullRequestMergeStatus>(
-						mergeStatusKey,
-						(status) =>
-							status === undefined ? status : { ...status, state: "MERGED" },
-					);
-
-					await Promise.all([
-						queryClient.invalidateQueries({ queryKey: mergeStatusKey }),
-						queryClient.invalidateQueries({
-							queryKey: orpc.sessions.list.queryKey(),
-						}),
-					]);
-				},
-			});
+			mutation.mutate(params, { onSuccess: () => onSuccess(params) });
 		},
-		[mutation, queryClient, orpc],
+		[mutation, onSuccess],
 	);
 
-	return { merge, isPending: mutation.isPending, error: mutation.error };
+	const mergeStack = useCallback(
+		(params: MergePullRequestParams) => {
+			stackMutation.mutate(params, { onSuccess: () => onSuccess(params) });
+		},
+		[stackMutation, onSuccess],
+	);
+
+	return {
+		merge,
+		mergeStack,
+		isPending: mutation.isPending || stackMutation.isPending,
+		error: mutation.error ?? stackMutation.error,
+	};
 }
 
 export type MarkPullRequestReadyParams = {

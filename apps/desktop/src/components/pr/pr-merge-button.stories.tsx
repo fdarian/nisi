@@ -7,7 +7,7 @@
  * around as permanent coverage — delete freely once verified.
  */
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import type { PullRequestMergeStatus } from "#/lib/pr-data";
+import type { PullRequestMergeStatus, PullRequestStack } from "#/lib/pr-data";
 import { createMockOrpc } from "../../../.storybook/mock-orpc";
 import { PrMergeButton } from "./pr-merge-button";
 
@@ -18,6 +18,33 @@ const BASE_STATUS: PullRequestMergeStatus = {
 	isDraft: false,
 	allowedMethods: ["merge", "squash", "rebase"],
 	defaultMethod: "merge",
+};
+
+const STACK: PullRequestStack = {
+	number: 7,
+	size: 2,
+	baseRefName: "main",
+	position: 2,
+	entries: [
+		{
+			position: 1,
+			number: 41,
+			title: "Add the data layer",
+			headRefName: "stack/one",
+			baseRefName: "main",
+			state: "OPEN",
+			isDraft: false,
+		},
+		{
+			position: 2,
+			number: 42,
+			title: "Add widgets",
+			headRefName: "stack/two",
+			baseRefName: "stack/one",
+			state: "OPEN",
+			isDraft: false,
+		},
+	],
 };
 
 const meta: Meta<typeof PrMergeButton> = {
@@ -81,5 +108,12 @@ export const FailedQuery: Story = {
 			mergeStatusError:
 				"Couldn't check whether this pull request can be merged.",
 		}),
+	},
+};
+
+/** A top stacked PR — the primary action merges both unmerged layers and shows the count pill. */
+export const Stacked: Story = {
+	args: {
+		orpc: createMockOrpc({ mergeStatus: BASE_STATUS, stack: STACK }),
 	},
 };

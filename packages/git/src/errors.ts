@@ -345,6 +345,22 @@ export class GhMergeFailed extends Schema.TaggedError<GhMergeFailed>()(
 	{ repoRoot: Schema.String, number: Schema.Number, reason: Schema.String },
 ) {}
 
+/**
+ * The asynchronous GitHub merge endpoint rejected or failed a stacked-PR
+ * merge — the message is GitHub's own terminal explanation, rather than a
+ * locally invented fallback.
+ */
+export class GhStackMergeFailed extends Schema.TaggedError<GhStackMergeFailed>()(
+	"GhStackMergeFailed",
+	{
+		repoRoot: Schema.String,
+		owner: Schema.String,
+		repo: Schema.String,
+		number: Schema.Number,
+		reason: Schema.String,
+	},
+) {}
+
 export type PullRequestMergeabilityError =
 	| GhOutputDecodeError
 	| GhNotAuthenticated
@@ -378,6 +394,13 @@ export type PullRequestMergeError =
 	| PullRequestNotFound
 	| PullRequestNotMergeable
 	| GhMergeFailed;
+
+export type PullRequestStackMergeError =
+	| GhNotAuthenticated
+	| PullRequestNotFound
+	| PullRequestNotMergeable
+	| GhStackMergeFailed
+	| GhOutputDecodeError;
 
 /**
  * `gh pr ready` failed for a reason that isn't auth or not-found — the

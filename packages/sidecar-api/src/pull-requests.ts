@@ -98,6 +98,29 @@ export type PullRequestMergeStatus = Schema.Schema.Type<
 	typeof PullRequestMergeStatus
 >;
 
+/** Mirrors `@repo/git`'s read-only GitHub stacked pull request snapshot. `null` means GitHub reported that this PR is not in a stack. */
+export const PullRequestStackEntry = Schema.Struct({
+	position: Schema.Number,
+	number: Schema.Number,
+	title: Schema.String,
+	headRefName: Schema.String,
+	baseRefName: Schema.String,
+	state: Schema.Literals(["OPEN", "CLOSED", "MERGED"]),
+	isDraft: Schema.Boolean,
+});
+export type PullRequestStackEntry = Schema.Schema.Type<
+	typeof PullRequestStackEntry
+>;
+
+export const PullRequestStack = Schema.Struct({
+	number: Schema.Number,
+	size: Schema.Number,
+	baseRefName: Schema.String,
+	position: Schema.Number,
+	entries: Schema.Array(PullRequestStackEntry),
+});
+export type PullRequestStack = Schema.Schema.Type<typeof PullRequestStack>;
+
 /**
  * Mirrors `@repo/git`'s `UnpushedCommits` — how many commits the local
  * worktree branch has that its remote doesn't, plus the remote ref
@@ -289,7 +312,39 @@ export const pullRequestsContract = {
 			NOT_FOUND: {},
 			MERGE_STATUS_UNAVAILABLE: {},
 		}),
+	stack: oc
+		.input(
+			Schema.Struct({
+				owner: Schema.String,
+				repo: Schema.String,
+				number: Schema.Number,
+			}),
+		)
+		.output(Schema.NullOr(PullRequestStack))
+		.errors({
+			GH_NOT_AUTHENTICATED: {},
+			TOO_MANY_REQUESTS: {},
+			SERVICE_UNAVAILABLE: {},
+			NOT_FOUND: {},
+		}),
 	merge: oc
+		.input(
+			Schema.Struct({
+				repoRoot: Schema.String,
+				owner: Schema.String,
+				repo: Schema.String,
+				number: Schema.Number,
+				method: MergeMethod,
+			}),
+		)
+		.output(Schema.Void)
+		.errors({
+			CONFLICT: {},
+			GH_NOT_AUTHENTICATED: {},
+			NOT_FOUND: {},
+			SERVICE_UNAVAILABLE: {},
+		}),
+	mergeStack: oc
 		.input(
 			Schema.Struct({
 				repoRoot: Schema.String,

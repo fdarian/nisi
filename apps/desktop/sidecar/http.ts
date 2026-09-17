@@ -12,10 +12,12 @@ import {
 	fetchPullRequestChecks,
 	fetchPullRequestMergeability,
 	fetchPullRequestOverview,
+	fetchPullRequestStack,
 	fetchRepoMergeMethods,
 	type GitCommandError,
 	markPullRequestReady,
 	mergePullRequest,
+	mergeStackPullRequest,
 	resolveUnpushedCommitCount,
 	searchPullRequests,
 	type WorktreeReadFailed,
@@ -1186,6 +1188,53 @@ export function attachRouter(
 						),
 					);
 			}),
+			// GitHub's GraphQL stack fields are read-only and don't depend on a
+			// checked-out worktree, so the sidecar's own cwd is enough for `gh`.
+			// A missing stack is a successful `null` result, not a NOT_FOUND error.
+			stack: authed.pullRequests.stack.effect(function* ({ input, errors }) {
+				return yield* fetchPullRequestStack({
+					repoRoot: process.cwd(),
+					owner: input.owner,
+					repo: input.repo,
+					number: input.number,
+				}).pipe(
+					Effect.catchTag("GhNotAuthenticated", (cause) =>
+						Effect.fail(
+							errors.GH_NOT_AUTHENTICATED({
+								message: `gh is not authenticated: ${cause.reason}`,
+							}),
+						),
+					),
+					Effect.catchTag("GhRateLimited", (cause) =>
+						Effect.fail(
+							errors.TOO_MANY_REQUESTS({
+								message: `GitHub's API is rate-limited right now: ${cause.reason}`,
+							}),
+						),
+					),
+					Effect.catchTag("PullRequestNotFound", (cause) =>
+						Effect.fail(
+							errors.NOT_FOUND({
+								message: `pull request #${cause.number} couldn't be resolved on GitHub: ${cause.reason}`,
+							}),
+						),
+					),
+					Effect.catchTag("GhOutputDecodeError", (cause) =>
+						Effect.fail(
+							errors.SERVICE_UNAVAILABLE({
+								message: `gh returned output nisi couldn't parse (${cause.command})`,
+							}),
+						),
+					),
+					Effect.catchTag("GitCommandError", (cause) =>
+						Effect.fail(
+							errors.SERVICE_UNAVAILABLE({
+								message: `${cause.command} could not be run: ${cause.stderr || String(cause.cause)}`,
+							}),
+						),
+					),
+				);
+			}),
 			// Combines `@repo/git`'s two independent `gh` reads (PR mergeability,
 			// repo merge-method settings) into one round trip — the PR header's
 			// Merge button needs both to decide its label/enabled state and its
@@ -1366,6 +1415,83 @@ export function attachRouter(
 				// above) — a failure to persist it doesn't undo the merge that
 				// already succeeded, so it's logged and swallowed rather than
 				// turned into an error response.
+				yield* repoMergeMethodStore
+					.set(input.owner, input.repo, input.method)
+					.pipe(
+						Effect.catchTag("SettingsStoreError", (cause) =>
+							Effect.logWarning("failed to remember last-used merge method", {
+								owner: input.owner,
+								repo: input.repo,
+								method: input.method,
+								cause,
+							}),
+						),
+					);
+			}),
+			mergeStack: authed.pullRequests.mergeStack.effect(function* ({
+				input,
+				errors,
+			}) {
+				const repoMergeMethodStore = yield* RepoMergeMethodStore;
+				yield* mergeStackPullRequest(
+					input.repoRoot,
+					input.owner,
+					input.repo,
+					input.number,
+					input.method,
+				).pipe(
+					Effect.catchTag("GhNotAuthenticated", (cause) =>
+						Effect.fail(
+							errors.GH_NOT_AUTHENTICATED({
+								message: `gh is not authenticated: ${cause.reason}`,
+							}),
+						),
+					),
+					Effect.catchTag("PullRequestNotFound", (cause) =>
+						Effect.fail(
+							errors.NOT_FOUND({
+								message: `pull request #${cause.number} couldn't be resolved on GitHub for ${cause.repoRoot}: ${cause.reason}`,
+							}),
+						),
+					),
+					Effect.catchTag("PullRequestNotMergeable", (cause) =>
+						Effect.fail(
+							errors.CONFLICT({
+								message: `pull request #${cause.number} isn't mergeable right now: ${cause.reason}`,
+							}),
+						),
+					),
+					Effect.catchTag("GhStackMergeFailed", (cause) =>
+						Effect.fail(
+							errors.SERVICE_UNAVAILABLE({
+								message: `GitHub stacked merge failed for pull request #${cause.number}: ${cause.reason}`,
+							}),
+						),
+					),
+					Effect.catchTag("GhOutputDecodeError", (cause) =>
+						Effect.fail(
+							errors.SERVICE_UNAVAILABLE({
+								message: `gh returned output nisi couldn't parse (${cause.command})`,
+							}),
+						),
+					),
+					Effect.catchTag("GitCommandError", (cause) =>
+						Effect.fail(
+							errors.SERVICE_UNAVAILABLE({
+								message: `${cause.command} could not be run: ${cause.stderr || String(cause.cause)}`,
+							}),
+						),
+					),
+				);
+
+				yield* Effect.logInfo("pull request stack merged", {
+					repoRoot: input.repoRoot,
+					owner: input.owner,
+					repo: input.repo,
+					number: input.number,
+					method: input.method,
+				});
+
 				yield* repoMergeMethodStore
 					.set(input.owner, input.repo, input.method)
 					.pipe(

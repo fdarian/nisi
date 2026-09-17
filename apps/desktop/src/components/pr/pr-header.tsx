@@ -22,14 +22,17 @@ import {
 	openInEditor,
 	useAvailableEditors,
 } from "#/hooks/use-available-editors";
+import { useDismissOnInactive } from "#/hooks/use-dismiss-on-inactive";
 import type { SidecarQueryUtils } from "#/lib/backend-context";
 import type { SessionTarget } from "#/lib/pr-data";
 import {
 	useMarkPullRequestReady,
 	usePullRequestMergeStatus,
 } from "#/lib/pr-data";
+import type { OpenPullRequestParams } from "#/lib/pull-requests-data";
 import { PrCiStatus } from "./pr-ci-status";
 import { PrMergeButton } from "./pr-merge-button";
+import { PrStackBadge } from "./pr-stack-badge";
 
 type PrHeaderProps = {
 	orpc: SidecarQueryUtils;
@@ -41,6 +44,8 @@ type PrHeaderProps = {
 	watched: boolean;
 	/** This PR's session id — threaded straight through to `PrCiStatus`, see `usePullRequestChecks`'s `useAwaitingNewCi` (`pr-data.ts`). */
 	sessionId: string;
+	findExistingSessionId: (params: OpenPullRequestParams) => string | undefined;
+	onSessionOpened: (sessionId: string) => void;
 };
 
 type MarkReadyMenuItemProps = {
@@ -98,16 +103,19 @@ export function PrHeader({
 	onCloseTab,
 	watched,
 	sessionId,
+	findExistingSessionId,
+	onSessionOpened,
 }: PrHeaderProps): React.ReactElement {
 	const repoNameSegments = repoRoot.split("/");
 	const repoName = repoNameSegments[repoNameSegments.length - 1] || repoRoot;
 	const { editors, loadEditors } = useAvailableEditors();
+	const [overflowMenuOpen, setOverflowMenuOpen] = useDismissOnInactive(watched);
 
 	return (
 		<div className="flex items-center gap-3 border-b pl-4 pr-6 py-2.5">
 			<div className="flex min-w-0 flex-1 flex-col gap-0.5">
 				<Breadcrumb>
-					<BreadcrumbList className="text-xs">
+					<BreadcrumbList className="text-xs h-6">
 						<BreadcrumbItem>
 							{target.kind === "pr"
 								? `${target.owner}/${target.repo}`
@@ -117,7 +125,18 @@ export function PrHeader({
 						<BreadcrumbItem>
 							<BreadcrumbPage className="text-muted-foreground">
 								{target.kind === "pr" ? (
-									`#${target.number}`
+									<div className="flex items-center gap-1.5">
+										<span>#{target.number}</span>
+										<PrStackBadge
+											number={target.number}
+											orpc={orpc}
+											owner={target.owner}
+											repo={target.repo}
+											watched={watched}
+											findExistingSessionId={findExistingSessionId}
+											onSessionOpened={onSessionOpened}
+										/>
+									</div>
 								) : (
 									<>
 										vs <span className="font-mono">{target.baseRef}</span>
@@ -162,8 +181,10 @@ export function PrHeader({
 			)}
 			<DropdownMenu
 				onOpenChange={(open) => {
+					setOverflowMenuOpen(open);
 					if (open) loadEditors();
 				}}
+				open={overflowMenuOpen}
 			>
 				<DropdownMenuTrigger
 					aria-label="More actions"

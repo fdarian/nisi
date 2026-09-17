@@ -23,6 +23,7 @@ import {
 	friendlyOpenPullRequestError,
 	friendlySearchError,
 	githubAvatarUrl,
+	type OpenPullRequestParams,
 	type PullRequestSearchResult,
 	useOpenPullRequest,
 	useSearchPullRequests,
@@ -52,6 +53,8 @@ type OpenPullRequestPaletteProps = {
 	orpc: SidecarQueryUtils;
 	/** Fires once `pullRequests.open` resolves — the caller sets `requestedActiveSessionId` (`app-shell.tsx`) so the new tab activates. */
 	onSessionOpened: (sessionId: string) => void;
+	/** Resolves a matching already-open tab before asking the sidecar to create/reuse a session. */
+	findExistingSessionId: (params: OpenPullRequestParams) => string | undefined;
 };
 
 function authorInitials(author: string): string {
@@ -85,6 +88,7 @@ export function OpenPullRequestPalette({
 	onOpenChange,
 	orpc,
 	onSessionOpened,
+	findExistingSessionId,
 }: OpenPullRequestPaletteProps): React.ReactElement {
 	const [query, setQuery] = useState("");
 	const [debouncedQuery, setDebouncedQuery] = useState("");
@@ -219,7 +223,14 @@ export function OpenPullRequestPalette({
 
 	function handleSelect(pr: PullRequestSearchResult) {
 		if (openPr.isPending) return;
-		openPr.open({ owner: pr.owner, repo: pr.repo, number: pr.number });
+		const params = { owner: pr.owner, repo: pr.repo, number: pr.number };
+		const existingSessionId = findExistingSessionId(params);
+		if (existingSessionId !== undefined) {
+			onSessionOpened(existingSessionId);
+			onOpenChange(false);
+			return;
+		}
+		openPr.open(params);
 	}
 }
 

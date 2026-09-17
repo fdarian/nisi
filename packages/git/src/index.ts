@@ -24,6 +24,7 @@ export {
 	GhOutputDecodeError,
 	GhPullRequestReadyFailed,
 	GhRateLimited,
+	GhStackMergeFailed,
 	GitCommandError,
 	type GitError,
 	GitHubSearchUnreachable,
@@ -42,6 +43,7 @@ export {
 	type PullRequestReadyError,
 	PullRequestRefNotFound,
 	type PullRequestSearchError,
+	type PullRequestStackMergeError,
 	type PullRequestWorktreeError,
 	type RepoMergeMethodsError,
 	RepoPathNoOriginRemote,
@@ -84,6 +86,7 @@ export {
 	fetchRepoMergeMethods,
 	markPullRequestReady,
 	mergePullRequest,
+	mergeStackPullRequest,
 } from "./pull-request-merge.ts";
 export type {
 	FetchPullRequestOverviewInput,
@@ -92,6 +95,13 @@ export type {
 	PullRequestOverview,
 } from "./pull-request-overview.ts";
 export { fetchPullRequestOverview } from "./pull-request-overview.ts";
+export type {
+	FetchPullRequestStackInput,
+	PullRequestStack,
+	PullRequestStackEntry,
+	PullRequestStackError,
+} from "./pull-request-stack.ts";
+export { fetchPullRequestStack } from "./pull-request-stack.ts";
 export type { UnpushedCommits } from "./repo.ts";
 export {
 	resolveCurrentBranch,
