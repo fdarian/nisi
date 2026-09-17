@@ -19,6 +19,8 @@ import {
 	useMemo,
 	useRef,
 } from "react";
+import { CodeIndexPeekDialog } from "#/components/code-index/code-index-peek-panel";
+import { useCodeIndexInteractions } from "#/components/code-index/use-code-index-interactions";
 import {
 	buildDiffCodeViewOptions,
 	DiffCodeView,
@@ -58,6 +60,7 @@ import type {
 	ReviewStateEntry,
 } from "#/lib/pr-data";
 import {
+	useSessionCodeIndexEnabled,
 	useSessionExpandedHiddenPaths,
 	useSessionFileCollapseOverrides,
 } from "#/lib/session-ui-store";
@@ -426,7 +429,18 @@ export function DiffPane({
 }: DiffPaneProps): React.ReactElement {
 	const codeViewRef =
 		useRef<CodeViewHandle<DiffAnnotationMetadata, undefined>>(null);
-	const diffTheme = useDiffTheme(orpc);
+	const [codeIndexEnabled] = useSessionCodeIndexEnabled(sessionId);
+	const codeIndex = useCodeIndexInteractions({
+		sessionId,
+		orpc,
+		codeViewRef,
+		enabled: codeIndexEnabled,
+	});
+	// See `FileView`'s matching comment: `useDiffTheme` needs
+	// `codeIndex.tokenInteractionsActive`, not the raw enable flag.
+	const diffTheme = useDiffTheme(orpc, {
+		tokenInteractions: codeIndex.tokenInteractionsActive,
+	});
 	const fileDiffCache = useRef(new Map<string, CachedFileDiff>());
 	const hiddenFileAnnotationCache = useRef(
 		new Map<string, CachedHiddenFileAnnotation>(),
@@ -645,7 +659,18 @@ export function DiffPane({
 			// in here only invalidated two items per click and dragged the whole
 			// memo (and every file's parse below) along with it. Selection reaches
 			// the pane through `scrollToPath`, not through rendering.
-			const baseVersionInput = `${file.fingerprint}:${diffStyle}:${reviewStatus}:${cardCollapsed ? "card-collapsed" : "card-expanded"}`;
+			// Folded in so starting or stopping LSP forces every
+			// currently-rendered file to re-request its render from the worker
+			// pool — `WorkerPoolOptionsSync` (`diff-code-view.tsx`) updates the
+			// pool's own `useTokenTransformer` setting, but pierre still skips
+			// re-rendering any item whose `version` it already has (same
+			// "version match -> keep old record" optimization `resolveFileDiff`'s
+			// own doc comment describes) unless something *else* about that item
+			// changed too.
+			const codeIndexVersionSuffix = codeIndex.tokenInteractionsActive
+				? "code-index-on"
+				: "code-index-off";
+			const baseVersionInput = `${file.fingerprint}:${diffStyle}:${reviewStatus}:${cardCollapsed ? "card-collapsed" : "card-expanded"}:${codeIndexVersionSuffix}`;
 
 			if (file.binary) {
 				nextItems.push({
@@ -876,6 +901,7 @@ export function DiffPane({
 		forcedPaths,
 		expandedHiddenPaths,
 		fileCollapse.overrides,
+		codeIndex.tokenInteractionsActive,
 	]);
 
 	// Item ids are the file path directly (`id: file.path` above) — resolving
@@ -1009,11 +1035,11 @@ export function DiffPane({
 
 	const codeViewOptions: CodeViewOptions<DiffAnnotationMetadata, undefined> =
 		useMemo(
-			() =>
-				buildDiffCodeViewOptions({
+			() => ({
+				...buildDiffCodeViewOptions({
 					diffStyle,
 					enableLineSelection: true,
-					extraCSS: diffCardChromeCSS + highlightCSS,
+					extraCSS: diffCardChromeCSS + highlightCSS + codeIndex.tokenCSS,
 					overflow: wrapLines ? "wrap" : "scroll",
 					theme: diffTheme.theme,
 					onPostRender: (node, _instance, phase, context) => {
@@ -1030,8 +1056,13 @@ export function DiffPane({
 							context.item.id,
 							phase === "unmount" ? undefined : (node.shadowRoot ?? undefined),
 						);
+						if (phase !== "unmount") {
+							codeIndex.notifyItemRendered(context.item.id);
+						}
 					},
 				}),
+				...codeIndex.codeViewOptions,
+			}),
 			[
 				diffStyle,
 				wrapLines,
@@ -1039,6 +1070,9 @@ export function DiffPane({
 				itemMetadata,
 				highlightCSS,
 				onItemPostRender,
+				codeIndex.tokenCSS,
+				codeIndex.notifyItemRendered,
+				codeIndex.codeViewOptions,
 			],
 		);
 
@@ -1336,6 +1370,12 @@ export function DiffPane({
 				renderAnnotation={renderAnnotation}
 				renderCustomHeader={renderCustomHeader}
 				selectedLines={diffSelection.selectedLines}
+			/>
+			<CodeIndexPeekDialog
+				onClose={codeIndex.closePeek}
+				orpc={orpc}
+				sessionId={sessionId}
+				target={codeIndex.peekTarget}
 			/>
 			<DiffSelectionPopover
 				anchorRect={diffSelection.anchorRect}

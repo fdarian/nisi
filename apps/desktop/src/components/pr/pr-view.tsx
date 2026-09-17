@@ -47,6 +47,7 @@ import {
 import { useWalkthroughEnabled } from "#/lib/settings-data";
 import { splitPath } from "#/lib/tree-paths";
 import { cn } from "#/lib/utils";
+import { CodeIndexLspControl } from "../code-index/code-index-lsp-control";
 
 type PrViewProps = {
 	session: Session;
@@ -180,6 +181,8 @@ export function PrView({
 				value={tabsValue}
 			>
 				<PrViewTabStrip
+					orpc={orpc}
+					session={session}
 					activeTab={activeTab}
 					isSelectedTab={isSelectedTab}
 					onCloseFile={closeFile}
@@ -269,7 +272,11 @@ function PrViewTabStrip({
 	setActiveTab,
 	onCloseFile,
 	isSelectedTab,
+	session,
+	orpc,
 }: {
+	session: Session;
+	orpc: SidecarQueryUtils;
 	activeTab: string;
 	tabs: readonly PrViewTab[];
 	openFiles: readonly string[];
@@ -284,10 +291,10 @@ function PrViewTabStrip({
 	useKeyBindings(bindings, { enabled: isSelectedTab });
 
 	return (
-		<div className="border-b">
+		<div className="border-b flex items-center justify-between pr-6.5">
 			<TabsList
 				className={cn(
-					"mx-4",
+					"-translate-x-2.5 mx-4",
 					fileTabPath(activeTab) !== null &&
 						"[&_[data-slot=tab-indicator]]:hidden",
 				)}
@@ -309,6 +316,7 @@ function PrViewTabStrip({
 					/>
 				))}
 			</TabsList>
+			<CodeIndexLspControl orpc={orpc} sessionId={session.id} />
 		</div>
 	);
 }

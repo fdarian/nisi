@@ -154,6 +154,24 @@ seam" for the port/token handshake this boots into.
 - `walkthrough/` — Phase 3's wiring layer. See its own AGENTS.md.
 - `chat/` — the quick-chat popup's read-only `HarnessAgent` conversations, one per thread. See its
   own AGENTS.md.
+- `code-index/state.ts` — the `codeIndex.*` handlers' process-lifetime state, backed by
+  `@repo/code-lsp`'s TypeScript 7 native LSP client rather than a prebuilt index. (A SCIP-index-based
+	implementation of this same feature lives on branch `claude/nisi-implementation-cfea93`, for
+	comparison.) `CodeLspPool` is a `Context.Service` wrapping one reference-counted map of live
+	`tsc --lsp --stdio` processes, keyed by the exact worktree root already resolved by
+	`Store.resolveSessionRepoRoot` and capacity-bounded by evicting only idle entries
+	(`MAX_LIVE_LSP_SERVERS`) — part of `index.ts`'s `MainLayer`, so every server dies with the sidecar
+	the same way every other `Effect.acquireRelease` resource does. Each occurrence or references
+	operation holds a scoped lease for its entire LSP request sequence; a full pool of leased servers
+	waits for a lease to release before admitting another root. The pool keeps two roots live: a fully
+	opened root reached roughly 773 MiB RSS in the repository spike, so two allows concurrent reviews
+	without accepting an unbounded multi-gigabyte process set.
+  `fileOccurrences`/`references` acquire a root lease lazily and send the current file through
+  `@repo/code-lsp`'s `openDocument` before querying. That `didOpen`/full-change signal makes project
+  loading deterministic across packages as files are visited; there is no separate build, index, or
+  warm-up state. `@repo/code-lsp` owns binary resolution and its process-wide install single-flight,
+  while this service supplies `<data dir>/lsp/ts` from `@repo/db`'s data-dir config. See that package's
+  AGENTS.md, "TS7 binary resolution"; this file remains the home of pooling and other process state.
 - `updater/` — macOS Homebrew-cask auto-update. `service.ts`'s `Updater` owns a `Ref<UpdateState>`
   and is the only writer of it: `startChecks()` (forked from `index.ts`'s boot program, same shape as
   `startLivePolling` above) drives `idle ⇄ available` on an hourly `Schedule`, stopping for good the

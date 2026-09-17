@@ -8,7 +8,7 @@ import {
 	BreadcrumbPage,
 	BreadcrumbSeparator,
 } from "#/components/ui/breadcrumb";
-import { buttonVariants } from "#/components/ui/button";
+import { Button } from "#/components/ui/button";
 import {
 	DropdownMenu,
 	DropdownMenuContent,
@@ -28,7 +28,6 @@ import {
 	useMarkPullRequestReady,
 	usePullRequestMergeStatus,
 } from "#/lib/pr-data";
-import { cn } from "#/lib/utils";
 import { PrCiStatus } from "./pr-ci-status";
 import { PrMergeButton } from "./pr-merge-button";
 
@@ -105,7 +104,7 @@ export function PrHeader({
 	const { editors, loadEditors } = useAvailableEditors();
 
 	return (
-		<div className="flex items-center gap-3 border-b px-4 py-2.5">
+		<div className="flex items-center gap-3 border-b pl-4 pr-6 py-2.5">
 			<div className="flex min-w-0 flex-1 flex-col gap-0.5">
 				<Breadcrumb>
 					<BreadcrumbList className="text-xs">
@@ -168,10 +167,13 @@ export function PrHeader({
 			>
 				<DropdownMenuTrigger
 					aria-label="More actions"
-					className={cn(buttonVariants({ variant: "ghost", size: "icon-sm" }))}
-				>
-					<MoreHorizontalIcon />
-				</DropdownMenuTrigger>
+					render={(props) => (
+						<Button variant="ghost" size="icon-sm" {...props}>
+							<MoreHorizontalIcon />
+						</Button>
+					)}
+				/>
+
 				<DropdownMenuContent align="end">
 					{target.kind === "pr" && (
 						<MarkReadyMenuItem

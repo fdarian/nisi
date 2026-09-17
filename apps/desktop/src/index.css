@@ -367,6 +367,14 @@
 	color: var(--shiki-light, var(--code-foreground));
 }
 
+.code-index-reference-line .code-index-reference-token {
+	color: var(--shiki-light, currentColor);
+}
+
+.dark .code-index-reference-line .code-index-reference-token {
+	color: var(--shiki-dark, currentColor);
+}
+
 .markdown-document .markdown-code-block .shiki code {
 	display: block;
 	min-width: max-content;
