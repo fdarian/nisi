@@ -23,8 +23,12 @@ import {
 	type WorktreeReadFailed,
 	type WorktreeRelocationFailed,
 } from "@repo/git";
-import { ReviewStore } from "@repo/review";
-import { RepoMergeMethodStore, SettingsStore } from "@repo/settings";
+import { ReviewStore, type ReviewStoreError } from "@repo/review";
+import {
+	RepoMergeMethodStore,
+	SettingsStore,
+	type SettingsStoreError,
+} from "@repo/settings";
 import type {
 	GenerateEvent,
 	HarnessId,
@@ -33,6 +37,7 @@ import type {
 import { contract } from "@repo/sidecar-api";
 import type { Context } from "effect";
 import { Effect } from "effect";
+import type { ChildProcessSpawner } from "effect/unstable/process";
 import {
 	ChatSessionNotFound,
 	resolveChatPromptContext,
@@ -40,6 +45,18 @@ import {
 import { buildChatInstructions } from "./chat/prompt.ts";
 import { closeChatThread, getOrCreateChatSession } from "./chat/sessions.ts";
 import { streamChatTurn } from "./chat/stream.ts";
+import {
+	buildFileOccurrencesResponse,
+	buildReferencesPlan,
+	buildReferencesResponse,
+	buildSourceContext,
+	CodeLspPool,
+	describeCodeIndexFailure,
+	getCodeLspStatus,
+	readWorktreeFileContents,
+	startCodeLspServer,
+	stopCodeLspServer,
+} from "./code-index/state.ts";
 import {
 	emit,
 	type SidecarEvent,
@@ -53,7 +70,7 @@ import {
 	reportChatCloseFailure,
 } from "./session-close.ts";
 import { SessionWatch } from "./session-watch.ts";
-import { Store } from "./store.ts";
+import { type SessionNotFound, Store } from "./store.ts";
 import { Updater } from "./updater/service.ts";
 import {
 	beginTrackedGeneration,
@@ -228,6 +245,61 @@ export function attachRouter(
 	const runWithMainContext = <A>(
 		effect: Effect.Effect<A, never, AppServices>,
 	) => Effect.runPromise(Effect.provide(effect, mainContext));
+
+	/**
+	 * Every `codeIndex.*` handler starts by resolving `sessionId` to a live
+	 * repo root. Mirrors `file.get`'s own repo-root-resolution catch
+	 * chain (`SessionNotFound` → `NOT_FOUND`, `GitCommandError`/
+	 * `WorktreeRelocationFailed` → `INTERNAL_SERVER_ERROR`); `ReviewStoreError`/
+	 * `SettingsStoreError` are left as uncaught defects, same as there —
+	 * genuinely rare, and not exhaustively mapped per `sidecar/AGENTS.md`.
+	 * `ENotFound`/`EInternal` are inferred separately from whichever
+	 * procedure's `errors` builder is passed in (they're never the same
+	 * concrete `ORPCError` type), so this stays exactly typed per call site
+	 * instead of widening to `unknown`.
+	 */
+	const resolveCodeIndexRepoRoot = <ENotFound, EInternal>(
+		sessionEffect: Effect.Effect<
+			string,
+			| SessionNotFound
+			| ReviewStoreError
+			| GitCommandError
+			| WorktreeRelocationFailed
+			| SettingsStoreError,
+			ChildProcessSpawner.ChildProcessSpawner
+		>,
+		sessionId: string,
+		errors: {
+			readonly NOT_FOUND: (input: { message: string }) => ENotFound;
+			readonly INTERNAL_SERVER_ERROR: (input: { message: string }) => EInternal;
+		},
+	) =>
+		// A single `catchTags` call against the concrete input union, rather
+		// than three chained `catchTag`s — chaining would make each step
+		// operate on the *previous* step's already-widened (generic-`E`-
+		// including) output type, which confuses `ExtractTag`'s inference for
+		// the generic `ENotFound`/`EInternal` this function is parameterized
+		// over. One call sidesteps that entirely.
+		sessionEffect.pipe(
+			Effect.catchTags({
+				SessionNotFound: () =>
+					Effect.fail(
+						errors.NOT_FOUND({ message: `session not found: ${sessionId}` }),
+					),
+				GitCommandError: (cause) =>
+					Effect.fail(
+						errors.INTERNAL_SERVER_ERROR({
+							message: formatGitCommandError(cause),
+						}),
+					),
+				WorktreeRelocationFailed: (cause) =>
+					Effect.fail(
+						errors.INTERNAL_SERVER_ERROR({
+							message: formatWorktreeRelocationFailed(cause),
+						}),
+					),
+			}),
+		);
 
 	const implementer = implement(contract).$context<ServerContext>();
 
@@ -1612,6 +1684,135 @@ export function attachRouter(
 							}),
 						),
 					),
+				);
+			}),
+		},
+		codeIndex: {
+			lspStatus: authed.codeIndex.lspStatus.effect(function* ({
+				input,
+				errors,
+			}) {
+				const store = yield* Store;
+				const repoRoot = yield* resolveCodeIndexRepoRoot(
+					store.resolveSessionRepoRoot(input.sessionId),
+					input.sessionId,
+					errors,
+				);
+				const pool = yield* CodeLspPool;
+				return getCodeLspStatus(pool, repoRoot);
+			}),
+			startLsp: authed.codeIndex.startLsp.effect(function* ({ input, errors }) {
+				const store = yield* Store;
+				const repoRoot = yield* resolveCodeIndexRepoRoot(
+					store.resolveSessionRepoRoot(input.sessionId),
+					input.sessionId,
+					errors,
+				);
+				const pool = yield* CodeLspPool;
+				return yield* startCodeLspServer(pool, repoRoot).pipe(
+					Effect.catch((failure) =>
+						Effect.fail(
+							errors.INTERNAL_SERVER_ERROR({
+								message: describeCodeIndexFailure(failure),
+							}),
+						),
+					),
+				);
+			}),
+			stopLsp: authed.codeIndex.stopLsp.effect(function* ({ input, errors }) {
+				const store = yield* Store;
+				const repoRoot = yield* resolveCodeIndexRepoRoot(
+					store.resolveSessionRepoRoot(input.sessionId),
+					input.sessionId,
+					errors,
+				);
+				const pool = yield* CodeLspPool;
+				return yield* stopCodeLspServer(pool, repoRoot);
+			}),
+			fileOccurrences: authed.codeIndex.fileOccurrences.effect(function* ({
+				input,
+				errors,
+			}) {
+				const store = yield* Store;
+				const repoRoot = yield* resolveCodeIndexRepoRoot(
+					store.resolveSessionRepoRoot(input.sessionId),
+					input.sessionId,
+					errors,
+				);
+				return yield* buildFileOccurrencesResponse(repoRoot, input.path).pipe(
+					Effect.catch((failure) =>
+						Effect.fail(
+							errors.INTERNAL_SERVER_ERROR({
+								message: describeCodeIndexFailure(failure),
+							}),
+						),
+					),
+				);
+			}),
+			references: authed.codeIndex.references.effect(function* ({
+				input,
+				errors,
+			}) {
+				const store = yield* Store;
+				const repoRoot = yield* resolveCodeIndexRepoRoot(
+					store.resolveSessionRepoRoot(input.sessionId),
+					input.sessionId,
+					errors,
+				);
+
+				const plan = yield* buildReferencesPlan(repoRoot, input.symbolKey).pipe(
+					Effect.catch((failure) =>
+						Effect.fail(
+							errors.INTERNAL_SERVER_ERROR({
+								message: describeCodeIndexFailure(failure),
+							}),
+						),
+					),
+				);
+				const paths = [
+					...new Set([
+						plan.symbolPath,
+						...plan.returnedLocations.map((location) => location.path),
+					]),
+				];
+				// Worktree-unconditional, never `Store.readCurrentContent`'s
+				// `includeUncommitted`-gated path — the LSP server always reads
+				// the working tree, so reading previews any other way would
+				// describe a different revision than the one the server's
+				// positions were computed against (see `readWorktreeFileContents`'
+				// own doc comment in `code-index/state.ts`). Best-effort: a read
+				// failure here shouldn't hide the reference locations themselves,
+				// only their line-text preview.
+				const fileContents = yield* readWorktreeFileContents(
+					repoRoot,
+					paths,
+				).pipe(Effect.catch(() => Effect.succeed(new Map())));
+				return buildReferencesResponse(plan, fileContents);
+			}),
+			referenceContext: authed.codeIndex.referenceContext.effect(function* ({
+				input,
+				errors,
+			}) {
+				const store = yield* Store;
+				const repoRoot = yield* resolveCodeIndexRepoRoot(
+					store.resolveSessionRepoRoot(input.sessionId),
+					input.sessionId,
+					errors,
+				);
+				const fileContents = yield* readWorktreeFileContents(repoRoot, [
+					input.path,
+				]).pipe(
+					Effect.catch((failure) =>
+						Effect.fail(
+							errors.INTERNAL_SERVER_ERROR({
+								message: describeCodeIndexFailure(failure),
+							}),
+						),
+					),
+				);
+				return buildSourceContext(
+					{ path: input.path, line: input.line },
+					fileContents,
 				);
 			}),
 		},

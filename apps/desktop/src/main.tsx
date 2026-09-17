@@ -13,7 +13,8 @@ void startDeepLinkListener();
 
 const router = createRouter({ routeTree });
 // The sidecar's `events.subscribe` stream (session-opened/closed,
-// session-files-changed) is this app's freshness mechanism — a blanket
+// session-files-changed, and root-scoped LSP status) is this app's freshness
+// mechanism — a blanket
 // window-refocus refetch of every query would be redundant on top of that,
 // and would defeat the Files Changed tab's manual-refresh gate
 // (`useLiveFileChanges`, `src/lib/pr-data.ts`), which deliberately holds

@@ -26,6 +26,11 @@ Three parts, one seam:
   shape as the `@pierre/trees` sidebar — it renders `diff.fileContents`' `patch`/`oldContent` directly,
   no client-side slicing; a reviewed file's already-seen spans arrive pre-collapsed into ordinary
   context by the sidecar (`FileContentReview.baselineKind`, see `@repo/review`'s `reconcile`).
+  `src/components/code-index/` holds LSP-powered code navigation (⌘-hover underline, ⌘-click peek
+  references), backed server-side by a live TypeScript 7 language server (`@repo/code-lsp`) rather
+  than a prebuilt SCIP index — one `useCodeIndexInteractions` hook shared by the diff pane's
+  additions side and the whole-file viewer (`src/components/pr/file-view.tsx`), since `@pierre/diffs`
+  token events carry no item/path field of their own to key a per-file occurrence lookup off.
 
 ## The seam
 The sidecar binds a port and mints a token, then claims and publishes `{ port, token }` to
@@ -221,6 +226,10 @@ fixture PR lives at `src/components/walkthrough/walkthrough.fixture.ts`.
 - `build:sidecar`/`build:cli` both go through `scripts/build-binary.ts` rather than a bare
   `bun build --compile` — a `bun build --compile` output with no further step gets `SIGKILL`'d on
   Apple Silicon, so the script strips and re-applies a clean ad-hoc code signature after compiling.
+- **TypeScript 7's native LSP binary is resolved at first use.** `CodeLspPool` passes the shared
+  data-directory cache at `<data dir>/lsp/ts`; `@repo/code-lsp` first checks the reviewed worktree's
+  TypeScript 7 package and then installs the pinned, SHA-512-verified platform package into that
+  cache. The executable and its sibling `lib.*.d.ts` files stay together in every usable location.
 - **`externalBin` is not in `tauri.conf.json`** — it lives in `src-tauri/tauri.build.conf.json`, which
   only `bun build` merges in (`tauri build --config …`). `tauri-build` validates every `externalBin`
   path at compile time in *both* modes, so keeping it in the base config made `bun dev` fail on a

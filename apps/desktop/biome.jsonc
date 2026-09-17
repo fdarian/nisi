@@ -1,6 +1,9 @@
 {
 	"root": false,
 	"extends": ["../../biome.jsonc"],
+	"files": {
+		"includes": ["!!**/.data", "!**/routeTree.gen.ts"]
+	},
 	"overrides": [
 		{
 			// Vendored from the coss ui registry (`shadcn add @coss/...`) — not

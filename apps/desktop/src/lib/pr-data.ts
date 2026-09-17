@@ -28,6 +28,11 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toastManager } from "#/components/ui/toast";
 import type { SidecarQueryUtils } from "#/lib/backend-context";
+import {
+	codeIndexLspIntentForStatus,
+	sessionIdsForCodeIndexLspStatus,
+} from "#/lib/code-index-lsp-events";
+import { useSetCodeIndexEnabled } from "#/lib/session-ui-store";
 import { useIncludeUncommitted } from "#/lib/settings-data";
 
 /**
@@ -181,7 +186,7 @@ export type ReviewStateEntry = {
 	status: ReviewState;
 };
 
-/** Mirrors `sessions.list()` plus a `sessions.close` mutation, kept live by `events.subscribe`. */
+/** Mirrors `sessions.list()` plus a `sessions.close` mutation, kept live by `events.subscribe`; root-scoped LSP status events also update every matching session's status cache and intent. */
 export function useSessions(
 	orpc: SidecarQueryUtils,
 	/** Fires when a `session-opened` event arrives — the caller sets `requestedActiveSessionId` (`app-shell.tsx`) so a CLI-opened tab activates the same way `OpenPullRequestPalette`'s `onSessionOpened` does for the in-app path. */
@@ -219,11 +224,13 @@ export function useSessions(
 				queryKey: orpc.sessions.list.queryKey(),
 			}),
 	});
+	const setCodeIndexEnabled = useSetCodeIndexEnabled();
 
 	// The CLI opening (or an idle tab closing) a session out from under a
 	// running app is exactly what `events.subscribe` exists for — a live
-	// query resolves to the latest emitted `SessionEvent`, so any event just
-	// invalidates the list rather than trying to reconcile it by hand.
+	// query resolves to the latest emitted `SessionEvent`. Session events
+	// invalidate the list; root-scoped LSP events reconcile status caches and
+	// intent directly so a shared server transition reaches every matching tab.
 	// `session-opened` additionally requests activation and foregrounds this
 	// window: the sidecar this event arrived from is by construction the one
 	// the CLI's `sessions.open` just reached, which is the only signal that
@@ -232,13 +239,38 @@ export function useSessions(
 	// apart by path/bundle id — see that module's doc comment).
 	const eventsQuery = useQuery(orpc.events.subscribe.liveOptions());
 	useEffect(() => {
-		if (eventsQuery.data === undefined) return;
+		const event = eventsQuery.data;
+		if (event === undefined) return;
+		if (event.type === "code-index-lsp-status-changed") {
+			const sessions = sessionsQuery.data ?? [];
+			for (const sessionId of sessionIdsForCodeIndexLspStatus(
+				sessions,
+				event,
+			)) {
+				queryClient.setQueryData(
+					orpc.codeIndex.lspStatus.queryKey({ input: { sessionId } }),
+					event.status,
+				);
+				setCodeIndexEnabled(
+					sessionId,
+					codeIndexLspIntentForStatus(event.status.status),
+				);
+			}
+			return;
+		}
 		queryClient.invalidateQueries({ queryKey: orpc.sessions.list.queryKey() });
-		if (eventsQuery.data.type === "session-opened") {
-			onSessionOpened(eventsQuery.data.session.id);
+		if (event.type === "session-opened") {
+			onSessionOpened(event.session.id);
 			if (isTauri()) void getCurrentWindow().setFocus();
 		}
-	}, [eventsQuery.data, queryClient, orpc, onSessionOpened]);
+	}, [
+		eventsQuery.data,
+		onSessionOpened,
+		orpc,
+		queryClient,
+		sessionsQuery.data,
+		setCodeIndexEnabled,
+	]);
 
 	const closeSession = useCallback(
 		(sessionId: string) => {
