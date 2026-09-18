@@ -1,5 +1,11 @@
 # @repo/desktop
 
+## 0.5.1
+
+### Patch Changes
+
+- 7572cfc: Files Changed diff pane now focuses the file under the mouse pointer. When the pointer moves outside the pane, focus reverts to the current scroll position.
+
 ## 0.5.0
 
 ### Minor Changes
