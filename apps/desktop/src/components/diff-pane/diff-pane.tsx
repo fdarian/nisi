@@ -1263,11 +1263,32 @@ export function DiffPane({
 		},
 		[reportVisiblePath, resolveHoveredPath],
 	);
-	const handleMouseLeave = useCallback(() => {
+	const clearPointerPresence = useCallback(() => {
 		pointerInsideRef.current = false;
 		pointerPositionRef.current = null;
 		lastHoveredPathRef.current = null;
 	}, []);
+	const handleMouseLeave = useCallback(
+		(event: MouseEvent) => {
+			const container = event.currentTarget;
+			if (container instanceof HTMLElement) {
+				const rect = container.getBoundingClientRect();
+				// Virtualized shadow-root content can cause a transient leave while
+				// scrolling changes the hit target. Keep the pointer active when its
+				// coordinates are still inside the scroll container.
+				if (
+					event.clientX >= rect.left &&
+					event.clientX < rect.right &&
+					event.clientY >= rect.top &&
+					event.clientY < rect.bottom
+				) {
+					return;
+				}
+			}
+			clearPointerPresence();
+		},
+		[clearPointerPresence],
+	);
 	useEffect(() => {
 		if (!hasRenderableFiles) return;
 		const attachFrame = { current: null as number | null };
@@ -1317,13 +1338,14 @@ export function DiffPane({
 			attachedContainer?.removeEventListener("keydown", markRealScrollInput);
 			attachedContainer?.removeEventListener("mousemove", handleMouseMove);
 			attachedContainer?.removeEventListener("mouseleave", handleMouseLeave);
-			handleMouseLeave();
+			clearPointerPresence();
 		};
 	}, [
 		releaseProgrammaticScrollSuppression,
 		markRealScrollInput,
 		handleMouseMove,
 		handleMouseLeave,
+		clearPointerPresence,
 		hasRenderableFiles,
 	]);
 
