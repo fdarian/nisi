@@ -48,6 +48,10 @@ import type { SidecarQueryUtils } from "#/lib/backend-context";
 import { buildFileDiff } from "#/lib/build-file-diff";
 import type { LineRange } from "#/lib/build-location-diff";
 import { buildLocationFileDiff } from "#/lib/build-location-diff";
+import {
+	type DiffHoverPoint,
+	findHoveredFileId,
+} from "#/lib/diff-hovered-file";
 import { pollUntilReady } from "#/lib/diff-match-dom";
 import type { DiffMatch } from "#/lib/diff-search";
 import { findTopVisibleItemId } from "#/lib/diff-visible-file";
@@ -175,6 +179,10 @@ const LOADING_ANNOTATIONS: LineAnnotation<DiffAnnotationMetadata>[] = [
  * silent exception for "empty is fine."
  */
 const EMPTY_DIFF_ANNOTATIONS: DiffLineAnnotation<DiffAnnotationMetadata>[] = [];
+
+function documentElementFromPoint(point: DiffHoverPoint): Element | null {
+	return document.elementFromPoint(point.clientX, point.clientY);
+}
 
 /**
  * The pane's imperative seam, for the one thing its props can't express:
@@ -449,11 +457,15 @@ export function DiffPane({
 		new Map<string, CachedLoadFileAnnotation>(),
 	);
 
-	// The path `onVisiblePathChange` last reported. Cleared the moment a new
-	// programmatic scroll begins (`scrollWhenReady` below), so it's only
+	// The path last reported through `onVisiblePathChange`. Cleared the moment
+	// a new programmatic scroll begins (`scrollWhenReady` below), so it's only
 	// ever stale for the one bounce-back it exists to catch — see the
 	// `selectedPath` effect below.
 	const lastReportedVisiblePathRef = useRef<string | null>(null);
+	const hoveredFileHostsRef = useRef(new Map<Element, string>());
+	const pointerInsideRef = useRef(false);
+	const pointerPositionRef = useRef<DiffHoverPoint | null>(null);
+	const lastHoveredPathRef = useRef<string | null>(null);
 	// Suppresses `onVisiblePathChange` reports for the duration of one
 	// in-flight programmatic `scrollTo`. Its smooth-scroll spring
 	// (`SCROLL_SETTLE_MS`'s doc comment) fires `onScroll` roughly every
@@ -509,6 +521,16 @@ export function DiffPane({
 	// shortcut for those input methods) is a worse, always-on regression than
 	// a narrow race that needs a click landing inside a short window.
 	const hasRealScrollInputRef = useRef(false);
+
+	const reportVisiblePath = useCallback(
+		(path: string) => {
+			if (onVisiblePathChange === undefined) return;
+			if (path === lastReportedVisiblePathRef.current) return;
+			lastReportedVisiblePathRef.current = path;
+			onVisiblePathChange(path);
+		},
+		[onVisiblePathChange],
+	);
 
 	const clearSettleTimeout = useCallback(() => {
 		if (settleTimeoutRef.current !== null) {
@@ -1052,6 +1074,13 @@ export function DiffPane({
 							DIFF_LOADING_HOST_CLASS,
 							meta?.isLoading === true,
 						);
+						if (phase === "unmount") {
+							if (hoveredFileHostsRef.current.get(node) === context.item.id) {
+								hoveredFileHostsRef.current.delete(node);
+							}
+						} else {
+							hoveredFileHostsRef.current.set(node, context.item.id);
+						}
 						onItemPostRender(
 							context.item.id,
 							phase === "unmount" ? undefined : (node.shadowRoot ?? undefined),
@@ -1201,6 +1230,43 @@ export function DiffPane({
 	const markRealScrollInput = useCallback(() => {
 		hasRealScrollInputRef.current = true;
 	}, []);
+	const resolveHoveredPath = useCallback((point: DiffHoverPoint) => {
+		return findHoveredFileId(
+			point,
+			hoveredFileHostsRef.current,
+			documentElementFromPoint,
+		);
+	}, []);
+	const handleMouseMove = useCallback(
+		(event: MouseEvent) => {
+			pointerInsideRef.current = true;
+			const point: DiffHoverPoint = {
+				clientX: event.clientX,
+				clientY: event.clientY,
+			};
+			const previousPoint = pointerPositionRef.current;
+			pointerPositionRef.current = point;
+			if (
+				previousPoint !== null &&
+				previousPoint.clientX === point.clientX &&
+				previousPoint.clientY === point.clientY
+			) {
+				return;
+			}
+
+			const path = resolveHoveredPath(point);
+			if (path === undefined || path === lastHoveredPathRef.current) return;
+			if (suppressVisiblePathReportRef.current) return;
+			lastHoveredPathRef.current = path;
+			reportVisiblePath(path);
+		},
+		[reportVisiblePath, resolveHoveredPath],
+	);
+	const handleMouseLeave = useCallback(() => {
+		pointerInsideRef.current = false;
+		pointerPositionRef.current = null;
+		lastHoveredPathRef.current = null;
+	}, []);
 	useEffect(() => {
 		if (!hasRenderableFiles) return;
 		const attachFrame = { current: null as number | null };
@@ -1226,6 +1292,12 @@ export function DiffPane({
 			container.addEventListener("keydown", markRealScrollInput, {
 				passive: true,
 			});
+			container.addEventListener("mousemove", handleMouseMove, {
+				passive: true,
+			});
+			container.addEventListener("mouseleave", handleMouseLeave, {
+				passive: true,
+			});
 			attachedContainer = container;
 			return true;
 		}, attachFrame);
@@ -1242,10 +1314,15 @@ export function DiffPane({
 			);
 			attachedContainer?.removeEventListener("mousedown", markRealScrollInput);
 			attachedContainer?.removeEventListener("keydown", markRealScrollInput);
+			attachedContainer?.removeEventListener("mousemove", handleMouseMove);
+			attachedContainer?.removeEventListener("mouseleave", handleMouseLeave);
+			handleMouseLeave();
 		};
 	}, [
 		releaseProgrammaticScrollSuppression,
 		markRealScrollInput,
+		handleMouseMove,
+		handleMouseLeave,
 		hasRenderableFiles,
 	]);
 
@@ -1267,25 +1344,26 @@ export function DiffPane({
 				beginProgrammaticScrollSuppression();
 				return;
 			}
-			if (onVisiblePathChange === undefined) return;
 			// Not suppressed doesn't yet mean genuine — see
 			// `hasRealScrollInputRef`'s doc comment for why a content-driven
 			// reflow can still reach here unsuppressed.
 			if (!hasRealScrollInputRef.current) return;
-			const topPath = findTopVisibleItemId(viewer, scrollTop);
-			if (
-				topPath === undefined ||
-				topPath === lastReportedVisiblePathRef.current
-			) {
-				return;
+			const pointerPosition = pointerPositionRef.current;
+			const topPath =
+				pointerInsideRef.current && pointerPosition !== null
+					? resolveHoveredPath(pointerPosition)
+					: findTopVisibleItemId(viewer, scrollTop);
+			if (topPath === undefined) return;
+			if (pointerInsideRef.current && pointerPosition !== null) {
+				lastHoveredPathRef.current = topPath;
 			}
-			lastReportedVisiblePathRef.current = topPath;
-			onVisiblePathChange(topPath);
+			reportVisiblePath(topPath);
 		},
 		[
 			beginProgrammaticScrollSuppression,
-			onVisiblePathChange,
 			diffSelection.refreshAnchorRect,
+			reportVisiblePath,
+			resolveHoveredPath,
 		],
 	);
 
