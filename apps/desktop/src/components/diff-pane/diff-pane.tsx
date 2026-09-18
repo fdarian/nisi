@@ -1092,6 +1092,11 @@ export function DiffPane({
 					},
 				}),
 				...codeIndex.codeViewOptions,
+				// `findHoveredFileId` uses the browser's point hit-test while a
+				// scroll is in progress. Without this, pierre temporarily disables
+				// pointer events on its sticky container and the hit-test resolves
+				// the card at the top of the viewport instead.
+				pointerEventsOnScroll: true,
 			}),
 			[
 				diffStyle,
