@@ -232,11 +232,12 @@ type DiffPaneProps = {
 	onForceLoad: (path: string) => void;
 	selectedPath: string | null;
 	/**
-	 * Reports the file currently at the top of the diff viewport while the
-	 * user scrolls (see `findTopVisibleItemId`). Wire this to the *raw*
-	 * selection setter, not a wrapper that also calls `scrollToPath` — that
-	 * would fight the scroll that produced this report. Never fires for this
-	 * pane's own programmatic scrolls — see `suppressVisiblePathReportRef`.
+	 * Reports the file focused by the pointer, or at the top of the diff
+	 * viewport while the user scrolls (see `findTopVisibleItemId`). Wire this
+	 * to the *raw* selection setter, not a wrapper that also calls
+	 * `scrollToPath` — that would fight the scroll that produced this report.
+	 * Never fires for this pane's own programmatic scrolls — see
+	 * `suppressVisiblePathReportRef`.
 	 */
 	onVisiblePathChange?: (path: string) => void;
 	reviewState: ReadonlyMap<string, ReviewStateEntry>;
