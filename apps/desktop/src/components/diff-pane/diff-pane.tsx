@@ -1272,6 +1272,7 @@ export function DiffPane({
 		(event: MouseEvent) => {
 			const container = event.currentTarget;
 			if (container instanceof HTMLElement) {
+				if (container.matches(":hover")) return;
 				const rect = container.getBoundingClientRect();
 				// Virtualized shadow-root content can cause a transient leave while
 				// scrolling changes the hit target. Keep the pointer active when its
