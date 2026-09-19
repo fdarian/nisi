@@ -2,7 +2,7 @@ import type {
 	CodeIndexFileReferences,
 	CodeIndexReference,
 } from "@repo/sidecar-api";
-import type { CodeIndexPeekTarget } from "#/components/code-index/use-code-index-interactions";
+import type { CodeIndexPeekTarget } from "./use-code-index-interactions";
 
 export type ReferenceNavigationGroup = {
 	path: string;

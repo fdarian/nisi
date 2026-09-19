@@ -36,7 +36,7 @@ import {
 	type DiffMatch,
 	diffContentMatchesQuery,
 	findDiffMatches,
-} from "#/lib/diff-search";
+} from "#/components/diff/diff-search";
 import type {
 	FileChange,
 	FileContentsMap,

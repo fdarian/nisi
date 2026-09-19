@@ -32,7 +32,7 @@ import {
 	DIFF_VIEWED_HOST_CLASS,
 	diffCardChromeCSS,
 	useDiffTheme,
-} from "#/components/diff/diff-view-theme";
+} from "#/lib/diff/diff-view-theme";
 import { Button } from "#/components/ui/button";
 import {
 	Empty,
@@ -41,17 +41,17 @@ import {
 	EmptyTitle,
 } from "#/components/ui/empty";
 import { Skeleton } from "#/components/ui/skeleton";
-import { useDiffMatchHighlighting } from "#/hooks/use-diff-match-highlighting";
-import { useDiffSelection } from "#/hooks/use-diff-selection";
-import { useDragAutoscroll } from "#/hooks/use-drag-autoscroll";
+import { useDiffMatchHighlighting } from "./use-diff-match-highlighting";
+import { useDiffSelection } from "#/components/diff/use-diff-selection";
+import { useDragAutoscroll } from "./use-drag-autoscroll";
 import type { SidecarQueryUtils } from "#/lib/backend-context";
-import { buildFileDiff } from "#/lib/build-file-diff";
-import type { LineRange } from "#/lib/build-location-diff";
-import { buildLocationFileDiff } from "#/lib/build-location-diff";
-import { pollUntilReady } from "#/lib/diff-match-dom";
-import type { DiffMatch } from "#/lib/diff-search";
-import { findTopVisibleItemId } from "#/lib/diff-visible-file";
-import { hashItemVersion } from "#/lib/item-version";
+import { buildFileDiff } from "./build-file-diff";
+import type { LineRange } from "#/components/diff/build-location-diff";
+import { buildLocationFileDiff } from "#/components/diff/build-location-diff";
+import { pollUntilReady } from "#/components/diff/diff-match-dom";
+import type { DiffMatch } from "#/components/diff/diff-search";
+import { findTopVisibleItemId } from "./diff-visible-file";
+import { hashItemVersion } from "#/components/diff/item-version";
 import type {
 	FileChange,
 	FileContent,

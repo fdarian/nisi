@@ -38,7 +38,7 @@ import {
 	diffCodeViewLayout,
 	diffItemMetrics,
 	diffViewUnsafeCSS,
-} from "./diff-view-theme";
+} from "#/lib/diff/diff-view-theme";
 import {
 	createTokenInteractionLeaseRegistry,
 	type TokenInteractionLeaseRegistry,

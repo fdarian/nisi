@@ -6,12 +6,12 @@ import {
 	type CodeIndexReferenceTarget,
 	codeIndexDisplayedLine,
 	codeIndexTargetLength,
-} from "#/lib/code-index-navigation";
+} from "#/components/code-index/code-index-navigation";
 import {
 	buildMatchRange,
 	findFileLineRowElement,
 	SUPPORTS_HIGHLIGHT_API,
-} from "#/lib/diff-match-dom";
+} from "#/components/diff/diff-match-dom";
 
 function referenceHighlightCSS(name: string): string {
 	// Matches the reference-row mark (`bg-primary/25`) and the ⌘-hover

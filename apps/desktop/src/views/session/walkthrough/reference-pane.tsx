@@ -28,7 +28,7 @@ import {
 	diffCardChromeCSS,
 	diffCardHeaderClassName,
 	useDiffTheme,
-} from "#/components/diff/diff-view-theme";
+} from "#/lib/diff/diff-view-theme";
 import { Badge } from "#/components/ui/badge";
 import { Checkbox } from "#/components/ui/checkbox";
 import {
@@ -41,8 +41,8 @@ import type { SidecarQueryUtils } from "#/lib/backend-context";
 import {
 	buildLocationFileDiff,
 	type LineRange,
-} from "#/lib/build-location-diff";
-import { hashItemVersion } from "#/lib/item-version";
+} from "#/components/diff/build-location-diff";
+import { hashItemVersion } from "#/components/diff/item-version";
 import type { FileChange, FileContentReview } from "#/lib/pr-data";
 import { useFileContents, useSetRangeViewed } from "#/lib/pr-data";
 import { useSessionOpenFiles } from "#/lib/session-ui-store";

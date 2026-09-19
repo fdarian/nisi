@@ -1,4 +1,4 @@
-import { type AnnotatedLine, parsePatchHunks } from "#/lib/diff-hunk-slicing";
+import { type AnnotatedLine, parsePatchHunks } from "./diff-hunk-slicing";
 import type { FileChange, FileContentsMap } from "#/lib/pr-data";
 
 /**

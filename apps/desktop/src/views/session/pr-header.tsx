@@ -22,7 +22,7 @@ import {
 	openInEditor,
 	useAvailableEditors,
 } from "#/hooks/use-available-editors";
-import { useDismissOnInactive } from "#/hooks/use-dismiss-on-inactive";
+import { useDismissOnInactive } from "./use-dismiss-on-inactive";
 import type { SidecarQueryUtils } from "#/lib/backend-context";
 import type { SessionTarget } from "#/lib/pr-data";
 import {

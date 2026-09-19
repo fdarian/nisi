@@ -13,7 +13,7 @@ import {
 	PopoverTitle,
 	PopoverTrigger,
 } from "#/components/ui/popover";
-import { useDismissOnInactive } from "#/hooks/use-dismiss-on-inactive";
+import { useDismissOnInactive } from "./use-dismiss-on-inactive";
 import type { SidecarQueryUtils } from "#/lib/backend-context";
 import type { PullRequestStackEntry } from "#/lib/pr-data";
 import { usePullRequestStack } from "#/lib/pr-data";

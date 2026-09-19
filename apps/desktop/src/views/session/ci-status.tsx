@@ -9,7 +9,7 @@ import {
 	DropdownMenuSeparator,
 	DropdownMenuTrigger,
 } from "#/components/ui/menu";
-import { useDismissOnInactive } from "#/hooks/use-dismiss-on-inactive";
+import { useDismissOnInactive } from "./use-dismiss-on-inactive";
 import { cn } from "#/lib/utils";
 
 export type CiCheckStatus =

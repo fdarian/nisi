@@ -1,4 +1,4 @@
-import type { CodeIndexReferenceTarget } from "#/lib/code-index-navigation";
+import type { CodeIndexReferenceTarget } from "#/components/code-index/code-index-navigation";
 
 export type CodeIndexReferenceRevealTransaction<Instance> = {
 	targetKey: string;

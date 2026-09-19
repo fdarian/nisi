@@ -4,7 +4,7 @@ import {
 	FileIcon,
 	MoreHorizontalIcon,
 } from "lucide-react";
-import { diffCardHeaderClassName } from "#/components/diff/diff-view-theme";
+import { diffCardHeaderClassName } from "#/lib/diff/diff-view-theme";
 import type { BadgeProps } from "#/components/ui/badge";
 import { Badge } from "#/components/ui/badge";
 import { buttonVariants } from "#/components/ui/button";

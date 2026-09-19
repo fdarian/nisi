@@ -17,7 +17,7 @@ import { createTanstackQueryUtils } from "@orpc/tanstack-query";
 import type { SidecarClient } from "@repo/sidecar-api";
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import type { SidecarQueryUtils } from "#/lib/backend-context";
-import type { UpdateState } from "#/lib/update-data";
+import type { UpdateState } from "./update-data";
 import { UpdatePill } from "./update-pill";
 
 function orpcFor(state: UpdateState): SidecarQueryUtils {

@@ -2,7 +2,7 @@
 
 MV3 Chrome extension. Recognizes a GitHub pull request page arrived at directly — a link from
 Slack, a typed or pasted URL, a bookmark — and hands it to the nisi desktop app via a
-`nisi://open?url=<encoded github url>` deep link (`apps/desktop/src/lib/deep-link.ts` owns that
+`nisi://open?url=<encoded github url>` deep link (`apps/desktop/src/views/frame/deep-link.ts` owns that
 grammar; this extension only forwards the GitHub URL verbatim, trailing segments and fragment
 included). Clicking around inside GitHub itself never triggers a hand-off. The hand-off lands on
 the extension's own interstitial page rather than firing the deep link straight from

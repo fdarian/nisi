@@ -26,7 +26,7 @@ import { useCallback } from "react";
 import { ChatPanel } from "./chat-panel";
 import { ChatTab } from "./chat-tab";
 import { Button } from "#/components/ui/button";
-import { useChatShortcut } from "#/hooks/use-chat-shortcut";
+import { useChatShortcut } from "./use-chat-shortcut";
 import { useKeyBindings } from "#/hooks/use-key-bindings";
 import type { SidecarQueryUtils } from "#/lib/backend-context";
 import {
@@ -35,7 +35,7 @@ import {
 	useChatPopupOpen,
 	useChatThreads,
 } from "#/lib/chat-store";
-import { spring } from "#/lib/springs";
+import { spring } from "./springs";
 
 type ChatDockProps = {
 	sessionId: string;

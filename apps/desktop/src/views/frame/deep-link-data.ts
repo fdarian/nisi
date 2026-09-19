@@ -8,12 +8,12 @@ import { useNavigate, useRouterState } from "@tanstack/react-router";
 import { useEffect, useSyncExternalStore } from "react";
 import { toastManager } from "#/components/ui/toast";
 import type { SidecarQueryUtils } from "#/lib/backend-context";
-import { parseNisiDeepLink } from "#/lib/deep-link";
+import { parseNisiDeepLink } from "./deep-link";
 import {
 	dequeueDeepLink,
 	getPendingDeepLinksSnapshot,
 	subscribeToDeepLinks,
-} from "#/lib/deep-link-store";
+} from "./deep-link-store";
 import {
 	friendlyOpenPullRequestError,
 	useOpenPullRequest,

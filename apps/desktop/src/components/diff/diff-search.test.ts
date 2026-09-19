@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { diffContentMatchesQuery, findDiffMatches } from "./diff-search.ts";
-import type { FileContentsMap } from "./pr-data.ts";
+import type { FileContentsMap } from "#/lib/pr-data";
 
 /** One hunk: a context line, a removed line, two added lines, a context line. */
 const PATCH = `diff --git a/f.txt b/f.txt

@@ -4,7 +4,7 @@ import { Server } from "lucide-react";
 import { Button } from "#/components/ui/button";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "#/components/ui/tooltip";
 import type { SidecarQueryUtils } from "#/lib/backend-context";
-import { useCodeIndexLspControl } from "#/lib/code-index-lsp";
+import { useCodeIndexLspControl } from "./code-index-lsp";
 import { useSessionCodeIndexEnabled } from "#/lib/session-ui-store";
 import { cn } from "#/lib/utils";
 

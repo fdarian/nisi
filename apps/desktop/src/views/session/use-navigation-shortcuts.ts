@@ -2,7 +2,7 @@
 
 import { useCallback } from "react";
 import { useKeyBindings } from "#/hooks/use-key-bindings";
-import type { NavigationEntry } from "#/lib/navigation-history";
+import type { NavigationEntry } from "./navigation-history.ts";
 import {
 	fileTabPath,
 	useSessionNavigationHistory,

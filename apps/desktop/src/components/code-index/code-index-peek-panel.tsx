@@ -36,7 +36,7 @@ import { CODE_INDEX_SOURCE_CONTEXT_LINE_COUNT } from "@repo/sidecar-api";
 import { keepPreviousData, useQueries, useQuery } from "@tanstack/react-query";
 import { AlertTriangleIcon } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { CodeIndexReferenceLine } from "#/components/code-index/code-index-reference-line";
+import { CodeIndexReferenceLine } from "./code-index-reference-line";
 import {
 	flattenVisibleReferences,
 	initialReferenceIndex,
@@ -47,8 +47,8 @@ import {
 	referenceNavigationGroup,
 	referenceRowId,
 	type VisibleReference,
-} from "#/components/code-index/code-index-reference-navigation";
-import type { CodeIndexPeekTarget } from "#/components/code-index/use-code-index-interactions";
+} from "./code-index-reference-navigation";
+import type { CodeIndexPeekTarget } from "./use-code-index-interactions";
 import {
 	buildDiffCodeViewOptions,
 	DiffCodeView,
@@ -59,7 +59,7 @@ import {
 	diffCodeViewLayout,
 	diffItemMetrics,
 	useDiffTheme,
-} from "#/components/diff/diff-view-theme";
+} from "#/lib/diff/diff-view-theme";
 import { Badge } from "#/components/ui/badge";
 import { Button } from "#/components/ui/button";
 import {
@@ -70,12 +70,12 @@ import {
 import { Dialog, DialogContent, DialogTitle } from "#/components/ui/dialog";
 import { ScrollArea } from "#/components/ui/scroll-area";
 import type { SidecarQueryUtils } from "#/lib/backend-context";
-import { codeIndexReferenceTarget } from "#/lib/code-index-navigation";
-import { hashItemVersion } from "#/lib/item-version";
+import { codeIndexReferenceTarget } from "./code-index-navigation";
+import { hashItemVersion } from "#/components/diff/item-version";
 import { useSessionOpenFiles } from "#/lib/session-ui-store";
 import { splitPath } from "#/lib/tree-paths";
 import { cn } from "#/lib/utils";
-import { Skeleton } from "../ui/skeleton";
+import { Skeleton } from "#/components/ui/skeleton";
 
 type CodeIndexPeekDialogProps = {
 	sessionId: string;

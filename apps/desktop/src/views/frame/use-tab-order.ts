@@ -6,7 +6,7 @@ import {
 	loadTabOrder,
 	tabOrderIdsEqual,
 	writeTabOrder,
-} from "#/lib/tab-order";
+} from "./tab-order";
 
 /**
  * Overlays a localStorage-backed tab order on the sidecar's session list.

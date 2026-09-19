@@ -48,7 +48,7 @@ import {
 	type DiffSelectionReference,
 	formatSelectionReference,
 	formatSelectionReferenceShort,
-} from "#/lib/diff-reference";
+} from "#/lib/diff/diff-reference";
 import { useLastChatModel } from "#/lib/settings-data";
 import { cn } from "#/lib/utils";
 import { type HarnessId, useHarnesses } from "#/lib/walkthrough-data";

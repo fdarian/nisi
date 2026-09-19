@@ -12,7 +12,7 @@ import {
 	DropdownMenuRadioItem,
 	DropdownMenuTrigger,
 } from "#/components/ui/menu";
-import { useDismissOnInactive } from "#/hooks/use-dismiss-on-inactive";
+import { useDismissOnInactive } from "./use-dismiss-on-inactive";
 import type { SidecarQueryUtils } from "#/lib/backend-context";
 import type {
 	MergeMethod,

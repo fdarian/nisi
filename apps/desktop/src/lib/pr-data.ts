@@ -31,7 +31,7 @@ import type { SidecarQueryUtils } from "#/lib/backend-context";
 import {
 	codeIndexLspIntentForStatus,
 	sessionIdsForCodeIndexLspStatus,
-} from "#/lib/code-index-lsp-events";
+} from "#/components/code-index/code-index-lsp-events";
 import { useSetCodeIndexEnabled } from "#/lib/session-ui-store";
 import { useIncludeUncommitted } from "#/lib/settings-data";
 
@@ -77,7 +77,7 @@ export type PullRequestUrlParts = {
  * `pullRequestUrl`'s inverse — recognizes a GitHub PR page even with
  * trailing segments (`/files`, `/commits/<sha>`), a query string, or a
  * fragment, since that's exactly what a browser extension forwards
- * verbatim (`.../pull/12/files#discussion_r1`, see `#/lib/deep-link.ts`).
+ * verbatim (`.../pull/12/files#discussion_r1`, see `#/views/frame/deep-link.ts`).
  * Only `github.com` is recognized — the same Enterprise gap noted on
  * `pullRequestUrl` above applies here. Returns `null` rather than throwing:
  * a URL that isn't a PR link is an expected outcome for a caller parsing

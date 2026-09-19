@@ -27,7 +27,7 @@ import {
 	diffCodeViewLayout,
 	diffItemMetrics,
 	useDiffTheme,
-} from "#/components/diff/diff-view-theme";
+} from "#/lib/diff/diff-view-theme";
 import { MarkdownDocument } from "./markdown/markdown-document";
 import {
 	Empty,
@@ -38,12 +38,12 @@ import {
 import { Spinner } from "#/components/ui/spinner";
 import { ToggleGroup, ToggleGroupItem } from "#/components/ui/toggle-group";
 import { Toolbar } from "#/components/ui/toolbar";
-import { useDiffSelection } from "#/hooks/use-diff-selection";
+import { useDiffSelection } from "#/components/diff/use-diff-selection";
 import type { SidecarQueryUtils } from "#/lib/backend-context";
 import {
 	type CodeIndexReferenceTarget,
 	codeIndexDisplayedLine,
-} from "#/lib/code-index-navigation";
+} from "#/components/code-index/code-index-navigation";
 import {
 	type CodeIndexReferenceRevealTransaction,
 	canClearCodeIndexReferenceReveal,
@@ -53,8 +53,8 @@ import {
 	markCodeIndexReferenceRevealed,
 	shouldRevealCodeIndexReference,
 	syncCodeIndexReferenceRevealTransaction,
-} from "#/lib/code-index-reference-reveal";
-import { hashItemVersion } from "#/lib/item-version";
+} from "./code-index-reference-reveal";
+import { hashItemVersion } from "#/components/diff/item-version";
 import {
 	useSessionCodeIndexEnabled,
 	useSessionFileReferenceTarget,

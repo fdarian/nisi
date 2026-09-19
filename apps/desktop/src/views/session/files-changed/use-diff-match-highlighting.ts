@@ -2,7 +2,7 @@
 
 /**
  * Keyword-search match highlighting for one `DiffPane` instance — the
- * stateful half of the concern `#/lib/diff-match-dom.ts` provides pure
+ * stateful half of the concern `#/components/diff/diff-match-dom.ts` provides pure
  * DOM primitives for. Owns the CSS Custom Highlight API registry lifecycle
  * (two `Highlight`s per instance, since `CSS.highlights` is one
  * document-global registry and more than one `DiffPane` can be mounted at
@@ -14,14 +14,14 @@
  */
 import type { CodeViewHandle } from "@pierre/diffs/react";
 import { useCallback, useEffect, useId, useMemo, useRef } from "react";
-import { diffSearchHighlightCSS } from "#/components/diff/diff-view-theme";
+import { diffSearchHighlightCSS } from "#/lib/diff/diff-view-theme";
 import {
 	buildMatchRange,
 	findMatchRowElement,
 	pollUntilReady,
 	SUPPORTS_HIGHLIGHT_API,
-} from "#/lib/diff-match-dom";
-import type { DiffMatch } from "#/lib/diff-search";
+} from "#/components/diff/diff-match-dom";
+import type { DiffMatch } from "#/components/diff/diff-search";
 
 type UseDiffMatchHighlightingOptions<LAnnotation> = {
 	/** The same `CodeViewHandle` ref the pane hands to `<DiffCodeView>` — used only to look up an already-rendered item's shadow root when bootstrapping the "current match" highlight for a target that isn't mounted yet (see the effect below). */

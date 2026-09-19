@@ -2,7 +2,7 @@
 
 import { openUrl } from "@tauri-apps/plugin-opener";
 import icon from "#/assets/icon.png";
-import { useAboutWindowChrome } from "#/hooks/use-about-window";
+import { useAboutWindowChrome } from "./use-about-window";
 
 const REPO_URL = "https://github.com/fdarian/nisi";
 

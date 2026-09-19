@@ -11,7 +11,7 @@ import {
 	parsePatchHunks,
 	resolveLineDispositions,
 	serializeSubHunk,
-} from "#/lib/diff-hunk-slicing";
+} from "./diff-hunk-slicing";
 
 export type LineRange = { startLine: number; endLine: number };
 

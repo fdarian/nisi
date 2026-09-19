@@ -8,9 +8,9 @@ import {
 	useMesurerEnabled,
 } from "#/views/devtool/dev-tool-context";
 import { ToastProvider } from "#/components/ui/toast";
-import { useSettingsShortcut } from "#/hooks/use-settings-shortcut";
+import { useSettingsShortcut } from "#/views/frame/use-settings-shortcut";
 import { BackendProvider } from "#/lib/backend-context";
-import { useRedirectHomeOnPendingDeepLink } from "#/lib/deep-link-data";
+import { useRedirectHomeOnPendingDeepLink } from "#/views/frame/deep-link-data";
 
 export const Route = createRootRoute({
 	component: RootLayout,

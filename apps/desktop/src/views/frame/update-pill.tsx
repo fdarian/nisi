@@ -13,7 +13,7 @@ import {
 	useDownloadUpdate,
 	useRestartToUpdate,
 	useUpdateStatus,
-} from "#/lib/update-data";
+} from "./update-data";
 import { cn } from "#/lib/utils";
 
 /** What the pill actually renders for one `UpdateState` — `null` for the two states that render nothing. */

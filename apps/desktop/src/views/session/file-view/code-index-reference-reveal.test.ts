@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { CodeIndexReferenceTarget } from "#/lib/code-index-navigation";
+import type { CodeIndexReferenceTarget } from "#/components/code-index/code-index-navigation";
 import {
 	canClearCodeIndexReferenceReveal,
 	codeIndexReferenceRevealTargetKey,
@@ -9,7 +9,7 @@ import {
 	markCodeIndexReferenceRevealed,
 	shouldRevealCodeIndexReference,
 	syncCodeIndexReferenceRevealTransaction,
-} from "#/lib/code-index-reference-reveal";
+} from "./code-index-reference-reveal";
 
 const target: CodeIndexReferenceTarget = {
 	path: "src/example.ts",

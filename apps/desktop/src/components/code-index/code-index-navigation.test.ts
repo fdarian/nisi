@@ -3,7 +3,7 @@ import {
 	codeIndexDisplayedLine,
 	codeIndexReferenceTarget,
 	codeIndexTargetLength,
-} from "#/lib/code-index-navigation";
+} from "./code-index-navigation";
 
 describe("code-index reference targets", () => {
 	test("preserves the LSP location and converts its line for CodeView", () => {

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { parseNisiDeepLink } from "./deep-link.ts";
-import { parsePullRequestUrl } from "./pr-data.ts";
+import { parsePullRequestUrl } from "#/lib/pr-data";
 
 describe("parsePullRequestUrl", () => {
 	test("parses a bare PR url", () => {

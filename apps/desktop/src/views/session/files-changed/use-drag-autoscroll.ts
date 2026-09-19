@@ -53,7 +53,7 @@
  * `resolveActiveTextSelection`), which is a bigger, separate change.
  */
 import { useEffect, useRef } from "react";
-import { isEventOriginOnDiffRow } from "#/lib/diff-match-dom";
+import { isEventOriginOnDiffRow } from "#/components/diff/diff-match-dom";
 
 type UseDragAutoscrollOptions = {
 	/** Reach the diff pane's scroll container fresh on every check, the same way `diff-pane.tsx` itself does (`codeViewRef.current?.getInstance()?.getContainerElement()`) — it isn't mounted until `@pierre/diffs` has rendered at least one file, and this hook may be armed before or after that happens. */

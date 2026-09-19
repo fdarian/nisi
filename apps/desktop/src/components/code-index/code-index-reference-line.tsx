@@ -5,7 +5,7 @@ import { getFiletypeFromFileName, getSharedHighlighter } from "@pierre/diffs";
 import type { CodeIndexReference } from "@repo/sidecar-api";
 import type { CSSProperties, ReactElement, ReactNode } from "react";
 import { memo, useEffect, useMemo, useRef, useState } from "react";
-import type { DiffTheme } from "#/components/diff/diff-view-theme";
+import type { DiffTheme } from "#/lib/diff/diff-view-theme";
 
 type CodeIndexReferenceLineProps = {
 	diffTheme: DiffTheme;

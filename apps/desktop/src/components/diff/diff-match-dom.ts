@@ -6,7 +6,7 @@
  * happens to expose. No React import here on purpose: everything is a plain
  * function over `Node`/`Element`/`Range`, unit-testable against a bare DOM.
  */
-import type { DiffMatch } from "#/lib/diff-search";
+import type { DiffMatch } from "./diff-search";
 
 /**
  * Match highlighting paints character ranges via the CSS Custom Highlight

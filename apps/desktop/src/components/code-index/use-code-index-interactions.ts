@@ -35,7 +35,7 @@ import {
 	buildOccurrenceIndex,
 	findOccurrenceForToken,
 	type OccurrenceIndex,
-} from "#/components/code-index/occurrence-index";
+} from "./occurrence-index";
 import type { SidecarQueryUtils } from "#/lib/backend-context";
 
 /** Class toggled directly on a token's `HTMLElement` — `@pierre/diffs` has no keyed decoration API, so this is the supported way to style one token (see `InteractionManager`'s own doc). Styled via `extraCSS`/`unsafeCSS` in each pane's `CodeViewOptions` — see `CODE_INDEX_TOKEN_CSS` below. */
