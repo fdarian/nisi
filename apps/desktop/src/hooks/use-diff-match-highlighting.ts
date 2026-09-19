@@ -14,7 +14,7 @@
  */
 import type { CodeViewHandle } from "@pierre/diffs/react";
 import { useCallback, useEffect, useId, useMemo, useRef } from "react";
-import { diffSearchHighlightCSS } from "#/components/diff-pane/diff-view-theme";
+import { diffSearchHighlightCSS } from "#/components/diff/diff-view-theme";
 import {
 	buildMatchRange,
 	findMatchRowElement,

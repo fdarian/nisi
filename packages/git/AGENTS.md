@@ -21,7 +21,7 @@ unit-testable against real temp repos without booting anything. Feeds `packages/
   its exit code.
 - `pull-request-checks.ts` — `fetchPullRequestChecks`: `gh pr view <number> --json statusCheckRollup`,
   mapped from GitHub's two check shapes (`CheckRun` for GitHub Actions, `StatusContext` for external
-  status integrations) to the 5-state vocabulary `apps/desktop/src/components/pr/ci-status.tsx`'s
+  status integrations) to the 5-state vocabulary `apps/desktop/src/views/session/ci-status.tsx`'s
   `CiCheckStatus` renders. A field GraphQL declares nullable comes back as that type's zero value
   (`""`/`"0001-01-01T00:00:00Z"`), never JSON `null` or an omitted key — confirmed live against
   several real PRs, not assumed from GitHub's docs.

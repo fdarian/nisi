@@ -12,7 +12,7 @@ import { ghResult } from "./exec.ts";
 import { isAuthFailure, isRateLimited } from "./pull-request.ts";
 
 /**
- * The 5-state vocabulary `apps/desktop/src/components/pr/ci-status.tsx`'s
+ * The 5-state vocabulary `apps/desktop/src/views/session/ci-status.tsx`'s
  * `CiCheckStatus` renders, computed here from GitHub's two check shapes —
  * this is domain knowledge (what "failing" means across a GitHub Actions run
  * vs. an external status integration), not a wire concern, so it's owned by
@@ -34,7 +34,7 @@ export type PullRequestCheck = {
 	 * flight, or reported by an external `StatusContext`, which carries no
 	 * duration at all. Left as a number, not a formatted string — how a
 	 * duration reads is a presentation concern for the frontend
-	 * (`apps/desktop/src/components/pr/pr-ci-status.tsx`), not something this
+	 * (`apps/desktop/src/views/session/pr-ci-status.tsx`), not something this
 	 * package should be minting English text for.
 	 */
 	durationMs?: number;

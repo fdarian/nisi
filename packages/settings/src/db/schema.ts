@@ -64,7 +64,7 @@ export const settings = sqliteTable("settings", {
 	 * this package stays independent of `@repo/sidecar-api`'s `HarnessId`.
 	 * Seeds the chat composer's picker on a fresh thread; the frontend
 	 * re-validates the harness still exists and is enabled before using it
-	 * — see `apps/desktop/src/components/chat-dock/chat-composer.tsx`.
+	 * — see `apps/desktop/src/views/chat/chat-composer.tsx`.
 	 */
 	lastChatHarness: text(),
 	/**
@@ -77,7 +77,7 @@ export const settings = sqliteTable("settings", {
 	lastChatModel: text(),
 	/**
 	 * `@pierre/theming` theme id used for the diff pane in light mode — see
-	 * `apps/desktop/src/components/diff-pane/diff-view-theme.ts`'s
+	 * `apps/desktop/src/components/diff/diff-view-theme.ts`'s
 	 * `DIFF_THEME_LIGHT_OPTIONS` for the full set nisi offers. Defaults to
 	 * `"github-light"`, the value `diff-view-theme.ts` hardcoded before this
 	 * setting existed, so existing installs see no change. Plain text, not a

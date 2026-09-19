@@ -52,14 +52,14 @@ import type { CodeIndexPeekTarget } from "#/components/code-index/use-code-index
 import {
 	buildDiffCodeViewOptions,
 	DiffCodeView,
-} from "#/components/diff-pane/diff-code-view";
+} from "#/components/diff/diff-code-view";
 import {
 	DIFF_CODE_LINE_HEIGHT,
 	type DiffTheme,
 	diffCodeViewLayout,
 	diffItemMetrics,
 	useDiffTheme,
-} from "#/components/diff-pane/diff-view-theme";
+} from "#/components/diff/diff-view-theme";
 import { Badge } from "#/components/ui/badge";
 import { Button } from "#/components/ui/button";
 import {

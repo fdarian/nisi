@@ -6,7 +6,7 @@ import {
 	DevToolProvider,
 	useAgentationEnabled,
 	useMesurerEnabled,
-} from "#/components/devtool/dev-tool-context";
+} from "#/views/devtool/dev-tool-context";
 import { ToastProvider } from "#/components/ui/toast";
 import { useSettingsShortcut } from "#/hooks/use-settings-shortcut";
 import { BackendProvider } from "#/lib/backend-context";

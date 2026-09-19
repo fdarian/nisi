@@ -19,7 +19,7 @@ the viewport steady across the shrink. `capturePendingLayoutAnchor` early-return
 `this.pendingScrollTarget != null` — correct while an in-flight `scrollTo()` still targets a
 *surviving* item, since capturing a competing anchor would fight the programmatic scroll. It's wrong
 when the pending target **is** the item being removed: nisi's `scrollToPath`
-(`apps/desktop/src/components/diff-pane/diff-pane.tsx`) fires a smooth `scrollTo({type:"item", id,
+(`apps/desktop/src/views/session/files-changed/diff-pane.tsx`) fires a smooth `scrollTo({type:"item", id,
 align:"start", ...})` on every `selectedPath` change, including a plain sidebar click. With "Hide
 Reviewed" on, clicking a file and immediately ticking *that same file's* Reviewed checkbox — a totally
 ordinary sequence, not a race the user has to work for — starts that scroll and then removes its own

@@ -51,7 +51,7 @@ Git/review procedures sit alongside `health.check`.
   blockLabel}`, attributing each surviving range to the claim currently covering it. `FileContentReview`
   is now populated whenever a file has *any* active claim, not only once it's been whole-file-ticked.
   `ranges` itself now only feeds the walkthrough reference pane's per-file reviewed/partial/unreviewed
-  checkbox (`apps/desktop/src/components/walkthrough/reference-pane.tsx`) — the diff pane stopped
+  checkbox (`apps/desktop/src/views/session/walkthrough/reference-pane.tsx`) — the diff pane stopped
   reading it once `baselineKind` shipped, below.
 - `FileContentReview` gained `baselineKind: "base" | "reviewed"`, telling the diff pane which file
   `FileContent.patch`/`oldContent` are actually diffed against. `"reviewed"` means the sidecar

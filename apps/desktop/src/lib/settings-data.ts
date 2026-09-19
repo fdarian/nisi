@@ -49,7 +49,7 @@ export type Settings = {
 	lastChatModel: string | null;
 	/**
 	 * `@pierre/theming` theme id for the diff pane in light mode — see
-	 * `#/components/diff-pane/diff-view-theme.ts`'s `DIFF_THEME_LIGHT_OPTIONS`
+	 * `#/components/diff/diff-view-theme.ts`'s `DIFF_THEME_LIGHT_OPTIONS`
 	 * for the offered set. See `@repo/settings`'s `Settings.diffThemeLight` doc
 	 * for why this stays a loose `string` rather than a literal union.
 	 */

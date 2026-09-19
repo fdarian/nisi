@@ -108,7 +108,7 @@ export type WalkthroughSelection =
  * captured at generation time, compared against the session's *current* fingerprints by
  * `useWalkthroughDrift` below. `uncoveredFiles` is `undefined` for a walkthrough generated before
  * that field existed (coverage unknown), `[]` when every changed line is covered, non-empty
- * otherwise — `UncoveredFiles` (`#/components/walkthrough/uncovered-files.tsx`) renders each of
+ * otherwise — `UncoveredFiles` (`#/views/session/walkthrough/uncovered-files.tsx`) renders each of
  * those three states differently.
  */
 export type StoredWalkthrough = {

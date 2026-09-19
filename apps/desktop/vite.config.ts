@@ -97,7 +97,7 @@ function resolveCommitSha(): string {
 
 // https://vite.dev/config/
 export default defineConfig(async () => ({
-	// Build-time constants for the custom About dialog (`src/components/about-dialog.tsx`)
+	// Build-time constants for the custom About dialog (`src/views/about/about-page.tsx`)
 	// — see `src/vite-env.d.ts` for their type declarations. The native AppKit about
 	// panel can't render a hyperlink, so the dialog needs the commit baked in itself.
 	define: {
@@ -128,7 +128,7 @@ export default defineConfig(async () => ({
 		dedupe: ["react", "react-dom"],
 	},
 
-	// `@pierre/diffs`' worker (src/components/diff-pane/diff-pane.tsx) is a real ES
+	// `@pierre/diffs`' worker (src/views/session/files-changed/diff-pane.tsx) is a real ES
 	// module with its own imports (shiki, @pierre/theming, diff) — Vite's default
 	// worker output format is `iife`, which rollup refuses for a bundle that needs
 	// code-splitting. `es` matches the `{ type: "module" }` the Worker is already

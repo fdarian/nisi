@@ -22,14 +22,14 @@ Three parts, one seam:
   `preferredEditor`, `hideReviewed`, `includeUncommitted`, `enabledHarnesses` for the settings page's
   checkboxes) — theme is the one exception, staying in
   `localStorage` via `next-themes` (wired in `routes/__root.tsx`) since nothing server-side reads it.
-  The diff pane (`src/components/diff-pane/`) renders with `@pierre/diffs`, same shadow-DOM/Worker-pool
+  The diff pane (`src/views/session/files-changed/diff-pane.tsx`) renders with `@pierre/diffs`, same shadow-DOM/Worker-pool
   shape as the `@pierre/trees` sidebar — it renders `diff.fileContents`' `patch`/`oldContent` directly,
   no client-side slicing; a reviewed file's already-seen spans arrive pre-collapsed into ordinary
   context by the sidecar (`FileContentReview.baselineKind`, see `@repo/review`'s `reconcile`).
   `src/components/code-index/` holds LSP-powered code navigation (⌘-hover underline, ⌘-click peek
   references), backed server-side by a live TypeScript 7 language server (`@repo/code-lsp`) rather
   than a prebuilt SCIP index — one `useCodeIndexInteractions` hook shared by the diff pane's
-  additions side and the whole-file viewer (`src/components/pr/file-view.tsx`), since `@pierre/diffs`
+  additions side and the whole-file viewer (`src/views/session/file-view/file-view.tsx`), since `@pierre/diffs`
   token events carry no item/path field of their own to key a per-file occurrence lookup off.
 
 ## The seam
@@ -190,7 +190,7 @@ format and `server.fs.allow`) via Vite's own `loadConfigFromFile`, dropping only
 over the same file crash the build). `.storybook/mock-orpc.ts`'s `createMockOrpc(...)` is a fake
 `SidecarClient` wrapped in the same `createTanstackQueryUtils` the real app uses — story-specific data
 (a stored walkthrough, harnesses, file contents) is supplied per call. The walkthrough tab's own
-fixture PR lives at `src/components/walkthrough/walkthrough.fixture.ts`.
+fixture PR lives at `src/views/session/walkthrough/walkthrough.fixture.ts`.
 
 ## Non-obvious decisions
 - `tsconfig.json` (the frontend one) is hand-rolled, not `extends: "@total-typescript/tsconfig/..."`
