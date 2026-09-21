@@ -2,8 +2,8 @@
 
 import { AlertTriangleIcon, XIcon } from "lucide-react";
 import { useMemo } from "react";
-import { useDevToolScope } from "#/views/devtool/dev-tool-context";
-import { useRefetchToasts } from "#/views/devtool/use-refetch-toasts";
+import { useDevToolScope } from "#/features/devtools/dev-tool-context";
+import { useRefetchToasts } from "#/features/devtools/use-refetch-toasts";
 import { FileView } from "#/views/session/file-view/file-view";
 import { FilesChangedView } from "#/views/session/files-changed/files-changed-view";
 import { OverviewView } from "#/views/session/overview/overview-view";

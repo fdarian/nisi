@@ -23,7 +23,7 @@
 import { PlusIcon } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { useCallback } from "react";
-import { ChatPanel } from "./chat-panel";
+import { ChatPanel } from "./panel/chat-panel";
 import { ChatTab } from "./chat-tab";
 import { Button } from "#/components/ui/button";
 import { useChatShortcut } from "./use-chat-shortcut";

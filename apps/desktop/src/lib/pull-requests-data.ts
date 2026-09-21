@@ -5,7 +5,7 @@
  * `search` hits GitHub live via `gh search prs` on every call — no local
  * index or cache. `useSearchPullRequests` below is the palette's only data
  * source; the debounce that keeps that live outside GitHub's rate limit
- * lives in the palette itself (`#/views/palettes/open-pull-request-palette.tsx`),
+ * lives in the palette itself (`#/features/command-palette/open-pull-request-palette.tsx`),
  * not here, since it has to coordinate with the "reset to a blank query on
  * open" effect that already lives there.
  */

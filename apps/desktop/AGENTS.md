@@ -200,7 +200,7 @@ fixture PR lives at `src/views/session/walkthrough/walkthrough.fixture.ts`.
 - `biome.jsonc` here (`root: false`, extends the repo root) exists only to exempt
   `src/components/ui/**` from a11y lint rules — that directory is vendored from the `@coss` registry
   (`bunx --bun shadcn@latest add @coss/<name>`), not hand-authored.
-- **The chat dock's transport (`src/views/chat/chat-transport.ts`) implements `ChatTransport` by hand
+- **The chat dock's transport (`src/features/chat/chat-transport.ts`) implements `ChatTransport` by hand
   instead of using `ai`'s `DefaultChatTransport`.** `chat.send` speaks oRPC's `eventIterator`, not
   an HTTP route — there's no fetch endpoint for `DefaultChatTransport` to point at, so
   `sendMessages` opens the oRPC async iterator itself and pumps it into the
@@ -256,7 +256,7 @@ fixture PR lives at `src/views/session/walkthrough/walkthrough.fixture.ts`.
 - A keyboard shortcut that collides with a macOS menu accelerator can't be handled in the frontend
   at all — AppKit gives the main menu first refusal, so the webview never sees the key. Give the
   shortcut a real menu item that emits an event instead (⌘W does this); the rest live in
-  `src/views/frame/use-tab-shortcuts.ts` / `use-settings-shortcut.ts`. A predefined item can also turn up
+	`src/shell/tabs/use-tab-shortcuts.ts` / `src/features/settings/use-settings-shortcut.ts`. A predefined item can also turn up
   in more than one default submenu (`Menu::default()` seeded a `close_window` in both Window and
   File) — `build_macos_menu` builds the whole tree explicitly instead of patching the default.
 - `#/*` → `src/*`, not `@/*`.

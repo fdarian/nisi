@@ -3,7 +3,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createRouter, RouterProvider } from "@tanstack/react-router";
 import React from "react";
 import ReactDOM from "react-dom/client";
-import { startDeepLinkListener } from "#/views/frame/deep-link-store";
+import { startDeepLinkListener } from "#/shell/deep-link/deep-link-store";
 import { routeTree } from "./routeTree.gen";
 
 // Boot-once, before anything renders — a `nisi://` link can arrive before

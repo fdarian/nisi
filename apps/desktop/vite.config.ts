@@ -97,7 +97,7 @@ function resolveCommitSha(): string {
 
 // https://vite.dev/config/
 export default defineConfig(async () => ({
-	// Build-time constants for the custom About dialog (`src/views/about/about-page.tsx`)
+	// Build-time constants for the custom About dialog (`src/features/about/about-page.tsx`)
 	// — see `src/vite-env.d.ts` for their type declarations. The native AppKit about
 	// panel can't render a hyperlink, so the dialog needs the commit baked in itself.
 	define: {

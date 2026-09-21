@@ -3,12 +3,12 @@
 import { Menu } from "@tauri-apps/api/menu";
 import { AlertTriangleIcon, InboxIcon } from "lucide-react";
 import { type ComponentProps, useCallback, useMemo, useState } from "react";
-import { ChatDock } from "#/views/chat/chat-dock";
-import { CommandPalette } from "#/views/palettes/command-palette";
-import { DevToolButton } from "#/views/devtool/dev-tool";
-import { useDevToolVisible } from "#/views/devtool/dev-tool-context";
-import { OpenPullRequestPalette } from "#/views/palettes/open-pull-request-palette";
-import { PrTabStrip } from "./pr-tab-strip";
+import { ChatDock } from "#/features/chat/chat-dock";
+import { CommandPalette } from "#/features/command-palette/command-palette";
+import { DevToolButton } from "#/features/devtools/dev-tool";
+import { useDevToolVisible } from "#/features/devtools/dev-tool-context";
+import { OpenPullRequestPalette } from "#/features/command-palette/open-pull-request-palette";
+import { PrTabStrip } from "./tabs/pr-tab-strip";
 import { PrView } from "#/views/session/pr-view";
 import { Button } from "#/components/ui/button";
 import {
@@ -21,11 +21,11 @@ import {
 import { FramePanel } from "#/components/ui/frame";
 import { Spinner } from "#/components/ui/spinner";
 import { TabsPrimitive } from "#/components/ui/tabs";
-import { useCommandPaletteShortcut } from "#/views/palettes/use-command-palette-shortcut";
-import { useOpenPrPaletteShortcut } from "#/views/palettes/use-open-pr-palette-shortcut";
-import { useTabOrder } from "./use-tab-order";
-import { useTabShortcuts } from "./use-tab-shortcuts";
-import { useTabSuspension } from "./use-tab-suspension";
+import { useCommandPaletteShortcut } from "#/features/command-palette/use-command-palette-shortcut";
+import { useOpenPrPaletteShortcut } from "#/features/command-palette/use-open-pr-palette-shortcut";
+import { useTabOrder } from "./tabs/use-tab-order";
+import { useTabShortcuts } from "./tabs/use-tab-shortcuts";
+import { useTabSuspension } from "./tabs/use-tab-suspension";
 import type { SidecarQueryUtils } from "#/lib/backend-context";
 import { useBackendContext } from "#/lib/backend-context";
 import {
@@ -35,7 +35,7 @@ import {
 	useClearChatSession,
 	useCycleActiveThread,
 } from "#/lib/chat-store";
-import { useDeepLinkOpener } from "./deep-link-data";
+import { useDeepLinkOpener } from "./deep-link/deep-link-data";
 import { useSessions } from "#/lib/pr-data";
 import type { OpenPullRequestParams } from "#/lib/pull-requests-data";
 import { findOpenPullRequestSessionId } from "#/lib/pull-requests-data";

@@ -64,7 +64,7 @@ export const settings = sqliteTable("settings", {
 	 * this package stays independent of `@repo/sidecar-api`'s `HarnessId`.
 	 * Seeds the chat composer's picker on a fresh thread; the frontend
 	 * re-validates the harness still exists and is enabled before using it
-	 * — see `apps/desktop/src/views/chat/chat-composer.tsx`.
+	 * — see `apps/desktop/src/features/chat/chat-composer.tsx`.
 	 */
 	lastChatHarness: text(),
 	/**

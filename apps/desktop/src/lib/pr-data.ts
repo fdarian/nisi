@@ -77,7 +77,7 @@ export type PullRequestUrlParts = {
  * `pullRequestUrl`'s inverse — recognizes a GitHub PR page even with
  * trailing segments (`/files`, `/commits/<sha>`), a query string, or a
  * fragment, since that's exactly what a browser extension forwards
- * verbatim (`.../pull/12/files#discussion_r1`, see `#/views/frame/deep-link.ts`).
+ * verbatim (`.../pull/12/files#discussion_r1`, see `#/shell/deep-link/deep-link.ts`).
  * Only `github.com` is recognized — the same Enterprise gap noted on
  * `pullRequestUrl` above applies here. Returns `null` rather than throwing:
  * a URL that isn't a PR link is an expected outcome for a caller parsing

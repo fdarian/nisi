@@ -44,7 +44,7 @@ import {
 import { Kbd } from "#/components/ui/kbd";
 import { TabsPrimitive } from "#/components/ui/tabs";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "#/components/ui/tooltip";
-import { UpdatePill } from "./update-pill";
+import { UpdatePill } from "#/shell/update/update-pill";
 import type { SidecarQueryUtils } from "#/lib/backend-context";
 import type { Session, SessionTarget } from "#/lib/pr-data";
 import { usePullRequestChecks, usePullRequestMergeStatus } from "#/lib/pr-data";

@@ -27,7 +27,7 @@ import {
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import ReactMarkdown, { type Components } from "react-markdown";
-import { ChatComposer } from "./chat-composer";
+import { ChatComposer } from "../chat-composer";
 import { ChatPanelResizeHandles, useChatPanelSize } from "./chat-panel-resize";
 import { Button } from "#/components/ui/button";
 import { ScrollArea } from "#/components/ui/scroll-area";
