@@ -25,13 +25,13 @@ import {
 } from "#/components/ui/menu";
 import { toastManager } from "#/components/ui/toast";
 import { ToggleGroup, ToggleGroupItem } from "#/components/ui/toggle-group";
-import type { EditorInfo } from "#/hooks/use-available-editors";
+import type { EditorInfo } from "#/infra/use-available-editors";
 import {
 	openInEditor,
 	useAvailableEditors,
-} from "#/hooks/use-available-editors";
-import { useKeyBindings } from "#/hooks/use-key-bindings";
-import type { SidecarQueryUtils } from "#/lib/backend-context";
+} from "#/infra/use-available-editors";
+import { useKeyBindings } from "#/lib/use-key-bindings";
+import type { SidecarQueryUtils } from "#/infra/backend-context";
 import {
 	type DiffMatch,
 	diffContentMatchesQuery,
@@ -42,8 +42,8 @@ import type {
 	FileContentsMap,
 	ReviewStateEntry,
 	Session,
-} from "#/lib/pr-data";
-import { pullRequestUrl, useFileContents } from "#/lib/pr-data";
+} from "#/features/pull-request/data/pr-data";
+import { pullRequestUrl, useFileContents } from "#/features/pull-request/data/pr-data";
 import {
 	useSessionCurrentMatchIndex,
 	useSessionFilterQuery,
@@ -52,7 +52,7 @@ import {
 	useSessionSearchMode,
 	useSessionSelectedPath,
 	useSessionUndoStack,
-} from "#/lib/session-ui-store";
+} from "#/features/pull-request/data/session-ui-store";
 import {
 	useDiffStyleMode,
 	useHideReviewed,
@@ -60,9 +60,9 @@ import {
 	usePreferredEditor,
 	useSidebarViewMode,
 	useWrapLines,
-} from "#/lib/settings-data";
+} from "#/features/settings/settings-data";
 import { comparePaths } from "#/lib/tree-paths";
-import { cn } from "#/lib/utils";
+import { cn } from "cn";
 
 /** Stable identity for the "keyword mode inactive" case — a fresh `[]`/`Map` every render would defeat `DiffPane`'s `items` memo just as surely as a genuinely different value would. */
 const EMPTY_MATCHES: readonly DiffMatch[] = [];

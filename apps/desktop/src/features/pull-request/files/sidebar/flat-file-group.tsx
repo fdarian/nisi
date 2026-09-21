@@ -1,8 +1,8 @@
 import { FileIcon } from "lucide-react";
 import { GroupHeader } from "./group-header";
-import type { FileChange, ReviewState, ReviewStateEntry } from "#/lib/pr-data";
+import type { FileChange, ReviewState, ReviewStateEntry } from "#/features/pull-request/data/pr-data";
 import { splitPath } from "#/lib/tree-paths";
-import { cn } from "#/lib/utils";
+import { cn } from "cn";
 
 type FlatFileGroupProps = {
 	title: string;

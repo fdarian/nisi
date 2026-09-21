@@ -38,7 +38,7 @@ the wire shape this grammar maps to.
   answered. Always the same POST either way; `target` just rides along, uninterpreted by this
   module. Bringing the window forward is not this module's job once a session already exists: the
   app that received the POST focuses itself on the `session-opened` event it emits
-  (`apps/desktop/src/lib/pr-data.ts`'s `useSessions`), since that's the only reliable way to tell
+  (`apps/desktop/src/features/pull-request/data/pr-data.ts`'s `useSessions`), since that's the only reliable way to tell
   which of several running instances (e.g. a dev sandbox vs. the production install) actually
   answered — `app-launch.ts` has no way to.
 - `src/app-launch.ts` — resolves "the app" to launch cold (env override, `/Applications`, or a

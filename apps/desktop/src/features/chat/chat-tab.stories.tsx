@@ -18,8 +18,8 @@ import { createTanstackQueryUtils } from "@orpc/tanstack-query";
 import type { SidecarClient } from "@repo/sidecar-api";
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { useEffect, useState } from "react";
-import type { SidecarQueryUtils } from "#/lib/backend-context";
-import { getOrCreateChat } from "#/lib/chat-store";
+import type { SidecarQueryUtils } from "#/infra/backend-context";
+import { getOrCreateChat } from "./chat-store";
 import { ChatTab } from "./chat-tab";
 
 const SESSION_ID = "storybook-session";

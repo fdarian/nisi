@@ -10,7 +10,7 @@ import {
 	AlertDialogTitle,
 } from "#/components/ui/alert-dialog";
 import { Button } from "#/components/ui/button";
-import type { UnpushedCommitsCheck } from "#/lib/pr-data";
+import type { UnpushedCommitsCheck } from "#/features/pull-request/data/pr-data";
 
 type UnpushedCheck = Exclude<UnpushedCommitsCheck, { status: "clean" }>;
 

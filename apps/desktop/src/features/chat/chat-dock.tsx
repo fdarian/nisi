@@ -27,14 +27,14 @@ import { ChatPanel } from "./panel/chat-panel";
 import { ChatTab } from "./chat-tab";
 import { Button } from "#/components/ui/button";
 import { useChatShortcut } from "./use-chat-shortcut";
-import { useKeyBindings } from "#/hooks/use-key-bindings";
-import type { SidecarQueryUtils } from "#/lib/backend-context";
+import { useKeyBindings } from "#/lib/use-key-bindings";
+import type { SidecarQueryUtils } from "#/infra/backend-context";
 import {
 	useChatActiveThreadId,
 	useChatDockActions,
 	useChatPopupOpen,
 	useChatThreads,
-} from "#/lib/chat-store";
+} from "./chat-store";
 import { spring } from "./springs";
 
 type ChatDockProps = {

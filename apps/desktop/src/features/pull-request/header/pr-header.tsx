@@ -21,18 +21,18 @@ import {
 import {
 	openInEditor,
 	useAvailableEditors,
-} from "#/hooks/use-available-editors";
+} from "#/infra/use-available-editors";
 import { useDismissOnInactive } from "#/features/pull-request/use-dismiss-on-inactive";
-import type { SidecarQueryUtils } from "#/lib/backend-context";
-import type { SessionTarget } from "#/lib/pr-data";
+import type { SidecarQueryUtils } from "#/infra/backend-context";
+import type { SessionTarget } from "#/features/pull-request/data/pr-data";
 import {
 	useMarkPullRequestReady,
 	usePullRequestMergeStatus,
-} from "#/lib/pr-data";
-import type { OpenPullRequestParams } from "#/lib/pull-requests-data";
-import { PrCiStatus } from "#/features/pull-request/header/pr-ci-status";
+} from "#/features/pull-request/data/pr-data";
+import type { OpenPullRequestParams } from "#/features/pull-request/data/pull-requests-data";
+import { PrCiStatus } from "./pr-ci-status";
 import { PrMergeButton } from "#/features/pull-request/merge/pr-merge-button";
-import { PrStackBadge } from "#/features/pull-request/header/pr-stack-badge";
+import { PrStackBadge } from "./pr-stack-badge";
 
 type PrHeaderProps = {
 	orpc: SidecarQueryUtils;

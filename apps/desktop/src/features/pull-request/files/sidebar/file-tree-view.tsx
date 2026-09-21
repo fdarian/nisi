@@ -30,7 +30,7 @@ import {
 	DropdownMenuItem,
 	DropdownMenuSeparator,
 } from "#/components/ui/menu";
-import type { FileChange, ReviewStateEntry } from "#/lib/pr-data";
+import type { FileChange, ReviewStateEntry } from "#/features/pull-request/data/pr-data";
 import { collectAncestorDirectoryPaths, comparePaths } from "#/lib/tree-paths";
 
 type FileTreeViewProps = {

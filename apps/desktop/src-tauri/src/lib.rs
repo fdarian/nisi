@@ -170,7 +170,7 @@ const ABOUT_WINDOW_LABEL: &str = "about";
  * - "Close Tab" (⌘W) closes the About window directly when it's focused;
  *   otherwise it emits `CLOSE_TAB_EVENT` and the frontend decides what that
  *   means (close the active tab, or the window when it's the last one — see
- *   `src/hooks/use-tab-shortcuts.ts`).
+ *   `src/shell/tabs/use-tab-shortcuts.ts`).
  * - "Close Window" (⌘⇧W) always closes whichever window is focused — the
  *   About window (`build_about_window`) when it's the one in front, the
  *   main window otherwise — no frontend round trip.
@@ -403,7 +403,7 @@ pub fn run() {
         .setup(|app| {
             // Foreground the main window the instant a `nisi://` link lands —
             // deliberately separate from the focus `useSessions` already does
-            // on the frontend's `session-opened` event (`src/lib/pr-data.ts`):
+            // on the frontend's `session-opened` event (`src/features/pull-request/data/pr-data.ts`):
             // that one arrives seconds late, after `pullRequests.open`'s own
             // `git fetch` completes, while this fires on the plugin's
             // `deep-link://new-url` event (emitted from `RunEvent::Opened`),

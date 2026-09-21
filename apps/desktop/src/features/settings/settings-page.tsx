@@ -51,17 +51,20 @@ import {
 import { Spinner } from "#/components/ui/spinner";
 import { Switch } from "#/components/ui/switch";
 import { ToggleGroup, ToggleGroupItem } from "#/components/ui/toggle-group";
-import { useAvailableEditors } from "#/hooks/use-available-editors";
-import type { SidecarQueryUtils } from "#/lib/backend-context";
-import { useBackendContext } from "#/lib/backend-context";
+import { useAvailableEditors } from "#/infra/use-available-editors";
+import type { SidecarQueryUtils } from "#/infra/backend-context";
+import { useBackendContext } from "#/infra/backend-context";
 import {
 	useDiffThemeDark,
 	useDiffThemeLight,
 	usePreferredEditor,
 	useUpdateSettings,
 	useWalkthroughEnabled,
-} from "#/lib/settings-data";
-import { type HarnessId, useHarnesses } from "#/lib/walkthrough-data";
+} from "./settings-data";
+import {
+	type HarnessId,
+	useHarnesses,
+} from "#/features/pull-request/walkthrough/walkthrough-data";
 
 /**
  * Top-level `/settings` route content — a sibling of the main `AppShell`, not

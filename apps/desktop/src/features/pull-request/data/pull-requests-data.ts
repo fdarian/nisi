@@ -1,6 +1,6 @@
 /**
  * Pull request search + open — mirrors `packages/sidecar-api/src/pull-requests.ts`.
- * Same explicit-`orpc`-param idiom as `#/lib/pr-data.ts`.
+ * Same explicit-`orpc`-param idiom as `#/features/pull-request/data/pr-data.ts`.
  *
  * `search` hits GitHub live via `gh search prs` on every call — no local
  * index or cache. `useSearchPullRequests` below is the palette's only data
@@ -12,8 +12,8 @@
 import { ORPCError } from "@orpc/client";
 import { keepPreviousData, useMutation, useQuery } from "@tanstack/react-query";
 import { open as openFolderPicker } from "@tauri-apps/plugin-dialog";
-import type { SidecarQueryUtils } from "#/lib/backend-context";
-import type { Session } from "#/lib/pr-data";
+import type { SidecarQueryUtils } from "#/infra/backend-context";
+import type { Session } from "./pr-data";
 
 /** One row the palette renders — mirrors `PullRequestSearchResult` (`packages/sidecar-api/src/pull-requests.ts`). */
 export type PullRequestSearchResult = {
@@ -165,7 +165,7 @@ async function resolvePullRequestOpen(
  * per-call one passed to `.mutate()`) purely so the palette's call site stays
  * a plain `open(params)` — there's no `useMutationState` overlay elsewhere
  * reading this mutation's pending status, so unlike `useSetFileViewed`
- * (`#/lib/pr-data.ts`) there's no timing subtlety riding on the split, just
+ * (`#/features/pull-request/data/pr-data.ts`) there's no timing subtlety riding on the split, just
  * fewer arguments to thread through. Only fires for the `"opened"` outcome —
  * a cancelled folder picker resolves the mutation successfully but leaves
  * the palette open.

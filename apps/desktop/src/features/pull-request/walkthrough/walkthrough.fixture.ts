@@ -4,7 +4,7 @@
  * anything from this repo) realistic enough that the reference pane has real
  * multi-hunk diffs to render and the narrative has real prose to read, not
  * lorem-ipsum stubs. Built against the frontend's own mirror types
- * (`#/lib/walkthrough-data`, `#/lib/pr-data`) — the same types
+ * (`#/features/pull-request/walkthrough/walkthrough-data`, `#/features/pull-request/data/pr-data`) — the same types
  * `WalkthroughView`'s props actually carry — not the Effect schemas in
  * `packages/walkthrough`/`packages/sidecar-api`.
  *
@@ -14,8 +14,12 @@
  * location falls outside every hunk) an empty/error item. Cross-check
  * against the patch string's own line numbers before changing either.
  */
-import type { FileChange, FileContent, Session } from "#/lib/pr-data";
-import type { StoredWalkthrough, UncoveredFile } from "#/lib/walkthrough-data";
+import type {
+	FileChange,
+	FileContent,
+	Session,
+} from "#/features/pull-request/data/pr-data";
+import type { StoredWalkthrough, UncoveredFile } from "./walkthrough-data";
 
 export const TODOS_PATH = "src/lib/todos.ts";
 export const TODO_ITEM_PATH = "src/components/todo-item.tsx";

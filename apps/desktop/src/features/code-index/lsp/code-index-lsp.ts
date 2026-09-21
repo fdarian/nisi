@@ -5,7 +5,7 @@ import type {
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useCallback, useEffect } from "react";
 import { toastManager } from "#/components/ui/toast";
-import type { SidecarQueryUtils } from "#/lib/backend-context";
+import type { SidecarQueryUtils } from "#/infra/backend-context";
 
 export type CodeIndexLspControlState = {
 	readonly status: CodeIndexLspStatusName;

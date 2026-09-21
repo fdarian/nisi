@@ -18,7 +18,7 @@ import {
 import { Kbd } from "#/components/ui/kbd";
 import { Separator } from "#/components/ui/separator";
 import { Spinner } from "#/components/ui/spinner";
-import type { SidecarQueryUtils } from "#/lib/backend-context";
+import type { SidecarQueryUtils } from "#/infra/backend-context";
 import {
 	friendlyOpenPullRequestError,
 	friendlySearchError,
@@ -27,7 +27,7 @@ import {
 	type PullRequestSearchResult,
 	useOpenPullRequest,
 	useSearchPullRequests,
-} from "#/lib/pull-requests-data";
+} from "#/features/pull-request/data/pull-requests-data";
 
 /**
  * GitHub's search API allows 30 requests/minute authenticated — but that
@@ -72,7 +72,7 @@ function authorInitials(author: string): string {
  * and opens it as a session the same way any other tab gets opened.
  *
  * `query` (what the input shows) and `debouncedQuery` (what's actually
- * searched, via `#/lib/pull-requests-data.ts`'s `useSearchPullRequests`) are
+ * searched, via `#/features/pull-request/data/pull-requests-data.ts`'s `useSearchPullRequests`) are
  * deliberately two separate pieces of state, debounced by hand below rather
  * than through a generic `useDebouncedValue(query, ms)` hook — the
  * reset-on-open effect needs both to snap back to `""` instantly, with no

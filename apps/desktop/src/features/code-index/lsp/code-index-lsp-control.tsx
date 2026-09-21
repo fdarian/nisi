@@ -3,10 +3,10 @@
 import { Server } from "lucide-react";
 import { Button } from "#/components/ui/button";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "#/components/ui/tooltip";
-import type { SidecarQueryUtils } from "#/lib/backend-context";
+import type { SidecarQueryUtils } from "#/infra/backend-context";
 import { useCodeIndexLspControl } from "./code-index-lsp";
-import { useSessionCodeIndexEnabled } from "#/lib/session-ui-store";
-import { cn } from "#/lib/utils";
+import { useSessionCodeIndexEnabled } from "#/features/pull-request/data/session-ui-store";
+import { cn } from "cn";
 
 const STATUS_DOT_CLASS = {
 	off: "bg-muted-foreground/50",

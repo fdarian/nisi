@@ -31,7 +31,7 @@ import { ChatComposer } from "../chat-composer";
 import { ChatPanelResizeHandles, useChatPanelSize } from "./chat-panel-resize";
 import { Button } from "#/components/ui/button";
 import { ScrollArea } from "#/components/ui/scroll-area";
-import type { SidecarQueryUtils } from "#/lib/backend-context";
+import type { SidecarQueryUtils } from "#/infra/backend-context";
 import {
 	type ChatThreadMeta,
 	deriveThreadTitle,
@@ -41,9 +41,9 @@ import {
 	useChatDockActions,
 	useChatPopupMinimized,
 	useChatThreads,
-} from "#/lib/chat-store";
-import { useLastChatModel } from "#/lib/settings-data";
-import { cn } from "#/lib/utils";
+} from "#/features/chat/chat-store";
+import { useLastChatModel } from "#/features/settings/settings-data";
+import { cn } from "cn";
 
 const markdownComponents: Components = {
 	p: (props) => <p className="text-foreground" {...props} />,

@@ -12,8 +12,8 @@ import {
 	ComboboxList,
 	ComboboxPopup,
 } from "#/components/ui/combobox";
-import { cn } from "#/lib/utils";
-import type { HarnessId, HarnessInfo } from "#/lib/walkthrough-data";
+import { cn } from "cn";
+import type { HarnessId, HarnessInfo } from "#/features/pull-request/walkthrough/walkthrough-data";
 
 export type ModelSelection = {
 	harness: HarnessId;

@@ -9,7 +9,7 @@ import {
 	markCodeIndexReferenceRevealed,
 	shouldRevealCodeIndexReference,
 	syncCodeIndexReferenceRevealTransaction,
-} from "#/features/pull-request/file-view/reference-reveal/code-index-reference-reveal";
+} from "./code-index-reference-reveal";
 
 const target: CodeIndexReferenceTarget = {
 	path: "src/example.ts",

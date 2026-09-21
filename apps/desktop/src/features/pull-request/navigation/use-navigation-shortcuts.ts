@@ -1,12 +1,12 @@
 "use client";
 
 import { useCallback } from "react";
-import { useKeyBindings } from "#/hooks/use-key-bindings";
+import { useKeyBindings } from "#/lib/use-key-bindings";
 import type { NavigationEntry } from "./navigation-history.ts";
 import {
 	fileTabPath,
 	useSessionNavigationHistory,
-} from "#/lib/session-ui-store";
+} from "#/features/pull-request/data/session-ui-store";
 
 type NavigationShortcutsOptions = {
 	sessionId: string;

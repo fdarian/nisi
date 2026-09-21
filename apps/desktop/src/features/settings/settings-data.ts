@@ -8,8 +8,8 @@
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback } from "react";
-import type { SidecarQueryUtils } from "#/lib/backend-context";
-import type { HarnessId } from "#/lib/walkthrough-data";
+import type { SidecarQueryUtils } from "#/infra/backend-context";
+import type { HarnessId } from "#/features/pull-request/walkthrough/walkthrough-data";
 
 export type SidebarViewMode = "tree" | "flat";
 export type DiffStyleMode = "unified" | "split";
@@ -34,7 +34,7 @@ export type Settings = {
 	hideReviewed: boolean;
 	/**
 	 * When true, uncommitted working-tree changes should be included alongside
-	 * the PR's diff. Sourced by `#/lib/pr-data.ts`'s `useFileChanges`/
+	 * the PR's diff. Sourced by `#/features/pull-request/data/pr-data.ts`'s `useFileChanges`/
 	 * `useFileContents` and folded into `diff.files`/`diff.file`'s query
 	 * `input` (part of the TanStack Query cache key, not just the request).
 	 */

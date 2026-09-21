@@ -16,14 +16,14 @@ import { useMemo } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import { RegenerateControl } from "#/features/pull-request/walkthrough/generate/regenerate-control";
 import { UncoveredFiles } from "./uncovered-files";
-import type { SidecarQueryUtils } from "#/lib/backend-context";
-import { cn } from "#/lib/utils";
+import type { SidecarQueryUtils } from "#/infra/backend-context";
+import { cn } from "cn";
 import type {
 	HarnessId,
 	UncoveredFile,
 	WalkthroughSection,
 	WalkthroughSelection,
-} from "#/lib/walkthrough-data";
+} from "./walkthrough-data";
 
 const REF_PREFIX = "ref:";
 

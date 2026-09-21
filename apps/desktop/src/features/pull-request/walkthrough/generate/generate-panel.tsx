@@ -10,22 +10,25 @@ import {
 	EmptyMedia,
 	EmptyTitle,
 } from "#/components/ui/empty";
-import { EnableHarnessesPanel } from "#/features/pull-request/walkthrough/generate/enable-harnesses-panel";
-import { GenerationTimeline } from "#/features/pull-request/walkthrough/generate/generation-timeline";
+import { EnableHarnessesPanel } from "./enable-harnesses-panel";
+import { GenerationTimeline } from "./generation-timeline";
 import {
 	HarnessModelCombobox,
 	type ModelSelection,
 } from "#/components/harness-model-combobox";
-import type { SidecarQueryUtils } from "#/lib/backend-context";
-import { useSettings, useUpdateSettings } from "#/lib/settings-data";
-import { cn } from "#/lib/utils";
+import type { SidecarQueryUtils } from "#/infra/backend-context";
+import {
+	useSettings,
+	useUpdateSettings,
+} from "#/features/settings/settings-data";
+import { cn } from "cn";
 import {
 	type GenerationLogEntry,
 	type GenerationProgress,
 	type HarnessId,
 	type HarnessInfo,
 	useHarnesses,
-} from "#/lib/walkthrough-data";
+} from "#/features/pull-request/walkthrough/walkthrough-data";
 
 type GeneratePanelProps = {
 	orpc: SidecarQueryUtils;

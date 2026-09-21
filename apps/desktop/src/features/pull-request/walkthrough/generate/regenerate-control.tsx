@@ -6,10 +6,10 @@ import {
 	HarnessModelCombobox,
 	type ModelSelection,
 } from "#/components/harness-model-combobox";
-import type { SidecarQueryUtils } from "#/lib/backend-context";
-import { cn } from "#/lib/utils";
-import type { HarnessId } from "#/lib/walkthrough-data";
-import { useHarnesses } from "#/lib/walkthrough-data";
+import type { SidecarQueryUtils } from "#/infra/backend-context";
+import { cn } from "cn";
+import type { HarnessId } from "#/features/pull-request/walkthrough/walkthrough-data";
+import { useHarnesses } from "#/features/pull-request/walkthrough/walkthrough-data";
 
 type RegenerateControlProps = {
 	orpc: SidecarQueryUtils;

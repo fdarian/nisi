@@ -3,7 +3,7 @@
  * Chrome extension (Phase 4) only forwards a GitHub PR URL verbatim through
  * it. Delegates the GitHub half to `parsePullRequestUrl`.
  */
-import { type PullRequestUrlParts, parsePullRequestUrl } from "#/lib/pr-data";
+import { type PullRequestUrlParts, parsePullRequestUrl } from "#/features/pull-request/data/pr-data";
 
 const DEEP_LINK_SCHEMES = ["nisi"];
 

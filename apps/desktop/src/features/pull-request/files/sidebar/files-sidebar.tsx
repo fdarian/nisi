@@ -18,11 +18,11 @@ import {
 	DropdownMenuTrigger,
 } from "#/components/ui/menu";
 import { ScrollArea } from "#/components/ui/scroll-area";
-import { useKeyBindings } from "#/hooks/use-key-bindings";
-import type { FileChange, ReviewStateEntry } from "#/lib/pr-data";
-import type { SidebarViewMode } from "#/lib/settings-data";
+import { useKeyBindings } from "#/lib/use-key-bindings";
+import type { FileChange, ReviewStateEntry } from "#/features/pull-request/data/pr-data";
+import type { SidebarViewMode } from "#/features/settings/settings-data";
 import { CATEGORY_LABELS, groupFilesByCategory } from "#/lib/tree-paths";
-import { cn } from "#/lib/utils";
+import { cn } from "cn";
 import { Button, buttonVariants } from "#/components/ui/button";
 
 /** The files sidebar's search box: filter by file path (today's default) or grep loaded diff content. */

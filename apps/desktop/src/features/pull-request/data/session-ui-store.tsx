@@ -37,7 +37,7 @@ import {
 	replaceNavigationHistoryAtCursor,
 	stepNavigationHistory,
 } from "#/features/pull-request/navigation/navigation-history";
-import type { WalkthroughSelection } from "#/lib/walkthrough-data";
+import type { WalkthroughSelection } from "#/features/pull-request/walkthrough/walkthrough-data";
 
 /** One `r` keypress's undo record — mirrors `files-changed-view.tsx`'s local type of the same name. */
 export type ReviewedToggleRecord = {

@@ -13,19 +13,19 @@ import {
 	DropdownMenuTrigger,
 } from "#/components/ui/menu";
 import { useDismissOnInactive } from "#/features/pull-request/use-dismiss-on-inactive";
-import type { SidecarQueryUtils } from "#/lib/backend-context";
+import type { SidecarQueryUtils } from "#/infra/backend-context";
 import type {
 	MergeMethod,
 	PullRequestMergeStatus,
 	UnpushedCommitsCheck,
-} from "#/lib/pr-data";
+} from "#/features/pull-request/data/pr-data";
 import {
 	useMergePullRequest,
 	usePullRequestMergeStatus,
 	usePullRequestStack,
 	useUnpushedCommitsCheck,
-} from "#/lib/pr-data";
-import { cn } from "#/lib/utils";
+} from "#/features/pull-request/data/pr-data";
+import { cn } from "cn";
 import { deriveStackMerge } from "./pr-stack-merge";
 import { UnpushedCommitsDialog } from "./unpushed-commits-dialog";
 

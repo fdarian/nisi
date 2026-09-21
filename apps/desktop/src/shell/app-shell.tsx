@@ -26,26 +26,26 @@ import { useOpenPrPaletteShortcut } from "#/features/command-palette/use-open-pr
 import { useTabOrder } from "./tabs/use-tab-order";
 import { useTabShortcuts } from "./tabs/use-tab-shortcuts";
 import { useTabSuspension } from "./tabs/use-tab-suspension";
-import type { SidecarQueryUtils } from "#/lib/backend-context";
-import { useBackendContext } from "#/lib/backend-context";
+import type { SidecarQueryUtils } from "#/infra/backend-context";
+import { useBackendContext } from "#/infra/backend-context";
 import {
 	ChatProvider,
 	useChatPopupMinimized,
 	useChatPopupOpen,
 	useClearChatSession,
 	useCycleActiveThread,
-} from "#/lib/chat-store";
+} from "#/features/chat/chat-store";
 import { useDeepLinkOpener } from "./deep-link/deep-link-data";
-import { useSessions } from "#/lib/pr-data";
-import type { OpenPullRequestParams } from "#/lib/pull-requests-data";
-import { findOpenPullRequestSessionId } from "#/lib/pull-requests-data";
+import { useSessions } from "#/features/pull-request/data/pr-data";
+import type { OpenPullRequestParams } from "#/features/pull-request/data/pull-requests-data";
+import { findOpenPullRequestSessionId } from "#/features/pull-request/data/pull-requests-data";
 import {
 	SessionUiProvider,
 	useClearSessionUiState,
 	useCycleFileTab,
 	useSetActiveTab,
-} from "#/lib/session-ui-store";
-import { cn } from "#/lib/utils";
+} from "#/features/pull-request/data/session-ui-store";
+import { cn } from "cn";
 
 /**
  * Mirrors `SidebarInset`'s inset treatment (`ui/sidebar.tsx`, used as-is by

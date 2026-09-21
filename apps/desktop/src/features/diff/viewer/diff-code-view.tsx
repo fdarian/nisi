@@ -43,8 +43,8 @@ import {
 	createTokenInteractionLeaseRegistry,
 	type TokenInteractionLeaseRegistry,
 } from "#/features/diff/selection/token-interaction-leases";
-import type { DiffStyleMode } from "#/lib/settings-data";
-import { cn } from "#/lib/utils";
+import type { DiffStyleMode } from "#/features/settings/settings-data";
+import { cn } from "cn";
 
 function useDiffWorkerPoolOptions() {
 	return useMemo(

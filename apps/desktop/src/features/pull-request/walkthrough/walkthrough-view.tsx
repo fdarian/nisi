@@ -6,19 +6,19 @@ import { GeneratePanel } from "#/features/pull-request/walkthrough/generate/gene
 import { NarrativePane } from "./narrative-pane";
 import { OutdatedBanner } from "#/features/pull-request/walkthrough/generate/outdated-banner";
 import { ReferencePane } from "./reference-pane";
-import type { SidecarQueryUtils } from "#/lib/backend-context";
-import type { FileChange, Session } from "#/lib/pr-data";
+import type { SidecarQueryUtils } from "#/infra/backend-context";
+import type { FileChange, Session } from "#/features/pull-request/data/pr-data";
 import type {
 	UncoveredFile,
 	WalkthroughReferenceBlock,
 	Walkthrough as WalkthroughSchema,
 	WalkthroughSelection,
-} from "#/lib/walkthrough-data";
+} from "./walkthrough-data";
 import {
 	useWalkthrough,
 	useWalkthroughDrift,
 	useWalkthroughGeneration,
-} from "#/lib/walkthrough-data";
+} from "./walkthrough-data";
 
 type WalkthroughViewProps = {
 	orpc: SidecarQueryUtils;

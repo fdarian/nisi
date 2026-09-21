@@ -14,7 +14,7 @@
  */
 import type { FileDiffMetadata } from "@pierre/diffs";
 import { parseDiffFromFile, parsePatchFiles } from "@pierre/diffs";
-import type { FileChange, FileContent } from "#/lib/pr-data";
+import type { FileChange, FileContent } from "#/features/pull-request/data/pr-data";
 
 export function buildFileDiff(
 	file: FileChange,

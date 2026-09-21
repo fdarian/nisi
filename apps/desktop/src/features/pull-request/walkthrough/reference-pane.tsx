@@ -37,21 +37,24 @@ import {
 	EmptyMedia,
 	EmptyTitle,
 } from "#/components/ui/empty";
-import type { SidecarQueryUtils } from "#/lib/backend-context";
+import type { SidecarQueryUtils } from "#/infra/backend-context";
 import {
 	buildLocationFileDiff,
 	type LineRange,
 } from "#/features/diff/viewer/build-location-diff";
 import { hashItemVersion } from "#/features/diff/viewer/item-version";
-import type { FileChange, FileContentReview } from "#/lib/pr-data";
-import { useFileContents, useSetRangeViewed } from "#/lib/pr-data";
-import { useSessionOpenFiles } from "#/lib/session-ui-store";
-import { splitPath } from "#/lib/tree-paths";
-import { cn } from "#/lib/utils";
 import type {
-	FileDrift,
-	WalkthroughReferenceBlock,
-} from "#/lib/walkthrough-data";
+	FileChange,
+	FileContentReview,
+} from "#/features/pull-request/data/pr-data";
+import {
+	useFileContents,
+	useSetRangeViewed,
+} from "#/features/pull-request/data/pr-data";
+import { useSessionOpenFiles } from "#/features/pull-request/data/session-ui-store";
+import { splitPath } from "#/lib/tree-paths";
+import { cn } from "cn";
+import type { FileDrift, WalkthroughReferenceBlock } from "./walkthrough-data";
 
 /** `action`, when present, renders as a button below the message — the out-of-diff case's "Open file" affordance (see `ReferencePane`'s `itemGroups` loop) is the only caller that supplies one today. */
 type ReferenceAnnotationMetadata = {

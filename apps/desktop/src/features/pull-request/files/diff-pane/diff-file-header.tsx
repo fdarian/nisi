@@ -22,10 +22,10 @@ import {
 import {
 	openInEditor,
 	useAvailableEditors,
-} from "#/hooks/use-available-editors";
-import type { FileChange, FileStatus, ReviewState } from "#/lib/pr-data";
+} from "#/infra/use-available-editors";
+import type { FileChange, FileStatus, ReviewState } from "#/features/pull-request/data/pr-data";
 import { splitPath } from "#/lib/tree-paths";
-import { cn } from "#/lib/utils";
+import { cn } from "cn";
 
 const STATUS_LABEL: Record<FileStatus, string> = {
 	added: "Added",

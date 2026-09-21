@@ -3,13 +3,13 @@
 import { useChat } from "@ai-sdk/react";
 import { LoaderCircleIcon, XIcon } from "lucide-react";
 import { Button } from "#/components/ui/button";
-import type { SidecarQueryUtils } from "#/lib/backend-context";
+import type { SidecarQueryUtils } from "#/infra/backend-context";
 import {
 	type ChatThreadMeta,
 	deriveThreadTitle,
 	getOrCreateChat,
-} from "#/lib/chat-store";
-import { cn } from "#/lib/utils";
+} from "./chat-store";
+import { cn } from "cn";
 
 type ChatTabProps = {
 	sessionId: string;

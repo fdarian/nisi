@@ -7,14 +7,14 @@ import { useCallback, useEffect, useRef } from "react";
 import { Button } from "#/components/ui/button";
 import { Spinner } from "#/components/ui/spinner";
 import { toastManager } from "#/components/ui/toast";
-import type { SidecarQueryUtils } from "#/lib/backend-context";
+import type { SidecarQueryUtils } from "#/infra/backend-context";
 import {
 	type UpdateState,
 	useDownloadUpdate,
 	useRestartToUpdate,
 	useUpdateStatus,
 } from "./update-data";
-import { cn } from "#/lib/utils";
+import { cn } from "cn";
 
 /** What the pill actually renders for one `UpdateState` — `null` for the two states that render nothing. */
 type PillView = {

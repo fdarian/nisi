@@ -7,7 +7,7 @@
  * around as permanent coverage — delete freely once verified.
  */
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import type { PullRequestMergeStatus, PullRequestStack } from "#/lib/pr-data";
+import type { PullRequestMergeStatus, PullRequestStack } from "#/features/pull-request/data/pr-data";
 import { createMockOrpc } from "../../../../.storybook/mock-orpc";
 import { PrMergeButton } from "./pr-merge-button";
 

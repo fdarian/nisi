@@ -2,8 +2,8 @@
 
 import { useLayoutEffect, useRef } from "react";
 import { ScrollArea } from "#/components/ui/scroll-area";
-import type { OverviewCommit } from "#/lib/pr-data";
-import { CommitRow } from "#/features/pull-request/overview/commits/commit-row";
+import type { OverviewCommit } from "#/features/pull-request/data/pr-data";
+import { CommitRow } from "./commit-row";
 
 type CommitListProps = {
 	commits: readonly OverviewCommit[];

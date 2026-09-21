@@ -131,7 +131,7 @@ const dev = Command.make(
 
 			// `--browser`: skip the Tauri webview entirely and open a plain
 			// `vite dev` tab against the sidecar instead, via the dev-only escape
-			// hatch in `src/lib/backend.ts` (see apps/desktop/AGENTS.md's "Browser
+			// hatch in `src/infra/backend.ts` (see apps/desktop/AGENTS.md's "Browser
 			// dev harness"). Vite can't start until the sidecar has actually
 			// published its handshake, so this sequences (await, then spawn vite)
 			// rather than starting both at once — still raced against the sidecar

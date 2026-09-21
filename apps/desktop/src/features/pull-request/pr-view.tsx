@@ -23,12 +23,12 @@ import {
 	TabsTrigger,
 } from "#/components/ui/tabs";
 import { WalkthroughView } from "#/features/pull-request/walkthrough/walkthrough-view";
-import type { KeyBindings } from "#/hooks/use-key-bindings";
-import { useKeyBindings } from "#/hooks/use-key-bindings";
+import type { KeyBindings } from "#/lib/use-key-bindings";
+import { useKeyBindings } from "#/lib/use-key-bindings";
 import { useNavigationShortcuts } from "#/features/pull-request/navigation/use-navigation-shortcuts";
-import { useWindowFocused } from "#/views/session/use-window-focused";
-import type { SidecarQueryUtils } from "#/lib/backend-context";
-import type { Session } from "#/lib/pr-data";
+import { useWindowFocused } from "#/infra/use-window-focused";
+import type { SidecarQueryUtils } from "#/infra/backend-context";
+import type { Session } from "#/features/pull-request/data/pr-data";
 import {
 	useFileChanges,
 	useLiveFileChanges,
@@ -36,18 +36,18 @@ import {
 	useReviewState,
 	useSessionWatch,
 	useSetFileViewed,
-} from "#/lib/pr-data";
-import type { OpenPullRequestParams } from "#/lib/pull-requests-data";
+} from "#/features/pull-request/data/pr-data";
+import type { OpenPullRequestParams } from "#/features/pull-request/data/pull-requests-data";
 import {
 	fileTabId,
 	fileTabPath,
 	useSessionActiveTab,
 	useSessionOpenFiles,
 	useSessionWalkthroughSelection,
-} from "#/lib/session-ui-store";
-import { useWalkthroughEnabled } from "#/lib/settings-data";
+} from "#/features/pull-request/data/session-ui-store";
+import { useWalkthroughEnabled } from "#/features/settings/settings-data";
 import { splitPath } from "#/lib/tree-paths";
-import { cn } from "#/lib/utils";
+import { cn } from "cn";
 import { CodeIndexLspControl } from "#/features/code-index/lsp/code-index-lsp-control";
 
 type PrViewProps = {

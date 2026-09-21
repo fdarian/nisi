@@ -28,8 +28,8 @@ import {
 	ToolbarSeparator,
 } from "#/components/ui/toolbar";
 import { diffSelectionPopupMarkerProps } from "./use-diff-selection";
-import type { SidecarQueryUtils } from "#/lib/backend-context";
-import { useChatDockActions } from "#/lib/chat-store";
+import type { SidecarQueryUtils } from "#/infra/backend-context";
+import { useChatDockActions } from "#/features/chat/chat-store";
 import {
 	type DiffSelectionReference,
 	formatSelectionReference,

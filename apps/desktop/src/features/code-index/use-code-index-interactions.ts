@@ -36,7 +36,7 @@ import {
 	findOccurrenceForToken,
 	type OccurrenceIndex,
 } from "#/features/code-index/navigation/occurrence-index";
-import type { SidecarQueryUtils } from "#/lib/backend-context";
+import type { SidecarQueryUtils } from "#/infra/backend-context";
 
 /** Class toggled directly on a token's `HTMLElement` — `@pierre/diffs` has no keyed decoration API, so this is the supported way to style one token (see `InteractionManager`'s own doc). Styled via `extraCSS`/`unsafeCSS` in each pane's `CodeViewOptions` — see `CODE_INDEX_TOKEN_CSS` below. */
 export const CODE_INDEX_TOKEN_ACTIVE_CLASS = "nisi-code-index-token-active";

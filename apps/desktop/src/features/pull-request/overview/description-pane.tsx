@@ -9,8 +9,8 @@
 import { useMemo } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import { Avatar, AvatarFallback, AvatarImage } from "#/components/ui/avatar";
-import type { OverviewDescription } from "#/lib/pr-data";
-import { githubAvatarUrl } from "#/lib/pull-requests-data";
+import type { OverviewDescription } from "#/features/pull-request/data/pr-data";
+import { githubAvatarUrl } from "#/features/pull-request/data/pull-requests-data";
 
 /** Mirrors `open-pull-request-palette.tsx`'s helper of the same name — too small (one line) to be worth sharing across the two files. */
 function authorInitials(login: string): string {

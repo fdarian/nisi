@@ -22,9 +22,9 @@ import {
 } from "#/components/ui/command";
 import { Kbd } from "#/components/ui/kbd";
 import { Separator } from "#/components/ui/separator";
-import type { SidecarQueryUtils } from "#/lib/backend-context";
-import type { Session } from "#/lib/pr-data";
-import { pullRequestUrl, useSwitchToPr } from "#/lib/pr-data";
+import type { SidecarQueryUtils } from "#/infra/backend-context";
+import type { Session } from "#/features/pull-request/data/pr-data";
+import { pullRequestUrl, useSwitchToPr } from "#/features/pull-request/data/pr-data";
 
 type CommandAction = {
 	id: string;

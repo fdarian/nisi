@@ -6,9 +6,12 @@ import {
 	FilePenIcon,
 	FilePlusIcon,
 } from "lucide-react";
-import { RegenerateControl } from "#/features/pull-request/walkthrough/generate/regenerate-control";
-import type { SidecarQueryUtils } from "#/lib/backend-context";
-import type { FileDrift, HarnessId } from "#/lib/walkthrough-data";
+import { RegenerateControl } from "./regenerate-control";
+import type { SidecarQueryUtils } from "#/infra/backend-context";
+import type {
+	FileDrift,
+	HarnessId,
+} from "#/features/pull-request/walkthrough/walkthrough-data";
 
 type OutdatedBannerProps = {
 	changedPaths: ReadonlyMap<string, FileDrift>;

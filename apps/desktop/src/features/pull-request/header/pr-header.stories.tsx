@@ -9,7 +9,7 @@ import type {
 	PullRequestMergeStatus,
 	PullRequestStack,
 	SessionTarget,
-} from "#/lib/pr-data";
+} from "#/features/pull-request/data/pr-data";
 import { createMockOrpc } from "../../../../.storybook/mock-orpc";
 import { PrHeader } from "./pr-header";
 

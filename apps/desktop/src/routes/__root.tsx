@@ -9,7 +9,7 @@ import {
 } from "#/features/devtools/dev-tool-context";
 import { ToastProvider } from "#/components/ui/toast";
 import { useSettingsShortcut } from "#/features/settings/use-settings-shortcut";
-import { BackendProvider } from "#/lib/backend-context";
+import { BackendProvider } from "#/infra/backend-context";
 import { useRedirectHomeOnPendingDeepLink } from "#/shell/deep-link/deep-link-data";
 
 export const Route = createRootRoute({

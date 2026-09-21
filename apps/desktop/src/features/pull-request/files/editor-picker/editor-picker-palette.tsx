@@ -15,7 +15,7 @@ import {
 } from "#/components/ui/command";
 import { Kbd } from "#/components/ui/kbd";
 import { Separator } from "#/components/ui/separator";
-import type { EditorInfo } from "#/hooks/use-available-editors";
+import type { EditorInfo } from "#/infra/use-available-editors";
 
 type EditorPickerPaletteProps = {
 	open: boolean;

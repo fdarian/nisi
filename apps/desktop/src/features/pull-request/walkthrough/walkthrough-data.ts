@@ -7,8 +7,8 @@
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { SidecarQueryUtils } from "#/lib/backend-context";
-import type { FileChange } from "#/lib/pr-data";
+import type { SidecarQueryUtils } from "#/infra/backend-context";
+import type { FileChange } from "#/features/pull-request/data/pr-data";
 
 export type HarnessId = "claude-code" | "codex" | "opencode" | "pi";
 

@@ -1,9 +1,9 @@
 "use client";
 
 import type React from "react";
-import type { SidecarQueryUtils } from "#/lib/backend-context";
-import type { PullRequestCheck } from "#/lib/pr-data";
-import { usePullRequestChecks } from "#/lib/pr-data";
+import type { SidecarQueryUtils } from "#/infra/backend-context";
+import type { PullRequestCheck } from "#/features/pull-request/data/pr-data";
+import { usePullRequestChecks } from "#/features/pull-request/data/pr-data";
 import type { CiCheck } from "./ci-status";
 import { CiStatus } from "./ci-status";
 

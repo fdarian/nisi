@@ -11,7 +11,7 @@ import type React from "react";
 import { createContext, useContext } from "react";
 import { Button } from "#/components/ui/button";
 import { ScrollArea } from "#/components/ui/scroll-area";
-import { cn } from "#/lib/utils";
+import { cn } from "cn";
 
 type DrawerPosition = "right" | "left" | "top" | "bottom";
 

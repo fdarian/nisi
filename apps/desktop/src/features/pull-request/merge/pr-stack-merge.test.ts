@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { PullRequestStack } from "#/lib/pr-data";
+import type { PullRequestStack } from "#/features/pull-request/data/pr-data";
 import { deriveStackMerge } from "./pr-stack-merge";
 
 const STACK: PullRequestStack = {

@@ -2,7 +2,7 @@
 
 import { Toolbar as ToolbarPrimitive } from "@base-ui/react/toolbar";
 import type React from "react";
-import { cn } from "#/lib/utils";
+import { cn } from "cn";
 
 export function Toolbar({
 	className,

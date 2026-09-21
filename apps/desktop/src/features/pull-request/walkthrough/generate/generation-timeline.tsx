@@ -9,7 +9,7 @@ import {
 } from "lucide-react";
 import { ScrollArea } from "#/components/ui/scroll-area";
 import { Spinner } from "#/components/ui/spinner";
-import type { GenerateEvent, GenerationLogEntry } from "#/lib/walkthrough-data";
+import type { GenerateEvent, GenerationLogEntry } from "#/features/pull-request/walkthrough/walkthrough-data";
 
 type GenerationTimelineProps = {
 	history: readonly GenerationLogEntry[];

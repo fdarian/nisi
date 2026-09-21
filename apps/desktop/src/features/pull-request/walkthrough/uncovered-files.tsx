@@ -6,11 +6,8 @@ import {
 	CollapsibleContent,
 	CollapsibleTrigger,
 } from "#/components/ui/collapsible";
-import { cn } from "#/lib/utils";
-import type {
-	UncoveredFile,
-	WalkthroughSelection,
-} from "#/lib/walkthrough-data";
+import { cn } from "cn";
+import type { UncoveredFile, WalkthroughSelection } from "./walkthrough-data";
 
 type UncoveredFilesProps = {
 	/**

@@ -10,7 +10,7 @@ import {
 	DropdownMenuTrigger,
 } from "#/components/ui/menu";
 import { useDismissOnInactive } from "#/features/pull-request/use-dismiss-on-inactive";
-import { cn } from "#/lib/utils";
+import { cn } from "cn";
 
 export type CiCheckStatus =
 	| "passing"

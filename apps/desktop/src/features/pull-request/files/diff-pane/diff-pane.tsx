@@ -44,7 +44,7 @@ import { Skeleton } from "#/components/ui/skeleton";
 import { useDiffMatchHighlighting } from "./use-diff-match-highlighting";
 import { useDiffSelection } from "#/features/diff/selection/use-diff-selection";
 import { useDragAutoscroll } from "#/features/pull-request/files/use-drag-autoscroll";
-import type { SidecarQueryUtils } from "#/lib/backend-context";
+import type { SidecarQueryUtils } from "#/infra/backend-context";
 import { buildFileDiff } from "./build-file-diff";
 import type { LineRange } from "#/features/diff/viewer/build-location-diff";
 import { buildLocationFileDiff } from "#/features/diff/viewer/build-location-diff";
@@ -58,14 +58,14 @@ import type {
 	FileContentsMap,
 	ReviewState,
 	ReviewStateEntry,
-} from "#/lib/pr-data";
+} from "#/features/pull-request/data/pr-data";
 import {
 	useSessionCodeIndexEnabled,
 	useSessionExpandedHiddenPaths,
 	useSessionFileCollapseOverrides,
-} from "#/lib/session-ui-store";
-import type { DiffStyleMode } from "#/lib/settings-data";
-import { cn } from "#/lib/utils";
+} from "#/features/pull-request/data/session-ui-store";
+import type { DiffStyleMode } from "#/features/settings/settings-data";
+import { cn } from "cn";
 
 /** Why a file's whole body is hidden behind a "Show diff" placeholder by default — see `resolveHiddenFileReason`. */
 type HiddenFileReason = "generated" | "large";

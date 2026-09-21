@@ -4,8 +4,8 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 import type React from "react";
 import { CiStatusIcon } from "#/features/pull-request/header/ci-status";
 import { Avatar, AvatarFallback, AvatarImage } from "#/components/ui/avatar";
-import type { OverviewCommit } from "#/lib/pr-data";
-import { githubAvatarUrl } from "#/lib/pull-requests-data";
+import type { OverviewCommit } from "#/features/pull-request/data/pr-data";
+import { githubAvatarUrl } from "#/features/pull-request/data/pull-requests-data";
 
 /** Mirrors `open-pull-request-palette.tsx`'s helper of the same name — too small (one line) to be worth sharing across the two files. */
 function authorInitials(name: string): string {

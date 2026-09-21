@@ -39,7 +39,7 @@ import { Spinner } from "#/components/ui/spinner";
 import { ToggleGroup, ToggleGroupItem } from "#/components/ui/toggle-group";
 import { Toolbar } from "#/components/ui/toolbar";
 import { useDiffSelection } from "#/features/diff/selection/use-diff-selection";
-import type { SidecarQueryUtils } from "#/lib/backend-context";
+import type { SidecarQueryUtils } from "#/infra/backend-context";
 import {
 	type CodeIndexReferenceTarget,
 	codeIndexDisplayedLine,
@@ -59,7 +59,7 @@ import {
 	useSessionCodeIndexEnabled,
 	useSessionFileReferenceTarget,
 	useSessionFileScrollTarget,
-} from "#/lib/session-ui-store";
+} from "#/features/pull-request/data/session-ui-store";
 import { splitPath } from "#/lib/tree-paths";
 
 type FileViewProps = {

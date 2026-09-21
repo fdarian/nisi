@@ -23,8 +23,8 @@
  */
 import type { ChatTransport, UIMessage, UIMessageChunk } from "ai";
 import { isTextUIPart } from "ai";
-import type { SidecarQueryUtils } from "#/lib/backend-context";
-import type { HarnessId } from "#/lib/walkthrough-data";
+import type { SidecarQueryUtils } from "#/infra/backend-context";
+import type { HarnessId } from "#/features/pull-request/walkthrough/walkthrough-data";
 
 /**
  * What `ChatComposer`'s submit passes as `sendMessage`'s per-call

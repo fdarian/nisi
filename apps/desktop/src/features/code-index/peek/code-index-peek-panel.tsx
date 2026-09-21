@@ -69,12 +69,12 @@ import {
 } from "#/components/ui/collapsible";
 import { Dialog, DialogContent, DialogTitle } from "#/components/ui/dialog";
 import { ScrollArea } from "#/components/ui/scroll-area";
-import type { SidecarQueryUtils } from "#/lib/backend-context";
+import type { SidecarQueryUtils } from "#/infra/backend-context";
 import { codeIndexReferenceTarget } from "#/features/code-index/navigation/code-index-navigation";
 import { hashItemVersion } from "#/features/diff/viewer/item-version";
-import { useSessionOpenFiles } from "#/lib/session-ui-store";
+import { useSessionOpenFiles } from "#/features/pull-request/data/session-ui-store";
 import { splitPath } from "#/lib/tree-paths";
-import { cn } from "#/lib/utils";
+import { cn } from "cn";
 import { Skeleton } from "#/components/ui/skeleton";
 
 type CodeIndexPeekDialogProps = {

@@ -9,7 +9,7 @@ import {
 	Toggle as ToggleComponent,
 	type toggleVariants,
 } from "#/components/ui/toggle";
-import { cn } from "#/lib/utils";
+import { cn } from "cn";
 
 export const ToggleGroupContext: React.Context<
 	VariantProps<typeof toggleVariants>

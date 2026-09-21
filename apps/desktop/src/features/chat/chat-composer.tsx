@@ -43,15 +43,15 @@ import {
 	HarnessModelCombobox,
 	type ModelSelection,
 } from "#/components/harness-model-combobox";
-import type { SidecarQueryUtils } from "#/lib/backend-context";
+import type { SidecarQueryUtils } from "#/infra/backend-context";
 import {
 	type DiffSelectionReference,
 	formatSelectionReference,
 	formatSelectionReferenceShort,
 } from "#/features/diff/diff-reference";
-import { useLastChatModel } from "#/lib/settings-data";
-import { cn } from "#/lib/utils";
-import { type HarnessId, useHarnesses } from "#/lib/walkthrough-data";
+import { useLastChatModel } from "#/features/settings/settings-data";
+import { cn } from "cn";
+import { type HarnessId, useHarnesses } from "#/features/pull-request/walkthrough/walkthrough-data";
 
 type ChatComposerProps = {
 	/** `null` until the thread's first message locks it in — see `chat-store.ts`'s `ChatThreadMeta` doc. */

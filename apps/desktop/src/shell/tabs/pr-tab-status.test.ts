@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { PullRequestCheck, PullRequestMergeStatus } from "#/lib/pr-data";
+import type { PullRequestCheck, PullRequestMergeStatus } from "#/features/pull-request/data/pr-data";
 import { derivePrTabStatus } from "./pr-tab-status.ts";
 
 /** `usePullRequestMergeStatus`'s default OPEN/CLEAN/mergeable shape — each test overrides only the fields it's about. */

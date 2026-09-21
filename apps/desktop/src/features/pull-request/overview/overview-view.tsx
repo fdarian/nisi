@@ -8,11 +8,11 @@ import {
 	EmptyTitle,
 } from "#/components/ui/empty";
 import { Spinner } from "#/components/ui/spinner";
-import type { SidecarQueryUtils } from "#/lib/backend-context";
-import type { Session } from "#/lib/pr-data";
-import { useOverview } from "#/lib/pr-data";
+import type { SidecarQueryUtils } from "#/infra/backend-context";
+import type { Session } from "#/features/pull-request/data/pr-data";
+import { useOverview } from "#/features/pull-request/data/pr-data";
 import { CommitList } from "#/features/pull-request/overview/commits/commit-list";
-import { DescriptionPane } from "#/features/pull-request/overview/description-pane";
+import { DescriptionPane } from "./description-pane";
 
 type OverviewViewProps = {
 	orpc: SidecarQueryUtils;

@@ -45,10 +45,10 @@ import { Kbd } from "#/components/ui/kbd";
 import { TabsPrimitive } from "#/components/ui/tabs";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "#/components/ui/tooltip";
 import { UpdatePill } from "#/shell/update/update-pill";
-import type { SidecarQueryUtils } from "#/lib/backend-context";
-import type { Session, SessionTarget } from "#/lib/pr-data";
-import { usePullRequestChecks, usePullRequestMergeStatus } from "#/lib/pr-data";
-import { cn } from "#/lib/utils";
+import type { SidecarQueryUtils } from "#/infra/backend-context";
+import type { Session, SessionTarget } from "#/features/pull-request/data/pr-data";
+import { usePullRequestChecks, usePullRequestMergeStatus } from "#/features/pull-request/data/pr-data";
+import { cn } from "cn";
 import { Button } from "#/components/ui/button";
 import { derivePrTabStatus, type PrTabStatus } from "./pr-tab-status";
 

@@ -12,7 +12,7 @@
  */
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { useState } from "react";
-import type { WalkthroughSelection } from "#/lib/walkthrough-data";
+import type { WalkthroughSelection } from "./walkthrough-data";
 import { createMockOrpc } from "../../../../.storybook/mock-orpc";
 import {
 	FIXTURE_FILE_CONTENTS,

@@ -1,4 +1,4 @@
-import type { PullRequestStack } from "#/lib/pr-data";
+import type { PullRequestStack } from "#/features/pull-request/data/pr-data";
 
 export type StackMergeInfo = {
 	count: number;

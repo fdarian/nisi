@@ -2,12 +2,12 @@
  * Drains `deep-link-store.ts`'s pending queue into real PR sessions, plus
  * the route redirect that gets a link out of `/settings` and back where
  * `AppShellReady` can see it. Same explicit-`orpc`-param idiom as
- * `#/lib/pr-data.ts`.
+ * `#/features/pull-request/data/pr-data.ts`.
  */
 import { useNavigate, useRouterState } from "@tanstack/react-router";
 import { useEffect, useSyncExternalStore } from "react";
 import { toastManager } from "#/components/ui/toast";
-import type { SidecarQueryUtils } from "#/lib/backend-context";
+import type { SidecarQueryUtils } from "#/infra/backend-context";
 import { parseNisiDeepLink } from "./deep-link";
 import {
 	dequeueDeepLink,
@@ -17,7 +17,7 @@ import {
 import {
 	friendlyOpenPullRequestError,
 	useOpenPullRequest,
-} from "#/lib/pull-requests-data";
+} from "#/features/pull-request/data/pull-requests-data";
 
 /**
  * Opens whatever's pending in `deep-link-store.ts`, one at a time — gated

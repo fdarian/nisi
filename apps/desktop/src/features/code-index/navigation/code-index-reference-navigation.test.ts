@@ -6,7 +6,7 @@ import {
 	REFERENCE_CONTEXT_PREFETCH_RADIUS,
 	referenceContextWindow,
 	referenceNavigationGroup,
-} from "#/features/code-index/navigation/code-index-reference-navigation";
+} from "./code-index-reference-navigation";
 import type { CodeIndexPeekTarget } from "#/features/code-index/use-code-index-interactions";
 
 const firstReference = {

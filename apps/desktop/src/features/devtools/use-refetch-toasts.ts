@@ -2,7 +2,7 @@ import { matchQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
 import { useToastOnRefetch } from "./dev-tool-context";
 import { toastManager } from "#/components/ui/toast";
-import type { SidecarQueryUtils } from "#/lib/backend-context";
+import type { SidecarQueryUtils } from "#/infra/backend-context";
 
 type WatchedQuery = {
 	label: string;
