@@ -128,7 +128,7 @@ export default defineConfig(async () => ({
 		dedupe: ["react", "react-dom"],
 	},
 
-	// `@pierre/diffs`' worker (src/views/session/files-changed/diff-pane.tsx) is a real ES
+	// `@pierre/diffs`' worker (src/features/pull-request/files/diff-pane/diff-pane.tsx) is a real ES
 	// module with its own imports (shiki, @pierre/theming, diff) — Vite's default
 	// worker output format is `iife`, which rollup refuses for a bundle that needs
 	// code-splitting. `es` matches the `{ type: "module" }` the Worker is already

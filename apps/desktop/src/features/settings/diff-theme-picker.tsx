@@ -28,7 +28,7 @@ import { useMemo } from "react";
 import {
 	DIFF_THEME_DARK_OPTIONS,
 	DIFF_THEME_LIGHT_OPTIONS,
-} from "#/lib/diff/diff-view-theme";
+} from "#/features/diff/diff-view-theme";
 import {
 	Select,
 	SelectContent,

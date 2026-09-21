@@ -9,7 +9,7 @@ import { DevToolButton } from "#/features/devtools/dev-tool";
 import { useDevToolVisible } from "#/features/devtools/dev-tool-context";
 import { OpenPullRequestPalette } from "#/features/command-palette/open-pull-request-palette";
 import { PrTabStrip } from "./tabs/pr-tab-strip";
-import { PrView } from "#/views/session/pr-view";
+import { PrView } from "#/features/pull-request/pr-view";
 import { Button } from "#/components/ui/button";
 import {
 	Empty,

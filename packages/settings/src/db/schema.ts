@@ -77,7 +77,7 @@ export const settings = sqliteTable("settings", {
 	lastChatModel: text(),
 	/**
 	 * `@pierre/theming` theme id used for the diff pane in light mode — see
-	 * `apps/desktop/src/lib/diff/diff-view-theme.ts`'s
+	 * `apps/desktop/src/features/diff/diff-view-theme.ts`'s
 	 * `DIFF_THEME_LIGHT_OPTIONS` for the full set nisi offers. Defaults to
 	 * `"github-light"`, the value `diff-view-theme.ts` hardcoded before this
 	 * setting existed, so existing installs see no change. Plain text, not a

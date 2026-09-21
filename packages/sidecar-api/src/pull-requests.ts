@@ -134,7 +134,7 @@ export const UnpushedCommits = Schema.Struct({
 });
 export type UnpushedCommits = Schema.Schema.Type<typeof UnpushedCommits>;
 
-/** Mirrors `@repo/git`'s `PullRequestCheckStatus` — the 5-state vocabulary `apps/desktop/src/views/session/ci-status.tsx`'s `CiCheckStatus` renders. */
+/** Mirrors `@repo/git`'s `PullRequestCheckStatus` — the 5-state vocabulary `apps/desktop/src/features/pull-request/header/ci-status.tsx`'s `CiCheckStatus` renders. */
 export const PullRequestCheckStatus = Schema.Literals([
 	"passing",
 	"failing",
@@ -238,7 +238,7 @@ export type PullRequestCheck = Schema.Schema.Type<typeof PullRequestCheck>;
  * configured legitimately resolves to an empty array, which `CiStatus`
  * already renders as nothing rather than an empty ring. Turning
  * `durationMs` into `CiStatus`'s human-readable `detail` string is left to
- * `apps/desktop/src/views/session/pr-ci-status.tsx` — this wire shape
+ * `apps/desktop/src/features/pull-request/header/pr-ci-status.tsx` — this wire shape
  * carries the fact, not the formatting.
  *
  * `unpushedCommits` backs the pre-merge "you have local unpushed commits"

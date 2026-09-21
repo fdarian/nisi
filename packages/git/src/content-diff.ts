@@ -78,7 +78,7 @@ export const diffContents = (
  * but with git's normal context (not `-U0`) and a header naming `path` on
  * both sides instead of the two blobs' shas — the shape a real file's patch
  * has, which `@pierre/diffs`' `parsePatchFiles` and
- * `apps/desktop/src/components/diff/build-location-diff.ts`'s hunk slicer both expect.
+ * `apps/desktop/src/features/diff/build-location-diff.ts`'s hunk slicer both expect.
  * Built for `reviewedBaseline → head`: neither side is a real git ref (the
  * baseline is synthesized, head may be the worktree), so no ref-based `git
  * diff` could produce a patch for this pair on its own.

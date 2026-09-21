@@ -31,7 +31,7 @@ import type { SidecarQueryUtils } from "#/lib/backend-context";
 import {
 	codeIndexLspIntentForStatus,
 	sessionIdsForCodeIndexLspStatus,
-} from "#/components/code-index/code-index-lsp-events";
+} from "#/features/code-index/lsp/code-index-lsp-events";
 import { useSetCodeIndexEnabled } from "#/lib/session-ui-store";
 import { useIncludeUncommitted } from "#/lib/settings-data";
 

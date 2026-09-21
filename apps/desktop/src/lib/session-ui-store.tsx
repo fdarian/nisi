@@ -26,8 +26,8 @@ import {
 	useState,
 } from "react";
 import { createStore, type StoreApi, useStore } from "zustand";
-import type { SearchMode } from "#/views/session/files-changed/files-sidebar/files-sidebar";
-import type { CodeIndexReferenceTarget } from "#/components/code-index/code-index-navigation";
+import type { SearchMode } from "#/features/pull-request/files/sidebar/files-sidebar";
+import type { CodeIndexReferenceTarget } from "#/features/code-index/navigation/code-index-navigation";
 import {
 	createNavigationHistory,
 	type NavigationEntry,
@@ -36,7 +36,7 @@ import {
 	pushNavigationHistory,
 	replaceNavigationHistoryAtCursor,
 	stepNavigationHistory,
-} from "#/views/session/navigation-history";
+} from "#/features/pull-request/navigation/navigation-history";
 import type { WalkthroughSelection } from "#/lib/walkthrough-data";
 
 /** One `r` keypress's undo record — mirrors `files-changed-view.tsx`'s local type of the same name. */
@@ -84,7 +84,7 @@ type SessionUiState = {
 	 */
 	codeIndexEnabled: boolean;
 	walkthroughSelection: WalkthroughSelection | null;
-	/** Browser-style back/forward history (⌘[/⌘]) for this PR session — see `#/views/session/navigation-history.ts` for transition semantics. Always a fresh, immutable value from that module's pure functions, never mutated in place. */
+	/** Browser-style back/forward history (⌘[/⌘]) for this PR session — see `#/features/pull-request/navigation/navigation-history.ts` for transition semantics. Always a fresh, immutable value from that module's pure functions, never mutated in place. */
 	navigationHistory: NavigationHistoryState;
 	/**
 	 * The `r`/`u` undo stack. A plain mutable array, not reactive state —

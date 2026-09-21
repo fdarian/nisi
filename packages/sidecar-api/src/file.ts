@@ -3,7 +3,7 @@ import { Schema } from "effect";
 
 /**
  * One whole file's content for a file-viewer tab
- * (`apps/desktop/src/views/session/file-view/file-view.tsx`) — rendered through
+ * (`apps/desktop/src/features/pull-request/file-view/file-view.tsx`) — rendered through
  * `@pierre/diffs`' plain `CodeViewFileItem`, which infers syntax
  * highlighting from the filename it's given (already known client-side,
  * it's the tab's own path), so there's nothing beyond the raw text this

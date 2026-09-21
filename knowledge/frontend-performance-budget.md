@@ -9,11 +9,11 @@ verified: { by: process:cdp-trace, at: 2026-07-29T00:00:00Z }
 stale_after: 2027-01-30
 sources:
   - id: one-tree
-    resource: ../apps/desktop/src/views/session/files-changed/files-sidebar/file-tree-view.tsx
+    resource: ../apps/desktop/src/features/pull-request/files/sidebar/file-tree-view.tsx
     title: "commit 3e1490d — render the files sidebar as one virtualized tree"
     last_modified: 2026-07-29
   - id: parse-once
-    resource: ../apps/desktop/src/views/session/files-changed/diff-pane.tsx
+    resource: ../apps/desktop/src/features/pull-request/files/diff-pane.tsx
     title: "commit 4ddd2fb — parse each file's diff once, not once per file per keystroke"
     last_modified: 2026-07-29
 ---

@@ -43,7 +43,7 @@ import {
 	createOrpcChatTransport,
 	messageText,
 } from "#/features/chat/chat-transport";
-import type { DiffSelectionReference } from "#/lib/diff/diff-reference";
+import type { DiffSelectionReference } from "#/features/diff/diff-reference";
 import type { HarnessId } from "#/lib/walkthrough-data";
 
 export type ChatThreadMeta = {
