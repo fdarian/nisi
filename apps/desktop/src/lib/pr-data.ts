@@ -242,7 +242,10 @@ export function useSessions(
 		const event = eventsQuery.data;
 		if (event === undefined) return;
 		if (event.type === "code-index-lsp-status-changed") {
-			const sessions = sessionsQuery.data ?? [];
+			const sessions = queryClient.getQueryData<readonly Session[]>(
+				orpc.sessions.list.queryKey(),
+			);
+			if (sessions === undefined) return;
 			for (const sessionId of sessionIdsForCodeIndexLspStatus(
 				sessions,
 				event,
@@ -264,11 +267,12 @@ export function useSessions(
 			if (isTauri()) void getCurrentWindow().setFocus();
 		}
 	}, [
+		// Keep the session list out of these dependencies: an optimistic cache
+		// write would replay the last event and cause the close-tab flicker.
 		eventsQuery.data,
 		onSessionOpened,
 		orpc,
 		queryClient,
-		sessionsQuery.data,
 		setCodeIndexEnabled,
 	]);
 
