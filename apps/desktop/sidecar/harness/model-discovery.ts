@@ -5,8 +5,8 @@ import { HARNESS_CLI_BIN } from "./harness-bin.ts";
 
 /**
  * How long a live discovery call is allowed to run before it's treated as a
- * failure — bounds the worst case so `walkthrough.harnesses` never hangs the
- * UI on a slow/hung CLI. Generous because claude-code's discovery spawns a
+ * failure — bounds a per-harness model request on a slow/hung CLI.
+ * Generous because claude-code's discovery spawns a
  * real `claude` subprocess (~3s warm on this machine; cold installs of the
  * SDK's own bundled binary can be slower).
  */

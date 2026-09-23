@@ -4,34 +4,18 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { BunServices } from "@effect/platform-bun";
 import { SqliteDb } from "@repo/db";
-import type { HarnessInfo, HarnessModel } from "@repo/sidecar-api";
+import type { HarnessInfo } from "@repo/sidecar-api";
 import { ConfigProvider, Effect, Layer } from "effect";
 import { listHarnesses } from "../harnesses.ts";
 import { HarnessModelCache } from "../model-store.ts";
+import { getHarnessModels } from "../models.ts";
 
-/**
- * `listHarnesses` composes a live `checkHarnessAvailability` (real
- * filesystem check, driven here through `NISI_CODEX_BIN` so the test
- * controls it without touching the real machine's installs) with
- * `HarnessModelCache` (`../model-store.ts`) — a real `SqliteDb` connection
- * pinned at a throwaway `NISI_DATA_DIR` via `withLayer`, never the shared
- * production instance. The cache's own fresh/stale/backoff/single-flight
- * semantics are `model-store.test.ts`'s job; this file only covers how
- * `listHarnesses` composes availability with whatever the cache reports —
- * `DISCOVER_MODELS[id]` is always the real `discoverCodexModels` (a real
- * subprocess spawn) here, so every scenario points `NISI_CODEX_BIN` at a
- * fake, non-functional shell script rather than a real CLI: discovery is
- * *attempted*, but always lands on the cache's own no-prior-success
- * fallback, which is all these tests need.
- */
-describe("listHarnesses — availability composition", () => {
+describe("harness presence and model discovery", () => {
 	let tempDir: string;
-	let dataDir: string;
 	let originalPath: string | undefined;
 
 	beforeEach(() => {
 		tempDir = mkdtempSync(join(tmpdir(), "list-harnesses-test-"));
-		dataDir = mkdtempSync(join(tmpdir(), "list-harnesses-data-"));
 		originalPath = process.env.PATH;
 		process.env.PATH = tempDir;
 	});
@@ -40,144 +24,70 @@ describe("listHarnesses — availability composition", () => {
 		process.env.PATH = originalPath;
 		delete process.env.NISI_CODEX_BIN;
 		rmSync(tempDir, { recursive: true, force: true });
-		rmSync(dataDir, { recursive: true, force: true });
 	});
-
-	const withLayer = <A>(
-		effect: Effect.Effect<A, never, HarnessModelCache>,
-	): Promise<A> =>
-		Effect.runPromise(
-			effect.pipe(
-				Effect.provide(
-					HarnessModelCache.layer.pipe(
-						Layer.provideMerge(SqliteDb.layer),
-						Layer.provideMerge(BunServices.layer),
-						Layer.provide(
-							ConfigProvider.layer(
-								ConfigProvider.fromUnknown({ NISI_DATA_DIR: dataDir }),
-							),
-						),
-					),
-				),
-			),
-		);
 
 	const getCodex = (infos: ReadonlyArray<HarnessInfo>) => {
 		const codex = infos.find((info) => info.id === "codex");
-		if (codex === undefined)
-			throw new Error("codex missing from listHarnesses result");
+		if (codex === undefined) throw new Error("codex missing from harness list");
 		return codex;
 	};
 
-	test("an unavailable harness reports unavailable and skips discovery entirely, even when enabled", async () => {
-		// An explicit override to a missing path is deterministic regardless of
-		// this machine's real installs — see `availability.test.ts`'s comment on
-		// why `PATH` alone can't force "not found" here.
-		process.env.NISI_CODEX_BIN = join(tempDir, "does-not-exist");
+	test("presence stays live and independent of the enabled setting", () => {
+		process.env.NISI_CODEX_BIN = join(tempDir, "codex");
+		expect(getCodex(listHarnesses(new Set(["codex"])))).toMatchObject({
+			enabled: true,
+			available: false,
+			binaryPath: null,
+		});
 
-		const infos = await withLayer(listHarnesses(new Set(["codex"])));
-
-		const codex = getCodex(infos);
-		expect(codex.enabled).toBe(true);
-		expect(codex.available).toBe(false);
-		expect(codex.binaryPath).toBeNull();
-		expect(codex.modelsStatus).toBe("unavailable");
-		expect(codex.models).toEqual([]);
+		writeFileSync(process.env.NISI_CODEX_BIN, "#!/bin/sh\n");
+		expect(getCodex(listHarnesses(new Set()))).toMatchObject({
+			enabled: false,
+			available: true,
+			binaryPath: process.env.NISI_CODEX_BIN,
+		});
+		expect(listHarnesses(null)).toHaveLength(4);
+		expect(listHarnesses(null).every((info) => info.enabled)).toBe(true);
 	});
 
-	test("a harness that was available (and cached) but has since lost its binary reports unavailable, not stale", async () => {
-		const binPath = join(tempDir, "codex");
-		writeFileSync(binPath, "#!/bin/sh\n");
-		process.env.NISI_CODEX_BIN = binPath;
-
-		// Prime the cache directly with a successful discovery — standing in
-		// for "codex was available a moment ago and its model list is cached."
-		await withLayer(
-			Effect.gen(function* () {
-				const cache = yield* HarnessModelCache;
-				yield* cache.get("codex", () =>
-					Effect.succeed([{ id: "m", label: "M" }]),
-				);
-			}),
+	test("model requests check presence independently and forced requests bypass a fresh cache hit", async () => {
+		process.env.NISI_CODEX_BIN = join(tempDir, "codex");
+		const dataDir = mkdtempSync(join(tmpdir(), "harness-models-test-"));
+		const layer = HarnessModelCache.layer.pipe(
+			Layer.provideMerge(SqliteDb.layer),
+			Layer.provideMerge(BunServices.layer),
+			Layer.provide(
+				ConfigProvider.layer(
+					ConfigProvider.fromUnknown({ NISI_DATA_DIR: dataDir }),
+				),
+			),
 		);
-
-		// The binary vanishes (env override now points nowhere real).
-		process.env.NISI_CODEX_BIN = join(tempDir, "does-not-exist");
-
-		const infos = await withLayer(listHarnesses(new Set(["codex"])));
-		const codex = getCodex(infos);
-		expect(codex.available).toBe(false);
-		expect(codex.modelsStatus).toBe("unavailable");
-		expect(codex.models).toEqual([]);
-	});
-
-	test("available and enabled runs discovery normally", async () => {
-		const binPath = join(tempDir, "codex");
-		writeFileSync(binPath, "#!/bin/sh\n");
-		process.env.NISI_CODEX_BIN = binPath;
-
-		const infos = await withLayer(listHarnesses(new Set(["codex"])));
-		const codex = getCodex(infos);
-		// Real `discoverCodexModels()` will fail against this fake binary (not
-		// a real codex CLI) — the point of this test is only that discovery is
-		// *attempted* (available+enabled), landing on the cache's own
-		// no-prior-success fallback rather than being short-circuited to
-		// unavailable before ever trying.
-		expect(codex.available).toBe(true);
-		expect(codex.binaryPath).toBe(binPath);
-		expect(codex.modelsStatus).toBe("unavailable");
-	});
-
-	test("disabled harnesses report unavailable models regardless of binary presence", async () => {
-		const binPath = join(tempDir, "codex");
-		writeFileSync(binPath, "#!/bin/sh\n");
-		process.env.NISI_CODEX_BIN = binPath;
-
-		const infos = await withLayer(listHarnesses(new Set([])));
-		const codex = getCodex(infos);
-		expect(codex.enabled).toBe(false);
-		expect(codex.available).toBe(true);
-		expect(codex.modelsStatus).toBe("unavailable");
-		expect(codex.models).toEqual([]);
-	});
-
-	test("force is threaded through to the cache, bypassing a fresh cache hit", async () => {
-		const binPath = join(tempDir, "codex");
-		// Empty output -- `discoverCodexModels`'s `JSON.parse` on it fails, so
-		// a real attempt against this binary always reports a failure. That's
-		// exactly the signal this test needs: the primed list can only ever
-		// come back flagged *stale* (not fresh) if a live discovery genuinely
-		// ran and failed, which only happens when `force` really reached the
-		// cache rather than being silently dropped on the way from
-		// `listHarnesses`'s own `opts?.force`.
-		writeFileSync(binPath, "#!/bin/sh\n");
-		process.env.NISI_CODEX_BIN = binPath;
-
-		const primed: HarnessModel = { id: "primed", label: "Primed" };
-
-		await withLayer(
-			Effect.gen(function* () {
-				const cache = yield* HarnessModelCache;
-				yield* cache.get("codex", () => Effect.succeed([primed]));
-
-				// Within the TTL, an unforced call is a pure cache hit --
-				// `listHarnesses` never reaches the real `discoverCodexModels`,
-				// so the primed list survives untouched and fresh.
-				const unforced = yield* listHarnesses(new Set(["codex"]));
-				const unforcedCodex = unforced.find((info) => info.id === "codex");
-				expect(unforcedCodex?.modelsStatus).toBe("fresh");
-				expect(unforcedCodex?.models).toEqual([primed]);
-
-				// `force: true` (`harnesses.ts`'s composition point,
-				// `cache.get(id, DISCOVER_MODELS[id], { force: opts?.force })`)
-				// must bypass that TTL and reach a real, live attempt.
-				const forced = yield* listHarnesses(new Set(["codex"]), {
-					force: true,
-				});
-				const forcedCodex = forced.find((info) => info.id === "codex");
-				expect(forcedCodex?.modelsStatus).toBe("stale");
-				expect(forcedCodex?.models).toEqual([primed]);
-			}),
-		);
+		try {
+			await Effect.runPromise(
+				Effect.gen(function* () {
+					const absent = yield* getHarnessModels("codex");
+					expect(absent).toEqual({ models: [], status: "unavailable" });
+					writeFileSync(process.env.NISI_CODEX_BIN as string, "#!/bin/sh\n");
+					const cache = yield* HarnessModelCache;
+					yield* cache.get("codex", () =>
+						Effect.succeed([{ id: "primed", label: "Primed" }]),
+					);
+					const cached = yield* getHarnessModels("codex");
+					expect(cached).toEqual({
+						models: [{ id: "primed", label: "Primed" }],
+						status: "fresh",
+					});
+					const forced = yield* getHarnessModels("codex", true);
+					expect(forced.status).toBe("stale");
+					process.env.NISI_CODEX_BIN = join(tempDir, "removed");
+					expect(yield* getHarnessModels("codex")).toEqual({
+						models: [],
+						status: "unavailable",
+					});
+				}).pipe(Effect.provide(layer)),
+			);
+		} finally {
+			rmSync(dataDir, { recursive: true, force: true });
+		}
 	});
 });
