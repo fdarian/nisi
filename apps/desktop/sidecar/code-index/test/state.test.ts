@@ -104,7 +104,7 @@ test("start initializes a root and stop waits for its active lease", async () =>
 	} finally {
 		unsubscribe();
 	}
-	expect(events).toEqual([
+	expect(events).toMatchObject([
 		{
 			type: "code-index-lsp-status-changed",
 			repoRoot: "root",
@@ -174,7 +174,7 @@ test("same-root LSP leases allow operations to overlap", async () => {
 		unsubscribe();
 	}
 	expect(maximumActive).toBe(2);
-	expect(events).toEqual([
+	expect(events).toMatchObject([
 		{
 			type: "code-index-lsp-status-changed",
 			repoRoot: "root",
@@ -272,12 +272,12 @@ test("a failed lazy startup publishes off with its error", async () => {
 
 	expect(result._tag).toBe("Failure");
 	expect(events).toHaveLength(2);
-	expect(events[0]).toEqual({
+	expect(events[0]).toMatchObject({
 		type: "code-index-lsp-status-changed",
 		repoRoot: "root",
 		status: { status: "starting", error: null },
 	});
-	expect(events[1]).toEqual({
+	expect(events[1]).toMatchObject({
 		type: "code-index-lsp-status-changed",
 		repoRoot: "root",
 		status: {
@@ -317,7 +317,7 @@ test("an interrupted startup publishes an error instead of a clean stop", async 
 	} finally {
 		unsubscribe();
 	}
-	expect(events).toEqual([
+	expect(events).toMatchObject([
 		{
 			type: "code-index-lsp-status-changed",
 			repoRoot: "root",

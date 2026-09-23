@@ -36,7 +36,7 @@ import type {
 } from "@repo/sidecar-api";
 import { contract } from "@repo/sidecar-api";
 import type { Context } from "effect";
-import { Effect } from "effect";
+import { Cause, Effect, Exit, Option } from "effect";
 import type { ChildProcessSpawner } from "effect/unstable/process";
 import {
 	ChatSessionNotFound,
@@ -60,11 +60,20 @@ import {
 import {
 	emit,
 	type SidecarEvent,
+	streamReady,
 	subscribe as subscribeToSidecarEvents,
 } from "./events.ts";
 import { listHarnesses } from "./harness/harnesses.ts";
 import { getHarnessModels } from "./harness/models.ts";
 import { checkSessionForChanges } from "./live-poll.ts";
+import { createNativeActivationHandler } from "./native-activation.ts";
+import {
+	acknowledgeOpenRequest,
+	createOpenRequest,
+	failOpenRequest,
+	listOpenRequests,
+	resolveOpenRequest,
+} from "./open-requests.ts";
 import type { AppServices } from "./services.ts";
 import {
 	forkSessionCloseSideEffects,
@@ -237,7 +246,12 @@ export function attachRouter(
 	server: ReturnType<typeof Bun.serve>,
 	token: string,
 	mainContext: Context.Context<AppServices>,
+	activationOwnerId?: string,
 ) {
+	const nativeActivation = createNativeActivationHandler(
+		token,
+		activationOwnerId,
+	);
 	// `events.subscribe`/`walkthrough.generate` are plain `.handler(async
 	// function* ...)` closures (see the comment on `events` below) — they
 	// never go through `.effect()`'s bridging into `mainContext`, so logging
@@ -321,6 +335,10 @@ export function attachRouter(
 		},
 		sessions: {
 			open: authed.sessions.open.effect(function* ({ input, errors }) {
+				const request = createOpenRequest(
+					input.cwd,
+					input.target ?? { kind: "auto" },
+				);
 				const store = yield* Store;
 				const session = yield* store.openSession(input.cwd, input.target).pipe(
 					Effect.catchTag("InvalidCwd", (cause) =>
@@ -381,8 +399,22 @@ export function attachRouter(
 							}),
 						),
 					),
+					Effect.onExit((exit) =>
+						Effect.sync(() => {
+							if (Exit.isSuccess(exit)) {
+								resolveOpenRequest(request.id, exit.value);
+							} else {
+								const error = Option.getOrUndefined(Exit.findErrorOption(exit));
+								failOpenRequest(
+									request.id,
+									error instanceof Error
+										? error.message
+										: Cause.pretty(exit.cause),
+								);
+							}
+						}),
+					),
 				);
-				emit({ type: "session-opened", session });
 				yield* Effect.logInfo("session opened", {
 					sessionId: session.id,
 					repoRoot: session.repoRoot,
@@ -743,6 +775,12 @@ export function attachRouter(
 			}),
 		},
 		events: {
+			openRequests: authed.events.openRequests.effect(function* () {
+				return yield* Effect.sync(listOpenRequests);
+			}),
+			ackOpenRequest: authed.events.ackOpenRequest.effect(function* (context) {
+				yield* Effect.sync(() => acknowledgeOpenRequest(context.input.id));
+			}),
 			// Plain async-generator handler — `.effect` resolves its generator to a
 			// single value via `runPromise`, so it can't hand back a live async
 			// iterator. This bridges `events.ts`'s callback `subscribe` into one,
@@ -755,12 +793,14 @@ export function attachRouter(
 					pending.push(event);
 					wake?.();
 				});
+				const ready = streamReady();
 				await runWithMainContext(Effect.logDebug("event subscriber attached"));
 
 				const onAbort = () => wake?.();
 				signal?.addEventListener("abort", onAbort);
 
 				try {
+					yield ready;
 					while (signal?.aborted !== true) {
 						const event = pending.shift();
 						if (event !== undefined) {
@@ -1820,6 +1860,8 @@ export function attachRouter(
 		// Bun's default 10s timeout).
 		idleTimeout: 0,
 		async fetch(req) {
+			const activationResponse = nativeActivation(req);
+			if (activationResponse !== undefined) return activationResponse;
 			// Generic per-call timing, covering every procedure without a
 			// per-handler instrumentation pass — `path` doubles as "which
 			// procedure" since RPCHandler routes `sessions.open` etc. to

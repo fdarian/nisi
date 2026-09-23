@@ -32,9 +32,8 @@ import {
  * Call once, from `AppShellReady` (mounted only on `/`, the only route
  * that can render an opened PR's tab). Doesn't need an "already open"
  * check: `reviewStore.openSession` dedupes on `computeSessionKey`, and the
- * `session-opened` event `useSessions` already subscribes to activates
- * (and, on `isTauri()`, refocuses) the existing tab — a repeat link
- * re-focuses rather than duplicating.
+ * `session-opened` event selects the existing tab through `useSessions`.
+ * Rust foregrounds the window when the deep link arrives.
  */
 export function useDeepLinkOpener(
 	orpc: SidecarQueryUtils,

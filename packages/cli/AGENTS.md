@@ -37,10 +37,9 @@ the wire shape this grammar maps to.
   reach anything — never on a declared app-level error, which means the sidecar is alive and
   answered. Always the same POST either way; `target` just rides along, uninterpreted by this
   module. Bringing the window forward is not this module's job once a session already exists: the
-  app that received the POST focuses itself on the `session-opened` event it emits
-  (`apps/desktop/src/features/pull-request/data/pr-data.ts`'s `useSessions`), since that's the only reliable way to tell
-  which of several running instances (e.g. a dev sandbox vs. the production install) actually
-  answered — `app-launch.ts` has no way to.
+  app that received the POST focuses its native window via the sidecar's replayable activation
+  stream (`apps/desktop/src-tauri/src/activation.rs`), before GitHub resolution finishes.
+  This identifies the dev sandbox or production instance that actually answered.
 - `src/app-launch.ts` — resolves "the app" to launch cold (env override, `/Applications`, or a
   locally-built release bundle — nisi has no install channel yet) and `open -a`s it, which hands off
   to LaunchServices. Used only for a genuine cold start (`handoff.ts`'s `unreachable` case, no

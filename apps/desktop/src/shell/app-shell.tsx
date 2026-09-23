@@ -3,7 +3,13 @@
 import { Menu } from "@tauri-apps/api/menu";
 import { cn } from "cn";
 import { AlertTriangleIcon, InboxIcon } from "lucide-react";
-import { type ComponentProps, useCallback, useMemo, useState } from "react";
+import {
+	type ComponentProps,
+	useCallback,
+	useEffect,
+	useMemo,
+	useState,
+} from "react";
 import { Button } from "#/components/ui/button";
 import {
 	Empty,
@@ -42,6 +48,7 @@ import { PrView } from "#/features/pull-request/pr-view";
 import type { SidecarQueryUtils } from "#/infra/backend-context";
 import { useBackendContext } from "#/infra/backend-context";
 import { useDeepLinkOpener } from "./deep-link/deep-link-data";
+import { useOpenRequest } from "./open-request/open-request-data";
 import { PrTabStrip } from "./tabs/pr-tab-strip";
 import { useTabOrder } from "./tabs/use-tab-order";
 import { useTabShortcuts } from "./tabs/use-tab-shortcuts";
@@ -138,7 +145,25 @@ function AppShellReady({
 	const [requestedActiveSessionId, setRequestedActiveSessionId] = useState<
 		string | null
 	>(null);
+	const [pendingTabSelection, setPendingTabSelection] = useState<{
+		requestId: string;
+		sessionId: string;
+	} | null>(null);
 	const listed = useSessions(orpc, setRequestedActiveSessionId);
+	const open = useOpenRequest();
+	const request = open.request;
+	const pendingRequest = request?.status.kind === "opened" ? null : request;
+	const pendingTabId =
+		pendingRequest === null ? null : `open:${pendingRequest.id}`;
+	const selectSession = useCallback(
+		(sessionId: string) => {
+			setRequestedActiveSessionId(sessionId);
+			if (pendingRequest !== null) {
+				setPendingTabSelection({ requestId: pendingRequest.id, sessionId });
+			}
+		},
+		[pendingRequest],
+	);
 	// Hooks run before the `sessions.length === 0` early return below, so a
 	// cold start into the empty state (nothing open yet) still opens a
 	// pending deep link instead of stalling on it.
@@ -185,6 +210,14 @@ function AppShellReady({
 	// `value` with no matching `Panel` — an effect only runs after paint,
 	// which would blank the content pane for a frame first.
 	const activeSessionId = useMemo(() => {
+		const openedId =
+			request?.status.kind === "opened" ? request.status.session.id : null;
+		if (
+			openedId !== null &&
+			sessions.some((session) => session.id === openedId)
+		) {
+			return openedId;
+		}
 		if (
 			requestedActiveSessionId != null &&
 			sessions.some((session) => session.id === requestedActiveSessionId)
@@ -192,11 +225,24 @@ function AppShellReady({
 			return requestedActiveSessionId;
 		}
 		return sessions[0]?.id ?? null;
-	}, [requestedActiveSessionId, sessions]);
+	}, [requestedActiveSessionId, sessions, request]);
+	const selectedTabId =
+		pendingRequest !== null &&
+		pendingTabSelection?.requestId === pendingRequest.id
+			? pendingTabSelection.sessionId
+			: (pendingTabId ?? activeSessionId);
+	const selectedSessionId =
+		selectedTabId === pendingTabId ? null : selectedTabId;
+	useEffect(() => {
+		if (request?.status.kind !== "opened") return;
+		if (selectedTabId !== request.status.session.id) return;
+		setRequestedActiveSessionId(request.status.session.id);
+		open.acknowledge(request.id);
+	}, [request, selectedTabId, open.acknowledge]);
 
 	const activeSession = useMemo(
-		() => sessions.find((session) => session.id === activeSessionId) ?? null,
-		[sessions, activeSessionId],
+		() => sessions.find((session) => session.id === selectedSessionId) ?? null,
+		[sessions, selectedSessionId],
 	);
 	// The command palette's "Go to Overview" action needs to switch a
 	// specific session's own sub-tab — the same per-session store `PrView`
@@ -211,7 +257,7 @@ function AppShellReady({
 	// active tab, never one with a walkthrough generation running).
 	// `suspendedSessionIds` is read back below to gate each session's
 	// `TabsPrimitive.Panel`'s own `keepMounted`.
-	const tabSuspension = useTabSuspension(sessions, activeSessionId, orpc);
+	const tabSuspension = useTabSuspension(sessions, selectedSessionId, orpc);
 
 	// Base UI's Tabs.Root only *suggests* a fallback value via onValueChange
 	// when the active tab disappears from a controlled root — it doesn't pick
@@ -231,13 +277,13 @@ function AppShellReady({
 			// intact on purpose, so only an actual close should drop it.
 			clearSessionUiState(sessionId);
 			clearChatSession(sessionId);
-			if (activeSessionId !== sessionId) return;
+			if (selectedSessionId !== sessionId) return;
 			const index = sessions.findIndex((session) => session.id === sessionId);
 			const neighbor = sessions[index + 1] ?? sessions[index - 1];
 			setRequestedActiveSessionId(neighbor?.id ?? null);
 		},
 		[
-			activeSessionId,
+			selectedSessionId,
 			closeSession,
 			clearSessionUiState,
 			clearChatSession,
@@ -263,19 +309,19 @@ function AppShellReady({
 	);
 	// The active session's chat popup gets first refusal on ⌘⇧]/⌘⇧[ — see
 	// `useTabShortcuts`'s `onChatThreadShortcut` doc comment.
-	const activeChatPopupOpen = useChatPopupOpen(activeSessionId);
-	const activeChatPopupMinimized = useChatPopupMinimized(activeSessionId);
+	const activeChatPopupOpen = useChatPopupOpen(selectedSessionId);
+	const activeChatPopupMinimized = useChatPopupMinimized(selectedSessionId);
 	const cycleActiveThread = useCycleActiveThread();
 	const cycleFileTab = useCycleFileTab();
 	const handleChatThreadShortcut = useCallback(
 		(direction: "next" | "previous"): boolean => {
-			if (activeSessionId === null) return false;
+			if (selectedSessionId === null) return false;
 			if (!activeChatPopupOpen || activeChatPopupMinimized) return false;
-			cycleActiveThread(activeSessionId, direction);
+			cycleActiveThread(selectedSessionId, direction);
 			return true;
 		},
 		[
-			activeSessionId,
+			selectedSessionId,
 			activeChatPopupOpen,
 			activeChatPopupMinimized,
 			cycleActiveThread,
@@ -283,14 +329,14 @@ function AppShellReady({
 	);
 	const handleFullFileTabShortcut = useCallback(
 		(direction: "next" | "previous"): boolean => {
-			if (activeSessionId === null) return false;
-			return cycleFileTab(activeSessionId, direction);
+			if (selectedSessionId === null) return false;
+			return cycleFileTab(selectedSessionId, direction);
 		},
-		[activeSessionId, cycleFileTab],
+		[selectedSessionId, cycleFileTab],
 	);
 	useTabShortcuts({
-		activeTabId: activeSessionId,
-		onActivateTab: setRequestedActiveSessionId,
+		activeTabId: selectedSessionId,
+		onActivateTab: selectSession,
 		onChatThreadShortcut: handleChatThreadShortcut,
 		onFullFileTabShortcut: handleFullFileTabShortcut,
 		onCloseOtherTabs: handleCloseOtherSessions,
@@ -298,7 +344,7 @@ function AppShellReady({
 		tabIds: sessionIds,
 	});
 
-	if (sessions.length === 0) {
+	if (sessions.length === 0 && pendingRequest === null) {
 		return (
 			<ShellFrame onContextMenu={handleTabStripContextMenu}>
 				<Empty className="flex-1">
@@ -338,17 +384,22 @@ function AppShellReady({
 	return (
 		<TabsPrimitive.Root
 			className="flex h-screen flex-col bg-sidebar"
-			onValueChange={(value) =>
-				setRequestedActiveSessionId(value as string | null)
-			}
-			value={activeSessionId}
+			onValueChange={(value) => {
+				if (value === pendingTabId) {
+					setPendingTabSelection(null);
+				} else if (typeof value === "string") {
+					selectSession(value);
+				}
+			}}
+			value={selectedTabId}
 			data-tauri-drag-region="deep"
 			onContextMenu={handleTabStripContextMenu}
 		>
 			<PrTabStrip
-				activeSessionId={activeSessionId}
+				pendingRequest={pendingRequest}
+				activeSessionId={selectedSessionId}
 				checkGenerationRunning={tabSuspension.isGenerationRunning}
-				onActivateSession={setRequestedActiveSessionId}
+				onActivateSession={selectSession}
 				onCloseOtherSessions={handleCloseOtherSessions}
 				onCloseSession={handleCloseSession}
 				onOpenPullRequest={openPalette}
@@ -362,6 +413,32 @@ function AppShellReady({
 				className={cn(INSET_PANE_CLASS, "my-0")}
 				data-tauri-drag-region="false"
 			>
+				{pendingRequest !== null && pendingTabId !== null && (
+					<TabsPrimitive.Panel
+						className="flex flex-1 flex-col items-center justify-center gap-3 p-6"
+						value={pendingTabId}
+					>
+						{pendingRequest.status.kind === "pending" ? (
+							<>
+								<Spinner className="size-5" />
+								<p>Opening {pendingRequest.cwd}…</p>
+							</>
+						) : pendingRequest.status.kind === "failed" ? (
+							<>
+								<p>Couldn’t open {pendingRequest.cwd}</p>
+								<p className="text-muted-foreground text-sm">
+									{pendingRequest.status.message}
+								</p>
+								<Button
+									onClick={() => open.acknowledge(pendingRequest.id)}
+									size="sm"
+								>
+									Dismiss
+								</Button>
+							</>
+						) : null}
+					</TabsPrimitive.Panel>
+				)}
 				{sessions.map((session) => (
 					<TabsPrimitive.Panel
 						className="flex min-h-0 flex-1 flex-col outline-none"
@@ -384,7 +461,7 @@ function AppShellReady({
 							// watch gating below and for keyboard shortcuts
 							// (`j`/`k`/`r`/`u`, `1`/`2`), which must only be live for
 							// whichever tab is selected.
-							isSelectedTab={session.id === activeSessionId}
+							isSelectedTab={session.id === selectedTabId}
 							onCloseTab={() => handleCloseSession(session.id)}
 							findExistingSessionId={findExistingSessionId}
 							onSessionOpened={setRequestedActiveSessionId}

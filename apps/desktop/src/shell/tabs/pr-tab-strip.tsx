@@ -24,8 +24,10 @@ import {
 	useSortable,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import type { OpenRequest } from "@repo/sidecar-api";
 import { cn } from "cn";
 import {
+	AlertTriangleIcon,
 	GitPullRequestArrowIcon,
 	GitPullRequestIcon,
 	LeafIcon,
@@ -44,6 +46,7 @@ import {
 	ContextMenuTrigger,
 } from "#/components/ui/context-menu";
 import { Kbd } from "#/components/ui/kbd";
+import { Spinner } from "#/components/ui/spinner";
 import { TabsPrimitive } from "#/components/ui/tabs";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "#/components/ui/tooltip";
 import type {
@@ -59,6 +62,7 @@ import { UpdatePill } from "#/shell/update/update-pill";
 import { derivePrTabStatus, type PrTabStatus } from "./pr-tab-status";
 
 type PrTabStripProps = {
+	pendingRequest?: OpenRequest | null;
 	sessions: readonly Session[];
 	/** The tab currently selected in the strip — `PrTab` reads this to keep
 	 * its context menu's Suspend item disabled for the active tab, matching
@@ -121,6 +125,7 @@ type PrTabStripProps = {
  * waits 8px so a click still selects the tab.
  */
 export function PrTabStrip({
+	pendingRequest,
 	sessions,
 	activeSessionId,
 	suspendedSessionIds,
@@ -205,6 +210,23 @@ export function PrTabStrip({
 								session={session}
 							/>
 						))}
+						{pendingRequest != null && (
+							<TabsPrimitive.Tab
+								className={PR_TAB_CLASS}
+								value={`open:${pendingRequest.id}`}
+							>
+								{pendingRequest.status.kind === "pending" ? (
+									<Spinner className="size-3.5" />
+								) : (
+									<AlertTriangleIcon className="size-3.5" />
+								)}
+								<span className="truncate">
+									{pendingRequest.status.kind === "pending"
+										? "Opening…"
+										: "Open failed"}
+								</span>
+							</TabsPrimitive.Tab>
+						)}
 						<OpenPullRequestButton onClick={onOpenPullRequest} />
 					</TabsPrimitive.List>
 				</SortableContext>

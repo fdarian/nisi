@@ -1,3 +1,4 @@
+mod activation;
 mod editors;
 
 use std::path::{Path, PathBuf};
@@ -100,7 +101,7 @@ async fn is_backend_alive(port: u16, token: &str) -> bool {
  * sidecar may be about to republish it (see `deskkit/sidecar`'s
  * `acquireSidecar`).
  */
-async fn wait_for_sidecar_json(path: &Path) -> Result<BackendState, String> {
+pub(crate) async fn wait_for_sidecar_json(path: &Path) -> Result<BackendState, String> {
     for _ in 0..16 {
         if path.exists() {
             if let Ok(raw) = tokio::fs::read_to_string(path).await {
@@ -401,23 +402,12 @@ pub fn run() {
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_deep_link::init())
         .setup(|app| {
-            // Foreground the main window the instant a `nisi://` link lands —
-            // deliberately separate from the focus `useSessions` already does
-            // on the frontend's `session-opened` event (`src/features/pull-request/data/pr-data.ts`):
-            // that one arrives seconds late, after `pullRequests.open`'s own
-            // `git fetch` completes, while this fires on the plugin's
-            // `deep-link://new-url` event (emitted from `RunEvent::Opened`),
-            // before the frontend has even resolved the link.
+            // A deep link activates the native window before the frontend
+            // resolves its PR; CLI opens arrive over the sidecar activation stream.
             let deep_link_app_handle = app.handle().clone();
             app.listen("deep-link://new-url", move |_event| {
-                let Some(window) = deep_link_app_handle.get_webview_window("main") else {
-                    return;
-                };
-                if let Err(e) = window.show() {
-                    eprintln!("failed to show the main window for a deep link: {e}");
-                }
-                if let Err(e) = window.set_focus() {
-                    eprintln!("failed to focus the main window for a deep link: {e}");
+                if let Err(e) = activation::activate_main_window(&deep_link_app_handle) {
+                    eprintln!("failed to activate the main window for a deep link: {e}");
                 }
             });
 
@@ -433,6 +423,12 @@ pub fn run() {
             };
 
             let sidecar_json_path = app_data_dir.join("sidecar.json");
+            let activation_owner_id = if cfg!(debug_assertions) {
+                std::env::var("NISI_ACTIVATION_OWNER_ID")
+                    .unwrap_or_else(|_| std::process::id().to_string())
+            } else {
+                std::process::id().to_string()
+            };
 
             // Prod: spawn the compiled sidecar binary now. This is fire-and-forget —
             // spawning is fast and must not block `.setup()`. `get_backend` (an async
@@ -452,12 +448,18 @@ pub fn run() {
                     .sidecar("sidecar")
                     .map_err(|e| format!("failed to create sidecar command: {e}"))?
                     .env("NISI_DATA_DIR", &data_dir_str)
+                    .env("NISI_ACTIVATION_OWNER_ID", &activation_owner_id)
                     .spawn()
                     .map_err(|e| format!("failed to spawn sidecar: {e}"))?;
 
                 app.manage(SidecarChild(Mutex::new(Some(spawn_result.1))));
             }
 
+            tauri::async_runtime::spawn(activation::watch(
+                app.handle().clone(),
+                sidecar_json_path.clone(),
+                activation_owner_id,
+            ));
             app.manage(SidecarJsonPath(sidecar_json_path));
             app.manage(BackendCell(OnceCell::new()));
             Ok(())

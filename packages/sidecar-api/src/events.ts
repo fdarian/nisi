@@ -1,11 +1,11 @@
 import { eventIterator, oc } from "@orpc/contract";
 import { Schema } from "effect";
 import { CodeIndexLspStatus } from "./code-index.ts";
-import { Session } from "./sessions.ts";
+import { OpenSessionTarget, Session } from "./sessions.ts";
 
 /**
- * Phase 1 shipped just enough for a running desktop app's tab strip to react
- * when the CLI opens (or an idle tab closes) a session out from under it.
+ * `session-opened` tracks the PR/worktree open path; CLI `sessions.open` uses
+ * `open-resolved`, which also carries the open request's identity.
  * Phase 2 adds `session-files-changed`: the live-update poller's signal that
  * a session's `diff.files`/`diff.fileContents` results are stale and worth
  * refetching — deliberately just a `sessionId`, not a diff of what changed,
@@ -46,9 +46,71 @@ export const SessionEvent = Schema.Union([
 ]);
 export type SessionEvent = Schema.Schema.Type<typeof SessionEvent>;
 
+export const OpenRequest = Schema.Struct({
+	id: Schema.String,
+	cwd: Schema.String,
+	target: OpenSessionTarget,
+	status: Schema.Union([
+		Schema.Struct({ kind: Schema.Literal("pending") }),
+		Schema.Struct({ kind: Schema.Literal("opened"), session: Session }),
+		Schema.Struct({ kind: Schema.Literal("failed"), message: Schema.String }),
+	]),
+});
+export type OpenRequest = Schema.Schema.Type<typeof OpenRequest>;
+
+export const SidecarEvent = Schema.Union([
+	Schema.Struct({
+		seq: Schema.Number,
+		type: Schema.Literal("session-opened"),
+		session: Session,
+	}),
+	Schema.Struct({
+		seq: Schema.Number,
+		type: Schema.Literal("session-closed"),
+		sessionId: Schema.String,
+	}),
+	Schema.Struct({
+		seq: Schema.Number,
+		type: Schema.Literal("session-files-changed"),
+		sessionId: Schema.String,
+	}),
+	Schema.Struct({
+		seq: Schema.Number,
+		type: Schema.Literal("session-updated"),
+		session: Session,
+	}),
+	Schema.Struct({
+		seq: Schema.Number,
+		type: Schema.Literal("code-index-lsp-status-changed"),
+		repoRoot: Schema.String,
+		status: CodeIndexLspStatus,
+	}),
+	Schema.Struct({
+		seq: Schema.Number,
+		type: Schema.Literal("open-requested"),
+		request: OpenRequest,
+	}),
+	Schema.Struct({
+		seq: Schema.Number,
+		type: Schema.Literal("open-resolved"),
+		request: OpenRequest,
+	}),
+	Schema.Struct({
+		seq: Schema.Number,
+		type: Schema.Literal("open-failed"),
+		request: OpenRequest,
+	}),
+	Schema.Struct({ seq: Schema.Number, type: Schema.Literal("stream-ready") }),
+]);
+export type SidecarEvent = Schema.Schema.Type<typeof SidecarEvent>;
+
 export const eventsContract = {
 	// `eventIterator` isn't covered by the `@orpc/experimental-effect` patch
 	// that lets `oc.input()`/`oc.output()` take an Effect `Schema` directly —
 	// it wants a Standard Schema, so convert explicitly.
-	subscribe: oc.output(eventIterator(Schema.toStandardSchemaV1(SessionEvent))),
+	subscribe: oc.output(eventIterator(Schema.toStandardSchemaV1(SidecarEvent))),
+	openRequests: oc.output(Schema.Array(OpenRequest)),
+	ackOpenRequest: oc
+		.input(Schema.Struct({ id: Schema.String }))
+		.output(Schema.Void),
 };

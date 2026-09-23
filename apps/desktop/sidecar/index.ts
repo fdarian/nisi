@@ -70,6 +70,9 @@ const program = Effect.scoped(
 			Config.option,
 		);
 		const token = Option.getOrElse(pinnedToken, () => crypto.randomUUID());
+		const activationOwnerId = yield* Config.string(
+			"NISI_ACTIVATION_OWNER_ID",
+		).pipe(Config.option);
 
 		// Bound immediately, answering only health.check — deliberately
 		// before AppServices/SqliteDb exist at all. Two concerns force this
@@ -150,7 +153,14 @@ const program = Effect.scoped(
 				// from its own plain `async function*` via this same captured
 				// context — see `walkthrough/generate.ts`'s `runEffect`.
 				const mainContext = yield* Effect.context<AppServices>();
-				yield* Effect.sync(() => attachRouter(server, token, mainContext));
+				yield* Effect.sync(() =>
+					attachRouter(
+						server,
+						token,
+						mainContext,
+						Option.getOrUndefined(activationOwnerId),
+					),
+				);
 
 				yield* Effect.logInfo("ready", { port, dataDir });
 

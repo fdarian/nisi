@@ -13,7 +13,12 @@ type SidecarQueryUtils = ReturnType<
 type BackendContextValue =
 	| { status: "loading" }
 	| { status: "error"; message: string }
-	| { status: "ready"; backend: BackendInfo; orpc: SidecarQueryUtils };
+	| {
+			status: "ready";
+			backend: BackendInfo;
+			orpc: SidecarQueryUtils;
+			client: SidecarClient;
+	  };
 
 const BackendContext = createContext<BackendContextValue>({
 	status: "loading",
@@ -29,7 +34,7 @@ function BackendProvider({ children }: { children: React.ReactNode }) {
 			.then((backend) => {
 				const client = makeSidecarClient(backend);
 				const orpc = createTanstackQueryUtils(client);
-				setValue({ status: "ready", backend, orpc });
+				setValue({ status: "ready", backend, orpc, client });
 			})
 			.catch((err) => {
 				setValue({
