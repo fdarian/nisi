@@ -171,7 +171,16 @@ describe("spawnLspServer against the real repo", () => {
 	const nestedTokenFiles = [
 		join(repoRoot, "packages", "settings", "src", "store.ts"),
 		join(repoRoot, "packages", "review", "src", "index.ts"),
-		join(repoRoot, "apps", "desktop", "src", "lib", "session-ui-store.tsx"),
+		join(
+			repoRoot,
+			"apps",
+			"desktop",
+			"src",
+			"features",
+			"pull-request",
+			"data",
+			"session-ui-store.tsx",
+		),
 		join(repoRoot, "apps", "desktop", "sidecar", "http.ts"),
 	] as const;
 

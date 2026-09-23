@@ -5,7 +5,7 @@ import { Context, Effect, Layer, Ref } from "effect";
  * check on each tick — a `Ref`-backed service, not a module-level mutable
  * global, since two separate modules touch this state: `http.ts`'s
  * `sessions.setWatching`/`sessions.close` handlers write it (in response to
- * the frontend's focus/tab predicate — see `apps/desktop/src/lib/pr-data.ts`),
+ * the frontend's focus/tab predicate — see `apps/desktop/src/features/pull-request/data/pr-data.ts`),
  * and `live-poll.ts`'s `pollOnce` reads it every tick to narrow which open
  * sessions actually get polled. Membership here is orthogonal to a session
  * being *open* (`Store.listSessions()`) — a session can be open but unwatched

@@ -21,7 +21,7 @@ unit-testable against real temp repos without booting anything. Feeds `packages/
   its exit code.
 - `pull-request-checks.ts` — `fetchPullRequestChecks`: `gh pr view <number> --json statusCheckRollup`,
   mapped from GitHub's two check shapes (`CheckRun` for GitHub Actions, `StatusContext` for external
-  status integrations) to the 5-state vocabulary `apps/desktop/src/components/pr/ci-status.tsx`'s
+  status integrations) to the 5-state vocabulary `apps/desktop/src/features/pull-request/header/ci-status.tsx`'s
   `CiCheckStatus` renders. A field GraphQL declares nullable comes back as that type's zero value
   (`""`/`"0001-01-01T00:00:00Z"`), never JSON `null` or an omitted key — confirmed live against
   several real PRs, not assumed from GitHub's docs.
@@ -56,7 +56,7 @@ unit-testable against real temp repos without booting anything. Feeds `packages/
 - `diff.ts` — orchestrates the above into `getChangedFiles` (cheap, all files, metadata only) and
   `getFileContents` (every requested path's patch + gated content in one pass, so opening N files
   in the diff pane, or gathering a walkthrough's per-turn validation facts, costs a constant handful
-  of spawns rather than N times as many — both `apps/desktop/src/lib/pr-data.ts`'s `useFileContents` and
+  of spawns rather than N times as many — both `apps/desktop/src/features/pull-request/data/pr-data.ts`'s `useFileContents` and
   `apps/desktop/sidecar/walkthrough/context.ts`'s `gatherGenerationContext` call it, there's no
   remaining per-path `getFileContent`). Both default to committed history only
   (`merge-base(baseRef, HEAD)..HEAD`, `includeUncommitted: false`); passing `includeUncommitted:

@@ -2,15 +2,15 @@ import { createRootRoute, Outlet } from "@tanstack/react-router";
 import { Agentation } from "agentation";
 import { Mesurer } from "mesurer";
 import { ThemeProvider } from "next-themes";
+import { ToastProvider } from "#/components/ui/toast";
 import {
 	DevToolProvider,
 	useAgentationEnabled,
 	useMesurerEnabled,
-} from "#/components/devtool/dev-tool-context";
-import { ToastProvider } from "#/components/ui/toast";
-import { useSettingsShortcut } from "#/hooks/use-settings-shortcut";
-import { BackendProvider } from "#/lib/backend-context";
-import { useRedirectHomeOnPendingDeepLink } from "#/lib/deep-link-data";
+} from "#/features/devtools/dev-tool-context";
+import { useSettingsShortcut } from "#/features/settings/use-settings-shortcut";
+import { BackendProvider } from "#/infra/backend-context";
+import { useRedirectHomeOnPendingDeepLink } from "#/shell/deep-link/deep-link-data";
 
 export const Route = createRootRoute({
 	component: RootLayout,

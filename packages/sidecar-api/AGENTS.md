@@ -34,14 +34,14 @@ Git/review procedures sit alongside `health.check`.
   (`events.ts`), still want a Standard Schema. Convert with `Schema.toStandardSchemaV1(...)`.
 - `diff.fileContents` is batched (`paths: FileContentRequest[]` in, `FileContentResult[]` out, one
   per requested path) rather than one-path-per-call — it replaced a singular `diff.file` outright
-  (its only caller, `apps/desktop/src/lib/pr-data.ts`'s `useFileContents`, chunks a large PR's paths
+  (its only caller, `apps/desktop/src/features/pull-request/data/pr-data.ts`'s `useFileContents`, chunks a large PR's paths
   across several calls rather than issuing one per file). A path not actually in the diff reports
   `content: null` in its own result entry instead of failing the batch. Each path's `force` input
   field exists so the load-on-demand size tier (see `@repo/git`) has any way to actually be loaded.
 - `diff.files`/`diff.fileContents` both gained `includeUncommitted`, mirroring `@repo/git`'s option
   of the same name — the frontend sources it from `@repo/settings`'s persisted setting and folds it
   into the query `input` (not a separate param) specifically so it's part of the TanStack Query
-  cache key; see `apps/desktop/src/lib/pr-data.ts`'s `useFileChanges`/`useFileContents`.
+  cache key; see `apps/desktop/src/features/pull-request/data/pr-data.ts`'s `useFileChanges`/`useFileContents`.
   `fileContents`' flag sits at the batch's top level, not per-path in `FileContentRequest` — it
   mirrors a session-wide setting applied uniformly, the same reasoning `@repo/git`'s
   `getFileContents` resolves it to one `DiffTarget` for the whole call rather than per-path.
@@ -51,7 +51,7 @@ Git/review procedures sit alongside `health.check`.
   blockLabel}`, attributing each surviving range to the claim currently covering it. `FileContentReview`
   is now populated whenever a file has *any* active claim, not only once it's been whole-file-ticked.
   `ranges` itself now only feeds the walkthrough reference pane's per-file reviewed/partial/unreviewed
-  checkbox (`apps/desktop/src/components/walkthrough/reference-pane.tsx`) — the diff pane stopped
+  checkbox (`apps/desktop/src/features/pull-request/walkthrough/reference-pane.tsx`) — the diff pane stopped
   reading it once `baselineKind` shipped, below.
 - `FileContentReview` gained `baselineKind: "base" | "reviewed"`, telling the diff pane which file
   `FileContent.patch`/`oldContent` are actually diffed against. `"reviewed"` means the sidecar
@@ -64,5 +64,5 @@ Git/review procedures sit alongside `health.check`.
   `walkthrough.refreshHarnesses` — same output shape, but bypasses `model-discovery.ts`'s cache. A
   separate procedure rather than a `force` input field (unlike `diff.fileContents`'s, above) so the UI can
   keep one stable, shared query-cache entry for `harnesses` while `refreshHarnesses` is called
-  imperatively and its result written back into that same cache — see `apps/desktop/src/lib/walkthrough-data.ts`'s
+  imperatively and its result written back into that same cache — see `apps/desktop/src/features/pull-request/walkthrough/walkthrough-data.ts`'s
   `useHarnesses`.

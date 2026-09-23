@@ -10,7 +10,7 @@ sources:
     resource: frontend-performance-budget.md
     title: Files Changed performance budget
   - id: set-viewed
-    resource: ../apps/desktop/src/lib/pr-data.ts
+    resource: ../apps/desktop/src/features/pull-request/data/pr-data.ts
     title: useSetFileViewed
 ---
 

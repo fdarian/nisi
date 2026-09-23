@@ -2,6 +2,7 @@
 
 import { mergeProps } from "@base-ui/react/merge-props";
 import { useRender } from "@base-ui/react/use-render";
+import { cn } from "cn";
 import {
 	ChevronLeftIcon,
 	ChevronRightIcon,
@@ -9,7 +10,6 @@ import {
 } from "lucide-react";
 import type * as React from "react";
 import { type Button, buttonVariants } from "#/components/ui/button";
-import { cn } from "#/lib/utils";
 
 export function Pagination({
 	className,

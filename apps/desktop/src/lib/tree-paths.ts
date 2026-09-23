@@ -1,4 +1,7 @@
-import type { FileCategory, FileChange } from "#/lib/pr-data";
+import type {
+	FileCategory,
+	FileChange,
+} from "#/features/pull-request/data/pr-data";
 
 export const CATEGORY_ORDER: readonly FileCategory[] = [
 	"implementation",

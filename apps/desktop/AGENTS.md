@@ -16,20 +16,20 @@ Three parts, one seam:
   behind one `Store` service — see `sidecar/AGENTS.md`.
 - `src/` — React frontend (TanStack Router file-based routes, shadcn on the `@coss` (coss ui / Base UI)
   registry). Two routes: `/` (`AppShell` — multi-PR tab strip + Files Changed sidebar + diff pane) and
-  `/settings` (Phase 4, `Cmd/Ctrl+,`), each wired to the live sidecar contract through `src/lib/pr-data.ts`
-  / `src/lib/settings-data.ts` (oRPC + TanStack Query via `backend-context.tsx`). `settings-data.ts` is
+  `/settings` (Phase 4, `Cmd/Ctrl+,`), each wired to the live sidecar contract through `src/features/pull-request/data/pr-data.ts`
+  / `src/features/settings/settings-data.ts` (oRPC + TanStack Query via `backend-context.tsx`). `settings-data.ts` is
   the one place that reads/writes `@repo/settings`-backed prefs (`sidebarViewMode`, `diffStyleMode`,
   `preferredEditor`, `hideReviewed`, `includeUncommitted`, `enabledHarnesses` for the settings page's
   checkboxes) — theme is the one exception, staying in
   `localStorage` via `next-themes` (wired in `routes/__root.tsx`) since nothing server-side reads it.
-  The diff pane (`src/components/diff-pane/`) renders with `@pierre/diffs`, same shadow-DOM/Worker-pool
+  The diff pane (`src/features/pull-request/files/diff-pane/diff-pane.tsx`) renders with `@pierre/diffs`, same shadow-DOM/Worker-pool
   shape as the `@pierre/trees` sidebar — it renders `diff.fileContents`' `patch`/`oldContent` directly,
   no client-side slicing; a reviewed file's already-seen spans arrive pre-collapsed into ordinary
   context by the sidecar (`FileContentReview.baselineKind`, see `@repo/review`'s `reconcile`).
-  `src/components/code-index/` holds LSP-powered code navigation (⌘-hover underline, ⌘-click peek
+  `src/features/code-index/` holds LSP-powered code navigation (⌘-hover underline, ⌘-click peek
   references), backed server-side by a live TypeScript 7 language server (`@repo/code-lsp`) rather
   than a prebuilt SCIP index — one `useCodeIndexInteractions` hook shared by the diff pane's
-  additions side and the whole-file viewer (`src/components/pr/file-view.tsx`), since `@pierre/diffs`
+  additions side and the whole-file viewer (`src/features/pull-request/file-view/file-view.tsx`), since `@pierre/diffs`
   token events carry no item/path field of their own to key a per-file occurrence lookup off.
 
 ## The seam
@@ -119,7 +119,7 @@ sidecars.
 ## Browser dev harness
 `invoke("get_backend")` (see [The seam](#the-seam)) only resolves inside the Tauri webview — a
 plain `vite dev` tab has no IPC bridge, so it throws immediately and the app can't render.
-`src/lib/backend.ts`'s `getBackend()` has a **dev-only** escape hatch for this: when
+`src/infra/backend.ts`'s `getBackend()` has a **dev-only** escape hatch for this: when
 `import.meta.env.DEV` is true and both `VITE_DEV_BACKEND_PORT`/`VITE_DEV_BACKEND_TOKEN` are set, it
 uses those instead of calling into Rust — letting a real browser tab (devtools, screen recording,
 browser-automation tools) drive the app against a live sidecar. `import.meta.env.DEV` makes the
@@ -190,7 +190,7 @@ format and `server.fs.allow`) via Vite's own `loadConfigFromFile`, dropping only
 over the same file crash the build). `.storybook/mock-orpc.ts`'s `createMockOrpc(...)` is a fake
 `SidecarClient` wrapped in the same `createTanstackQueryUtils` the real app uses — story-specific data
 (a stored walkthrough, harnesses, file contents) is supplied per call. The walkthrough tab's own
-fixture PR lives at `src/components/walkthrough/walkthrough.fixture.ts`.
+fixture PR lives at `src/features/pull-request/walkthrough/walkthrough.fixture.ts`.
 
 ## Non-obvious decisions
 - `tsconfig.json` (the frontend one) is hand-rolled, not `extends: "@total-typescript/tsconfig/..."`
@@ -200,7 +200,7 @@ fixture PR lives at `src/components/walkthrough/walkthrough.fixture.ts`.
 - `biome.jsonc` here (`root: false`, extends the repo root) exists only to exempt
   `src/components/ui/**` from a11y lint rules — that directory is vendored from the `@coss` registry
   (`bunx --bun shadcn@latest add @coss/<name>`), not hand-authored.
-- **The chat dock's transport (`src/lib/chat-transport.ts`) implements `ChatTransport` by hand
+- **The chat dock's transport (`src/features/chat/chat-transport.ts`) implements `ChatTransport` by hand
   instead of using `ai`'s `DefaultChatTransport`.** `chat.send` speaks oRPC's `eventIterator`, not
   an HTTP route — there's no fetch endpoint for `DefaultChatTransport` to point at, so
   `sendMessages` opens the oRPC async iterator itself and pumps it into the
@@ -249,14 +249,14 @@ fixture PR lives at `src/components/walkthrough/walkthrough.fixture.ts`.
   cached; `enabled` is `@repo/settings`'s `enabledHarnesses`, a user declaration. A harness can be
   enabled but currently unavailable (its checkbox in `EnableHarnessesPanel`/`SettingsPage` stays
   checked but disabled, with an inline reason — it isn't dropped from `enabledHarnesses`) or
-  available but not yet enabled. `useHarnesses` (`src/lib/walkthrough-data.ts`) also exposes
+  available but not yet enabled. `useHarnesses` (`src/features/pull-request/walkthrough/walkthrough-data.ts`) also exposes
   `refresh`/`isRefreshing`, wired to `walkthrough.refreshHarnesses` — the refresh icon next to the
   harness list (Settings) and the model combobox (walkthrough tab) both call it, writing straight
   into the shared `walkthrough.harnesses` query cache so both places update from one round trip.
 - A keyboard shortcut that collides with a macOS menu accelerator can't be handled in the frontend
   at all — AppKit gives the main menu first refusal, so the webview never sees the key. Give the
   shortcut a real menu item that emits an event instead (⌘W does this); the rest live in
-  `src/hooks/use-tab-shortcuts.ts` / `use-settings-shortcut.ts`. A predefined item can also turn up
+  `src/shell/tabs/use-tab-shortcuts.ts` / `src/features/settings/use-settings-shortcut.ts`. A predefined item can also turn up
   in more than one default submenu (`Menu::default()` seeded a `close_window` in both Window and
   File) — `build_macos_menu` builds the whole tree explicitly instead of patching the default.
 - `#/*` → `src/*`, not `@/*`.

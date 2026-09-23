@@ -2,8 +2,8 @@
 
 import { mergeProps } from "@base-ui/react/merge-props";
 import { useRender } from "@base-ui/react/use-render";
+import { cn } from "cn";
 import type React from "react";
-import { cn } from "#/lib/utils";
 
 export type TableVariant = "default" | "card";
 

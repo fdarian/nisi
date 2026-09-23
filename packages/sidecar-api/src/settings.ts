@@ -4,7 +4,7 @@ import { HarnessId } from "./walkthrough.ts";
 
 /**
  * Tree/flat display preference for the files sidebar — mirrors
- * `apps/desktop/src/hooks/use-sidebar-view-mode.ts`'s `SidebarViewMode`,
+ * `apps/desktop/src/features/settings/settings-data.ts`'s `SidebarViewMode`,
  * redeclared here rather than imported since this package stays
  * dependency-free from the frontend, same as every other domain type it
  * mirrors.

@@ -47,7 +47,7 @@ const FILES_FROM_FOUR_PROJECTS = [
 	"packages/settings/src/store.ts",
 	"packages/git/src/exec.ts",
 	"packages/review/src/index.ts",
-	"apps/desktop/src/components/code-index/occurrence-index.ts",
+	"apps/desktop/src/features/code-index/navigation/occurrence-index.ts",
 ] as const;
 
 const TestLayer = CodeLspPool.layer.pipe(Layer.provideMerge(BunServices.layer));

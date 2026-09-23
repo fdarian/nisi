@@ -16,7 +16,7 @@ export type SidecarClient = RouterContractClient<typeof contract>;
  * thing that knows which address the sidecar was reached at, so it passes its
  * own `window.location.hostname` rather than letting this default to a loopback
  * that would resolve to the phone/tablet itself. See
- * `apps/desktop/src/lib/backend.ts`.
+ * `apps/desktop/src/infra/backend.ts`.
  */
 export function makeSidecarClient(options: {
 	readonly port: number;

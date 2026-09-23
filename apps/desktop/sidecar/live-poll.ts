@@ -131,7 +131,7 @@ export const checkSessionForChanges = (sessionId: string) =>
 /**
  * One poll tick: checks every open session currently in `SessionWatch`'s
  * registry (windowFocused && Files Changed active && its tab selected — see
- * `apps/desktop/src/lib/pr-data.ts`), not every open session — an
+ * `apps/desktop/src/features/pull-request/data/pr-data.ts`), not every open session — an
  * unfocused/backgrounded PR isn't showing its Files Changed tab to anyone,
  * so there's no one for a poll-driven event to reach.
  */
