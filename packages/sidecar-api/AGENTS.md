@@ -59,10 +59,8 @@ Git/review procedures sit alongside `health.check`.
   computing the patch — so an *empty* patch under `"reviewed"` means "nothing new since your last
   pass," not "nothing changed in the PR." Always `"base"` for a size-gated file even with an active
   claim, since reconciliation needs content the size gate withheld.
-- `HarnessInfo` gained `available`/`binaryPath` (a live `@repo/bin-resolver` check — see the type's own
-  doc for why this is independent of `enabled`), and `walkthrough.harnesses` gained a sibling
-  `walkthrough.refreshHarnesses` — same output shape, but bypasses `model-discovery.ts`'s cache. A
-  separate procedure rather than a `force` input field (unlike `diff.fileContents`'s, above) so the UI can
-  keep one stable, shared query-cache entry for `harnesses` while `refreshHarnesses` is called
-  imperatively and its result written back into that same cache — see `apps/desktop/src/features/pull-request/walkthrough/walkthrough-data.ts`'s
-  `useHarnesses`.
+- `HarnessInfo` carries `enabled` and live binary `available`/`binaryPath` only. The
+  `walkthrough.harnesses`/`refreshHarnesses` pair handles the presence list; keyed
+  `walkthrough.models`/`refreshModels` handle cached or forced discovery for one harness at a time.
+  The frontend stores refresh results under each corresponding query key — see
+  `apps/desktop/src/features/pull-request/walkthrough/walkthrough-data.ts`.

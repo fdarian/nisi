@@ -346,7 +346,7 @@ export class HarnessModelCache extends Context.Service<HarnessModelCache>()(
 			): Effect.Effect<DiscoveryResult> =>
 				Effect.gen(function* () {
 					// `force` (the manual refresh escape hatch, `walkthrough.
-					// refreshHarnesses`) bypasses both the TTL and the failure
+					// refreshModels`) bypasses both the TTL and the failure
 					// backoff, but still goes through `runExclusive` — concurrent
 					// force calls (or a force landing while a background
 					// revalidation is already running) share one attempt rather

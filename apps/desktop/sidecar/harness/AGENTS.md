@@ -29,17 +29,16 @@ against a review session imports from this directory rather than reaching into a
   and forks a background revalidation (`Effect.forkDetach`) unless a failure backoff (1 minute,
   doubling per consecutive failure, capped at 24h) is still running. Every attempt — cold, background,
   or `force`d — goes through one single-flight path keyed by harness id, so concurrent callers for the
-  same harness join one discovery instead of each spawning their own subprocess. A run of failures
-  never overwrites a previously-good model list, only the failure/backoff bookkeeping.
+  same harness join one discovery instead of each spawning their own subprocess. Interrupted leaders
+  wake waiting callers and release their flight slot. A run of failures never overwrites a
+  previously-good model list, only the failure/backoff bookkeeping.
 - `harnesses.ts` — `listHarnesses` (the registry `walkthrough.harnesses`/`walkthrough.refreshHarnesses`
   return — always all four, each carrying an `enabled` flag against the caller-supplied
-  `enabledHarnesses` set, `available`/`binaryPath` from `availability.ts`, and a `modelsStatus` from
-  `HarnessModelCache`, so the onboarding picker and the settings page can render every harness as a
-  row; `http.ts` reads `enabledHarnesses` from `@repo/settings`'s `SettingsStore` before calling in).
-  Model discovery only runs for a harness that's both `enabled` *and* `available` — an unavailable
-  harness short-circuits to `modelsStatus: "unavailable"` without ever touching the discovery cache,
-  so a harness that loses its CLI never reports a misleadingly-reassuring `"stale"`. Also
-  `createHarnessAdapter` (harness/model choice → a real `HarnessV1` adapter instance).
+  `enabledHarnesses` set and live `available`/`binaryPath` from `availability.ts`; no model probe
+  runs on this path). Also `createHarnessAdapter` (harness/model choice → a real `HarnessV1` adapter).
+- `models.ts` — `getHarnessModels`, the per-harness `walkthrough.models`/`refreshModels` path.
+  Checks binary presence first, then calls `HarnessModelCache` with the corresponding discovery
+  function. A missing CLI returns unavailable even if a previous model list is cached.
 - `sandbox.ts` — `resolveSandboxSettings`: picks `@repo/harness-local`'s `LocalSandboxSettings` mode
   (`"in-place"` vs `"relocated"`) per harness for a given `repoRoot`, and the fixed
   `~/.nisi/harness-sandbox` scratch root relocated mode uses — see `@repo/harness-local`'s own
