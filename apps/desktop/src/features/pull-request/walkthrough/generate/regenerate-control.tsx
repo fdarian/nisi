@@ -7,8 +7,11 @@ import {
 	type ModelSelection,
 } from "#/components/harness-model-combobox";
 import { Button } from "#/components/ui/button";
-import type { HarnessId } from "#/features/pull-request/walkthrough/walkthrough-data";
-import { useHarnesses } from "#/features/pull-request/walkthrough/walkthrough-data";
+import {
+	type HarnessId,
+	useHarnesses,
+	useHarnessModels,
+} from "#/features/pull-request/walkthrough/walkthrough-data";
 import type { SidecarQueryUtils } from "#/infra/backend-context";
 
 type RegenerateControlProps = {
@@ -39,7 +42,11 @@ export function RegenerateControl({
 	buttonVariant = "outline",
 	className,
 }: RegenerateControlProps): React.ReactElement {
-	const { harnesses } = useHarnesses(orpc);
+	const { harnesses, isLoading: harnessesLoading } = useHarnesses(orpc);
+	const { modelsByHarness, isLoading, loadingHarnesses } = useHarnessModels(
+		orpc,
+		harnesses,
+	);
 	const [selection, setSelection] = useState<ModelSelection>({
 		harness: defaultHarness,
 		modelId: defaultModel ?? undefined,
@@ -50,6 +57,9 @@ export function RegenerateControl({
 			<div className="w-56">
 				<HarnessModelCombobox
 					harnesses={harnesses}
+					modelsByHarness={modelsByHarness}
+					isLoading={harnessesLoading || isLoading}
+					loadingHarnesses={loadingHarnesses}
 					onChange={setSelection}
 					value={selection}
 				/>

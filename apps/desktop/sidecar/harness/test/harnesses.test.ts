@@ -51,7 +51,8 @@ describe("harness presence and model discovery", () => {
 	});
 
 	test("model requests check presence independently and forced requests bypass a fresh cache hit", async () => {
-		process.env.NISI_CODEX_BIN = join(tempDir, "codex");
+		const binPath = join(tempDir, "codex");
+		process.env.NISI_CODEX_BIN = binPath;
 		const dataDir = mkdtempSync(join(tmpdir(), "harness-models-test-"));
 		const layer = HarnessModelCache.layer.pipe(
 			Layer.provideMerge(SqliteDb.layer),
@@ -67,7 +68,7 @@ describe("harness presence and model discovery", () => {
 				Effect.gen(function* () {
 					const absent = yield* getHarnessModels("codex");
 					expect(absent).toEqual({ models: [], status: "unavailable" });
-					writeFileSync(process.env.NISI_CODEX_BIN as string, "#!/bin/sh\n");
+					writeFileSync(binPath, "#!/bin/sh\n");
 					const cache = yield* HarnessModelCache;
 					yield* cache.get("codex", () =>
 						Effect.succeed([{ id: "primed", label: "Primed" }]),

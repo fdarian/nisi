@@ -4,9 +4,7 @@
  * The message input: a Lexical plain-text editor (Enter sends, Shift+Enter
  * newlines) plus the harness/model picker, reusing
  * `HarnessModelCombobox` (`#/components/harness-model-combobox.tsx`)
- * as-is rather than building a second one — it already takes plain
- * `harnesses`/`value`/`onChange` props with no walkthrough-specific
- * coupling, so importing it here needed no changes.
+ * with per-harness model queries rather than building a second picker.
  *
  * `PlainTextPlugin`, not `RichTextPlugin`: the Plain/Rich split only
  * decides which default `KEY_ENTER_COMMAND` handler and formatting
@@ -52,6 +50,7 @@ import {
 import {
 	type HarnessId,
 	useHarnesses,
+	useHarnessModels,
 } from "#/features/pull-request/walkthrough/walkthrough-data";
 import { useLastChatModel } from "#/features/settings/settings-data";
 import type { SidecarQueryUtils } from "#/infra/backend-context";
@@ -142,7 +141,13 @@ function ComposerBody({
 	const [editor] = useLexicalComposerContext();
 	const [hasText, setHasText] = useState(false);
 	const [selection, setSelection] = useState<ModelSelection | null>(null);
-	const { harnesses } = useHarnesses(orpc);
+	const { harnesses, isLoading: harnessesLoading } = useHarnesses(orpc);
+	const needsPicker = threadHarness === null;
+	const {
+		modelsByHarness,
+		isLoading: modelsLoading,
+		loadingHarnesses,
+	} = useHarnessModels(orpc, needsPicker ? harnesses : []);
 	const [lastChatModel] = useLastChatModel(orpc);
 
 	// Takes the caret on mount (opening the popup, expanding from minimized,
@@ -165,7 +170,6 @@ function ComposerBody({
 	// The picker only matters before the thread's live harness session
 	// exists — `chatContract.send`'s doc: harness/model are ignored server
 	// side once a thread's first message picked them.
-	const needsPicker = threadHarness === null;
 	const hasEnabledHarness = harnesses.some((harness) => harness.enabled);
 
 	// Seeds the picker from the last harness/model actually sent with, once
@@ -182,10 +186,12 @@ function ComposerBody({
 		if (harness === undefined || !harness.enabled) return;
 		const modelStillOffered =
 			lastChatModel.modelId === undefined ||
-			harness.models.some((model) => model.id === lastChatModel.modelId);
+			modelsByHarness[harness.id]?.models.some(
+				(model) => model.id === lastChatModel.modelId,
+			);
 		if (!modelStillOffered) return;
 		setSelection({ harness: harness.id, modelId: lastChatModel.modelId });
-	}, [needsPicker, lastChatModel, harnesses, selection]);
+	}, [needsPicker, lastChatModel, harnesses, modelsByHarness, selection]);
 
 	const submit = useCallback(() => {
 		if (isBusy) return;
@@ -259,6 +265,9 @@ function ComposerBody({
 				(hasEnabledHarness ? (
 					<HarnessModelCombobox
 						harnesses={harnesses}
+						modelsByHarness={modelsByHarness}
+						isLoading={harnessesLoading || modelsLoading}
+						loadingHarnesses={loadingHarnesses}
 						onChange={setSelection}
 						value={selection}
 					/>
