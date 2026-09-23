@@ -242,7 +242,10 @@ export function useSessions(
 		const event = eventsQuery.data;
 		if (event === undefined) return;
 		if (event.type === "code-index-lsp-status-changed") {
-			const sessions = sessionsQuery.data ?? [];
+			const sessions = queryClient.getQueryData<readonly Session[]>(
+				orpc.sessions.list.queryKey(),
+			);
+			if (sessions === undefined) return;
 			for (const sessionId of sessionIdsForCodeIndexLspStatus(
 				sessions,
 				event,
@@ -264,11 +267,12 @@ export function useSessions(
 			if (isTauri()) void getCurrentWindow().setFocus();
 		}
 	}, [
+		// Keep the session list out of these dependencies: an optimistic cache
+		// write would replay the last event and cause the close-tab flicker.
 		eventsQuery.data,
 		onSessionOpened,
 		orpc,
 		queryClient,
-		sessionsQuery.data,
 		setCodeIndexEnabled,
 	]);
 
@@ -1042,12 +1046,11 @@ export type MergePullRequestParams = {
 };
 
 /**
- * `pullRequests.merge` — fires `gh pr merge` with the caller's chosen
- * method. On success first writes the confirmed terminal state into this PR's
- * `mergeStatus` cache, then refetches it and the sessions list. `gh pr merge`
- * has already returned successfully by then, so this isn't speculative: it
- * closes the gap where the mutation settles before the invalidated status
- * query returns, briefly restoring the old method label in the button.
+ * `pullRequests.merge`/`mergeStack` — on success writes the confirmed terminal
+ * state into this PR's `mergeStatus` cache, then refetches it and the sessions
+ * list. The hook-level success handlers are awaited before `isPending` clears;
+ * call-level `.mutate` callbacks run after the mutation has already settled,
+ * leaving a gap where the button can briefly show its old merge-method label.
  */
 export function useMergePullRequest(orpc: SidecarQueryUtils): {
 	merge: (params: MergePullRequestParams) => void;
@@ -1056,10 +1059,6 @@ export function useMergePullRequest(orpc: SidecarQueryUtils): {
 	error: unknown;
 } {
 	const queryClient = useQueryClient();
-	const mutation = useMutation(orpc.pullRequests.merge.mutationOptions());
-	const stackMutation = useMutation(
-		orpc.pullRequests.mergeStack.mutationOptions(),
-	);
 
 	const onSuccess = useCallback(
 		async (params: MergePullRequestParams) => {
@@ -1102,19 +1101,27 @@ export function useMergePullRequest(orpc: SidecarQueryUtils): {
 		},
 		[queryClient, orpc],
 	);
+	const mutation = useMutation({
+		...orpc.pullRequests.merge.mutationOptions(),
+		onSuccess: (_data, params) => onSuccess(params),
+	});
+	const stackMutation = useMutation({
+		...orpc.pullRequests.mergeStack.mutationOptions(),
+		onSuccess: (_data, params) => onSuccess(params),
+	});
 
 	const merge = useCallback(
 		(params: MergePullRequestParams) => {
-			mutation.mutate(params, { onSuccess: () => onSuccess(params) });
+			mutation.mutate(params);
 		},
-		[mutation, onSuccess],
+		[mutation],
 	);
 
 	const mergeStack = useCallback(
 		(params: MergePullRequestParams) => {
-			stackMutation.mutate(params, { onSuccess: () => onSuccess(params) });
+			stackMutation.mutate(params);
 		},
-		[stackMutation, onSuccess],
+		[stackMutation],
 	);
 
 	return {
