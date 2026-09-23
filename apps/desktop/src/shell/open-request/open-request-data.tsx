@@ -8,7 +8,6 @@ import {
 	useRef,
 	useState,
 } from "react";
-import type { SidecarQueryUtils } from "#/infra/backend-context";
 import { useBackendContext } from "#/infra/backend-context";
 import { useSidecarEvent } from "#/infra/sidecar-events";
 
@@ -19,7 +18,6 @@ type OpenRequestContextValue = {
 const OpenRequestContext = createContext<OpenRequestContextValue | null>(null);
 
 export function OpenRequestProvider(props: {
-	orpc: SidecarQueryUtils;
 	children: React.ReactNode;
 }): React.ReactElement {
 	const backend = useBackendContext();
@@ -67,7 +65,7 @@ export function OpenRequestProvider(props: {
 		merge(event.request);
 		if (event.type === "open-resolved") {
 			void queryClient.invalidateQueries({
-				queryKey: props.orpc.sessions.list.queryKey(),
+				queryKey: backend.orpc.sessions.list.queryKey(),
 			});
 		}
 		void navigate({ to: "/" });

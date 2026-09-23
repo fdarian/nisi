@@ -66,14 +66,13 @@ import {
 import { listHarnesses } from "./harness/harnesses.ts";
 import { getHarnessModels } from "./harness/models.ts";
 import { checkSessionForChanges } from "./live-poll.ts";
+import { createNativeActivationHandler } from "./native-activation.ts";
 import {
-	acknowledgeActivation,
 	acknowledgeOpenRequest,
 	createOpenRequest,
 	failOpenRequest,
 	listOpenRequests,
 	resolveOpenRequest,
-	subscribeToActivations,
 } from "./open-requests.ts";
 import type { AppServices } from "./services.ts";
 import {
@@ -249,6 +248,10 @@ export function attachRouter(
 	mainContext: Context.Context<AppServices>,
 	activationOwnerId?: string,
 ) {
+	const nativeActivation = createNativeActivationHandler(
+		token,
+		activationOwnerId,
+	);
 	// `events.subscribe`/`walkthrough.generate` are plain `.handler(async
 	// function* ...)` closures (see the comment on `events` below) — they
 	// never go through `.effect()`'s bridging into `mainContext`, so logging
@@ -412,7 +415,6 @@ export function attachRouter(
 						}),
 					),
 				);
-				emit({ type: "session-opened", session });
 				yield* Effect.logInfo("session opened", {
 					sessionId: session.id,
 					repoRoot: session.repoRoot,
@@ -1858,48 +1860,8 @@ export function attachRouter(
 		// Bun's default 10s timeout).
 		idleTimeout: 0,
 		async fetch(req) {
-			const url = new URL(req.url);
-			if (url.pathname.startsWith("/native/activation")) {
-				if (req.headers.get("authorization") !== `Bearer ${token}`) {
-					return new Response("unauthorized", { status: 401 });
-				}
-				if (
-					activationOwnerId === undefined ||
-					req.headers.get("x-nisi-activation-owner") !== activationOwnerId
-				) {
-					return new Response("not the owning app", { status: 403 });
-				}
-				if (
-					url.pathname === "/native/activation/ack" &&
-					req.method === "POST"
-				) {
-					const id = url.searchParams.get("id");
-					if (id === null) return new Response("missing id", { status: 400 });
-					acknowledgeActivation(id);
-					return new Response(null, { status: 204 });
-				}
-				if (url.pathname !== "/native/activation" || req.method !== "GET") {
-					return new Response("not found", { status: 404 });
-				}
-				let unsubscribe: (() => void) | undefined;
-				const stream = new ReadableStream<Uint8Array>({
-					start(controller) {
-						const encoder = new TextEncoder();
-						unsubscribe = subscribeToActivations((id) => {
-							controller.enqueue(encoder.encode(`${JSON.stringify({ id })}\n`));
-						});
-					},
-					cancel() {
-						unsubscribe?.();
-					},
-				});
-				return new Response(stream, {
-					headers: {
-						"content-type": "application/x-ndjson",
-						"cache-control": "no-store",
-					},
-				});
-			}
+			const activationResponse = nativeActivation(req);
+			if (activationResponse !== undefined) return activationResponse;
 			// Generic per-call timing, covering every procedure without a
 			// per-handler instrumentation pass — `path` doubles as "which
 			// procedure" since RPCHandler routes `sessions.open` etc. to

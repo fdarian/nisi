@@ -10,9 +10,9 @@ import {
 } from "#/features/devtools/dev-tool-context";
 import { useSettingsShortcut } from "#/features/settings/use-settings-shortcut";
 import { BackendProvider, useBackendContext } from "#/infra/backend-context";
+import { SidecarEventsProvider } from "#/infra/sidecar-events";
 import { useRedirectHomeOnPendingDeepLink } from "#/shell/deep-link/deep-link-data";
 import { OpenRequestProvider } from "#/shell/open-request/open-request-data";
-import { SidecarEventsProvider } from "#/infra/sidecar-events";
 
 export const Route = createRootRoute({
 	component: RootLayout,
@@ -52,7 +52,7 @@ function ConnectedEvents() {
 	if (backend.status !== "ready") return content;
 	return (
 		<SidecarEventsProvider client={backend.client}>
-			<OpenRequestProvider orpc={backend.orpc}>{content}</OpenRequestProvider>
+			<OpenRequestProvider>{content}</OpenRequestProvider>
 		</SidecarEventsProvider>
 	);
 }

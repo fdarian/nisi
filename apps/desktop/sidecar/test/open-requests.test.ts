@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
 import { emit, streamReady, subscribe } from "../events.ts";
 import {
 	acknowledgeActivation,
@@ -93,5 +93,44 @@ describe("open requests", () => {
 		).toEqual({ kind: "failed", message: "GitHub unavailable" });
 		acknowledgeOpenRequest(request.id);
 		acknowledgeActivation(request.id);
+	});
+
+	test("bounds unacknowledged terminal requests and activation replay", () => {
+		const created = Array.from({ length: 105 }, () => {
+			const request = createOpenRequest("/repo", target);
+			failOpenRequest(request.id, "unavailable");
+			return request;
+		});
+		const retained = listOpenRequests();
+		expect(retained).toHaveLength(100);
+		expect(retained[0]?.id).toBe(created[5]?.id);
+		const replayed: string[] = [];
+		const stop = subscribeToActivations((id) => replayed.push(id));
+		expect(replayed).toHaveLength(100);
+		expect(replayed[0]).toBe(created[5]?.id);
+		stop();
+		for (const request of created) {
+			acknowledgeOpenRequest(request.id);
+			acknowledgeActivation(request.id);
+		}
+	});
+
+	test("expires settled requests and unacknowledged activations", () => {
+		let now = 1_000;
+		const clock = spyOn(Date, "now").mockImplementation(() => now);
+		try {
+			const request = createOpenRequest("/repo", target);
+			failOpenRequest(request.id, "unavailable");
+			now += 30 * 60_000;
+			expect(listOpenRequests().some((entry) => entry.id === request.id)).toBe(
+				false,
+			);
+			const replayed: string[] = [];
+			const stop = subscribeToActivations((id) => replayed.push(id));
+			expect(replayed).not.toContain(request.id);
+			stop();
+		} finally {
+			clock.mockRestore();
+		}
 	});
 });

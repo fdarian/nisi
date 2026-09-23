@@ -81,7 +81,9 @@ claims and publishes it with, so both ends of the handshake share one dependency
   `scripts/dev.ts`, so this HTTP stream works in both dev and production; stdout would not.
   `src/infra/sidecar-events.tsx` owns the frontend event stream and
   `src/shell/open-request/open-request-data.tsx` replays pending opens on connection, including
-  when the frontend is on `/settings`.
+  when the frontend is on `/settings`. A production app can inherit a still-live sidecar from a
+  crashed app process; its Rust watcher claims activation ownership only after the previous owner's
+  stream disconnects (`sidecar/native-activation.ts`). A connected owner cannot be displaced.
 - Sidecar boot (`sidecar/index.ts`) is one Effect program run via `BunRuntime.runMain`: the HTTP
   server and `deskkit/sidecar`'s `acquireSidecar` claim are each acquired/released with
   `Effect.acquireRelease` inside `Effect.scoped`, so SIGINT/SIGTERM (which `runMain` already listens

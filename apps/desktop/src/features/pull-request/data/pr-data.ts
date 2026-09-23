@@ -188,7 +188,7 @@ export type ReviewStateEntry = {
 /** Mirrors `sessions.list()` plus a `sessions.close` mutation, kept live by `events.subscribe`; root-scoped LSP status events also update every matching session's status cache and intent. */
 export function useSessions(
 	orpc: SidecarQueryUtils,
-	/** Fires when a `session-opened` event arrives — the caller sets `requestedActiveSessionId` (`app-shell.tsx`) so a CLI-opened tab activates the same way `OpenPullRequestPalette`'s `onSessionOpened` does for the in-app path. */
+	/** `session-opened` is emitted by the worktree/PR open path; CLI `sessions.open` selects through `open-resolved` instead. */
 	onSessionOpened: (sessionId: string) => void,
 ): {
 	sessions: readonly Session[];

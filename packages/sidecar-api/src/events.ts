@@ -4,8 +4,8 @@ import { CodeIndexLspStatus } from "./code-index.ts";
 import { OpenSessionTarget, Session } from "./sessions.ts";
 
 /**
- * Phase 1 shipped just enough for a running desktop app's tab strip to react
- * when the CLI opens (or an idle tab closes) a session out from under it.
+ * `session-opened` tracks the PR/worktree open path; CLI `sessions.open` uses
+ * `open-resolved`, which also carries the open request's identity.
  * Phase 2 adds `session-files-changed`: the live-update poller's signal that
  * a session's `diff.files`/`diff.fileContents` results are stale and worth
  * refetching — deliberately just a `sessionId`, not a diff of what changed,
