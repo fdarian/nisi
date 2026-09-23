@@ -1,5 +1,6 @@
 import { BunRuntime, BunServices } from "@effect/platform-bun";
 import { safe } from "@orpc/client";
+import { resolvedPath } from "@repo/bin-resolver";
 import { getDataDirConfig, SqliteDb } from "@repo/db";
 import { RepoMergeMethodStore, SettingsStore } from "@repo/settings";
 import { makeSidecarClient } from "@repo/sidecar-api";
@@ -49,6 +50,19 @@ const program = Effect.scoped(
 	Effect.gen(function* () {
 		const fs = yield* FileSystem;
 		const dataDir = yield* dataDirConfig;
+
+		// In-process libraries such as Pi spawn npm with process.env, bypassing
+		// the local sandbox's login-shell PATH handling.
+		yield* Effect.try({
+			try: () => {
+				process.env.PATH = resolvedPath();
+			},
+			catch: (cause) => new Error("Could not resolve sidecar PATH", { cause }),
+		}).pipe(
+			Effect.tapError((error) =>
+				Effect.logError("sidecar PATH setup failed", error),
+			),
+		);
 
 		yield* Effect.logInfo("starting up", { dataDir });
 		yield* fs.makeDirectory(dataDir, { recursive: true });
