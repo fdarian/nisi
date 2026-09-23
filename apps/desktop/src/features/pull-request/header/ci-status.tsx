@@ -1,6 +1,7 @@
 "use client";
 
 import { openUrl } from "@tauri-apps/plugin-opener";
+import { cn } from "cn";
 import type React from "react";
 import {
 	DropdownMenu,
@@ -10,7 +11,6 @@ import {
 	DropdownMenuTrigger,
 } from "#/components/ui/menu";
 import { useDismissOnInactive } from "#/features/pull-request/use-dismiss-on-inactive";
-import { cn } from "cn";
 
 export type CiCheckStatus =
 	| "passing"

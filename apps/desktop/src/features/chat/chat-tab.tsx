@@ -1,6 +1,7 @@
 "use client";
 
 import { useChat } from "@ai-sdk/react";
+import { cn } from "cn";
 import { LoaderCircleIcon, XIcon } from "lucide-react";
 import { Button } from "#/components/ui/button";
 import type { SidecarQueryUtils } from "#/infra/backend-context";
@@ -9,7 +10,6 @@ import {
 	deriveThreadTitle,
 	getOrCreateChat,
 } from "./chat-store";
-import { cn } from "cn";
 
 type ChatTabProps = {
 	sessionId: string;

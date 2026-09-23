@@ -8,10 +8,10 @@ import {
 	EmptyTitle,
 } from "#/components/ui/empty";
 import { Spinner } from "#/components/ui/spinner";
-import type { SidecarQueryUtils } from "#/infra/backend-context";
 import type { Session } from "#/features/pull-request/data/pr-data";
 import { useOverview } from "#/features/pull-request/data/pr-data";
 import { CommitList } from "#/features/pull-request/overview/commits/commit-list";
+import type { SidecarQueryUtils } from "#/infra/backend-context";
 import { DescriptionPane } from "./description-pane";
 
 type OverviewViewProps = {

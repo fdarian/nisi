@@ -34,9 +34,20 @@ import type {
 } from "@repo/sidecar-api";
 import { CODE_INDEX_SOURCE_CONTEXT_LINE_COUNT } from "@repo/sidecar-api";
 import { keepPreviousData, useQueries, useQuery } from "@tanstack/react-query";
+import { cn } from "cn";
 import { AlertTriangleIcon } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { CodeIndexReferenceLine } from "./code-index-reference-line";
+import { Badge } from "#/components/ui/badge";
+import { Button } from "#/components/ui/button";
+import {
+	Collapsible,
+	CollapsiblePanel,
+	CollapsibleTrigger,
+} from "#/components/ui/collapsible";
+import { Dialog, DialogContent, DialogTitle } from "#/components/ui/dialog";
+import { ScrollArea } from "#/components/ui/scroll-area";
+import { Skeleton } from "#/components/ui/skeleton";
+import { codeIndexReferenceTarget } from "#/features/code-index/navigation/code-index-navigation";
 import {
 	flattenVisibleReferences,
 	initialReferenceIndex,
@@ -50,32 +61,21 @@ import {
 } from "#/features/code-index/navigation/code-index-reference-navigation";
 import type { CodeIndexPeekTarget } from "#/features/code-index/use-code-index-interactions";
 import {
-	buildDiffCodeViewOptions,
-	DiffCodeView,
-} from "#/features/diff/viewer/diff-code-view";
-import {
 	DIFF_CODE_LINE_HEIGHT,
 	type DiffTheme,
 	diffCodeViewLayout,
 	diffItemMetrics,
 	useDiffTheme,
 } from "#/features/diff/diff-view-theme";
-import { Badge } from "#/components/ui/badge";
-import { Button } from "#/components/ui/button";
 import {
-	Collapsible,
-	CollapsiblePanel,
-	CollapsibleTrigger,
-} from "#/components/ui/collapsible";
-import { Dialog, DialogContent, DialogTitle } from "#/components/ui/dialog";
-import { ScrollArea } from "#/components/ui/scroll-area";
-import type { SidecarQueryUtils } from "#/infra/backend-context";
-import { codeIndexReferenceTarget } from "#/features/code-index/navigation/code-index-navigation";
+	buildDiffCodeViewOptions,
+	DiffCodeView,
+} from "#/features/diff/viewer/diff-code-view";
 import { hashItemVersion } from "#/features/diff/viewer/item-version";
 import { useSessionOpenFiles } from "#/features/pull-request/data/session-ui-store";
+import type { SidecarQueryUtils } from "#/infra/backend-context";
 import { splitPath } from "#/lib/tree-paths";
-import { cn } from "cn";
-import { Skeleton } from "#/components/ui/skeleton";
+import { CodeIndexReferenceLine } from "./code-index-reference-line";
 
 type CodeIndexPeekDialogProps = {
 	sessionId: string;

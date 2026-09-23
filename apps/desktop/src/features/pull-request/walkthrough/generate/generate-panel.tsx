@@ -1,8 +1,13 @@
 "use client";
 
 import { Link } from "@tanstack/react-router";
+import { cn } from "cn";
 import { RefreshCwIcon, SparklesIcon } from "lucide-react";
 import { useState } from "react";
+import {
+	HarnessModelCombobox,
+	type ModelSelection,
+} from "#/components/harness-model-combobox";
 import { Button, buttonVariants } from "#/components/ui/button";
 import {
 	Empty,
@@ -10,18 +15,6 @@ import {
 	EmptyMedia,
 	EmptyTitle,
 } from "#/components/ui/empty";
-import { EnableHarnessesPanel } from "./enable-harnesses-panel";
-import { GenerationTimeline } from "./generation-timeline";
-import {
-	HarnessModelCombobox,
-	type ModelSelection,
-} from "#/components/harness-model-combobox";
-import type { SidecarQueryUtils } from "#/infra/backend-context";
-import {
-	useSettings,
-	useUpdateSettings,
-} from "#/features/settings/settings-data";
-import { cn } from "cn";
 import {
 	type GenerationLogEntry,
 	type GenerationProgress,
@@ -29,6 +22,13 @@ import {
 	type HarnessInfo,
 	useHarnesses,
 } from "#/features/pull-request/walkthrough/walkthrough-data";
+import {
+	useSettings,
+	useUpdateSettings,
+} from "#/features/settings/settings-data";
+import type { SidecarQueryUtils } from "#/infra/backend-context";
+import { EnableHarnessesPanel } from "./enable-harnesses-panel";
+import { GenerationTimeline } from "./generation-timeline";
 
 type GeneratePanelProps = {
 	orpc: SidecarQueryUtils;

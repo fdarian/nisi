@@ -1,6 +1,7 @@
 "use client";
 
 import { exit } from "@tauri-apps/plugin-process";
+import { cn } from "cn";
 import { DownloadIcon, RotateCcwIcon } from "lucide-react";
 import type React from "react";
 import { useCallback, useEffect, useRef } from "react";
@@ -14,7 +15,6 @@ import {
 	useRestartToUpdate,
 	useUpdateStatus,
 } from "./update-data";
-import { cn } from "cn";
 
 /** What the pill actually renders for one `UpdateState` — `null` for the two states that render nothing. */
 type PillView = {

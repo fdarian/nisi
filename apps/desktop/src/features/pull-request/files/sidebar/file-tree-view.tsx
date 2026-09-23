@@ -15,6 +15,17 @@ import {
 	useRef,
 } from "react";
 import {
+	DropdownMenu,
+	DropdownMenuContent,
+	DropdownMenuItem,
+	DropdownMenuSeparator,
+} from "#/components/ui/menu";
+import type {
+	FileChange,
+	ReviewStateEntry,
+} from "#/features/pull-request/data/pr-data";
+import { collectAncestorDirectoryPaths, comparePaths } from "#/lib/tree-paths";
+import {
 	buildStatusColorCSS,
 	buildTreeThemeStyle,
 	createRowDecorationRenderer,
@@ -24,14 +35,6 @@ import {
 	syncScrollFadeStyle,
 	syncStatusColorStyle,
 } from "./tree-shadow-dom";
-import {
-	DropdownMenu,
-	DropdownMenuContent,
-	DropdownMenuItem,
-	DropdownMenuSeparator,
-} from "#/components/ui/menu";
-import type { FileChange, ReviewStateEntry } from "#/features/pull-request/data/pr-data";
-import { collectAncestorDirectoryPaths, comparePaths } from "#/lib/tree-paths";
 
 type FileTreeViewProps = {
 	files: readonly FileChange[];

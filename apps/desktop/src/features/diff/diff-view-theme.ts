@@ -14,10 +14,13 @@
 import type { CodeViewLayout, ThemesType } from "@pierre/diffs";
 import type { WorkerInitializationRenderOptions } from "@pierre/diffs/react";
 import { themes } from "@pierre/theming/themes";
-import { useMemo } from "react";
-import type { SidecarQueryUtils } from "#/infra/backend-context";
-import { useDiffThemeDark, useDiffThemeLight } from "#/features/settings/settings-data";
 import { cn } from "cn";
+import { useMemo } from "react";
+import {
+	useDiffThemeDark,
+	useDiffThemeLight,
+} from "#/features/settings/settings-data";
+import type { SidecarQueryUtils } from "#/infra/backend-context";
 
 /** One selectable diff syntax theme — an id `@pierre/theming`'s registry resolves, plus a human label for the Settings picker. */
 export type DiffThemeOption = {

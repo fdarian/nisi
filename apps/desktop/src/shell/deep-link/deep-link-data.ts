@@ -7,6 +7,10 @@
 import { useNavigate, useRouterState } from "@tanstack/react-router";
 import { useEffect, useSyncExternalStore } from "react";
 import { toastManager } from "#/components/ui/toast";
+import {
+	friendlyOpenPullRequestError,
+	useOpenPullRequest,
+} from "#/features/pull-request/data/pull-requests-data";
 import type { SidecarQueryUtils } from "#/infra/backend-context";
 import { parseNisiDeepLink } from "./deep-link";
 import {
@@ -14,10 +18,6 @@ import {
 	getPendingDeepLinksSnapshot,
 	subscribeToDeepLinks,
 } from "./deep-link-store";
-import {
-	friendlyOpenPullRequestError,
-	useOpenPullRequest,
-} from "#/features/pull-request/data/pull-requests-data";
 
 /**
  * Opens whatever's pending in `deep-link-store.ts`, one at a time — gated

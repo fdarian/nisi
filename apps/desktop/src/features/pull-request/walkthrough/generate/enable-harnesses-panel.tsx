@@ -4,7 +4,10 @@ import { useState } from "react";
 import { Button } from "#/components/ui/button";
 import { Checkbox } from "#/components/ui/checkbox";
 import { CheckboxGroup } from "#/components/ui/checkbox-group";
-import type { HarnessId, HarnessInfo } from "#/features/pull-request/walkthrough/walkthrough-data";
+import type {
+	HarnessId,
+	HarnessInfo,
+} from "#/features/pull-request/walkthrough/walkthrough-data";
 
 type EnableHarnessesPanelProps = {
 	harnesses: readonly HarnessInfo[];

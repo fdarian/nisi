@@ -12,7 +12,6 @@
  */
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { useState } from "react";
-import type { WalkthroughSelection } from "./walkthrough-data";
 import { createMockOrpc } from "../../../../.storybook/mock-orpc";
 import {
 	FIXTURE_FILE_CONTENTS,
@@ -24,6 +23,7 @@ import {
 	FIXTURE_WALKTHROUGH_WITH_GAPS,
 	TODOS_PATH,
 } from "./walkthrough.fixture";
+import type { WalkthroughSelection } from "./walkthrough-data";
 import { WalkthroughView } from "./walkthrough-view";
 
 type WalkthroughViewProps = React.ComponentProps<typeof WalkthroughView>;

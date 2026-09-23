@@ -1,6 +1,7 @@
 "use client";
 
 import { Toast } from "@base-ui/react/toast";
+import { cn } from "cn";
 import {
 	CircleAlertIcon,
 	CircleCheckIcon,
@@ -10,7 +11,6 @@ import {
 } from "lucide-react";
 import type React from "react";
 import { buttonVariants } from "#/components/ui/button";
-import { cn } from "cn";
 
 const TOAST_ICONS = {
 	error: CircleAlertIcon,

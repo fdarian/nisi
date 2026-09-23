@@ -27,13 +27,13 @@ import {
 	ToolbarButton,
 	ToolbarSeparator,
 } from "#/components/ui/toolbar";
-import { diffSelectionPopupMarkerProps } from "./use-diff-selection";
-import type { SidecarQueryUtils } from "#/infra/backend-context";
 import { useChatDockActions } from "#/features/chat/chat-store";
 import {
 	type DiffSelectionReference,
 	formatSelectionReference,
 } from "#/features/diff/diff-reference";
+import type { SidecarQueryUtils } from "#/infra/backend-context";
+import { diffSelectionPopupMarkerProps } from "./use-diff-selection";
 
 const COPIED_CONFIRMATION_MS = 1500;
 

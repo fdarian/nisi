@@ -1,4 +1,7 @@
-import type { PullRequestCheck, PullRequestMergeStatus } from "#/features/pull-request/data/pr-data";
+import type {
+	PullRequestCheck,
+	PullRequestMergeStatus,
+} from "#/features/pull-request/data/pr-data";
 
 /**
  * What the PR tab badge's icon (`PrTabIcon`, `pr-tab-strip.tsx`) shows once

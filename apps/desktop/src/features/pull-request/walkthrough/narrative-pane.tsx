@@ -1,5 +1,6 @@
 "use client";
 
+import { cn } from "cn";
 /**
  * The left pane: every section's markdown body, in order, followed by two
  * footnotes to the prose — `UncoveredFiles` (what the walkthrough skipped)
@@ -15,9 +16,8 @@
 import { useMemo } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import { RegenerateControl } from "#/features/pull-request/walkthrough/generate/regenerate-control";
-import { UncoveredFiles } from "./uncovered-files";
 import type { SidecarQueryUtils } from "#/infra/backend-context";
-import { cn } from "cn";
+import { UncoveredFiles } from "./uncovered-files";
 import type {
 	HarnessId,
 	UncoveredFile,

@@ -23,19 +23,19 @@
 import { PlusIcon } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { useCallback } from "react";
-import { ChatPanel } from "./panel/chat-panel";
-import { ChatTab } from "./chat-tab";
 import { Button } from "#/components/ui/button";
-import { useChatShortcut } from "./use-chat-shortcut";
-import { useKeyBindings } from "#/lib/use-key-bindings";
 import type { SidecarQueryUtils } from "#/infra/backend-context";
+import { useKeyBindings } from "#/lib/use-key-bindings";
 import {
 	useChatActiveThreadId,
 	useChatDockActions,
 	useChatPopupOpen,
 	useChatThreads,
 } from "./chat-store";
+import { ChatTab } from "./chat-tab";
+import { ChatPanel } from "./panel/chat-panel";
 import { spring } from "./springs";
+import { useChatShortcut } from "./use-chat-shortcut";
 
 type ChatDockProps = {
 	sessionId: string;

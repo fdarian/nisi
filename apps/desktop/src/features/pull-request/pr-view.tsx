@@ -1,13 +1,8 @@
 "use client";
 
+import { cn } from "cn";
 import { AlertTriangleIcon, XIcon } from "lucide-react";
 import { useMemo } from "react";
-import { useDevToolScope } from "#/features/devtools/dev-tool-context";
-import { useRefetchToasts } from "#/features/devtools/use-refetch-toasts";
-import { FileView } from "#/features/pull-request/file-view/file-view";
-import { FilesChangedView } from "#/features/pull-request/files/files-changed-view";
-import { OverviewView } from "#/features/pull-request/overview/overview-view";
-import { PrHeader } from "#/features/pull-request/header/pr-header";
 import {
 	Empty,
 	EmptyDescription,
@@ -22,12 +17,9 @@ import {
 	TabsPrimitive,
 	TabsTrigger,
 } from "#/components/ui/tabs";
-import { WalkthroughView } from "#/features/pull-request/walkthrough/walkthrough-view";
-import type { KeyBindings } from "#/lib/use-key-bindings";
-import { useKeyBindings } from "#/lib/use-key-bindings";
-import { useNavigationShortcuts } from "#/features/pull-request/navigation/use-navigation-shortcuts";
-import { useWindowFocused } from "#/infra/use-window-focused";
-import type { SidecarQueryUtils } from "#/infra/backend-context";
+import { CodeIndexLspControl } from "#/features/code-index/lsp/code-index-lsp-control";
+import { useDevToolScope } from "#/features/devtools/dev-tool-context";
+import { useRefetchToasts } from "#/features/devtools/use-refetch-toasts";
 import type { Session } from "#/features/pull-request/data/pr-data";
 import {
 	useFileChanges,
@@ -45,10 +37,18 @@ import {
 	useSessionOpenFiles,
 	useSessionWalkthroughSelection,
 } from "#/features/pull-request/data/session-ui-store";
+import { FileView } from "#/features/pull-request/file-view/file-view";
+import { FilesChangedView } from "#/features/pull-request/files/files-changed-view";
+import { PrHeader } from "#/features/pull-request/header/pr-header";
+import { useNavigationShortcuts } from "#/features/pull-request/navigation/use-navigation-shortcuts";
+import { OverviewView } from "#/features/pull-request/overview/overview-view";
+import { WalkthroughView } from "#/features/pull-request/walkthrough/walkthrough-view";
 import { useWalkthroughEnabled } from "#/features/settings/settings-data";
+import type { SidecarQueryUtils } from "#/infra/backend-context";
+import { useWindowFocused } from "#/infra/use-window-focused";
 import { splitPath } from "#/lib/tree-paths";
-import { cn } from "cn";
-import { CodeIndexLspControl } from "#/features/code-index/lsp/code-index-lsp-control";
+import type { KeyBindings } from "#/lib/use-key-bindings";
+import { useKeyBindings } from "#/lib/use-key-bindings";
 
 type PrViewProps = {
 	session: Session;

@@ -1,6 +1,7 @@
 "use client";
 
 import { openUrl } from "@tauri-apps/plugin-opener";
+import { cn } from "cn";
 import {
 	Columns2Icon,
 	RefreshCwIcon,
@@ -8,11 +9,6 @@ import {
 	SlidersHorizontalIcon,
 } from "lucide-react";
 import { useCallback, useMemo, useRef, useState } from "react";
-import type { DiffPaneHandle } from "#/features/pull-request/files/diff-pane/diff-pane";
-import { DiffPane } from "#/features/pull-request/files/diff-pane/diff-pane";
-import { EditorPickerPalette } from "#/features/pull-request/files/editor-picker/editor-picker-palette";
-import type { SearchMode } from "#/features/pull-request/files/sidebar/files-sidebar";
-import { FilesSidebar } from "#/features/pull-request/files/sidebar/files-sidebar";
 import { Button, buttonVariants } from "#/components/ui/button";
 import {
 	DropdownMenu,
@@ -25,13 +21,6 @@ import {
 } from "#/components/ui/menu";
 import { toastManager } from "#/components/ui/toast";
 import { ToggleGroup, ToggleGroupItem } from "#/components/ui/toggle-group";
-import type { EditorInfo } from "#/infra/use-available-editors";
-import {
-	openInEditor,
-	useAvailableEditors,
-} from "#/infra/use-available-editors";
-import { useKeyBindings } from "#/lib/use-key-bindings";
-import type { SidecarQueryUtils } from "#/infra/backend-context";
 import {
 	type DiffMatch,
 	diffContentMatchesQuery,
@@ -43,7 +32,10 @@ import type {
 	ReviewStateEntry,
 	Session,
 } from "#/features/pull-request/data/pr-data";
-import { pullRequestUrl, useFileContents } from "#/features/pull-request/data/pr-data";
+import {
+	pullRequestUrl,
+	useFileContents,
+} from "#/features/pull-request/data/pr-data";
 import {
 	useSessionCurrentMatchIndex,
 	useSessionFilterQuery,
@@ -53,6 +45,11 @@ import {
 	useSessionSelectedPath,
 	useSessionUndoStack,
 } from "#/features/pull-request/data/session-ui-store";
+import type { DiffPaneHandle } from "#/features/pull-request/files/diff-pane/diff-pane";
+import { DiffPane } from "#/features/pull-request/files/diff-pane/diff-pane";
+import { EditorPickerPalette } from "#/features/pull-request/files/editor-picker/editor-picker-palette";
+import type { SearchMode } from "#/features/pull-request/files/sidebar/files-sidebar";
+import { FilesSidebar } from "#/features/pull-request/files/sidebar/files-sidebar";
 import {
 	useDiffStyleMode,
 	useHideReviewed,
@@ -61,8 +58,14 @@ import {
 	useSidebarViewMode,
 	useWrapLines,
 } from "#/features/settings/settings-data";
+import type { SidecarQueryUtils } from "#/infra/backend-context";
+import type { EditorInfo } from "#/infra/use-available-editors";
+import {
+	openInEditor,
+	useAvailableEditors,
+} from "#/infra/use-available-editors";
 import { comparePaths } from "#/lib/tree-paths";
-import { cn } from "cn";
+import { useKeyBindings } from "#/lib/use-key-bindings";
 
 /** Stable identity for the "keyword mode inactive" case — a fresh `[]`/`Map` every render would defeat `DiffPane`'s `items` memo just as surely as a genuinely different value would. */
 const EMPTY_MATCHES: readonly DiffMatch[] = [];

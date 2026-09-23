@@ -7,22 +7,22 @@ import {
 	GitPullRequestIcon,
 	LayersIcon,
 } from "lucide-react";
+import { Button } from "#/components/ui/button";
+import { Frame, FramePanel } from "#/components/ui/frame";
 import {
 	Popover,
 	PopoverPopup,
 	PopoverTitle,
 	PopoverTrigger,
 } from "#/components/ui/popover";
-import { useDismissOnInactive } from "#/features/pull-request/use-dismiss-on-inactive";
-import type { SidecarQueryUtils } from "#/infra/backend-context";
 import type { PullRequestStackEntry } from "#/features/pull-request/data/pr-data";
 import { usePullRequestStack } from "#/features/pull-request/data/pr-data";
 import {
 	type OpenPullRequestParams,
 	useOpenPullRequest,
 } from "#/features/pull-request/data/pull-requests-data";
-import { Button } from "#/components/ui/button";
-import { Frame, FramePanel } from "#/components/ui/frame";
+import { useDismissOnInactive } from "#/features/pull-request/use-dismiss-on-inactive";
+import type { SidecarQueryUtils } from "#/infra/backend-context";
 
 type PrStackBadgeProps = {
 	orpc: SidecarQueryUtils;

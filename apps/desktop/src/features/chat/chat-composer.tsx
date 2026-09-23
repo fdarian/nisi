@@ -28,6 +28,7 @@ import { OnChangePlugin } from "@lexical/react/LexicalOnChangePlugin";
 import { PlainTextPlugin } from "@lexical/react/LexicalPlainTextPlugin";
 import { Link } from "@tanstack/react-router";
 import type { ChatStatus } from "ai";
+import { cn } from "cn";
 import {
 	$createParagraphNode,
 	$getRoot,
@@ -37,21 +38,23 @@ import {
 } from "lexical";
 import { ArrowUpIcon, SquareIcon, XIcon } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
-import { Badge } from "#/components/ui/badge";
-import { Button, buttonVariants } from "#/components/ui/button";
 import {
 	HarnessModelCombobox,
 	type ModelSelection,
 } from "#/components/harness-model-combobox";
-import type { SidecarQueryUtils } from "#/infra/backend-context";
+import { Badge } from "#/components/ui/badge";
+import { Button, buttonVariants } from "#/components/ui/button";
 import {
 	type DiffSelectionReference,
 	formatSelectionReference,
 	formatSelectionReferenceShort,
 } from "#/features/diff/diff-reference";
+import {
+	type HarnessId,
+	useHarnesses,
+} from "#/features/pull-request/walkthrough/walkthrough-data";
 import { useLastChatModel } from "#/features/settings/settings-data";
-import { cn } from "cn";
-import { type HarnessId, useHarnesses } from "#/features/pull-request/walkthrough/walkthrough-data";
+import type { SidecarQueryUtils } from "#/infra/backend-context";
 
 type ChatComposerProps = {
 	/** `null` until the thread's first message locks it in — see `chat-store.ts`'s `ChatThreadMeta` doc. */

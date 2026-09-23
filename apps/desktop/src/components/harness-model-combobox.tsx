@@ -1,5 +1,6 @@
 "use client";
 
+import { cn } from "cn";
 /** The generate empty-state's model picker — a typeable, grouped-by-harness combobox (coss ui's `Combobox`, Base UI-backed). Grouping is real `Combobox.Group`/`Combobox.GroupLabel` structure, not a flat list with a prefix, so the group headers stay out of the filter/keyboard-nav text. */
 import { useMemo } from "react";
 import {
@@ -12,8 +13,10 @@ import {
 	ComboboxList,
 	ComboboxPopup,
 } from "#/components/ui/combobox";
-import { cn } from "cn";
-import type { HarnessId, HarnessInfo } from "#/features/pull-request/walkthrough/walkthrough-data";
+import type {
+	HarnessId,
+	HarnessInfo,
+} from "#/features/pull-request/walkthrough/walkthrough-data";
 
 export type ModelSelection = {
 	harness: HarnessId;

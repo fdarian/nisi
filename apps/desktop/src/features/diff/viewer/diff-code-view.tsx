@@ -26,6 +26,7 @@ import {
 	type WorkerInitializationRenderOptions,
 	WorkerPoolContextProvider,
 } from "@pierre/diffs/react";
+import { cn } from "cn";
 import {
 	useCallback,
 	useEffect,
@@ -44,7 +45,6 @@ import {
 	type TokenInteractionLeaseRegistry,
 } from "#/features/diff/selection/token-interaction-leases";
 import type { DiffStyleMode } from "#/features/settings/settings-data";
-import { cn } from "cn";
 
 function useDiffWorkerPoolOptions() {
 	return useMemo(

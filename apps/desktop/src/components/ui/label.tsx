@@ -2,8 +2,8 @@
 
 import { mergeProps } from "@base-ui/react/merge-props";
 import { useRender } from "@base-ui/react/use-render";
-import type React from "react";
 import { cn } from "cn";
+import type React from "react";
 
 export function Label({
 	className,

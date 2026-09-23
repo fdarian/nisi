@@ -1,5 +1,11 @@
-import { type AnnotatedLine, parsePatchHunks } from "#/features/diff/viewer/diff-hunk-slicing";
-import type { FileChange, FileContentsMap } from "#/features/pull-request/data/pr-data";
+import {
+	type AnnotatedLine,
+	parsePatchHunks,
+} from "#/features/diff/viewer/diff-hunk-slicing";
+import type {
+	FileChange,
+	FileContentsMap,
+} from "#/features/pull-request/data/pr-data";
 
 /**
  * One keyword-search hit, precise enough to drive both slicing

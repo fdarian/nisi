@@ -1,5 +1,5 @@
-import type React from "react";
 import { cn } from "cn";
+import type React from "react";
 
 export function Skeleton({
 	className,

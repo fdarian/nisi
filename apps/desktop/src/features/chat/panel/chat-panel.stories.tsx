@@ -13,12 +13,12 @@
  */
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import type { UIMessage } from "ai";
+import { ScrollArea } from "#/components/ui/scroll-area";
+import { MessageList } from "./chat-panel";
 import {
 	CHAT_PANEL_DEFAULT_WIDTH,
 	CHAT_PANEL_MIN_WIDTH,
 } from "./chat-panel-resize";
-import { ScrollArea } from "#/components/ui/scroll-area";
-import { MessageList } from "./chat-panel";
 
 const LONG_SHELL_COMMAND =
 	"bun node_modules/@rheya/build-config/run.mjs --target=darwin-arm64 --profile=release --skip-cache-verification-step --emit-source-maps --output-dir=./dist/darwin-arm64/release";

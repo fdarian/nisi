@@ -24,6 +24,7 @@ import {
 	useSortable,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import { cn } from "cn";
 import {
 	GitPullRequestArrowIcon,
 	GitPullRequestIcon,
@@ -33,6 +34,7 @@ import {
 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { GitPullRequestMergedIcon } from "#/components/icons/git-pull-request-merged";
+import { Button } from "#/components/ui/button";
 import {
 	ContextMenu,
 	ContextMenuItem,
@@ -44,12 +46,16 @@ import {
 import { Kbd } from "#/components/ui/kbd";
 import { TabsPrimitive } from "#/components/ui/tabs";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "#/components/ui/tooltip";
-import { UpdatePill } from "#/shell/update/update-pill";
+import type {
+	Session,
+	SessionTarget,
+} from "#/features/pull-request/data/pr-data";
+import {
+	usePullRequestChecks,
+	usePullRequestMergeStatus,
+} from "#/features/pull-request/data/pr-data";
 import type { SidecarQueryUtils } from "#/infra/backend-context";
-import type { Session, SessionTarget } from "#/features/pull-request/data/pr-data";
-import { usePullRequestChecks, usePullRequestMergeStatus } from "#/features/pull-request/data/pr-data";
-import { cn } from "cn";
-import { Button } from "#/components/ui/button";
+import { UpdatePill } from "#/shell/update/update-pill";
 import { derivePrTabStatus, type PrTabStatus } from "./pr-tab-status";
 
 type PrTabStripProps = {

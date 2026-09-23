@@ -1,15 +1,9 @@
 "use client";
 
 import { Menu } from "@tauri-apps/api/menu";
+import { cn } from "cn";
 import { AlertTriangleIcon, InboxIcon } from "lucide-react";
 import { type ComponentProps, useCallback, useMemo, useState } from "react";
-import { ChatDock } from "#/features/chat/chat-dock";
-import { CommandPalette } from "#/features/command-palette/command-palette";
-import { DevToolButton } from "#/features/devtools/dev-tool";
-import { useDevToolVisible } from "#/features/devtools/dev-tool-context";
-import { OpenPullRequestPalette } from "#/features/command-palette/open-pull-request-palette";
-import { PrTabStrip } from "./tabs/pr-tab-strip";
-import { PrView } from "#/features/pull-request/pr-view";
 import { Button } from "#/components/ui/button";
 import {
 	Empty,
@@ -21,13 +15,7 @@ import {
 import { FramePanel } from "#/components/ui/frame";
 import { Spinner } from "#/components/ui/spinner";
 import { TabsPrimitive } from "#/components/ui/tabs";
-import { useCommandPaletteShortcut } from "#/features/command-palette/use-command-palette-shortcut";
-import { useOpenPrPaletteShortcut } from "#/features/command-palette/use-open-pr-palette-shortcut";
-import { useTabOrder } from "./tabs/use-tab-order";
-import { useTabShortcuts } from "./tabs/use-tab-shortcuts";
-import { useTabSuspension } from "./tabs/use-tab-suspension";
-import type { SidecarQueryUtils } from "#/infra/backend-context";
-import { useBackendContext } from "#/infra/backend-context";
+import { ChatDock } from "#/features/chat/chat-dock";
 import {
 	ChatProvider,
 	useChatPopupMinimized,
@@ -35,7 +23,12 @@ import {
 	useClearChatSession,
 	useCycleActiveThread,
 } from "#/features/chat/chat-store";
-import { useDeepLinkOpener } from "./deep-link/deep-link-data";
+import { CommandPalette } from "#/features/command-palette/command-palette";
+import { OpenPullRequestPalette } from "#/features/command-palette/open-pull-request-palette";
+import { useCommandPaletteShortcut } from "#/features/command-palette/use-command-palette-shortcut";
+import { useOpenPrPaletteShortcut } from "#/features/command-palette/use-open-pr-palette-shortcut";
+import { DevToolButton } from "#/features/devtools/dev-tool";
+import { useDevToolVisible } from "#/features/devtools/dev-tool-context";
 import { useSessions } from "#/features/pull-request/data/pr-data";
 import type { OpenPullRequestParams } from "#/features/pull-request/data/pull-requests-data";
 import { findOpenPullRequestSessionId } from "#/features/pull-request/data/pull-requests-data";
@@ -45,7 +38,14 @@ import {
 	useCycleFileTab,
 	useSetActiveTab,
 } from "#/features/pull-request/data/session-ui-store";
-import { cn } from "cn";
+import { PrView } from "#/features/pull-request/pr-view";
+import type { SidecarQueryUtils } from "#/infra/backend-context";
+import { useBackendContext } from "#/infra/backend-context";
+import { useDeepLinkOpener } from "./deep-link/deep-link-data";
+import { PrTabStrip } from "./tabs/pr-tab-strip";
+import { useTabOrder } from "./tabs/use-tab-order";
+import { useTabShortcuts } from "./tabs/use-tab-shortcuts";
+import { useTabSuspension } from "./tabs/use-tab-suspension";
 
 /**
  * Mirrors `SidebarInset`'s inset treatment (`ui/sidebar.tsx`, used as-is by

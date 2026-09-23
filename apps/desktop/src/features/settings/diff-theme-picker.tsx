@@ -26,16 +26,16 @@ import { PatchDiff } from "@pierre/diffs/react";
 import { MoonIcon, SunIcon } from "lucide-react";
 import { useMemo } from "react";
 import {
-	DIFF_THEME_DARK_OPTIONS,
-	DIFF_THEME_LIGHT_OPTIONS,
-} from "#/features/diff/diff-view-theme";
-import {
 	Select,
 	SelectContent,
 	SelectItem,
 	SelectTrigger,
 	SelectValue,
 } from "#/components/ui/select";
+import {
+	DIFF_THEME_DARK_OPTIONS,
+	DIFF_THEME_LIGHT_OPTIONS,
+} from "#/features/diff/diff-view-theme";
 
 /**
  * A small, representative unified diff — a function whose body changes from

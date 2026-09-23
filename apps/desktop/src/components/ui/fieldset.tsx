@@ -1,8 +1,8 @@
 "use client";
 
 import { Fieldset as FieldsetPrimitive } from "@base-ui/react/fieldset";
-import type React from "react";
 import { cn } from "cn";
+import type React from "react";
 
 export function Fieldset({
 	className,

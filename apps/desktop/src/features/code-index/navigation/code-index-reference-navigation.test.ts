@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import type { CodeIndexPeekTarget } from "#/features/code-index/use-code-index-interactions";
 import {
 	flattenVisibleReferences,
 	initialReferenceIndex,
@@ -7,7 +8,6 @@ import {
 	referenceContextWindow,
 	referenceNavigationGroup,
 } from "./code-index-reference-navigation";
-import type { CodeIndexPeekTarget } from "#/features/code-index/use-code-index-interactions";
 
 const firstReference = {
 	line: 4,

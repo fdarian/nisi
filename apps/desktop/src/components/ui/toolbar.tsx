@@ -1,8 +1,8 @@
 "use client";
 
 import { Toolbar as ToolbarPrimitive } from "@base-ui/react/toolbar";
-import type React from "react";
 import { cn } from "cn";
+import type React from "react";
 
 export function Toolbar({
 	className,

@@ -8,7 +8,10 @@
 import type { FileTreeRowDecorationRenderer } from "@pierre/trees";
 import { FILE_TREE_TAG_NAME } from "@pierre/trees";
 import type { CSSProperties } from "react";
-import type { FileChange, ReviewStateEntry } from "#/features/pull-request/data/pr-data";
+import type {
+	FileChange,
+	ReviewStateEntry,
+} from "#/features/pull-request/data/pr-data";
 
 /**
  * Maps our design tokens onto the tree's theme surface. The height is

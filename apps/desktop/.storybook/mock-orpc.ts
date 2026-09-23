@@ -19,20 +19,20 @@
 import { AsyncIteratorClass } from "@orpc/shared";
 import { createTanstackQueryUtils } from "@orpc/tanstack-query";
 import type { SidecarClient } from "@repo/sidecar-api";
-import type { SidecarQueryUtils } from "#/infra/backend-context";
 import type {
 	FileContent,
 	PullRequestCheck,
 	PullRequestMergeStatus,
 	PullRequestStack,
 } from "#/features/pull-request/data/pr-data";
-import type { Settings } from "#/features/settings/settings-data";
 import type {
 	GenerateEvent,
 	HarnessId,
 	HarnessInfo,
 	StoredWalkthrough,
 } from "#/features/pull-request/walkthrough/walkthrough-data";
+import type { Settings } from "#/features/settings/settings-data";
+import type { SidecarQueryUtils } from "#/infra/backend-context";
 
 const DEFAULT_SETTINGS: Settings = {
 	enabledHarnesses: ["claude-code", "codex"],

@@ -1,10 +1,10 @@
 "use client";
 
 import { NumberField as NumberFieldPrimitive } from "@base-ui/react/number-field";
+import { cn } from "cn";
 import { MinusIcon, PlusIcon } from "lucide-react";
 import * as React from "react";
 import { Label } from "#/components/ui/label";
-import { cn } from "cn";
 
 export const NumberFieldContext: React.Context<{
 	fieldId: string;

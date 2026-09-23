@@ -1,9 +1,9 @@
 "use client";
 
+import { cn } from "cn";
 import { SearchIcon, SlidersHorizontalIcon, XIcon } from "lucide-react";
 import { useMemo, useRef } from "react";
-import { FileTreeView } from "./file-tree-view";
-import { FlatFileGroup } from "./flat-file-group";
+import { Button, buttonVariants } from "#/components/ui/button";
 import { Empty, EmptyDescription, EmptyTitle } from "#/components/ui/empty";
 import {
 	InputGroup,
@@ -18,12 +18,15 @@ import {
 	DropdownMenuTrigger,
 } from "#/components/ui/menu";
 import { ScrollArea } from "#/components/ui/scroll-area";
-import { useKeyBindings } from "#/lib/use-key-bindings";
-import type { FileChange, ReviewStateEntry } from "#/features/pull-request/data/pr-data";
+import type {
+	FileChange,
+	ReviewStateEntry,
+} from "#/features/pull-request/data/pr-data";
 import type { SidebarViewMode } from "#/features/settings/settings-data";
 import { CATEGORY_LABELS, groupFilesByCategory } from "#/lib/tree-paths";
-import { cn } from "cn";
-import { Button, buttonVariants } from "#/components/ui/button";
+import { useKeyBindings } from "#/lib/use-key-bindings";
+import { FileTreeView } from "./file-tree-view";
+import { FlatFileGroup } from "./flat-file-group";
 
 /** The files sidebar's search box: filter by file path (today's default) or grep loaded diff content. */
 export type SearchMode = "files" | "keyword";

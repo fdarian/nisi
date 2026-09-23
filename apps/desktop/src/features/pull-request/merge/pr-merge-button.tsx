@@ -1,6 +1,7 @@
 "use client";
 
 import { ORPCError } from "@orpc/client";
+import { cn } from "cn";
 import { ChevronDownIcon } from "lucide-react";
 import { useCallback, useState } from "react";
 import { Button, buttonVariants } from "#/components/ui/button";
@@ -12,8 +13,6 @@ import {
 	DropdownMenuRadioItem,
 	DropdownMenuTrigger,
 } from "#/components/ui/menu";
-import { useDismissOnInactive } from "#/features/pull-request/use-dismiss-on-inactive";
-import type { SidecarQueryUtils } from "#/infra/backend-context";
 import type {
 	MergeMethod,
 	PullRequestMergeStatus,
@@ -25,7 +24,8 @@ import {
 	usePullRequestStack,
 	useUnpushedCommitsCheck,
 } from "#/features/pull-request/data/pr-data";
-import { cn } from "cn";
+import { useDismissOnInactive } from "#/features/pull-request/use-dismiss-on-inactive";
+import type { SidecarQueryUtils } from "#/infra/backend-context";
 import { deriveStackMerge } from "./pr-stack-merge";
 import { UnpushedCommitsDialog } from "./unpushed-commits-dialog";
 

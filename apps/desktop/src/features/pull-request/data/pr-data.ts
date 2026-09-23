@@ -27,13 +27,13 @@ import { isTauri } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toastManager } from "#/components/ui/toast";
-import type { SidecarQueryUtils } from "#/infra/backend-context";
 import {
 	codeIndexLspIntentForStatus,
 	sessionIdsForCodeIndexLspStatus,
 } from "#/features/code-index/lsp/code-index-lsp-events";
-import { useSetCodeIndexEnabled } from "./session-ui-store";
 import { useIncludeUncommitted } from "#/features/settings/settings-data";
+import type { SidecarQueryUtils } from "#/infra/backend-context";
+import { useSetCodeIndexEnabled } from "./session-ui-store";
 
 /**
  * What a session is actually reviewing — mirrors `SessionTarget`

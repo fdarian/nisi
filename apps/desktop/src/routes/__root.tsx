@@ -2,12 +2,12 @@ import { createRootRoute, Outlet } from "@tanstack/react-router";
 import { Agentation } from "agentation";
 import { Mesurer } from "mesurer";
 import { ThemeProvider } from "next-themes";
+import { ToastProvider } from "#/components/ui/toast";
 import {
 	DevToolProvider,
 	useAgentationEnabled,
 	useMesurerEnabled,
 } from "#/features/devtools/dev-tool-context";
-import { ToastProvider } from "#/components/ui/toast";
 import { useSettingsShortcut } from "#/features/settings/use-settings-shortcut";
 import { BackendProvider } from "#/infra/backend-context";
 import { useRedirectHomeOnPendingDeepLink } from "#/shell/deep-link/deep-link-data";

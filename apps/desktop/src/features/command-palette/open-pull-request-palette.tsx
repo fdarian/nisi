@@ -18,7 +18,6 @@ import {
 import { Kbd } from "#/components/ui/kbd";
 import { Separator } from "#/components/ui/separator";
 import { Spinner } from "#/components/ui/spinner";
-import type { SidecarQueryUtils } from "#/infra/backend-context";
 import {
 	friendlyOpenPullRequestError,
 	friendlySearchError,
@@ -28,6 +27,7 @@ import {
 	useOpenPullRequest,
 	useSearchPullRequests,
 } from "#/features/pull-request/data/pull-requests-data";
+import type { SidecarQueryUtils } from "#/infra/backend-context";
 
 /**
  * GitHub's search API allows 30 requests/minute authenticated — but that

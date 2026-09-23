@@ -2,8 +2,8 @@
 
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { SidecarQueryUtils } from "#/infra/backend-context";
 import type { Session } from "#/features/pull-request/data/pr-data";
+import type { SidecarQueryUtils } from "#/infra/backend-context";
 
 /**
  * How long a PR tab sits inactive (not the selected tab in the multi-PR

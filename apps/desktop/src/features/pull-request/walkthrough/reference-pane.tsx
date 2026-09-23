@@ -17,18 +17,9 @@ import type {
 	LineAnnotation,
 } from "@pierre/diffs";
 import { parsePatchFiles } from "@pierre/diffs";
+import { cn } from "cn";
 import { BookOpenIcon } from "lucide-react";
 import { useCallback, useMemo } from "react";
-import {
-	buildDiffCodeViewOptions,
-	DiffCodeView,
-} from "#/features/diff/viewer/diff-code-view";
-import {
-	DIFF_VIEWED_HOST_CLASS,
-	diffCardChromeCSS,
-	diffCardHeaderClassName,
-	useDiffTheme,
-} from "#/features/diff/diff-view-theme";
 import { Badge } from "#/components/ui/badge";
 import { Checkbox } from "#/components/ui/checkbox";
 import {
@@ -37,11 +28,20 @@ import {
 	EmptyMedia,
 	EmptyTitle,
 } from "#/components/ui/empty";
-import type { SidecarQueryUtils } from "#/infra/backend-context";
+import {
+	DIFF_VIEWED_HOST_CLASS,
+	diffCardChromeCSS,
+	diffCardHeaderClassName,
+	useDiffTheme,
+} from "#/features/diff/diff-view-theme";
 import {
 	buildLocationFileDiff,
 	type LineRange,
 } from "#/features/diff/viewer/build-location-diff";
+import {
+	buildDiffCodeViewOptions,
+	DiffCodeView,
+} from "#/features/diff/viewer/diff-code-view";
 import { hashItemVersion } from "#/features/diff/viewer/item-version";
 import type {
 	FileChange,
@@ -52,8 +52,8 @@ import {
 	useSetRangeViewed,
 } from "#/features/pull-request/data/pr-data";
 import { useSessionOpenFiles } from "#/features/pull-request/data/session-ui-store";
+import type { SidecarQueryUtils } from "#/infra/backend-context";
 import { splitPath } from "#/lib/tree-paths";
-import { cn } from "cn";
 import type { FileDrift, WalkthroughReferenceBlock } from "./walkthrough-data";
 
 /** `action`, when present, renders as a button below the message — the out-of-diff case's "Open file" affordance (see `ReferencePane`'s `itemGroups` loop) is the only caller that supplies one today. */

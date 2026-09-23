@@ -15,20 +15,6 @@ import type { CodeViewHandle } from "@pierre/diffs/react";
 import { useQuery } from "@tanstack/react-query";
 import { AlertTriangleIcon } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { CodeIndexPeekDialog } from "#/features/code-index/peek/code-index-peek-panel";
-import { useCodeIndexInteractions } from "#/features/code-index/use-code-index-interactions";
-import { useCodeIndexReferenceHighlighting } from "#/features/pull-request/file-view/reference-reveal/use-code-index-reference-highlighting";
-import {
-	buildDiffCodeViewOptions,
-	DiffCodeView,
-} from "#/features/diff/viewer/diff-code-view";
-import { DiffSelectionPopover } from "#/features/diff/selection/diff-selection-popover";
-import {
-	diffCodeViewLayout,
-	diffItemMetrics,
-	useDiffTheme,
-} from "#/features/diff/diff-view-theme";
-import { MarkdownDocument } from "#/features/pull-request/file-view/markdown/markdown-document";
 import {
 	Empty,
 	EmptyDescription,
@@ -38,12 +24,30 @@ import {
 import { Spinner } from "#/components/ui/spinner";
 import { ToggleGroup, ToggleGroupItem } from "#/components/ui/toggle-group";
 import { Toolbar } from "#/components/ui/toolbar";
-import { useDiffSelection } from "#/features/diff/selection/use-diff-selection";
-import type { SidecarQueryUtils } from "#/infra/backend-context";
 import {
 	type CodeIndexReferenceTarget,
 	codeIndexDisplayedLine,
 } from "#/features/code-index/navigation/code-index-navigation";
+import { CodeIndexPeekDialog } from "#/features/code-index/peek/code-index-peek-panel";
+import { useCodeIndexInteractions } from "#/features/code-index/use-code-index-interactions";
+import {
+	diffCodeViewLayout,
+	diffItemMetrics,
+	useDiffTheme,
+} from "#/features/diff/diff-view-theme";
+import { DiffSelectionPopover } from "#/features/diff/selection/diff-selection-popover";
+import { useDiffSelection } from "#/features/diff/selection/use-diff-selection";
+import {
+	buildDiffCodeViewOptions,
+	DiffCodeView,
+} from "#/features/diff/viewer/diff-code-view";
+import { hashItemVersion } from "#/features/diff/viewer/item-version";
+import {
+	useSessionCodeIndexEnabled,
+	useSessionFileReferenceTarget,
+	useSessionFileScrollTarget,
+} from "#/features/pull-request/data/session-ui-store";
+import { MarkdownDocument } from "#/features/pull-request/file-view/markdown/markdown-document";
 import {
 	type CodeIndexReferenceRevealTransaction,
 	canClearCodeIndexReferenceReveal,
@@ -54,12 +58,8 @@ import {
 	shouldRevealCodeIndexReference,
 	syncCodeIndexReferenceRevealTransaction,
 } from "#/features/pull-request/file-view/reference-reveal/code-index-reference-reveal";
-import { hashItemVersion } from "#/features/diff/viewer/item-version";
-import {
-	useSessionCodeIndexEnabled,
-	useSessionFileReferenceTarget,
-	useSessionFileScrollTarget,
-} from "#/features/pull-request/data/session-ui-store";
+import { useCodeIndexReferenceHighlighting } from "#/features/pull-request/file-view/reference-reveal/use-code-index-reference-highlighting";
+import type { SidecarQueryUtils } from "#/infra/backend-context";
 import { splitPath } from "#/lib/tree-paths";
 
 type FileViewProps = {

@@ -1,12 +1,12 @@
 "use client";
 
+import { cn } from "cn";
 import { ChevronRightIcon } from "lucide-react";
 import {
 	Collapsible,
 	CollapsibleContent,
 	CollapsibleTrigger,
 } from "#/components/ui/collapsible";
-import { cn } from "cn";
 import type { UncoveredFile, WalkthroughSelection } from "./walkthrough-data";
 
 type UncoveredFilesProps = {

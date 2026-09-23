@@ -19,6 +19,7 @@
  */
 import { useChat } from "@ai-sdk/react";
 import { getToolName, isTextUIPart, isToolUIPart, type UIMessage } from "ai";
+import { cn } from "cn";
 import {
 	ChevronDownIcon,
 	ChevronUpIcon,
@@ -27,11 +28,8 @@ import {
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import ReactMarkdown, { type Components } from "react-markdown";
-import { ChatComposer } from "../chat-composer";
-import { ChatPanelResizeHandles, useChatPanelSize } from "./chat-panel-resize";
 import { Button } from "#/components/ui/button";
 import { ScrollArea } from "#/components/ui/scroll-area";
-import type { SidecarQueryUtils } from "#/infra/backend-context";
 import {
 	type ChatThreadMeta,
 	deriveThreadTitle,
@@ -43,7 +41,9 @@ import {
 	useChatThreads,
 } from "#/features/chat/chat-store";
 import { useLastChatModel } from "#/features/settings/settings-data";
-import { cn } from "cn";
+import type { SidecarQueryUtils } from "#/infra/backend-context";
+import { ChatComposer } from "../chat-composer";
+import { ChatPanelResizeHandles, useChatPanelSize } from "./chat-panel-resize";
 
 const markdownComponents: Components = {
 	p: (props) => <p className="text-foreground" {...props} />,

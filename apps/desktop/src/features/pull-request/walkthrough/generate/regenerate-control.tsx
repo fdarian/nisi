@@ -1,15 +1,15 @@
 "use client";
 
+import { cn } from "cn";
 import { useState } from "react";
-import { Button } from "#/components/ui/button";
 import {
 	HarnessModelCombobox,
 	type ModelSelection,
 } from "#/components/harness-model-combobox";
-import type { SidecarQueryUtils } from "#/infra/backend-context";
-import { cn } from "cn";
+import { Button } from "#/components/ui/button";
 import type { HarnessId } from "#/features/pull-request/walkthrough/walkthrough-data";
 import { useHarnesses } from "#/features/pull-request/walkthrough/walkthrough-data";
+import type { SidecarQueryUtils } from "#/infra/backend-context";
 
 type RegenerateControlProps = {
 	orpc: SidecarQueryUtils;

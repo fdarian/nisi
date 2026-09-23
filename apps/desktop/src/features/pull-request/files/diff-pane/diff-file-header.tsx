@@ -1,10 +1,10 @@
+import { cn } from "cn";
 import {
 	ChevronDownIcon,
 	ChevronRightIcon,
 	FileIcon,
 	MoreHorizontalIcon,
 } from "lucide-react";
-import { diffCardHeaderClassName } from "#/features/diff/diff-view-theme";
 import type { BadgeProps } from "#/components/ui/badge";
 import { Badge } from "#/components/ui/badge";
 import { buttonVariants } from "#/components/ui/button";
@@ -19,13 +19,17 @@ import {
 	DropdownMenuSubTrigger,
 	DropdownMenuTrigger,
 } from "#/components/ui/menu";
+import { diffCardHeaderClassName } from "#/features/diff/diff-view-theme";
+import type {
+	FileChange,
+	FileStatus,
+	ReviewState,
+} from "#/features/pull-request/data/pr-data";
 import {
 	openInEditor,
 	useAvailableEditors,
 } from "#/infra/use-available-editors";
-import type { FileChange, FileStatus, ReviewState } from "#/features/pull-request/data/pr-data";
 import { splitPath } from "#/lib/tree-paths";
-import { cn } from "cn";
 
 const STATUS_LABEL: Record<FileStatus, string> = {
 	added: "Added",

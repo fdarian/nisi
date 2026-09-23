@@ -11,6 +11,7 @@ import type {
 } from "@pierre/diffs";
 import { parsePatchFiles } from "@pierre/diffs";
 import type { CodeViewHandle } from "@pierre/diffs/react";
+import { cn } from "cn";
 import { FileIcon } from "lucide-react";
 import {
 	useCallback,
@@ -19,20 +20,6 @@ import {
 	useMemo,
 	useRef,
 } from "react";
-import { CodeIndexPeekDialog } from "#/features/code-index/peek/code-index-peek-panel";
-import { useCodeIndexInteractions } from "#/features/code-index/use-code-index-interactions";
-import {
-	buildDiffCodeViewOptions,
-	DiffCodeView,
-} from "#/features/diff/viewer/diff-code-view";
-import { DiffFileHeader } from "./diff-file-header";
-import { DiffSelectionPopover } from "#/features/diff/selection/diff-selection-popover";
-import {
-	DIFF_LOADING_HOST_CLASS,
-	DIFF_VIEWED_HOST_CLASS,
-	diffCardChromeCSS,
-	useDiffTheme,
-} from "#/features/diff/diff-view-theme";
 import { Button } from "#/components/ui/button";
 import {
 	Empty,
@@ -41,20 +28,24 @@ import {
 	EmptyTitle,
 } from "#/components/ui/empty";
 import { Skeleton } from "#/components/ui/skeleton";
-import { useDiffMatchHighlighting } from "./use-diff-match-highlighting";
-import { useDiffSelection } from "#/features/diff/selection/use-diff-selection";
-import { useDragAutoscroll } from "#/features/pull-request/files/use-drag-autoscroll";
-import type { SidecarQueryUtils } from "#/infra/backend-context";
-import { buildFileDiff } from "./build-file-diff";
-import type { LineRange } from "#/features/diff/viewer/build-location-diff";
-import { buildLocationFileDiff } from "#/features/diff/viewer/build-location-diff";
-import { pollUntilReady } from "#/features/diff/viewer/diff-match-dom";
+import { CodeIndexPeekDialog } from "#/features/code-index/peek/code-index-peek-panel";
+import { useCodeIndexInteractions } from "#/features/code-index/use-code-index-interactions";
 import type { DiffMatch } from "#/features/diff/diff-search";
 import {
-	type DiffHoverPoint,
-	findHoveredFileId,
-} from "./diff-hovered-file";
-import { findTopVisibleItemId } from "./diff-visible-file";
+	DIFF_LOADING_HOST_CLASS,
+	DIFF_VIEWED_HOST_CLASS,
+	diffCardChromeCSS,
+	useDiffTheme,
+} from "#/features/diff/diff-view-theme";
+import { DiffSelectionPopover } from "#/features/diff/selection/diff-selection-popover";
+import { useDiffSelection } from "#/features/diff/selection/use-diff-selection";
+import type { LineRange } from "#/features/diff/viewer/build-location-diff";
+import { buildLocationFileDiff } from "#/features/diff/viewer/build-location-diff";
+import {
+	buildDiffCodeViewOptions,
+	DiffCodeView,
+} from "#/features/diff/viewer/diff-code-view";
+import { pollUntilReady } from "#/features/diff/viewer/diff-match-dom";
 import { hashItemVersion } from "#/features/diff/viewer/item-version";
 import type {
 	FileChange,
@@ -68,8 +59,14 @@ import {
 	useSessionExpandedHiddenPaths,
 	useSessionFileCollapseOverrides,
 } from "#/features/pull-request/data/session-ui-store";
+import { useDragAutoscroll } from "#/features/pull-request/files/use-drag-autoscroll";
 import type { DiffStyleMode } from "#/features/settings/settings-data";
-import { cn } from "cn";
+import type { SidecarQueryUtils } from "#/infra/backend-context";
+import { buildFileDiff } from "./build-file-diff";
+import { DiffFileHeader } from "./diff-file-header";
+import { type DiffHoverPoint, findHoveredFileId } from "./diff-hovered-file";
+import { findTopVisibleItemId } from "./diff-visible-file";
+import { useDiffMatchHighlighting } from "./use-diff-match-highlighting";
 
 /** Why a file's whole body is hidden behind a "Show diff" placeholder by default — see `resolveHiddenFileReason`. */
 type HiddenFileReason = "generated" | "large";

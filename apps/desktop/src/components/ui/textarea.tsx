@@ -2,8 +2,8 @@
 
 import { Field as FieldPrimitive } from "@base-ui/react/field";
 import { mergeProps } from "@base-ui/react/merge-props";
-import type * as React from "react";
 import { cn } from "cn";
+import type * as React from "react";
 
 export type TextareaProps = React.ComponentPropsWithoutRef<"textarea"> &
 	React.RefAttributes<HTMLTextAreaElement> & {

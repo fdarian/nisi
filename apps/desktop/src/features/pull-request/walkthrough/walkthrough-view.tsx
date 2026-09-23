@@ -2,12 +2,12 @@
 
 import { Empty, EmptyMedia, EmptyTitle } from "#/components/ui/empty";
 import { Spinner } from "#/components/ui/spinner";
-import { GeneratePanel } from "#/features/pull-request/walkthrough/generate/generate-panel";
-import { NarrativePane } from "./narrative-pane";
-import { OutdatedBanner } from "#/features/pull-request/walkthrough/generate/outdated-banner";
-import { ReferencePane } from "./reference-pane";
-import type { SidecarQueryUtils } from "#/infra/backend-context";
 import type { FileChange, Session } from "#/features/pull-request/data/pr-data";
+import { GeneratePanel } from "#/features/pull-request/walkthrough/generate/generate-panel";
+import { OutdatedBanner } from "#/features/pull-request/walkthrough/generate/outdated-banner";
+import type { SidecarQueryUtils } from "#/infra/backend-context";
+import { NarrativePane } from "./narrative-pane";
+import { ReferencePane } from "./reference-pane";
 import type {
 	UncoveredFile,
 	WalkthroughReferenceBlock,

@@ -38,10 +38,10 @@ import {
 	useState,
 } from "react";
 import { createStore, type StoreApi, useStore } from "zustand";
-import type { SidecarQueryUtils } from "#/infra/backend-context";
-import { createOrpcChatTransport, messageText } from "./chat-transport";
 import type { DiffSelectionReference } from "#/features/diff/diff-reference";
 import type { HarnessId } from "#/features/pull-request/walkthrough/walkthrough-data";
+import type { SidecarQueryUtils } from "#/infra/backend-context";
+import { createOrpcChatTransport, messageText } from "./chat-transport";
 
 export type ChatThreadMeta = {
 	id: string;

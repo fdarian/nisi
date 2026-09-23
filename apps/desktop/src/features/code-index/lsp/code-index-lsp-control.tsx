@@ -1,12 +1,12 @@
 "use client";
 
+import { cn } from "cn";
 import { Server } from "lucide-react";
 import { Button } from "#/components/ui/button";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "#/components/ui/tooltip";
+import { useSessionCodeIndexEnabled } from "#/features/pull-request/data/session-ui-store";
 import type { SidecarQueryUtils } from "#/infra/backend-context";
 import { useCodeIndexLspControl } from "./code-index-lsp";
-import { useSessionCodeIndexEnabled } from "#/features/pull-request/data/session-ui-store";
-import { cn } from "cn";
 
 const STATUS_DOT_CLASS = {
 	off: "bg-muted-foreground/50",

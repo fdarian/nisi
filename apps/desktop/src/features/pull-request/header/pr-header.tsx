@@ -18,20 +18,20 @@ import {
 	DropdownMenuSubTrigger,
 	DropdownMenuTrigger,
 } from "#/components/ui/menu";
-import {
-	openInEditor,
-	useAvailableEditors,
-} from "#/infra/use-available-editors";
-import { useDismissOnInactive } from "#/features/pull-request/use-dismiss-on-inactive";
-import type { SidecarQueryUtils } from "#/infra/backend-context";
 import type { SessionTarget } from "#/features/pull-request/data/pr-data";
 import {
 	useMarkPullRequestReady,
 	usePullRequestMergeStatus,
 } from "#/features/pull-request/data/pr-data";
 import type { OpenPullRequestParams } from "#/features/pull-request/data/pull-requests-data";
-import { PrCiStatus } from "./pr-ci-status";
 import { PrMergeButton } from "#/features/pull-request/merge/pr-merge-button";
+import { useDismissOnInactive } from "#/features/pull-request/use-dismiss-on-inactive";
+import type { SidecarQueryUtils } from "#/infra/backend-context";
+import {
+	openInEditor,
+	useAvailableEditors,
+} from "#/infra/use-available-editors";
+import { PrCiStatus } from "./pr-ci-status";
 import { PrStackBadge } from "./pr-stack-badge";
 
 type PrHeaderProps = {

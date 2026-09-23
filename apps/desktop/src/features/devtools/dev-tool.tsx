@@ -1,12 +1,12 @@
 import type React from "react";
+import { Popover, PopoverPopup, PopoverTrigger } from "#/components/ui/popover";
+import { Switch } from "#/components/ui/switch";
 import {
 	useAgentationEnabled,
 	useIsDevToolScopeActive,
 	useMesurerEnabled,
 	useToastOnRefetch,
 } from "./dev-tool-context";
-import { Popover, PopoverPopup, PopoverTrigger } from "#/components/ui/popover";
-import { Switch } from "#/components/ui/switch";
 
 /** The dev-only grab-handle button, now doubling as the trigger for the devtool popover — see `dev-tool-context.tsx`. */
 export function DevToolButton(): React.ReactElement {

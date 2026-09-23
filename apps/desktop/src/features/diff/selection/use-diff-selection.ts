@@ -18,8 +18,11 @@
 import type { CodeViewLineSelection, SelectionSide } from "@pierre/diffs";
 import type { CodeViewHandle } from "@pierre/diffs/react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { isEventOriginOnGutter, pollUntilReady } from "#/features/diff/viewer/diff-match-dom";
 import type { DiffSelectionReference } from "#/features/diff/diff-reference";
+import {
+	isEventOriginOnGutter,
+	pollUntilReady,
+} from "#/features/diff/viewer/diff-match-dom";
 
 type UseDiffSelectionOptions<Metadata> = {
 	/** The same `CodeViewHandle` ref passed to `<DiffCodeView ref>` — used to reach a selected item's rendered shadow root (for the gutter path's anchor rect) and to resolve which item id a native text selection landed in. */

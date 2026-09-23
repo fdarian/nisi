@@ -26,8 +26,8 @@ import {
 	useState,
 } from "react";
 import { createStore, type StoreApi, useStore } from "zustand";
-import type { SearchMode } from "#/features/pull-request/files/sidebar/files-sidebar";
 import type { CodeIndexReferenceTarget } from "#/features/code-index/navigation/code-index-navigation";
+import type { SearchMode } from "#/features/pull-request/files/sidebar/files-sidebar";
 import {
 	createNavigationHistory,
 	type NavigationEntry,

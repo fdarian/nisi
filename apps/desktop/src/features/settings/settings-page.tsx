@@ -12,7 +12,6 @@ import {
 } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useCallback } from "react";
-import { DiffThemeColumn } from "./diff-theme-picker";
 import { Button } from "#/components/ui/button";
 import {
 	Card,
@@ -51,9 +50,14 @@ import {
 import { Spinner } from "#/components/ui/spinner";
 import { Switch } from "#/components/ui/switch";
 import { ToggleGroup, ToggleGroupItem } from "#/components/ui/toggle-group";
-import { useAvailableEditors } from "#/infra/use-available-editors";
+import {
+	type HarnessId,
+	useHarnesses,
+} from "#/features/pull-request/walkthrough/walkthrough-data";
 import type { SidecarQueryUtils } from "#/infra/backend-context";
 import { useBackendContext } from "#/infra/backend-context";
+import { useAvailableEditors } from "#/infra/use-available-editors";
+import { DiffThemeColumn } from "./diff-theme-picker";
 import {
 	useDiffThemeDark,
 	useDiffThemeLight,
@@ -61,10 +65,6 @@ import {
 	useUpdateSettings,
 	useWalkthroughEnabled,
 } from "./settings-data";
-import {
-	type HarnessId,
-	useHarnesses,
-} from "#/features/pull-request/walkthrough/walkthrough-data";
 
 /**
  * Top-level `/settings` route content — a sibling of the main `AppShell`, not

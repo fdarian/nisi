@@ -14,6 +14,7 @@
  */
 import type { CodeViewHandle } from "@pierre/diffs/react";
 import { useCallback, useEffect, useId, useMemo, useRef } from "react";
+import type { DiffMatch } from "#/features/diff/diff-search";
 import { diffSearchHighlightCSS } from "#/features/diff/diff-view-theme";
 import {
 	buildMatchRange,
@@ -21,7 +22,6 @@ import {
 	pollUntilReady,
 	SUPPORTS_HIGHLIGHT_API,
 } from "#/features/diff/viewer/diff-match-dom";
-import type { DiffMatch } from "#/features/diff/diff-search";
 
 type UseDiffMatchHighlightingOptions<LAnnotation> = {
 	/** The same `CodeViewHandle` ref the pane hands to `<DiffCodeView>` — used only to look up an already-rendered item's shadow root when bootstrapping the "current match" highlight for a target that isn't mounted yet (see the effect below). */
