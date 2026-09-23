@@ -15,26 +15,22 @@ export const HarnessId = Schema.Literals([
 ]);
 export type HarnessId = Schema.Schema.Type<typeof HarnessId>;
 
-/** One selectable model for a harness. All four harnesses discover these live — see `apps/desktop/sidecar/harness/model-discovery.ts`. */
+/** One selectable model for a harness. */
 export const HarnessModel = Schema.Struct({
 	id: Schema.String,
 	label: Schema.String,
 });
 export type HarnessModel = Schema.Schema.Type<typeof HarnessModel>;
 
-/**
- * Provenance of `HarnessInfo.models` relative to `model-discovery.ts`'s
- * cache: `"fresh"` — discovered (or cache-hit within the TTL) this call;
- * `"stale"` — the live attempt failed but a previous successful discovery is
- * being reused; `"unavailable"` — either discovery has never once succeeded,
- * or the harness's `available` is `false` (its CLI isn't present, so
- * discovery isn't even attempted — see `HarnessInfo`'s doc for why a missing
- * binary is never reported `"stale"`). The harness itself stays selectable
- * and `enabled` regardless of this value — it only ever describes `models`,
- * never gates the checkbox on its own (`available` does that — see below).
- */
+/** Whether models came from a fresh discovery, an older successful one, or no successful discovery. */
 export const ModelsStatus = Schema.Literals(["fresh", "stale", "unavailable"]);
 export type ModelsStatus = Schema.Schema.Type<typeof ModelsStatus>;
+
+export const HarnessModels = Schema.Struct({
+	models: Schema.Array(HarnessModel),
+	status: ModelsStatus,
+});
+export type HarnessModels = Schema.Schema.Type<typeof HarnessModels>;
 
 /**
  * `available` and `enabled` are independent and both always present, one per
@@ -56,21 +52,13 @@ export type ModelsStatus = Schema.Schema.Type<typeof ModelsStatus>;
  *   previous machine state but currently unavailable, or available but not
  *   yet enabled.
  *
- * All four entries are always present — the onboarding picker and the
- * settings page both need every harness as a row, checkbox included, even
- * an unavailable one (so the user can see it's an option they could
- * install). `models` is only discovered live when a harness is both
- * `enabled` *and* `available` — no point paying for discovery's subprocess
- * on a harness nobody's turned on, or one whose CLI isn't even there to ask.
- * Anything short of that gets an empty `models` list and
- * `modelsStatus: "unavailable"`.
+ * All four entries are always present; model discovery is a separate,
+ * per-harness request so the settings list never waits on a CLI process.
  */
 export const HarnessInfo = Schema.Struct({
 	id: HarnessId,
 	label: Schema.String,
-	models: Schema.Array(HarnessModel),
 	enabled: Schema.Boolean,
-	modelsStatus: ModelsStatus,
 	available: Schema.Boolean,
 	binaryPath: Schema.NullOr(Schema.String),
 });
@@ -205,19 +193,17 @@ export type ActiveGeneration = Schema.Schema.Type<typeof ActiveGeneration>;
 export const walkthroughContract = {
 	/**
 	 * All four adapters, each flagged `enabled` and `available` — never
-	 * errors. Serves cached model discovery (see `HarnessInfo`'s doc) and a
-	 * live `available` check on every call.
+	 * errors. Checks binary presence without spawning a model-discovery CLI.
 	 */
 	harnesses: oc.output(Schema.Array(HarnessInfo)),
 	/**
-	 * Same shape and behavior as `harnesses`, except it bypasses
-	 * `model-discovery.ts`'s cache — every enabled+available harness's model
-	 * list is re-fetched live rather than served from the TTL cache. For an
-	 * explicit user-initiated refresh (a refresh icon in the UI), not for
-	 * routine reads: `available` is already live on every `harnesses()` call
-	 * on its own, so this only buys anything for `models`/`modelsStatus`.
+	 * Re-probes the login-shell PATH and returns the current binary presence.
 	 */
 	refreshHarnesses: oc.output(Schema.Array(HarnessInfo)),
+	models: oc.input(Schema.Struct({ harness: HarnessId })).output(HarnessModels),
+	refreshModels: oc
+		.input(Schema.Struct({ harness: HarnessId }))
+		.output(HarnessModels),
 	/** `null` when the session has no generated walkthrough yet — not an error. */
 	get: oc
 		.input(Schema.Struct({ sessionId: Schema.String }))

@@ -98,7 +98,7 @@ export function useSettings(orpc: SidecarQueryUtils): {
  * authoritative row (merged server-side), so there's nothing to refetch.
  *
  * A patch touching `enabledHarnesses` additionally invalidates
- * `walkthrough.harnesses` — its `HarnessInfo.enabled`/`models` are computed
+ * `walkthrough.harnesses` — its `HarnessInfo.enabled` is computed
  * server-side off this same setting (see `packages/sidecar-api/src/walkthrough.ts`),
  * so the combobox and the settings page's checkboxes would otherwise show a
  * stale `enabled` flag until something else happened to refetch it.

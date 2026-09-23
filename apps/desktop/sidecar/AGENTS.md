@@ -123,12 +123,12 @@ seam" for the port/token handshake this boots into.
   `settings.get`/`settings.update` are the one pair of handlers backed directly by a domain
   package's own store (`@repo/settings`'s `SettingsStore`) rather than a sidecar-local wrapper —
   see that package's AGENTS.md for why it didn't need the `WalkthroughStore` split.
-  `walkthrough.harnesses`/`walkthrough.refreshHarnesses` (the latter forcing a fresh model-discovery
-  attempt, for the UI's manual refresh) read `SettingsStore` first and pass its `enabledHarnesses`
+  `walkthrough.harnesses`/`walkthrough.refreshHarnesses` (the latter re-probing login-shell PATH)
+  read `SettingsStore` first and pass its `enabledHarnesses`
   into `listHarnesses`, which always returns all four harnesses, each flagged `enabled` against that
   set and `available` against a live `@repo/bin-resolver` check — every harness stays a checkbox,
-  not a filtered list, whether enabled, available, both, or neither. See
-  `sidecar/walkthrough/AGENTS.md`.
+  not a filtered list, whether enabled, available, both, or neither. `walkthrough.models`/
+  `refreshModels` use `sidecar/harness/models.ts` to fetch one harness's models independently.
 - `events.ts` — in-memory pub/sub for `events.subscribe`, ported from rheya's sidecar verbatim. oRPC's
   `.effect()` can't return a live async iterator (it resolves the generator via `runPromise`), so
   `events.subscribe` uses the lower-level `.handler(async function* ...)` instead, bridging this

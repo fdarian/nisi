@@ -252,7 +252,8 @@ fixture PR lives at `src/features/pull-request/walkthrough/walkthrough.fixture.t
   available but not yet enabled. `useHarnesses` (`src/features/pull-request/walkthrough/walkthrough-data.ts`) also exposes
   `refresh`/`isRefreshing`, wired to `walkthrough.refreshHarnesses` — the refresh icon next to the
   harness list (Settings) and the model combobox (walkthrough tab) both call it, writing straight
-  into the shared `walkthrough.harnesses` query cache so both places update from one round trip.
+  into the shared `walkthrough.harnesses` query cache. `useHarnessModels` runs independent model
+  queries only in the walkthrough/chat pickers; a slow CLI cannot hold up Settings or other models.
 - A keyboard shortcut that collides with a macOS menu accelerator can't be handled in the frontend
   at all — AppKit gives the main menu first refusal, so the webview never sees the key. Give the
   shortcut a real menu item that emits an event instead (⌘W does this); the rest live in

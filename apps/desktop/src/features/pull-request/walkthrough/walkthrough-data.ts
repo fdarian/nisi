@@ -5,7 +5,12 @@
  * same way `@repo/walkthrough` is its own package: different lifecycle,
  * different consumers, and `pr-data.ts` is already sizeable.
  */
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+	useMutation,
+	useQueries,
+	useQuery,
+	useQueryClient,
+} from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { FileChange } from "#/features/pull-request/data/pr-data";
 import type { SidecarQueryUtils } from "#/infra/backend-context";
@@ -14,16 +19,12 @@ export type HarnessId = "claude-code" | "codex" | "opencode" | "pi";
 
 export type HarnessModel = { id: string; label: string };
 
-/**
- * Mirrors `ModelsStatus` (`packages/sidecar-api/src/walkthrough.ts`):
- * `"fresh"` — discovered (or cache-hit) this call; `"stale"` — the live
- * attempt failed but a previous successful discovery is being reused;
- * `"unavailable"` — discovery has never once succeeded, so `models` is
- * empty. Surfaced in the UI (`GeneratePanel`) so an empty model list reads
- * as "couldn't reach the CLI" rather than the generic "no search results"
- * a bare empty `models` array would otherwise look like.
- */
 export type ModelsStatus = "fresh" | "stale" | "unavailable";
+
+export type HarnessModels = {
+	models: readonly HarnessModel[];
+	status: ModelsStatus;
+};
 
 /**
  * Mirrors `HarnessInfo` (`packages/sidecar-api/src/walkthrough.ts`).
@@ -37,18 +38,12 @@ export type ModelsStatus = "fresh" | "stale" | "unavailable";
  * `@repo/settings`'s `enabledHarnesses` (unset counts as every harness
  * enabled) — a user declaration, not a probe. `binaryPath` is the resolved
  * path when `available`, for showing *which* binary was picked; `null`
- * otherwise. `models` is discovered live only for a harness that's both
- * enabled and available (each independently timeout-bounded and cached
- * server-side) — `modelsStatus` distinguishes "discovery succeeded with
- * zero models" from "discovery failed" from "not installed," since all
- * three otherwise look like the same empty array here.
+ * otherwise. Model requests are separate and keyed by harness.
  */
 export type HarnessInfo = {
 	id: HarnessId;
 	label: string;
-	models: readonly HarnessModel[];
 	enabled: boolean;
-	modelsStatus: ModelsStatus;
 	available: boolean;
 	binaryPath: string | null;
 };
@@ -133,9 +128,7 @@ export type GenerateEvent =
 	| { type: "cancelled" };
 
 /**
- * Mirrors `walkthrough.harnesses()` — the harness/model registry, live
- * `available` and cached `models` server-side. Never errors: every harness
- * is always reported, `available`/`enabled` decide what's selectable.
+ * Mirrors `walkthrough.harnesses()` — presence and user-enabled state only.
  *
  * `refresh()` calls `walkthrough.refreshHarnesses` directly (bypassing
  * `useQuery`'s own cache-then-fetch, same pattern as
@@ -151,7 +144,7 @@ export type GenerateEvent =
 export function useHarnesses(orpc: SidecarQueryUtils): {
 	harnesses: readonly HarnessInfo[];
 	isLoading: boolean;
-	refresh: () => void;
+	refresh: () => Promise<readonly HarnessInfo[]>;
 	isRefreshing: boolean;
 } {
 	const queryClient = useQueryClient();
@@ -169,8 +162,65 @@ export function useHarnesses(orpc: SidecarQueryUtils): {
 	return {
 		harnesses: query.data ?? [],
 		isLoading: query.isLoading,
-		refresh: mutation.mutate,
+		refresh: mutation.mutateAsync,
 		isRefreshing: mutation.isPending,
+	};
+}
+
+/** One independent query per enabled, available harness; slow model discovery cannot hold the presence list or other model groups. */
+export function useHarnessModels(
+	orpc: SidecarQueryUtils,
+	harnesses: readonly HarnessInfo[],
+): {
+	modelsByHarness: Partial<Record<HarnessId, HarnessModels>>;
+	isLoading: boolean;
+	loadingHarnesses: readonly HarnessId[];
+	failedHarnesses: readonly HarnessId[];
+	isRefreshing: boolean;
+	refresh: (current: readonly HarnessInfo[]) => Promise<void>;
+} {
+	const queryClient = useQueryClient();
+	const active = harnesses.filter(
+		(harness) => harness.enabled && harness.available,
+	);
+	const queries = useQueries({
+		queries: active.map((harness) =>
+			orpc.walkthrough.models.queryOptions({ input: { harness: harness.id } }),
+		),
+	});
+	const mutation = useMutation({
+		mutationFn: async (current: readonly HarnessInfo[]) => {
+			await Promise.all(
+				current
+					.filter((harness) => harness.enabled && harness.available)
+					.map(async (harness) => {
+						const input = { harness: harness.id };
+						const result = await orpc.walkthrough.refreshModels.call(input);
+						queryClient.setQueryData(
+							orpc.walkthrough.models.queryKey({ input }),
+							result,
+						);
+					}),
+			);
+		},
+	});
+	const modelsByHarness: Partial<Record<HarnessId, HarnessModels>> = {};
+	const loadingHarnesses: HarnessId[] = [];
+	const failedHarnesses: HarnessId[] = [];
+	active.forEach((harness, index) => {
+		const query = queries[index];
+		if (query === undefined) return;
+		if (query.data !== undefined) modelsByHarness[harness.id] = query.data;
+		if (query.isPending) loadingHarnesses.push(harness.id);
+		if (query.isError) failedHarnesses.push(harness.id);
+	});
+	return {
+		modelsByHarness,
+		isLoading: loadingHarnesses.length > 0,
+		loadingHarnesses,
+		failedHarnesses,
+		isRefreshing: mutation.isPending,
+		refresh: mutation.mutateAsync,
 	};
 }
 

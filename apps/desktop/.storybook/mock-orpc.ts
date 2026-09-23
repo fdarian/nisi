@@ -29,6 +29,7 @@ import type {
 	GenerateEvent,
 	HarnessId,
 	HarnessInfo,
+	HarnessModels,
 	StoredWalkthrough,
 } from "#/features/pull-request/walkthrough/walkthrough-data";
 import type { Settings } from "#/features/settings/settings-data";
@@ -52,54 +53,60 @@ const DEFAULT_SETTINGS: Settings = {
 	diffThemeDark: "github-dark",
 };
 
-/** A plausible four-harness registry — two enabled+available with fresh models, one enabled but not found on `PATH`, one never turned on. Stories override individual entries (e.g. `EnableHarnessesPanel`'s onboarding gate wants every harness present but nothing enabled yet). */
+/** A plausible four-harness registry — two enabled+available, one enabled but missing, one disabled. */
 const DEFAULT_HARNESSES: readonly HarnessInfo[] = [
 	{
 		id: "claude-code",
 		label: "Claude Code",
 		enabled: true,
 		available: true,
-		modelsStatus: "fresh",
 		binaryPath: "/usr/local/bin/claude",
-		models: [
-			{ id: "claude-opus-4-5", label: "Claude Opus 4.5" },
-			{ id: "claude-sonnet-4-5", label: "Claude Sonnet 4.5" },
-		],
 	},
 	{
 		id: "codex",
 		label: "Codex",
 		enabled: true,
 		available: true,
-		modelsStatus: "fresh",
 		binaryPath: "/usr/local/bin/codex",
-		models: [{ id: "gpt-5.1-codex", label: "GPT-5.1 Codex" }],
 	},
 	{
 		id: "opencode",
 		label: "opencode",
 		enabled: true,
 		available: false,
-		modelsStatus: "unavailable",
 		binaryPath: null,
-		models: [],
 	},
 	{
 		id: "pi",
 		label: "Pi",
 		enabled: false,
 		available: true,
-		modelsStatus: "unavailable",
 		binaryPath: null,
-		models: [],
 	},
 ];
+
+const DEFAULT_MODELS: Record<HarnessId, HarnessModels> = {
+	"claude-code": {
+		models: [
+			{ id: "claude-opus-4-5", label: "Claude Opus 4.5" },
+			{ id: "claude-sonnet-4-5", label: "Claude Sonnet 4.5" },
+		],
+		status: "fresh",
+	},
+	codex: {
+		models: [{ id: "gpt-5.1-codex", label: "GPT-5.1 Codex" }],
+		status: "fresh",
+	},
+	opencode: { models: [], status: "unavailable" },
+	pi: { models: [], status: "unavailable" },
+};
 
 export type MockOrpcData = {
 	/** `walkthrough.get`'s result — omit for "nothing generated yet", pass a fixture for the loaded reader. */
 	storedWalkthrough?: StoredWalkthrough | null;
 	/** Overrides `DEFAULT_HARNESSES` wholesale — pass a full four-entry list, not a patch. */
 	harnesses?: readonly HarnessInfo[];
+	models?: Partial<Record<HarnessId, HarnessModels>>;
 	/** Merged over `DEFAULT_SETTINGS`. */
 	settings?: Partial<Settings>;
 	/** `diff.fileContents`' per-path results — keyed by the same paths the story's `files` prop uses. A path with no entry here reports `content: null` ("not part of the current diff"), same as the real sidecar. */
@@ -295,6 +302,10 @@ export function createMockOrpc(data: MockOrpcData = {}): SidecarQueryUtils {
 		walkthrough: {
 			harnesses: async () => harnesses,
 			refreshHarnesses: async () => harnesses,
+			models: async (input) =>
+				data.models?.[input.harness] ?? DEFAULT_MODELS[input.harness],
+			refreshModels: async (input) =>
+				data.models?.[input.harness] ?? DEFAULT_MODELS[input.harness],
 			get: async () => data.storedWalkthrough ?? null,
 			activeGeneration: async () =>
 				runningGeneration === undefined

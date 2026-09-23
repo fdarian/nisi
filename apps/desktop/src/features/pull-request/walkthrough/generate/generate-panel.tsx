@@ -21,6 +21,7 @@ import {
 	type HarnessId,
 	type HarnessInfo,
 	useHarnesses,
+	useHarnessModels,
 } from "#/features/pull-request/walkthrough/walkthrough-data";
 import {
 	useSettings,
@@ -39,13 +40,19 @@ type GeneratePanelProps = {
 	isStopping: boolean;
 };
 
-/** Enabled harnesses whose `modelsStatus` is `"unavailable"` — either the CLI isn't installed (`!harness.available`) or its live discovery has never once succeeded, see `HarnessInfo`'s doc comment. These are the ones worth naming to the user; `"stale"` is quietly using a cached list and isn't worth alarming over. */
+/** Pending model requests are not failures. */
 function unavailableHarnessLabels(
 	harnesses: readonly HarnessInfo[],
+	modelsByHarness: Partial<Record<HarnessId, { status: string }>>,
+	failedHarnesses: readonly HarnessId[],
 ): readonly string[] {
 	return harnesses
 		.filter(
-			(harness) => harness.enabled && harness.modelsStatus === "unavailable",
+			(harness) =>
+				harness.enabled &&
+				(!harness.available ||
+					modelsByHarness[harness.id]?.status === "unavailable" ||
+					failedHarnesses.includes(harness.id)),
 		)
 		.map((harness) => harness.label);
 }
@@ -75,11 +82,29 @@ export function GeneratePanel({
 	onStop,
 	isStopping,
 }: GeneratePanelProps): React.ReactElement {
-	const { harnesses, refresh, isRefreshing } = useHarnesses(orpc);
+	const {
+		harnesses,
+		isLoading: harnessesLoading,
+		refresh,
+		isRefreshing,
+	} = useHarnesses(orpc);
 	const { settings } = useSettings(orpc);
 	const updateSettings = useUpdateSettings(orpc);
 	const [selection, setSelection] = useState<ModelSelection | null>(null);
 	const [reconfiguring, setReconfiguring] = useState(false);
+	const showPicker =
+		settings.enabledHarnesses !== null &&
+		!reconfiguring &&
+		progress.phase !== "starting" &&
+		progress.phase !== "running";
+	const {
+		modelsByHarness,
+		isLoading: modelsLoading,
+		loadingHarnesses,
+		failedHarnesses,
+		refresh: refreshModels,
+		isRefreshing: modelsRefreshing,
+	} = useHarnessModels(orpc, showPicker ? harnesses : []);
 
 	// The pending window (`"starting"`, no event yet) renders the *same*
 	// timeline the stream drives, so the first event just fills in its log
@@ -138,10 +163,17 @@ export function GeneratePanel({
 		);
 	}
 
-	const unavailable = unavailableHarnessLabels(harnesses);
-	const hasAnySelectableModel = harnesses.some(
-		(harness) => harness.enabled && harness.models.length > 0,
+	const unavailable = unavailableHarnessLabels(
+		harnesses,
+		modelsByHarness,
+		failedHarnesses,
 	);
+	const hasAnySelectableModel = harnesses.some((harness) => {
+		const discovery = modelsByHarness[harness.id];
+		return (
+			harness.enabled && discovery !== undefined && discovery.models.length > 0
+		);
+	});
 	const unavailableSummary =
 		unavailable.length > 0
 			? `Couldn't reach ${formatList(unavailable)} — check ${unavailable.length === 1 ? "it's" : "they're"} installed and on your PATH, then hit refresh.`
@@ -175,13 +207,18 @@ export function GeneratePanel({
 							: (unavailableSummary ?? undefined)
 					}
 					harnesses={harnesses}
+					modelsByHarness={modelsByHarness}
+					isLoading={harnessesLoading || modelsLoading}
+					loadingHarnesses={loadingHarnesses}
 					onChange={setSelection}
 					value={selection}
 				/>
 				<Button
 					aria-label="Refresh harnesses and models"
-					loading={isRefreshing}
-					onClick={refresh}
+					loading={isRefreshing || modelsRefreshing}
+					onClick={() => {
+						void refresh().then(refreshModels);
+					}}
 					size="icon"
 					title="Re-check installed harnesses and re-fetch their models"
 					variant="outline"

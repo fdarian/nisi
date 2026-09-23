@@ -1,7 +1,7 @@
 "use client";
 
 import { cn } from "cn";
-/** The generate empty-state's model picker — a typeable, grouped-by-harness combobox (coss ui's `Combobox`, Base UI-backed). Grouping is real `Combobox.Group`/`Combobox.GroupLabel` structure, not a flat list with a prefix, so the group headers stay out of the filter/keyboard-nav text. */
+/** Shared walkthrough/chat model picker, grouped by harness so headers stay out of filtering and keyboard navigation. */
 import { useMemo } from "react";
 import {
 	Combobox,
@@ -16,6 +16,7 @@ import {
 import type {
 	HarnessId,
 	HarnessInfo,
+	HarnessModels,
 } from "#/features/pull-request/walkthrough/walkthrough-data";
 
 export type ModelSelection = {
@@ -38,13 +39,16 @@ function optionValue(harness: HarnessId, modelId: string | undefined): string {
 
 type HarnessModelComboboxProps = {
 	harnesses: readonly HarnessInfo[];
+	modelsByHarness: Partial<Record<HarnessId, HarnessModels>>;
+	isLoading?: boolean;
+	loadingHarnesses?: readonly HarnessId[];
 	value: ModelSelection | null;
 	onChange: (value: ModelSelection) => void;
 	/**
 	 * Shown in place of the popup's default "No matching models." when every
 	 * group is empty. Lets `GeneratePanel` distinguish "discovery failed for
 	 * every enabled harness" (an actionable, specific message) from a genuine
-	 * no-search-results state, which `HarnessInfo.modelsStatus` alone
+	 * no-search-results state, which the model query's status alone
 	 * determines but this component has no other reason to know about.
 	 */
 	emptyMessage?: string;
@@ -55,6 +59,9 @@ type HarnessModelComboboxProps = {
 /** Only enabled harnesses get a model group — `HarnessInfo.enabled` already reflects `@repo/settings`'s `enabledHarnesses` server-side, so there's no separate id set to thread through. */
 export function HarnessModelCombobox({
 	harnesses,
+	modelsByHarness,
+	isLoading = false,
+	loadingHarnesses = [],
 	value,
 	onChange,
 	emptyMessage = "No matching models.",
@@ -64,7 +71,9 @@ export function HarnessModelCombobox({
 		const result: ModelOptionGroup[] = [];
 		for (const harness of harnesses) {
 			if (!harness.enabled) continue;
-			const items = harness.models.map(
+			const discovery = modelsByHarness[harness.id];
+			if (discovery === undefined) continue;
+			const items = discovery.models.map(
 				(model): ModelOption => ({
 					value: optionValue(harness.id, model.id),
 					label: model.label,
@@ -76,7 +85,7 @@ export function HarnessModelCombobox({
 			result.push({ label: harness.label, items });
 		}
 		return result;
-	}, [harnesses]);
+	}, [harnesses, modelsByHarness]);
 
 	const selectedOption = useMemo(() => {
 		if (value === null) return null;
@@ -101,7 +110,19 @@ export function HarnessModelCombobox({
 		>
 			<ComboboxInput placeholder="Choose a model…" />
 			<ComboboxPopup>
-				<ComboboxEmpty>{emptyMessage}</ComboboxEmpty>
+				{loadingHarnesses.length > 0 && (
+					<p className="px-2 py-1 text-muted-foreground text-xs" role="status">
+						Loading{" "}
+						{harnesses
+							.filter((harness) => loadingHarnesses.includes(harness.id))
+							.map((harness) => harness.label)
+							.join(", ")}{" "}
+						models…
+					</p>
+				)}
+				<ComboboxEmpty>
+					{isLoading ? "Loading models…" : emptyMessage}
+				</ComboboxEmpty>
 				<ComboboxList scrollFadeTop={!stickyGroupLabels}>
 					{(group: ModelOptionGroup) => (
 						<ComboboxGroup items={group.items} key={group.label}>

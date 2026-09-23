@@ -63,6 +63,7 @@ import {
 	subscribe as subscribeToSidecarEvents,
 } from "./events.ts";
 import { listHarnesses } from "./harness/harnesses.ts";
+import { getHarnessModels } from "./harness/models.ts";
 import { checkSessionForChanges } from "./live-poll.ts";
 import type { AppServices } from "./services.ts";
 import {
@@ -780,36 +781,27 @@ export function attachRouter(
 			}),
 		},
 		walkthrough: {
-			// All four adapters, each flagged `enabled` against `SettingsStore`'s
-			// `enabledHarnesses` and `available` against a live bin-resolver check
-			// — never fails, see `listHarnesses`.
 			harnesses: authed.walkthrough.harnesses.effect(function* () {
 				const settingsStore = yield* SettingsStore;
 				const settings = yield* settingsStore.get();
-				return yield* listHarnesses(
-					toEnabledHarnessSet(settings.enabledHarnesses),
-				);
+				return listHarnesses(toEnabledHarnessSet(settings.enabledHarnesses));
 			}),
-			// Same as `harnesses`, but forces a fresh model-discovery attempt for
-			// every enabled+available harness rather than serving the cache — the
-			// UI's manual refresh action, for when a harness was just installed
-			// (or removed) while the sidecar's been running. Drops
-			// `@repo/bin-resolver`'s login-shell `PATH` memo in the same breath and
-			// for the same reason: a CLI — or the `node` a harness bridge runs on —
-			// installed through a version manager since boot stays invisible until
-			// that probe re-runs, so refreshing discovery without refreshing the
-			// search path would still report the harness missing.
 			refreshHarnesses: authed.walkthrough.refreshHarnesses.effect(
 				function* () {
 					const settingsStore = yield* SettingsStore;
 					const settings = yield* settingsStore.get();
 					refreshLoginShellPath();
-					return yield* listHarnesses(
-						toEnabledHarnessSet(settings.enabledHarnesses),
-						{ force: true },
-					);
+					return listHarnesses(toEnabledHarnessSet(settings.enabledHarnesses));
 				},
 			),
+			models: authed.walkthrough.models.effect(function* ({ input }) {
+				return yield* getHarnessModels(input.harness);
+			}),
+			refreshModels: authed.walkthrough.refreshModels.effect(function* ({
+				input,
+			}) {
+				return yield* getHarnessModels(input.harness, true);
+			}),
 			get: authed.walkthrough.get.effect(function* ({ input, errors }) {
 				const reviewStore = yield* ReviewStore;
 				yield* reviewStore.getSession(input.sessionId).pipe(

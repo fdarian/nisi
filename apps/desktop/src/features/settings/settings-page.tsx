@@ -410,10 +410,8 @@ const UNAVAILABLE_REASON = "Not found on PATH or common install locations.";
  * an inline warning explains why, so re-plugging in the same CLI later needs
  * no reconfiguration.
  *
- * The refresh button re-runs both the availability check and (for
- * enabled+available harnesses) model discovery, bypassing
- * `model-discovery.ts`'s cache — for a harness installed while nisi was
- * already open.
+ * The refresh button re-probes PATH and binary presence for a harness
+ * installed while nisi was already open. Model discovery belongs to the picker.
  */
 function HarnessesSection({
 	orpc,

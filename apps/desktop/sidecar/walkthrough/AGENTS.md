@@ -1,8 +1,8 @@
 # sidecar/walkthrough
 
 The Phase 3 wiring layer: turns `@repo/walkthrough`'s pure schema/validation/prompt functions and
-`@repo/harness-local`'s sandbox provider into the sidecar's `walkthrough.harnesses` /
-`walkthrough.get` / `walkthrough.activeGeneration` / `walkthrough.generate` procedures. Neither of
+`@repo/harness-local`'s sandbox provider into the sidecar's `walkthrough.get` /
+`walkthrough.activeGeneration` / `walkthrough.generate` procedures. Neither of
 those two packages does I/O or knows about the other — this directory is where they actually meet.
 Harness-adapter plumbing that isn't walkthrough-specific (which CLI backs a harness, model
 discovery, sandbox mode, read-only tool gating) lives one level up in
