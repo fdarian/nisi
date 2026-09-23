@@ -265,65 +265,79 @@ export class HarnessModelCache extends Context.Service<HarnessModelCache>()(
 				discover: Discover,
 				reason: DiscoveryReason,
 			): Effect.Effect<DiscoveryResult> =>
-				Effect.gen(function* () {
-					const mine = yield* Deferred.make<DiscoveryResult, never>();
-					const leader = yield* Ref.modify(inFlight, (map) => {
-						const existing = map.get(id);
-						if (existing !== undefined) return [existing, map] as const;
-						const next = new Map(map);
-						next.set(id, mine);
-						return [mine, next] as const;
-					});
+				Effect.uninterruptibleMask((restore) =>
+					Effect.gen(function* () {
+						const mine = yield* Deferred.make<DiscoveryResult, never>();
+						const leader = yield* Ref.modify(inFlight, (map) => {
+							const existing = map.get(id);
+							if (existing !== undefined) return [existing, map] as const;
+							const next = new Map(map);
+							next.set(id, mine);
+							return [mine, next] as const;
+						});
 
-					if (leader !== mine) {
-						yield* Effect.logDebug(
-							"harness model discovery already in flight -- joining it instead of spawning a second one",
-							{ harnessId: id, reason },
-						);
-						return yield* Deferred.await(leader);
-					}
+						if (leader !== mine) {
+							yield* Effect.logDebug(
+								"harness model discovery already in flight -- joining it instead of spawning a second one",
+								{ harnessId: id, reason },
+							);
+							return yield* restore(Deferred.await(leader));
+						}
 
-					const attempt = yield* Effect.result(discover(reason));
-					const now = new Date();
-					const result: DiscoveryResult = yield* Result.isSuccess(attempt)
-						? writeSuccess(id, attempt.success, now).pipe(
-								Effect.as({
-									models: attempt.success,
-									status: "fresh" as const,
+						return yield* restore(
+							Effect.gen(function* () {
+								const attempt = yield* Effect.result(discover(reason));
+								const now = new Date();
+								const result: DiscoveryResult = yield* Result.isSuccess(attempt)
+									? writeSuccess(id, attempt.success, now).pipe(
+											Effect.as({
+												models: attempt.success,
+												status: "fresh" as const,
+											}),
+										)
+									: Effect.gen(function* () {
+											// Read fresh rather than trust a snapshot taken before this
+											// call claimed leadership — single-flight means only the
+											// leader ever writes, so this read-then-write is race-free
+											// for `consecutiveFailures`, and it also doubles as what to
+											// serve this attempt's own caller.
+											const previous = yield* readRow(id);
+											yield* writeFailure(
+												id,
+												previous?.consecutiveFailures ?? 0,
+												now,
+												attempt.failure,
+											);
+											const hasModels = previous?.fetchedAt != null;
+											return {
+												models: hasModels
+													? parseModels(previous?.modelsJson ?? null)
+													: [],
+												status: hasModels
+													? ("stale" as const)
+													: ("unavailable" as const),
+											};
+										});
+
+								yield* Deferred.succeed(mine, result);
+								return result;
+							}),
+						).pipe(
+							Effect.ensuring(
+								Effect.gen(function* () {
+									// An interrupted leader must wake its followers before its slot is reusable.
+									yield* Deferred.interrupt(mine);
+									yield* Ref.update(inFlight, (map) => {
+										if (map.get(id) !== mine) return map;
+										const next = new Map(map);
+										next.delete(id);
+										return next;
+									});
 								}),
-							)
-						: Effect.gen(function* () {
-								// Read fresh rather than trust a snapshot taken before this
-								// call claimed leadership — single-flight means only the
-								// leader ever writes, so this read-then-write is race-free
-								// for `consecutiveFailures`, and it also doubles as what to
-								// serve this attempt's own caller.
-								const previous = yield* readRow(id);
-								yield* writeFailure(
-									id,
-									previous?.consecutiveFailures ?? 0,
-									now,
-									attempt.failure,
-								);
-								const hasModels = previous?.fetchedAt != null;
-								return {
-									models: hasModels
-										? parseModels(previous?.modelsJson ?? null)
-										: [],
-									status: hasModels
-										? ("stale" as const)
-										: ("unavailable" as const),
-								};
-							});
-
-					yield* Deferred.succeed(mine, result);
-					yield* Ref.update(inFlight, (map) => {
-						const next = new Map(map);
-						next.delete(id);
-						return next;
-					});
-					return result;
-				});
+							),
+						);
+					}),
+				);
 
 			const get = (
 				id: HarnessId,

@@ -6,7 +6,7 @@ import { BunServices } from "@effect/platform-bun";
 import { SqliteDb } from "@repo/db";
 import type { HarnessModel } from "@repo/sidecar-api";
 import { eq } from "drizzle-orm";
-import { ConfigProvider, Deferred, Effect, Layer } from "effect";
+import { ConfigProvider, Deferred, Effect, Exit, Fiber, Layer } from "effect";
 import { harnessModelDiscoveries } from "../db/schema.ts";
 import { HarnessModelCache } from "../model-store.ts";
 
@@ -344,6 +344,39 @@ describe("HarnessModelCache — force", () => {
 });
 
 describe("HarnessModelCache — single-flight", () => {
+	test("an interrupted leader releases its followers and lets the next caller retry", async () => {
+		await Effect.runPromise(
+			Effect.gen(function* () {
+				const cache = yield* HarnessModelCache;
+				const started = yield* Deferred.make<void>();
+				const gate = yield* Deferred.make<void>();
+				const leader = yield* Effect.forkChild(
+					cache.get("codex", () =>
+						Effect.gen(function* () {
+							yield* Deferred.succeed(started, undefined);
+							yield* Deferred.await(gate);
+							return [MODEL];
+						}),
+					),
+				);
+				yield* Deferred.await(started);
+				const follower = yield* Effect.forkChild(
+					cache.get("codex", () => Effect.die("follower spawned discovery")),
+				);
+				yield* Effect.sleep("20 millis");
+				yield* Fiber.interrupt(leader);
+				const followerExit = yield* Fiber.await(follower).pipe(
+					Effect.timeout("1 second"),
+				);
+				expect(Exit.isFailure(followerExit)).toBe(true);
+				const retried = yield* cache
+					.get("codex", () => Effect.succeed([MODEL]))
+					.pipe(Effect.timeout("1 second"));
+				expect(retried).toEqual({ models: [MODEL], status: "fresh" });
+			}).pipe(Effect.provide(makeTestLayer(dataDir))),
+		);
+	});
+
 	test("concurrent callers for the same harness share one discovery instead of each spawning their own", async () => {
 		let spawns = 0;
 		// A real `Effect.sleep` (rather than an externally-released gate) is
