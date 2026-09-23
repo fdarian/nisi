@@ -224,6 +224,8 @@ export function createMockOrpc(data: MockOrpcData = {}): SidecarQueryUtils {
 			// `useLiveFileChanges`/`useSessions`/`usePullRequestChecks`'s
 			// `useAwaitingNewCi` all treat as the steady state.
 			subscribe: async () => neverIterator(),
+			openRequests: async () => [],
+			ackOpenRequest: async () => undefined,
 		},
 		// No story exercises the chat dock yet (Phase 3/4 frontend work) — these
 		// stubs exist only to keep `SidecarClient` satisfied, same reasoning as

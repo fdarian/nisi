@@ -9,8 +9,10 @@ import {
 	useMesurerEnabled,
 } from "#/features/devtools/dev-tool-context";
 import { useSettingsShortcut } from "#/features/settings/use-settings-shortcut";
-import { BackendProvider } from "#/infra/backend-context";
+import { BackendProvider, useBackendContext } from "#/infra/backend-context";
 import { useRedirectHomeOnPendingDeepLink } from "#/shell/deep-link/deep-link-data";
+import { OpenRequestProvider } from "#/shell/open-request/open-request-data";
+import { SidecarEventsProvider } from "#/infra/sidecar-events";
 
 export const Route = createRootRoute({
 	component: RootLayout,
@@ -30,13 +32,28 @@ function RootLayout() {
 			<DevToolProvider>
 				<ToastProvider>
 					<BackendProvider>
-						<Outlet />
-						<AgentationToggle />
-						<MesurerToggle />
+						<ConnectedEvents />
 					</BackendProvider>
 				</ToastProvider>
 			</DevToolProvider>
 		</ThemeProvider>
+	);
+}
+
+function ConnectedEvents() {
+	const backend = useBackendContext();
+	const content = (
+		<>
+			<Outlet />
+			<AgentationToggle />
+			<MesurerToggle />
+		</>
+	);
+	if (backend.status !== "ready") return content;
+	return (
+		<SidecarEventsProvider client={backend.client}>
+			<OpenRequestProvider orpc={backend.orpc}>{content}</OpenRequestProvider>
+		</SidecarEventsProvider>
 	);
 }
 

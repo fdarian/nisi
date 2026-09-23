@@ -23,8 +23,6 @@ import {
 	useQuery,
 	useQueryClient,
 } from "@tanstack/react-query";
-import { isTauri } from "@tauri-apps/api/core";
-import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toastManager } from "#/components/ui/toast";
 import {
@@ -33,6 +31,7 @@ import {
 } from "#/features/code-index/lsp/code-index-lsp-events";
 import { useIncludeUncommitted } from "#/features/settings/settings-data";
 import type { SidecarQueryUtils } from "#/infra/backend-context";
+import { useSidecarEvent } from "#/infra/sidecar-events";
 import { useSetCodeIndexEnabled } from "./session-ui-store";
 
 /**
@@ -226,21 +225,11 @@ export function useSessions(
 	});
 	const setCodeIndexEnabled = useSetCodeIndexEnabled();
 
-	// The CLI opening (or an idle tab closing) a session out from under a
-	// running app is exactly what `events.subscribe` exists for — a live
-	// query resolves to the latest emitted `SessionEvent`. Session events
-	// invalidate the list; root-scoped LSP events reconcile status caches and
-	// intent directly so a shared server transition reaches every matching tab.
-	// `session-opened` additionally requests activation and foregrounds this
-	// window: the sidecar this event arrived from is by construction the one
-	// the CLI's `sessions.open` just reached, which is the only signal that
-	// reliably identifies "the right app" when a dev sandbox and a production
-	// install both exist (`packages/cli/src/app-launch.ts` can't tell them
-	// apart by path/bundle id — see that module's doc comment).
-	const eventsQuery = useQuery(orpc.events.subscribe.liveOptions());
-	useEffect(() => {
-		const event = eventsQuery.data;
-		if (event === undefined) return;
+	// Session events invalidate the list; root-scoped LSP events reconcile
+	// status caches and intent for every matching tab. Native activation and
+	// open-request selection are handled independently of this list cache.
+	useSidecarEvent((event) => {
+		if (event.type === "stream-ready" || event.type.startsWith("open-")) return;
 		if (event.type === "code-index-lsp-status-changed") {
 			const sessions = queryClient.getQueryData<readonly Session[]>(
 				orpc.sessions.list.queryKey(),
@@ -264,17 +253,8 @@ export function useSessions(
 		queryClient.invalidateQueries({ queryKey: orpc.sessions.list.queryKey() });
 		if (event.type === "session-opened") {
 			onSessionOpened(event.session.id);
-			if (isTauri()) void getCurrentWindow().setFocus();
 		}
-	}, [
-		// Keep the session list out of these dependencies: an optimistic cache
-		// write would replay the last event and cause the close-tab flicker.
-		eventsQuery.data,
-		onSessionOpened,
-		orpc,
-		queryClient,
-		setCodeIndexEnabled,
-	]);
+	});
 
 	const closeSession = useCallback(
 		(sessionId: string) => {
@@ -750,15 +730,13 @@ export function useLiveFileChanges(
 	sessionId: string,
 ): LiveFileChanges {
 	const queryClient = useQueryClient();
-	const eventsQuery = useQuery(orpc.events.subscribe.liveOptions());
 	const [hasPendingChanges, setHasPendingChanges] = useState(false);
 
-	useEffect(() => {
-		const event = eventsQuery.data;
-		if (event === undefined || event.type !== "session-files-changed") return;
+	useSidecarEvent((event) => {
+		if (event.type !== "session-files-changed") return;
 		if (event.sessionId !== sessionId) return;
 		setHasPendingChanges(true);
-	}, [eventsQuery.data, sessionId]);
+	});
 
 	const refresh = useCallback(() => {
 		queryClient.invalidateQueries({
@@ -1270,19 +1248,14 @@ const hasUnsettledCheck = (
  * actually unsettled, `refetchInterval`'s own `hasUnsettledCheck` check
  * already forces the fast poll, so a stale-true flag changes nothing.
  */
-const useAwaitingNewCi = (
-	orpc: SidecarQueryUtils,
-	sessionId: string,
-): boolean => {
-	const eventsQuery = useQuery(orpc.events.subscribe.liveOptions());
+const useAwaitingNewCi = (sessionId: string): boolean => {
 	const [awaitingNewCi, setAwaitingNewCi] = useState(false);
 	const timeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(
 		undefined,
 	);
 
-	useEffect(() => {
-		const event = eventsQuery.data;
-		if (event === undefined || event.type !== "session-files-changed") return;
+	useSidecarEvent((event) => {
+		if (event.type !== "session-files-changed") return;
 		if (event.sessionId !== sessionId) return;
 		clearTimeout(timeoutRef.current);
 		timeoutRef.current = setTimeout(
@@ -1290,7 +1263,7 @@ const useAwaitingNewCi = (
 			CI_CHECKS_AWAITING_NEW_CI_TIMEOUT_MS,
 		);
 		setAwaitingNewCi(true);
-	}, [eventsQuery.data, sessionId]);
+	});
 
 	useEffect(() => () => clearTimeout(timeoutRef.current), []);
 
@@ -1332,7 +1305,7 @@ export function usePullRequestChecks(
 	options: PullRequestChecksOptions,
 ): UseQueryResult<readonly PullRequestCheck[]> {
 	const queryClient = useQueryClient();
-	const awaitingNewCi = useAwaitingNewCi(orpc, options.sessionId);
+	const awaitingNewCi = useAwaitingNewCi(options.sessionId);
 	const query = useQuery({
 		...orpc.pullRequests.checks.queryOptions({ input: params }),
 		refetchInterval: (query) =>
