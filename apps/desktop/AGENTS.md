@@ -8,7 +8,7 @@ Three parts, one seam:
 - `src-tauri/` — **Rust, intentionally thin.** Spawns/discovers the sidecar, hands `{ port, token }` to
   the frontend via the `get_backend` command, and owns the macOS app menu, built explicitly rather
   than patched from `Menu::default` (see `build_macos_menu` in `src/lib.rs`). Little business logic
-  beyond window-focus routing in `on_menu_event`: the File menu's ⌘W item closes the About window
+  beyond window-focus routing in `on_menu_event` and `activation.rs`: the File menu's ⌘W item closes the About window
   (`build_about_window`) directly when it's focused, otherwise emits `menu://close-tab` and lets the
   frontend decide what that means; ⌘⇧W ("Close Window") always closes whichever window is focused.
 - `sidecar/` — the real backend, a long-running Bun process (Effect). Implements `packages/sidecar-api`'s
@@ -74,6 +74,14 @@ claims and publishes it with, so both ends of the handshake share one dependency
   [Browser dev harness](#browser-dev-harness).
 - **Prod**: Rust spawns the compiled `binaries/sidecar` (`externalBin`, `shell:allow-spawn`) from
   `.setup()` — fire-and-forget.
+- **CLI activation**: `sessions.open` registers a replayable request before GitHub work and publishes
+  it over the sidecar's bearer-authenticated `/native/activation` stream. `activation.rs` subscribes
+  with the launch owner's ID, shows/unminimizes/focuses the main window, and acknowledges the
+  activation separately from the frontend's request acknowledgment. Dev's sidecar is spawned by
+  `scripts/dev.ts`, so this HTTP stream works in both dev and production; stdout would not.
+  `src/infra/sidecar-events.tsx` owns the frontend event stream and
+  `src/shell/open-request/open-request-data.tsx` replays pending opens on connection, including
+  when the frontend is on `/settings`.
 - Sidecar boot (`sidecar/index.ts`) is one Effect program run via `BunRuntime.runMain`: the HTTP
   server and `deskkit/sidecar`'s `acquireSidecar` claim are each acquired/released with
   `Effect.acquireRelease` inside `Effect.scoped`, so SIGINT/SIGTERM (which `runMain` already listens

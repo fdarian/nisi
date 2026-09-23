@@ -132,8 +132,12 @@ seam" for the port/token handshake this boots into.
 - `events.ts` — in-memory pub/sub for `events.subscribe`, ported from rheya's sidecar verbatim. oRPC's
   `.effect()` can't return a live async iterator (it resolves the generator via `runPromise`), so
   `events.subscribe` uses the lower-level `.handler(async function* ...)` instead, bridging this
-  module's callback-style `subscribe` into a pull loop woken by a `wake` closure. `walkthrough.generate`
-  uses the same `.handler()` escape hatch, for the same reason.
+   module's callback-style `subscribe` into a pull loop woken by a `wake` closure. `walkthrough.generate`
+   uses the same `.handler()` escape hatch, for the same reason.
+- `open-requests.ts` — process-lifetime pending/terminal open requests and an independent native
+  activation backlog. The frontend acknowledges a resolved tab after selecting it (or dismisses a
+  failure); Rust acknowledges activation after focusing the window. Each backlog replays independently
+  on reconnect, including requests for an already-open session.
 - `live-poll.ts` — `startLivePolling`, forked as a background fiber from `index.ts`'s boot program.
   Every `POLL_INTERVAL`, diffs each open session's `@repo/git` change signature against the previous
   tick (module-level `Map`, same in-memory-state shape as `events.ts`'s subscriber `Set`) and emits

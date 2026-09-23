@@ -232,12 +232,9 @@ const openSession = (
  * selection (`packages/cli/src/index.ts`), passed straight through to
  * `sessions.open` — this module doesn't interpret it.
  *
- * Only the cold-start path (`openSession`'s `launchApp` call) brings a window
- * forward from here — an already-running app focuses itself on receiving the
- * `session-opened` event it just got POSTed (`pr-data.ts`'s `useSessions`),
- * since that event, unlike `launchApp`, always names the right app: a second
- * `open -a` here would have no way to tell a dev sandbox instance from a
- * production install (see `app-launch.ts`'s doc comment).
+ * Only the cold-start path uses `launchApp`. A running app's native activation
+ * listener receives the request directly from the sidecar that answered the
+ * POST, identifying the correct dev sandbox or production window.
  */
 export const handoff = (
 	cwd: string,
