@@ -36,7 +36,7 @@ import type {
 } from "@repo/sidecar-api";
 import { contract } from "@repo/sidecar-api";
 import type { Context } from "effect";
-import { Effect } from "effect";
+import { Cause, Effect, Exit, Option } from "effect";
 import type { ChildProcessSpawner } from "effect/unstable/process";
 import {
 	ChatSessionNotFound,
@@ -60,11 +60,21 @@ import {
 import {
 	emit,
 	type SidecarEvent,
+	streamReady,
 	subscribe as subscribeToSidecarEvents,
 } from "./events.ts";
 import { listHarnesses } from "./harness/harnesses.ts";
 import { getHarnessModels } from "./harness/models.ts";
 import { checkSessionForChanges } from "./live-poll.ts";
+import {
+	acknowledgeActivation,
+	acknowledgeOpenRequest,
+	createOpenRequest,
+	failOpenRequest,
+	listOpenRequests,
+	resolveOpenRequest,
+	subscribeToActivations,
+} from "./open-requests.ts";
 import type { AppServices } from "./services.ts";
 import {
 	forkSessionCloseSideEffects,
@@ -237,6 +247,7 @@ export function attachRouter(
 	server: ReturnType<typeof Bun.serve>,
 	token: string,
 	mainContext: Context.Context<AppServices>,
+	activationOwnerId?: string,
 ) {
 	// `events.subscribe`/`walkthrough.generate` are plain `.handler(async
 	// function* ...)` closures (see the comment on `events` below) — they
@@ -321,6 +332,10 @@ export function attachRouter(
 		},
 		sessions: {
 			open: authed.sessions.open.effect(function* ({ input, errors }) {
+				const request = createOpenRequest(
+					input.cwd,
+					input.target ?? { kind: "auto" },
+				);
 				const store = yield* Store;
 				const session = yield* store.openSession(input.cwd, input.target).pipe(
 					Effect.catchTag("InvalidCwd", (cause) =>
@@ -380,6 +395,21 @@ export function attachRouter(
 								message: `could not reach GitHub for ${cause.repoRoot}: ${cause.reason}`,
 							}),
 						),
+					),
+					Effect.onExit((exit) =>
+						Effect.sync(() => {
+							if (Exit.isSuccess(exit)) {
+								resolveOpenRequest(request.id, exit.value);
+							} else {
+								const error = Option.getOrUndefined(Exit.findErrorOption(exit));
+								failOpenRequest(
+									request.id,
+									error instanceof Error
+										? error.message
+										: Cause.pretty(exit.cause),
+								);
+							}
+						}),
 					),
 				);
 				emit({ type: "session-opened", session });
@@ -743,6 +773,12 @@ export function attachRouter(
 			}),
 		},
 		events: {
+			openRequests: authed.events.openRequests.effect(function* () {
+				return yield* Effect.sync(listOpenRequests);
+			}),
+			ackOpenRequest: authed.events.ackOpenRequest.effect(function* (context) {
+				yield* Effect.sync(() => acknowledgeOpenRequest(context.input.id));
+			}),
 			// Plain async-generator handler — `.effect` resolves its generator to a
 			// single value via `runPromise`, so it can't hand back a live async
 			// iterator. This bridges `events.ts`'s callback `subscribe` into one,
@@ -755,12 +791,14 @@ export function attachRouter(
 					pending.push(event);
 					wake?.();
 				});
+				const ready = streamReady();
 				await runWithMainContext(Effect.logDebug("event subscriber attached"));
 
 				const onAbort = () => wake?.();
 				signal?.addEventListener("abort", onAbort);
 
 				try {
+					yield ready;
 					while (signal?.aborted !== true) {
 						const event = pending.shift();
 						if (event !== undefined) {
@@ -1820,6 +1858,48 @@ export function attachRouter(
 		// Bun's default 10s timeout).
 		idleTimeout: 0,
 		async fetch(req) {
+			const url = new URL(req.url);
+			if (url.pathname.startsWith("/native/activation")) {
+				if (req.headers.get("authorization") !== `Bearer ${token}`) {
+					return new Response("unauthorized", { status: 401 });
+				}
+				if (
+					activationOwnerId === undefined ||
+					req.headers.get("x-nisi-activation-owner") !== activationOwnerId
+				) {
+					return new Response("not the owning app", { status: 403 });
+				}
+				if (
+					url.pathname === "/native/activation/ack" &&
+					req.method === "POST"
+				) {
+					const id = url.searchParams.get("id");
+					if (id === null) return new Response("missing id", { status: 400 });
+					acknowledgeActivation(id);
+					return new Response(null, { status: 204 });
+				}
+				if (url.pathname !== "/native/activation" || req.method !== "GET") {
+					return new Response("not found", { status: 404 });
+				}
+				let unsubscribe: (() => void) | undefined;
+				const stream = new ReadableStream<Uint8Array>({
+					start(controller) {
+						const encoder = new TextEncoder();
+						unsubscribe = subscribeToActivations((id) => {
+							controller.enqueue(encoder.encode(`${JSON.stringify({ id })}\n`));
+						});
+					},
+					cancel() {
+						unsubscribe?.();
+					},
+				});
+				return new Response(stream, {
+					headers: {
+						"content-type": "application/x-ndjson",
+						"cache-control": "no-store",
+					},
+				});
+			}
 			// Generic per-call timing, covering every procedure without a
 			// per-handler instrumentation pass — `path` doubles as "which
 			// procedure" since RPCHandler routes `sessions.open` etc. to

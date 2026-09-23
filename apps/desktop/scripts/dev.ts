@@ -111,6 +111,7 @@ const dev = Command.make(
 
 			const env = {
 				NISI_DATA_DIR: dataDir,
+				NISI_ACTIVATION_OWNER_ID: crypto.randomUUID(),
 				VITE_PORT: String(vitePort),
 				VITE_HOST: String(host),
 				NISI_DEV_SIDECAR_PORT: String(sidecarPort),
