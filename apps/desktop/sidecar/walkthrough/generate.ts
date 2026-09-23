@@ -333,6 +333,16 @@ export async function* generateWalkthrough(
 				context.repoRoot,
 			));
 		} catch (error) {
+			await runEffect(
+				Effect.logError("walkthrough harness session start failed", error).pipe(
+					Effect.annotateLogs({
+						sessionId: input.sessionId,
+						harness: input.harness,
+						...(input.model === undefined ? {} : { model: input.model }),
+					}),
+				),
+				mainContext,
+			);
 			yield {
 				type: "failed",
 				message: error instanceof Error ? error.message : String(error),
