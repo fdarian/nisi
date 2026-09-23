@@ -1,4 +1,4 @@
-import type { HarnessId, HarnessModels, HarnessModel } from "@repo/sidecar-api";
+import type { HarnessId, HarnessModel, HarnessModels } from "@repo/sidecar-api";
 import { Effect } from "effect";
 import { checkHarnessAvailability } from "./availability.ts";
 import type { DiscoveryReason } from "./model-discovery.ts";
