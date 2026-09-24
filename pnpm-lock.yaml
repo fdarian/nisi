@@ -120,6 +120,9 @@ catalogs:
 packageExtensionsChecksum: sha256-OJjli7Jt03re7jCpqmTDveZ0wD7HAwvpOoiVc5uWe1E=
 
 patchedDependencies:
+  '@ai-sdk/harness-claude-code@1.0.127': f78cd982c1b3ddbbc676a25d2ebc00c4ee8005ac37fc3cb887461a2f22e081c6
+  '@ai-sdk/harness-codex@1.0.125': 0dd99b405cb76ec5260991c87a3931bd011713e020f85b8f789471e4a62d9df6
+  '@ai-sdk/harness-opencode@1.0.125': a560bcc823f9c3f63aa0f692052768924fe5092b1324ac15c3b3b5f4c540643f
   '@pierre/diffs@1.5.1': af563af8f9fa16289dd8cddc613d7788006aa8a8c10d6892eec9928213271180
   microsandbox@0.6.18: c588b3be9c03653d20e077249f82c4e141827ee72ed39d7441cae8f2fe6efc9d
 
@@ -144,13 +147,13 @@ importers:
         version: 1.0.123(ws@8.21.0)(zod@4.5.4)
       '@ai-sdk/harness-claude-code':
         specifier: 1.0.127
-        version: 1.0.127(zod@4.5.4)
+        version: 1.0.127(patch_hash=f78cd982c1b3ddbbc676a25d2ebc00c4ee8005ac37fc3cb887461a2f22e081c6)(zod@4.5.4)
       '@ai-sdk/harness-codex':
         specifier: 1.0.125
-        version: 1.0.125(zod@4.5.4)
+        version: 1.0.125(patch_hash=0dd99b405cb76ec5260991c87a3931bd011713e020f85b8f789471e4a62d9df6)(zod@4.5.4)
       '@ai-sdk/harness-opencode':
         specifier: 1.0.125
-        version: 1.0.125(zod@4.5.4)
+        version: 1.0.125(patch_hash=a560bcc823f9c3f63aa0f692052768924fe5092b1324ac15c3b3b5f4c540643f)(zod@4.5.4)
       '@ai-sdk/harness-pi':
         specifier: 1.0.125
         version: 1.0.125(@earendil-works/pi-tui@0.84.4)(@modelcontextprotocol/sdk@1.30.0(zod@4.5.4))(@opentelemetry/api@1.9.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(ws@8.21.0)(zod@4.5.4)
@@ -6113,7 +6116,7 @@ snapshots:
       '@vercel/oidc': 3.2.0
       zod: 4.5.4
 
-  '@ai-sdk/harness-claude-code@1.0.127(zod@4.5.4)':
+  '@ai-sdk/harness-claude-code@1.0.127(patch_hash=f78cd982c1b3ddbbc676a25d2ebc00c4ee8005ac37fc3cb887461a2f22e081c6)(zod@4.5.4)':
     dependencies:
       '@ai-sdk/harness': 1.0.123(ws@8.21.3)(zod@4.5.4)
       '@ai-sdk/provider-utils': 5.0.47(zod@4.5.4)
@@ -6133,7 +6136,7 @@ snapshots:
       - bufferutil
       - utf-8-validate
 
-  '@ai-sdk/harness-codex@1.0.125(zod@4.5.4)':
+  '@ai-sdk/harness-codex@1.0.125(patch_hash=0dd99b405cb76ec5260991c87a3931bd011713e020f85b8f789471e4a62d9df6)(zod@4.5.4)':
     dependencies:
       '@ai-sdk/harness': 1.0.123(ws@8.21.3)(zod@4.5.4)
       '@ai-sdk/provider-utils': 5.0.47(zod@4.5.4)
@@ -6143,7 +6146,7 @@ snapshots:
       - bufferutil
       - utf-8-validate
 
-  '@ai-sdk/harness-opencode@1.0.125(zod@4.5.4)':
+  '@ai-sdk/harness-opencode@1.0.125(patch_hash=a560bcc823f9c3f63aa0f692052768924fe5092b1324ac15c3b3b5f4c540643f)(zod@4.5.4)':
     dependencies:
       '@ai-sdk/harness': 1.0.123(ws@8.21.0)(zod@4.5.4)
       '@ai-sdk/provider-utils': 5.0.47(zod@4.5.4)

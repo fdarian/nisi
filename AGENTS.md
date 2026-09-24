@@ -93,6 +93,11 @@ run per harness is slow (roughly 13–28s) while it installs a pinned copy; subs
     [teardown](knowledge/codeview-teardown-leak-patch.md),
     [scroll target](knowledge/codeview-stale-pending-scroll-target-patch.md), and
     [sticky jitter](knowledge/deferred-frontend-perf-work.md).
+  - `@ai-sdk/harness-claude-code`, `@ai-sdk/harness-codex`, `@ai-sdk/harness-opencode` —
+    statically embed bridge assets for the compiled sidecar; see
+    [knowledge/compiled-binary-differences.md](knowledge/compiled-binary-differences.md).
+  - `microsandbox@0.6.18` — statically imports its native loader for the compiled sidecar; see
+    [`patches/microsandbox@0.6.18.patch`](patches/microsandbox@0.6.18.patch).
 - OpenCode's microsandbox bootstrap needs the VM memory allocation in
   `apps/desktop/sidecar/harness/sandbox.ts`.
 - Path alias is `#/*` → `src/*` in every package, not `@/*`.
