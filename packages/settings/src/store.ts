@@ -12,6 +12,7 @@ import { SettingsStoreError } from "./errors.ts";
 
 export type SidebarViewMode = "tree" | "flat";
 export type DiffStyleMode = "unified" | "split";
+export type SandboxMode = "local" | "microsandbox";
 
 export type Settings = {
 	/**
@@ -27,6 +28,7 @@ export type Settings = {
 	 * yet.
 	 */
 	readonly enabledHarnesses: ReadonlyArray<string> | null;
+	readonly sandboxMode: SandboxMode;
 	readonly sidebarViewMode: SidebarViewMode;
 	readonly diffStyleMode: DiffStyleMode;
 	/**
@@ -84,6 +86,7 @@ export type RepoPathMapping = {
  */
 export const DEFAULT_SETTINGS: Settings = {
 	enabledHarnesses: null,
+	sandboxMode: "local",
 	sidebarViewMode: "tree",
 	diffStyleMode: "unified",
 	preferredEditor: null,
@@ -98,6 +101,7 @@ export const DEFAULT_SETTINGS: Settings = {
 };
 
 const toSettings = (row: SettingsRow): Settings => ({
+	sandboxMode: row.sandboxMode as SandboxMode,
 	enabledHarnesses:
 		row.enabledHarnesses === null
 			? null
@@ -161,6 +165,7 @@ export class SettingsStore extends Context.Service<SettingsStore>()(
 					const next: Settings = { ...current, ...patch };
 
 					const values = {
+						sandboxMode: next.sandboxMode,
 						enabledHarnesses:
 							next.enabledHarnesses === null
 								? null

@@ -1,7 +1,7 @@
 # sidecar/walkthrough
 
 The Phase 3 wiring layer: turns `@repo/walkthrough`'s pure schema/validation/prompt functions and
-`@repo/harness-local`'s sandbox provider into the sidecar's `walkthrough.get` /
+the selectable sandbox provider into the sidecar's `walkthrough.get` /
 `walkthrough.activeGeneration` / `walkthrough.generate` procedures. Neither of
 those two packages does I/O or knows about the other — this directory is where they actually meet.
 Harness-adapter plumbing that isn't walkthrough-specific (which CLI backs a harness, model
@@ -27,7 +27,7 @@ discovery, sandbox mode, read-only tool gating) lives one level up in
   and threads it into both `@repo/git` calls, so the diff an agent explores matches what the user
   sees in Files Changed. Refuses outright (`HeadNotCheckedOut`) for a plain branch session whose
   `headRef` isn't what `repoRoot` actually has checked out — the harness runs a real coding agent
-  directly against that worktree (`@repo/harness-local`), so an explicit, not-checked-out head
+  against that worktree (locally or via the guest mount), so an explicit, not-checked-out head
   would have the agent explore files that don't match the diff it was briefed on. A PR-backed
   session never trips this, since its `repoRoot` is a worktree nisi created and keeps checked out
   to exactly that PR's head. `generate.ts`'s `resolveContext` turns this into a specific `failed`

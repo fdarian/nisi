@@ -4,6 +4,7 @@ export { RepoMergeMethodStore } from "./repo-merge-method-store.ts";
 export type {
 	DiffStyleMode,
 	RepoPathMapping,
+	SandboxMode,
 	Settings,
 	SettingsUpdate,
 	SidebarViewMode,

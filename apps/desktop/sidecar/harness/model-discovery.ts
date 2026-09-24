@@ -185,9 +185,7 @@ export const discoverCodexModels = (
  * relative to its own `import.meta.url`. That resolution reads real files
  * from a real `node_modules` on disk, which doesn't exist once this file is
  * bundled into the sidecar's `bun build --compile` single-file executable
- * (same class of problem as the `readBridgeAsset` fix in
- * `patches/@ai-sdk%2Fharness-claude-code@1.0.47.patch`, just for a native
- * binary rather than a text asset that can be statically imported) — it
+ * (a native binary rather than a text asset that can be statically imported) — it
  * throws "Native CLI binary for darwin-arm64 not found" every time in the
  * built app, confirmed via a standalone `bun build --compile` repro.
  * Resolving to the user's own installed `claude` CLI sidesteps the bundled

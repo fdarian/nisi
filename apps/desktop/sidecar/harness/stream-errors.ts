@@ -10,9 +10,8 @@ import type { TextStreamPart, ToolSet } from "ai";
  * failure the harness already described.
  *
  * Returns `undefined` for a part carrying no payload at all. OpenCode's
- * bridge emits a bare `{ type: "error" }` partway through a busy session (see
- * `patches/@ai-sdk%2Fharness@1.0.46.patch`, which is what lets it decode
- * rather than tear the stream down); it says nothing, arrives on runs that
+ * bridge can emit a bare `{ type: "error" }` partway through a busy session;
+ * it says nothing, arrives on runs that
  * are otherwise fine, and must not abort a turn that is about to succeed.
  * Anything with real content still fails the turn.
  */

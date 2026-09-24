@@ -1,5 +1,10 @@
 import type { HarnessAgent, HarnessAgentSession } from "@ai-sdk/harness/agent";
-import { type ToolSet, toUIMessageStream, type UIMessageChunk } from "ai";
+import {
+	type TextStreamPart,
+	type ToolSet,
+	toUIMessageStream,
+	type UIMessageChunk,
+} from "ai";
 import { filterMeaninglessStreamErrors } from "../harness/stream-errors.ts";
 
 /** Drains a `ReadableStream` via its reader rather than `yield*`/`for await` directly on it — the standalone `toUIMessageStream` below returns a plain `ReadableStream`, not AI SDK's own `AsyncIterableStream` (which attaches `Symbol.asyncIterator` itself; see `@ai-sdk/harness`'s `asAsyncIterableStream`), so async iteration isn't guaranteed without going through the reader explicitly. */
@@ -72,7 +77,9 @@ export async function* streamChatTurn(options: {
 	// interface `agent.stream()` is typed to return, hence the cast.
 	const tools = (result as unknown as { readonly tools: ToolSet }).tools;
 	const chunkStream = toUIMessageStream({
-		stream: filterMeaninglessStreamErrors(result.stream),
+		stream: filterMeaninglessStreamErrors(
+			result.stream as ReadableStream<TextStreamPart<ToolSet>>,
+		),
 		tools,
 	});
 	yield* drain(chunkStream);

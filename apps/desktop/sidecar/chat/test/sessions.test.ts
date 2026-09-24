@@ -63,6 +63,7 @@ const paramsFor = (sessionId: string, threadId: string) => ({
 	model: undefined,
 	repoRoot: "/tmp/does-not-need-to-exist",
 	instructions: "test instructions",
+	sandboxMode: "local" as const,
 });
 
 const reportFailure = (_failure: unknown): void => {};

@@ -39,7 +39,7 @@ against a review session imports from this directory rather than reaching into a
 - `models.ts` — `getHarnessModels`, the per-harness `walkthrough.models`/`refreshModels` path.
   Checks binary presence first, then calls `HarnessModelCache` with the corresponding discovery
   function. A missing CLI returns unavailable even if a previous model list is cached.
-- `sandbox.ts` — `resolveSandboxSettings`: picks `@repo/harness-local`'s `LocalSandboxSettings` mode
+- `sandbox.ts` — `createHarnessSandbox` selects the experimental microsandbox VM (writable repo bind mount) for Claude Code/Codex/OpenCode when requested; otherwise `resolveSandboxSettings` picks `@repo/harness-local`'s `LocalSandboxSettings` mode
   (`"in-place"` vs `"relocated"`) per harness for a given `repoRoot`, and the fixed
   `~/.nisi/harness-sandbox` scratch root relocated mode uses — see `@repo/harness-local`'s own
   AGENTS.md ("Two sandbox modes") for why claude-code/codex/opencode need relocating and Pi doesn't.

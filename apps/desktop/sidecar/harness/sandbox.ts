@@ -1,7 +1,10 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
 import type { LocalSandboxSettings } from "@repo/harness-local";
+import { createLocalSandbox } from "@repo/harness-local";
+import type { SandboxMode } from "@repo/settings";
 import type { HarnessId } from "@repo/sidecar-api";
+import { createMicrosandbox } from "ai-microsandbox";
 
 /**
  * claude-code/codex/opencode each bootstrap a pinned CLI install into
@@ -43,6 +46,8 @@ const HARNESSES_NEEDING_RELOCATION: ReadonlySet<HarnessId> = new Set([
  * already gives for not making this per-session.
  */
 const HARNESS_SANDBOX_ROOT = join(homedir(), ".nisi", "harness-sandbox");
+const MICROSANDBOX_IMAGE = "node:22";
+const GUEST_REPO_PATH = "/home/node/repo";
 
 /**
  * Picks a `HarnessV1SandboxProvider`'s sandbox mode for `harness` against
@@ -56,3 +61,44 @@ export const resolveSandboxSettings = (
 	HARNESSES_NEEDING_RELOCATION.has(harness)
 		? { mode: "relocated", repoRoot, scratchRoot: HARNESS_SANDBOX_ROOT }
 		: { mode: "in-place", repoRoot };
+
+export const createHarnessSandbox = (
+	harness: HarnessId,
+	repoRoot: string,
+	mode: SandboxMode,
+) => {
+	if (mode === "microsandbox" && harness !== "pi") {
+		const provider = createMicrosandbox({
+			image: MICROSANDBOX_IMAGE,
+			configure: (builder) =>
+				builder
+					.user("node")
+					.workdir("/home/node")
+					.env("PATH", "/home/node/.local/bin:/usr/local/bin:/usr/bin:/bin")
+					.volume(GUEST_REPO_PATH, (mount) => mount.bind(repoRoot)),
+		});
+		const createSession = provider.createSession;
+		provider.createSession = (options) =>
+			createSession({
+				...options,
+				onFirstCreate: async (session, opts) => {
+					const result = await session.run({
+						command:
+							"mkdir -p /home/node/.local/bin && corepack enable --install-directory /home/node/.local/bin",
+						abortSignal: opts.abortSignal,
+					});
+					if (result.exitCode !== 0) {
+						throw new Error(
+							`Could not enable pnpm in microsandbox: ${result.stderr}`,
+						);
+					}
+					await options?.onFirstCreate?.(session, opts);
+				},
+			});
+		return {
+			provider,
+			workDir: "repo",
+		};
+	}
+	return createLocalSandbox(resolveSandboxSettings(harness, repoRoot));
+};

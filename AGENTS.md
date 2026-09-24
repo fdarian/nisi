@@ -31,7 +31,7 @@ with the detail — this is only the map.
 - `packages/git` — PR/diff detection and file classification. Pure, no SQLite, no oRPC.
 - `packages/review` — session/review persistence + the base/reviewed/head reconciliation engine.
 - `packages/walkthrough` — walkthrough schema, tools, prompt, and coverage validation. I/O-free.
-- `packages/harness-local` — `HarnessV1SandboxProvider` over real disk, so an agent runs against the user's worktree.
+- `packages/harness-local` — local `HarnessV1SandboxProvider` over real disk; the desktop can also mount the worktree into microsandbox.
 - `packages/db` — shared SQLite connection + embedded migrations. Read its migration gotcha before adding one.
 - `packages/settings` — persistent app preferences the sidecar reads.
 - `packages/cli` — the `nisi` command; detects the PR and hands off to the app.
@@ -64,9 +64,9 @@ The sidecar keeps a rotating log file at `<data dir>/logs/sidecar.log` (`<data d
 `packages/logging/AGENTS.md`.
 
 The walkthrough drives a real coding agent CLI (Claude Code, Codex, OpenCode, or Pi) against your
-own worktree, not a remote sandbox. Enable a harness in Settings (`Cmd+,`) and authenticate that
-CLI yourself first — nisi doesn't install the agent's own credentials. The first run per harness is
-slow (roughly 13–28s) while nisi installs a pinned copy of it; every run after that is warm. See
+own worktree, either locally or via a writable microsandbox VM mount (Pi stays local). Enable a harness in Settings (`Cmd+,`) and authenticate that
+CLI yourself first — nisi doesn't install the agent's own credentials. The local provider's first
+run per harness is slow (roughly 13–28s) while it installs a pinned copy; subsequent local runs are warm. See
 `packages/harness-local/AGENTS.md`.
 
 ## Deeper notes
@@ -89,9 +89,6 @@ slow (roughly 13–28s) while nisi installs a pinned copy of it; every run after
   hand-building the patch file (`git diff --no-index` between a pristine `npm pack` extraction and
   a hand-edited copy) and registering it in `pnpm-workspace.yaml` directly instead of trusting
   `patch-commit`. Current patches:
-  - `@ai-sdk/harness*` (four, across the adapters and `@ai-sdk/harness` itself — `@ai-sdk/harness-pi`
-    carries no patch; upstream's own model resolver is provider-aware now) — see
-    [knowledge/compiled-binary-differences.md](knowledge/compiled-binary-differences.md).
   - `@pierre/diffs` — `CodeView` teardown, pending-scroll-target, and sticky-header fixes; see
     [teardown](knowledge/codeview-teardown-leak-patch.md),
     [scroll target](knowledge/codeview-stale-pending-scroll-target-patch.md), and

@@ -62,6 +62,7 @@ import {
 	useDiffThemeDark,
 	useDiffThemeLight,
 	usePreferredEditor,
+	useSettings,
 	useUpdateSettings,
 	useWalkthroughEnabled,
 } from "./settings-data";
@@ -420,6 +421,7 @@ function HarnessesSection({
 }): React.ReactElement {
 	const { harnesses, refresh, isRefreshing } = useHarnesses(orpc);
 	const update = useUpdateSettings(orpc);
+	const { settings } = useSettings(orpc);
 
 	const toggleHarness = useCallback(
 		(id: HarnessId, checked: boolean) => {
@@ -449,6 +451,32 @@ function HarnessesSection({
 			}
 			title="Harnesses"
 		>
+			<SettingsRow
+				description="Experimental VM sandbox for Claude Code, Codex and OpenCode. Pi always runs locally."
+				title="Sandbox"
+			>
+				<Select
+					items={[
+						{ value: "local", label: "Local" },
+						{ value: "microsandbox", label: "Microsandbox (experimental)" },
+					]}
+					onValueChange={(value) => {
+						if (value === "local" || value === "microsandbox")
+							update({ sandboxMode: value });
+					}}
+					value={settings.sandboxMode}
+				>
+					<SelectTrigger className="w-52" size="sm">
+						<SelectValue />
+					</SelectTrigger>
+					<SelectContent>
+						<SelectItem value="local">Local</SelectItem>
+						<SelectItem value="microsandbox">
+							Microsandbox (experimental)
+						</SelectItem>
+					</SelectContent>
+				</Select>
+			</SettingsRow>
 			{harnesses.map((harness) => (
 				<SettingsRow
 					description={
