@@ -18,8 +18,8 @@ import type {
 } from "@pierre/diffs";
 import { parsePatchFiles } from "@pierre/diffs";
 import { cn } from "cn";
-import { BookOpenIcon } from "lucide-react";
-import { useCallback, useMemo } from "react";
+import { BookOpenIcon, ChevronDownIcon, ChevronRightIcon } from "lucide-react";
+import { useCallback, useMemo, useState } from "react";
 import { Badge } from "#/components/ui/badge";
 import { Checkbox } from "#/components/ui/checkbox";
 import {
@@ -58,7 +58,7 @@ import type { FileDrift, WalkthroughReferenceBlock } from "./walkthrough-data";
 
 /** `action`, when present, renders as a button below the message — the out-of-diff case's "Open file" affordance (see `ReferencePane`'s `itemGroups` loop) is the only caller that supplies one today. */
 type ReferenceAnnotationMetadata = {
-	type: "error";
+	type: "error" | "reviewed-empty";
 	message: string;
 	action?: { label: string; onClick: () => void };
 };
@@ -121,6 +121,25 @@ export function ReferencePane({
 	changedPaths,
 }: ReferencePaneProps): React.ReactElement {
 	const diffTheme = useDiffTheme(orpc);
+	// Like the diff pane's file overrides, either direction is sticky until the checkbox flips.
+	const [collapseOverrides, setCollapseOverrides] = useState<
+		ReadonlyMap<string, boolean>
+	>(() => new Map());
+	const setCollapseOverride = useCallback(
+		(itemId: string, collapsed: boolean) => {
+			setCollapseOverrides((current) =>
+				new Map(current).set(itemId, collapsed),
+			);
+		},
+		[],
+	);
+	const clearCollapseOverride = useCallback((itemId: string) => {
+		setCollapseOverrides((current) => {
+			const next = new Map(current);
+			next.delete(itemId);
+			return next;
+		});
+	}, []);
 
 	const filesByPath = useMemo(
 		() => new Map(files.map((file) => [file.path, file] as const)),
@@ -185,10 +204,9 @@ export function ReferencePane({
 			const content = entry?.content;
 			if (content === undefined) continue; // still loading — appears once resolved
 
-			nextStatus.set(
-				itemId,
-				computeGroupReviewStatus(group.ranges, content.review),
-			);
+			const status = computeGroupReviewStatus(group.ranges, content.review);
+			nextStatus.set(itemId, status);
+			const collapsed = collapseOverrides.get(itemId) ?? status === "reviewed";
 
 			const synthesizedPatch = buildLocationFileDiff(
 				content.patch,
@@ -196,11 +214,15 @@ export function ReferencePane({
 			);
 			if (synthesizedPatch === undefined) {
 				nextItems.push(
-					errorItem(
-						itemId,
-						group.path,
-						"None of this block's line ranges are in the current diff — the file has likely changed since generation.",
-					),
+					status === "reviewed"
+						? reviewedEmptyItem(itemId, group.path, collapsed)
+						: errorItem(
+								itemId,
+								group.path,
+								"None of this block's line ranges are in the current diff — the file has likely changed since generation.",
+								undefined,
+								collapsed,
+							),
 				);
 				continue;
 			}
@@ -216,33 +238,39 @@ export function ReferencePane({
 				type: "diff",
 				fileDiff,
 				annotations: [],
-				version: hashItemVersion(`${file.fingerprint}:${itemId}`),
+				collapsed,
+				version: hashItemVersion(`${file.fingerprint}:${itemId}:${collapsed}`),
 			});
 		}
 
 		return { items: nextItems, statusByItemId: nextStatus };
-	}, [itemGroups, filesByPath, fileContents, openFile]);
+	}, [itemGroups, filesByPath, fileContents, openFile, collapseOverrides]);
 
 	const renderCustomHeader = useCallback(
 		(item: CodeViewItem<ReferenceAnnotationMetadata>) => {
 			const group = itemGroups.get(item.id);
 			if (group === undefined || block === null) return null;
 			const status = statusByItemId.get(item.id);
+			const collapsed = item.collapsed === true;
 			return (
 				<ReferenceLocationHeader
+					collapsed={collapsed}
 					drift={changedPaths.get(group.path)}
 					itemId={item.id}
+					onToggleCollapse={() => setCollapseOverride(item.id, !collapsed)}
 					onToggleReviewed={
 						status === undefined
 							? undefined
-							: () =>
+							: () => {
+									clearCollapseOverride(item.id);
 									setRangeViewed({
 										path: group.path,
 										blockId: block.id,
 										blockLabel: block.label,
 										ranges: group.ranges,
 										viewed: status !== "reviewed",
-									})
+									});
+								}
 					}
 					path={group.path}
 					ranges={group.ranges}
@@ -250,7 +278,15 @@ export function ReferencePane({
 				/>
 			);
 		},
-		[itemGroups, changedPaths, statusByItemId, block, setRangeViewed],
+		[
+			itemGroups,
+			changedPaths,
+			statusByItemId,
+			block,
+			setRangeViewed,
+			setCollapseOverride,
+			clearCollapseOverride,
+		],
 	);
 
 	const renderAnnotation = useCallback(
@@ -259,7 +295,14 @@ export function ReferencePane({
 				| LineAnnotation<ReferenceAnnotationMetadata>
 				| DiffLineAnnotation<ReferenceAnnotationMetadata>,
 		) => (
-			<div className="flex flex-col items-center gap-2 px-3 py-6 text-center text-destructive-foreground text-xs">
+			<div
+				className={cn(
+					"flex flex-col items-center gap-2 px-3 py-6 text-center text-xs",
+					annotation.metadata.type === "reviewed-empty"
+						? "text-muted-foreground"
+						: "text-destructive-foreground",
+				)}
+			>
 				<span>{annotation.metadata.message}</span>
 				{annotation.metadata.action && (
 					<button
@@ -336,6 +379,7 @@ function errorItem(
 	path: string,
 	message: string,
 	action?: { label: string; onClick: () => void },
+	collapsed = false,
 ): CodeViewItem<ReferenceAnnotationMetadata> {
 	return {
 		id,
@@ -344,7 +388,36 @@ function errorItem(
 		annotations: [
 			{ lineNumber: 1, metadata: { type: "error", message, action } },
 		] satisfies LineAnnotation<ReferenceAnnotationMetadata>[],
-		version: hashItemVersion(`error:${id}`),
+		collapsed,
+		version: hashItemVersion(`error:${id}:${collapsed}`),
+	};
+}
+
+function reviewedEmptyItem(
+	id: string,
+	path: string,
+	collapsed: boolean,
+): CodeViewItem<ReferenceAnnotationMetadata> {
+	return {
+		id,
+		type: "file",
+		file: {
+			name: path,
+			contents: " ",
+			lang: "text",
+			cacheKey: `reviewed-empty:${id}`,
+		},
+		annotations: [
+			{
+				lineNumber: 1,
+				metadata: {
+					type: "reviewed-empty",
+					message: "No changes since your last pass.",
+				},
+			},
+		],
+		collapsed,
+		version: hashItemVersion(`reviewed-empty:${id}:${collapsed}`),
 	};
 }
 
@@ -354,33 +427,49 @@ function checkboxDomId(itemId: string): string {
 }
 
 function ReferenceLocationHeader({
+	collapsed,
 	itemId,
 	path,
 	ranges,
 	drift,
 	status,
+	onToggleCollapse,
 	onToggleReviewed,
 }: {
+	collapsed: boolean;
 	itemId: string;
 	path: string;
 	ranges: readonly LineRange[];
 	drift: FileDrift | undefined;
 	status: GroupReviewStatus | undefined;
+	onToggleCollapse: () => void;
 	onToggleReviewed: (() => void) | undefined;
 }): React.ReactElement {
 	const { dirname, basename } = splitPath(path);
 	const domId = checkboxDomId(itemId);
 
 	return (
+		// biome-ignore lint/a11y/useSemanticElements: the row contains the Reviewed checkbox and its label.
 		<div
+			aria-expanded={!collapsed}
 			className={cn(
-				"flex min-w-0 flex-1 items-center gap-3 px-3",
-				// This row *is* the card's top edge, same as `DiffFileHeader`'s — see
-				// `diffCardHeaderClassName`. Locations here have no collapsed state,
-				// so there's always a body under it: always the expanded form.
-				diffCardHeaderClassName(false),
+				"flex min-w-0 flex-1 cursor-pointer items-center gap-3 px-3",
+				diffCardHeaderClassName(collapsed),
 			)}
+			onClick={onToggleCollapse}
+			onKeyDown={(event) => {
+				if (event.key !== "Enter" && event.key !== " ") return;
+				event.preventDefault();
+				onToggleCollapse();
+			}}
+			role="button"
+			tabIndex={0}
 		>
+			{collapsed ? (
+				<ChevronRightIcon className="size-3.5 shrink-0 text-muted-foreground" />
+			) : (
+				<ChevronDownIcon className="size-3.5 shrink-0 text-muted-foreground" />
+			)}
 			<span className="flex min-w-0 flex-1 items-baseline gap-1.5 truncate font-mono text-xs">
 				{dirname && (
 					<span className="truncate text-muted-foreground">{dirname}/</span>
@@ -405,13 +494,14 @@ function ReferenceLocationHeader({
 				<label
 					className="flex shrink-0 cursor-pointer items-center gap-1.5 text-muted-foreground text-xs"
 					htmlFor={domId}
+					onClick={(event) => event.stopPropagation()}
+					onKeyDown={(event) => event.stopPropagation()}
 				>
 					<Checkbox
 						checked={status === "reviewed"}
 						id={domId}
 						indeterminate={status === "partial"}
 						onCheckedChange={() => onToggleReviewed()}
-						onClick={(event) => event.stopPropagation()}
 					/>
 					Reviewed
 				</label>
