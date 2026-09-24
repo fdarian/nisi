@@ -51,6 +51,8 @@ type DiffSelectionPopoverProps = {
 	 * two are separate.
 	 */
 	anchorRect: DOMRect | null;
+	getScrollElement: () => HTMLElement | undefined;
+	onForwardedWheel?: () => void;
 	/**
 	 * Called when the user presses Escape to dismiss without copying, or
 	 * clicks "Ask" (which, unlike "Copy reference", closes the popover once
@@ -81,6 +83,8 @@ export function DiffSelectionPopover({
 	orpc,
 	reference,
 	anchorRect,
+	getScrollElement,
+	onForwardedWheel,
 	onDismiss,
 }: DiffSelectionPopoverProps): React.ReactElement | null {
 	const [copied, setCopied] = useState(false);
@@ -166,6 +170,14 @@ export function DiffSelectionPopover({
 				>
 					<PopoverPrimitive.Popup
 						className="outline-none"
+						onWheel={(event) => {
+							if (event.deltaMode !== WheelEvent.DOM_DELTA_PIXEL) return;
+							const scrollElement = getScrollElement();
+							if (scrollElement === undefined) return;
+							event.preventDefault();
+							onForwardedWheel?.();
+							scrollElement.scrollBy({ left: event.deltaX, top: event.deltaY });
+						}}
 						// Cosmetic only, matching the `data-slot` convention every other
 						// shared-UI primitive in this app sets on itself. The
 						// selection-clearing logic in `use-diff-selection.ts` does NOT

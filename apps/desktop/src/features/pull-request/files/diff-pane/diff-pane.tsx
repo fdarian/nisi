@@ -1485,7 +1485,11 @@ export function DiffPane({
 			/>
 			<DiffSelectionPopover
 				anchorRect={diffSelection.anchorRect}
+				getScrollElement={() =>
+					codeViewRef.current?.getInstance()?.getContainerElement()
+				}
 				onDismiss={diffSelection.clearSelection}
+				onForwardedWheel={releaseProgrammaticScrollSuppression}
 				orpc={orpc}
 				reference={diffSelection.reference}
 				sessionId={sessionId}
