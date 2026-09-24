@@ -260,6 +260,13 @@ export type PullRequestCheck = Schema.Schema.Type<typeof PullRequestCheck>;
  * Error codes mirror `merge`'s minus `CONFLICT` — readiness doesn't depend on
  * mergeability, so there's no analogous "not mergeable right now" outcome.
  */
+const MergeFailure = Schema.toStandardSchemaV1(
+	Schema.Struct({
+		reason: Schema.String,
+		detail: Schema.String,
+	}),
+);
+
 export const pullRequestsContract = {
 	search: oc
 		.input(Schema.Struct({ query: Schema.String }))
@@ -339,10 +346,10 @@ export const pullRequestsContract = {
 		)
 		.output(Schema.Void)
 		.errors({
-			CONFLICT: {},
-			GH_NOT_AUTHENTICATED: {},
-			NOT_FOUND: {},
-			SERVICE_UNAVAILABLE: {},
+			CONFLICT: { data: MergeFailure },
+			GH_NOT_AUTHENTICATED: { data: MergeFailure },
+			NOT_FOUND: { data: MergeFailure },
+			SERVICE_UNAVAILABLE: { data: MergeFailure },
 		}),
 	mergeStack: oc
 		.input(
@@ -356,10 +363,10 @@ export const pullRequestsContract = {
 		)
 		.output(Schema.Void)
 		.errors({
-			CONFLICT: {},
-			GH_NOT_AUTHENTICATED: {},
-			NOT_FOUND: {},
-			SERVICE_UNAVAILABLE: {},
+			CONFLICT: { data: MergeFailure },
+			GH_NOT_AUTHENTICATED: { data: MergeFailure },
+			NOT_FOUND: { data: MergeFailure },
+			SERVICE_UNAVAILABLE: { data: MergeFailure },
 		}),
 	markReady: oc
 		.input(

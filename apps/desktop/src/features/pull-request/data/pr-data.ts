@@ -1030,11 +1030,13 @@ export type MergePullRequestParams = {
  * call-level `.mutate` callbacks run after the mutation has already settled,
  * leaving a gap where the button can briefly show its old merge-method label.
  */
-export function useMergePullRequest(orpc: SidecarQueryUtils): {
+export function useMergePullRequest(
+	orpc: SidecarQueryUtils,
+	onError: (error: unknown, params: MergePullRequestParams) => void,
+): {
 	merge: (params: MergePullRequestParams) => void;
 	mergeStack: (params: MergePullRequestParams) => void;
 	isPending: boolean;
-	error: unknown;
 } {
 	const queryClient = useQueryClient();
 
@@ -1082,10 +1084,12 @@ export function useMergePullRequest(orpc: SidecarQueryUtils): {
 	const mutation = useMutation({
 		...orpc.pullRequests.merge.mutationOptions(),
 		onSuccess: (_data, params) => onSuccess(params),
+		onError,
 	});
 	const stackMutation = useMutation({
 		...orpc.pullRequests.mergeStack.mutationOptions(),
 		onSuccess: (_data, params) => onSuccess(params),
+		onError,
 	});
 
 	const merge = useCallback(
@@ -1106,7 +1110,6 @@ export function useMergePullRequest(orpc: SidecarQueryUtils): {
 		merge,
 		mergeStack,
 		isPending: mutation.isPending || stackMutation.isPending,
-		error: mutation.error ?? stackMutation.error,
 	};
 }
 
