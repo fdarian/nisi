@@ -4,7 +4,7 @@ export type StackMergeInfo = {
 	count: number;
 };
 
-/** Returns the number of unmerged layers that GitHub will merge through the current PR. */
+/** Returns the stack merge's unmerged layer count for a current, unmerged stack member. */
 export function deriveStackMerge(
 	stack: PullRequestStack | null | undefined,
 	currentNumber: number,
@@ -17,5 +17,5 @@ export function deriveStackMerge(
 	const count = stack.entries.filter(
 		(entry) => entry.position <= current.position && entry.state !== "MERGED",
 	).length;
-	return count > 1 ? { count } : null;
+	return { count };
 }

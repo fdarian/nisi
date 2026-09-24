@@ -168,6 +168,13 @@ export const PullRequestCheck = Schema.Struct({
 });
 export type PullRequestCheck = Schema.Schema.Type<typeof PullRequestCheck>;
 
+const MergeFailure = Schema.toStandardSchemaV1(
+	Schema.Struct({
+		reason: Schema.String,
+		detail: Schema.String,
+	}),
+);
+
 /**
  * `search` asks GitHub live via `@repo/git`'s `searchPullRequests` — no
  * local index or cache, so every call is a real `gh search prs` round trip.
@@ -339,10 +346,10 @@ export const pullRequestsContract = {
 		)
 		.output(Schema.Void)
 		.errors({
-			CONFLICT: {},
-			GH_NOT_AUTHENTICATED: {},
-			NOT_FOUND: {},
-			SERVICE_UNAVAILABLE: {},
+			CONFLICT: { data: MergeFailure },
+			GH_NOT_AUTHENTICATED: { data: MergeFailure },
+			NOT_FOUND: { data: MergeFailure },
+			SERVICE_UNAVAILABLE: { data: MergeFailure },
 		}),
 	mergeStack: oc
 		.input(
@@ -356,10 +363,10 @@ export const pullRequestsContract = {
 		)
 		.output(Schema.Void)
 		.errors({
-			CONFLICT: {},
-			GH_NOT_AUTHENTICATED: {},
-			NOT_FOUND: {},
-			SERVICE_UNAVAILABLE: {},
+			CONFLICT: { data: MergeFailure },
+			GH_NOT_AUTHENTICATED: { data: MergeFailure },
+			NOT_FOUND: { data: MergeFailure },
+			SERVICE_UNAVAILABLE: { data: MergeFailure },
 		}),
 	markReady: oc
 		.input(

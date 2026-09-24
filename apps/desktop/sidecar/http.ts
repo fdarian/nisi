@@ -18,6 +18,8 @@ import {
 	markPullRequestReady,
 	mergePullRequest,
 	mergeStackPullRequest,
+	type PullRequestMergeError,
+	type PullRequestStackMergeError,
 	resolveUnpushedCommitCount,
 	searchPullRequests,
 	type WorktreeReadFailed,
@@ -92,6 +94,33 @@ import {
 	getGeneration,
 } from "./walkthrough/generation-log.ts";
 import { WalkthroughStore } from "./walkthrough/store.ts";
+
+type MergeError =
+	| PullRequestMergeError
+	| PullRequestStackMergeError
+	| GitCommandError;
+
+const mergeFailureDetail = (error: MergeError): string => {
+	if (error._tag === "GhOutputDecodeError") {
+		return `${error.command}: ${error.raw}\n${String(error.cause)}`;
+	}
+	if (error._tag === "GitCommandError") {
+		return `${error.command} ${error.args.join(" ")} (exit ${error.exitCode}): ${error.stderr}\n${String(error.cause)}`;
+	}
+	return error.reason;
+};
+
+const logMergeFailure = (
+	operation: "pull request merge" | "pull request stack merge",
+	input: { owner: string; repo: string; number: number; method: string },
+	error: MergeError,
+) =>
+	Effect.logWarning(`${operation} failed`, {
+		pr: `${input.owner}/${input.repo}#${input.number}`,
+		method: input.method,
+		reason: error._tag,
+		detail: mergeFailureDetail(error),
+	});
 
 /**
  * `@repo/settings`'s `Settings` keeps `enabledHarnesses` as a loose
@@ -1400,10 +1429,17 @@ export function attachRouter(
 					input.number,
 					input.method,
 				).pipe(
+					Effect.tapError((cause) =>
+						logMergeFailure("pull request merge", input, cause),
+					),
 					Effect.catchTag("GhNotAuthenticated", (cause) =>
 						Effect.fail(
 							errors.GH_NOT_AUTHENTICATED({
 								message: `gh is not authenticated: ${cause.reason}`,
+								data: {
+									reason: "Authentication required",
+									detail: cause.reason,
+								},
 							}),
 						),
 					),
@@ -1411,6 +1447,10 @@ export function attachRouter(
 						Effect.fail(
 							errors.NOT_FOUND({
 								message: `pull request #${cause.number} couldn't be resolved on GitHub for ${cause.repoRoot}: ${cause.reason}`,
+								data: {
+									reason: "Pull request not found",
+									detail: cause.reason,
+								},
 							}),
 						),
 					),
@@ -1418,6 +1458,7 @@ export function attachRouter(
 						Effect.fail(
 							errors.CONFLICT({
 								message: `pull request #${cause.number} isn't mergeable right now: ${cause.reason}`,
+								data: { reason: "Merge blocked", detail: cause.reason },
 							}),
 						),
 					),
@@ -1425,6 +1466,10 @@ export function attachRouter(
 						Effect.fail(
 							errors.SERVICE_UNAVAILABLE({
 								message: `gh pr merge failed for pull request #${cause.number}: ${cause.reason}`,
+								data: {
+									reason: "GitHub rejected the merge",
+									detail: cause.reason,
+								},
 							}),
 						),
 					),
@@ -1432,6 +1477,10 @@ export function attachRouter(
 						Effect.fail(
 							errors.SERVICE_UNAVAILABLE({
 								message: `${cause.command} could not be run: ${cause.stderr || String(cause.cause)}`,
+								data: {
+									reason: "Couldn't run gh",
+									detail: mergeFailureDetail(cause),
+								},
 							}),
 						),
 					),
@@ -1472,10 +1521,17 @@ export function attachRouter(
 					input.number,
 					input.method,
 				).pipe(
+					Effect.tapError((cause) =>
+						logMergeFailure("pull request stack merge", input, cause),
+					),
 					Effect.catchTag("GhNotAuthenticated", (cause) =>
 						Effect.fail(
 							errors.GH_NOT_AUTHENTICATED({
 								message: `gh is not authenticated: ${cause.reason}`,
+								data: {
+									reason: "Authentication required",
+									detail: cause.reason,
+								},
 							}),
 						),
 					),
@@ -1483,6 +1539,10 @@ export function attachRouter(
 						Effect.fail(
 							errors.NOT_FOUND({
 								message: `pull request #${cause.number} couldn't be resolved on GitHub for ${cause.repoRoot}: ${cause.reason}`,
+								data: {
+									reason: "Pull request not found",
+									detail: cause.reason,
+								},
 							}),
 						),
 					),
@@ -1490,6 +1550,7 @@ export function attachRouter(
 						Effect.fail(
 							errors.CONFLICT({
 								message: `pull request #${cause.number} isn't mergeable right now: ${cause.reason}`,
+								data: { reason: "Merge blocked", detail: cause.reason },
 							}),
 						),
 					),
@@ -1497,6 +1558,10 @@ export function attachRouter(
 						Effect.fail(
 							errors.SERVICE_UNAVAILABLE({
 								message: `GitHub stacked merge failed for pull request #${cause.number}: ${cause.reason}`,
+								data: {
+									reason: "GitHub rejected the stack merge",
+									detail: cause.reason,
+								},
 							}),
 						),
 					),
@@ -1504,6 +1569,10 @@ export function attachRouter(
 						Effect.fail(
 							errors.SERVICE_UNAVAILABLE({
 								message: `gh returned output nisi couldn't parse (${cause.command})`,
+								data: {
+									reason: "Invalid GitHub response",
+									detail: mergeFailureDetail(cause),
+								},
 							}),
 						),
 					),
@@ -1511,6 +1580,10 @@ export function attachRouter(
 						Effect.fail(
 							errors.SERVICE_UNAVAILABLE({
 								message: `${cause.command} could not be run: ${cause.stderr || String(cause.cause)}`,
+								data: {
+									reason: "Couldn't run gh",
+									detail: mergeFailureDetail(cause),
+								},
 							}),
 						),
 					),

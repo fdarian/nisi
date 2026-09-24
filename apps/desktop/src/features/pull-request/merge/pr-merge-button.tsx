@@ -1,6 +1,6 @@
 "use client";
 
-import { ORPCError } from "@orpc/client";
+import { isDefinedError, ORPCError } from "@orpc/client";
 import { cn } from "cn";
 import { ChevronDownIcon } from "lucide-react";
 import { useCallback, useState } from "react";
@@ -13,8 +13,10 @@ import {
 	DropdownMenuRadioItem,
 	DropdownMenuTrigger,
 } from "#/components/ui/menu";
+import { toastManager } from "#/components/ui/toast";
 import type {
 	MergeMethod,
+	MergePullRequestError,
 	PullRequestMergeStatus,
 	UnpushedCommitsCheck,
 } from "#/features/pull-request/data/pr-data";
@@ -26,6 +28,7 @@ import {
 } from "#/features/pull-request/data/pr-data";
 import { useDismissOnInactive } from "#/features/pull-request/use-dismiss-on-inactive";
 import type { SidecarQueryUtils } from "#/infra/backend-context";
+import { MergeErrorDialog, type MergeFailure } from "./merge-error-dialog";
 import { deriveStackMerge } from "./pr-stack-merge";
 import { UnpushedCommitsDialog } from "./unpushed-commits-dialog";
 
@@ -74,6 +77,18 @@ const mergeStatusErrorMessage = (error: unknown): string => {
 	}
 	if (error instanceof Error) return error.message;
 	return "Couldn't check whether this pull request can be merged.";
+};
+
+const mergeFailureMessage = (
+	error: MergePullRequestError,
+): Pick<MergeFailure, "reason" | "detail"> => {
+	if (isDefinedError(error) && error.code !== "UNAUTHORIZED") {
+		return { reason: error.data.reason, detail: error.data.detail };
+	}
+	return {
+		reason: "Merge failed",
+		detail: error instanceof Error ? error.message : String(error),
+	};
 };
 
 /**
@@ -178,7 +193,31 @@ export function PrMergeButton({
 		{ owner, repo, number },
 		watched,
 	);
-	const { merge, mergeStack, isPending: isMerging } = useMergePullRequest(orpc);
+	const [mergeFailure, setMergeFailure] = useState<MergeFailure | null>(null);
+	const handleMergeError = useCallback(
+		(error: MergePullRequestError, params: { number: number }) => {
+			const message = mergeFailureMessage(error);
+			const failure = {
+				title: `Couldn't merge #${params.number}`,
+				...message,
+			};
+			toastManager.add({
+				title: failure.title,
+				description: failure.reason,
+				type: "error",
+				actionProps: {
+					children: "View details",
+					onClick: () => setMergeFailure(failure),
+				},
+			});
+		},
+		[],
+	);
+	const {
+		merge,
+		mergeStack,
+		isPending: isMerging,
+	} = useMergePullRequest(orpc, handleMergeError);
 	const { check: checkUnpushedCommits, isPending: isCheckingUnpushed } =
 		useUnpushedCommitsCheck(orpc);
 
@@ -252,7 +291,7 @@ export function PrMergeButton({
 	const allowedMethods = statusQuery.data?.allowedMethods ?? [];
 	const showMethodPicker = allowedMethods.length > 1;
 	const buttonLabel =
-		!disabled && stackMerge !== null && method !== null
+		!disabled && stackMerge !== null && stackMerge.count > 1 && method !== null
 			? METHOD_STACK_LABEL[method]
 			: label;
 
@@ -267,7 +306,7 @@ export function PrMergeButton({
 					variant="outline"
 				>
 					{buttonLabel}
-					{!disabled && stackMerge !== null && (
+					{!disabled && stackMerge !== null && stackMerge.count > 1 && (
 						<span className="rounded-full bg-muted px-1.5 py-0.5 font-mono text-[10px] tabular-nums">
 							{stackMerge.count}
 						</span>
@@ -327,6 +366,12 @@ export function PrMergeButton({
 				}}
 				onOpenChange={(open) => {
 					if (!open) setPendingUnpushedCheck(null);
+				}}
+			/>
+			<MergeErrorDialog
+				failure={mergeFailure}
+				onOpenChange={(open) => {
+					if (!open) setMergeFailure(null);
 				}}
 			/>
 		</>

@@ -14,7 +14,8 @@
  * one field (the boolean) that's honest to predict — see that hook's doc
  * comment for the split.
  */
-import { ORPCError } from "@orpc/client";
+import { type InferClientError, ORPCError } from "@orpc/client";
+import type { SidecarClient } from "@repo/sidecar-api";
 import type { Query, UseQueryResult } from "@tanstack/react-query";
 import {
 	useMutation,
@@ -1023,6 +1024,10 @@ export type MergePullRequestParams = {
 	method: MergeMethod;
 };
 
+export type MergePullRequestError =
+	| InferClientError<SidecarClient["pullRequests"]["merge"]>
+	| Error;
+
 /**
  * `pullRequests.merge`/`mergeStack` — on success writes the confirmed terminal
  * state into this PR's `mergeStatus` cache, then refetches it and the sessions
@@ -1030,11 +1035,16 @@ export type MergePullRequestParams = {
  * call-level `.mutate` callbacks run after the mutation has already settled,
  * leaving a gap where the button can briefly show its old merge-method label.
  */
-export function useMergePullRequest(orpc: SidecarQueryUtils): {
+export function useMergePullRequest(
+	orpc: SidecarQueryUtils,
+	onError: (
+		error: MergePullRequestError,
+		params: MergePullRequestParams,
+	) => void,
+): {
 	merge: (params: MergePullRequestParams) => void;
 	mergeStack: (params: MergePullRequestParams) => void;
 	isPending: boolean;
-	error: unknown;
 } {
 	const queryClient = useQueryClient();
 
@@ -1082,10 +1092,12 @@ export function useMergePullRequest(orpc: SidecarQueryUtils): {
 	const mutation = useMutation({
 		...orpc.pullRequests.merge.mutationOptions(),
 		onSuccess: (_data, params) => onSuccess(params),
+		onError,
 	});
 	const stackMutation = useMutation({
 		...orpc.pullRequests.mergeStack.mutationOptions(),
 		onSuccess: (_data, params) => onSuccess(params),
+		onError,
 	});
 
 	const merge = useCallback(
@@ -1106,7 +1118,6 @@ export function useMergePullRequest(orpc: SidecarQueryUtils): {
 		merge,
 		mergeStack,
 		isPending: mutation.isPending || stackMutation.isPending,
-		error: mutation.error ?? stackMutation.error,
 	};
 }
 
