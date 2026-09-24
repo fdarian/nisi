@@ -1,8 +1,11 @@
 "use client";
 
-import { cn } from "cn";
-/** Shared walkthrough/chat model picker, grouped by harness so headers stay out of filtering and keyboard navigation. */
+/** Shared walkthrough/chat model picker. Groups keep headers out of filtering and keyboard navigation; search matches tokens across harness and model details. */
 import { useMemo } from "react";
+import {
+	matchesModelQuery,
+	type SearchableModelOption,
+} from "#/components/harness-model-search";
 import {
 	Combobox,
 	ComboboxEmpty,
@@ -24,11 +27,9 @@ export type ModelSelection = {
 	modelId: string | undefined;
 };
 
-type ModelOption = {
+type ModelOption = SearchableModelOption & {
 	value: string;
-	label: string;
 	harness: HarnessId;
-	modelId: string | undefined;
 };
 
 type ModelOptionGroup = { label: string; items: readonly ModelOption[] };
@@ -44,16 +45,6 @@ type HarnessModelComboboxProps = {
 	loadingHarnesses?: readonly HarnessId[];
 	value: ModelSelection | null;
 	onChange: (value: ModelSelection) => void;
-	/**
-	 * Shown in place of the popup's default "No matching models." when every
-	 * group is empty. Lets `GeneratePanel` distinguish "discovery failed for
-	 * every enabled harness" (an actionable, specific message) from a genuine
-	 * no-search-results state, which the model query's status alone
-	 * determines but this component has no other reason to know about.
-	 */
-	emptyMessage?: string;
-	/** Pins each group's label to the top of the popup while its models scroll underneath. Disables the popup's top scroll-fade, since the sticky label already occludes the content behind it. */
-	stickyGroupLabels?: boolean;
 };
 
 /** Only enabled harnesses get a model group — `HarnessInfo.enabled` already reflects `@repo/settings`'s `enabledHarnesses` server-side, so there's no separate id set to thread through. */
@@ -64,8 +55,6 @@ export function HarnessModelCombobox({
 	loadingHarnesses = [],
 	value,
 	onChange,
-	emptyMessage = "No matching models.",
-	stickyGroupLabels = true,
 }: HarnessModelComboboxProps): React.ReactElement {
 	const groups = useMemo<readonly ModelOptionGroup[]>(() => {
 		const result: ModelOptionGroup[] = [];
@@ -78,6 +67,7 @@ export function HarnessModelCombobox({
 					value: optionValue(harness.id, model.id),
 					label: model.label,
 					harness: harness.id,
+					harnessLabel: harness.label,
 					modelId: model.id,
 				}),
 			);
@@ -101,6 +91,7 @@ export function HarnessModelCombobox({
 
 	return (
 		<Combobox<ModelOption>
+			filter={matchesModelQuery}
 			items={groups}
 			onValueChange={(option) => {
 				if (option === null) return;
@@ -121,16 +112,12 @@ export function HarnessModelCombobox({
 					</p>
 				)}
 				<ComboboxEmpty>
-					{isLoading ? "Loading models…" : emptyMessage}
+					{isLoading ? "Loading models…" : "No matching models."}
 				</ComboboxEmpty>
-				<ComboboxList scrollFadeTop={!stickyGroupLabels}>
+				<ComboboxList scrollFadeTop={false}>
 					{(group: ModelOptionGroup) => (
 						<ComboboxGroup items={group.items} key={group.label}>
-							<ComboboxGroupLabel
-								className={cn(
-									stickyGroupLabels && "sticky top-0 z-10 bg-popover",
-								)}
-							>
+							<ComboboxGroupLabel className="sticky top-0 z-10 bg-popover">
 								{group.label}
 							</ComboboxGroupLabel>
 							{group.items.map((option) => (
