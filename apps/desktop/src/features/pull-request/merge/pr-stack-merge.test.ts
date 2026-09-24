@@ -43,23 +43,29 @@ describe("deriveStackMerge", () => {
 		expect(deriveStackMerge(STACK, 43)).toEqual({ count: 2 });
 	});
 
-	test("keeps the regular merge when the current PR is the only unmerged layer", () => {
+	test("uses the stack merge for the bottom PR even when only one layer will merge", () => {
+		expect(deriveStackMerge(STACK, 41)).toEqual({ count: 1 });
+	});
+
+	test("uses the stack merge when the current PR is the only unmerged layer", () => {
 		expect(
 			deriveStackMerge(
 				{
 					...STACK,
 					entries: STACK.entries.map((entry) => ({
 						...entry,
-						state: "MERGED" as const,
+						state:
+							entry.number === 43 ? ("OPEN" as const) : ("MERGED" as const),
 					})),
 				},
 				43,
 			),
-		).toBeNull();
+		).toEqual({ count: 1 });
 	});
 
-	test("returns no stack merge for an absent stack or unknown PR", () => {
+	test("returns no stack merge for an absent stack, unknown PR, or merged member", () => {
 		expect(deriveStackMerge(null, 43)).toBeNull();
 		expect(deriveStackMerge(STACK, 99)).toBeNull();
+		expect(deriveStackMerge(STACK, 42)).toBeNull();
 	});
 });

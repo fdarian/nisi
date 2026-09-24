@@ -291,7 +291,7 @@ export function PrMergeButton({
 	const allowedMethods = statusQuery.data?.allowedMethods ?? [];
 	const showMethodPicker = allowedMethods.length > 1;
 	const buttonLabel =
-		!disabled && stackMerge !== null && method !== null
+		!disabled && stackMerge !== null && stackMerge.count > 1 && method !== null
 			? METHOD_STACK_LABEL[method]
 			: label;
 
@@ -306,7 +306,7 @@ export function PrMergeButton({
 					variant="outline"
 				>
 					{buttonLabel}
-					{!disabled && stackMerge !== null && (
+					{!disabled && stackMerge !== null && stackMerge.count > 1 && (
 						<span className="rounded-full bg-muted px-1.5 py-0.5 font-mono text-[10px] tabular-nums">
 							{stackMerge.count}
 						</span>
