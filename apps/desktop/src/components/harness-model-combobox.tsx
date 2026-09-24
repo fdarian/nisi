@@ -1,5 +1,6 @@
 "use client";
 
+/** Shared walkthrough/chat model picker. Groups keep headers out of filtering and keyboard navigation; search matches tokens across harness and model details. */
 import { useMemo } from "react";
 import {
 	matchesModelQuery,
