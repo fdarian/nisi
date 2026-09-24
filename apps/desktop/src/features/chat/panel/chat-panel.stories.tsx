@@ -90,7 +90,11 @@ function ChatPanelFrame({
 			style={{ width }}
 		>
 			<ScrollArea scrollFade style={{ height: 480 }}>
-				<MessageList isWaitingForFirstReply={false} messages={messages} />
+				<MessageList
+					isWaitingForFirstReply={false}
+					messages={messages}
+					sandboxPhase={null}
+				/>
 			</ScrollArea>
 		</div>
 	);

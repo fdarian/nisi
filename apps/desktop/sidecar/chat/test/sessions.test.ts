@@ -177,6 +177,8 @@ describe("closeChatThreadsForSession", () => {
 		const pending = chatSessions.getOrCreateChatSession(
 			paramsFor(sessionId, threadId),
 		);
+		expect(chatSessions.hasChatSession(threadId)).toBe(true);
+		await Promise.resolve();
 		const resolve = resolvePendingCreateSession;
 		if (resolve === undefined) {
 			throw new Error("fake createSession did not expose its resolver");
