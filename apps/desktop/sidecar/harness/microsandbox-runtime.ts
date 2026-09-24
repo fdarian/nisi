@@ -60,7 +60,11 @@ export const loadMicrosandbox = async () => {
 		directory,
 		"microsandbox.darwin-arm64.node",
 	);
-	process.env.MSB_PATH = join(directory, "bin/msb");
-	process.env.MSB_LIBKRUNFW_PATH = join(directory, "lib/libkrunfw.5.dylib");
-	return import("ai-microsandbox");
+	const runtime = await import("ai-microsandbox");
+	const native = await import("microsandbox/native");
+	// The compiled bundle loads the native resolver before this lazy download;
+	// its startup-time environment lookup cannot see paths set here afterward.
+	native.setRuntimeMsbPath(join(directory, "bin/msb"));
+	native.setRuntimeLibkrunfwPath(join(directory, "lib/libkrunfw.5.dylib"));
+	return runtime;
 };
