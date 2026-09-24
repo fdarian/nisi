@@ -24,12 +24,12 @@ import type {
 import type { CodeViewHandle } from "@pierre/diffs/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { DiffSelectionReference } from "#/features/diff/diff-reference";
-import { type HeadRange, selectionHeadRange } from "./selection-head-range";
 import {
 	isEventOriginOnGutter,
 	paintedSelectionMatchesRange,
 	pollUntilReady,
 } from "#/features/diff/viewer/diff-match-dom";
+import { type HeadRange, selectionHeadRange } from "./selection-head-range";
 
 type UseDiffSelectionOptions<Metadata> = {
 	/** The same `CodeViewHandle` ref passed to `<DiffCodeView ref>` — used to reach a selected item's rendered shadow root (for the gutter path's anchor rect) and to resolve which item id a native text selection landed in. */
@@ -193,7 +193,7 @@ function resolveActiveTextSelection(
  * attribute, defined once and imported by both sides, means the two can't
  * drift apart again and doesn't reach into a module this feature doesn't own.
  */
-const DIFF_SELECTION_POPUP_ATTRIBUTE = "data-diff-selection-popup";
+export const DIFF_SELECTION_POPUP_ATTRIBUTE = "data-diff-selection-popup";
 
 /** Spread onto the floating "Copy reference" popup's root DOM node — see `DIFF_SELECTION_POPUP_ATTRIBUTE`'s doc comment. */
 export const diffSelectionPopupMarkerProps = {

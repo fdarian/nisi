@@ -14,6 +14,7 @@
  */
 import type { FileDiffMetadata } from "@pierre/diffs";
 import { parseDiffFromFile, parsePatchFiles } from "@pierre/diffs";
+import { hashItemVersion } from "#/features/diff/viewer/item-version";
 import type {
 	FileChange,
 	FileContent,
@@ -24,16 +25,19 @@ export function buildFileDiff(
 	content: FileContent,
 ): FileDiffMetadata | undefined {
 	if (!content.truncated) {
+		// A range claim changes the reviewed baseline without changing the file fingerprint;
+		// Pierre uses these keys, not the parsed hunks, to decide whether to reuse a render.
+		const contentKey = `${content.review?.baselineKind ?? "base"}:${hashItemVersion(content.patch)}`;
 		return parseDiffFromFile(
 			{
 				name: file.oldPath ?? file.path,
 				contents: content.oldContent ?? "",
-				cacheKey: `${file.fingerprint}:old`,
+				cacheKey: `${file.fingerprint}:${contentKey}:old`,
 			},
 			{
 				name: file.path,
 				contents: content.newContent ?? "",
-				cacheKey: `${file.fingerprint}:new`,
+				cacheKey: `${file.fingerprint}:${contentKey}:new`,
 			},
 		);
 	}

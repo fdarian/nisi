@@ -26,6 +26,7 @@ import {
 	diffContentMatchesQuery,
 	findDiffMatches,
 } from "#/features/diff/diff-search";
+import { DIFF_SELECTION_POPUP_ATTRIBUTE } from "#/features/diff/selection/use-diff-selection";
 import type {
 	FileChange,
 	FileContentsMap,
@@ -568,7 +569,11 @@ export function FilesChangedView({
 			// Mirrors `r` exactly — same toggle, same undo-stack push — but walks
 			// `queryFilteredFiles` backward instead of forward.
 			R: () => handleToggleReviewed(-1),
-			u: handleUndo,
+			u: () => {
+				if (document.querySelector(`[${DIFF_SELECTION_POPUP_ATTRIBUTE}]`))
+					return;
+				handleUndo();
+			},
 			"o e": handleOpenInPreferredEditor,
 			"o g": handleOpenPrInGitHub,
 			// Suppressed while the filter input has focus (bare-key guard in

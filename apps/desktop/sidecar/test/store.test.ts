@@ -103,6 +103,95 @@ describe("Store.openSession — branch target with an explicit baseRef", () => {
 	});
 });
 
+test("range claims change the Files Changed patch for a single added line", async () => {
+	await withTestRepoAndDataDir(async (repoRoot, dataDir) => {
+		const baseLines = Array.from(
+			{ length: 45 },
+			(_, index) => `line ${index + 1}`,
+		);
+		await Bun.write(join(repoRoot, "a.ts"), `${baseLines.join("\n")}\n`);
+		await sh(repoRoot, ["add", "-A"]);
+		await sh(repoRoot, ["commit", "-q", "-m", "base lines"]);
+		await sh(repoRoot, ["checkout", "-q", "-b", "feature"]);
+		const headLines = [...baseLines];
+		headLines.splice(41, 0, "selected addition");
+		headLines[4] = "another change";
+		await Bun.write(join(repoRoot, "a.ts"), `${headLines.join("\n")}\n`);
+		await sh(repoRoot, ["add", "-A"]);
+		await sh(repoRoot, ["commit", "-q", "-m", "changes"]);
+
+		const result = await Effect.runPromise(
+			Effect.gen(function* () {
+				const store = yield* Store;
+				const session = yield* store.openSession(repoRoot, {
+					kind: "branch",
+					baseRef: "main",
+				});
+				const before = yield* store.readFileContents(
+					session.id,
+					[{ path: "a.ts", force: false }],
+					false,
+				);
+				yield* store.setRangeViewed(
+					session.id,
+					"a.ts",
+					"selection:test",
+					"Selection L42",
+					[{ startLine: 42, endLine: 42 }],
+					true,
+				);
+				const after = yield* store.readFileContents(
+					session.id,
+					[{ path: "a.ts", force: false }],
+					false,
+				);
+				yield* store.setRangeViewed(
+					session.id,
+					"a.ts",
+					"selection:test",
+					"Selection L42",
+					[{ startLine: 42, endLine: 42 }],
+					false,
+				);
+				yield* store.setRangeViewed(
+					session.id,
+					"a.ts",
+					"walkthrough:block",
+					"Walkthrough block",
+					[{ startLine: 42, endLine: 42 }],
+					true,
+				);
+				const walkthroughAfter = yield* store.readFileContents(
+					session.id,
+					[{ path: "a.ts", force: false }],
+					false,
+				);
+				return {
+					before: before[0]?.content,
+					after: after[0]?.content,
+					walkthroughAfter: walkthroughAfter[0]?.content,
+				};
+			}).pipe(Effect.provide(makeTestLayer(dataDir))),
+		);
+		expect(result.before?.patch).toContain("+selected addition");
+		expect(result.after?.review?.baselineKind).toBe("reviewed");
+		expect(result.after?.review?.ranges).toContainEqual({
+			startLine: 42,
+			endLine: 42,
+			status: "reviewed",
+			reviewedVia: {
+				kind: "range",
+				blockId: "selection:test",
+				blockLabel: "Selection L42",
+			},
+		});
+		expect(result.after?.patch).not.toContain("+selected addition");
+		expect(result.after?.patch).toContain("+another change");
+		expect(result.walkthroughAfter?.review?.baselineKind).toBe("reviewed");
+		expect(result.walkthroughAfter?.patch).not.toContain("+selected addition");
+	});
+});
+
 describe("Store.openSession — branch target with an explicit headRef (two arbitrary refs)", () => {
 	test("rejects an unresolvable head with InvalidHeadRef, carrying git's own stderr", async () => {
 		await withTestRepoAndDataDir(async (repoRoot, dataDir) => {
