@@ -1,7 +1,7 @@
 "use client";
 
 /** Shared walkthrough/chat model picker. Groups keep headers out of filtering and keyboard navigation; search matches tokens across harness and model details. */
-import { useMemo } from "react";
+import { type KeyboardEvent as ReactKeyboardEvent, useMemo } from "react";
 import {
 	matchesModelQuery,
 	type SearchableModelOption,
@@ -36,6 +36,30 @@ type ModelOptionGroup = { label: string; items: readonly ModelOption[] };
 
 function optionValue(harness: HarnessId, modelId: string | undefined): string {
 	return `${harness}::${modelId ?? ""}`;
+}
+
+/** Base UI ignores modified keys, so forward Ctrl+N/P as unmodified arrows through its own list navigation. */
+function handleModelPickerKeyDown(
+	event: ReactKeyboardEvent<HTMLInputElement>,
+): void {
+	if (
+		!event.ctrlKey ||
+		event.metaKey ||
+		event.altKey ||
+		event.shiftKey ||
+		(event.key !== "n" && event.key !== "p")
+	) {
+		return;
+	}
+
+	event.preventDefault();
+	event.currentTarget.dispatchEvent(
+		new KeyboardEvent("keydown", {
+			key: event.key === "n" ? "ArrowDown" : "ArrowUp",
+			bubbles: true,
+			cancelable: true,
+		}),
+	);
 }
 
 type HarnessModelComboboxProps = {
@@ -99,7 +123,10 @@ export function HarnessModelCombobox({
 			}}
 			value={selectedOption}
 		>
-			<ComboboxInput placeholder="Choose a model…" />
+			<ComboboxInput
+				onKeyDown={handleModelPickerKeyDown}
+				placeholder="Choose a model…"
+			/>
 			<ComboboxPopup>
 				{loadingHarnesses.length > 0 && (
 					<p className="px-2 py-1 text-muted-foreground text-xs" role="status">
