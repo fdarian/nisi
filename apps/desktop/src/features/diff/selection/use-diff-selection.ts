@@ -193,7 +193,7 @@ function resolveActiveTextSelection(
  * attribute, defined once and imported by both sides, means the two can't
  * drift apart again and doesn't reach into a module this feature doesn't own.
  */
-export const DIFF_SELECTION_POPUP_ATTRIBUTE = "data-diff-selection-popup";
+const DIFF_SELECTION_POPUP_ATTRIBUTE = "data-diff-selection-popup";
 
 /** Spread onto the floating "Copy reference" popup's root DOM node — see `DIFF_SELECTION_POPUP_ATTRIBUTE`'s doc comment. */
 export const diffSelectionPopupMarkerProps = {

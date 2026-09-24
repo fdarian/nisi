@@ -192,6 +192,61 @@ test("range claims change the Files Changed patch for a single added line", asyn
 	});
 });
 
+test("a walkthrough claim and a whole-file tick both produce the empty reviewed patch", async () => {
+	await withTestRepoAndDataDir(async (repoRoot, dataDir) => {
+		await sh(repoRoot, ["checkout", "-q", "-b", "feature"]);
+		await Bun.write(join(repoRoot, "a.ts"), "hello\nadded line\n");
+		await sh(repoRoot, ["add", "-A"]);
+		await sh(repoRoot, ["commit", "-q", "-m", "add line"]);
+
+		const result = await Effect.runPromise(
+			Effect.gen(function* () {
+				const store = yield* Store;
+				const session = yield* store.openSession(repoRoot, {
+					kind: "branch",
+					baseRef: "main",
+				});
+				yield* store.setRangeViewed(
+					session.id,
+					"a.ts",
+					"walkthrough:block",
+					"Block",
+					[{ startLine: 2, endLine: 2 }],
+					true,
+				);
+				const walkthrough = yield* store.readFileContents(
+					session.id,
+					[{ path: "a.ts", force: false }],
+					false,
+				);
+				yield* store.setRangeViewed(
+					session.id,
+					"a.ts",
+					"walkthrough:block",
+					"Block",
+					[{ startLine: 2, endLine: 2 }],
+					false,
+				);
+				yield* store.setFileViewed(session.id, "a.ts", true);
+				const wholeFile = yield* store.readFileContents(
+					session.id,
+					[{ path: "a.ts", force: false }],
+					false,
+				);
+				return {
+					walkthrough: walkthrough[0]?.content,
+					wholeFile: wholeFile[0]?.content,
+				};
+			}).pipe(Effect.provide(makeTestLayer(dataDir))),
+		);
+
+		expect(result.walkthrough?.review?.baselineKind).toBe("reviewed");
+		expect(result.walkthrough?.patch).toBe("");
+		expect(result.wholeFile?.review?.baselineKind).toBe("reviewed");
+		expect(result.wholeFile?.patch).toBe("");
+	});
+});
+
 describe("Store.openSession — branch target with an explicit headRef (two arbitrary refs)", () => {
 	test("rejects an unresolvable head with InvalidHeadRef, carrying git's own stderr", async () => {
 		await withTestRepoAndDataDir(async (repoRoot, dataDir) => {
