@@ -57,3 +57,4 @@ packageExtensions:
       "@shikijs/themes": "4.4.3"
 patchedDependencies:
   "@pierre/diffs@1.5.1": patches/@pierre%2Fdiffs@1.5.1.patch
+  microsandbox@0.6.18: patches/microsandbox@0.6.18.patch

@@ -4,7 +4,7 @@ import type { LocalSandboxSettings } from "@repo/harness-local";
 import { createLocalSandbox } from "@repo/harness-local";
 import type { SandboxMode } from "@repo/settings";
 import type { HarnessId } from "@repo/sidecar-api";
-import { createMicrosandbox } from "ai-microsandbox";
+import { loadMicrosandbox } from "./microsandbox-runtime.ts";
 
 /**
  * claude-code/codex/opencode each bootstrap a pinned CLI install into
@@ -62,13 +62,14 @@ export const resolveSandboxSettings = (
 		? { mode: "relocated", repoRoot, scratchRoot: HARNESS_SANDBOX_ROOT }
 		: { mode: "in-place", repoRoot };
 
-export const createHarnessSandbox = (
+export const createHarnessSandbox = async (
 	harness: HarnessId,
 	repoRoot: string,
 	mode: SandboxMode,
 ) => {
 	if (mode === "microsandbox" && harness !== "pi") {
-		const provider = createMicrosandbox({
+		const runtime = await loadMicrosandbox();
+		const provider = runtime.createMicrosandbox({
 			image: MICROSANDBOX_IMAGE,
 			configure: (builder) => {
 				// OpenCode's pnpm bootstrap is killed with exit 137 at the VM's default allocation.

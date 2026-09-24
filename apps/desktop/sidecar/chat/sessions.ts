@@ -59,7 +59,7 @@ export type ChatSessionParams = {
 const startChatSession = async (
 	params: ChatSessionParams,
 ): Promise<LiveChatSession> => {
-	const sandbox = createHarnessSandbox(
+	const sandbox = await createHarnessSandbox(
 		params.harness,
 		params.repoRoot,
 		params.sandboxMode,

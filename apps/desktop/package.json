@@ -57,6 +57,7 @@
 		"@repo/git": "workspace:*",
 		"@repo/harness-local": "workspace:*",
 		"@repo/logging": "workspace:*",
+		"@repo/npm-tarball": "workspace:*",
 		"@repo/review": "workspace:*",
 		"@repo/settings": "workspace:*",
 		"@repo/sidecar-api": "workspace:*",

@@ -170,7 +170,11 @@ const startFreshSession = async (
 	readonly buffer: LiveWalkthroughSession["buffer"];
 }> => {
 	const buffer = createBuffer();
-	const sandbox = createHarnessSandbox(input.harness, repoRoot, sandboxMode);
+	const sandbox = await createHarnessSandbox(
+		input.harness,
+		repoRoot,
+		sandboxMode,
+	);
 	// The same pair feeds both the harness (which registers these keys) and the
 	// prompt (which tells the model what to call) — they must never diverge.
 	const toolNames = WALKTHROUGH_TOOL_NAMES;
