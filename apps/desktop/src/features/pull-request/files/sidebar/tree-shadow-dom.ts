@@ -32,6 +32,7 @@ export function buildTreeThemeStyle(): CSSProperties {
 		"--trees-selected-fg-override": "var(--sidebar-accent-foreground)",
 		"--trees-font-family-override": "var(--font-sans)",
 		"--trees-focus-ring-color-override": "var(--ring)",
+		"--trees-selected-focused-border-color-override": "transparent",
 		"--trees-border-radius-override": "var(--radius-md)",
 		// The lane only reserves row width so a long filename truncates before
 		// running under the "…" trigger — the trigger itself is an overlay, not
