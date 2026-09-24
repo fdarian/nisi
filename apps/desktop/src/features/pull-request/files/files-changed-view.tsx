@@ -35,6 +35,7 @@ import type {
 import {
 	pullRequestUrl,
 	useFileContents,
+	useSetRangeViewed,
 } from "#/features/pull-request/data/pr-data";
 import {
 	useSessionCurrentMatchIndex,
@@ -353,6 +354,28 @@ export function FilesChangedView({
 	// renders off it), just addressable by session id so it survives this
 	// component unmounting on suspend.
 	const undoStack = useSessionUndoStack(session.id);
+	const setRangeViewed = useSetRangeViewed(orpc, session.id);
+	const markSelectionReviewed = useCallback(
+		(
+			path: string,
+			range: { startLine: number; endLine: number },
+			onSuccess: () => void,
+		) => {
+			const blockId = `selection:${crypto.randomUUID()}`;
+			const blockLabel =
+				range.startLine === range.endLine
+					? `Selection L${range.startLine}`
+					: `Selection L${range.startLine}–L${range.endLine}`;
+			setRangeViewed(
+				{ path, blockId, blockLabel, ranges: [range], viewed: true },
+				() => {
+					undoStack.push({ kind: "range", path, blockId, blockLabel, range });
+					onSuccess();
+				},
+			);
+		},
+		[setRangeViewed, undoStack],
+	);
 
 	// Mirrors exactly how `DiffPane` derives the `viewed` boolean it passes to
 	// `handleToggleViewed` — the one other place a file's reviewed flag gets
@@ -401,7 +424,7 @@ export function FilesChangedView({
 		(direction: 1 | -1) => {
 			if (selectedPath === null) return;
 			const previousViewed = isViewed(selectedPath);
-			undoStack.push({ path: selectedPath, previousViewed });
+			undoStack.push({ kind: "file", path: selectedPath, previousViewed });
 			setViewed(selectedPath, !previousViewed);
 			const currentIndex = queryFilteredFiles.findIndex(
 				(file) => file.path === selectedPath,
@@ -425,9 +448,19 @@ export function FilesChangedView({
 	const handleUndo = useCallback(() => {
 		const lastRecord = undoStack.pop();
 		if (!lastRecord) return;
-		setViewed(lastRecord.path, lastRecord.previousViewed);
+		if (lastRecord.kind === "file") {
+			setViewed(lastRecord.path, lastRecord.previousViewed);
+		} else {
+			setRangeViewed({
+				path: lastRecord.path,
+				blockId: lastRecord.blockId,
+				blockLabel: lastRecord.blockLabel,
+				ranges: [lastRecord.range],
+				viewed: false,
+			});
+		}
 		selectPath(lastRecord.path);
-	}, [undoStack, setViewed, selectPath]);
+	}, [undoStack, setViewed, setRangeViewed, selectPath]);
 
 	// Tree view's right-click "Mark as Reviewed"/"Mark Folder as Reviewed" —
 	// no undo stack entry, unlike `handleToggleReviewed`: a folder can resolve
@@ -675,6 +708,7 @@ export function FilesChangedView({
 						files={diffPaneFiles}
 						forcedPaths={forcedPaths}
 						keywordMatchesByPath={keywordMatchesByPath}
+						onMarkSelectionReviewed={markSelectionReviewed}
 						onForceLoad={addForcedPath}
 						onOpenFile={onOpenFile}
 						onVisiblePathChange={handleVisiblePathChange}

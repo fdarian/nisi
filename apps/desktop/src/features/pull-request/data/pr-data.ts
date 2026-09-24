@@ -653,51 +653,38 @@ export type SetRangeViewedParams = {
  * chunk here is what keeps a tick in one view visible in the other without
  * a manual reload — and without refetching every other open file's chunk.
  *
- * Deliberately keeps the fire-and-forget call-level `onSuccess` shape
- * `useSetFileViewed` moved away from — this mutation's key isn't what
- * `useReviewState`'s `useMutationState` filter matches, so there's no
- * optimistic overlay riding on it to protect from a premature drop. If a
- * range-scoped overlay is ever added, it needs the same hook-level
- * `onSuccess` treatment (see `useSetFileViewed`'s doc comment) — a
- * call-level one won't delay the mutation's `"pending"` → `"success"`
- * transition no matter what it returns.
- *
- * `onError` is call-level too, for the same reason `onSuccess` is: there's
- * no overlay here for a failure to leave stuck, so nothing needs the
- * hook-level await-before-transition timing — just a toast so a failed tick
- * (`NOT_FOUND` or `INTERNAL_SERVER_ERROR`) doesn't fail silently.
+ * Each call awaits its own mutation so several quick selections each get a
+ * success callback (and their own undo entry). TanStack's call-level mutate
+ * callbacks only run for the latest pending call on a mutation observer.
  */
 export function useSetRangeViewed(
 	orpc: SidecarQueryUtils,
 	sessionId: string,
-): (params: SetRangeViewedParams) => void {
+): (params: SetRangeViewedParams, onSuccess?: () => void) => void {
 	const queryClient = useQueryClient();
 	const mutation = useMutation(orpc.review.setRangeViewed.mutationOptions());
 
 	return useCallback(
-		(params: SetRangeViewedParams) => {
-			mutation.mutate(
-				{ sessionId, ...params },
-				{
-					onSuccess: () => {
-						queryClient.invalidateQueries({
-							queryKey: orpc.diff.files.key({ input: { sessionId } }),
-						});
-						queryClient.invalidateQueries({
-							queryKey: orpc.diff.fileContents.key({ input: { sessionId } }),
-							predicate: (query) => queryCoveredPath(query, params.path),
-						});
-					},
-					onError: (error) => {
-						toastManager.add({
-							title: `Failed to update review state for ${params.path}`,
-							description:
-								error instanceof Error ? error.message : String(error),
-							type: "error",
-						});
-					},
-				},
-			);
+		(params: SetRangeViewedParams, onSuccess?: () => void) => {
+			void mutation
+				.mutateAsync({ sessionId, ...params })
+				.then(() => {
+					onSuccess?.();
+					void queryClient.invalidateQueries({
+						queryKey: orpc.diff.files.key({ input: { sessionId } }),
+					});
+					void queryClient.invalidateQueries({
+						queryKey: orpc.diff.fileContents.key({ input: { sessionId } }),
+						predicate: (query) => queryCoveredPath(query, params.path),
+					});
+				})
+				.catch((error: unknown) => {
+					toastManager.add({
+						title: `Failed to update review state for ${params.path}`,
+						description: error instanceof Error ? error.message : String(error),
+						type: "error",
+					});
+				});
 		},
 		[mutation, queryClient, orpc, sessionId],
 	);

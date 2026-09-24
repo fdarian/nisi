@@ -40,6 +40,7 @@ import {
 } from "#/features/diff/diff-view-theme";
 import { DiffSelectionPopover } from "#/features/diff/selection/diff-selection-popover";
 import { useDiffSelection } from "#/features/diff/selection/use-diff-selection";
+import type { HeadRange } from "#/features/diff/selection/selection-head-range";
 import type { LineRange } from "#/features/diff/viewer/build-location-diff";
 import { buildLocationFileDiff } from "#/features/diff/viewer/build-location-diff";
 import {
@@ -241,6 +242,11 @@ type DiffPaneProps = {
 	onVisiblePathChange?: (path: string) => void;
 	reviewState: ReadonlyMap<string, ReviewStateEntry>;
 	setViewed: (path: string, viewed: boolean) => void;
+	onMarkSelectionReviewed: (
+		path: string,
+		range: HeadRange,
+		onSuccess: () => void,
+	) => void;
 	/** Opens a path in a whole-file viewer tab — the per-file "…" menu's "View full file" item (`DiffFileHeader`). */
 	onOpenFile: (path: string) => void;
 	diffStyle: DiffStyleMode;
@@ -430,6 +436,7 @@ export function DiffPane({
 	onVisiblePathChange,
 	reviewState,
 	setViewed,
+	onMarkSelectionReviewed,
 	onOpenFile,
 	diffStyle,
 	wrapLines,
@@ -945,9 +952,18 @@ export function DiffPane({
 			itemMetadataRef.current.has(itemId) ? itemId : undefined,
 		[],
 	);
+	const fileContentsRef = useRef(fileContents);
+	fileContentsRef.current = fileContents;
+	const resolveHeadLineCount = useCallback((itemId: string) => {
+		const content = fileContentsRef.current.get(itemId)?.content?.newContent;
+		if (content === undefined) return undefined;
+		if (content === "") return 0;
+		return content.split("\n").length - (content.endsWith("\n") ? 1 : 0);
+	}, []);
 	const diffSelection = useDiffSelection({
 		codeViewRef,
 		resolveItemPath: resolveSelectionItemPath,
+		resolveHeadLineCount,
 	});
 	// Scrolls this same container while a selection drag (either of
 	// `diffSelection`'s two sources) is held near its top or bottom edge —
@@ -1485,6 +1501,16 @@ export function DiffPane({
 			/>
 			<DiffSelectionPopover
 				anchorRect={diffSelection.anchorRect}
+				headRange={diffSelection.headRange}
+				onMarkReviewed={(range) => {
+					const reference = diffSelection.reference;
+					if (reference === null) return;
+					onMarkSelectionReviewed(
+						reference.path,
+						range,
+						diffSelection.clearSelection,
+					);
+				}}
 				onDismiss={diffSelection.clearSelection}
 				onForwardedWheel={releaseProgrammaticScrollSuppression}
 				orpc={orpc}

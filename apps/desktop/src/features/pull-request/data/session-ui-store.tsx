@@ -39,11 +39,15 @@ import {
 } from "#/features/pull-request/navigation/navigation-history";
 import type { WalkthroughSelection } from "#/features/pull-request/walkthrough/walkthrough-data";
 
-/** One `r` keypress's undo record — mirrors `files-changed-view.tsx`'s local type of the same name. */
-export type ReviewedToggleRecord = {
-	path: string;
-	previousViewed: boolean;
-};
+export type ReviewUndoRecord =
+	| { kind: "file"; path: string; previousViewed: boolean }
+	| {
+			kind: "range";
+			path: string;
+			blockId: string;
+			blockLabel: string;
+			range: { startLine: number; endLine: number };
+	  };
 
 type SessionUiState = {
 	selectedPath: string | null;
@@ -95,7 +99,7 @@ type SessionUiState = {
 	 * directly by `pushUndo`/`popUndo` below rather than routed through
 	 * `set()`, so pushing/popping never triggers a re-render.
 	 */
-	undoStack: ReviewedToggleRecord[];
+	undoStack: ReviewUndoRecord[];
 };
 
 /** Fresh, independent `Set`/`Map`/array instances every call — see `withSession` for why a shared singleton would be wrong here. */
@@ -201,8 +205,8 @@ type SessionUiStore = {
 		sessionId: string,
 		selection: WalkthroughSelection | null,
 	) => void;
-	pushUndo: (sessionId: string, record: ReviewedToggleRecord) => void;
-	popUndo: (sessionId: string) => ReviewedToggleRecord | undefined;
+	pushUndo: (sessionId: string, record: ReviewUndoRecord) => void;
+	popUndo: (sessionId: string) => ReviewUndoRecord | undefined;
 	/** Records a deliberate view transition, truncating any forward entries. */
 	pushNavigationEntry: (sessionId: string, entry: NavigationEntry) => void;
 	/** Replaces the current entry for scroll drift without truncating forward entries. */
@@ -873,13 +877,12 @@ export function useSessionWalkthroughSelection(
 
 /** The `r`/`u` undo stack — imperative, non-reactive (see `SessionUiState.undoStack`'s doc comment), so this deliberately isn't a `useStore` subscription. */
 export function useSessionUndoStack(sessionId: string): {
-	push: (record: ReviewedToggleRecord) => void;
-	pop: () => ReviewedToggleRecord | undefined;
+	push: (record: ReviewUndoRecord) => void;
+	pop: () => ReviewUndoRecord | undefined;
 } {
 	const store = useSessionUiStore();
 	const push = useCallback(
-		(record: ReviewedToggleRecord) =>
-			store.getState().pushUndo(sessionId, record),
+		(record: ReviewUndoRecord) => store.getState().pushUndo(sessionId, record),
 		[store, sessionId],
 	);
 	const pop = useCallback(
