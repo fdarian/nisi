@@ -6,6 +6,7 @@ import type {
 	CodeViewOptions,
 	CodeViewScrollTarget,
 	DiffLineAnnotation,
+	FileContents,
 	FileDiffMetadata,
 	LineAnnotation,
 } from "@pierre/diffs";
@@ -66,6 +67,7 @@ import { buildFileDiff } from "./build-file-diff";
 import { DiffFileHeader } from "./diff-file-header";
 import { type DiffHoverPoint, findHoveredFileId } from "./diff-hovered-file";
 import { findTopVisibleItemId } from "./diff-visible-file";
+import { resolvePlaceholderFile } from "./placeholder-file-cache";
 import { useDiffMatchHighlighting } from "./use-diff-match-highlighting";
 
 /** Why a file's whole body is hidden behind a "Show diff" placeholder by default — see `resolveHiddenFileReason`. */
@@ -448,6 +450,8 @@ export function DiffPane({
 		tokenInteractions: codeIndex.tokenInteractionsActive,
 	});
 	const fileDiffCache = useRef(new Map<string, CachedFileDiff>());
+	// Pierre compares rendered and prepared-layout files by reference; memo passes rebuild placeholders even when their cacheKey stays the same.
+	const placeholderFileCache = useRef(new Map<string, FileContents>());
 	const hiddenFileAnnotationCache = useRef(
 		new Map<string, CachedHiddenFileAnnotation>(),
 	);
@@ -696,12 +700,11 @@ export function DiffPane({
 				nextItems.push({
 					id: file.path,
 					type: "file",
-					file: {
-						name: file.path,
-						contents: " ",
-						lang: "text",
-						cacheKey: `binary:${file.fingerprint}`,
-					},
+					file: resolvePlaceholderFile(
+						placeholderFileCache.current,
+						file.path,
+						`binary:${file.fingerprint}`,
+					),
 					annotations: BINARY_ANNOTATIONS,
 					collapsed: cardCollapsed,
 					version: hashItemVersion(`${baseVersionInput}:binary`),
@@ -714,12 +717,11 @@ export function DiffPane({
 				nextItems.push({
 					id: file.path,
 					type: "file",
-					file: {
-						name: file.path,
-						contents: " ",
-						lang: "text",
-						cacheKey: `error:${file.fingerprint}`,
-					},
+					file: resolvePlaceholderFile(
+						placeholderFileCache.current,
+						file.path,
+						`error:${file.fingerprint}`,
+					),
 					annotations: ERROR_ANNOTATIONS,
 					collapsed: cardCollapsed,
 					version: hashItemVersion(`${baseVersionInput}:error`),
@@ -749,12 +751,12 @@ export function DiffPane({
 				nextItems.push({
 					id: file.path,
 					type: "file",
-					file: {
-						name: file.path,
-						contents: loadingPlaceholderContents(file),
-						lang: "text",
-						cacheKey: `loading:${file.fingerprint}`,
-					},
+					file: resolvePlaceholderFile(
+						placeholderFileCache.current,
+						file.path,
+						`loading:${file.fingerprint}`,
+						loadingPlaceholderContents(file),
+					),
 					annotations: LOADING_ANNOTATIONS,
 					collapsed: cardCollapsed,
 					version: hashItemVersion(`${baseVersionInput}:loading`),
@@ -815,12 +817,11 @@ export function DiffPane({
 				nextItems.push({
 					id: file.path,
 					type: "file",
-					file: {
-						name: file.path,
-						contents: " ",
-						lang: "text",
-						cacheKey: `hidden:${hiddenReason}:${file.fingerprint}`,
-					},
+					file: resolvePlaceholderFile(
+						placeholderFileCache.current,
+						file.path,
+						`hidden:${hiddenReason}:${file.fingerprint}`,
+					),
 					annotations: resolveHiddenFileAnnotations(
 						hiddenFileAnnotationCache.current,
 						file,
@@ -846,12 +847,11 @@ export function DiffPane({
 				nextItems.push({
 					id: file.path,
 					type: "file",
-					file: {
-						name: file.path,
-						contents: " ",
-						lang: "text",
-						cacheKey: `reviewed-empty:${file.fingerprint}`,
-					},
+					file: resolvePlaceholderFile(
+						placeholderFileCache.current,
+						file.path,
+						`reviewed-empty:${file.fingerprint}`,
+					),
 					annotations: REVIEWED_EMPTY_ANNOTATIONS,
 					collapsed: cardCollapsed,
 					version: hashItemVersion(`${baseVersionInput}:reviewed-empty`),
@@ -864,12 +864,11 @@ export function DiffPane({
 				nextItems.push({
 					id: file.path,
 					type: "file",
-					file: {
-						name: file.path,
-						contents: " ",
-						lang: "text",
-						cacheKey: `parse-error:${file.fingerprint}`,
-					},
+					file: resolvePlaceholderFile(
+						placeholderFileCache.current,
+						file.path,
+						`parse-error:${file.fingerprint}`,
+					),
 					annotations: PARSE_ERROR_ANNOTATIONS,
 					collapsed: cardCollapsed,
 					version: hashItemVersion(`${baseVersionInput}:parse-error`),
@@ -902,6 +901,9 @@ export function DiffPane({
 		// pass saw, so anything else is gone.
 		for (const path of fileDiffCache.current.keys()) {
 			if (!nextMetadata.has(path)) fileDiffCache.current.delete(path);
+		}
+		for (const path of placeholderFileCache.current.keys()) {
+			if (!nextMetadata.has(path)) placeholderFileCache.current.delete(path);
 		}
 		for (const path of hiddenFileAnnotationCache.current.keys()) {
 			if (!nextMetadata.has(path))
