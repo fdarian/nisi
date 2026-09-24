@@ -168,12 +168,6 @@ export function GeneratePanel({
 		modelsByHarness,
 		failedHarnesses,
 	);
-	const hasAnySelectableModel = harnesses.some((harness) => {
-		const discovery = modelsByHarness[harness.id];
-		return (
-			harness.enabled && discovery !== undefined && discovery.models.length > 0
-		);
-	});
 	const unavailableSummary =
 		unavailable.length > 0
 			? `Couldn't reach ${formatList(unavailable)} — check ${unavailable.length === 1 ? "it's" : "they're"} installed and on your PATH, then hit refresh.`
@@ -201,11 +195,6 @@ export function GeneratePanel({
 			)}
 			<div className="flex items-center gap-2">
 				<HarnessModelCombobox
-					emptyMessage={
-						hasAnySelectableModel
-							? undefined
-							: (unavailableSummary ?? undefined)
-					}
 					harnesses={harnesses}
 					modelsByHarness={modelsByHarness}
 					isLoading={harnessesLoading || modelsLoading}
