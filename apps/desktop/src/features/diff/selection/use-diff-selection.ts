@@ -16,7 +16,11 @@
  * live text selection and vice versa, so the pane never has to reconcile two
  * simultaneous highlights or show two floating buttons.
  */
-import type { CodeViewLineSelection, SelectionSide } from "@pierre/diffs";
+import type {
+	CodeViewLineSelection,
+	FileDiffMetadata,
+	SelectionSide,
+} from "@pierre/diffs";
 import type { CodeViewHandle } from "@pierre/diffs/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { DiffSelectionReference } from "#/features/diff/diff-reference";
@@ -32,7 +36,7 @@ type UseDiffSelectionOptions<Metadata> = {
 	codeViewRef: React.RefObject<CodeViewHandle<Metadata, undefined> | null>;
 	/** `CodeViewItem.id -> repo-relative path`. `DiffPane` happens to use the path as the id directly, but this hook doesn't assume that — `undefined` means "don't resolve a reference for this item" (e.g. an id this pane doesn't recognize). */
 	resolveItemPath: (itemId: string) => string | undefined;
-	resolveHeadLineCount?: (itemId: string) => number | undefined;
+	resolveItemDiff?: (itemId: string) => FileDiffMetadata | undefined;
 };
 
 type UseDiffSelectionResult = {
@@ -121,45 +125,13 @@ function rowToBoundary(
 	return { line, side };
 }
 
-function headRangeFromRows(
-	rows: Iterable<Element>,
-	root: ParentNode,
-	fileEndLine?: number,
-): HeadRange | undefined {
-	const boundaryForRow = (row: Element) => {
-		const boundary = rowToBoundary(row);
-		return boundary && row.closest("[data-deletions]")
-			? { line: boundary.line, side: "deletions" as const }
-			: boundary;
-	};
-	const boundaries = Array.from(rows, boundaryForRow).filter(
-		(row): row is { line: number; side: SelectionSide } => row !== undefined,
-	);
-	const renderedEndLine = selectionHeadRange(
-		Array.from(root.querySelectorAll("[data-line]"), boundaryForRow).filter(
-			(row): row is { line: number; side: SelectionSide } => row !== undefined,
-		),
-	)?.endLine;
-	return selectionHeadRange(boundaries, fileEndLine ?? renderedEndLine);
-}
-
-function gutterHeadRange<Metadata>(
-	codeViewRef: React.RefObject<CodeViewHandle<Metadata, undefined> | null>,
-	selection: CodeViewLineSelection,
-	fileEndLine?: number,
-): HeadRange | undefined {
-	const item = codeViewRef.current
-		?.getInstance()
-		?.getRenderedItems()
-		.find((candidate) => candidate.id === selection.id);
-	const root = item?.element.shadowRoot;
-	return root
-		? headRangeFromRows(
-				root.querySelectorAll("[data-selected-line]"),
-				root,
-				fileEndLine,
-			)
-		: undefined;
+function rowToReviewBoundary(
+	row: Element,
+): { line: number; side: SelectionSide } | undefined {
+	const boundary = rowToBoundary(row);
+	return boundary && row.closest("[data-deletions]")
+		? { line: boundary.line, side: "deletions" }
+		: boundary;
 }
 
 /**
@@ -262,7 +234,7 @@ function unionRect(a: DOMRect, b: DOMRect): DOMRect {
 export function useDiffSelection<Metadata>({
 	codeViewRef,
 	resolveItemPath,
-	resolveHeadLineCount,
+	resolveItemDiff,
 }: UseDiffSelectionOptions<Metadata>): UseDiffSelectionResult {
 	const [gutterSelection, setGutterSelection] =
 		useState<CodeViewLineSelection | null>(null);
@@ -469,12 +441,24 @@ export function useDiffSelection<Metadata>({
 					if (gutterSelectionRef.current !== selection) return true;
 					const rect = measureGutterAnchorRect(selection);
 					if (rect === undefined) return false;
+					const diff = resolveItemDiff?.(selection.id);
 					setHeadRange(
-						gutterHeadRange(
-							codeViewRef,
-							selection,
-							resolveHeadLineCount?.(selection.id),
-						),
+						diff
+							? selectionHeadRange(
+									diff.hunks,
+									{
+										line: selection.range.start,
+										side: selection.range.side ?? "additions",
+									},
+									{
+										line: selection.range.end,
+										side:
+											selection.range.endSide ??
+											selection.range.side ??
+											"additions",
+									},
+								)
+							: undefined,
 					);
 					setAnchorRect(rect);
 					return true;
@@ -486,12 +470,7 @@ export function useDiffSelection<Metadata>({
 				},
 			);
 		},
-		[
-			resolveItemPath,
-			resolveHeadLineCount,
-			measureGutterAnchorRect,
-			codeViewRef,
-		],
+		[resolveItemPath, resolveItemDiff, measureGutterAnchorRect],
 	);
 
 	// The text path: plain browser selection over code, which `@pierre/diffs`
@@ -596,17 +575,12 @@ export function useDiffSelection<Metadata>({
 				startLine: headRange.startLine,
 				endLine: headRange.endLine,
 			});
-			const item = items.find((candidate) => candidate.id === active.itemId);
-			const root = item?.element.shadowRoot;
+			const diff = resolveItemDiff?.(active.itemId);
+			const reviewStart = startRow && rowToReviewBoundary(startRow);
+			const reviewEnd = endRow && rowToReviewBoundary(endRow);
 			setHeadRange(
-				root
-					? headRangeFromRows(
-							Array.from(root.querySelectorAll("[data-line]")).filter((row) =>
-								active.range.intersectsNode(row),
-							),
-							root,
-							resolveHeadLineCount?.(active.itemId),
-						)
+				diff && reviewStart && reviewEnd
+					? selectionHeadRange(diff.hunks, reviewStart, reviewEnd)
 					: undefined,
 			);
 			setAnchorRect(active.range.getBoundingClientRect());
@@ -621,7 +595,7 @@ export function useDiffSelection<Metadata>({
 			document.removeEventListener("pointerup", recomputeTextSelection);
 			document.removeEventListener("keyup", recomputeTextSelection);
 		};
-	}, [codeViewRef, resolveItemPath, resolveHeadLineCount]);
+	}, [codeViewRef, resolveItemPath, resolveItemDiff]);
 
 	useEffect(
 		() => () => {

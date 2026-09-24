@@ -952,18 +952,16 @@ export function DiffPane({
 			itemMetadataRef.current.has(itemId) ? itemId : undefined,
 		[],
 	);
-	const fileContentsRef = useRef(fileContents);
-	fileContentsRef.current = fileContents;
-	const resolveHeadLineCount = useCallback((itemId: string) => {
-		const content = fileContentsRef.current.get(itemId)?.content?.newContent;
-		if (content === undefined) return undefined;
-		if (content === "") return 0;
-		return content.split("\n").length - (content.endsWith("\n") ? 1 : 0);
+	const itemsRef = useRef(items);
+	itemsRef.current = items;
+	const resolveItemDiff = useCallback((itemId: string) => {
+		const item = itemsRef.current.find((candidate) => candidate.id === itemId);
+		return item?.type === "diff" ? item.fileDiff : undefined;
 	}, []);
 	const diffSelection = useDiffSelection({
 		codeViewRef,
 		resolveItemPath: resolveSelectionItemPath,
-		resolveHeadLineCount,
+		resolveItemDiff,
 	});
 	// Scrolls this same container while a selection drag (either of
 	// `diffSelection`'s two sources) is held near its top or bottom edge —
