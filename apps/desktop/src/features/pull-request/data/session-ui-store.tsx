@@ -47,6 +47,7 @@ export type ReviewUndoRecord =
 			blockId: string;
 			blockLabel: string;
 			range: { startLine: number; endLine: number };
+			baselineBefore?: string;
 	  };
 
 type SessionUiState = {

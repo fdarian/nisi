@@ -643,6 +643,35 @@ export type SetRangeViewedParams = {
 	viewed: boolean;
 };
 
+type OptimisticRangeCall = {
+	sessionId: string;
+	params: SetRangeViewedParams;
+	baseline?: string;
+	onSuccess?: () => void;
+};
+
+export function useOptimisticRangeBaselines(
+	orpc: SidecarQueryUtils,
+	sessionId: string,
+): ReadonlyMap<string, string> {
+	const mutationKey = useMemo(
+		() => orpc.review.setRangeViewed.mutationKey(),
+		[orpc],
+	);
+	const pending = useMutationState({
+		filters: { mutationKey, status: "pending" },
+		select: (mutation) => mutation.state.variables as OptimisticRangeCall,
+	});
+	return useMemo(() => {
+		const baselines = new Map<string, string>();
+		for (const call of pending) {
+			if (call.sessionId === sessionId && call.baseline !== undefined)
+				baselines.set(call.params.path, call.baseline);
+		}
+		return baselines;
+	}, [pending, sessionId]);
+}
+
 /**
  * `review.setRangeViewed` — one walkthrough reference block's claim on a set
  * of ranges within one file. Same invalidation shape as `useSetFileViewed`,
@@ -653,40 +682,66 @@ export type SetRangeViewedParams = {
  * chunk here is what keeps a tick in one view visible in the other without
  * a manual reload — and without refetching every other open file's chunk.
  *
- * Each call awaits its own mutation so several quick selections each get a
- * success callback (and their own undo entry). TanStack's call-level mutate
- * callbacks only run for the latest pending call on a mutation observer.
+ * The hook-level success callback keeps each mark pending through both
+ * refetches, and records its undo entry even if another mark starts before
+ * this one finishes. Call-level callbacks only run for the latest call.
  */
 export function useSetRangeViewed(
 	orpc: SidecarQueryUtils,
 	sessionId: string,
-): (params: SetRangeViewedParams, onSuccess?: () => void) => void {
+): (
+	params: SetRangeViewedParams,
+	onSuccess?: () => void,
+	baseline?: string,
+) => void {
 	const queryClient = useQueryClient();
-	const mutation = useMutation(orpc.review.setRangeViewed.mutationOptions());
+	const options = orpc.review.setRangeViewed.mutationOptions();
+	const mutation = useMutation({
+		...options,
+		onMutate: undefined,
+		onSettled: undefined,
+		mutationFn: (call: OptimisticRangeCall, context) => {
+			if (options.mutationFn === undefined)
+				throw new Error("Missing range mutation function");
+			return options.mutationFn(
+				{ sessionId: call.sessionId, ...call.params },
+				context,
+			);
+		},
+		onSuccess: async (_data, call) => {
+			call.onSuccess?.();
+			await Promise.all([
+				queryClient.invalidateQueries({
+					queryKey: orpc.diff.files.key({
+						input: { sessionId: call.sessionId },
+					}),
+				}),
+				queryClient.invalidateQueries({
+					queryKey: orpc.diff.fileContents.key({
+						input: { sessionId: call.sessionId },
+					}),
+					predicate: (query) => queryCoveredPath(query, call.params.path),
+				}),
+			]);
+		},
+		onError: (error, call) => {
+			toastManager.add({
+				title: `Failed to update review state for ${call.params.path}`,
+				description: error instanceof Error ? error.message : String(error),
+				type: "error",
+			});
+		},
+	});
 
 	return useCallback(
-		(params: SetRangeViewedParams, onSuccess?: () => void) => {
-			void mutation
-				.mutateAsync({ sessionId, ...params })
-				.then(() => {
-					onSuccess?.();
-					void queryClient.invalidateQueries({
-						queryKey: orpc.diff.files.key({ input: { sessionId } }),
-					});
-					void queryClient.invalidateQueries({
-						queryKey: orpc.diff.fileContents.key({ input: { sessionId } }),
-						predicate: (query) => queryCoveredPath(query, params.path),
-					});
-				})
-				.catch((error: unknown) => {
-					toastManager.add({
-						title: `Failed to update review state for ${params.path}`,
-						description: error instanceof Error ? error.message : String(error),
-						type: "error",
-					});
-				});
+		(
+			params: SetRangeViewedParams,
+			onSuccess?: () => void,
+			baseline?: string,
+		) => {
+			mutation.mutate({ sessionId, params, baseline, onSuccess });
 		},
-		[mutation, queryClient, orpc, sessionId],
+		[mutation, sessionId],
 	);
 }
 

@@ -39,8 +39,8 @@ import {
 	useDiffTheme,
 } from "#/features/diff/diff-view-theme";
 import { DiffSelectionPopover } from "#/features/diff/selection/diff-selection-popover";
-import { useDiffSelection } from "#/features/diff/selection/use-diff-selection";
 import type { HeadRange } from "#/features/diff/selection/selection-head-range";
+import { useDiffSelection } from "#/features/diff/selection/use-diff-selection";
 import type { LineRange } from "#/features/diff/viewer/build-location-diff";
 import { buildLocationFileDiff } from "#/features/diff/viewer/build-location-diff";
 import {
@@ -242,11 +242,8 @@ type DiffPaneProps = {
 	onVisiblePathChange?: (path: string) => void;
 	reviewState: ReadonlyMap<string, ReviewStateEntry>;
 	setViewed: (path: string, viewed: boolean) => void;
-	onMarkSelectionReviewed: (
-		path: string,
-		range: HeadRange,
-		onSuccess: () => void,
-	) => void;
+	onMarkSelectionReviewed: (path: string, range: HeadRange) => void;
+	optimisticBaselines: ReadonlyMap<string, string>;
 	/** Opens a path in a whole-file viewer tab — the per-file "…" menu's "View full file" item (`DiffFileHeader`). */
 	onOpenFile: (path: string) => void;
 	diffStyle: DiffStyleMode;
@@ -437,6 +434,7 @@ export function DiffPane({
 	reviewState,
 	setViewed,
 	onMarkSelectionReviewed,
+	optimisticBaselines,
 	onOpenFile,
 	diffStyle,
 	wrapLines,
@@ -674,9 +672,15 @@ export function DiffPane({
 			const reviewEntry = reviewState.get(file.path);
 			const reviewStatus = reviewEntry?.status ?? "unreviewed";
 			const viewed = reviewStatus === "viewed";
-			// Defaults to collapsed once the file is "viewed" — overridable in
-			// either direction by clicking the header.
-			const cardCollapsed = fileCollapse.overrides.get(file.path) ?? viewed;
+			// An undo restores the old diff immediately, even if diff.files still
+			// reports the file as viewed until its own refetch settles.
+			const pendingBaseline = optimisticBaselines.get(file.path);
+			const cardCollapsed =
+				fileCollapse.overrides.get(file.path) ??
+				(viewed &&
+					(pendingBaseline === undefined ||
+						pendingBaseline ===
+							fileContents.get(file.path)?.content?.newContent));
 			nextMetadata.set(file.path, {
 				file,
 				viewed,
@@ -736,7 +740,25 @@ export function DiffPane({
 				continue;
 			}
 
-			const content = entry?.content;
+			const serverContent = entry?.content;
+			const optimisticBaseline = optimisticBaselines.get(file.path);
+			const content =
+				serverContent !== undefined &&
+				optimisticBaseline !== undefined &&
+				!serverContent.truncated &&
+				serverContent.newContent !== undefined
+					? {
+							...serverContent,
+							oldContent: optimisticBaseline,
+							patch: `optimistic:${hashItemVersion(optimisticBaseline)}:${serverContent.patch}`,
+							review: {
+								changedSinceReview:
+									optimisticBaseline !== serverContent.newContent,
+								ranges: [],
+								baselineKind: "reviewed" as const,
+							},
+						}
+					: serverContent;
 			if (content === undefined) {
 				// Still loading. This used to just `continue`, dropping the file
 				// from `items` entirely — but `useFileContents` chunks the file
@@ -842,15 +864,19 @@ export function DiffPane({
 				continue;
 			}
 
-			// The server already diffed reviewed-and-unchanged content back into
-			// ordinary context (or dropped it entirely) before this patch ever
-			// reached the wire — see `@repo/review`'s `reconcile`'s
+			// Reviewed-and-unchanged content is ordinary context (or gone)
+			// before this branch — see `@repo/review`'s `reconcile`'s
 			// `reviewedBaseline` and `readFileContents`' `baselineKind` — so an
 			// empty patch here means "nothing new since your last pass," not "this
 			// file has no diff to render." Only reachable when `baselineKind` is
 			// `"reviewed"`: a plain empty `base → head` patch can't happen (a file
 			// only appears in `files` because something changed against base).
-			if (content.review?.baselineKind === "reviewed" && content.patch === "") {
+			if (
+				content.review?.baselineKind === "reviewed" &&
+				(content.patch === "" ||
+					(optimisticBaseline !== undefined &&
+						optimisticBaseline === content.newContent))
+			) {
 				nextItems.push({
 					id: file.path,
 					type: "file",
@@ -924,6 +950,7 @@ export function DiffPane({
 	}, [
 		files,
 		fileContents,
+		optimisticBaselines,
 		keywordMatchesByPath,
 		reviewState,
 		diffStyle,
@@ -1503,11 +1530,8 @@ export function DiffPane({
 				onMarkReviewed={(range) => {
 					const reference = diffSelection.reference;
 					if (reference === null) return;
-					onMarkSelectionReviewed(
-						reference.path,
-						range,
-						diffSelection.clearSelection,
-					);
+					onMarkSelectionReviewed(reference.path, range);
+					diffSelection.clearSelection();
 				}}
 				onDismiss={diffSelection.clearSelection}
 				onForwardedWheel={releaseProgrammaticScrollSuppression}
