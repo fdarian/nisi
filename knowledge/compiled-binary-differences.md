@@ -33,8 +33,10 @@ libsql, whose native addon has no way into the binary.
 from a `drizzle/` folder that won't exist.[^migrations]
 
 **Only *static* asset specifiers get embedded.** Computed asset paths are invisible to the compiler;
-`import x from "./f" with { type: "text" }` is inlined as a string literal and survives. Verify
-adapter bridge assets in a compiled build after upgrading harness packages.
+`import x from "./f" with { type: "text" }` is inlined as a string literal and survives. Current
+OpenCode's adapter passes literal bridge asset URLs to `createReadBridgeAsset`, which reads them at
+runtime; no adapter bridge patch is registered. Verify those assets in a compiled build after
+upgrading harness packages — a successful `bun run sidecar` turn does not exercise that path.
 
 Same class, different library: `@earendil-works/pi-ai` loads its OAuth flows through a computed
 `import()` (`dist/auth/oauth/load.js`), so the compiled sidecar has no source tree to resolve them

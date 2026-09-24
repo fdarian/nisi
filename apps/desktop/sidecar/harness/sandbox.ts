@@ -70,12 +70,15 @@ export const createHarnessSandbox = (
 	if (mode === "microsandbox" && harness !== "pi") {
 		const provider = createMicrosandbox({
 			image: MICROSANDBOX_IMAGE,
-			configure: (builder) =>
-				builder
+			configure: (builder) => {
+				// OpenCode's pnpm bootstrap is killed with exit 137 at the VM's default allocation.
+				const sized = harness === "opencode" ? builder.memory(2048) : builder;
+				return sized
 					.user("node")
 					.workdir("/home/node")
 					.env("PATH", "/home/node/.local/bin:/usr/local/bin:/usr/bin:/bin")
-					.volume(GUEST_REPO_PATH, (mount) => mount.bind(repoRoot)),
+					.volume(GUEST_REPO_PATH, (mount) => mount.bind(repoRoot));
+			},
 			setup: async (session, opts) => {
 				const result = await session.run({
 					command:

@@ -1032,24 +1032,38 @@ export function attachRouter(
 					throw error;
 				});
 
-				const live = await getOrCreateChatSession(
-					{
-						sessionId: input.sessionId,
-						threadId: input.threadId,
-						harness: input.harness,
-						model: input.model,
-						repoRoot: promptContext.repoRoot,
-						instructions: buildChatInstructions(promptContext),
-					},
-					mainContext,
-				);
+				try {
+					const live = await getOrCreateChatSession(
+						{
+							sessionId: input.sessionId,
+							threadId: input.threadId,
+							harness: input.harness,
+							model: input.model,
+							repoRoot: promptContext.repoRoot,
+							instructions: buildChatInstructions(promptContext),
+						},
+						mainContext,
+					);
 
-				yield* streamChatTurn({
-					agent: live.agent,
-					session: live.session,
-					message: input.message,
-					abortSignal: signal,
-				});
+					yield* streamChatTurn({
+						agent: live.agent,
+						session: live.session,
+						message: input.message,
+						abortSignal: signal,
+					});
+				} catch (error) {
+					if (!signal?.aborted) {
+						await Effect.runPromise(
+							Effect.logError("chat turn failed", {
+								sessionId: input.sessionId,
+								threadId: input.threadId,
+								harness: input.harness,
+								cause: error instanceof Error ? error.stack : String(error),
+							}).pipe(Effect.provide(mainContext)),
+						);
+					}
+					throw error;
+				}
 			}),
 			closeThread: authed.chat.closeThread.effect(function* ({ input }) {
 				yield* Effect.promise(() =>
