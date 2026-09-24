@@ -76,25 +76,19 @@ export const createHarnessSandbox = (
 					.workdir("/home/node")
 					.env("PATH", "/home/node/.local/bin:/usr/local/bin:/usr/bin:/bin")
 					.volume(GUEST_REPO_PATH, (mount) => mount.bind(repoRoot)),
+			setup: async (session, opts) => {
+				const result = await session.run({
+					command:
+						"mkdir -p /home/node/.local/bin && corepack enable --install-directory /home/node/.local/bin",
+					abortSignal: opts.abortSignal,
+				});
+				if (result.exitCode !== 0) {
+					throw new Error(
+						`Could not enable pnpm in microsandbox: ${result.stderr}`,
+					);
+				}
+			},
 		});
-		const createSession = provider.createSession;
-		provider.createSession = (options) =>
-			createSession({
-				...options,
-				onFirstCreate: async (session, opts) => {
-					const result = await session.run({
-						command:
-							"mkdir -p /home/node/.local/bin && corepack enable --install-directory /home/node/.local/bin",
-						abortSignal: opts.abortSignal,
-					});
-					if (result.exitCode !== 0) {
-						throw new Error(
-							`Could not enable pnpm in microsandbox: ${result.stderr}`,
-						);
-					}
-					await options?.onFirstCreate?.(session, opts);
-				},
-			});
 		return {
 			provider,
 			workDir: "repo",
