@@ -136,7 +136,11 @@ browser-automation tools) drive the app against a live sidecar. `import.meta.env
 whole branch dead code in a packaged build (Vite inlines it to `false` and strips the branch), so
 there's no path to it in production regardless of env vars, and the token is never logged.
 
-**`bun dev --browser`** (from `apps/desktop`) is the easy path: same devsess orchestration as plain
+`bun dev` sets both env vars in every mode, so the vite server behind a plain `bun dev` is also
+openable in a browser tab — find its port with `devsess tail` (aliased `dev tail`). The Tauri
+webview takes the same override in dev, so `get_backend` only runs in packaged builds.
+
+**`bun dev --browser`** (from `apps/desktop`) is the path for an agent-owned server: same devsess orchestration as plain
 `bun dev` (own session, own `NISI_DATA_DIR`, sequenced instead of raced — the frontend process waits
 on the sidecar's `sidecar.json` handshake before it spawns `vite`, then both race each other same as
 `tauri dev` would), just with `vite dev` in place of the Tauri webview. Vite's port is the flag

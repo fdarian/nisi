@@ -13,6 +13,8 @@ type BackendInfo = {
  * impossible to open the app in a real browser for visual QA (devtools,
  * screen recording, extensions). When both env vars are set, this points the
  * frontend at an already-running sidecar instead of asking Rust for one.
+ * `scripts/dev.ts` sets them in every dev mode, so the Tauri webview takes
+ * this path in dev too.
  * `import.meta.env.DEV` makes the whole branch dead code in a packaged
  * build, so there's no path to it outside `vite dev` regardless of env
  * vars. See apps/desktop/AGENTS.md, "Browser dev harness", for the full

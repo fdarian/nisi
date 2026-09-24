@@ -116,6 +116,13 @@ const dev = Command.make(
 				VITE_HOST: String(host),
 				NISI_DEV_SIDECAR_PORT: String(sidecarPort),
 				NISI_DEV_SIDECAR_TOKEN: sidecarToken,
+				// Set in both modes, not just `--browser`: with these, the vite server
+				// `tauri dev` starts can also be opened in a plain browser tab (see
+				// `src/infra/backend.ts`). The Tauri webview picks them up too instead
+				// of `get_backend` — same sidecar either way, since this run pinned
+				// both.
+				VITE_DEV_BACKEND_PORT: String(sidecarPort),
+				VITE_DEV_BACKEND_TOKEN: sidecarToken,
 			};
 
 			// `--watch`, not `--hot`: `--hot` re-runs the entry module in the same
@@ -137,20 +144,12 @@ const dev = Command.make(
 			// published its handshake, so this sequences (await, then spawn vite)
 			// rather than starting both at once — still raced against the sidecar
 			// itself below, so a sidecar crash before publishing interrupts the
-			// wait instead of hanging forever. `sidecarPort`/`sidecarToken` are
-			// handed to vite directly rather than read back off the handshake —
-			// this run already minted both, so re-deriving them from the file
-			// `awaitSidecarHandshake` just finished polling would be a needless
-			// roundabout.
+			// wait instead of hanging forever.
 			const frontendProcess = browser
 				? Effect.gen(function* () {
 						yield* awaitSidecarHandshake(dataDir, { token: sidecarToken });
 						return yield* runManagedSubprocess("bun", ["run", "dev:vite"], {
-							env: {
-								...env,
-								VITE_DEV_BACKEND_PORT: String(sidecarPort),
-								VITE_DEV_BACKEND_TOKEN: sidecarToken,
-							},
+							env,
 						});
 					})
 				: runManagedSubprocess(
