@@ -14,7 +14,8 @@
  * one field (the boolean) that's honest to predict — see that hook's doc
  * comment for the split.
  */
-import { ORPCError } from "@orpc/client";
+import { type InferClientError, ORPCError } from "@orpc/client";
+import type { SidecarClient } from "@repo/sidecar-api";
 import type { Query, UseQueryResult } from "@tanstack/react-query";
 import {
 	useMutation,
@@ -1023,6 +1024,10 @@ export type MergePullRequestParams = {
 	method: MergeMethod;
 };
 
+export type MergePullRequestError =
+	| InferClientError<SidecarClient["pullRequests"]["merge"]>
+	| Error;
+
 /**
  * `pullRequests.merge`/`mergeStack` — on success writes the confirmed terminal
  * state into this PR's `mergeStatus` cache, then refetches it and the sessions
@@ -1032,7 +1037,10 @@ export type MergePullRequestParams = {
  */
 export function useMergePullRequest(
 	orpc: SidecarQueryUtils,
-	onError: (error: unknown, params: MergePullRequestParams) => void,
+	onError: (
+		error: MergePullRequestError,
+		params: MergePullRequestParams,
+	) => void,
 ): {
 	merge: (params: MergePullRequestParams) => void;
 	mergeStack: (params: MergePullRequestParams) => void;

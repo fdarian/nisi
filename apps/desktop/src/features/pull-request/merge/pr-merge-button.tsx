@@ -1,6 +1,6 @@
 "use client";
 
-import { ORPCError } from "@orpc/client";
+import { isDefinedError, ORPCError } from "@orpc/client";
 import { cn } from "cn";
 import { ChevronDownIcon } from "lucide-react";
 import { useCallback, useState } from "react";
@@ -16,6 +16,7 @@ import {
 import { toastManager } from "#/components/ui/toast";
 import type {
 	MergeMethod,
+	MergePullRequestError,
 	PullRequestMergeStatus,
 	UnpushedCommitsCheck,
 } from "#/features/pull-request/data/pr-data";
@@ -79,20 +80,10 @@ const mergeStatusErrorMessage = (error: unknown): string => {
 };
 
 const mergeFailureMessage = (
-	error: unknown,
+	error: MergePullRequestError,
 ): Pick<MergeFailure, "reason" | "detail"> => {
-	if (error instanceof ORPCError) {
-		const data: unknown = error.data;
-		if (
-			typeof data === "object" &&
-			data !== null &&
-			"reason" in data &&
-			typeof data.reason === "string" &&
-			"detail" in data &&
-			typeof data.detail === "string"
-		) {
-			return { reason: data.reason, detail: data.detail };
-		}
+	if (isDefinedError(error) && error.code !== "UNAUTHORIZED") {
+		return { reason: error.data.reason, detail: error.data.detail };
 	}
 	return {
 		reason: "Merge failed",
@@ -204,7 +195,7 @@ export function PrMergeButton({
 	);
 	const [mergeFailure, setMergeFailure] = useState<MergeFailure | null>(null);
 	const handleMergeError = useCallback(
-		(error: unknown, params: { number: number }) => {
+		(error: MergePullRequestError, params: { number: number }) => {
 			const message = mergeFailureMessage(error);
 			const failure = {
 				title: `Couldn't merge #${params.number}`,

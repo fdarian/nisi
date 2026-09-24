@@ -168,6 +168,13 @@ export const PullRequestCheck = Schema.Struct({
 });
 export type PullRequestCheck = Schema.Schema.Type<typeof PullRequestCheck>;
 
+const MergeFailure = Schema.toStandardSchemaV1(
+	Schema.Struct({
+		reason: Schema.String,
+		detail: Schema.String,
+	}),
+);
+
 /**
  * `search` asks GitHub live via `@repo/git`'s `searchPullRequests` — no
  * local index or cache, so every call is a real `gh search prs` round trip.
@@ -260,13 +267,6 @@ export type PullRequestCheck = Schema.Schema.Type<typeof PullRequestCheck>;
  * Error codes mirror `merge`'s minus `CONFLICT` — readiness doesn't depend on
  * mergeability, so there's no analogous "not mergeable right now" outcome.
  */
-const MergeFailure = Schema.toStandardSchemaV1(
-	Schema.Struct({
-		reason: Schema.String,
-		detail: Schema.String,
-	}),
-);
-
 export const pullRequestsContract = {
 	search: oc
 		.input(Schema.Struct({ query: Schema.String }))
