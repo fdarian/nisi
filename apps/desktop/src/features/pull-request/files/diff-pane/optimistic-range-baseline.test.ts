@@ -56,7 +56,7 @@ test("an addition beside a deletion must be claimed before it covers that flank"
 			startLine: 2,
 			endLine: 2,
 		}),
-	).toBe("before\nnew\nafter\n");
+	).toBe("before\nold\nnew\nafter\n");
 });
 
 test("optimistic baseline agrees with reconciliation for selected additions and replacements", async () => {
@@ -76,6 +76,16 @@ test("optimistic baseline agrees with reconciliation for selected additions and 
 				base: "before\nold\nafter\n",
 				head: "before\nnew\nafter\n",
 				range: { startLine: 1, endLine: 3 },
+			},
+			{
+				base: "before\nold\nafter\n",
+				head: "before\nnew\nafter\n",
+				range: { startLine: 2, endLine: 2 },
+			},
+			{
+				base: "before\nremoved\nafter\n",
+				head: "before\nafter\n",
+				range: { startLine: 1, endLine: 1 },
 			},
 		];
 		for (const fixture of cases) {

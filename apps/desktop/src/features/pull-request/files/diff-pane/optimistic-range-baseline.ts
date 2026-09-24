@@ -18,27 +18,11 @@ export function optimisticRangeBaseline(
 	if (diff === undefined) return baseline;
 	const oldLines = linesOf(baseline);
 	const headLines = linesOf(head);
-	const addedLines = new Set<number>();
-	for (const hunk of diff.hunks) {
-		let headLine = hunk.additionStart;
-		for (const part of hunk.hunkContent) {
-			if (part.type === "context") {
-				headLine += part.lines;
-			} else {
-				for (let index = 0; index < part.additions; index++) {
-					addedLines.add(headLine + index);
-				}
-				headLine += part.additions;
-			}
-		}
-	}
-	const covered = (line: number): boolean =>
+	const claimed = (line: number): boolean =>
 		line >= 1 &&
 		line <= headLines.length &&
-		((line >= range.startLine && line <= range.endLine) ||
-			!addedLines.has(line));
-	const claimed = (line: number): boolean =>
-		line >= range.startLine && line <= range.endLine;
+		line >= range.startLine &&
+		line <= range.endLine;
 	const result: string[] = [];
 	let oldCursor = 0;
 	for (const hunk of diff.hunks) {
@@ -55,14 +39,7 @@ export function optimisticRangeBaseline(
 				headLine += part.lines;
 				continue;
 			}
-			if (
-				part.deletions > 0 &&
-				!(
-					covered(headLine) &&
-					covered(headLine + 1) &&
-					(claimed(headLine) || claimed(headLine + 1))
-				)
-			) {
+			if (part.deletions > 0 && !(claimed(headLine) && claimed(headLine + 1))) {
 				result.push(...oldLines.slice(oldLine, oldLine + part.deletions));
 			}
 			oldLine += part.deletions;
