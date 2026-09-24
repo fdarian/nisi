@@ -124,3 +124,56 @@ test("old-side context endpoints map to their HEAD positions", () => {
 		),
 	).toEqual({ startLine: 10, endLine: 12 });
 });
+
+const expanded = hunks(
+	"@@ -3,2 +3,3 @@\n before\n+inserted\n after\n@@ -12,2 +13,2 @@\n before2\n-old\n+new\n",
+);
+
+test("a selection starting in expanded context before a hunk includes the hunk", () => {
+	expect(
+		selectionHeadRange(
+			expanded,
+			{ line: 2, side: "deletions" },
+			{ line: 4, side: "additions" },
+		),
+	).toEqual({ startLine: 2, endLine: 4 });
+});
+
+test("a selection ending in expanded context after a hunk uses the preceding offset", () => {
+	expect(
+		selectionHeadRange(
+			expanded,
+			{ line: 14, side: "additions" },
+			{ line: 15, side: "deletions" },
+		),
+	).toEqual({ startLine: 14, endLine: 16 });
+});
+
+test("two expanded-context endpoints spanning a whole hunk cover its changed rows", () => {
+	expect(
+		selectionHeadRange(
+			expanded,
+			{ line: 10, side: "deletions" },
+			{ line: 15, side: "deletions" },
+		),
+	).toEqual({ startLine: 11, endLine: 16 });
+});
+
+test("expanded old-side context maps across zero-length hunk sides", () => {
+	const deletion = hunks("@@ -5,1 +4,0 @@\n-old\n");
+	expect(
+		selectionHeadRange(
+			deletion,
+			{ line: 4, side: "deletions" },
+			{ line: 6, side: "deletions" },
+		),
+	).toEqual({ startLine: 4, endLine: 5 });
+	const insertion = hunks("@@ -4,0 +5,1 @@\n+added\n");
+	expect(
+		selectionHeadRange(
+			insertion,
+			{ line: 4, side: "deletions" },
+			{ line: 5, side: "deletions" },
+		),
+	).toEqual({ startLine: 4, endLine: 6 });
+});
