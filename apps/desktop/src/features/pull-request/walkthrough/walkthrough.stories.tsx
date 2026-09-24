@@ -21,6 +21,7 @@ import {
 	FIXTURE_WALKTHROUGH,
 	FIXTURE_WALKTHROUGH_FULLY_COVERED,
 	FIXTURE_WALKTHROUGH_WITH_GAPS,
+	TODO_ITEM_PATH,
 	TODOS_PATH,
 } from "./walkthrough.fixture";
 import type { WalkthroughSelection } from "./walkthrough-data";
@@ -79,6 +80,41 @@ export const Loaded: Story = {
 		session: FIXTURE_SESSION,
 		files: FIXTURE_FILES,
 		initialSelection: { kind: "reference", id: "toggle-mutation" },
+	},
+};
+
+/** A reviewed reference with an empty reviewed→head patch starts header-only; expand it to see the quiet no-changes message. */
+export const ReviewedBlock: Story = {
+	args: {
+		orpc: createMockOrpc({
+			storedWalkthrough: FIXTURE_WALKTHROUGH,
+			fileContents: {
+				...FIXTURE_FILE_CONTENTS,
+				[TODO_ITEM_PATH]: {
+					patch: "",
+					truncated: false,
+					review: {
+						baselineKind: "reviewed",
+						changedSinceReview: false,
+						ranges: [
+							{
+								startLine: 22,
+								endLine: 33,
+								status: "reviewed",
+								reviewedVia: {
+									kind: "range",
+									blockId: "checkbox-ui",
+									blockLabel: "Checkbox pending/complete states",
+								},
+							},
+						],
+					},
+				},
+			},
+		}),
+		session: FIXTURE_SESSION,
+		files: FIXTURE_FILES,
+		initialSelection: { kind: "reference", id: "checkbox-ui" },
 	},
 };
 
