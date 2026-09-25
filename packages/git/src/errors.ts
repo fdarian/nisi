@@ -382,6 +382,16 @@ export type PullRequestChecksError =
 	| GhRateLimited
 	| PullRequestNotFound;
 
+export class WorkflowApprovalForbidden extends Schema.TaggedError<WorkflowApprovalForbidden>()(
+	"WorkflowApprovalForbidden",
+	{ runId: Schema.Number, reason: Schema.String },
+) {}
+
+export class WorkflowApprovalFailed extends Schema.TaggedError<WorkflowApprovalFailed>()(
+	"WorkflowApprovalFailed",
+	{ runId: Schema.Number, reason: Schema.String },
+) {}
+
 export type RepoMergeMethodsError =
 	| GhOutputDecodeError
 	| GhNotAuthenticated

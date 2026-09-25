@@ -1,9 +1,19 @@
 "use client";
 
+import { isDefinedError } from "@orpc/client";
 import type React from "react";
+import { useState } from "react";
+import { toastManager } from "#/components/ui/toast";
 import type { PullRequestCheck } from "#/features/pull-request/data/pr-data";
-import { usePullRequestChecks } from "#/features/pull-request/data/pr-data";
+import {
+	useApproveWorkflowRuns,
+	usePullRequestChecks,
+} from "#/features/pull-request/data/pr-data";
 import type { SidecarQueryUtils } from "#/infra/backend-context";
+import {
+	MergeErrorDialog,
+	type MergeFailure,
+} from "../merge/merge-error-dialog";
 import type { CiCheck } from "./ci-status";
 import { CiStatus } from "./ci-status";
 
@@ -94,6 +104,32 @@ export function PrCiStatus({
 	watched,
 	sessionId,
 }: PrCiStatusProps): React.ReactElement | null {
+	const [approvalFailure, setApprovalFailure] = useState<MergeFailure | null>(
+		null,
+	);
+	const approval = useApproveWorkflowRuns(orpc, (error) => {
+		const detail =
+			isDefinedError(error) && error.code !== "UNAUTHORIZED"
+				? error.data
+				: {
+						reason: "Workflow approval failed",
+						detail: error instanceof Error ? error.message : String(error),
+					};
+		const failure = {
+			title: "Couldn't approve workflows",
+			reason: detail.reason,
+			detail: detail.detail,
+		};
+		toastManager.add({
+			title: failure.title,
+			description: failure.reason,
+			type: "error",
+			actionProps: {
+				children: "View details",
+				onClick: () => setApprovalFailure(failure),
+			},
+		});
+	});
 	const checksQuery = usePullRequestChecks(
 		orpc,
 		{ repoRoot, owner, repo, number },
@@ -102,5 +138,29 @@ export function PrCiStatus({
 
 	if (checksQuery.data === undefined) return null;
 
-	return <CiStatus checks={toCiChecks(checksQuery.data)} watched={watched} />;
+	const runIds = checksQuery.data.flatMap((check) =>
+		check.status === "awaiting_approval" && check.workflowRunId !== undefined
+			? [check.workflowRunId]
+			: [],
+	);
+	return (
+		<>
+			<CiStatus
+				checks={toCiChecks(checksQuery.data)}
+				watched={watched}
+				onApproveWorkflows={
+					runIds.length > 0
+						? () => approval.approve({ repoRoot, owner, repo, runIds })
+						: undefined
+				}
+				isApproving={approval.isPending}
+			/>
+			<MergeErrorDialog
+				failure={approvalFailure}
+				onOpenChange={(open) => {
+					if (!open) setApprovalFailure(null);
+				}}
+			/>
+		</>
+	);
 }

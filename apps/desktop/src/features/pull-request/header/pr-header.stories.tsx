@@ -121,7 +121,22 @@ export const AwaitingApproval: Story = {
 		target: PR_TARGET,
 		orpc: createMockOrpc({
 			mergeStatus: { ...BASE_STATUS, defaultMethod: "squash" },
-			checks: [{ name: "CI", status: "awaiting_approval" }],
+			checks: [
+				{
+					name: "CI",
+					workflowName: "CI",
+					status: "awaiting_approval",
+					workflowRunId: 101,
+					detailsUrl: "https://github.com/acme/widgets/actions/runs/101",
+				},
+				{
+					name: "Tests",
+					workflowName: "Tests",
+					status: "awaiting_approval",
+					workflowRunId: 102,
+					detailsUrl: "https://github.com/acme/widgets/actions/runs/102",
+				},
+			],
 		}),
 	},
 };

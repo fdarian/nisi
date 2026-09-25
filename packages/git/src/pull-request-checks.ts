@@ -4,7 +4,9 @@ import {
 	GhNotAuthenticated,
 	GhOutputDecodeError,
 	GhRateLimited,
-	type GitCommandError,
+	GitCommandError,
+	WorkflowApprovalForbidden,
+	WorkflowApprovalFailed,
 	type PullRequestChecksError,
 	PullRequestNotFound,
 } from "./errors.ts";
@@ -12,7 +14,7 @@ import { ghResult } from "./exec.ts";
 import { isAuthFailure, isRateLimited } from "./pull-request.ts";
 
 /**
- * The 5-state vocabulary `apps/desktop/src/features/pull-request/header/ci-status.tsx`'s
+ * The CI vocabulary `apps/desktop/src/features/pull-request/header/ci-status.tsx`'s
  * `CiCheckStatus` renders, computed here from GitHub's two check shapes —
  * this is domain knowledge (what "failing" means across a GitHub Actions run
  * vs. an external status integration), not a wire concern, so it's owned by
@@ -21,6 +23,7 @@ import { isAuthFailure, isRateLimited } from "./pull-request.ts";
 export type PullRequestCheckStatus =
 	| "passing"
 	| "failing"
+	| "awaiting_approval"
 	| "running"
 	| "pending"
 	| "skipped";
@@ -52,6 +55,7 @@ export type PullRequestCheck = {
 	 * in the set at once.
 	 */
 	workflowName?: string;
+	workflowRunId?: number;
 };
 
 /**
@@ -117,16 +121,49 @@ export const StatusContextView = Schema.Struct({
 export type StatusContextView = Schema.Schema.Type<typeof StatusContextView>;
 
 const StatusCheckRollupView = Schema.Struct({
+	headRefOid: Schema.String,
 	statusCheckRollup: Schema.Array(
 		Schema.Union([CheckRunView, StatusContextView]),
 	),
 });
 
 const decodeStatusCheckRollupView = (command: string, raw: string) =>
-	Effect.try({
-		try: () => Schema.decodeUnknownSync(StatusCheckRollupView)(JSON.parse(raw)),
-		catch: (cause) => new GhOutputDecodeError({ command, raw, cause }),
-	});
+	Schema.decodeUnknownEffect(Schema.fromJsonString(StatusCheckRollupView))(
+		raw,
+	).pipe(
+		Effect.mapError(
+			(cause) => new GhOutputDecodeError({ command, raw, cause }),
+		),
+	);
+
+const AwaitingWorkflowRuns = Schema.Struct({
+	workflow_runs: Schema.Array(
+		Schema.Struct({
+			id: Schema.Number,
+			name: Schema.String,
+			html_url: Schema.String,
+		}),
+	),
+});
+
+export const decodeAwaitingWorkflowRuns = (command: string, raw: string) =>
+	Schema.decodeUnknownEffect(Schema.fromJsonString(AwaitingWorkflowRuns))(
+		raw,
+	).pipe(
+		Effect.mapError(
+			(cause) => new GhOutputDecodeError({ command, raw, cause }),
+		),
+		Effect.map(
+			(result): ReadonlyArray<PullRequestCheck> =>
+				result.workflow_runs.map((run) => ({
+					name: run.name,
+					workflowName: run.name,
+					status: "awaiting_approval",
+					detailsUrl: run.html_url,
+					workflowRunId: run.id,
+				})),
+		),
+	);
 
 /** GitHub's zero-value `DateTime` — how an unset `completedAt`/`startedAt` prints, never a real timestamp. */
 const NO_TIMESTAMP = "0001-01-01T00:00:00Z";
@@ -218,7 +255,8 @@ export type FetchPullRequestChecksInput = {
 };
 
 /**
- * `gh pr view <number> --json statusCheckRollup` — every CI check attached to
+ * `gh pr view <number> --json statusCheckRollup,headRefOid` plus the Actions
+ * runs awaiting approval for that head SHA — every CI check attached to
  * a PR, GitHub Actions (`CheckRun`) and external status integrations
  * (`StatusContext`) alike, in the order `gh` reports them (never sorted —
  * that ordering is GitHub's own). `input.owner`/`input.repo` aren't used by
@@ -244,7 +282,7 @@ export const fetchPullRequestChecks = (
 			"view",
 			String(input.number),
 			"--json",
-			"statusCheckRollup",
+			"statusCheckRollup,headRefOid",
 		]);
 
 		if (result.exitCode !== 0) {
@@ -267,5 +305,61 @@ export const fetchPullRequestChecks = (
 			"gh pr view",
 			result.stdout,
 		);
-		return view.statusCheckRollup.map(toPullRequestCheck);
+		const endpoint = `repos/${input.owner}/${input.repo}/actions/runs?head_sha=${encodeURIComponent(view.headRefOid)}&status=action_required`;
+		const runs = yield* ghResult(input.repoRoot, ["api", endpoint]);
+		if (runs.exitCode !== 0) {
+			if (isAuthFailure(runs)) {
+				return yield* new GhNotAuthenticated({ reason: runs.stderr.trim() });
+			}
+			if (isRateLimited(runs.stderr)) {
+				return yield* new GhRateLimited({ reason: runs.stderr.trim() });
+			}
+			return yield* new GitCommandError({
+				command: "gh",
+				args: ["api", endpoint],
+				cwd: input.repoRoot,
+				exitCode: runs.exitCode,
+				stderr: runs.stderr,
+				cause: new Error(runs.stderr),
+			});
+		}
+		const awaiting = yield* decodeAwaitingWorkflowRuns(
+			"gh api actions/runs",
+			runs.stdout,
+		);
+		return [...view.statusCheckRollup.map(toPullRequestCheck), ...awaiting];
+	});
+
+export const approveWorkflowRuns = (input: {
+	repoRoot: string;
+	owner: string;
+	repo: string;
+	runIds: readonly number[];
+}) =>
+	Effect.gen(function* () {
+		for (const runId of input.runIds) {
+			const endpoint = `repos/${input.owner}/${input.repo}/actions/runs/${runId}/approve`;
+			const result = yield* ghResult(input.repoRoot, [
+				"api",
+				"-X",
+				"POST",
+				endpoint,
+			]);
+			if (result.exitCode === 0) continue;
+			if (isAuthFailure(result)) {
+				return yield* new GhNotAuthenticated({ reason: result.stderr.trim() });
+			}
+			if (
+				/\b403\b|resource not accessible by integration/i.test(result.stderr)
+			) {
+				return yield* new WorkflowApprovalForbidden({
+					runId,
+					reason: result.stderr.trim(),
+				});
+			}
+			return yield* new WorkflowApprovalFailed({
+				runId,
+				reason: result.stderr.trim(),
+			});
+		}
 	});

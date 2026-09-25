@@ -56,6 +56,8 @@ export {
 	WorktreePathOccupied,
 	WorktreeReadFailed,
 	WorktreeRelocationFailed,
+	WorkflowApprovalFailed,
+	WorkflowApprovalForbidden,
 } from "./errors.ts";
 export type { Hunk } from "./hunk.ts";
 export { parseHunks } from "./hunk.ts";
@@ -76,7 +78,10 @@ export type {
 	PullRequestCheck,
 	PullRequestCheckStatus,
 } from "./pull-request-checks.ts";
-export { fetchPullRequestChecks } from "./pull-request-checks.ts";
+export {
+	approveWorkflowRuns,
+	fetchPullRequestChecks,
+} from "./pull-request-checks.ts";
 export type {
 	MergeMethod,
 	PullRequestMergeability,

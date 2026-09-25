@@ -1208,7 +1208,51 @@ export type PullRequestCheck = {
 	durationMs?: number;
 	detailsUrl?: string;
 	workflowName?: string;
+	workflowRunId?: number;
 };
+
+export type ApproveWorkflowRunsParams = {
+	repoRoot: string;
+	owner: string;
+	repo: string;
+	runIds: readonly number[];
+};
+
+export type ApproveWorkflowRunsError =
+	| InferClientError<SidecarClient["pullRequests"]["approveWorkflowRuns"]>
+	| Error;
+
+export function useApproveWorkflowRuns(
+	orpc: SidecarQueryUtils,
+	onError: (error: ApproveWorkflowRunsError) => void,
+): {
+	approve: (params: ApproveWorkflowRunsParams) => void;
+	isPending: boolean;
+} {
+	const queryClient = useQueryClient();
+	const refreshChecks = (params: ApproveWorkflowRunsParams) =>
+		queryClient.invalidateQueries({
+			queryKey: orpc.pullRequests.checks.key({
+				input: {
+					repoRoot: params.repoRoot,
+					owner: params.owner,
+					repo: params.repo,
+				},
+			}),
+		});
+	const mutation = useMutation({
+		...orpc.pullRequests.approveWorkflowRuns.mutationOptions(),
+		onSuccess: (_data, params) => refreshChecks(params),
+		onError: (error, params) => {
+			onError(error);
+			void refreshChecks(params);
+		},
+	});
+	return {
+		approve: (params) => mutation.mutate(params),
+		isPending: mutation.isPending,
+	};
+}
 
 export type PullRequestChecksParams = {
 	repoRoot: string;
