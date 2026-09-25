@@ -1,7 +1,7 @@
 "use client";
 
 import { GitPullRequestIcon } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { Avatar, AvatarFallback, AvatarImage } from "#/components/ui/avatar";
 import { Badge } from "#/components/ui/badge";
 import {
@@ -92,7 +92,6 @@ export function OpenPullRequestPalette({
 }: OpenPullRequestPaletteProps): React.ReactElement {
 	const [query, setQuery] = useState("");
 	const [debouncedQuery, setDebouncedQuery] = useState("");
-	const inputRef = useRef<HTMLInputElement>(null);
 
 	const { results, error: searchError } = useSearchPullRequests(
 		orpc,
@@ -131,36 +130,6 @@ export function OpenPullRequestPalette({
 		return () => clearTimeout(timer);
 	}, [query]);
 
-	/**
-	 * Emacs-style Ctrl+N/Ctrl+P, alongside the arrow keys the Autocomplete
-	 * already binds. Base UI's `Autocomplete.Root` (`command.tsx`'s `Command`)
-	 * owns highlight state internally via floating-ui's `useListNavigation`,
-	 * attached to the search input's own `onKeyDown` — there's no public prop
-	 * to set the highlighted item or move it imperatively (only
-	 * `onItemHighlighted`, a read-only callback), so the only way to drive
-	 * that *same* state instead of tracking a second index of our own is to
-	 * dispatch the identical key the arrow keys produce at that same input
-	 * element and let Base UI's existing handler process it — this is
-	 * genuinely synthesizing a key event, not a documented API, but it goes
-	 * through the real navigation logic (same wrap-around, same mouse-hover
-	 * interplay) rather than inventing a parallel one.
-	 */
-	const handlePaletteKeyDown = (event: React.KeyboardEvent) => {
-		if (!event.ctrlKey || event.metaKey || event.altKey || event.shiftKey) {
-			return;
-		}
-		const key = event.key.toLowerCase();
-		if (key !== "n" && key !== "p") return;
-		event.preventDefault();
-		inputRef.current?.dispatchEvent(
-			new KeyboardEvent("keydown", {
-				key: key === "n" ? "ArrowDown" : "ArrowUp",
-				bubbles: true,
-				cancelable: true,
-			}),
-		);
-	};
-
 	// The open-action error takes priority in the footer — it's about the
 	// selection the user just made, more specific than a background search
 	// failure. A search error only surfaces there when it's *not* already the
@@ -175,7 +144,7 @@ export function OpenPullRequestPalette({
 
 	return (
 		<CommandDialog onOpenChange={onOpenChange} open={open}>
-			<CommandDialogPopup onKeyDown={handlePaletteKeyDown}>
+			<CommandDialogPopup>
 				<CommandPanel>
 					<Command
 						filter={null}
@@ -183,7 +152,7 @@ export function OpenPullRequestPalette({
 						onValueChange={setQuery}
 						value={query}
 					>
-						<CommandInput placeholder="Open pull requests…" ref={inputRef} />
+						<CommandInput placeholder="Open pull requests…" />
 						<Separator />
 						<CommandEmpty>
 							{searchErrorMessage ?? "No pull requests found."}

@@ -111,23 +111,41 @@ export function Command({
 	);
 }
 
-export function CommandInput({
-	className,
-	placeholder = undefined,
-	...props
-}: React.ComponentProps<typeof AutocompleteInput>): React.ReactElement {
+export function CommandInput(
+	props: React.ComponentProps<typeof AutocompleteInput>,
+): React.ReactElement {
+	const handleKeyDown: NonNullable<
+		React.ComponentProps<typeof AutocompleteInput>["onKeyDown"]
+	> = (event) => {
+		props.onKeyDown?.(event);
+		if (event.defaultPrevented) return;
+		if (!event.ctrlKey || event.metaKey || event.altKey || event.shiftKey)
+			return;
+
+		const key = event.key.toLowerCase();
+		if (key !== "n" && key !== "p") return;
+		event.preventDefault();
+		event.currentTarget.dispatchEvent(
+			new KeyboardEvent("keydown", {
+				key: key === "n" ? "ArrowDown" : "ArrowUp",
+				bubbles: true,
+				cancelable: true,
+			}),
+		);
+	};
+
 	return (
 		<div className="px-2.5 py-1.5">
 			<AutocompleteInput
+				{...props}
 				autoFocus
 				className={cn(
 					"border-transparent! bg-transparent! shadow-none before:hidden has-focus-visible:ring-0",
-					className,
+					props.className,
 				)}
-				placeholder={placeholder}
+				onKeyDown={handleKeyDown}
 				size="lg"
 				startAddon={<SearchIcon />}
-				{...props}
 			/>
 		</div>
 	);
