@@ -72,7 +72,7 @@
 		"class-variance-authority": "^0.7.1",
 		"cn": "^0.2.3",
 		"deskkit": "github:fdarian/deskkit",
-		"devsess": "^0.3.0",
+		"devsess": "^0.3.2",
 		"drizzle-orm": "1.0.0-rc.5-169397b",
 		"effect": "catalog:",
 		"lexical": "^0.49.0",
