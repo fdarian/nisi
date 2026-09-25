@@ -1,10 +1,13 @@
 import { animate, useMotionValue, useReducedMotion } from "motion/react";
-import { useLayoutEffect, useRef } from "react";
+import { useCallback, useLayoutEffect, useState } from "react";
 
 const SPRING = { type: "spring", duration: 0.08, bounce: 0 } as const;
 
 export function useSelectionPopoverGlide(open: boolean) {
-	const positionerRef = useRef<HTMLDivElement>(null);
+	const [positioner, setPositioner] = useState<HTMLDivElement | null>(null);
+	const positionerRef = useCallback((element: HTMLDivElement | null) => {
+		setPositioner(element);
+	}, []);
 	const x = useMotionValue(0);
 	const y = useMotionValue(0);
 	const reducedMotion = useReducedMotion();
@@ -15,7 +18,6 @@ export function useSelectionPopoverGlide(open: boolean) {
 			y.set(0);
 			return;
 		}
-		const positioner = positionerRef.current;
 		if (positioner === null) return;
 		const previousRect = { current: null as DOMRect | null };
 		const animations = {
@@ -62,7 +64,7 @@ export function useSelectionPopoverGlide(open: boolean) {
 			x.set(0);
 			y.set(0);
 		};
-	}, [open, reducedMotion, x, y]);
+	}, [open, positioner, reducedMotion, x, y]);
 
 	return { positionerRef, x, y };
 }
