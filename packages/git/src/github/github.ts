@@ -1,4 +1,4 @@
-import { Context, type Effect } from "effect";
+import { Context, type Effect, type Stream } from "effect";
 import type {
 	GitCommandError,
 	GitHubUnreachable,
@@ -29,7 +29,11 @@ import type {
 	PullRequestStack,
 	PullRequestStackError,
 } from "./models.ts";
-import type { MergeMethod, PullRequestMergeability } from "./models.ts";
+import type {
+	MergeMethod,
+	PullRequestMergeability,
+	PullRequestMergeStatus,
+} from "./models.ts";
 
 export type RepositoryIdentity = {
 	readonly owner: string;
@@ -100,6 +104,8 @@ export type GitHubShape = {
 	>;
 	merge: (
 		repoRoot: string,
+		owner: string,
+		repo: string,
 		number: number,
 		method: MergeMethod,
 	) => Effect.Effect<void, PullRequestMergeError | GitCommandError>;
@@ -112,8 +118,34 @@ export type GitHubShape = {
 	) => Effect.Effect<void, PullRequestStackMergeError | GitCommandError>;
 	markReady: (
 		repoRoot: string,
+		owner: string,
+		repo: string,
 		number: number,
 	) => Effect.Effect<void, PullRequestReadyError | GitCommandError>;
+	watchChecks: (
+		input: FetchPullRequestChecksInput,
+	) => Stream.Stream<
+		ReadonlyArray<PullRequestCheck>,
+		PullRequestChecksError | GitCommandError
+	>;
+	watchMergeStatus: (
+		input: FetchPullRequestChecksInput,
+	) => Stream.Stream<
+		PullRequestMergeStatus,
+		PullRequestMergeabilityError | RepoMergeMethodsError | GitCommandError
+	>;
+	watchStack: (
+		input: FetchPullRequestStackInput,
+	) => Stream.Stream<
+		PullRequestStack | null,
+		PullRequestStackError | GitCommandError
+	>;
+	watchOverview: (
+		input: FetchPullRequestOverviewInput,
+	) => Stream.Stream<
+		PullRequestOverview,
+		PullRequestChecksError | GitCommandError
+	>;
 };
 
 export class GitHub extends Context.Service<GitHub, GitHubShape>()(

@@ -1,5 +1,4 @@
-import { GhGitHub } from "../../src/github/gh/github.ts";
-import { Layer } from "effect";
+import { GitHubTestLayer } from "./github-layer.ts";
 /**
  * Runs one of `pull-request.ts`'s two `ReviewTarget` resolvers and prints its
  * outcome as one line of JSON — spawned as a *fresh process* (not imported
@@ -11,7 +10,6 @@ import { Layer } from "effect";
  * separate process with the env var set before this script's first import is
  * the only way to make the override actually take effect.
  */
-import { BunServices } from "@effect/platform-bun";
 import { Cause, Effect, Exit } from "effect";
 import {
 	resolveReviewTarget,
@@ -31,9 +29,7 @@ const target =
 		: resolveReviewTarget(repoRoot);
 
 const exit = await Effect.runPromise(
-	Effect.exit(target).pipe(
-		Effect.provide(GhGitHub.layer.pipe(Layer.provideMerge(BunServices.layer))),
-	),
+	Effect.exit(target).pipe(Effect.provide(GitHubTestLayer)),
 );
 
 const result = Exit.isSuccess(exit)

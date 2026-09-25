@@ -165,3 +165,8 @@ export type PullRequestMergeability = Schema.Schema.Type<
 >;
 
 export type MergeMethod = "merge" | "squash" | "rebase";
+
+export type PullRequestMergeStatus = {
+	readonly mergeability: PullRequestMergeability;
+	readonly allowedMethods: ReadonlyArray<MergeMethod>;
+};

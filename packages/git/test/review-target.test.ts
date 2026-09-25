@@ -1,7 +1,6 @@
-import { GhGitHub } from "../src/github/gh/github.ts";
-import { Layer } from "effect";
+import { GitHubTestLayer } from "./fixtures/github-layer.ts";
 import { describe, expect, test } from "bun:test";
-import { BunServices } from "@effect/platform-bun";
+import type { BunServices } from "@effect/platform-bun";
 import { Effect } from "effect";
 import { GitHub } from "../src/github/github.ts";
 import { resolveReviewTarget } from "../src/pull-request.ts";
@@ -18,7 +17,7 @@ const run = <A, E>(
 	Effect.runPromise(
 		effect.pipe(
 			Effect.provide(
-				GhGitHub.layer.pipe(Layer.provideMerge(BunServices.layer)),
+				GitHubTestLayer,
 			),
 		),
 	);
@@ -34,7 +33,7 @@ const runExit = <A, E>(
 		Effect.exit(
 			effect.pipe(
 				Effect.provide(
-					GhGitHub.layer.pipe(Layer.provideMerge(BunServices.layer)),
+					GitHubTestLayer,
 				),
 			),
 		),

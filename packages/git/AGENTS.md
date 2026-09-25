@@ -6,6 +6,11 @@ Effect service (`github/github.ts`), supplied by `GhGitHub.layer` (`github/gh/gi
 sidecar. The CLI adapter owns GitHub command construction, decoding, and failure classification;
 `github/models.ts` holds public domain shapes. Feeds `packages/sidecar-api`'s `diff` contract.
 
+`github/gh/watch.ts` owns the gh adapter's adaptive cadence, retry/backoff, structural dedupe,
+and replaying, reference-counted per-PR sources. `github/gh/attention.ts` declares the
+`PullRequestAttention` input the adapter needs; the sidecar supplies it. The `GitHub` service
+exposes both one-shot reads and watch streams, so consumers never need to schedule GitHub reads.
+
 - `exec.ts` — the only place that spawns processes. `git`/`gh` helpers plus a strict (fails on
   non-zero exit) and lenient (reports exit code, for "ran and said no" cases like no PR) variant.
 - `repo.ts` — repo root / current branch / merge-base / HEAD sha / local default branch, pure

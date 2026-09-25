@@ -1,5 +1,4 @@
-import { GhGitHub } from "../../src/github/gh/github.ts";
-import { Layer } from "effect";
+import { GitHubTestLayer } from "./github-layer.ts";
 /**
  * Runs `searchPullRequests` once and prints its outcome as one line of JSON —
  * spawned as a *fresh process* (not imported directly) by
@@ -9,7 +8,6 @@ import { Layer } from "effect";
  * at `fixtures/gh-search-stub.sh` only takes effect in a process that hasn't
  * already imported `exec.ts` with the real binary.
  */
-import { BunServices } from "@effect/platform-bun";
 import { Cause, Effect, Exit } from "effect";
 import { GitHub } from "../../src/github/github.ts";
 
@@ -24,9 +22,7 @@ const exit = await Effect.runPromise(
 			const github = yield* GitHub;
 			return yield* github.search(cwd, query);
 		}),
-	).pipe(
-		Effect.provide(GhGitHub.layer.pipe(Layer.provideMerge(BunServices.layer))),
-	),
+	).pipe(Effect.provide(GitHubTestLayer)),
 );
 
 const result = Exit.isSuccess(exit)

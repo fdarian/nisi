@@ -19,6 +19,7 @@ export type {
 export { getChangedFiles, getFileContents } from "./diff.ts";
 export { GitHub } from "./github/github.ts";
 export { GhGitHub } from "./github/gh/github.ts";
+export { PullRequestAttention } from "./github/gh/attention.ts";
 export type {
 	FetchPullRequestChecksInput,
 	FetchPullRequestOverviewInput,

@@ -1,6 +1,4 @@
-import { GhGitHub } from "../../src/github/gh/github.ts";
-import { Layer } from "effect";
-import { BunServices } from "@effect/platform-bun";
+import { GitHubTestLayer } from "./github-layer.ts";
 import { Cause, Effect, Exit } from "effect";
 import { GhStackMergeFailed } from "../../src/errors.ts";
 import { GitHub } from "../../src/github/github.ts";
@@ -16,9 +14,7 @@ const exit = await Effect.runPromise(
 			const github = yield* GitHub;
 			return yield* github.mergeStack("/tmp", "acme", "widgets", 42, "squash");
 		}),
-	).pipe(
-		Effect.provide(GhGitHub.layer.pipe(Layer.provideMerge(BunServices.layer))),
-	),
+	).pipe(Effect.provide(GitHubTestLayer)),
 );
 
 if (Exit.isSuccess(exit)) {

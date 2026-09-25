@@ -1,5 +1,4 @@
-import { GhGitHub } from "../../src/github/gh/github.ts";
-import { Layer } from "effect";
+import { GitHubTestLayer } from "./github-layer.ts";
 /**
  * Runs `markPullRequestReady` and prints its outcome as one line of JSON —
  * spawned as a *fresh process* (not imported directly) by
@@ -7,7 +6,6 @@ import { Layer } from "effect";
  * `NISI_GH_BIN` once at module load via a top-level `const`. See
  * `search-pull-requests-runner.ts`'s doc comment for the full reasoning.
  */
-import { BunServices } from "@effect/platform-bun";
 import { Cause, Effect, Exit } from "effect";
 import { GitHub } from "../../src/github/github.ts";
 
@@ -22,11 +20,14 @@ const exit = await Effect.runPromise(
 	Effect.exit(
 		Effect.gen(function* () {
 			const github = yield* GitHub;
-			return yield* github.markReady(repoRoot, Number(numberArg));
+			return yield* github.markReady(
+				repoRoot,
+				"acme",
+				"widgets",
+				Number(numberArg),
+			);
 		}),
-	).pipe(
-		Effect.provide(GhGitHub.layer.pipe(Layer.provideMerge(BunServices.layer))),
-	),
+	).pipe(Effect.provide(GitHubTestLayer)),
 );
 
 const result = Exit.isSuccess(exit)

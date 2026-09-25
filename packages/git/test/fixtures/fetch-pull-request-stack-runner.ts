@@ -1,6 +1,4 @@
-import { GhGitHub } from "../../src/github/gh/github.ts";
-import { Layer } from "effect";
-import { BunServices } from "@effect/platform-bun";
+import { GitHubTestLayer } from "./github-layer.ts";
 import { Cause, Effect, Exit } from "effect";
 import { GitHub } from "../../src/github/github.ts";
 
@@ -20,9 +18,7 @@ const exit = await Effect.runPromise(
 				number: Number(numberArg),
 			});
 		}),
-	).pipe(
-		Effect.provide(GhGitHub.layer.pipe(Layer.provideMerge(BunServices.layer))),
-	),
+	).pipe(Effect.provide(GitHubTestLayer)),
 );
 
 const result = Exit.isSuccess(exit)
