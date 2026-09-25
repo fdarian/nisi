@@ -64,7 +64,12 @@ import {
 import { useDragAutoscroll } from "#/features/pull-request/files/use-drag-autoscroll";
 import type { DiffStyleMode } from "#/features/settings/settings-data";
 import type { SidecarQueryUtils } from "#/infra/backend-context";
-import { buildFileDiff } from "./build-file-diff";
+import {
+	buildFileDiff,
+	createFileDiffIdentityCache,
+	getFileDiffIdentity,
+} from "./build-file-diff";
+import type { FileDiffIdentity } from "./build-file-diff";
 import { DiffFileHeader } from "./diff-file-header";
 import { type DiffHoverPoint, findHoveredFileId } from "./diff-hovered-file";
 import { findTopVisibleItemId } from "./diff-visible-file";
@@ -301,21 +306,6 @@ type CachedFileDiff = {
 };
 
 /**
- * A cheap, always-correct proxy for "this file's `patch`/`oldContent` pair
- * changed" — hashing `content.patch` itself (bounded by the diff's size, not
- * the file's) rather than the full `oldContent`. Always derived from
- * `content`, never from `file`: `content` (`diff.fileContents`) and `file`
- * (`diff.files`) are two independently fetched queries with no ordering
- * guarantee between them, so a signature describing `content` has to be
- * computed from `content` itself to stay trustworthy. `baselineKind` is
- * folded in too, since ticking Reviewed changes which bytes `content.patch`
- * holds without necessarily changing their hash on its own.
- */
-function contentSignature(content: FileContent): string {
-	return `${content.review?.baselineKind ?? "base"}:${hashItemVersion(content.patch)}`;
-}
-
-/**
  * Parsing a file into `FileDiffMetadata` is the single most expensive thing
  * the pane does — `buildFileDiff`'s non-truncated path runs a full Myers diff
  * (`@pierre/diffs` → `createTwoFilesPatch`) over the file's before/after
@@ -325,15 +315,9 @@ function contentSignature(content: FileContent): string {
  * all of them: ticking Reviewed on a single file in a 221-file session measured
  * ~3300 full-file parses across the memo recomputes that one toggle triggered.
  *
- * The key must be a pure function of `content` — the exact value being
- * parsed — plus which parser tier it landed in. Nothing derived from `file`
- * belongs here: `file` (`diff.files`) and `content` (`diff.fileContents`) are
- * two independently fetched queries that settle at different times, so a key
- * that mixes in `file.fingerprint` can validate against the wrong query —
- * matching a stale cache entry against fresh `file` data while still parsing
- * whatever `content` happened to be on hand. It's the same string handed to
- * `@pierre/diffs` as the `cacheKey`, so this cache can't disagree with
- * pierre's own memoization about when two renders are the same diff.
+ * The identity is derived from the bytes fed to the parser (and the paths),
+ * rather than `file.fingerprint`: `diff.files` and `diff.fileContents` are
+ * fetched independently. The same old/new keys are handed to Pierre.
  *
  * The signature is load-bearing, not cosmetic: pierre's worker pool and its
  * `areDiffTargetsEqual`/`areFilesEqual` memoization (VirtualizedFileDiff.js,
@@ -349,12 +333,13 @@ function resolveFileDiff(
 	cache: Map<string, CachedFileDiff>,
 	file: FileChange,
 	content: FileContent,
+	identity: FileDiffIdentity,
 ): FileDiffMetadata | undefined {
-	const key = `${content.truncated ? "patch" : "full"}:${contentSignature(content)}`;
+	const key = `${identity.kind}:${identity.signature}`;
 	const cached = cache.get(file.path);
 	if (cached !== undefined && cached.key === key) return cached.fileDiff;
 
-	const fileDiff = buildFileDiff(file, content);
+	const fileDiff = buildFileDiff(file, content, identity);
 	cache.set(file.path, { key, fileDiff });
 	return fileDiff;
 }
@@ -455,6 +440,7 @@ export function DiffPane({
 		tokenInteractions: codeIndex.tokenInteractionsActive,
 	});
 	const fileDiffCache = useRef(new Map<string, CachedFileDiff>());
+	const fileDiffIdentityCache = useRef(createFileDiffIdentityCache());
 	// Pierre compares rendered and prepared-layout files by reference; memo passes rebuild placeholders even when their cacheKey stays the same.
 	const placeholderFileCache = useRef(new Map<string, FileContents>());
 	const hiddenFileAnnotationCache = useRef(
@@ -750,7 +736,6 @@ export function DiffPane({
 					? {
 							...serverContent,
 							oldContent: optimisticBaseline,
-							patch: `optimistic:${hashItemVersion(optimisticBaseline)}:${serverContent.patch}`,
 							review: {
 								changedSinceReview:
 									optimisticBaseline !== serverContent.newContent,
@@ -873,7 +858,7 @@ export function DiffPane({
 			// only appears in `files` because something changed against base).
 			if (
 				content.review?.baselineKind === "reviewed" &&
-				(content.patch === "" ||
+				((content.patch === "" && optimisticBaseline === undefined) ||
 					(optimisticBaseline !== undefined &&
 						optimisticBaseline === content.newContent))
 			) {
@@ -892,7 +877,17 @@ export function DiffPane({
 				continue;
 			}
 
-			const fileDiff = resolveFileDiff(fileDiffCache.current, file, content);
+			const identity = getFileDiffIdentity(
+				file,
+				content,
+				fileDiffIdentityCache.current,
+			);
+			const fileDiff = resolveFileDiff(
+				fileDiffCache.current,
+				file,
+				content,
+				identity,
+			);
 			if (fileDiff === undefined) {
 				nextItems.push({
 					id: file.path,
@@ -924,7 +919,7 @@ export function DiffPane({
 				annotations,
 				collapsed: cardCollapsed,
 				version: hashItemVersion(
-					`${baseVersionInput}:${contentSignature(content)}`,
+					`${baseVersionInput}:${identity.kind}:${identity.signature}`,
 				),
 			});
 		}
@@ -934,6 +929,9 @@ export function DiffPane({
 		// pass saw, so anything else is gone.
 		for (const path of fileDiffCache.current.keys()) {
 			if (!nextMetadata.has(path)) fileDiffCache.current.delete(path);
+		}
+		for (const path of fileDiffIdentityCache.current.keys()) {
+			if (!nextMetadata.has(path)) fileDiffIdentityCache.current.delete(path);
 		}
 		for (const path of placeholderFileCache.current.keys()) {
 			if (!nextMetadata.has(path)) placeholderFileCache.current.delete(path);
