@@ -54,7 +54,7 @@ const resolveTarget = (repoRoot: string, number?: number) =>
 		if (!(yield* hasAnyRemote(repoRoot)))
 			return yield* localOnlyTarget(repoRoot);
 		const github = yield* GitHub;
-		const [identity, pr] = yield* Effect.all(
+		const results = yield* Effect.all(
 			[
 				github.repository(repoRoot),
 				github.pullRequest(repoRoot, number).pipe(
@@ -71,6 +71,8 @@ const resolveTarget = (repoRoot: string, number?: number) =>
 			],
 			{ concurrency: "unbounded" },
 		);
+		const identity = results[0];
+		const pr = results[1];
 		if (identity === null) return yield* localOnlyTarget(repoRoot);
 		if (Result.isFailure(pr)) return yield* Effect.fail(pr.failure);
 		const defaultBranch =
