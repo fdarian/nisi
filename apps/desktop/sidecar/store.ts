@@ -6,6 +6,7 @@ import {
 	type GitCommandError,
 	type FileChange as GitFileChange,
 	type FileContent as GitFileContent,
+	GitHub,
 	type GitHubTarget,
 	type GitHubUnreachable,
 	getChangedFiles,
@@ -21,7 +22,6 @@ import {
 	readWorktreeBlobContent,
 	resolveCurrentBranch,
 	resolveMergeBase,
-	resolvePullRequestHeadRef,
 	resolveRepoRoot,
 	resolveReviewTarget,
 	resolveReviewTargetForPullRequest,
@@ -573,7 +573,7 @@ export class Store extends Context.Service<Store>()("Store", {
 			| NoPullRequest
 			| ReviewStoreError
 			| SettingsStoreError,
-			ChildProcessSpawner.ChildProcessSpawner | FileSystem
+			ChildProcessSpawner.ChildProcessSpawner | FileSystem | GitHub
 		> =>
 			Effect.gen(function* () {
 				const repoRoot = yield* resolveRepoPath(input.owner, input.repo);
@@ -585,10 +585,8 @@ export class Store extends Context.Service<Store>()("Store", {
 					};
 				}
 
-				const headRef = yield* resolvePullRequestHeadRef(
-					repoRoot,
-					input.number,
-				);
+				const github = yield* GitHub;
+				const headRef = yield* github.headRef(repoRoot, input.number);
 				const worktreePath = yield* openPullRequestWorktree({
 					repoRoot,
 					number: input.number,

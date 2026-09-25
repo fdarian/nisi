@@ -131,4 +131,8 @@ export const sessionsContract = {
 		)
 		.output(Schema.Void)
 		.errors({ NOT_FOUND: {} }),
+	setAttention: oc
+		.input(Schema.Struct({ sessionId: Schema.String, watched: Schema.Boolean }))
+		.output(Schema.Void)
+		.errors({ NOT_FOUND: {} }),
 };

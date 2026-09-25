@@ -1,9 +1,15 @@
 # @repo/git
 
-Pure git domain: PR/diff detection and the file-change model consumed by the sidecar. No SQLite,
-no oRPC — everything here is `git`/`gh` shelled out to via `effect/unstable/process`, so it's
-unit-testable against real temp repos without booting anything. Feeds `packages/sidecar-api`'s
-`diff` contract.
+Git and GitHub domain: PR/diff detection and the file-change model consumed by the sidecar. No
+SQLite, no oRPC. Git operations shell out through `exec.ts`; GitHub operations require the `GitHub`
+Effect service (`github/github.ts`), supplied by `GhGitHub.layer` (`github/gh/github.ts`) in the
+sidecar. The CLI adapter owns GitHub command construction, decoding, and failure classification;
+`github/models.ts` holds public domain shapes. Feeds `packages/sidecar-api`'s `diff` contract.
+
+`github/gh/watch.ts` owns the gh adapter's adaptive cadence, retry/backoff, structural dedupe,
+and replaying, reference-counted per-PR sources. `github/gh/attention.ts` declares the
+`PullRequestAttention` input the adapter needs; the sidecar supplies it. The `GitHub` service
+exposes both one-shot reads and watch streams, so consumers never need to schedule GitHub reads.
 
 - `exec.ts` — the only place that spawns processes. `git`/`gh` helpers plus a strict (fails on
   non-zero exit) and lenient (reports exit code, for "ran and said no" cases like no PR) variant.
@@ -13,19 +19,14 @@ unit-testable against real temp repos without booting anything. Feeds `packages/
   `DiffTarget` and `diffTargetArgs`: the diff's right-hand side (a commit, or the worktree via
   git's own bare commit-vs-worktree form) and its translation to git args — threaded through
   `patch.ts` and `diff.ts` instead of each re-deriving it from a boolean.
-- `pull-request.ts` — `resolveReviewTarget`: what a review is *against*. The GitHub half is
-  optional — no remote, a host `gh` doesn't know, or an origin GitHub can't resolve all degrade to
-  `github: null` and `repo.ts`'s `resolveLocalDefaultBranch`, since nisi reviews local branches, not
-  only PRs. Only *not being able to ask* (no `gh`, no auth, no network) fails, as
-  `GitHubUnreachable`; see the module for why that split is matched on `gh`'s message rather than
-  its exit code.
-- `pull-request-checks.ts` — `fetchPullRequestChecks`: `gh pr view <number> --json statusCheckRollup`,
-  mapped from GitHub's two check shapes (`CheckRun` for GitHub Actions, `StatusContext` for external
-  status integrations) to the 5-state vocabulary `apps/desktop/src/features/pull-request/header/ci-status.tsx`'s
-  `CiCheckStatus` renders. A field GraphQL declares nullable comes back as that type's zero value
-  (`""`/`"0001-01-01T00:00:00Z"`), never JSON `null` or an omitted key — confirmed live against
-  several real PRs, not assumed from GitHub's docs.
-- `pull-request-stack.ts` / `pull-request-merge.ts` — stacked PR reads use the read-only GraphQL
+- `pull-request.ts` — `resolveReviewTarget`: combines local git state with the `GitHub` service.
+  No remote or no GitHub repository degrades to a local-only target using
+  `resolveLocalDefaultBranch`; GitHub transport failures remain errors. The PR-number variant
+  requires a resolvable PR when GitHub identifies the repository.
+- `github/gh/checks.ts` — maps GitHub's two check shapes (`CheckRun` and `StatusContext`) to the
+  five-state CI vocabulary. The CLI's flattened nullable fields use zero values
+  (`""`/`"0001-01-01T00:00:00Z"`), unlike the raw GraphQL overview response.
+- `github/gh/stack.ts` / `github/gh/merge.ts` — stacked PR reads use the read-only GraphQL
   `stack` fields; every unmerged stack member, including the bottom PR when it is the only layer
   being merged, must use GitHub's `PUT .../merge-async` endpoint and poll its UUID until a terminal
   result. GitHub rejects `gh pr merge` for any stack member.

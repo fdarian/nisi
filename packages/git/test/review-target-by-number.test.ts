@@ -1,17 +1,23 @@
 import { describe, expect, test } from "bun:test";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { BunServices } from "@effect/platform-bun";
+import type { BunServices } from "@effect/platform-bun";
 import { Effect } from "effect";
 import { resolveReviewTargetForPullRequest } from "../src/pull-request.ts";
+import { GitHubTestLayer } from "./fixtures/github-layer.ts";
 import { cleanupTestRepo, makeTestRepo } from "./fixtures.ts";
 
 const testDir = dirname(fileURLToPath(import.meta.url));
 const GH_STUB = join(testDir, "fixtures/gh-stub.sh");
 const RUNNER = join(testDir, "fixtures/resolve-review-target-runner.ts");
 
-const run = <A, E>(effect: Effect.Effect<A, E, BunServices.BunServices>) =>
-	Effect.runPromise(effect.pipe(Effect.provide(BunServices.layer)));
+const run = <A, E>(
+	effect: Effect.Effect<
+		A,
+		E,
+		BunServices.BunServices | import("../src/github/github.ts").GitHub
+	>,
+) => Effect.runPromise(effect.pipe(Effect.provide(GitHubTestLayer)));
 
 type RunnerResult =
 	| {

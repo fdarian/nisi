@@ -183,16 +183,13 @@ export function PrMergeButton({
 	number,
 	watched,
 }: PrMergeButtonProps): React.ReactElement {
-	const statusQuery = usePullRequestMergeStatus(
-		orpc,
-		{ repoRoot, owner, repo, number },
-		watched,
-	);
-	const stackQuery = usePullRequestStack(
-		orpc,
-		{ owner, repo, number },
-		watched,
-	);
+	const statusQuery = usePullRequestMergeStatus(orpc, {
+		repoRoot,
+		owner,
+		repo,
+		number,
+	});
+	const stackQuery = usePullRequestStack(orpc, { owner, repo, number });
 	const [mergeFailure, setMergeFailure] = useState<MergeFailure | null>(null);
 	const handleMergeError = useCallback(
 		(error: MergePullRequestError, params: { number: number }) => {

@@ -7,9 +7,9 @@
  * at `fixtures/gh-search-stub.sh` only takes effect in a process that hasn't
  * already imported `exec.ts` with the real binary.
  */
-import { BunServices } from "@effect/platform-bun";
 import { Cause, Effect, Exit } from "effect";
-import { searchPullRequests } from "../../src/pull-request.ts";
+import { GitHub } from "../../src/github/github.ts";
+import { GitHubTestLayer } from "./github-layer.ts";
 
 const [cwd, query] = process.argv.slice(2);
 if (cwd === undefined || query === undefined) {
@@ -17,9 +17,12 @@ if (cwd === undefined || query === undefined) {
 }
 
 const exit = await Effect.runPromise(
-	Effect.exit(searchPullRequests(cwd, query)).pipe(
-		Effect.provide(BunServices.layer),
-	),
+	Effect.exit(
+		Effect.gen(function* () {
+			const github = yield* GitHub;
+			return yield* github.search(cwd, query);
+		}),
+	).pipe(Effect.provide(GitHubTestLayer)),
 );
 
 const result = Exit.isSuccess(exit)

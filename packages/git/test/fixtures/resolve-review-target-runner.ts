@@ -9,12 +9,12 @@
  * separate process with the env var set before this script's first import is
  * the only way to make the override actually take effect.
  */
-import { BunServices } from "@effect/platform-bun";
 import { Cause, Effect, Exit } from "effect";
 import {
 	resolveReviewTarget,
 	resolveReviewTargetForPullRequest,
 } from "../../src/pull-request.ts";
+import { GitHubTestLayer } from "./github-layer.ts";
 
 const [mode, repoRoot, numberArg] = process.argv.slice(2);
 if (mode === undefined || repoRoot === undefined) {
@@ -29,7 +29,7 @@ const target =
 		: resolveReviewTarget(repoRoot);
 
 const exit = await Effect.runPromise(
-	Effect.exit(target).pipe(Effect.provide(BunServices.layer)),
+	Effect.exit(target).pipe(Effect.provide(GitHubTestLayer)),
 );
 
 const result = Exit.isSuccess(exit)

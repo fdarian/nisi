@@ -1,4 +1,4 @@
-import { oc } from "@orpc/contract";
+import { eventIterator, oc } from "@orpc/contract";
 import { Schema } from "effect";
 import { PullRequestCheckStatus } from "./pull-requests.ts";
 
@@ -61,8 +61,7 @@ export type OverviewResult = Schema.Schema.Type<typeof OverviewResult>;
 
 /**
  * `get`'s input is `repoRoot` plus a discriminated union on `kind` — a PR
- * session (GitHub identity, resolved through `@repo/git`'s
- * `fetchPullRequestOverview`) or a branch/diff session (just the two refs
+ * session (GitHub identity, resolved through `GitHub.watchOverview`) or a branch/diff session (the two refs and session id
  * `@repo/git`'s `fetchBranchCommits` diffs, no GitHub involved at all). Not
  * nested under a `target` field the way `sessions.SessionTarget` is — the
  * Overview tab already has a session's resolved `kind`/refs/PR identity in
@@ -80,6 +79,7 @@ export const OverviewInput = Schema.Union([
 	Schema.Struct({
 		repoRoot: Schema.String,
 		kind: Schema.Literal("branch"),
+		sessionId: Schema.String,
 		baseRef: Schema.String,
 		headRef: Schema.String,
 	}),
@@ -98,10 +98,13 @@ export type OverviewInput = Schema.Schema.Type<typeof OverviewInput>;
  * to run at all) ever applies to it.
  */
 export const overviewContract = {
-	get: oc.input(OverviewInput).output(OverviewResult).errors({
-		GH_NOT_AUTHENTICATED: {},
-		TOO_MANY_REQUESTS: {},
-		SERVICE_UNAVAILABLE: {},
-		NOT_FOUND: {},
-	}),
+	get: oc
+		.input(OverviewInput)
+		.output(eventIterator(Schema.toStandardSchemaV1(OverviewResult)))
+		.errors({
+			GH_NOT_AUTHENTICATED: {},
+			TOO_MANY_REQUESTS: {},
+			SERVICE_UNAVAILABLE: {},
+			NOT_FOUND: {},
+		}),
 };

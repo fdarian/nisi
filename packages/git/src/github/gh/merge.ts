@@ -18,29 +18,14 @@ import {
 	type PullRequestReadyError,
 	type PullRequestStackMergeError,
 	type RepoMergeMethodsError,
-} from "./errors.ts";
-import { ghResult } from "./exec.ts";
+} from "../../errors.ts";
+import { ghResult } from "../../exec.ts";
+import {
+	MergeabilityView,
+	type MergeMethod,
+	type PullRequestMergeability,
+} from "../models.ts";
 import { isAuthFailure, isRateLimited } from "./pull-request.ts";
-
-const MergeabilityView = Schema.Struct({
-	state: Schema.Literals(["OPEN", "CLOSED", "MERGED"]),
-	mergeable: Schema.Literals(["MERGEABLE", "CONFLICTING", "UNKNOWN"]),
-	mergeStateStatus: Schema.Literals([
-		"BEHIND",
-		"BLOCKED",
-		"CLEAN",
-		"DIRTY",
-		"DRAFT",
-		"HAS_HOOKS",
-		"UNKNOWN",
-		"UNSTABLE",
-	]),
-	isDraft: Schema.Boolean,
-});
-
-export type PullRequestMergeability = Schema.Schema.Type<
-	typeof MergeabilityView
->;
 
 const decodeMergeabilityView = (command: string, raw: string) =>
 	Effect.try({
@@ -126,8 +111,6 @@ export const fetchPullRequestMergeability = (
 
 		return yield* decodeMergeabilityView("gh pr view", result.stdout);
 	});
-
-export type MergeMethod = "merge" | "squash" | "rebase";
 
 const RepoMergeMethodsView = Schema.Struct({
 	mergeCommitAllowed: Schema.Boolean,

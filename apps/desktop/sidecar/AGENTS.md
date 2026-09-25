@@ -39,6 +39,12 @@ seam" for the port/token handshake this boots into.
 - `services.ts` — `AppServices`, the service union `mainContext` carries. One alias so `http.ts` and
   the walkthrough generation loop (which bridges Effect from a plain `async function*`, not `.effect()`)
   agree on what's available without each hand-rolling the union.
+- `pull-request-attention.ts` — session-to-PR attention and the 120-second local-change CI window,
+  combined across sessions of the same PR. `http.ts` receives header-level focus/selection via
+  `sessions.setAttention`; `live-poll.ts` marks local changes; `session-close.ts` removes entries.
+  `GhGitHub.layer` consumes its `PullRequestAttention` stream to choose its polling cadence.
+- `stream-bridge.ts` — turns an Effect Stream into the async iterator required by four oRPC live
+  handlers, interrupting the consuming fiber when the request aborts.
 - `diff-head.ts` — `resolveDiffHead`: for a session's `headRef` and whether it's a PR-backed
   session, decides `DiffHead` — `{headRef, worktreeEligible}` — the single place that answers
   "which ref is this session's head right now, and is `repoRoot`'s worktree safe to overlay on it."

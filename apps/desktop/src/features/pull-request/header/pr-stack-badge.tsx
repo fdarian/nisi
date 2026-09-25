@@ -115,11 +115,11 @@ export function PrStackBadge(
 	props: PrStackBadgeProps,
 ): React.ReactElement | null {
 	const [open, setOpen] = useDismissOnInactive(props.watched);
-	const stackQuery = usePullRequestStack(
-		props.orpc,
-		{ owner: props.owner, repo: props.repo, number: props.number },
-		props.watched,
-	);
+	const stackQuery = usePullRequestStack(props.orpc, {
+		owner: props.owner,
+		repo: props.repo,
+		number: props.number,
+	});
 	const openPullRequest = useOpenPullRequest(props.orpc, props.onSessionOpened);
 	const stack = stackQuery.data;
 	if (stack === undefined || stack === null) return null;

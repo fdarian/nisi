@@ -5,9 +5,9 @@
  * `NISI_GH_BIN` once at module load via a top-level `const`. See
  * `search-pull-requests-runner.ts`'s doc comment for the full reasoning.
  */
-import { BunServices } from "@effect/platform-bun";
 import { Cause, Effect, Exit } from "effect";
-import { markPullRequestReady } from "../../src/pull-request-merge.ts";
+import { GitHub } from "../../src/github/github.ts";
+import { GitHubTestLayer } from "./github-layer.ts";
 
 const [repoRoot, numberArg] = process.argv.slice(2);
 if (repoRoot === undefined || numberArg === undefined) {
@@ -17,9 +17,17 @@ if (repoRoot === undefined || numberArg === undefined) {
 }
 
 const exit = await Effect.runPromise(
-	Effect.exit(markPullRequestReady(repoRoot, Number(numberArg))).pipe(
-		Effect.provide(BunServices.layer),
-	),
+	Effect.exit(
+		Effect.gen(function* () {
+			const github = yield* GitHub;
+			return yield* github.markReady(
+				repoRoot,
+				"acme",
+				"widgets",
+				Number(numberArg),
+			);
+		}),
+	).pipe(Effect.provide(GitHubTestLayer)),
 );
 
 const result = Exit.isSuccess(exit)

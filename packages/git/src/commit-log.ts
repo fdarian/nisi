@@ -2,7 +2,7 @@ import { Effect } from "effect";
 import type { ChildProcessSpawner } from "effect/unstable/process";
 import type { GitCommandError } from "./errors.ts";
 import { git } from "./exec.ts";
-import type { OverviewCommit } from "./pull-request-overview.ts";
+import type { OverviewCommit } from "./github/models.ts";
 import { resolveHeadSha, resolveMergeBase } from "./repo.ts";
 
 /**

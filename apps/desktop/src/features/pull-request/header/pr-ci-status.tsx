@@ -92,13 +92,13 @@ export function PrCiStatus({
 	repo,
 	number,
 	watched,
-	sessionId,
 }: PrCiStatusProps): React.ReactElement | null {
-	const checksQuery = usePullRequestChecks(
-		orpc,
-		{ repoRoot, owner, repo, number },
-		{ watched, sessionId },
-	);
+	const checksQuery = usePullRequestChecks(orpc, {
+		repoRoot,
+		owner,
+		repo,
+		number,
+	});
 
 	if (checksQuery.data === undefined) return null;
 

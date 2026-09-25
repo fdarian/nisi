@@ -14,6 +14,10 @@ Three parts, one seam:
 - `sidecar/` — the real backend, a long-running Bun process (Effect). Implements `packages/sidecar-api`'s
   contract by composing `@repo/git` (pure PR/diff detection) and `@repo/review` (SQLite persistence)
   behind one `Store` service — see `sidecar/AGENTS.md`.
+- GitHub-backed PR status, checks, stack, and overview arrive through oRPC event iterators. Frontend
+  hooks in `src/features/pull-request/data/pr-data.ts` use `.liveOptions()`; the gh adapter owns
+  fetching cadence and the sidecar reports selected-tab/window-focus attention via
+  `sessions.setAttention`. Files Changed uses its separate `sessions.setWatching` predicate.
 - `src/` — React frontend (TanStack Router file-based routes, shadcn on the `@coss` (coss ui / Base UI)
   registry). Two routes: `/` (`AppShell` — multi-PR tab strip + Files Changed sidebar + diff pane) and
   `/settings` (Phase 4, `Cmd/Ctrl+,`), each wired to the live sidecar contract through `src/features/pull-request/data/pr-data.ts`
