@@ -16,7 +16,7 @@
  */
 import { type InferClientError, ORPCError } from "@orpc/client";
 import type { SidecarClient } from "@repo/sidecar-api";
-import type { Query, UseQueryResult } from "@tanstack/react-query";
+import type { Query, QueryClient, UseQueryResult } from "@tanstack/react-query";
 import {
 	useMutation,
 	useMutationState,
@@ -981,6 +981,36 @@ export function usePullRequestMergeStatus(
 	return useQuery(orpc.pullRequests.mergeStatus.liveOptions({ input: params }));
 }
 
+const MERGE_STATUS_WAIT_MS = 15000;
+
+/** Keep the merge pending until the same live cache entry the button reads reports MERGED. */
+export function waitForMergedStatus(
+	queryClient: QueryClient,
+	orpc: SidecarQueryUtils,
+	params: PullRequestMergeStatusParams,
+	timeoutMs = MERGE_STATUS_WAIT_MS,
+): Promise<void> {
+	const key = orpc.pullRequests.mergeStatus.liveKey({ input: params });
+	return new Promise((resolve) => {
+		const finish = () => {
+			clearTimeout(timeout);
+			unsubscribe();
+			resolve();
+		};
+		const isMerged = () =>
+			queryClient.getQueryData<PullRequestMergeStatus>(key)?.state === "MERGED";
+		if (isMerged()) {
+			resolve();
+			return;
+		}
+		const unsubscribe = queryClient.getQueryCache().subscribe(() => {
+			if (isMerged()) finish();
+		});
+		const timeout = setTimeout(finish, timeoutMs);
+		if (isMerged()) finish();
+	});
+}
+
 export type PullRequestStackParams = {
 	owner: string;
 	repo: string;
@@ -1006,7 +1036,7 @@ export type MergePullRequestError =
 	| InferClientError<SidecarClient["pullRequests"]["merge"]>
 	| Error;
 
-/** Merge mutations refresh the sessions list; the adapter kicks the live GitHub streams. */
+/** Keep mutations pending through the adapter's post-merge live status refresh. */
 export function useMergePullRequest(
 	orpc: SidecarQueryUtils,
 	onError: (
@@ -1020,19 +1050,23 @@ export function useMergePullRequest(
 } {
 	const queryClient = useQueryClient();
 
-	const onSuccess = useCallback(async () => {
-		await queryClient.invalidateQueries({
-			queryKey: orpc.sessions.list.queryKey(),
-		});
-	}, [queryClient, orpc]);
+	const onSuccess = useCallback(
+		async (params: MergePullRequestParams) => {
+			await queryClient.invalidateQueries({
+				queryKey: orpc.sessions.list.queryKey(),
+			});
+			await waitForMergedStatus(queryClient, orpc, params);
+		},
+		[queryClient, orpc],
+	);
 	const mutation = useMutation({
 		...orpc.pullRequests.merge.mutationOptions(),
-		onSuccess,
+		onSuccess: (_data, params) => onSuccess(params),
 		onError,
 	});
 	const stackMutation = useMutation({
 		...orpc.pullRequests.mergeStack.mutationOptions(),
-		onSuccess,
+		onSuccess: (_data, params) => onSuccess(params),
 		onError,
 	});
 
