@@ -1,16 +1,16 @@
 import { Context, type Effect, type Stream } from "effect";
 import type {
+	GhOutputDecodeError,
 	GitCommandError,
 	GitHubUnreachable,
-	GhOutputDecodeError,
-	PullRequestNotFound,
-	PullRequestSearchError,
 	PullRequestChecksError,
 	PullRequestMergeabilityError,
-	RepoMergeMethodsError,
 	PullRequestMergeError,
-	PullRequestStackMergeError,
+	PullRequestNotFound,
 	PullRequestReadyError,
+	PullRequestSearchError,
+	PullRequestStackMergeError,
+	RepoMergeMethodsError,
 } from "../errors.ts";
 import type {
 	PullRequestRef,
@@ -18,21 +18,15 @@ import type {
 } from "../pull-request.ts";
 import type {
 	FetchPullRequestChecksInput,
-	PullRequestCheck,
-} from "./models.ts";
-import type {
 	FetchPullRequestOverviewInput,
-	PullRequestOverview,
-} from "./models.ts";
-import type {
 	FetchPullRequestStackInput,
-	PullRequestStack,
-	PullRequestStackError,
-} from "./models.ts";
-import type {
 	MergeMethod,
+	PullRequestCheck,
 	PullRequestMergeability,
 	PullRequestMergeStatus,
+	PullRequestOverview,
+	PullRequestStack,
+	PullRequestStackError,
 } from "./models.ts";
 
 export type RepositoryIdentity = {

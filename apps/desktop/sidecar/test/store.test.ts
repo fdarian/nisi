@@ -8,8 +8,8 @@ import { GhGitHub } from "@repo/git";
 import { ReviewStore } from "@repo/review";
 import { SettingsStore } from "@repo/settings";
 import { ConfigProvider, Effect, Layer, Result } from "effect";
-import { Store } from "../store.ts";
 import { PullRequestAttentionLive } from "../pull-request-attention.ts";
+import { Store } from "../store.ts";
 
 /** Runs real `git` for test setup — the code under test uses its own Effect-based runner. */
 const sh = async (cwd: string, args: ReadonlyArray<string>): Promise<void> => {

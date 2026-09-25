@@ -1,7 +1,7 @@
-import { GitHubTestLayer } from "./github-layer.ts";
 import { Cause, Effect, Exit } from "effect";
 import { GhStackMergeFailed } from "../../src/errors.ts";
 import { GitHub } from "../../src/github/github.ts";
+import { GitHubTestLayer } from "./github-layer.ts";
 
 const outcome = process.argv[2];
 if (outcome !== "merged" && outcome !== "failed") {

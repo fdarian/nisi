@@ -1,10 +1,10 @@
-import { GitHubTestLayer } from "./fixtures/github-layer.ts";
 import { describe, expect, test } from "bun:test";
 import type { BunServices } from "@effect/platform-bun";
 import { Effect } from "effect";
 import { GitHub } from "../src/github/github.ts";
 import { resolveReviewTarget } from "../src/pull-request.ts";
 import { resolveLocalDefaultBranch } from "../src/repo.ts";
+import { GitHubTestLayer } from "./fixtures/github-layer.ts";
 import { cleanupTestRepo, makeTestRepo } from "./fixtures.ts";
 
 const run = <A, E>(
@@ -13,14 +13,7 @@ const run = <A, E>(
 		E,
 		BunServices.BunServices | import("../src/github/github.ts").GitHub
 	>,
-) =>
-	Effect.runPromise(
-		effect.pipe(
-			Effect.provide(
-				GitHubTestLayer,
-			),
-		),
-	);
+) => Effect.runPromise(effect.pipe(Effect.provide(GitHubTestLayer)));
 
 const runExit = <A, E>(
 	effect: Effect.Effect<
@@ -29,15 +22,7 @@ const runExit = <A, E>(
 		BunServices.BunServices | import("../src/github/github.ts").GitHub
 	>,
 ) =>
-	Effect.runPromise(
-		Effect.exit(
-			effect.pipe(
-				Effect.provide(
-					GitHubTestLayer,
-				),
-			),
-		),
-	);
+	Effect.runPromise(Effect.exit(effect.pipe(Effect.provide(GitHubTestLayer))));
 
 describe("resolveLocalDefaultBranch", () => {
 	test("picks the conventional branch that actually exists", async () => {

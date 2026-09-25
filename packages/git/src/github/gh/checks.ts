@@ -1,9 +1,4 @@
 import { Effect, Schema } from "effect";
-import type {
-	FetchPullRequestChecksInput,
-	PullRequestCheck,
-	PullRequestCheckStatus,
-} from "../models.ts";
 import type { ChildProcessSpawner } from "effect/unstable/process";
 import {
 	GhNotAuthenticated,
@@ -14,6 +9,11 @@ import {
 	PullRequestNotFound,
 } from "../../errors.ts";
 import { ghResult } from "../../exec.ts";
+import type {
+	FetchPullRequestChecksInput,
+	PullRequestCheck,
+	PullRequestCheckStatus,
+} from "../models.ts";
 import { isAuthFailure, isRateLimited } from "./pull-request.ts";
 
 /**

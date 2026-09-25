@@ -1,4 +1,3 @@
-import { GitHubTestLayer } from "./github-layer.ts";
 /**
  * Runs `markPullRequestReady` and prints its outcome as one line of JSON —
  * spawned as a *fresh process* (not imported directly) by
@@ -8,6 +7,7 @@ import { GitHubTestLayer } from "./github-layer.ts";
  */
 import { Cause, Effect, Exit } from "effect";
 import { GitHub } from "../../src/github/github.ts";
+import { GitHubTestLayer } from "./github-layer.ts";
 
 const [repoRoot, numberArg] = process.argv.slice(2);
 if (repoRoot === undefined || numberArg === undefined) {

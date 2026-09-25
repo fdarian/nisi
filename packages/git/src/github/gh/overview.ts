@@ -1,10 +1,4 @@
 import { Effect, Schema } from "effect";
-import type {
-	FetchPullRequestOverviewInput,
-	OverviewCommit,
-	OverviewCommitCheck,
-	PullRequestOverview,
-} from "../models.ts";
 import type { ChildProcessSpawner } from "effect/unstable/process";
 import {
 	GhNotAuthenticated,
@@ -15,12 +9,18 @@ import {
 	PullRequestNotFound,
 } from "../../errors.ts";
 import { ghResult } from "../../exec.ts";
-import { isAuthFailure, isRateLimited } from "./pull-request.ts";
+import type {
+	FetchPullRequestOverviewInput,
+	OverviewCommit,
+	OverviewCommitCheck,
+	PullRequestOverview,
+} from "../models.ts";
 import {
 	type CheckRunView,
 	type StatusContextView,
 	toPullRequestCheck,
 } from "./checks.ts";
+import { isAuthFailure, isRateLimited } from "./pull-request.ts";
 
 /**
  * The exact `CheckRun`/`StatusContext` node shape this module asks GraphQL

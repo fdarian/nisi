@@ -1,9 +1,4 @@
 import { Effect, Option, Schema } from "effect";
-import {
-	MergeabilityView,
-	type MergeMethod,
-	type PullRequestMergeability,
-} from "../models.ts";
 import type { ChildProcessSpawner } from "effect/unstable/process";
 import {
 	GhMergeFailed,
@@ -25,6 +20,11 @@ import {
 	type RepoMergeMethodsError,
 } from "../../errors.ts";
 import { ghResult } from "../../exec.ts";
+import {
+	MergeabilityView,
+	type MergeMethod,
+	type PullRequestMergeability,
+} from "../models.ts";
 import { isAuthFailure, isRateLimited } from "./pull-request.ts";
 
 const decodeMergeabilityView = (command: string, raw: string) =>

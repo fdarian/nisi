@@ -1,4 +1,3 @@
-import { GitHubTestLayer } from "./github-layer.ts";
 /**
  * Runs one of `pull-request.ts`'s two `ReviewTarget` resolvers and prints its
  * outcome as one line of JSON — spawned as a *fresh process* (not imported
@@ -15,6 +14,7 @@ import {
 	resolveReviewTarget,
 	resolveReviewTargetForPullRequest,
 } from "../../src/pull-request.ts";
+import { GitHubTestLayer } from "./github-layer.ts";
 
 const [mode, repoRoot, numberArg] = process.argv.slice(2);
 if (mode === undefined || repoRoot === undefined) {

@@ -10,13 +10,16 @@ import {
 	Schedule,
 	Stream,
 } from "effect";
-import type { Attention, PullRequestIdentity } from "./attention.ts";
-import type { PullRequestAttention } from "./attention.ts";
 import type {
 	PullRequestCheck,
 	PullRequestMergeStatus,
 	PullRequestOverview,
 } from "../models.ts";
+import type {
+	Attention,
+	PullRequestAttention,
+	PullRequestIdentity,
+} from "./attention.ts";
 
 type Key = PullRequestIdentity & { readonly repoRoot: string };
 type WatchState = { readonly delay: Duration.Input | null };

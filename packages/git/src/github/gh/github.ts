@@ -3,8 +3,6 @@ import { ChildProcessSpawner } from "effect/unstable/process";
 import { GitHub } from "../github.ts";
 import { PullRequestAttention } from "./attention.ts";
 import { fetchPullRequestChecks } from "./checks.ts";
-import { fetchPullRequestOverview } from "./overview.ts";
-import { fetchPullRequestStack } from "./stack.ts";
 import {
 	fetchPullRequestMergeability,
 	fetchRepoMergeMethods,
@@ -12,12 +10,14 @@ import {
 	mergePullRequest,
 	mergeStackPullRequest,
 } from "./merge.ts";
+import { fetchPullRequestOverview } from "./overview.ts";
 import {
 	headRef,
 	pullRequest,
 	repository,
 	searchPullRequests,
 } from "./pull-request.ts";
+import { fetchPullRequestStack } from "./stack.ts";
 import {
 	checksInterval,
 	kick,

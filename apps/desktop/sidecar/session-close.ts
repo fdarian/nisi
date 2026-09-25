@@ -5,8 +5,8 @@ import {
 	type ChatThreadCloseFailureReporter,
 	closeChatThreadsForSession,
 } from "./chat/sessions.ts";
-import type { AppServices } from "./services.ts";
 import { AttentionState } from "./pull-request-attention.ts";
+import type { AppServices } from "./services.ts";
 import { SessionWatch } from "./session-watch.ts";
 import {
 	abortGeneration,

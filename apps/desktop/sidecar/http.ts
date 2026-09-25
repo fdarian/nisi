@@ -9,8 +9,8 @@ import {
 import { refreshLoginShellPath } from "@repo/bin-resolver";
 import {
 	fetchBranchCommits,
-	GitHub,
 	type GitCommandError,
+	GitHub,
 	type PullRequestChecksError,
 	type PullRequestMergeError,
 	type PullRequestStackMergeError,
@@ -61,8 +61,6 @@ import {
 import { listHarnesses } from "./harness/harnesses.ts";
 import { getHarnessModels } from "./harness/models.ts";
 import { checkSessionForChanges } from "./live-poll.ts";
-import { AttentionState } from "./pull-request-attention.ts";
-import { streamToIterator } from "./stream-bridge.ts";
 import { createNativeActivationHandler } from "./native-activation.ts";
 import {
 	acknowledgeOpenRequest,
@@ -71,6 +69,7 @@ import {
 	listOpenRequests,
 	resolveOpenRequest,
 } from "./open-requests.ts";
+import { AttentionState } from "./pull-request-attention.ts";
 import type { AppServices } from "./services.ts";
 import {
 	forkSessionCloseSideEffects,
@@ -78,6 +77,7 @@ import {
 } from "./session-close.ts";
 import { SessionWatch } from "./session-watch.ts";
 import { type SessionNotFound, Store } from "./store.ts";
+import { streamToIterator } from "./stream-bridge.ts";
 import { Updater } from "./updater/service.ts";
 import {
 	beginTrackedGeneration,

@@ -1,4 +1,3 @@
-import { GitHubTestLayer } from "./github-layer.ts";
 /**
  * Runs `searchPullRequests` once and prints its outcome as one line of JSON —
  * spawned as a *fresh process* (not imported directly) by
@@ -10,6 +9,7 @@ import { GitHubTestLayer } from "./github-layer.ts";
  */
 import { Cause, Effect, Exit } from "effect";
 import { GitHub } from "../../src/github/github.ts";
+import { GitHubTestLayer } from "./github-layer.ts";
 
 const [cwd, query] = process.argv.slice(2);
 if (cwd === undefined || query === undefined) {

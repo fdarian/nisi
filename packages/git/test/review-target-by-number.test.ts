@@ -1,10 +1,10 @@
-import { GitHubTestLayer } from "./fixtures/github-layer.ts";
 import { describe, expect, test } from "bun:test";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { BunServices } from "@effect/platform-bun";
 import { Effect } from "effect";
 import { resolveReviewTargetForPullRequest } from "../src/pull-request.ts";
+import { GitHubTestLayer } from "./fixtures/github-layer.ts";
 import { cleanupTestRepo, makeTestRepo } from "./fixtures.ts";
 
 const testDir = dirname(fileURLToPath(import.meta.url));
@@ -17,14 +17,7 @@ const run = <A, E>(
 		E,
 		BunServices.BunServices | import("../src/github/github.ts").GitHub
 	>,
-) =>
-	Effect.runPromise(
-		effect.pipe(
-			Effect.provide(
-				GitHubTestLayer,
-			),
-		),
-	);
+) => Effect.runPromise(effect.pipe(Effect.provide(GitHubTestLayer)));
 
 type RunnerResult =
 	| {

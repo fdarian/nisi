@@ -17,24 +17,6 @@ export type {
 	FileStatus,
 } from "./diff.ts";
 export { getChangedFiles, getFileContents } from "./diff.ts";
-export { GitHub } from "./github/github.ts";
-export { GhGitHub } from "./github/gh/github.ts";
-export { PullRequestAttention } from "./github/gh/attention.ts";
-export type {
-	FetchPullRequestChecksInput,
-	FetchPullRequestOverviewInput,
-	FetchPullRequestStackInput,
-	MergeMethod,
-	OverviewCommit,
-	OverviewCommitCheck,
-	PullRequestCheck,
-	PullRequestCheckStatus,
-	PullRequestMergeability,
-	PullRequestOverview,
-	PullRequestStack,
-	PullRequestStackEntry,
-	PullRequestStackError,
-} from "./github/models.ts";
 export {
 	FileNotChanged,
 	GhMergeFailed,
@@ -75,6 +57,24 @@ export {
 	WorktreeReadFailed,
 	WorktreeRelocationFailed,
 } from "./errors.ts";
+export { PullRequestAttention } from "./github/gh/attention.ts";
+export { GhGitHub } from "./github/gh/github.ts";
+export { GitHub } from "./github/github.ts";
+export type {
+	FetchPullRequestChecksInput,
+	FetchPullRequestOverviewInput,
+	FetchPullRequestStackInput,
+	MergeMethod,
+	OverviewCommit,
+	OverviewCommitCheck,
+	PullRequestCheck,
+	PullRequestCheckStatus,
+	PullRequestMergeability,
+	PullRequestOverview,
+	PullRequestStack,
+	PullRequestStackEntry,
+	PullRequestStackError,
+} from "./github/models.ts";
 export type { Hunk } from "./hunk.ts";
 export { parseHunks } from "./hunk.ts";
 export type {
