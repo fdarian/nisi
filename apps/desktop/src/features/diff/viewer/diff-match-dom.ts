@@ -6,6 +6,7 @@
  * happens to expose. No React import here on purpose: everything is a plain
  * function over `Node`/`Element`/`Range`, unit-testable against a bare DOM.
  */
+import type { SelectedLineRange, SelectionSide } from "@pierre/diffs";
 import type { DiffMatch } from "#/features/diff/diff-search";
 
 /**
@@ -50,6 +51,47 @@ export function findMatchRowElement(
 		if (side === "deletions" && candidate.closest("[data-additions]")) continue;
 		if (side === "additions" && candidate.closest("[data-deletions]")) continue;
 		return candidate;
+	}
+	return undefined;
+}
+
+/** Whether the painted selection's boundary rows belong to this range, including their old/new sides. */
+export function paintedSelectionMatchesRange(
+	root: ParentNode,
+	range: SelectedLineRange,
+): boolean {
+	const startSide: SelectionSide = range.side ?? "additions";
+	const endSide: SelectionSide = range.endSide ?? startSide;
+	const start = findSelectedEndpoint(root, startSide, range.start);
+	const end = findSelectedEndpoint(root, endSide, range.end);
+	if (!start || !end) return false;
+	const startMarker = start.getAttribute("data-selected-line");
+	const endMarker = end.getAttribute("data-selected-line");
+	if (start === end) return startMarker === "single";
+	return (
+		(startMarker === "single" && endMarker === "single") ||
+		(startMarker === "first" && endMarker === "last") ||
+		(startMarker === "last" && endMarker === "first")
+	);
+}
+
+function findSelectedEndpoint(
+	root: ParentNode,
+	side: SelectionSide,
+	line: number,
+): HTMLElement | undefined {
+	for (const candidate of root.querySelectorAll(`[data-line="${line}"]`)) {
+		if (!(candidate instanceof HTMLElement)) continue;
+		const column = candidate.closest("[data-deletions], [data-additions]");
+		if (column) {
+			if (!column.hasAttribute(`data-${side}`)) continue;
+		} else if (
+			(candidate.getAttribute("data-line-type") === "change-deletion") !==
+			(side === "deletions")
+		) {
+			continue;
+		}
+		if (candidate.hasAttribute("data-selected-line")) return candidate;
 	}
 	return undefined;
 }
@@ -160,12 +202,13 @@ export function isEventOriginOnDiffRow(event: Event): boolean {
  * virtualized item to actually mount before they can act on it. `frameRef`
  * is the caller's own pending-frame ref, so two independent pollers (e.g. a
  * scroll and a highlight update in flight at once) never cancel each
- * other's loop.
+ * other's loop. `onExhausted` runs only if the last attempt still fails.
  */
 export function pollUntilReady(
 	attempt: () => boolean,
 	frameRef: { current: number | null },
 	frameLimit = 60,
+	onExhausted?: () => void,
 ): void {
 	if (frameRef.current !== null) {
 		cancelAnimationFrame(frameRef.current);
@@ -178,6 +221,8 @@ export function pollUntilReady(
 		if (attempts < frameLimit) {
 			attempts += 1;
 			frameRef.current = requestAnimationFrame(tick);
+		} else {
+			onExhausted?.();
 		}
 	};
 	tick();

@@ -21,6 +21,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { DiffSelectionReference } from "#/features/diff/diff-reference";
 import {
 	isEventOriginOnGutter,
+	paintedSelectionMatchesRange,
 	pollUntilReady,
 } from "#/features/diff/viewer/diff-match-dom";
 
@@ -286,6 +287,9 @@ export function useDiffSelection<Metadata>({
 				.find((candidate) => candidate.id === selection.id);
 			const shadowRoot = item?.element.shadowRoot;
 			if (!shadowRoot) return undefined;
+			if (!paintedSelectionMatchesRange(shadowRoot, selection.range)) {
+				return undefined;
+			}
 			const rows = shadowRoot.querySelectorAll("[data-selected-line]");
 			if (rows.length === 0) return undefined;
 			let rect: DOMRect | undefined;
@@ -350,6 +354,7 @@ export function useDiffSelection<Metadata>({
 			// polling forever.
 			setAnchorRect(null);
 			pollUntilReady(() => {
+				if (gutterSelectionRef.current !== selection) return true;
 				const rect = measureGutterAnchorRect(selection);
 				if (rect === undefined) return false;
 				setAnchorRect(rect);
@@ -403,17 +408,25 @@ export function useDiffSelection<Metadata>({
 					side: selection.range.endSide ?? selection.range.side ?? "additions",
 				},
 			);
-			pollUntilReady(() => {
-				const rect = measureGutterAnchorRect(selection);
-				if (rect === undefined) return false;
-				setReference({
-					path,
-					startLine: headRange.startLine,
-					endLine: headRange.endLine,
-				});
-				setAnchorRect(rect);
-				return true;
-			}, pendingGutterRectFrame);
+			setReference({
+				path,
+				startLine: headRange.startLine,
+				endLine: headRange.endLine,
+			});
+			pollUntilReady(
+				() => {
+					if (gutterSelectionRef.current !== selection) return true;
+					const rect = measureGutterAnchorRect(selection);
+					if (rect === undefined) return false;
+					setAnchorRect(rect);
+					return true;
+				},
+				pendingGutterRectFrame,
+				60,
+				() => {
+					if (gutterSelectionRef.current === selection) setAnchorRect(null);
+				},
+			);
 		},
 		[resolveItemPath, measureGutterAnchorRect],
 	);
