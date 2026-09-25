@@ -52,14 +52,15 @@ export {
 	RepoPathOriginMismatch,
 	type RepoPathVerificationError,
 	UnpushedCommitCountUnparseable,
+	WorkflowApprovalFailed,
+	WorkflowApprovalForbidden,
 	WorktreeBranchInUse,
 	WorktreePathOccupied,
 	WorktreeReadFailed,
 	WorktreeRelocationFailed,
-	WorkflowApprovalFailed,
-	WorkflowApprovalForbidden,
 } from "./errors.ts";
 export { PullRequestAttention } from "./github/gh/attention.ts";
+export { approveWorkflowRuns } from "./github/gh/checks.ts";
 export { GhGitHub } from "./github/gh/github.ts";
 export { GitHub } from "./github/github.ts";
 export type {
@@ -89,7 +90,6 @@ export {
 	resolveReviewTarget,
 	resolveReviewTargetForPullRequest,
 } from "./pull-request.ts";
-export { approveWorkflowRuns } from "./github/gh/checks.ts";
 export type { UnpushedCommits } from "./repo.ts";
 export {
 	resolveCurrentBranch,

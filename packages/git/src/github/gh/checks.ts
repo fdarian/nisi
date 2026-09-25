@@ -5,10 +5,10 @@ import {
 	GhOutputDecodeError,
 	GhRateLimited,
 	GitCommandError,
-	WorkflowApprovalForbidden,
-	WorkflowApprovalFailed,
 	type PullRequestChecksError,
 	PullRequestNotFound,
+	WorkflowApprovalFailed,
+	WorkflowApprovalForbidden,
 } from "../../errors.ts";
 import { ghResult } from "../../exec.ts";
 import type {

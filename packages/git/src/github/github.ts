@@ -5,8 +5,6 @@ import type {
 	GitCommandError,
 	GitHubUnreachable,
 	PullRequestChecksError,
-	WorkflowApprovalFailed,
-	WorkflowApprovalForbidden,
 	PullRequestMergeabilityError,
 	PullRequestMergeError,
 	PullRequestNotFound,
@@ -14,6 +12,8 @@ import type {
 	PullRequestSearchError,
 	PullRequestStackMergeError,
 	RepoMergeMethodsError,
+	WorkflowApprovalFailed,
+	WorkflowApprovalForbidden,
 } from "../errors.ts";
 import type {
 	PullRequestRef,
