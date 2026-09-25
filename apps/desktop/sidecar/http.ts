@@ -9,19 +9,11 @@ import {
 import { refreshLoginShellPath } from "@repo/bin-resolver";
 import {
 	fetchBranchCommits,
-	fetchPullRequestChecks,
-	fetchPullRequestMergeability,
-	fetchPullRequestOverview,
-	fetchPullRequestStack,
-	fetchRepoMergeMethods,
+	GitHub,
 	type GitCommandError,
-	markPullRequestReady,
-	mergePullRequest,
-	mergeStackPullRequest,
 	type PullRequestMergeError,
 	type PullRequestStackMergeError,
 	resolveUnpushedCommitCount,
-	searchPullRequests,
 	type WorktreeReadFailed,
 	type WorktreeRelocationFailed,
 } from "@repo/git";
@@ -1070,7 +1062,8 @@ export function attachRouter(
 			// and `gh search prs` doesn't care what directory it runs from
 			// (verified live — same results run from this repo or from `/tmp`).
 			search: authed.pullRequests.search.effect(function* ({ input, errors }) {
-				return yield* searchPullRequests(process.cwd(), input.query).pipe(
+				const github = yield* GitHub;
+				return yield* github.search(process.cwd(), input.query).pipe(
 					Effect.catchTag("GhNotAuthenticated", (cause) =>
 						Effect.fail(
 							errors.GH_NOT_AUTHENTICATED({
@@ -1253,48 +1246,51 @@ export function attachRouter(
 			// checked-out worktree, so the sidecar's own cwd is enough for `gh`.
 			// A missing stack is a successful `null` result, not a NOT_FOUND error.
 			stack: authed.pullRequests.stack.effect(function* ({ input, errors }) {
-				return yield* fetchPullRequestStack({
-					repoRoot: process.cwd(),
-					owner: input.owner,
-					repo: input.repo,
-					number: input.number,
-				}).pipe(
-					Effect.catchTag("GhNotAuthenticated", (cause) =>
-						Effect.fail(
-							errors.GH_NOT_AUTHENTICATED({
-								message: `gh is not authenticated: ${cause.reason}`,
-							}),
+				const github = yield* GitHub;
+				return yield* github
+					.stack({
+						repoRoot: process.cwd(),
+						owner: input.owner,
+						repo: input.repo,
+						number: input.number,
+					})
+					.pipe(
+						Effect.catchTag("GhNotAuthenticated", (cause) =>
+							Effect.fail(
+								errors.GH_NOT_AUTHENTICATED({
+									message: `gh is not authenticated: ${cause.reason}`,
+								}),
+							),
 						),
-					),
-					Effect.catchTag("GhRateLimited", (cause) =>
-						Effect.fail(
-							errors.TOO_MANY_REQUESTS({
-								message: `GitHub's API is rate-limited right now: ${cause.reason}`,
-							}),
+						Effect.catchTag("GhRateLimited", (cause) =>
+							Effect.fail(
+								errors.TOO_MANY_REQUESTS({
+									message: `GitHub's API is rate-limited right now: ${cause.reason}`,
+								}),
+							),
 						),
-					),
-					Effect.catchTag("PullRequestNotFound", (cause) =>
-						Effect.fail(
-							errors.NOT_FOUND({
-								message: `pull request #${cause.number} couldn't be resolved on GitHub: ${cause.reason}`,
-							}),
+						Effect.catchTag("PullRequestNotFound", (cause) =>
+							Effect.fail(
+								errors.NOT_FOUND({
+									message: `pull request #${cause.number} couldn't be resolved on GitHub: ${cause.reason}`,
+								}),
+							),
 						),
-					),
-					Effect.catchTag("GhOutputDecodeError", (cause) =>
-						Effect.fail(
-							errors.SERVICE_UNAVAILABLE({
-								message: `gh returned output nisi couldn't parse (${cause.command})`,
-							}),
+						Effect.catchTag("GhOutputDecodeError", (cause) =>
+							Effect.fail(
+								errors.SERVICE_UNAVAILABLE({
+									message: `gh returned output nisi couldn't parse (${cause.command})`,
+								}),
+							),
 						),
-					),
-					Effect.catchTag("GitCommandError", (cause) =>
-						Effect.fail(
-							errors.SERVICE_UNAVAILABLE({
-								message: `${cause.command} could not be run: ${cause.stderr || String(cause.cause)}`,
-							}),
+						Effect.catchTag("GitCommandError", (cause) =>
+							Effect.fail(
+								errors.SERVICE_UNAVAILABLE({
+									message: `${cause.command} could not be run: ${cause.stderr || String(cause.cause)}`,
+								}),
+							),
 						),
-					),
-				);
+					);
 			}),
 			// Combines `@repo/git`'s two independent `gh` reads (PR mergeability,
 			// repo merge-method settings) into one round trip — the PR header's
@@ -1323,10 +1319,11 @@ export function attachRouter(
 						),
 					);
 
+				const github = yield* GitHub;
 				const [mergeability, allowedMethods] = yield* Effect.all(
 					[
-						fetchPullRequestMergeability(input.repoRoot, input.number),
-						fetchRepoMergeMethods(input.repoRoot, input.owner, input.repo),
+						github.mergeability(input.repoRoot, input.number),
+						github.mergeMethods(input.repoRoot, input.owner, input.repo),
 					],
 					{ concurrency: "unbounded" },
 				).pipe(
@@ -1424,11 +1421,8 @@ export function attachRouter(
 			}),
 			merge: authed.pullRequests.merge.effect(function* ({ input, errors }) {
 				const repoMergeMethodStore = yield* RepoMergeMethodStore;
-				yield* mergePullRequest(
-					input.repoRoot,
-					input.number,
-					input.method,
-				).pipe(
+				const github = yield* GitHub;
+				yield* github.merge(input.repoRoot, input.number, input.method).pipe(
 					Effect.tapError((cause) =>
 						logMergeFailure("pull request merge", input, cause),
 					),
@@ -1514,80 +1508,83 @@ export function attachRouter(
 				errors,
 			}) {
 				const repoMergeMethodStore = yield* RepoMergeMethodStore;
-				yield* mergeStackPullRequest(
-					input.repoRoot,
-					input.owner,
-					input.repo,
-					input.number,
-					input.method,
-				).pipe(
-					Effect.tapError((cause) =>
-						logMergeFailure("pull request stack merge", input, cause),
-					),
-					Effect.catchTag("GhNotAuthenticated", (cause) =>
-						Effect.fail(
-							errors.GH_NOT_AUTHENTICATED({
-								message: `gh is not authenticated: ${cause.reason}`,
-								data: {
-									reason: "Authentication required",
-									detail: cause.reason,
-								},
-							}),
+				const github = yield* GitHub;
+				yield* github
+					.mergeStack(
+						input.repoRoot,
+						input.owner,
+						input.repo,
+						input.number,
+						input.method,
+					)
+					.pipe(
+						Effect.tapError((cause) =>
+							logMergeFailure("pull request stack merge", input, cause),
 						),
-					),
-					Effect.catchTag("PullRequestNotFound", (cause) =>
-						Effect.fail(
-							errors.NOT_FOUND({
-								message: `pull request #${cause.number} couldn't be resolved on GitHub for ${cause.repoRoot}: ${cause.reason}`,
-								data: {
-									reason: "Pull request not found",
-									detail: cause.reason,
-								},
-							}),
+						Effect.catchTag("GhNotAuthenticated", (cause) =>
+							Effect.fail(
+								errors.GH_NOT_AUTHENTICATED({
+									message: `gh is not authenticated: ${cause.reason}`,
+									data: {
+										reason: "Authentication required",
+										detail: cause.reason,
+									},
+								}),
+							),
 						),
-					),
-					Effect.catchTag("PullRequestNotMergeable", (cause) =>
-						Effect.fail(
-							errors.CONFLICT({
-								message: `pull request #${cause.number} isn't mergeable right now: ${cause.reason}`,
-								data: { reason: "Merge blocked", detail: cause.reason },
-							}),
+						Effect.catchTag("PullRequestNotFound", (cause) =>
+							Effect.fail(
+								errors.NOT_FOUND({
+									message: `pull request #${cause.number} couldn't be resolved on GitHub for ${cause.repoRoot}: ${cause.reason}`,
+									data: {
+										reason: "Pull request not found",
+										detail: cause.reason,
+									},
+								}),
+							),
 						),
-					),
-					Effect.catchTag("GhStackMergeFailed", (cause) =>
-						Effect.fail(
-							errors.SERVICE_UNAVAILABLE({
-								message: `GitHub stacked merge failed for pull request #${cause.number}: ${cause.reason}`,
-								data: {
-									reason: "GitHub rejected the stack merge",
-									detail: cause.reason,
-								},
-							}),
+						Effect.catchTag("PullRequestNotMergeable", (cause) =>
+							Effect.fail(
+								errors.CONFLICT({
+									message: `pull request #${cause.number} isn't mergeable right now: ${cause.reason}`,
+									data: { reason: "Merge blocked", detail: cause.reason },
+								}),
+							),
 						),
-					),
-					Effect.catchTag("GhOutputDecodeError", (cause) =>
-						Effect.fail(
-							errors.SERVICE_UNAVAILABLE({
-								message: `gh returned output nisi couldn't parse (${cause.command})`,
-								data: {
-									reason: "Invalid GitHub response",
-									detail: mergeFailureDetail(cause),
-								},
-							}),
+						Effect.catchTag("GhStackMergeFailed", (cause) =>
+							Effect.fail(
+								errors.SERVICE_UNAVAILABLE({
+									message: `GitHub stacked merge failed for pull request #${cause.number}: ${cause.reason}`,
+									data: {
+										reason: "GitHub rejected the stack merge",
+										detail: cause.reason,
+									},
+								}),
+							),
 						),
-					),
-					Effect.catchTag("GitCommandError", (cause) =>
-						Effect.fail(
-							errors.SERVICE_UNAVAILABLE({
-								message: `${cause.command} could not be run: ${cause.stderr || String(cause.cause)}`,
-								data: {
-									reason: "Couldn't run gh",
-									detail: mergeFailureDetail(cause),
-								},
-							}),
+						Effect.catchTag("GhOutputDecodeError", (cause) =>
+							Effect.fail(
+								errors.SERVICE_UNAVAILABLE({
+									message: `gh returned output nisi couldn't parse (${cause.command})`,
+									data: {
+										reason: "Invalid GitHub response",
+										detail: mergeFailureDetail(cause),
+									},
+								}),
+							),
 						),
-					),
-				);
+						Effect.catchTag("GitCommandError", (cause) =>
+							Effect.fail(
+								errors.SERVICE_UNAVAILABLE({
+									message: `${cause.command} could not be run: ${cause.stderr || String(cause.cause)}`,
+									data: {
+										reason: "Couldn't run gh",
+										detail: mergeFailureDetail(cause),
+									},
+								}),
+							),
+						),
+					);
 
 				yield* Effect.logInfo("pull request stack merged", {
 					repoRoot: input.repoRoot,
@@ -1618,7 +1615,8 @@ export function attachRouter(
 				input,
 				errors,
 			}) {
-				yield* markPullRequestReady(input.repoRoot, input.number).pipe(
+				const github = yield* GitHub;
+				yield* github.markReady(input.repoRoot, input.number).pipe(
 					Effect.catchTag("GhNotAuthenticated", (cause) =>
 						Effect.fail(
 							errors.GH_NOT_AUTHENTICATED({
@@ -1659,7 +1657,8 @@ export function attachRouter(
 			// classification is the PR-scoped subset of `mergeStatus`'s (no
 			// `MERGE_STATUS_UNAVAILABLE` — nothing here needs push access).
 			checks: authed.pullRequests.checks.effect(function* ({ input, errors }) {
-				return yield* fetchPullRequestChecks(input).pipe(
+				const github = yield* GitHub;
+				return yield* github.checks(input).pipe(
 					Effect.catchTag("GhNotAuthenticated", (cause) =>
 						Effect.fail(
 							errors.GH_NOT_AUTHENTICATED({
@@ -1753,7 +1752,8 @@ export function attachRouter(
 					return { description: null, commits };
 				}
 
-				return yield* fetchPullRequestOverview(input).pipe(
+				const github = yield* GitHub;
+				return yield* github.overview(input).pipe(
 					Effect.catchTag("GhNotAuthenticated", (cause) =>
 						Effect.fail(
 							errors.GH_NOT_AUTHENTICATED({

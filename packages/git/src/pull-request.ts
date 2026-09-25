@@ -82,15 +82,3 @@ export const resolveReviewTargetForPullRequest = (
 	repoRoot: string,
 	number: number,
 ) => resolveTarget(repoRoot, number);
-
-export const resolvePullRequestHeadRef = (repoRoot: string, number: number) =>
-	Effect.gen(function* () {
-		const github = yield* GitHub;
-		return yield* github.headRef(repoRoot, number);
-	});
-
-export const searchPullRequests = (cwd: string, query: string) =>
-	Effect.gen(function* () {
-		const github = yield* GitHub;
-		return yield* github.search(cwd, query);
-	});

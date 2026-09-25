@@ -19,6 +19,21 @@ export type {
 export { getChangedFiles, getFileContents } from "./diff.ts";
 export { GitHub } from "./github/github.ts";
 export { GhGitHub } from "./github/gh/github.ts";
+export type {
+	FetchPullRequestChecksInput,
+	FetchPullRequestOverviewInput,
+	FetchPullRequestStackInput,
+	MergeMethod,
+	OverviewCommit,
+	OverviewCommitCheck,
+	PullRequestCheck,
+	PullRequestCheckStatus,
+	PullRequestMergeability,
+	PullRequestOverview,
+	PullRequestStack,
+	PullRequestStackEntry,
+	PullRequestStackError,
+} from "./github/models.ts";
 export {
 	FileNotChanged,
 	GhMergeFailed,
@@ -68,42 +83,9 @@ export type {
 	ReviewTarget,
 } from "./pull-request.ts";
 export {
-	resolvePullRequestHeadRef,
 	resolveReviewTarget,
 	resolveReviewTargetForPullRequest,
-	searchPullRequests,
 } from "./pull-request.ts";
-export type {
-	FetchPullRequestChecksInput,
-	PullRequestCheck,
-	PullRequestCheckStatus,
-} from "./pull-request-checks.ts";
-export { fetchPullRequestChecks } from "./pull-request-checks.ts";
-export type {
-	MergeMethod,
-	PullRequestMergeability,
-} from "./pull-request-merge.ts";
-export {
-	fetchPullRequestMergeability,
-	fetchRepoMergeMethods,
-	markPullRequestReady,
-	mergePullRequest,
-	mergeStackPullRequest,
-} from "./pull-request-merge.ts";
-export type {
-	FetchPullRequestOverviewInput,
-	OverviewCommit,
-	OverviewCommitCheck,
-	PullRequestOverview,
-} from "./pull-request-overview.ts";
-export { fetchPullRequestOverview } from "./pull-request-overview.ts";
-export type {
-	FetchPullRequestStackInput,
-	PullRequestStack,
-	PullRequestStackEntry,
-	PullRequestStackError,
-} from "./pull-request-stack.ts";
-export { fetchPullRequestStack } from "./pull-request-stack.ts";
 export type { UnpushedCommits } from "./repo.ts";
 export {
 	resolveCurrentBranch,

@@ -9,7 +9,7 @@ import { Layer } from "effect";
  */
 import { BunServices } from "@effect/platform-bun";
 import { Cause, Effect, Exit } from "effect";
-import { markPullRequestReady } from "../../src/pull-request-merge.ts";
+import { GitHub } from "../../src/github/github.ts";
 
 const [repoRoot, numberArg] = process.argv.slice(2);
 if (repoRoot === undefined || numberArg === undefined) {
@@ -19,7 +19,12 @@ if (repoRoot === undefined || numberArg === undefined) {
 }
 
 const exit = await Effect.runPromise(
-	Effect.exit(markPullRequestReady(repoRoot, Number(numberArg))).pipe(
+	Effect.exit(
+		Effect.gen(function* () {
+			const github = yield* GitHub;
+			return yield* github.markReady(repoRoot, Number(numberArg));
+		}),
+	).pipe(
 		Effect.provide(GhGitHub.layer.pipe(Layer.provideMerge(BunServices.layer))),
 	),
 );

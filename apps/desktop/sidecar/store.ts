@@ -7,7 +7,7 @@ import {
 	type FileChange as GitFileChange,
 	type FileContent as GitFileContent,
 	type GitHubTarget,
-	type GitHub,
+	GitHub,
 	type GitHubUnreachable,
 	getChangedFiles,
 	getFileContents,
@@ -22,7 +22,6 @@ import {
 	readWorktreeBlobContent,
 	resolveCurrentBranch,
 	resolveMergeBase,
-	resolvePullRequestHeadRef,
 	resolveRepoRoot,
 	resolveReviewTarget,
 	resolveReviewTargetForPullRequest,
@@ -586,10 +585,8 @@ export class Store extends Context.Service<Store>()("Store", {
 					};
 				}
 
-				const headRef = yield* resolvePullRequestHeadRef(
-					repoRoot,
-					input.number,
-				);
+				const github = yield* GitHub;
+				const headRef = yield* github.headRef(repoRoot, input.number);
 				const worktreePath = yield* openPullRequestWorktree({
 					repoRoot,
 					number: input.number,
