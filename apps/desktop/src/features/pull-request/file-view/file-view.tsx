@@ -469,12 +469,12 @@ export function FileView({
 							</div>
 							<DiffSelectionPopover
 								anchorRect={diffSelection.anchorRect}
-								getScrollElement={() =>
-									codeViewRef.current?.getInstance()?.getContainerElement()
-								}
 								onDismiss={diffSelection.clearSelection}
 								orpc={orpc}
 								reference={diffSelection.reference}
+								scrollContainer={codeViewRef.current
+									?.getInstance()
+									?.getContainerElement()}
 								sessionId={sessionId}
 							/>
 						</>

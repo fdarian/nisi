@@ -53,7 +53,7 @@ type DiffSelectionPopoverProps = {
 	 * two are separate.
 	 */
 	anchorRect: DOMRect | null;
-	getScrollElement: () => HTMLElement | undefined;
+	scrollContainer: HTMLElement | undefined;
 	onForwardedWheel?: () => void;
 	/**
 	 * Called when the user presses Escape to dismiss without copying, or
@@ -85,7 +85,7 @@ export function DiffSelectionPopover({
 	orpc,
 	reference,
 	anchorRect,
-	getScrollElement,
+	scrollContainer,
 	onForwardedWheel,
 	onDismiss,
 }: DiffSelectionPopoverProps): React.ReactElement | null {
@@ -140,21 +140,44 @@ export function DiffSelectionPopover({
 	useLayoutEffect(() => {
 		if (reference !== null) setOpen(true);
 	}, [reference]);
+	// Base UI's hide middleware uses the portaled positioner's clipping ancestors,
+	// not collisionBoundary, so it cannot hide an anchor scrolled out of CodeView.
+	const boundaryRect = scrollContainer?.getBoundingClientRect();
+	const anchorVisible =
+		anchorRect !== null &&
+		boundaryRect !== undefined &&
+		anchorRect.bottom > boundaryRect.top &&
+		anchorRect.top < boundaryRect.bottom &&
+		anchorRect.right > boundaryRect.left &&
+		anchorRect.left < boundaryRect.right;
+	// Anchor at the visible end of the selection. A long selection can span
+	// both edges of the scrollport, leaving neither side of its full rect
+	// available for Floating UI to place the toolbar.
+	const visibleAnchor =
+		anchorVisible && anchorRect && boundaryRect
+			? new DOMRect(
+					Math.max(anchorRect.left, boundaryRect.left),
+					Math.min(anchorRect.bottom, boundaryRect.bottom),
+					Math.min(anchorRect.right, boundaryRect.right) -
+						Math.max(anchorRect.left, boundaryRect.left),
+					0,
+				)
+			: null;
 	const glide = useSelectionPopoverGlide(
-		open && anchorRect !== null && reference !== null,
+		open && anchorVisible && reference !== null,
 	);
 
 	if (reference === null) return null;
 
 	// `anchorRect` re-measures live (see `use-diff-selection.ts`'s
 	// `measureGutterAnchorRect`/`refreshAnchorRect`), so this closure never
-	// captures a stale position — it just reads whatever `anchorRect`
-	// currently is on each call. The `new DOMRect()` fallback only exists to
+	// captures a stale position — it just reads the visible portion on each
+	// call. The `new DOMRect()` fallback only exists to
 	// satisfy `getBoundingClientRect`'s non-nullable return type; it's never
 	// actually read, since `open` below already gates on `anchorRect` being
 	// non-null before Base UI would ask.
 	const virtualAnchor = {
-		getBoundingClientRect: () => anchorRect ?? new DOMRect(),
+		getBoundingClientRect: () => visibleAnchor ?? new DOMRect(),
 	};
 
 	return (
@@ -162,13 +185,14 @@ export function DiffSelectionPopover({
 			onOpenChange={(_open, eventDetails) => {
 				if (eventDetails.reason === "escape-key") onDismiss();
 			}}
-			open={open && anchorRect !== null}
+			open={open && anchorVisible}
 		>
 			<PopoverPrimitive.Portal>
 				<PopoverPrimitive.Positioner
 					align="start"
 					anchor={virtualAnchor}
 					className="z-50 outline-none"
+					collisionBoundary={scrollContainer}
 					ref={glide.positionerRef}
 					side="bottom"
 					sideOffset={8}
@@ -178,11 +202,10 @@ export function DiffSelectionPopover({
 							className="outline-none"
 							onWheel={(event) => {
 								if (event.deltaMode !== WheelEvent.DOM_DELTA_PIXEL) return;
-								const scrollElement = getScrollElement();
-								if (scrollElement === undefined) return;
+								if (scrollContainer === undefined) return;
 								event.preventDefault();
 								onForwardedWheel?.();
-								scrollElement.scrollBy({
+								scrollContainer.scrollBy({
 									left: event.deltaX,
 									top: event.deltaY,
 								});
