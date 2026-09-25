@@ -13,7 +13,7 @@ sources:
 
 # Why the patch exists
 
-`CodeView.reconcileItems()` (`patches/@pierre%2Fdiffs@1.3.5.patch`) removes items whose ids no longer
+`CodeView.reconcileItems()` (`patches/@pierre%2Fdiffs@1.5.1.patch`) removes items whose ids no longer
 appear in the controlled list, then calls `capturePendingLayoutAnchor()` so the next render can hold
 the viewport steady across the shrink. `capturePendingLayoutAnchor` early-returns whenever
 `this.pendingScrollTarget != null` — correct while an in-flight `scrollTo()` still targets a
