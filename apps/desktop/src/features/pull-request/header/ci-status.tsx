@@ -2,7 +2,7 @@
 
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { cn } from "cn";
-import { CirclePause } from "lucide-react";
+import { CirclePause, Pause } from "lucide-react";
 import type React from "react";
 import {
 	DropdownMenu,
@@ -274,8 +274,8 @@ export function CiStatus({
 							))}
 					</g>
 					{awaitingApproval ? (
-						<CirclePause
-							className="stroke-warning"
+						<Pause
+							className="stroke-muted-foreground"
 							height={10}
 							width={10}
 							x={VIEWBOX / 2 - 5}
