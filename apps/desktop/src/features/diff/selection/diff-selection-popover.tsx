@@ -18,6 +18,7 @@
  * rather than a box nested in a box. `PopoverPrimitive.Positioner` is still what
  * does the actual anchor math (collision detection, flipping).
  */
+import { motion } from "motion/react";
 import { useEffect, useLayoutEffect, useState } from "react";
 import { Button } from "#/components/ui/button";
 import { Popover, PopoverPrimitive } from "#/components/ui/popover";
@@ -34,6 +35,7 @@ import {
 } from "#/features/diff/diff-reference";
 import type { SidecarQueryUtils } from "#/infra/backend-context";
 import { diffSelectionPopupMarkerProps } from "./use-diff-selection";
+import { useSelectionPopoverGlide } from "./use-selection-popover-glide";
 
 const COPIED_CONFIRMATION_MS = 1500;
 
@@ -115,10 +117,9 @@ export function DiffSelectionPopover({
 	// only registers with Floating UI a render later, inside its own layout
 	// effect. Without the concealment window, the popup could paint once at
 	// whatever position Floating UI resolved before that registration, then
-	// visibly jump to the true position on the next commit — which, with
-	// the `Positioner`'s position transition active, read as a slide in
-	// from the left. `previousReference` + the effect below reproduce a
-	// real edge: start closed, flip open only after mount, so the popup
+	// visibly jump to the true position on the next commit. The
+	// `previousReference` state and effect below reproduce a real edge:
+	// start closed, flip open only after mount, so the popup
 	// never paints before it's positioned against the real anchor.
 	//
 	// `previousReference` is state (React's own "adjusting state during
@@ -139,6 +140,9 @@ export function DiffSelectionPopover({
 	useLayoutEffect(() => {
 		if (reference !== null) setOpen(true);
 	}, [reference]);
+	const glide = useSelectionPopoverGlide(
+		open && anchorRect !== null && reference !== null,
+	);
 
 	if (reference === null) return null;
 
@@ -165,72 +169,78 @@ export function DiffSelectionPopover({
 					align="start"
 					anchor={virtualAnchor}
 					className="z-50 outline-none"
+					ref={glide.positionerRef}
 					side="bottom"
 					sideOffset={8}
 				>
-					<PopoverPrimitive.Popup
-						className="outline-none"
-						onWheel={(event) => {
-							if (event.deltaMode !== WheelEvent.DOM_DELTA_PIXEL) return;
-							const scrollElement = getScrollElement();
-							if (scrollElement === undefined) return;
-							event.preventDefault();
-							onForwardedWheel?.();
-							scrollElement.scrollBy({ left: event.deltaX, top: event.deltaY });
-						}}
-						// Cosmetic only, matching the `data-slot` convention every other
-						// shared-UI primitive in this app sets on itself. The
-						// selection-clearing logic in `use-diff-selection.ts` does NOT
-						// key off this — see `diffSelectionPopupMarkerProps` below for
-						// the attribute it actually checks, and that constant's doc
-						// comment for why depending on `data-slot` for that broke once
-						// already.
-						data-slot="popover-popup"
-						// Base UI's default `finalFocus` returns focus to whatever was
-						// focused when the popover opened — here, wherever the drag
-						// gesture happened to land focus in the diff pane (a file
-						// header row, since there's no real trigger element for this
-						// virtual-anchor popover). Left on, that steals focus back out
-						// of the composer a tick after "Ask" moves it there
-						// (`chat-composer.tsx`'s mount-focus effect). `false` disables
-						// the restore entirely, since neither button here has a
-						// "trigger" to sensibly return focus to.
-						finalFocus={false}
-						{...diffSelectionPopupMarkerProps}
-					>
-						<Toolbar>
-							<ToolbarButton
-								onClick={() => {
-									navigator.clipboard
-										.writeText(formatSelectionReference(reference))
-										.then(() => setCopied(true))
-										.catch((error: unknown) => {
-											toastManager.add({
-												title: "Failed to copy reference",
-												description:
-													error instanceof Error
-														? error.message
-														: String(error),
-												type: "error",
+					<motion.div style={{ x: glide.x, y: glide.y }}>
+						<PopoverPrimitive.Popup
+							className="outline-none"
+							onWheel={(event) => {
+								if (event.deltaMode !== WheelEvent.DOM_DELTA_PIXEL) return;
+								const scrollElement = getScrollElement();
+								if (scrollElement === undefined) return;
+								event.preventDefault();
+								onForwardedWheel?.();
+								scrollElement.scrollBy({
+									left: event.deltaX,
+									top: event.deltaY,
+								});
+							}}
+							// Cosmetic only, matching the `data-slot` convention every other
+							// shared-UI primitive in this app sets on itself. The
+							// selection-clearing logic in `use-diff-selection.ts` does NOT
+							// key off this — see `diffSelectionPopupMarkerProps` below for
+							// the attribute it actually checks, and that constant's doc
+							// comment for why depending on `data-slot` for that broke once
+							// already.
+							data-slot="popover-popup"
+							// Base UI's default `finalFocus` returns focus to whatever was
+							// focused when the popover opened — here, wherever the drag
+							// gesture happened to land focus in the diff pane (a file
+							// header row, since there's no real trigger element for this
+							// virtual-anchor popover). Left on, that steals focus back out
+							// of the composer a tick after "Ask" moves it there
+							// (`chat-composer.tsx`'s mount-focus effect). `false` disables
+							// the restore entirely, since neither button here has a
+							// "trigger" to sensibly return focus to.
+							finalFocus={false}
+							{...diffSelectionPopupMarkerProps}
+						>
+							<Toolbar>
+								<ToolbarButton
+									onClick={() => {
+										navigator.clipboard
+											.writeText(formatSelectionReference(reference))
+											.then(() => setCopied(true))
+											.catch((error: unknown) => {
+												toastManager.add({
+													title: "Failed to copy reference",
+													description:
+														error instanceof Error
+															? error.message
+															: String(error),
+													type: "error",
+												});
 											});
-										});
-								}}
-								render={<Button size="xs" variant="ghost" />}
-							>
-								{copied ? "Copied" : "Copy reference"}
-							</ToolbarButton>
-							<ToolbarSeparator />
-							<ToolbarButton
-								onClick={() => {
-									dock.askWithReference(reference);
-									onDismiss();
-								}}
-								render={<Button size="xs" variant="ghost" />}
-							>
-								Ask
-							</ToolbarButton>
-						</Toolbar>
-					</PopoverPrimitive.Popup>
+									}}
+									render={<Button size="xs" variant="ghost" />}
+								>
+									{copied ? "Copied" : "Copy reference"}
+								</ToolbarButton>
+								<ToolbarSeparator />
+								<ToolbarButton
+									onClick={() => {
+										dock.askWithReference(reference);
+										onDismiss();
+									}}
+									render={<Button size="xs" variant="ghost" />}
+								>
+									Ask
+								</ToolbarButton>
+							</Toolbar>
+						</PopoverPrimitive.Popup>
+					</motion.div>
 				</PopoverPrimitive.Positioner>
 			</PopoverPrimitive.Portal>
 		</Popover>
