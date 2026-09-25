@@ -5,12 +5,12 @@
  * `MarkReadyMenuItem`).
  */
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import { SidecarEventsProvider } from "#/infra/sidecar-events";
 import type {
 	PullRequestMergeStatus,
 	PullRequestStack,
 	SessionTarget,
 } from "#/features/pull-request/data/pr-data";
+import { SidecarEventsProvider } from "#/infra/sidecar-events";
 import {
 	createMockOrpc,
 	createMockSidecarClient,
@@ -123,12 +123,5 @@ export const AwaitingApproval: Story = {
 			mergeStatus: { ...BASE_STATUS, defaultMethod: "squash" },
 			checks: [{ name: "CI", status: "awaiting_approval" }],
 		}),
-	},
-};
-
-export const NoChecks: Story = {
-	args: {
-		target: PR_TARGET,
-		orpc: createMockOrpc({ mergeStatus: BASE_STATUS, checks: [] }),
 	},
 };

@@ -1,4 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
+import { fn } from "storybook/test";
 import type { CiCheck } from "./ci-status";
 import { CiStatus } from "./ci-status";
 
@@ -28,23 +29,32 @@ const CHECKS: readonly CiCheck[] = [
 	{ name: "test (bun)", status: "passing", detail: "3m 04s" },
 ];
 
-const CHECKS_URL = "https://github.com/acme/widgets/pull/42/checks";
 const AWAITING_CHECKS: readonly CiCheck[] = [
 	{ name: "CI / build", status: "awaiting_approval" },
 	{ name: "CI / test", status: "awaiting_approval" },
 	{ name: "CodeQL", status: "awaiting_approval" },
 ];
 
-export const NoChecks: Story = {
-	args: { checks: [] },
-};
-
 export const AwaitingApproval: Story = {
-	args: { checks: [AWAITING_CHECKS[0]], checksUrl: CHECKS_URL },
+	args: {
+		checks: [AWAITING_CHECKS[0]],
+		onApproveWorkflows: fn(),
+	},
 };
 
 export const AwaitingApprovalMultiple: Story = {
-	args: { checks: AWAITING_CHECKS, checksUrl: CHECKS_URL },
+	args: {
+		checks: AWAITING_CHECKS,
+		onApproveWorkflows: fn(),
+	},
+};
+
+export const AwaitingApprovalApproving: Story = {
+	args: {
+		checks: AWAITING_CHECKS,
+		onApproveWorkflows: fn(),
+		isApproving: true,
+	},
 };
 
 export const AwaitingApprovalMixed: Story = {
@@ -53,7 +63,7 @@ export const AwaitingApprovalMixed: Story = {
 			{ name: "Vercel preview", status: "passing" },
 			...AWAITING_CHECKS.slice(0, 2),
 		],
-		checksUrl: CHECKS_URL,
+		onApproveWorkflows: fn(),
 	},
 };
 

@@ -32,8 +32,11 @@ export type CiCheck = {
 
 type CiStatusProps = {
 	checks: readonly CiCheck[];
-	checksUrl?: string;
 	className?: string;
+	/** Presentational only — the sidecar doesn't call GitHub's approve-workflow-run API yet. Rendered only when supplied. */
+	onApproveWorkflows?: () => void;
+	/** Disables the action and swaps its label to "Approving…" while `onApproveWorkflows`'s caller is mid-request. */
+	isApproving?: boolean;
 };
 
 type WatchedCiStatusProps = CiStatusProps & {
@@ -131,15 +134,18 @@ function overallStatus(checks: readonly CiCheck[]): CiCheckStatus {
  */
 function CiChecksMenuContent({
 	checks,
-	checksUrl,
+	onApproveWorkflows,
+	isApproving,
 }: {
 	checks: readonly CiCheck[];
-	checksUrl?: string;
+	onApproveWorkflows?: () => void;
+	isApproving?: boolean;
 }): React.ReactElement {
 	const summary = summarize(checks);
-	const awaitingApproval = checks.some(
+	const awaitingChecks = checks.filter(
 		(check) => check.status === "awaiting_approval",
 	);
+	const awaitingApproval = awaitingChecks.length > 0;
 	return (
 		<DropdownMenuContent align="end" className="w-72">
 			<div className="px-2 py-1.5">
@@ -188,11 +194,16 @@ function CiChecksMenuContent({
 						</DropdownMenuItem>
 					);
 				})}
-			{awaitingApproval && checksUrl !== undefined && (
+			{awaitingApproval && onApproveWorkflows !== undefined && (
 				<>
 					<DropdownMenuSeparator />
-					<DropdownMenuItem onClick={() => void openUrl(checksUrl)}>
-						Review on GitHub
+					<DropdownMenuItem
+						disabled={isApproving === true}
+						onClick={onApproveWorkflows}
+					>
+						{isApproving === true
+							? "Approving…"
+							: `Approve ${awaitingChecks.length} ${awaitingChecks.length === 1 ? "workflow" : "workflows"}`}
 					</DropdownMenuItem>
 				</>
 			)}
@@ -203,22 +214,27 @@ function CiChecksMenuContent({
 /**
  * One arc per check around a ring labeled "CI", click for the full list.
  *
- * An empty response gets a quiet dashed ring rather than disappearing from the header.
+ * Renders nothing when there are no checks — a PR with no CI configured
+ * shouldn't get an empty ring implying something is still coming.
  */
 export function CiStatus({
 	checks,
-	checksUrl,
 	className,
+	onApproveWorkflows,
+	isApproving,
 	watched,
-}: WatchedCiStatusProps): React.ReactElement {
+}: WatchedCiStatusProps): React.ReactElement | null {
 	const [open, setOpen] = useDismissOnInactive(watched);
+	if (checks.length === 0) return null;
 
-	const step =
-		checks.length === 0 ? CIRCUMFERENCE : CIRCUMFERENCE / checks.length;
+	const step = CIRCUMFERENCE / checks.length;
 	// A single check gets an unbroken ring — a gap there would read as a second, missing check.
 	const gap = checks.length === 1 ? 0 : Math.min(MAX_SEGMENT_GAP, step * 0.4);
 	const segment = step - gap;
-	const summary = checks.length === 0 ? "No checks" : summarize(checks);
+	const summary = summarize(checks);
+	const awaitingApproval = checks.some(
+		(check) => check.status === "awaiting_approval",
+	);
 
 	return (
 		<DropdownMenu onOpenChange={setOpen} open={open}>
@@ -237,62 +253,52 @@ export function CiStatus({
 					xmlns="http://www.w3.org/2000/svg"
 				>
 					<g transform={`rotate(-90 ${VIEWBOX / 2} ${VIEWBOX / 2})`}>
-						{checks.length === 0 ? (
-							<circle
-								className="stroke-muted-foreground/40"
-								cx={VIEWBOX / 2}
-								cy={VIEWBOX / 2}
-								r={RADIUS}
-								strokeDasharray="2 3"
-								strokeWidth={1.5}
-							/>
-						) : (
-							[...checks]
-								.sort((a, b) => STATUS_ORDER[a.status] - STATUS_ORDER[b.status])
-								.map((check, index) => (
-									<circle
-										className={cn(
-											STATUS_STROKE[check.status],
-											check.status === "running" && "animate-pulse",
-										)}
-										cx={VIEWBOX / 2}
-										cy={VIEWBOX / 2}
-										key={check.name}
-										r={RADIUS}
-										strokeDasharray={`${segment} ${CIRCUMFERENCE - segment}`}
-										strokeDashoffset={-index * step}
-										strokeWidth={
-											check.status === "awaiting_approval" ? 1.5 : STROKE_WIDTH
-										}
-									/>
-								))
-						)}
+						{[...checks]
+							.sort((a, b) => STATUS_ORDER[a.status] - STATUS_ORDER[b.status])
+							.map((check, index) => (
+								<circle
+									className={cn(
+										STATUS_STROKE[check.status],
+										check.status === "running" && "animate-pulse",
+									)}
+									cx={VIEWBOX / 2}
+									cy={VIEWBOX / 2}
+									key={check.name}
+									r={RADIUS}
+									strokeDasharray={`${segment} ${CIRCUMFERENCE - segment}`}
+									strokeDashoffset={-index * step}
+									strokeWidth={
+										check.status === "awaiting_approval" ? 1.5 : STROKE_WIDTH
+									}
+								/>
+							))}
 					</g>
-					<text
-						className={cn(
-							"font-semibold text-[8px]",
-							checks.length === 0 ? "fill-muted-foreground" : "fill-foreground",
-						)}
-						dominantBaseline="central"
-						textAnchor="middle"
-						x={VIEWBOX / 2}
-						y={VIEWBOX / 2 + 0.5}
-					>
-						CI
-					</text>
+					{awaitingApproval ? (
+						<CirclePause
+							className="stroke-warning"
+							height={10}
+							width={10}
+							x={VIEWBOX / 2 - 5}
+							y={VIEWBOX / 2 - 5}
+						/>
+					) : (
+						<text
+							className="fill-foreground font-semibold text-[8px]"
+							dominantBaseline="central"
+							textAnchor="middle"
+							x={VIEWBOX / 2}
+							y={VIEWBOX / 2 + 0.5}
+						>
+							CI
+						</text>
+					)}
 				</svg>
-				{checks.length === 0 && <span className="text-xs">No checks</span>}
 			</DropdownMenuTrigger>
-			{checks.length === 0 ? (
-				<DropdownMenuContent
-					align="end"
-					className="w-64 px-2 py-1.5 text-muted-foreground text-xs"
-				>
-					No checks reported for this commit.
-				</DropdownMenuContent>
-			) : (
-				<CiChecksMenuContent checks={checks} checksUrl={checksUrl} />
-			)}
+			<CiChecksMenuContent
+				checks={checks}
+				isApproving={isApproving}
+				onApproveWorkflows={onApproveWorkflows}
+			/>
 		</DropdownMenu>
 	);
 }
@@ -306,8 +312,9 @@ export function CiStatus({
  */
 export function CiStatusIcon({
 	checks,
-	checksUrl,
 	className,
+	onApproveWorkflows,
+	isApproving,
 }: CiStatusProps): React.ReactElement | null {
 	if (checks.length === 0) return null;
 
@@ -331,7 +338,11 @@ export function CiStatusIcon({
 					)}
 				/>
 			</DropdownMenuTrigger>
-			<CiChecksMenuContent checks={checks} checksUrl={checksUrl} />
+			<CiChecksMenuContent
+				checks={checks}
+				isApproving={isApproving}
+				onApproveWorkflows={onApproveWorkflows}
+			/>
 		</DropdownMenu>
 	);
 }

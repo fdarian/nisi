@@ -244,7 +244,7 @@ const MergeFailure = Schema.toStandardSchemaV1(
  * `MERGE_STATUS_UNAVAILABLE` — nothing here needs push access) — see
  * `apps/desktop/sidecar/http.ts`'s handler for the mapping. A PR with no CI
  * configured legitimately resolves to an empty array, which `CiStatus`
- * renders as a quiet empty state. Turning
+ * already renders as nothing rather than an empty ring. Turning
  * `durationMs` into `CiStatus`'s human-readable `detail` string is left to
  * `apps/desktop/src/features/pull-request/header/pr-ci-status.tsx` — this wire shape
  * carries the fact, not the formatting.
