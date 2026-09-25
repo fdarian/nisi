@@ -1,6 +1,5 @@
 import { Effect, Result } from "effect";
 import { gitResult } from "./exec.ts";
-import { GitHubUnreachable } from "./errors.ts";
 import { GitHub } from "./github/github.ts";
 import { resolveLocalDefaultBranch } from "./repo.ts";
 
@@ -57,22 +56,14 @@ const resolveTarget = (repoRoot: string, number?: number) =>
 		const results = yield* Effect.all(
 			[
 				github.repository(repoRoot),
-				github.pullRequest(repoRoot, number).pipe(
-					Effect.catchTag(
-						"GitCommandError",
-						(cause) =>
-							new GitHubUnreachable({
-								repoRoot,
-								reason: `gh could not be run: ${cause.stderr}`,
-							}),
-					),
-					Effect.result,
-				),
+				Effect.result(github.pullRequest(repoRoot, number)),
 			],
 			{ concurrency: "unbounded" },
 		);
 		const identity = results[0];
 		const pr = results[1];
+		if (Result.isFailure(pr) && pr.failure._tag === "GitHubUnreachable")
+			return yield* Effect.fail(pr.failure);
 		if (identity === null) return yield* localOnlyTarget(repoRoot);
 		if (Result.isFailure(pr)) return yield* Effect.fail(pr.failure);
 		const defaultBranch =

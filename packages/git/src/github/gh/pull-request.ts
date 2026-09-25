@@ -451,7 +451,16 @@ export const pullRequest = (repoRoot: string, number?: number) =>
 			number === undefined
 				? ["pr", "view", "--json", PR_VIEW_JSON_FIELDS]
 				: ["pr", "view", String(number), "--json", PR_VIEW_JSON_FIELDS];
-		const result = yield* ghResult(repoRoot, args);
+		const result = yield* ghResult(repoRoot, args).pipe(
+			Effect.catchTag(
+				"GitCommandError",
+				(cause) =>
+					new GitHubUnreachable({
+						repoRoot,
+						reason: `gh could not be run: ${cause.stderr}`,
+					}),
+			),
+		);
 		if (result.exitCode !== 0) {
 			if (number === undefined) return null;
 			return yield* new PullRequestNotFound({

@@ -49,7 +49,7 @@ export type GitHubShape = {
 		number?: number,
 	) => Effect.Effect<
 		PullRequestRef | null,
-		PullRequestNotFound | GhOutputDecodeError | GitCommandError
+		PullRequestNotFound | GhOutputDecodeError | GitHubUnreachable
 	>;
 	headRef: (
 		repoRoot: string,
