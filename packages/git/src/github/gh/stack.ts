@@ -6,40 +6,14 @@ import {
 	GhRateLimited,
 	type GitCommandError,
 	PullRequestNotFound,
-} from "./errors.ts";
-import { ghResult } from "./exec.ts";
+} from "../../errors.ts";
+import { ghResult } from "../../exec.ts";
+import type {
+	FetchPullRequestStackInput,
+	PullRequestStack,
+	PullRequestStackError,
+} from "../models.ts";
 import { isAuthFailure, isRateLimited } from "./pull-request.ts";
-
-export type PullRequestStackEntry = {
-	readonly position: number;
-	readonly number: number;
-	readonly title: string;
-	readonly headRefName: string;
-	readonly baseRefName: string;
-	readonly state: "OPEN" | "CLOSED" | "MERGED";
-	readonly isDraft: boolean;
-};
-
-export type PullRequestStack = {
-	readonly number: number;
-	readonly size: number;
-	readonly baseRefName: string;
-	readonly position: number;
-	readonly entries: ReadonlyArray<PullRequestStackEntry>;
-};
-
-export type FetchPullRequestStackInput = {
-	readonly repoRoot: string;
-	readonly owner: string;
-	readonly repo: string;
-	readonly number: number;
-};
-
-export type PullRequestStackError =
-	| GhOutputDecodeError
-	| GhNotAuthenticated
-	| GhRateLimited
-	| PullRequestNotFound;
 
 const GraphQLStackEntry = Schema.Struct({
 	position: Schema.Number,

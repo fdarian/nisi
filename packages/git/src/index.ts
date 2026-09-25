@@ -59,6 +59,24 @@ export {
 	WorkflowApprovalFailed,
 	WorkflowApprovalForbidden,
 } from "./errors.ts";
+export { PullRequestAttention } from "./github/gh/attention.ts";
+export { GhGitHub } from "./github/gh/github.ts";
+export { GitHub } from "./github/github.ts";
+export type {
+	FetchPullRequestChecksInput,
+	FetchPullRequestOverviewInput,
+	FetchPullRequestStackInput,
+	MergeMethod,
+	OverviewCommit,
+	OverviewCommitCheck,
+	PullRequestCheck,
+	PullRequestCheckStatus,
+	PullRequestMergeability,
+	PullRequestOverview,
+	PullRequestStack,
+	PullRequestStackEntry,
+	PullRequestStackError,
+} from "./github/models.ts";
 export type { Hunk } from "./hunk.ts";
 export { parseHunks } from "./hunk.ts";
 export type {
@@ -68,45 +86,10 @@ export type {
 	ReviewTarget,
 } from "./pull-request.ts";
 export {
-	resolvePullRequestHeadRef,
 	resolveReviewTarget,
 	resolveReviewTargetForPullRequest,
-	searchPullRequests,
 } from "./pull-request.ts";
-export type {
-	FetchPullRequestChecksInput,
-	PullRequestCheck,
-	PullRequestCheckStatus,
-} from "./pull-request-checks.ts";
-export {
-	approveWorkflowRuns,
-	fetchPullRequestChecks,
-} from "./pull-request-checks.ts";
-export type {
-	MergeMethod,
-	PullRequestMergeability,
-} from "./pull-request-merge.ts";
-export {
-	fetchPullRequestMergeability,
-	fetchRepoMergeMethods,
-	markPullRequestReady,
-	mergePullRequest,
-	mergeStackPullRequest,
-} from "./pull-request-merge.ts";
-export type {
-	FetchPullRequestOverviewInput,
-	OverviewCommit,
-	OverviewCommitCheck,
-	PullRequestOverview,
-} from "./pull-request-overview.ts";
-export { fetchPullRequestOverview } from "./pull-request-overview.ts";
-export type {
-	FetchPullRequestStackInput,
-	PullRequestStack,
-	PullRequestStackEntry,
-	PullRequestStackError,
-} from "./pull-request-stack.ts";
-export { fetchPullRequestStack } from "./pull-request-stack.ts";
+export { approveWorkflowRuns } from "./github/gh/checks.ts";
 export type { UnpushedCommits } from "./repo.ts";
 export {
 	resolveCurrentBranch,

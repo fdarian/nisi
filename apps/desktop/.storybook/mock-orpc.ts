@@ -168,6 +168,15 @@ function neverIterator<T>(): AsyncIteratorClass<T, void> {
 	);
 }
 
+function liveValue<T>(value: T): AsyncIteratorClass<T, void> {
+	return toAsyncIteratorClass(
+		(async function* () {
+			yield value;
+			await neverSettles();
+		})(),
+	);
+}
+
 async function* replayThenHang(
 	events: readonly GenerateEvent[],
 ): AsyncGenerator<GenerateEvent> {
@@ -223,6 +232,7 @@ export function createMockSidecarClient(
 			list: async () => [],
 			close: async () => undefined,
 			setWatching: async () => undefined,
+			setAttention: async () => undefined,
 		},
 		events: {
 			// Never resolves — the same "no events forthcoming" shape
@@ -286,8 +296,11 @@ export function createMockSidecarClient(
 						}
 					: mergeStatus === undefined
 						? neverSettles
-						: async () => mergeStatus,
-			stack: stack === undefined ? neverSettles : async () => stack,
+						: async () => liveValue(mergeStatus),
+			stack:
+				stack === undefined
+					? async () => neverIterator()
+					: async () => liveValue(stack),
 			merge: async () => undefined,
 			mergeStack: async () => undefined,
 			markReady: async () => undefined,
@@ -303,18 +316,20 @@ export function createMockSidecarClient(
 					: checks === undefined
 						? neverSettles
 						: async () =>
-								checks.map((check) =>
-									check.workflowRunId !== undefined &&
-									approvedRuns.has(check.workflowRunId)
-										? { ...check, status: "pending" as const }
-										: check,
+								liveValue(
+									checks.map((check) =>
+										check.workflowRunId !== undefined &&
+										approvedRuns.has(check.workflowRunId)
+											? { ...check, status: "pending" as const }
+											: check,
+									),
 								),
 			unpushedCommits: neverSettles,
 		},
 		// No story exercises the Overview tab yet — same reasoning as
 		// `events.subscribe` above.
 		overview: {
-			get: neverSettles,
+			get: async () => neverIterator(),
 		},
 		walkthrough: {
 			harnesses: async () => harnesses,

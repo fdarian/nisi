@@ -23,10 +23,8 @@ type PrCiStatusProps = {
 	owner: string;
 	repo: string;
 	number: number;
-	/** This PR's tab is both the selected one and the window has focus — see `usePullRequestChecks` (`pr-data.ts`). */
+	/** This PR's tab is both selected and focused; controls the CI popover. */
 	watched: boolean;
-	/** This PR's session id — threaded straight through to `usePullRequestChecks`'s `useAwaitingNewCi` (`pr-data.ts`), which matches it against `session-files-changed` events. */
-	sessionId: string;
 };
 
 /** `"1m 12s"`/`"48s"` — the one place that decides how a check's run time reads, since neither the sidecar nor `@repo/git` should be minting English text. */
@@ -102,7 +100,6 @@ export function PrCiStatus({
 	repo,
 	number,
 	watched,
-	sessionId,
 }: PrCiStatusProps): React.ReactElement | null {
 	const [approvalFailure, setApprovalFailure] = useState<MergeFailure | null>(
 		null,
@@ -130,11 +127,12 @@ export function PrCiStatus({
 			},
 		});
 	});
-	const checksQuery = usePullRequestChecks(
-		orpc,
-		{ repoRoot, owner, repo, number },
-		{ watched, sessionId },
-	);
+	const checksQuery = usePullRequestChecks(orpc, {
+		repoRoot,
+		owner,
+		repo,
+		number,
+	});
 
 	if (checksQuery.data === undefined) return null;
 
@@ -150,7 +148,7 @@ export function PrCiStatus({
 				watched={watched}
 				onApproveWorkflows={
 					runIds.length > 0
-						? () => approval.approve({ repoRoot, owner, repo, runIds })
+						? () => approval.approve({ repoRoot, owner, repo, number, runIds })
 						: undefined
 				}
 				isApproving={approval.isPending}

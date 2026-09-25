@@ -5,7 +5,7 @@ import { Effect } from "effect";
 import {
 	decodeAwaitingWorkflowRuns,
 	toPullRequestCheck,
-} from "../src/pull-request-checks.ts";
+} from "../src/github/gh/checks.ts";
 
 const testDir = dirname(fileURLToPath(import.meta.url));
 const runAgainstGhStub = async (operation: string) => {

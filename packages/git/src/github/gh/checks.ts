@@ -9,54 +9,14 @@ import {
 	WorkflowApprovalFailed,
 	type PullRequestChecksError,
 	PullRequestNotFound,
-} from "./errors.ts";
-import { ghResult } from "./exec.ts";
+} from "../../errors.ts";
+import { ghResult } from "../../exec.ts";
+import type {
+	FetchPullRequestChecksInput,
+	PullRequestCheck,
+	PullRequestCheckStatus,
+} from "../models.ts";
 import { isAuthFailure, isRateLimited } from "./pull-request.ts";
-
-/**
- * The CI vocabulary `apps/desktop/src/features/pull-request/header/ci-status.tsx`'s
- * `CiCheckStatus` renders, computed here from GitHub's two check shapes —
- * this is domain knowledge (what "failing" means across a GitHub Actions run
- * vs. an external status integration), not a wire concern, so it's owned by
- * this module rather than left for the sidecar or frontend to re-derive.
- */
-export type PullRequestCheckStatus =
-	| "passing"
-	| "failing"
-	| "awaiting_approval"
-	| "running"
-	| "pending"
-	| "skipped";
-
-export type PullRequestCheck = {
-	name: string;
-	status: PullRequestCheckStatus;
-	/**
-	 * Elapsed run time in milliseconds, only when GitHub reports a real
-	 * `completedAt` for a `CheckRun` — `undefined` for anything still in
-	 * flight, or reported by an external `StatusContext`, which carries no
-	 * duration at all. Left as a number, not a formatted string — how a
-	 * duration reads is a presentation concern for the frontend
-	 * (`apps/desktop/src/features/pull-request/header/pr-ci-status.tsx`), not something this
-	 * package should be minting English text for.
-	 */
-	durationMs?: number;
-	detailsUrl?: string;
-	/**
-	 * The Actions workflow a `CheckRun` belongs to (e.g. `"CI"`) — absent for a
-	 * `StatusContext`, which has no workflow concept and whose `name` (its
-	 * `context`) is already unique by definition. Carried raw, including a
-	 * possible `""` (a `CheckRun` from a non-Actions GitHub App check, which
-	 * has no workflow either) — callers that qualify an ambiguous `name` with
-	 * this need to treat `""` the same as absent, not print a bare `" / "`.
-	 * `name` alone is *not* guaranteed unique: two different workflows can
-	 * both define a job called `test`, and `gh` reports the bare job name —
-	 * disambiguating is `pr-ci-status.tsx`'s job, once it can see every check
-	 * in the set at once.
-	 */
-	workflowName?: string;
-	workflowRunId?: number;
-};
 
 /**
  * `gh pr view <number> --json statusCheckRollup`'s two check shapes,
@@ -246,13 +206,6 @@ export const toPullRequestCheck = (
 	view.__typename === "CheckRun"
 		? toCheckRunResult(view)
 		: toStatusContextResult(view);
-
-export type FetchPullRequestChecksInput = {
-	repoRoot: string;
-	owner: string;
-	repo: string;
-	number: number;
-};
 
 /**
  * `gh pr view <number> --json statusCheckRollup,headRefOid` plus the Actions

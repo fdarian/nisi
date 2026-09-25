@@ -3,7 +3,7 @@ import { Cause, Effect, Exit } from "effect";
 import {
 	approveWorkflowRuns,
 	fetchPullRequestChecks,
-} from "../../src/pull-request-checks.ts";
+} from "../../src/github/gh/checks.ts";
 
 const operation = process.argv[2];
 const input = { repoRoot: "/tmp", owner: "acme", repo: "widgets" };

@@ -4,9 +4,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { BunServices } from "@effect/platform-bun";
 import { SqliteDb } from "@repo/db";
+import { GhGitHub } from "@repo/git";
 import { ReviewStore } from "@repo/review";
 import { SettingsStore } from "@repo/settings";
 import { ConfigProvider, Effect, Layer, Result } from "effect";
+import { PullRequestAttentionLive } from "../pull-request-attention.ts";
 import { Store } from "../store.ts";
 
 /** Runs real `git` for test setup — the code under test uses its own Effect-based runner. */
@@ -38,6 +40,9 @@ const makeTestRepo = async (): Promise<string> => {
 /** Same composition as `packages/review/test/fixtures.ts`'s `makeTestLayer`, one layer up — `Store.layer` already pulls in `ReviewStore.layer` via `provideMerge`, so this only has to add what `Store.make` needs beyond that: `SqliteDb` and `NISI_DATA_DIR`. */
 const makeTestLayer = (dataDir: string) =>
 	Store.layer.pipe(
+		Layer.provideMerge(
+			GhGitHub.layer.pipe(Layer.provideMerge(PullRequestAttentionLive.layer)),
+		),
 		Layer.provideMerge(SqliteDb.layer),
 		Layer.provideMerge(BunServices.layer),
 		Layer.provide(
@@ -100,6 +105,150 @@ describe("Store.openSession — branch target with an explicit baseRef", () => {
 				headRef: "main",
 			});
 		});
+	});
+});
+
+test("range claims change the Files Changed patch for a single added line", async () => {
+	await withTestRepoAndDataDir(async (repoRoot, dataDir) => {
+		const baseLines = Array.from(
+			{ length: 45 },
+			(_, index) => `line ${index + 1}`,
+		);
+		await Bun.write(join(repoRoot, "a.ts"), `${baseLines.join("\n")}\n`);
+		await sh(repoRoot, ["add", "-A"]);
+		await sh(repoRoot, ["commit", "-q", "-m", "base lines"]);
+		await sh(repoRoot, ["checkout", "-q", "-b", "feature"]);
+		const headLines = [...baseLines];
+		headLines.splice(41, 0, "selected addition");
+		headLines[4] = "another change";
+		await Bun.write(join(repoRoot, "a.ts"), `${headLines.join("\n")}\n`);
+		await sh(repoRoot, ["add", "-A"]);
+		await sh(repoRoot, ["commit", "-q", "-m", "changes"]);
+
+		const result = await Effect.runPromise(
+			Effect.gen(function* () {
+				const store = yield* Store;
+				const session = yield* store.openSession(repoRoot, {
+					kind: "branch",
+					baseRef: "main",
+				});
+				const before = yield* store.readFileContents(
+					session.id,
+					[{ path: "a.ts", force: false }],
+					false,
+				);
+				yield* store.setRangeViewed(
+					session.id,
+					"a.ts",
+					"selection:test",
+					"Selection L42",
+					[{ startLine: 42, endLine: 42 }],
+					true,
+				);
+				const after = yield* store.readFileContents(
+					session.id,
+					[{ path: "a.ts", force: false }],
+					false,
+				);
+				yield* store.setRangeViewed(
+					session.id,
+					"a.ts",
+					"selection:test",
+					"Selection L42",
+					[{ startLine: 42, endLine: 42 }],
+					false,
+				);
+				yield* store.setRangeViewed(
+					session.id,
+					"a.ts",
+					"walkthrough:block",
+					"Walkthrough block",
+					[{ startLine: 42, endLine: 42 }],
+					true,
+				);
+				const walkthroughAfter = yield* store.readFileContents(
+					session.id,
+					[{ path: "a.ts", force: false }],
+					false,
+				);
+				return {
+					before: before[0]?.content,
+					after: after[0]?.content,
+					walkthroughAfter: walkthroughAfter[0]?.content,
+				};
+			}).pipe(Effect.provide(makeTestLayer(dataDir))),
+		);
+		expect(result.before?.patch).toContain("+selected addition");
+		expect(result.after?.review?.baselineKind).toBe("reviewed");
+		expect(result.after?.review?.ranges).toContainEqual({
+			startLine: 42,
+			endLine: 42,
+			status: "reviewed",
+			reviewedVia: {
+				kind: "range",
+				blockId: "selection:test",
+				blockLabel: "Selection L42",
+			},
+		});
+		expect(result.after?.patch).not.toContain("+selected addition");
+		expect(result.after?.patch).toContain("+another change");
+		expect(result.walkthroughAfter?.review?.baselineKind).toBe("reviewed");
+		expect(result.walkthroughAfter?.patch).not.toContain("+selected addition");
+	});
+});
+
+test("a walkthrough claim and a whole-file tick both produce the empty reviewed patch", async () => {
+	await withTestRepoAndDataDir(async (repoRoot, dataDir) => {
+		await sh(repoRoot, ["checkout", "-q", "-b", "feature"]);
+		await Bun.write(join(repoRoot, "a.ts"), "hello\nadded line\n");
+		await sh(repoRoot, ["add", "-A"]);
+		await sh(repoRoot, ["commit", "-q", "-m", "add line"]);
+
+		const result = await Effect.runPromise(
+			Effect.gen(function* () {
+				const store = yield* Store;
+				const session = yield* store.openSession(repoRoot, {
+					kind: "branch",
+					baseRef: "main",
+				});
+				yield* store.setRangeViewed(
+					session.id,
+					"a.ts",
+					"walkthrough:block",
+					"Block",
+					[{ startLine: 2, endLine: 2 }],
+					true,
+				);
+				const walkthrough = yield* store.readFileContents(
+					session.id,
+					[{ path: "a.ts", force: false }],
+					false,
+				);
+				yield* store.setRangeViewed(
+					session.id,
+					"a.ts",
+					"walkthrough:block",
+					"Block",
+					[{ startLine: 2, endLine: 2 }],
+					false,
+				);
+				yield* store.setFileViewed(session.id, "a.ts", true);
+				const wholeFile = yield* store.readFileContents(
+					session.id,
+					[{ path: "a.ts", force: false }],
+					false,
+				);
+				return {
+					walkthrough: walkthrough[0]?.content,
+					wholeFile: wholeFile[0]?.content,
+				};
+			}).pipe(Effect.provide(makeTestLayer(dataDir))),
+		);
+
+		expect(result.walkthrough?.review?.baselineKind).toBe("reviewed");
+		expect(result.walkthrough?.patch).toBe("");
+		expect(result.wholeFile?.review?.baselineKind).toBe("reviewed");
+		expect(result.wholeFile?.patch).toBe("");
 	});
 });
 

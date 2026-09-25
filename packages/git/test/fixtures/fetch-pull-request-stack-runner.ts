@@ -1,6 +1,6 @@
-import { BunServices } from "@effect/platform-bun";
 import { Cause, Effect, Exit } from "effect";
-import { fetchPullRequestStack } from "../../src/pull-request-stack.ts";
+import { GitHub } from "../../src/github/github.ts";
+import { GitHubTestLayer } from "./github-layer.ts";
 
 const numberArg = process.argv[2];
 if (numberArg === undefined) {
@@ -9,13 +9,16 @@ if (numberArg === undefined) {
 
 const exit = await Effect.runPromise(
 	Effect.exit(
-		fetchPullRequestStack({
-			repoRoot: "/tmp",
-			owner: "acme",
-			repo: "widgets",
-			number: Number(numberArg),
+		Effect.gen(function* () {
+			const github = yield* GitHub;
+			return yield* github.stack({
+				repoRoot: "/tmp",
+				owner: "acme",
+				repo: "widgets",
+				number: Number(numberArg),
+			});
 		}),
-	).pipe(Effect.provide(BunServices.layer)),
+	).pipe(Effect.provide(GitHubTestLayer)),
 );
 
 const result = Exit.isSuccess(exit)

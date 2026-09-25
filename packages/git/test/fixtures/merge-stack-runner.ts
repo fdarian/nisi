@@ -1,7 +1,7 @@
-import { BunServices } from "@effect/platform-bun";
 import { Cause, Effect, Exit } from "effect";
 import { GhStackMergeFailed } from "../../src/errors.ts";
-import { mergeStackPullRequest } from "../../src/pull-request-merge.ts";
+import { GitHub } from "../../src/github/github.ts";
+import { GitHubTestLayer } from "./github-layer.ts";
 
 const outcome = process.argv[2];
 if (outcome !== "merged" && outcome !== "failed") {
@@ -10,8 +10,11 @@ if (outcome !== "merged" && outcome !== "failed") {
 
 const exit = await Effect.runPromise(
 	Effect.exit(
-		mergeStackPullRequest("/tmp", "acme", "widgets", 42, "squash"),
-	).pipe(Effect.provide(BunServices.layer)),
+		Effect.gen(function* () {
+			const github = yield* GitHub;
+			return yield* github.mergeStack("/tmp", "acme", "widgets", 42, "squash");
+		}),
+	).pipe(Effect.provide(GitHubTestLayer)),
 );
 
 if (Exit.isSuccess(exit)) {

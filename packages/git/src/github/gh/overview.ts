@@ -7,72 +7,20 @@ import {
 	type GitCommandError,
 	type PullRequestChecksError,
 	PullRequestNotFound,
-} from "./errors.ts";
-import { ghResult } from "./exec.ts";
-import { isAuthFailure, isRateLimited } from "./pull-request.ts";
+} from "../../errors.ts";
+import { ghResult } from "../../exec.ts";
+import type {
+	FetchPullRequestOverviewInput,
+	OverviewCommit,
+	OverviewCommitCheck,
+	PullRequestOverview,
+} from "../models.ts";
 import {
 	type CheckRunView,
-	type PullRequestCheckStatus,
 	type StatusContextView,
 	toPullRequestCheck,
-} from "./pull-request-checks.ts";
-
-/**
- * One CI check on a commit, for the Overview tab's per-commit list.
- * Deliberately not `PullRequestCheck` (`pull-request-checks.ts`) reused
- * wholesale — that shape carries `durationMs`/`workflowName`, facts the PR
- * header's `CiStatus` ring needs but a per-commit row here doesn't. `detail`
- * stands in for `workflowName` (a `CheckRun`'s Actions workflow name, when
- * there is one — never set for a `StatusContext`) since this tab has no
- * per-check breakdown to disambiguate a bare duration the way
- * `pr-ci-status.tsx` does; formatting a duration into English is still a
- * presentation concern this package doesn't take on. `status` reuses the
- * exact same 5-state vocabulary as `PullRequestCheck`.
- */
-export type OverviewCommitCheck = {
-	readonly name: string;
-	readonly status: PullRequestCheckStatus;
-	readonly detail?: string;
-	readonly detailsUrl?: string;
-};
-
-/**
- * One commit in the Overview tab's list, PR mode and branch mode alike —
- * `commit-log.ts`'s branch-mode reader produces the same shape with
- * `authorLogin`/`url` always `null` and `checks` always `null` (no GitHub
- * identity or CI data for a commit that was only ever read off local `git
- * log`).
- */
-export type OverviewCommit = {
-	readonly sha: string;
-	readonly shortSha: string;
-	readonly headline: string;
-	/** Full commit body after the headline — `null`, not `""`, when the commit has none. */
-	readonly body: string | null;
-	readonly authorName: string;
-	/** `null` when GitHub can't attribute the commit to an account (no matching email, or a since-deleted one). */
-	readonly authorLogin: string | null;
-	readonly committedDate: string;
-	/** `null` in branch mode — there's no GitHub commit page for a ref that was never pushed as (or isn't part of) a PR. */
-	readonly url: string | null;
-	/** `null` when GitHub reports no CI rollup at all for this commit; `[]` for a rollup with zero contexts. Always `null` in branch mode. */
-	readonly checks: ReadonlyArray<OverviewCommitCheck> | null;
-};
-
-export type PullRequestOverview = {
-	readonly description: {
-		readonly authorLogin: string;
-		readonly body: string | null;
-	};
-	readonly commits: ReadonlyArray<OverviewCommit>;
-};
-
-export type FetchPullRequestOverviewInput = {
-	readonly repoRoot: string;
-	readonly owner: string;
-	readonly repo: string;
-	readonly number: number;
-};
+} from "./checks.ts";
+import { isAuthFailure, isRateLimited } from "./pull-request.ts";
 
 /**
  * The exact `CheckRun`/`StatusContext` node shape this module asks GraphQL

@@ -25,6 +25,10 @@ Git/review procedures sit alongside `health.check`.
   directly, which `package.json`'s narrow `exports` map (`"." -> "./src/index.ts"`) enforces from
   outside this package.
 - `client.ts` — `makeSidecarClient({ port, token })`, a typed `RouterContractClient`.
+- `pullRequests.mergeStatus`/`stack`/`checks` and `overview.get` are event iterators consumed via
+  `.liveOptions()` in the frontend. `sessions.setAttention` supplies header-level PR visibility;
+  `sessions.setWatching` remains the narrower Files Changed worktree-poll signal. Branch overview
+  includes a `sessionId` so the sidecar can re-emit on that session's change event.
 
 ## Gotchas
 - `effect` here is the `beta` dist-tag (`4.0.0-beta.x`) — `latest` on npm is still v3. Pinned exact,

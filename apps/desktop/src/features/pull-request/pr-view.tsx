@@ -24,6 +24,7 @@ import type { Session } from "#/features/pull-request/data/pr-data";
 import {
 	useFileChanges,
 	useLiveFileChanges,
+	usePullRequestAttention,
 	useRefreshOnWatchedEdge,
 	useReviewState,
 	useSessionWatch,
@@ -136,6 +137,7 @@ export function PrView({
 	// see `usePullRequestChecks`'s doc comment (`pr-data.ts`) for how this
 	// gates its poll.
 	const isHeaderWatched = isSelectedTab && windowFocused;
+	usePullRequestAttention(orpc, session.id, isHeaderWatched);
 	// Not gated on window focus — the devtool popover should offer the
 	// "toast on every refetch" option whenever Files Changed is the visible
 	// tab, whether or not the window currently has focus.
@@ -175,7 +177,6 @@ export function PrView({
 				onCloseTab={onCloseTab}
 				orpc={orpc}
 				repoRoot={session.repoRoot}
-				sessionId={session.id}
 				stat={stat}
 				target={session.target}
 				watched={isHeaderWatched}

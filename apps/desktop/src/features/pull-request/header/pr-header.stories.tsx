@@ -78,7 +78,6 @@ const meta: Meta<typeof PrHeader> = {
 	parameters: { layout: "fullscreen", controls: { disable: true } },
 	args: {
 		repoRoot: "/tmp/storybook-repo",
-		sessionId: "story-session",
 		stat: { additions: 12, deletions: 4 },
 		onCloseTab: () => {},
 		findExistingSessionId: () => undefined,

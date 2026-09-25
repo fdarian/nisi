@@ -35,6 +35,8 @@ import type {
 import {
 	pullRequestUrl,
 	useFileContents,
+	useOptimisticRangeBaselines,
+	useSetRangeViewed,
 } from "#/features/pull-request/data/pr-data";
 import {
 	useSessionCurrentMatchIndex,
@@ -47,6 +49,7 @@ import {
 } from "#/features/pull-request/data/session-ui-store";
 import type { DiffPaneHandle } from "#/features/pull-request/files/diff-pane/diff-pane";
 import { DiffPane } from "#/features/pull-request/files/diff-pane/diff-pane";
+import { optimisticRangeBaseline } from "#/features/pull-request/files/diff-pane/optimistic-range-baseline";
 import { EditorPickerPalette } from "#/features/pull-request/files/editor-picker/editor-picker-palette";
 import type { SearchMode } from "#/features/pull-request/files/sidebar/files-sidebar";
 import { FilesSidebar } from "#/features/pull-request/files/sidebar/files-sidebar";
@@ -174,6 +177,7 @@ export function FilesChangedView({
 	const [preferredEditor, setPreferredEditor] = usePreferredEditor(orpc);
 	const { editors, loadEditors } = useAvailableEditors();
 	const [editorPickerOpen, setEditorPickerOpen] = useState(false);
+	const optimisticBaselines = useOptimisticRangeBaselines(orpc, session.id);
 
 	const viewedCount = useMemo(
 		() =>
@@ -181,23 +185,6 @@ export function FilesChangedView({
 				.length,
 		[files, reviewState],
 	);
-
-	// Filters out already-reviewed files for both the sidebar and the diff
-	// pane's list when "Hide reviewed" is on — the header counter below stays
-	// keyed off the unfiltered `files`/`viewedCount` so "N of M" keeps
-	// reporting real progress instead of collapsing toward "0 of M" as
-	// reviewed files disappear from view.
-	//
-	// Sorted with the same `comparePaths` the tree sidebar uses, so the diff
-	// pane's card order (which never re-sorts) walks the tree in the same
-	// order the sidebar renders it, instead of the backend's flat
-	// whole-path `localeCompare` order.
-	const visibleFiles = useMemo(() => {
-		const filtered = hideReviewed
-			? files.filter((file) => reviewState.get(file.path)?.status !== "viewed")
-			: files;
-		return [...filtered].sort((a, b) => comparePaths(a.path, b.path));
-	}, [files, reviewState, hideReviewed]);
 
 	// Lifted from `DiffPane` (rather than duplicated) — its keyword-search
 	// predicate below and the diff pane's own rendering need to read the
@@ -219,6 +206,18 @@ export function FilesChangedView({
 		contentPaths,
 		forcedPaths,
 	);
+	const visibleFiles = useMemo(() => {
+		const filtered = hideReviewed
+			? files.filter(
+					(file) =>
+						reviewState.get(file.path)?.status !== "viewed" ||
+						(optimisticBaselines.has(file.path) &&
+							optimisticBaselines.get(file.path) !==
+								fileContents.get(file.path)?.content?.newContent),
+				)
+			: files;
+		return [...filtered].sort((a, b) => comparePaths(a.path, b.path));
+	}, [files, reviewState, hideReviewed, optimisticBaselines, fileContents]);
 
 	// What the sidebar actually renders — `visibleFiles` narrowed by the text
 	// filter. `j`/`k` walk this list; `DiffPane` below keeps receiving the
@@ -353,6 +352,45 @@ export function FilesChangedView({
 	// renders off it), just addressable by session id so it survives this
 	// component unmounting on suspend.
 	const undoStack = useSessionUndoStack(session.id);
+	const setRangeViewed = useSetRangeViewed(orpc, session.id);
+	const markSelectionReviewed = useCallback(
+		(path: string, range: { startLine: number; endLine: number }) => {
+			const content = fileContents.get(path)?.content;
+			const baselineBefore =
+				optimisticBaselines.get(path) ??
+				content?.oldContent ??
+				(files.some((file) => file.path === path && file.status === "added")
+					? ""
+					: undefined);
+			const baseline =
+				content !== undefined &&
+				!content.truncated &&
+				content.newContent !== undefined &&
+				baselineBefore !== undefined
+					? optimisticRangeBaseline(baselineBefore, content.newContent, range)
+					: undefined;
+			const blockId = `selection:${crypto.randomUUID()}`;
+			const blockLabel =
+				range.startLine === range.endLine
+					? `Selection L${range.startLine}`
+					: `Selection L${range.startLine}–L${range.endLine}`;
+			setRangeViewed(
+				{ path, blockId, blockLabel, ranges: [range], viewed: true },
+				() => {
+					undoStack.push({
+						kind: "range",
+						path,
+						blockId,
+						blockLabel,
+						range,
+						baselineBefore,
+					});
+				},
+				baseline,
+			);
+		},
+		[setRangeViewed, undoStack, fileContents, optimisticBaselines, files],
+	);
 
 	// Mirrors exactly how `DiffPane` derives the `viewed` boolean it passes to
 	// `handleToggleViewed` — the one other place a file's reviewed flag gets
@@ -401,7 +439,7 @@ export function FilesChangedView({
 		(direction: 1 | -1) => {
 			if (selectedPath === null) return;
 			const previousViewed = isViewed(selectedPath);
-			undoStack.push({ path: selectedPath, previousViewed });
+			undoStack.push({ kind: "file", path: selectedPath, previousViewed });
 			setViewed(selectedPath, !previousViewed);
 			const currentIndex = queryFilteredFiles.findIndex(
 				(file) => file.path === selectedPath,
@@ -425,9 +463,23 @@ export function FilesChangedView({
 	const handleUndo = useCallback(() => {
 		const lastRecord = undoStack.pop();
 		if (!lastRecord) return;
-		setViewed(lastRecord.path, lastRecord.previousViewed);
+		if (lastRecord.kind === "file") {
+			setViewed(lastRecord.path, lastRecord.previousViewed);
+		} else {
+			setRangeViewed(
+				{
+					path: lastRecord.path,
+					blockId: lastRecord.blockId,
+					blockLabel: lastRecord.blockLabel,
+					ranges: [lastRecord.range],
+					viewed: false,
+				},
+				undefined,
+				lastRecord.baselineBefore,
+			);
+		}
 		selectPath(lastRecord.path);
-	}, [undoStack, setViewed, selectPath]);
+	}, [undoStack, setViewed, setRangeViewed, selectPath]);
 
 	// Tree view's right-click "Mark as Reviewed"/"Mark Folder as Reviewed" —
 	// no undo stack entry, unlike `handleToggleReviewed`: a folder can resolve
@@ -669,12 +721,14 @@ export function FilesChangedView({
 						</div>
 					</div>
 					<DiffPane
+						optimisticBaselines={optimisticBaselines}
 						currentMatch={currentMatch}
 						diffStyle={diffStyle}
 						fileContents={fileContents}
 						files={diffPaneFiles}
 						forcedPaths={forcedPaths}
 						keywordMatchesByPath={keywordMatchesByPath}
+						onMarkSelectionReviewed={markSelectionReviewed}
 						onForceLoad={addForcedPath}
 						onOpenFile={onOpenFile}
 						onVisiblePathChange={handleVisiblePathChange}

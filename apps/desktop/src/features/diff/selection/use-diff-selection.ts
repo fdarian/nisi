@@ -6,7 +6,8 @@
  * `enableLineSelection`/`selectedLines`, and a plain click-drag over the code
  * text, which is native browser selection `@pierre/diffs` never sees — and
  * normalizes whichever is active to one shape: the file path and a
- * head-relative line range (`reference`), plus a client rect to anchor a
+ * copyable line reference (`reference`), a separate HEAD-side review range
+ * (`headRange`), plus a client rect to anchor a
  * floating action against (`anchorRect`, kept separate — see its own doc
  * comment below). The pane and the floating "Copy reference" button both
  * consume that shape; neither needs to know two selection mechanisms exist.
@@ -15,7 +16,11 @@
  * live text selection and vice versa, so the pane never has to reconcile two
  * simultaneous highlights or show two floating buttons.
  */
-import type { CodeViewLineSelection, SelectionSide } from "@pierre/diffs";
+import type {
+	CodeViewLineSelection,
+	FileDiffMetadata,
+	SelectionSide,
+} from "@pierre/diffs";
 import type { CodeViewHandle } from "@pierre/diffs/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { DiffSelectionReference } from "#/features/diff/diff-reference";
@@ -24,12 +29,14 @@ import {
 	paintedSelectionMatchesRange,
 	pollUntilReady,
 } from "#/features/diff/viewer/diff-match-dom";
+import { type HeadRange, selectionHeadRange } from "./selection-head-range";
 
 type UseDiffSelectionOptions<Metadata> = {
 	/** The same `CodeViewHandle` ref passed to `<DiffCodeView ref>` — used to reach a selected item's rendered shadow root (for the gutter path's anchor rect) and to resolve which item id a native text selection landed in. */
 	codeViewRef: React.RefObject<CodeViewHandle<Metadata, undefined> | null>;
 	/** `CodeViewItem.id -> repo-relative path`. `DiffPane` happens to use the path as the id directly, but this hook doesn't assume that — `undefined` means "don't resolve a reference for this item" (e.g. an id this pane doesn't recognize). */
 	resolveItemPath: (itemId: string) => string | undefined;
+	resolveItemDiff?: (itemId: string) => FileDiffMetadata | undefined;
 };
 
 type UseDiffSelectionResult = {
@@ -39,6 +46,7 @@ type UseDiffSelectionResult = {
 	onSelectedLinesChange: (selection: CodeViewLineSelection | null) => void;
 	/** The floating button's target, or `null` when nothing resolves to one — no selection, a collapsed caret, or a text drag that crossed into a second file (see `resolveActiveTextSelection`'s doc comment). */
 	reference: DiffSelectionReference | null;
+	headRange: HeadRange | undefined;
 	/**
 	 * Where to anchor the floating button right now, or `null` when the
 	 * selected rows aren't currently resolvable — scrolled out of
@@ -115,6 +123,15 @@ function rowToBoundary(
 			? "deletions"
 			: "additions";
 	return { line, side };
+}
+
+function rowToReviewBoundary(
+	row: Element,
+): { line: number; side: SelectionSide } | undefined {
+	const boundary = rowToBoundary(row);
+	return boundary && row.closest("[data-deletions]")
+		? { line: boundary.line, side: "deletions" }
+		: boundary;
 }
 
 /**
@@ -217,6 +234,7 @@ function unionRect(a: DOMRect, b: DOMRect): DOMRect {
 export function useDiffSelection<Metadata>({
 	codeViewRef,
 	resolveItemPath,
+	resolveItemDiff,
 }: UseDiffSelectionOptions<Metadata>): UseDiffSelectionResult {
 	const [gutterSelection, setGutterSelection] =
 		useState<CodeViewLineSelection | null>(null);
@@ -238,6 +256,7 @@ export function useDiffSelection<Metadata>({
 	const [reference, setReference] = useState<DiffSelectionReference | null>(
 		null,
 	);
+	const [headRange, setHeadRange] = useState<HeadRange | undefined>();
 	const [anchorRect, setAnchorRect] = useState<DOMRect | null>(null);
 	// The text path's counterpart to `gutterSelectionRef` — the last `Range`
 	// `recomputeTextSelection` resolved a reference from, kept around so
@@ -306,6 +325,7 @@ export function useDiffSelection<Metadata>({
 		gutterSelectionRef.current = null;
 		setGutterSelection(null);
 		setReference(null);
+		setHeadRange(undefined);
 		activeTextRangeRef.current = null;
 		setAnchorRect(null);
 		if (pendingGutterRectFrame.current !== null) {
@@ -384,6 +404,7 @@ export function useDiffSelection<Metadata>({
 			setGutterSelection(selection);
 			if (selection === null) {
 				setReference(null);
+				setHeadRange(undefined);
 				setAnchorRect(null);
 				return;
 			}
@@ -391,10 +412,12 @@ export function useDiffSelection<Metadata>({
 			// selection is ever "active" (see this module's doc comment).
 			document.getSelection()?.removeAllRanges();
 			activeTextRangeRef.current = null;
+			setHeadRange(undefined);
 
 			const path = resolveItemPath(selection.id);
 			if (path === undefined) {
 				setReference(null);
+				setHeadRange(undefined);
 				setAnchorRect(null);
 				return;
 			}
@@ -418,6 +441,25 @@ export function useDiffSelection<Metadata>({
 					if (gutterSelectionRef.current !== selection) return true;
 					const rect = measureGutterAnchorRect(selection);
 					if (rect === undefined) return false;
+					const diff = resolveItemDiff?.(selection.id);
+					setHeadRange(
+						diff
+							? selectionHeadRange(
+									diff.hunks,
+									{
+										line: selection.range.start,
+										side: selection.range.side ?? "additions",
+									},
+									{
+										line: selection.range.end,
+										side:
+											selection.range.endSide ??
+											selection.range.side ??
+											"additions",
+									},
+								)
+							: undefined,
+					);
 					setAnchorRect(rect);
 					return true;
 				},
@@ -428,7 +470,7 @@ export function useDiffSelection<Metadata>({
 				},
 			);
 		},
-		[resolveItemPath, measureGutterAnchorRect],
+		[resolveItemPath, resolveItemDiff, measureGutterAnchorRect],
 	);
 
 	// The text path: plain browser selection over code, which `@pierre/diffs`
@@ -503,11 +545,15 @@ export function useDiffSelection<Metadata>({
 					gutterSelectionRef.current = null;
 					setGutterSelection(null);
 					setReference(null);
+					setHeadRange(undefined);
 					activeTextRangeRef.current = null;
 					setAnchorRect(null);
 					return;
 				}
-				if (gutterSelectionRef.current === null) setReference(null);
+				if (gutterSelectionRef.current === null) {
+					setReference(null);
+					setHeadRange(undefined);
+				}
 				return;
 			}
 			const path = resolveItemPath(active.itemId);
@@ -529,6 +575,14 @@ export function useDiffSelection<Metadata>({
 				startLine: headRange.startLine,
 				endLine: headRange.endLine,
 			});
+			const diff = resolveItemDiff?.(active.itemId);
+			const reviewStart = startRow && rowToReviewBoundary(startRow);
+			const reviewEnd = endRow && rowToReviewBoundary(endRow);
+			setHeadRange(
+				diff && reviewStart && reviewEnd
+					? selectionHeadRange(diff.hunks, reviewStart, reviewEnd)
+					: undefined,
+			);
 			setAnchorRect(active.range.getBoundingClientRect());
 		};
 		document.addEventListener("pointerdown", handlePointerDown);
@@ -541,7 +595,7 @@ export function useDiffSelection<Metadata>({
 			document.removeEventListener("pointerup", recomputeTextSelection);
 			document.removeEventListener("keyup", recomputeTextSelection);
 		};
-	}, [codeViewRef, resolveItemPath]);
+	}, [codeViewRef, resolveItemPath, resolveItemDiff]);
 
 	useEffect(
 		() => () => {
@@ -556,6 +610,7 @@ export function useDiffSelection<Metadata>({
 		selectedLines: gutterSelection,
 		onSelectedLinesChange: handleSelectedLinesChange,
 		reference,
+		headRange,
 		anchorRect,
 		refreshAnchorRect,
 		clearSelection,
