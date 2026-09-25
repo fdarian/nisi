@@ -643,6 +643,35 @@ export type SetRangeViewedParams = {
 	viewed: boolean;
 };
 
+type OptimisticRangeCall = {
+	sessionId: string;
+	params: SetRangeViewedParams;
+	baseline?: string;
+	onSuccess?: () => void;
+};
+
+export function useOptimisticRangeBaselines(
+	orpc: SidecarQueryUtils,
+	sessionId: string,
+): ReadonlyMap<string, string> {
+	const mutationKey = useMemo(
+		() => orpc.review.setRangeViewed.mutationKey(),
+		[orpc],
+	);
+	const pending = useMutationState({
+		filters: { mutationKey, status: "pending" },
+		select: (mutation) => mutation.state.variables as OptimisticRangeCall,
+	});
+	return useMemo(() => {
+		const baselines = new Map<string, string>();
+		for (const call of pending) {
+			if (call.sessionId === sessionId && call.baseline !== undefined)
+				baselines.set(call.params.path, call.baseline);
+		}
+		return baselines;
+	}, [pending, sessionId]);
+}
+
 /**
  * `review.setRangeViewed` — one walkthrough reference block's claim on a set
  * of ranges within one file. Same invalidation shape as `useSetFileViewed`,
@@ -653,53 +682,66 @@ export type SetRangeViewedParams = {
  * chunk here is what keeps a tick in one view visible in the other without
  * a manual reload — and without refetching every other open file's chunk.
  *
- * Deliberately keeps the fire-and-forget call-level `onSuccess` shape
- * `useSetFileViewed` moved away from — this mutation's key isn't what
- * `useReviewState`'s `useMutationState` filter matches, so there's no
- * optimistic overlay riding on it to protect from a premature drop. If a
- * range-scoped overlay is ever added, it needs the same hook-level
- * `onSuccess` treatment (see `useSetFileViewed`'s doc comment) — a
- * call-level one won't delay the mutation's `"pending"` → `"success"`
- * transition no matter what it returns.
- *
- * `onError` is call-level too, for the same reason `onSuccess` is: there's
- * no overlay here for a failure to leave stuck, so nothing needs the
- * hook-level await-before-transition timing — just a toast so a failed tick
- * (`NOT_FOUND` or `INTERNAL_SERVER_ERROR`) doesn't fail silently.
+ * The hook-level success callback keeps each mark pending through both
+ * refetches, and records its undo entry even if another mark starts before
+ * this one finishes. Call-level callbacks only run for the latest call.
  */
 export function useSetRangeViewed(
 	orpc: SidecarQueryUtils,
 	sessionId: string,
-): (params: SetRangeViewedParams) => void {
+): (
+	params: SetRangeViewedParams,
+	onSuccess?: () => void,
+	baseline?: string,
+) => void {
 	const queryClient = useQueryClient();
-	const mutation = useMutation(orpc.review.setRangeViewed.mutationOptions());
-
-	return useCallback(
-		(params: SetRangeViewedParams) => {
-			mutation.mutate(
-				{ sessionId, ...params },
-				{
-					onSuccess: () => {
-						queryClient.invalidateQueries({
-							queryKey: orpc.diff.files.key({ input: { sessionId } }),
-						});
-						queryClient.invalidateQueries({
-							queryKey: orpc.diff.fileContents.key({ input: { sessionId } }),
-							predicate: (query) => queryCoveredPath(query, params.path),
-						});
-					},
-					onError: (error) => {
-						toastManager.add({
-							title: `Failed to update review state for ${params.path}`,
-							description:
-								error instanceof Error ? error.message : String(error),
-							type: "error",
-						});
-					},
-				},
+	const options = orpc.review.setRangeViewed.mutationOptions();
+	const mutation = useMutation({
+		...options,
+		onMutate: undefined,
+		onSettled: undefined,
+		mutationFn: (call: OptimisticRangeCall, context) => {
+			if (options.mutationFn === undefined)
+				throw new Error("Missing range mutation function");
+			return options.mutationFn(
+				{ sessionId: call.sessionId, ...call.params },
+				context,
 			);
 		},
-		[mutation, queryClient, orpc, sessionId],
+		onSuccess: async (_data, call) => {
+			call.onSuccess?.();
+			await Promise.all([
+				queryClient.invalidateQueries({
+					queryKey: orpc.diff.files.key({
+						input: { sessionId: call.sessionId },
+					}),
+				}),
+				queryClient.invalidateQueries({
+					queryKey: orpc.diff.fileContents.key({
+						input: { sessionId: call.sessionId },
+					}),
+					predicate: (query) => queryCoveredPath(query, call.params.path),
+				}),
+			]);
+		},
+		onError: (error, call) => {
+			toastManager.add({
+				title: `Failed to update review state for ${call.params.path}`,
+				description: error instanceof Error ? error.message : String(error),
+				type: "error",
+			});
+		},
+	});
+
+	return useCallback(
+		(
+			params: SetRangeViewedParams,
+			onSuccess?: () => void,
+			baseline?: string,
+		) => {
+			mutation.mutate({ sessionId, params, baseline, onSuccess });
+		},
+		[mutation, sessionId],
 	);
 }
 

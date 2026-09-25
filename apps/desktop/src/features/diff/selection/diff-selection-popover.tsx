@@ -34,6 +34,7 @@ import {
 	formatSelectionReference,
 } from "#/features/diff/diff-reference";
 import type { SidecarQueryUtils } from "#/infra/backend-context";
+import type { HeadRange } from "./selection-head-range";
 import { diffSelectionPopupMarkerProps } from "./use-diff-selection";
 import { useSelectionPopoverGlide } from "./use-selection-popover-glide";
 
@@ -44,6 +45,8 @@ type DiffSelectionPopoverProps = {
 	sessionId: string;
 	orpc: SidecarQueryUtils;
 	reference: DiffSelectionReference | null;
+	headRange?: HeadRange;
+	onMarkReviewed?: (range: HeadRange) => void;
 	/**
 	 * Where to anchor the button right now, or `null` when the selected rows
 	 * aren't currently resolvable (scrolled out of `@pierre/diffs`'
@@ -84,6 +87,8 @@ export function DiffSelectionPopover({
 	sessionId,
 	orpc,
 	reference,
+	headRange,
+	onMarkReviewed,
 	anchorRect,
 	scrollContainer,
 	onForwardedWheel,
@@ -261,6 +266,25 @@ export function DiffSelectionPopover({
 								>
 									Ask
 								</ToolbarButton>
+								{onMarkReviewed && (
+									<>
+										<ToolbarSeparator />
+										<ToolbarButton
+											disabled={headRange === undefined}
+											onClick={() => {
+												if (headRange !== undefined) onMarkReviewed(headRange);
+											}}
+											render={<Button size="xs" variant="ghost" />}
+											title={
+												headRange === undefined
+													? "Deleted lines can't be marked reviewed on their own"
+													: undefined
+											}
+										>
+											Mark reviewed
+										</ToolbarButton>
+									</>
+								)}
 							</Toolbar>
 						</PopoverPrimitive.Popup>
 					</motion.div>

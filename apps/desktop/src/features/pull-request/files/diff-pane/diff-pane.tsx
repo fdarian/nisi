@@ -39,6 +39,7 @@ import {
 	useDiffTheme,
 } from "#/features/diff/diff-view-theme";
 import { DiffSelectionPopover } from "#/features/diff/selection/diff-selection-popover";
+import type { HeadRange } from "#/features/diff/selection/selection-head-range";
 import { useDiffSelection } from "#/features/diff/selection/use-diff-selection";
 import type { LineRange } from "#/features/diff/viewer/build-location-diff";
 import { buildLocationFileDiff } from "#/features/diff/viewer/build-location-diff";
@@ -63,7 +64,12 @@ import {
 import { useDragAutoscroll } from "#/features/pull-request/files/use-drag-autoscroll";
 import type { DiffStyleMode } from "#/features/settings/settings-data";
 import type { SidecarQueryUtils } from "#/infra/backend-context";
-import { buildFileDiff } from "./build-file-diff";
+import type { FileDiffIdentity } from "./build-file-diff";
+import {
+	buildFileDiff,
+	createFileDiffIdentityCache,
+	getFileDiffIdentity,
+} from "./build-file-diff";
 import { DiffFileHeader } from "./diff-file-header";
 import { type DiffHoverPoint, findHoveredFileId } from "./diff-hovered-file";
 import { findTopVisibleItemId } from "./diff-visible-file";
@@ -241,6 +247,8 @@ type DiffPaneProps = {
 	onVisiblePathChange?: (path: string) => void;
 	reviewState: ReadonlyMap<string, ReviewStateEntry>;
 	setViewed: (path: string, viewed: boolean) => void;
+	onMarkSelectionReviewed: (path: string, range: HeadRange) => void;
+	optimisticBaselines: ReadonlyMap<string, string>;
 	/** Opens a path in a whole-file viewer tab — the per-file "…" menu's "View full file" item (`DiffFileHeader`). */
 	onOpenFile: (path: string) => void;
 	diffStyle: DiffStyleMode;
@@ -298,21 +306,6 @@ type CachedFileDiff = {
 };
 
 /**
- * A cheap, always-correct proxy for "this file's `patch`/`oldContent` pair
- * changed" — hashing `content.patch` itself (bounded by the diff's size, not
- * the file's) rather than the full `oldContent`. Always derived from
- * `content`, never from `file`: `content` (`diff.fileContents`) and `file`
- * (`diff.files`) are two independently fetched queries with no ordering
- * guarantee between them, so a signature describing `content` has to be
- * computed from `content` itself to stay trustworthy. `baselineKind` is
- * folded in too, since ticking Reviewed changes which bytes `content.patch`
- * holds without necessarily changing their hash on its own.
- */
-function contentSignature(content: FileContent): string {
-	return `${content.review?.baselineKind ?? "base"}:${hashItemVersion(content.patch)}`;
-}
-
-/**
  * Parsing a file into `FileDiffMetadata` is the single most expensive thing
  * the pane does — `buildFileDiff`'s non-truncated path runs a full Myers diff
  * (`@pierre/diffs` → `createTwoFilesPatch`) over the file's before/after
@@ -322,15 +315,9 @@ function contentSignature(content: FileContent): string {
  * all of them: ticking Reviewed on a single file in a 221-file session measured
  * ~3300 full-file parses across the memo recomputes that one toggle triggered.
  *
- * The key must be a pure function of `content` — the exact value being
- * parsed — plus which parser tier it landed in. Nothing derived from `file`
- * belongs here: `file` (`diff.files`) and `content` (`diff.fileContents`) are
- * two independently fetched queries that settle at different times, so a key
- * that mixes in `file.fingerprint` can validate against the wrong query —
- * matching a stale cache entry against fresh `file` data while still parsing
- * whatever `content` happened to be on hand. It's the same string handed to
- * `@pierre/diffs` as the `cacheKey`, so this cache can't disagree with
- * pierre's own memoization about when two renders are the same diff.
+ * The identity is derived from the bytes fed to the parser (and the paths),
+ * rather than `file.fingerprint`: `diff.files` and `diff.fileContents` are
+ * fetched independently. The same old/new keys are handed to Pierre.
  *
  * The signature is load-bearing, not cosmetic: pierre's worker pool and its
  * `areDiffTargetsEqual`/`areFilesEqual` memoization (VirtualizedFileDiff.js,
@@ -346,12 +333,13 @@ function resolveFileDiff(
 	cache: Map<string, CachedFileDiff>,
 	file: FileChange,
 	content: FileContent,
+	identity: FileDiffIdentity,
 ): FileDiffMetadata | undefined {
-	const key = `${content.truncated ? "patch" : "full"}:${contentSignature(content)}`;
+	const key = `${identity.kind}:${identity.signature}`;
 	const cached = cache.get(file.path);
 	if (cached !== undefined && cached.key === key) return cached.fileDiff;
 
-	const fileDiff = buildFileDiff(file, content);
+	const fileDiff = buildFileDiff(file, content, identity);
 	cache.set(file.path, { key, fileDiff });
 	return fileDiff;
 }
@@ -430,6 +418,8 @@ export function DiffPane({
 	onVisiblePathChange,
 	reviewState,
 	setViewed,
+	onMarkSelectionReviewed,
+	optimisticBaselines,
 	onOpenFile,
 	diffStyle,
 	wrapLines,
@@ -450,6 +440,7 @@ export function DiffPane({
 		tokenInteractions: codeIndex.tokenInteractionsActive,
 	});
 	const fileDiffCache = useRef(new Map<string, CachedFileDiff>());
+	const fileDiffIdentityCache = useRef(createFileDiffIdentityCache());
 	// Pierre compares rendered and prepared-layout files by reference; memo passes rebuild placeholders even when their cacheKey stays the same.
 	const placeholderFileCache = useRef(new Map<string, FileContents>());
 	const hiddenFileAnnotationCache = useRef(
@@ -667,9 +658,15 @@ export function DiffPane({
 			const reviewEntry = reviewState.get(file.path);
 			const reviewStatus = reviewEntry?.status ?? "unreviewed";
 			const viewed = reviewStatus === "viewed";
-			// Defaults to collapsed once the file is "viewed" — overridable in
-			// either direction by clicking the header.
-			const cardCollapsed = fileCollapse.overrides.get(file.path) ?? viewed;
+			// An undo restores the old diff immediately, even if diff.files still
+			// reports the file as viewed until its own refetch settles.
+			const pendingBaseline = optimisticBaselines.get(file.path);
+			const cardCollapsed =
+				fileCollapse.overrides.get(file.path) ??
+				(viewed &&
+					(pendingBaseline === undefined ||
+						pendingBaseline ===
+							fileContents.get(file.path)?.content?.newContent));
 			nextMetadata.set(file.path, {
 				file,
 				viewed,
@@ -729,7 +726,24 @@ export function DiffPane({
 				continue;
 			}
 
-			const content = entry?.content;
+			const serverContent = entry?.content;
+			const optimisticBaseline = optimisticBaselines.get(file.path);
+			const content =
+				serverContent !== undefined &&
+				optimisticBaseline !== undefined &&
+				!serverContent.truncated &&
+				serverContent.newContent !== undefined
+					? {
+							...serverContent,
+							oldContent: optimisticBaseline,
+							review: {
+								changedSinceReview:
+									optimisticBaseline !== serverContent.newContent,
+								ranges: [],
+								baselineKind: "reviewed" as const,
+							},
+						}
+					: serverContent;
 			if (content === undefined) {
 				// Still loading. This used to just `continue`, dropping the file
 				// from `items` entirely — but `useFileContents` chunks the file
@@ -835,15 +849,19 @@ export function DiffPane({
 				continue;
 			}
 
-			// The server already diffed reviewed-and-unchanged content back into
-			// ordinary context (or dropped it entirely) before this patch ever
-			// reached the wire — see `@repo/review`'s `reconcile`'s
+			// Reviewed-and-unchanged content is ordinary context (or gone)
+			// before this branch — see `@repo/review`'s `reconcile`'s
 			// `reviewedBaseline` and `readFileContents`' `baselineKind` — so an
 			// empty patch here means "nothing new since your last pass," not "this
 			// file has no diff to render." Only reachable when `baselineKind` is
 			// `"reviewed"`: a plain empty `base → head` patch can't happen (a file
 			// only appears in `files` because something changed against base).
-			if (content.review?.baselineKind === "reviewed" && content.patch === "") {
+			if (
+				content.review?.baselineKind === "reviewed" &&
+				((content.patch === "" && optimisticBaseline === undefined) ||
+					(optimisticBaseline !== undefined &&
+						optimisticBaseline === content.newContent))
+			) {
 				nextItems.push({
 					id: file.path,
 					type: "file",
@@ -859,7 +877,17 @@ export function DiffPane({
 				continue;
 			}
 
-			const fileDiff = resolveFileDiff(fileDiffCache.current, file, content);
+			const identity = getFileDiffIdentity(
+				file,
+				content,
+				fileDiffIdentityCache.current,
+			);
+			const fileDiff = resolveFileDiff(
+				fileDiffCache.current,
+				file,
+				content,
+				identity,
+			);
 			if (fileDiff === undefined) {
 				nextItems.push({
 					id: file.path,
@@ -891,7 +919,7 @@ export function DiffPane({
 				annotations,
 				collapsed: cardCollapsed,
 				version: hashItemVersion(
-					`${baseVersionInput}:${contentSignature(content)}`,
+					`${baseVersionInput}:${identity.kind}:${identity.signature}`,
 				),
 			});
 		}
@@ -901,6 +929,9 @@ export function DiffPane({
 		// pass saw, so anything else is gone.
 		for (const path of fileDiffCache.current.keys()) {
 			if (!nextMetadata.has(path)) fileDiffCache.current.delete(path);
+		}
+		for (const path of fileDiffIdentityCache.current.keys()) {
+			if (!nextMetadata.has(path)) fileDiffIdentityCache.current.delete(path);
 		}
 		for (const path of placeholderFileCache.current.keys()) {
 			if (!nextMetadata.has(path)) placeholderFileCache.current.delete(path);
@@ -917,6 +948,7 @@ export function DiffPane({
 	}, [
 		files,
 		fileContents,
+		optimisticBaselines,
 		keywordMatchesByPath,
 		reviewState,
 		diffStyle,
@@ -945,9 +977,16 @@ export function DiffPane({
 			itemMetadataRef.current.has(itemId) ? itemId : undefined,
 		[],
 	);
+	const itemsRef = useRef(items);
+	itemsRef.current = items;
+	const resolveItemDiff = useCallback((itemId: string) => {
+		const item = itemsRef.current.find((candidate) => candidate.id === itemId);
+		return item?.type === "diff" ? item.fileDiff : undefined;
+	}, []);
 	const diffSelection = useDiffSelection({
 		codeViewRef,
 		resolveItemPath: resolveSelectionItemPath,
+		resolveItemDiff,
 	});
 	// Scrolls this same container while a selection drag (either of
 	// `diffSelection`'s two sources) is held near its top or bottom edge —
@@ -1485,6 +1524,13 @@ export function DiffPane({
 			/>
 			<DiffSelectionPopover
 				anchorRect={diffSelection.anchorRect}
+				headRange={diffSelection.headRange}
+				onMarkReviewed={(range) => {
+					const reference = diffSelection.reference;
+					if (reference === null) return;
+					onMarkSelectionReviewed(reference.path, range);
+					diffSelection.clearSelection();
+				}}
 				onDismiss={diffSelection.clearSelection}
 				onForwardedWheel={releaseProgrammaticScrollSuppression}
 				orpc={orpc}
