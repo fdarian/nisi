@@ -1181,10 +1181,11 @@ export function useMarkPullRequestReady(orpc: SidecarQueryUtils): {
 	return { markReady, isPending: mutation.isPending };
 }
 
-/** Mirrors `PullRequestCheckStatus` (`packages/sidecar-api/src/pull-requests.ts`) — the 5-state vocabulary `ci-status.tsx`'s `CiCheckStatus` renders. */
+/** Mirrors `PullRequestCheckStatus` (`packages/sidecar-api/src/pull-requests.ts`). */
 export type PullRequestCheckStatus =
 	| "passing"
 	| "failing"
+	| "awaiting_approval"
 	| "running"
 	| "pending"
 	| "skipped";

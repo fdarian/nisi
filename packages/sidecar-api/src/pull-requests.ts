@@ -134,10 +134,11 @@ export const UnpushedCommits = Schema.Struct({
 });
 export type UnpushedCommits = Schema.Schema.Type<typeof UnpushedCommits>;
 
-/** Mirrors `@repo/git`'s `PullRequestCheckStatus` — the 5-state vocabulary `apps/desktop/src/features/pull-request/header/ci-status.tsx`'s `CiCheckStatus` renders. */
+/** Extends `@repo/git`'s check statuses with awaiting approval, which the UI can render before the sidecar starts reporting it. */
 export const PullRequestCheckStatus = Schema.Literals([
 	"passing",
 	"failing",
+	"awaiting_approval",
 	"running",
 	"pending",
 	"skipped",
@@ -243,7 +244,7 @@ const MergeFailure = Schema.toStandardSchemaV1(
  * `MERGE_STATUS_UNAVAILABLE` — nothing here needs push access) — see
  * `apps/desktop/sidecar/http.ts`'s handler for the mapping. A PR with no CI
  * configured legitimately resolves to an empty array, which `CiStatus`
- * already renders as nothing rather than an empty ring. Turning
+ * renders as a quiet empty state. Turning
  * `durationMs` into `CiStatus`'s human-readable `detail` string is left to
  * `apps/desktop/src/features/pull-request/header/pr-ci-status.tsx` — this wire shape
  * carries the fact, not the formatting.

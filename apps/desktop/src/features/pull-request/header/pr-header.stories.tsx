@@ -5,12 +5,16 @@
  * `MarkReadyMenuItem`).
  */
 import type { Meta, StoryObj } from "@storybook/react-vite";
+import { SidecarEventsProvider } from "#/infra/sidecar-events";
 import type {
 	PullRequestMergeStatus,
 	PullRequestStack,
 	SessionTarget,
 } from "#/features/pull-request/data/pr-data";
-import { createMockOrpc } from "../../../../.storybook/mock-orpc";
+import {
+	createMockOrpc,
+	createMockSidecarClient,
+} from "../../../../.storybook/mock-orpc";
 import { PrHeader } from "./pr-header";
 
 const BASE_STATUS: PullRequestMergeStatus = {
@@ -59,9 +63,18 @@ const STACK: PullRequestStack = {
 	],
 };
 
+const STORY_CLIENT = createMockSidecarClient();
+
 const meta: Meta<typeof PrHeader> = {
 	title: "Pr/PrHeader",
 	component: PrHeader,
+	decorators: [
+		(Story) => (
+			<SidecarEventsProvider client={STORY_CLIENT}>
+				<Story />
+			</SidecarEventsProvider>
+		),
+	],
 	parameters: { layout: "fullscreen", controls: { disable: true } },
 	args: {
 		repoRoot: "/tmp/storybook-repo",
@@ -100,5 +113,22 @@ export const StackedPullRequest: Story = {
 	args: {
 		target: PR_TARGET,
 		orpc: createMockOrpc({ mergeStatus: BASE_STATUS, stack: STACK }),
+	},
+};
+
+export const AwaitingApproval: Story = {
+	args: {
+		target: PR_TARGET,
+		orpc: createMockOrpc({
+			mergeStatus: { ...BASE_STATUS, defaultMethod: "squash" },
+			checks: [{ name: "CI", status: "awaiting_approval" }],
+		}),
+	},
+};
+
+export const NoChecks: Story = {
+	args: {
+		target: PR_TARGET,
+		orpc: createMockOrpc({ mergeStatus: BASE_STATUS, checks: [] }),
 	},
 };

@@ -82,8 +82,7 @@ const toCiChecks = (
  * Data-fetching wrapper around the purely presentational `CiStatus` —
  * renders `null` while `pullRequests.checks` is still loading and on error, a
  * PR whose checks failed to load must not show a ring implying real state
- * (unlike a genuinely empty check list, which `CiStatus` already renders as
- * nothing on its own).
+ * (unlike a genuinely empty check list, which `CiStatus` renders as an empty state).
  */
 export function PrCiStatus({
 	orpc,
@@ -102,5 +101,11 @@ export function PrCiStatus({
 
 	if (checksQuery.data === undefined) return null;
 
-	return <CiStatus checks={toCiChecks(checksQuery.data)} watched={watched} />;
+	return (
+		<CiStatus
+			checks={toCiChecks(checksQuery.data)}
+			checksUrl={`https://github.com/${owner}/${repo}/pull/${number}/checks`}
+			watched={watched}
+		/>
+	);
 }

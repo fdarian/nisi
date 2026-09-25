@@ -179,7 +179,9 @@ async function* replayThenHang(
 }
 
 /** Builds a fake `SidecarClient` and wraps it in the same `createTanstackQueryUtils` the real app uses — see this module's doc comment. */
-export function createMockOrpc(data: MockOrpcData = {}): SidecarQueryUtils {
+export function createMockSidecarClient(
+	data: MockOrpcData = {},
+): SidecarClient {
 	const settings: Settings = { ...DEFAULT_SETTINGS, ...data.settings };
 	const harnesses = data.harnesses ?? DEFAULT_HARNESSES;
 	const fileContents = data.fileContents ?? {};
@@ -336,5 +338,9 @@ export function createMockOrpc(data: MockOrpcData = {}): SidecarQueryUtils {
 		},
 	};
 
-	return createTanstackQueryUtils(client);
+	return client;
+}
+
+export function createMockOrpc(data: MockOrpcData = {}): SidecarQueryUtils {
+	return createTanstackQueryUtils(createMockSidecarClient(data));
 }

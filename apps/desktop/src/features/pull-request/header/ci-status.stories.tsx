@@ -28,6 +28,35 @@ const CHECKS: readonly CiCheck[] = [
 	{ name: "test (bun)", status: "passing", detail: "3m 04s" },
 ];
 
+const CHECKS_URL = "https://github.com/acme/widgets/pull/42/checks";
+const AWAITING_CHECKS: readonly CiCheck[] = [
+	{ name: "CI / build", status: "awaiting_approval" },
+	{ name: "CI / test", status: "awaiting_approval" },
+	{ name: "CodeQL", status: "awaiting_approval" },
+];
+
+export const NoChecks: Story = {
+	args: { checks: [] },
+};
+
+export const AwaitingApproval: Story = {
+	args: { checks: [AWAITING_CHECKS[0]], checksUrl: CHECKS_URL },
+};
+
+export const AwaitingApprovalMultiple: Story = {
+	args: { checks: AWAITING_CHECKS, checksUrl: CHECKS_URL },
+};
+
+export const AwaitingApprovalMixed: Story = {
+	args: {
+		checks: [
+			{ name: "Vercel preview", status: "passing" },
+			...AWAITING_CHECKS.slice(0, 2),
+		],
+		checksUrl: CHECKS_URL,
+	},
+};
+
 /** Everything green — the ring is a solid segmented circle. */
 export const AllPassing: Story = {
 	args: { checks: CHECKS },
