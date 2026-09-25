@@ -64,12 +64,12 @@ import {
 import { useDragAutoscroll } from "#/features/pull-request/files/use-drag-autoscroll";
 import type { DiffStyleMode } from "#/features/settings/settings-data";
 import type { SidecarQueryUtils } from "#/infra/backend-context";
+import type { FileDiffIdentity } from "./build-file-diff";
 import {
 	buildFileDiff,
 	createFileDiffIdentityCache,
 	getFileDiffIdentity,
 } from "./build-file-diff";
-import type { FileDiffIdentity } from "./build-file-diff";
 import { DiffFileHeader } from "./diff-file-header";
 import { type DiffHoverPoint, findHoveredFileId } from "./diff-hovered-file";
 import { findTopVisibleItemId } from "./diff-visible-file";
