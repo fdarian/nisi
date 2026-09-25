@@ -134,10 +134,11 @@ export const UnpushedCommits = Schema.Struct({
 });
 export type UnpushedCommits = Schema.Schema.Type<typeof UnpushedCommits>;
 
-/** Mirrors `@repo/git`'s `PullRequestCheckStatus` — the 5-state vocabulary `apps/desktop/src/features/pull-request/header/ci-status.tsx`'s `CiCheckStatus` renders. */
+/** Mirrors `@repo/git`'s check statuses, including workflow runs awaiting approval. */
 export const PullRequestCheckStatus = Schema.Literals([
 	"passing",
 	"failing",
+	"awaiting_approval",
 	"running",
 	"pending",
 	"skipped",
@@ -165,6 +166,7 @@ export const PullRequestCheck = Schema.Struct({
 	durationMs: Schema.optional(Schema.Number),
 	detailsUrl: Schema.optional(Schema.String),
 	workflowName: Schema.optional(Schema.String),
+	workflowRunId: Schema.optional(Schema.Number),
 });
 export type PullRequestCheck = Schema.Schema.Type<typeof PullRequestCheck>;
 
@@ -393,6 +395,22 @@ export const pullRequestsContract = {
 			TOO_MANY_REQUESTS: {},
 			SERVICE_UNAVAILABLE: {},
 			NOT_FOUND: {},
+		}),
+	approveWorkflowRuns: oc
+		.input(
+			Schema.Struct({
+				repoRoot: Schema.String,
+				owner: Schema.String,
+				repo: Schema.String,
+				number: Schema.Number,
+				runIds: Schema.Array(Schema.Number),
+			}),
+		)
+		.output(Schema.Void)
+		.errors({
+			FORBIDDEN: { data: MergeFailure },
+			GH_NOT_AUTHENTICATED: { data: MergeFailure },
+			SERVICE_UNAVAILABLE: { data: MergeFailure },
 		}),
 	unpushedCommits: oc
 		.input(Schema.Struct({ repoRoot: Schema.String }))

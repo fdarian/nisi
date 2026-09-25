@@ -23,9 +23,10 @@ exposes both one-shot reads and watch streams, so consumers never need to schedu
   No remote or no GitHub repository degrades to a local-only target using
   `resolveLocalDefaultBranch`; GitHub transport failures remain errors. The PR-number variant
   requires a resolvable PR when GitHub identifies the repository.
-- `github/gh/checks.ts` — maps GitHub's two check shapes (`CheckRun` and `StatusContext`) to the
-  five-state CI vocabulary. The CLI's flattened nullable fields use zero values
-  (`""`/`"0001-01-01T00:00:00Z"`), unlike the raw GraphQL overview response.
+- `github/gh/checks.ts` — maps GitHub's `CheckRun`/`StatusContext` rollup plus Actions runs
+  awaiting approval to the six-state CI vocabulary. The CLI's flattened nullable fields use zero
+  values (`""`/`"0001-01-01T00:00:00Z"`), unlike the raw GraphQL overview response. Approval goes
+  through `GhGitHub` so it refreshes that PR's live checks even when some runs fail to approve.
 - `github/gh/stack.ts` / `github/gh/merge.ts` — stacked PR reads use the read-only GraphQL
   `stack` fields; every unmerged stack member, including the bottom PR when it is the only layer
   being merged, must use GitHub's `PUT .../merge-async` endpoint and poll its UUID until a terminal

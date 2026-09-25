@@ -40,10 +40,8 @@ type PrHeaderProps = {
 	repoRoot: string;
 	stat: { additions: number; deletions: number };
 	onCloseTab: () => void;
-	/** This PR's tab is both the selected one and the window has focus — threaded straight through to `PrCiStatus`'s own poll gating, see `usePullRequestChecks` (`pr-data.ts`). */
+	/** This PR's tab is both selected and focused; controls menu visibility. */
 	watched: boolean;
-	/** This PR's session id — threaded straight through to `PrCiStatus`, see `usePullRequestChecks`'s `useAwaitingNewCi` (`pr-data.ts`). */
-	sessionId: string;
 	findExistingSessionId: (params: OpenPullRequestParams) => string | undefined;
 	onSessionOpened: (sessionId: string) => void;
 };
@@ -102,7 +100,6 @@ export function PrHeader({
 	stat,
 	onCloseTab,
 	watched,
-	sessionId,
 	findExistingSessionId,
 	onSessionOpened,
 }: PrHeaderProps): React.ReactElement {
@@ -166,7 +163,6 @@ export function PrHeader({
 						owner={target.owner}
 						repo={target.repo}
 						repoRoot={repoRoot}
-						sessionId={sessionId}
 						watched={watched}
 					/>
 					<PrMergeButton

@@ -121,6 +121,8 @@ export type MockOrpcData = {
 	checks?: readonly PullRequestCheck[];
 	/** When set, `pullRequests.checks` rejects with this message instead of resolving. Takes priority over `checks` if both are set (they shouldn't be). */
 	checksError?: string;
+	/** Successful approval replaces awaiting runs with queued checks on the next query. */
+	approveWorkflowRuns?: (runIds: readonly number[]) => void;
 	/**
 	 * When set, `walkthrough.activeGeneration` reports a `"running"`
 	 * generation and `walkthrough.generate` replays `events` in order (each a
@@ -188,7 +190,9 @@ async function* replayThenHang(
 }
 
 /** Builds a fake `SidecarClient` and wraps it in the same `createTanstackQueryUtils` the real app uses — see this module's doc comment. */
-export function createMockOrpc(data: MockOrpcData = {}): SidecarQueryUtils {
+export function createMockSidecarClient(
+	data: MockOrpcData = {},
+): SidecarClient {
 	const settings: Settings = { ...DEFAULT_SETTINGS, ...data.settings };
 	const harnesses = data.harnesses ?? DEFAULT_HARNESSES;
 	const fileContents = data.fileContents ?? {};
@@ -197,6 +201,7 @@ export function createMockOrpc(data: MockOrpcData = {}): SidecarQueryUtils {
 	const mergeStatusError = data.mergeStatusError;
 	const stack = data.stack;
 	const checks = data.checks;
+	const approvedRuns = new Set<number>();
 	const checksError = data.checksError;
 
 	const client: SidecarClient = {
@@ -299,6 +304,10 @@ export function createMockOrpc(data: MockOrpcData = {}): SidecarQueryUtils {
 			merge: async () => undefined,
 			mergeStack: async () => undefined,
 			markReady: async () => undefined,
+			approveWorkflowRuns: async (input) => {
+				data.approveWorkflowRuns?.(input.runIds);
+				for (const id of input.runIds) approvedRuns.add(id);
+			},
 			checks:
 				checksError !== undefined
 					? async () => {
@@ -306,7 +315,15 @@ export function createMockOrpc(data: MockOrpcData = {}): SidecarQueryUtils {
 						}
 					: checks === undefined
 						? neverSettles
-						: async () => liveValue(checks),
+						: async () =>
+								liveValue(
+									checks.map((check) =>
+										check.workflowRunId !== undefined &&
+										approvedRuns.has(check.workflowRunId)
+											? { ...check, status: "pending" as const }
+											: check,
+									),
+								),
 			unpushedCommits: neverSettles,
 		},
 		// No story exercises the Overview tab yet — same reasoning as
@@ -349,5 +366,9 @@ export function createMockOrpc(data: MockOrpcData = {}): SidecarQueryUtils {
 		},
 	};
 
-	return createTanstackQueryUtils(client);
+	return client;
+}
+
+export function createMockOrpc(data: MockOrpcData = {}): SidecarQueryUtils {
+	return createTanstackQueryUtils(createMockSidecarClient(data));
 }

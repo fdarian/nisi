@@ -1,5 +1,6 @@
 import { Context, type Effect, type Stream } from "effect";
 import type {
+	GhNotAuthenticated,
 	GhOutputDecodeError,
 	GitCommandError,
 	GitHubUnreachable,
@@ -11,6 +12,8 @@ import type {
 	PullRequestSearchError,
 	PullRequestStackMergeError,
 	RepoMergeMethodsError,
+	WorkflowApprovalFailed,
+	WorkflowApprovalForbidden,
 } from "../errors.ts";
 import type {
 	PullRequestRef,
@@ -68,6 +71,19 @@ export type GitHubShape = {
 	) => Effect.Effect<
 		ReadonlyArray<PullRequestCheck>,
 		PullRequestChecksError | GitCommandError
+	>;
+	approveWorkflowRuns: (input: {
+		repoRoot: string;
+		owner: string;
+		repo: string;
+		number: number;
+		runIds: readonly number[];
+	}) => Effect.Effect<
+		void,
+		| WorkflowApprovalFailed
+		| WorkflowApprovalForbidden
+		| GhNotAuthenticated
+		| GitCommandError
 	>;
 	overview: (
 		input: FetchPullRequestOverviewInput,

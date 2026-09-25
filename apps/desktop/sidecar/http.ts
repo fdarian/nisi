@@ -1632,6 +1632,58 @@ export function attachRouter(
 				);
 				yield* streamToIterator(stream, mainContext, signal);
 			}),
+			approveWorkflowRuns: authed.pullRequests.approveWorkflowRuns.effect(
+				function* ({ input, errors }) {
+					const github = yield* GitHub;
+					yield* github.approveWorkflowRuns(input).pipe(
+						Effect.catchTag("WorkflowApprovalForbidden", (cause) =>
+							Effect.fail(
+								errors.FORBIDDEN({
+									message:
+										"You don't have permission to approve these workflows.",
+									data: {
+										reason: "Maintainer permission required",
+										detail: `GitHub rejected approval for workflow run ${cause.runId}: ${cause.reason}`,
+									},
+								}),
+							),
+						),
+						Effect.catchTag("GhNotAuthenticated", (cause) =>
+							Effect.fail(
+								errors.GH_NOT_AUTHENTICATED({
+									message: "gh is not authenticated",
+									data: {
+										reason: "Authentication required",
+										detail: cause.reason,
+									},
+								}),
+							),
+						),
+						Effect.catchTag("WorkflowApprovalFailed", (cause) =>
+							Effect.fail(
+								errors.SERVICE_UNAVAILABLE({
+									message: `GitHub rejected approval for workflow run ${cause.runId}`,
+									data: {
+										reason: "Workflow approval failed",
+										detail: cause.reason,
+									},
+								}),
+							),
+						),
+						Effect.catchTag("GitCommandError", (cause) =>
+							Effect.fail(
+								errors.SERVICE_UNAVAILABLE({
+									message: "Couldn't run gh to approve workflows",
+									data: {
+										reason: "Couldn't run gh",
+										detail: mergeFailureDetail(cause),
+									},
+								}),
+							),
+						),
+					);
+				},
+			),
 			// The pre-merge "you have local unpushed commits" check — about the
 			// local worktree branch, not the PR, so it only needs `repoRoot`.
 			unpushedCommits: authed.pullRequests.unpushedCommits.effect(function* ({

@@ -177,7 +177,6 @@ export function PrView({
 				onCloseTab={onCloseTab}
 				orpc={orpc}
 				repoRoot={session.repoRoot}
-				sessionId={session.id}
 				stat={stat}
 				target={session.target}
 				watched={isHeaderWatched}

@@ -2,7 +2,7 @@ import { Effect, Layer, PubSub } from "effect";
 import { ChildProcessSpawner } from "effect/unstable/process";
 import { GitHub } from "../github.ts";
 import { PullRequestAttention } from "./attention.ts";
-import { fetchPullRequestChecks } from "./checks.ts";
+import { approveWorkflowRuns, fetchPullRequestChecks } from "./checks.ts";
 import {
 	fetchPullRequestMergeability,
 	fetchRepoMergeMethods,
@@ -90,6 +90,10 @@ export const GhGitHub = {
 				headRef: (repoRoot, number) => provide(headRef(repoRoot, number)),
 				search: (cwd, query) => provide(searchPullRequests(cwd, query)),
 				checks: (input) => provide(fetchPullRequestChecks(input)),
+				approveWorkflowRuns: (input) =>
+					provide(approveWorkflowRuns(input)).pipe(
+						Effect.onExit(() => kick(kicks, input)),
+					),
 				overview: (input) => provide(fetchPullRequestOverview(input)),
 				stack: (input) => provide(fetchPullRequestStack(input)),
 				mergeability: (repoRoot, number) =>

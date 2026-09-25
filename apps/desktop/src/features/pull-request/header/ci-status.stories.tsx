@@ -1,4 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
+import { fn } from "storybook/test";
 import type { CiCheck } from "./ci-status";
 import { CiStatus } from "./ci-status";
 
@@ -27,6 +28,44 @@ const CHECKS: readonly CiCheck[] = [
 	{ name: "lint", status: "passing", detail: "22s" },
 	{ name: "test (bun)", status: "passing", detail: "3m 04s" },
 ];
+
+const AWAITING_CHECKS: readonly CiCheck[] = [
+	{ name: "CI / build", status: "awaiting_approval" },
+	{ name: "CI / test", status: "awaiting_approval" },
+	{ name: "CodeQL", status: "awaiting_approval" },
+];
+
+export const AwaitingApproval: Story = {
+	args: {
+		checks: [AWAITING_CHECKS[0]],
+		onApproveWorkflows: fn(),
+	},
+};
+
+export const AwaitingApprovalMultiple: Story = {
+	args: {
+		checks: AWAITING_CHECKS,
+		onApproveWorkflows: fn(),
+	},
+};
+
+export const AwaitingApprovalApproving: Story = {
+	args: {
+		checks: AWAITING_CHECKS,
+		onApproveWorkflows: fn(),
+		isApproving: true,
+	},
+};
+
+export const AwaitingApprovalMixed: Story = {
+	args: {
+		checks: [
+			{ name: "Vercel preview", status: "passing" },
+			...AWAITING_CHECKS.slice(0, 2),
+		],
+		onApproveWorkflows: fn(),
+	},
+};
 
 /** Everything green — the ring is a solid segmented circle. */
 export const AllPassing: Story = {

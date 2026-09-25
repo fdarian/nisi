@@ -1088,10 +1088,11 @@ export function useMarkPullRequestReady(orpc: SidecarQueryUtils): {
 	return { markReady, isPending: mutation.isPending };
 }
 
-/** Mirrors `PullRequestCheckStatus` (`packages/sidecar-api/src/pull-requests.ts`) — the 5-state vocabulary `ci-status.tsx`'s `CiCheckStatus` renders. */
+/** Mirrors `PullRequestCheckStatus` (`packages/sidecar-api/src/pull-requests.ts`). */
 export type PullRequestCheckStatus =
 	| "passing"
 	| "failing"
+	| "awaiting_approval"
 	| "running"
 	| "pending"
 	| "skipped";
@@ -1114,7 +1115,53 @@ export type PullRequestCheck = {
 	durationMs?: number;
 	detailsUrl?: string;
 	workflowName?: string;
+	workflowRunId?: number;
 };
+
+export type ApproveWorkflowRunsParams = {
+	repoRoot: string;
+	owner: string;
+	repo: string;
+	number: number;
+	runIds: readonly number[];
+};
+
+export type ApproveWorkflowRunsError =
+	| InferClientError<SidecarClient["pullRequests"]["approveWorkflowRuns"]>
+	| Error;
+
+export function useApproveWorkflowRuns(
+	orpc: SidecarQueryUtils,
+	onError: (error: ApproveWorkflowRunsError) => void,
+): {
+	approve: (params: ApproveWorkflowRunsParams) => void;
+	isPending: boolean;
+} {
+	const queryClient = useQueryClient();
+	const refreshChecks = (params: ApproveWorkflowRunsParams) =>
+		queryClient.invalidateQueries({
+			queryKey: orpc.pullRequests.checks.key({
+				input: {
+					repoRoot: params.repoRoot,
+					owner: params.owner,
+					repo: params.repo,
+					number: params.number,
+				},
+			}),
+		});
+	const mutation = useMutation({
+		...orpc.pullRequests.approveWorkflowRuns.mutationOptions(),
+		onSuccess: (_data, params) => refreshChecks(params),
+		onError: (error, params) => {
+			onError(error);
+			void refreshChecks(params);
+		},
+	});
+	return {
+		approve: (params) => mutation.mutate(params),
+		isPending: mutation.isPending,
+	};
+}
 
 export type PullRequestChecksParams = {
 	repoRoot: string;

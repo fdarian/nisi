@@ -7,8 +7,8 @@ import type {
 } from "../errors.ts";
 
 /**
- * The 5-state vocabulary `apps/desktop/src/features/pull-request/header/ci-status.tsx`'s
- * `CiCheckStatus` renders, computed here from GitHub's two check shapes —
+ * The six-state vocabulary `apps/desktop/src/features/pull-request/header/ci-status.tsx`'s
+ * `CiCheckStatus` renders, computed from GitHub's check rollup and awaiting Actions runs —
  * this is domain knowledge (what "failing" means across a GitHub Actions run
  * vs. an external status integration), not a wire concern, so it's owned by
  * this module rather than left for the sidecar or frontend to re-derive.
@@ -16,6 +16,7 @@ import type {
 export type PullRequestCheckStatus =
 	| "passing"
 	| "failing"
+	| "awaiting_approval"
 	| "running"
 	| "pending"
 	| "skipped";
@@ -54,11 +55,12 @@ export type PullRequestCheck = {
 	 * in the set at once.
 	 */
 	workflowName?: string;
+	workflowRunId?: number;
 };
 
 /**
  * One CI check on a commit, for the Overview tab's per-commit list.
- * Deliberately not `PullRequestCheck` (`pull-request-checks.ts`) reused
+ * Deliberately not `PullRequestCheck` (`github/gh/checks.ts`) reused
  * wholesale — that shape carries `durationMs`/`workflowName`, facts the PR
  * header's `CiStatus` ring needs but a per-commit row here doesn't. `detail`
  * stands in for `workflowName` (a `CheckRun`'s Actions workflow name, when
@@ -66,7 +68,7 @@ export type PullRequestCheck = {
  * per-check breakdown to disambiguate a bare duration the way
  * `pr-ci-status.tsx` does; formatting a duration into English is still a
  * presentation concern this package doesn't take on. `status` reuses the
- * exact same 5-state vocabulary as `PullRequestCheck`.
+ * same status vocabulary as `PullRequestCheck`.
  */
 export type OverviewCommitCheck = {
 	readonly name: string;
