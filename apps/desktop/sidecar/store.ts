@@ -7,6 +7,7 @@ import {
 	type FileChange as GitFileChange,
 	type FileContent as GitFileContent,
 	type GitHubTarget,
+	type GitHub,
 	type GitHubUnreachable,
 	getChangedFiles,
 	getFileContents,
@@ -573,7 +574,7 @@ export class Store extends Context.Service<Store>()("Store", {
 			| NoPullRequest
 			| ReviewStoreError
 			| SettingsStoreError,
-			ChildProcessSpawner.ChildProcessSpawner | FileSystem
+			ChildProcessSpawner.ChildProcessSpawner | FileSystem | GitHub
 		> =>
 			Effect.gen(function* () {
 				const repoRoot = yield* resolveRepoPath(input.owner, input.repo);

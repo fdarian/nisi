@@ -2,6 +2,7 @@ import { BunRuntime, BunServices } from "@effect/platform-bun";
 import { safe } from "@orpc/client";
 import { resolvedPath } from "@repo/bin-resolver";
 import { getDataDirConfig, SqliteDb } from "@repo/db";
+import { GhGitHub } from "@repo/git";
 import { RepoMergeMethodStore, SettingsStore } from "@repo/settings";
 import { makeSidecarClient } from "@repo/sidecar-api";
 import {
@@ -227,6 +228,7 @@ const MainLayer = Layer.mergeAll(
 	ChatSessions.layer,
 	HarnessModelCache.layer,
 	CodeLspPool.layer,
+	GhGitHub.layer,
 ).pipe(
 	Layer.provideMerge(SqliteDb.layer),
 	Layer.provideMerge(BunServices.layer),

@@ -1,4 +1,5 @@
 import type { BunServices } from "@effect/platform-bun";
+import type { GitHub } from "@repo/git";
 import type { ReviewStore } from "@repo/review";
 import type { RepoMergeMethodStore, SettingsStore } from "@repo/settings";
 import type { ChatSessions } from "./chat/sessions.ts";
@@ -27,4 +28,5 @@ export type AppServices =
 	| ChatSessions
 	| HarnessModelCache
 	| CodeLspPool
+	| GitHub
 	| BunServices.BunServices;

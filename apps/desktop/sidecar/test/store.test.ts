@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { BunServices } from "@effect/platform-bun";
 import { SqliteDb } from "@repo/db";
+import { GhGitHub } from "@repo/git";
 import { ReviewStore } from "@repo/review";
 import { SettingsStore } from "@repo/settings";
 import { ConfigProvider, Effect, Layer, Result } from "effect";
@@ -38,6 +39,7 @@ const makeTestRepo = async (): Promise<string> => {
 /** Same composition as `packages/review/test/fixtures.ts`'s `makeTestLayer`, one layer up — `Store.layer` already pulls in `ReviewStore.layer` via `provideMerge`, so this only has to add what `Store.make` needs beyond that: `SqliteDb` and `NISI_DATA_DIR`. */
 const makeTestLayer = (dataDir: string) =>
 	Store.layer.pipe(
+		Layer.provideMerge(GhGitHub.layer),
 		Layer.provideMerge(SqliteDb.layer),
 		Layer.provideMerge(BunServices.layer),
 		Layer.provide(
