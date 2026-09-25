@@ -2,7 +2,7 @@
 
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { cn } from "cn";
-import { CirclePause, Pause } from "lucide-react";
+import { CirclePause } from "lucide-react";
 import type React from "react";
 import {
 	DropdownMenu,
@@ -33,14 +33,14 @@ export type CiCheck = {
 type CiStatusProps = {
 	checks: readonly CiCheck[];
 	className?: string;
-	/** Presentational only — the sidecar doesn't call GitHub's approve-workflow-run API yet. Rendered only when supplied. */
-	onApproveWorkflows?: () => void;
-	/** Disables the action and swaps its label to "Approving…" while `onApproveWorkflows`'s caller is mid-request. */
-	isApproving?: boolean;
 };
 
 type WatchedCiStatusProps = CiStatusProps & {
 	watched: boolean;
+	/** Presentational only — the sidecar doesn't call GitHub's approve-workflow-run API yet. Rendered only when supplied. */
+	onApproveWorkflows?: () => void;
+	/** Disables the action and swaps its label to "Approving…" while `onApproveWorkflows`'s caller is mid-request. */
+	isApproving?: boolean;
 };
 
 const STATUS_LABEL: Record<CiCheckStatus, string> = {
@@ -203,7 +203,9 @@ function CiChecksMenuContent({
 					>
 						{isApproving === true
 							? "Approving…"
-							: `Approve ${awaitingChecks.length} ${awaitingChecks.length === 1 ? "workflow" : "workflows"}`}
+							: awaitingChecks.length === 1
+								? "Approve workflow"
+								: `Approve ${awaitingChecks.length} workflows`}
 					</DropdownMenuItem>
 				</>
 			)}
@@ -212,7 +214,7 @@ function CiChecksMenuContent({
 }
 
 /**
- * One arc per check around a ring labeled "CI", click for the full list.
+ * One arc per check around a ring, click for the full list.
  *
  * Renders nothing when there are no checks — a PR with no CI configured
  * shouldn't get an empty ring implying something is still coming.
@@ -241,7 +243,7 @@ export function CiStatus({
 			<DropdownMenuTrigger
 				aria-label={`CI: ${summary}`}
 				className={cn(
-					"flex h-7 shrink-0 items-center justify-center gap-1 rounded-md text-muted-foreground transition-colors hover:bg-accent data-popup-open:bg-accent focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-1",
+					"flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent data-popup-open:bg-accent focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-1",
 					className,
 				)}
 			>
@@ -274,8 +276,8 @@ export function CiStatus({
 							))}
 					</g>
 					{awaitingApproval ? (
-						<Pause
-							className="stroke-muted-foreground"
+						<CirclePause
+							className="text-warning"
 							height={10}
 							width={10}
 							x={VIEWBOX / 2 - 5}
@@ -313,8 +315,6 @@ export function CiStatus({
 export function CiStatusIcon({
 	checks,
 	className,
-	onApproveWorkflows,
-	isApproving,
 }: CiStatusProps): React.ReactElement | null {
 	if (checks.length === 0) return null;
 
@@ -338,11 +338,7 @@ export function CiStatusIcon({
 					)}
 				/>
 			</DropdownMenuTrigger>
-			<CiChecksMenuContent
-				checks={checks}
-				isApproving={isApproving}
-				onApproveWorkflows={onApproveWorkflows}
-			/>
+			<CiChecksMenuContent checks={checks} />
 		</DropdownMenu>
 	);
 }
