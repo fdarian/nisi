@@ -1,3 +1,5 @@
+import { GhGitHub } from "../src/github/gh/github.ts";
+import { Layer } from "effect";
 import { describe, expect, test } from "bun:test";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -10,8 +12,20 @@ const testDir = dirname(fileURLToPath(import.meta.url));
 const GH_STUB = join(testDir, "fixtures/gh-stub.sh");
 const RUNNER = join(testDir, "fixtures/resolve-review-target-runner.ts");
 
-const run = <A, E>(effect: Effect.Effect<A, E, BunServices.BunServices>) =>
-	Effect.runPromise(effect.pipe(Effect.provide(BunServices.layer)));
+const run = <A, E>(
+	effect: Effect.Effect<
+		A,
+		E,
+		BunServices.BunServices | import("../src/github/github.ts").GitHub
+	>,
+) =>
+	Effect.runPromise(
+		effect.pipe(
+			Effect.provide(
+				GhGitHub.layer.pipe(Layer.provideMerge(BunServices.layer)),
+			),
+		),
+	);
 
 type RunnerResult =
 	| {

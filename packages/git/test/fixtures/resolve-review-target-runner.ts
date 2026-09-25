@@ -1,3 +1,5 @@
+import { GhGitHub } from "../../src/github/gh/github.ts";
+import { Layer } from "effect";
 /**
  * Runs one of `pull-request.ts`'s two `ReviewTarget` resolvers and prints its
  * outcome as one line of JSON — spawned as a *fresh process* (not imported
@@ -29,7 +31,9 @@ const target =
 		: resolveReviewTarget(repoRoot);
 
 const exit = await Effect.runPromise(
-	Effect.exit(target).pipe(Effect.provide(BunServices.layer)),
+	Effect.exit(target).pipe(
+		Effect.provide(GhGitHub.layer.pipe(Layer.provideMerge(BunServices.layer))),
+	),
 );
 
 const result = Exit.isSuccess(exit)

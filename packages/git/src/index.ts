@@ -17,6 +17,8 @@ export type {
 	FileStatus,
 } from "./diff.ts";
 export { getChangedFiles, getFileContents } from "./diff.ts";
+export { GitHub } from "./github/github.ts";
+export { GhGitHub } from "./github/gh/github.ts";
 export {
 	FileNotChanged,
 	GhMergeFailed,

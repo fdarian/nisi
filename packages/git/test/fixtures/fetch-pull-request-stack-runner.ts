@@ -1,3 +1,5 @@
+import { GhGitHub } from "../../src/github/gh/github.ts";
+import { Layer } from "effect";
 import { BunServices } from "@effect/platform-bun";
 import { Cause, Effect, Exit } from "effect";
 import { fetchPullRequestStack } from "../../src/pull-request-stack.ts";
@@ -15,7 +17,9 @@ const exit = await Effect.runPromise(
 			repo: "widgets",
 			number: Number(numberArg),
 		}),
-	).pipe(Effect.provide(BunServices.layer)),
+	).pipe(
+		Effect.provide(GhGitHub.layer.pipe(Layer.provideMerge(BunServices.layer))),
+	),
 );
 
 const result = Exit.isSuccess(exit)

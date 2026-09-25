@@ -1,3 +1,5 @@
+import { GhGitHub } from "../../src/github/gh/github.ts";
+import { Layer } from "effect";
 /**
  * Runs `searchPullRequests` once and prints its outcome as one line of JSON —
  * spawned as a *fresh process* (not imported directly) by
@@ -18,7 +20,7 @@ if (cwd === undefined || query === undefined) {
 
 const exit = await Effect.runPromise(
 	Effect.exit(searchPullRequests(cwd, query)).pipe(
-		Effect.provide(BunServices.layer),
+		Effect.provide(GhGitHub.layer.pipe(Layer.provideMerge(BunServices.layer))),
 	),
 );
 

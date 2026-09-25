@@ -1,3 +1,5 @@
+import { GhGitHub } from "../../src/github/gh/github.ts";
+import { Layer } from "effect";
 import { BunServices } from "@effect/platform-bun";
 import { Cause, Effect, Exit } from "effect";
 import { GhStackMergeFailed } from "../../src/errors.ts";
@@ -11,7 +13,9 @@ if (outcome !== "merged" && outcome !== "failed") {
 const exit = await Effect.runPromise(
 	Effect.exit(
 		mergeStackPullRequest("/tmp", "acme", "widgets", 42, "squash"),
-	).pipe(Effect.provide(BunServices.layer)),
+	).pipe(
+		Effect.provide(GhGitHub.layer.pipe(Layer.provideMerge(BunServices.layer))),
+	),
 );
 
 if (Exit.isSuccess(exit)) {
