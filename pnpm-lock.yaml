@@ -124,7 +124,7 @@ patchedDependencies:
   '@ai-sdk/harness-codex@1.0.93': 3b003d1c9402d196b62e8ec2dc9734e7116ab4585321f1c3f096512aeddd1c51
   '@ai-sdk/harness-opencode@1.0.92': ca8793a635d82de60f14a887bc55a81e7f54d7a051c8fa3135fe8fe01ba9b0a6
   '@ai-sdk/harness@1.0.91': 7fe99bf0c691e923a900a46e9c06da2e69a22167bf0ccae94efc7e7c6d6f414d
-  '@pierre/diffs@1.4.1': fa1f52b731b25e050d6d79d275018baefca09728610b44695126feae8ad45a18
+  '@pierre/diffs@1.5.1': af563af8f9fa16289dd8cddc613d7788006aa8a8c10d6892eec9928213271180
 
 importers:
 
@@ -215,8 +215,8 @@ importers:
         specifier: 2.0.0-beta.21
         version: 2.0.0-beta.21(@opentelemetry/api@1.9.0)(@tanstack/query-core@5.102.8)
       '@pierre/diffs':
-        specifier: 1.4.1
-        version: 1.4.1(patch_hash=fa1f52b731b25e050d6d79d275018baefca09728610b44695126feae8ad45a18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+        specifier: 1.5.1
+        version: 1.5.1(patch_hash=af563af8f9fa16289dd8cddc613d7788006aa8a8c10d6892eec9928213271180)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       '@pierre/theming':
         specifier: 1.0.1
         version: 1.0.1(@pierre/theme@2.0.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(shiki@4.4.3)
@@ -2430,8 +2430,8 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  '@pierre/diffs@1.4.1':
-    resolution: {integrity: sha512-rzvY9FeeYdGtVcErjNsW6tnrjpMb0DvGtgCFNuMoYT8wufE+gO1ZXAzKAc2VPRBS3Rl5HELEQ38WDlis4qZHkQ==}
+  '@pierre/diffs@1.5.1':
+    resolution: {integrity: sha512-+EXNfz4ZXI6FHr7P6ToWEORwyYiPVfAmzhA70xF+0y/oNvj7gbNTLJJ6jNzkBjuMbRlu564TAmgYZLc5OyHURA==}
     peerDependencies:
       react: ^18.3.1 || ^19.0.0
       react-dom: ^18.3.1 || ^19.0.0
@@ -7752,7 +7752,7 @@ snapshots:
   '@oxc-resolver/binding-win32-x64-msvc@11.21.2':
     optional: true
 
-  '@pierre/diffs@1.4.1(patch_hash=fa1f52b731b25e050d6d79d275018baefca09728610b44695126feae8ad45a18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)':
+  '@pierre/diffs@1.5.1(patch_hash=af563af8f9fa16289dd8cddc613d7788006aa8a8c10d6892eec9928213271180)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)':
     dependencies:
       '@pierre/theme': 2.0.0
       '@pierre/theming': 1.0.1(@pierre/theme@2.0.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(shiki@4.4.3)

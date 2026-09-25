@@ -83,7 +83,7 @@ unlimited paged scroller"). That polish only matters for the paged-scroll coordi
 activates only past `SCROLL_REBASE_THRESHOLD` (11,000,000px, `CodeView.js:114-118`) — real PRs in
 nisi run ~400,000px of scroll height, so the rebasing path this was meant to mask never engages,
 while the jitter itself was paid on every render regardless. Removed in
-`patches/@pierre%2Fdiffs@1.3.5.patch`. Verified fixed in the in-app Chromium preview pane, **not**
+`patches/@pierre%2Fdiffs@1.5.1.patch`. Verified fixed in the in-app Chromium preview pane, **not**
 in the production Tauri/WKWebView shell — the WKWebView-specific claim in this section's title is
 still unconfirmed for this candidate.
 
