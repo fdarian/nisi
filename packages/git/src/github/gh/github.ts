@@ -84,63 +84,38 @@ export const GhGitHub = {
 				overviewInterval,
 			);
 			return {
-				repository: (repoRoot: string) => provide(repository(repoRoot)),
-				pullRequest: (repoRoot: string, number?: number) =>
+				repository: (repoRoot) => provide(repository(repoRoot)),
+				pullRequest: (repoRoot, number) =>
 					provide(pullRequest(repoRoot, number)),
-				headRef: (repoRoot: string, number: number) =>
-					provide(headRef(repoRoot, number)),
-				search: (cwd: string, query: string) =>
-					provide(searchPullRequests(cwd, query)),
-				checks: (input: Parameters<typeof fetchPullRequestChecks>[0]) =>
-					provide(fetchPullRequestChecks(input)),
-				overview: (input: Parameters<typeof fetchPullRequestOverview>[0]) =>
-					provide(fetchPullRequestOverview(input)),
-				stack: (input: Parameters<typeof fetchPullRequestStack>[0]) =>
-					provide(fetchPullRequestStack(input)),
-				mergeability: (repoRoot: string, number: number) =>
+				headRef: (repoRoot, number) => provide(headRef(repoRoot, number)),
+				search: (cwd, query) => provide(searchPullRequests(cwd, query)),
+				checks: (input) => provide(fetchPullRequestChecks(input)),
+				overview: (input) => provide(fetchPullRequestOverview(input)),
+				stack: (input) => provide(fetchPullRequestStack(input)),
+				mergeability: (repoRoot, number) =>
 					provide(fetchPullRequestMergeability(repoRoot, number)),
-				mergeMethods: (repoRoot: string, owner: string, repo: string) =>
+				mergeMethods: (repoRoot, owner, repo) =>
 					provide(fetchRepoMergeMethods(repoRoot, owner, repo)),
-				merge: (
-					repoRoot: string,
-					owner: string,
-					repo: string,
-					number: number,
-					method: Parameters<typeof mergePullRequest>[2],
-				) =>
-					provide(mergePullRequest(repoRoot, number, method)).pipe(
+				merge: (repoRoot, owner, repo, number, method) =>
+					mergePullRequest(repoRoot, number, method).pipe(
+						provide,
 						Effect.tap(() => kick(kicks, { owner, repo, number })),
 					),
-				mergeStack: (
-					repoRoot: string,
-					owner: string,
-					repo: string,
-					number: number,
-					method: Parameters<typeof mergeStackPullRequest>[4],
-				) =>
-					provide(
-						mergeStackPullRequest(repoRoot, owner, repo, number, method),
-					).pipe(Effect.tap(() => kick(kicks, { owner, repo, number }))),
-				markReady: (
-					repoRoot: string,
-					owner: string,
-					repo: string,
-					number: number,
-				) =>
-					provide(markPullRequestReady(repoRoot, number)).pipe(
+				mergeStack: (repoRoot, owner, repo, number, method) =>
+					mergeStackPullRequest(repoRoot, owner, repo, number, method).pipe(
+						provide,
 						Effect.tap(() => kick(kicks, { owner, repo, number })),
 					),
-				watchChecks: (input: Parameters<typeof fetchPullRequestChecks>[0]) =>
-					watchFromMap(checks, input),
-				watchMergeStatus: (
-					input: Parameters<typeof fetchPullRequestChecks>[0],
-				) => watchFromMap(mergeStatus, input),
-				watchStack: (input: Parameters<typeof fetchPullRequestStack>[0]) =>
-					watchFromMap(stack, input),
-				watchOverview: (
-					input: Parameters<typeof fetchPullRequestOverview>[0],
-				) => watchFromMap(overview, input),
-			};
+				markReady: (repoRoot, owner, repo, number) =>
+					markPullRequestReady(repoRoot, number).pipe(
+						provide,
+						Effect.tap(() => kick(kicks, { owner, repo, number })),
+					),
+				watchChecks: (input) => watchFromMap(checks, input),
+				watchMergeStatus: (input) => watchFromMap(mergeStatus, input),
+				watchStack: (input) => watchFromMap(stack, input),
+				watchOverview: (input) => watchFromMap(overview, input),
+			} satisfies GitHub["Service"];
 		}),
 	),
 };
