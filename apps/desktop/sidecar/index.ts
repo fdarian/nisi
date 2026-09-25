@@ -18,6 +18,7 @@ import { HarnessModelCache } from "./harness/model-store.ts";
 import { attachRouter, bindHealthCheckServer } from "./http.ts";
 import { startLivePolling } from "./live-poll.ts";
 import { LoggingLive } from "./logging.ts";
+import { PullRequestAttentionLive } from "./pull-request-attention.ts";
 import type { AppServices } from "./services.ts";
 import { SessionWatch } from "./session-watch.ts";
 import { Store } from "./store.ts";
@@ -228,7 +229,7 @@ const MainLayer = Layer.mergeAll(
 	ChatSessions.layer,
 	HarnessModelCache.layer,
 	CodeLspPool.layer,
-	GhGitHub.layer,
+	GhGitHub.layer.pipe(Layer.provideMerge(PullRequestAttentionLive.layer)),
 ).pipe(
 	Layer.provideMerge(SqliteDb.layer),
 	Layer.provideMerge(BunServices.layer),

@@ -6,6 +6,7 @@ import {
 import { SettingsStore } from "@repo/settings";
 import { Duration, Effect, Schedule } from "effect";
 import { emit } from "./events.ts";
+import { AttentionState } from "./pull-request-attention.ts";
 import { SessionWatch } from "./session-watch.ts";
 import { Store } from "./store.ts";
 
@@ -109,6 +110,8 @@ export const checkSessionForChanges = (sessionId: string) =>
 			!repoChangeSignatureEquals(previous.signature, signature)
 		) {
 			emit({ type: "session-files-changed", sessionId });
+			const attention = yield* AttentionState;
+			yield* attention.markChanged(sessionId);
 		}
 	}).pipe(
 		Effect.catchTag("WorktreeRelocationFailed", (cause) =>

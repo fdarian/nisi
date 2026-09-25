@@ -166,6 +166,15 @@ function neverIterator<T>(): AsyncIteratorClass<T, void> {
 	);
 }
 
+function liveValue<T>(value: T): AsyncIteratorClass<T, void> {
+	return toAsyncIteratorClass(
+		(async function* () {
+			yield value;
+			await neverSettles();
+		})(),
+	);
+}
+
 async function* replayThenHang(
 	events: readonly GenerateEvent[],
 ): AsyncGenerator<GenerateEvent> {
@@ -218,6 +227,7 @@ export function createMockOrpc(data: MockOrpcData = {}): SidecarQueryUtils {
 			list: async () => [],
 			close: async () => undefined,
 			setWatching: async () => undefined,
+			setAttention: async () => undefined,
 		},
 		events: {
 			// Never resolves — the same "no events forthcoming" shape
@@ -281,8 +291,11 @@ export function createMockOrpc(data: MockOrpcData = {}): SidecarQueryUtils {
 						}
 					: mergeStatus === undefined
 						? neverSettles
-						: async () => mergeStatus,
-			stack: stack === undefined ? neverSettles : async () => stack,
+						: async () => liveValue(mergeStatus),
+			stack:
+				stack === undefined
+					? async () => neverIterator()
+					: async () => liveValue(stack),
 			merge: async () => undefined,
 			mergeStack: async () => undefined,
 			markReady: async () => undefined,
@@ -293,13 +306,13 @@ export function createMockOrpc(data: MockOrpcData = {}): SidecarQueryUtils {
 						}
 					: checks === undefined
 						? neverSettles
-						: async () => checks,
+						: async () => liveValue(checks),
 			unpushedCommits: neverSettles,
 		},
 		// No story exercises the Overview tab yet — same reasoning as
 		// `events.subscribe` above.
 		overview: {
-			get: neverSettles,
+			get: async () => neverIterator(),
 		},
 		walkthrough: {
 			harnesses: async () => harnesses,

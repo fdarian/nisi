@@ -1,4 +1,4 @@
-import { oc } from "@orpc/contract";
+import { eventIterator, oc } from "@orpc/contract";
 import { Schema } from "effect";
 import { Session } from "./sessions.ts";
 
@@ -218,12 +218,8 @@ const MergeFailure = Schema.toStandardSchemaV1(
  * `git` failing to run at all. Persists nothing on failure; on success, the
  * frontend calls `open` again, which now resolves without a fresh prompt.
  *
- * `mergeStatus`/`merge` back the PR header's Merge button. `mergeStatus`
- * combines `@repo/git`'s `fetchPullRequestMergeability` and
- * `fetchRepoMergeMethods` into one round trip — the button needs both to
- * decide its label/enabled state and its method picker at once, and they're
- * independent `gh` calls with no reason to force two round trips where one
- * will do. `MERGE_STATUS_UNAVAILABLE` is the one error code that isn't
+ * `mergeStatus` streams mergeability and allowed methods from `GitHub.watchMergeStatus`;
+ * the sidecar adds the saved default method on each emission. `MERGE_STATUS_UNAVAILABLE` is the one error code that isn't
  * shared with `search`/`open`: `mergeStateStatus` specifically requires push
  * access to the repo, and a caller without it gets this rather than a
  * silently substituted `"UNKNOWN"` — see `PullRequestMergeStatusUnavailable`
@@ -234,8 +230,7 @@ const MergeFailure = Schema.toStandardSchemaV1(
  * not-mergeable falls back to. See `apps/desktop/sidecar/http.ts`'s handlers
  * for the full error mapping.
  *
- * `checks` backs the PR header's `CiStatus` ring — `@repo/git`'s
- * `fetchPullRequestChecks` mapped straight through onto `PullRequestCheck`
+ * `checks` backs the PR header's `CiStatus` ring — `GitHub.watchChecks` emits `PullRequestCheck`
  * above, same input shape as `mergeStatus` (only `repoRoot`/`number`
  * actually drive the underlying `gh pr view`, but `owner`/`repo` are kept
  * for consistency with every other per-PR procedure here). Its three error
@@ -258,12 +253,8 @@ const MergeFailure = Schema.toStandardSchemaV1(
  * `SERVICE_UNAVAILABLE` (a `git` command itself failing to run) since the
  * frontend shows a different dialog for each.
  *
- * `markReady` fires `gh pr ready`, flipping a draft PR to ready for review —
- * backs the PR header overflow menu's own item, shown only while
- * `mergeStatus.isDraft` is true. Input is just `repoRoot`/`number` (unlike
- * `merge`, `gh pr ready` needs no method); the frontend still invalidates
- * `mergeStatus` on success the same way `merge` does, since `isDraft` drives
- * both that menu item's visibility and the merge button's own draft label.
+ * `markReady` flips a draft PR to ready for review — the adapter uses
+ * `owner`/`repo`/`number` to refresh that PR's live sources after success.
  * Error codes mirror `merge`'s minus `CONFLICT` — readiness doesn't depend on
  * mergeability, so there's no analogous "not mergeable right now" outcome.
  */
@@ -311,7 +302,7 @@ export const pullRequestsContract = {
 				number: Schema.Number,
 			}),
 		)
-		.output(PullRequestMergeStatus)
+		.output(eventIterator(Schema.toStandardSchemaV1(PullRequestMergeStatus)))
 		.errors({
 			GH_NOT_AUTHENTICATED: {},
 			TOO_MANY_REQUESTS: {},
@@ -327,7 +318,9 @@ export const pullRequestsContract = {
 				number: Schema.Number,
 			}),
 		)
-		.output(Schema.NullOr(PullRequestStack))
+		.output(
+			eventIterator(Schema.toStandardSchemaV1(Schema.NullOr(PullRequestStack))),
+		)
 		.errors({
 			GH_NOT_AUTHENTICATED: {},
 			TOO_MANY_REQUESTS: {},
@@ -372,6 +365,8 @@ export const pullRequestsContract = {
 		.input(
 			Schema.Struct({
 				repoRoot: Schema.String,
+				owner: Schema.String,
+				repo: Schema.String,
 				number: Schema.Number,
 			}),
 		)
@@ -390,7 +385,9 @@ export const pullRequestsContract = {
 				number: Schema.Number,
 			}),
 		)
-		.output(Schema.Array(PullRequestCheck))
+		.output(
+			eventIterator(Schema.toStandardSchemaV1(Schema.Array(PullRequestCheck))),
+		)
 		.errors({
 			GH_NOT_AUTHENTICATED: {},
 			TOO_MANY_REQUESTS: {},

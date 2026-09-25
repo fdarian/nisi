@@ -9,6 +9,7 @@ import { ReviewStore } from "@repo/review";
 import { SettingsStore } from "@repo/settings";
 import { ConfigProvider, Effect, Layer, Result } from "effect";
 import { Store } from "../store.ts";
+import { PullRequestAttentionLive } from "../pull-request-attention.ts";
 
 /** Runs real `git` for test setup — the code under test uses its own Effect-based runner. */
 const sh = async (cwd: string, args: ReadonlyArray<string>): Promise<void> => {
@@ -39,7 +40,9 @@ const makeTestRepo = async (): Promise<string> => {
 /** Same composition as `packages/review/test/fixtures.ts`'s `makeTestLayer`, one layer up — `Store.layer` already pulls in `ReviewStore.layer` via `provideMerge`, so this only has to add what `Store.make` needs beyond that: `SqliteDb` and `NISI_DATA_DIR`. */
 const makeTestLayer = (dataDir: string) =>
 	Store.layer.pipe(
-		Layer.provideMerge(GhGitHub.layer),
+		Layer.provideMerge(
+			GhGitHub.layer.pipe(Layer.provideMerge(PullRequestAttentionLive.layer)),
+		),
 		Layer.provideMerge(SqliteDb.layer),
 		Layer.provideMerge(BunServices.layer),
 		Layer.provide(

@@ -73,13 +73,13 @@ function MarkReadyMenuItem({
 	owner,
 	repo,
 	number,
-	watched,
 }: MarkReadyMenuItemProps): React.ReactElement | null {
-	const statusQuery = usePullRequestMergeStatus(
-		orpc,
-		{ repoRoot, owner, repo, number },
-		watched,
-	);
+	const statusQuery = usePullRequestMergeStatus(orpc, {
+		repoRoot,
+		owner,
+		repo,
+		number,
+	});
 	const { markReady, isPending } = useMarkPullRequestReady(orpc);
 
 	if (statusQuery.data?.isDraft !== true) return null;

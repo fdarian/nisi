@@ -33,9 +33,8 @@ type OverviewViewProps = {
 export function OverviewView({
 	orpc,
 	session,
-	watched,
 }: OverviewViewProps): React.ReactElement {
-	const overviewQuery = useOverview(orpc, session, watched);
+	const overviewQuery = useOverview(orpc, session);
 
 	if (overviewQuery.error != null) {
 		return <OverviewError error={overviewQuery.error} />;

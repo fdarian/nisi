@@ -365,26 +365,17 @@ export function PrTabIcon({
  * in place of a plain `PrTabIcon` only when `session.target.kind === "pr"`
  * *and* the tab isn't suspended, so neither a branch tab nor a suspended PR
  * tab ever reaches these queries — suspension exists precisely to stop
- * background work for a tab, and two live polling subscriptions would defeat
- * that. `isSuspended` is never a prop here for the same reason: a caller
- * that reached this component has already ruled it out.
- *
- * `watched: false` on both keeps a background PR tab off their slow polls —
- * TanStack Query dedupes against the same query key `PrHeader`/
- * `PrMergeButton`/`PrCiStatus` already poll once this tab becomes the active
- * (watched) one, so this doesn't cost a second round trip, just a second
- * subscriber to the existing cache entry.
+ * background work for a tab. The adapter shares each PR's live source across
+ * the tab icon and header subscribers; `isSuspended` never reaches this component.
  */
 function PrTabStatusIcon({
 	orpc,
 	repoRoot,
 	target,
-	sessionId,
 }: {
 	orpc: SidecarQueryUtils;
 	repoRoot: string;
 	target: Extract<SessionTarget, { kind: "pr" }>;
-	sessionId: string;
 }): React.ReactElement {
 	const params = {
 		repoRoot,
@@ -392,11 +383,8 @@ function PrTabStatusIcon({
 		repo: target.repo,
 		number: target.number,
 	};
-	const mergeStatusQuery = usePullRequestMergeStatus(orpc, params, false);
-	const checksQuery = usePullRequestChecks(orpc, params, {
-		watched: false,
-		sessionId,
-	});
+	const mergeStatusQuery = usePullRequestMergeStatus(orpc, params);
+	const checksQuery = usePullRequestChecks(orpc, params);
 	const status = derivePrTabStatus(mergeStatusQuery.data, checksQuery.data);
 
 	return <PrTabIcon isSuspended={false} kind="pr" status={status} />;
@@ -477,7 +465,6 @@ function PrTab({
 							<PrTabStatusIcon
 								orpc={orpc}
 								repoRoot={session.repoRoot}
-								sessionId={session.id}
 								target={session.target}
 							/>
 						) : (

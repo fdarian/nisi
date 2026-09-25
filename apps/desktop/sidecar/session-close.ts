@@ -6,6 +6,7 @@ import {
 	closeChatThreadsForSession,
 } from "./chat/sessions.ts";
 import type { AppServices } from "./services.ts";
+import { AttentionState } from "./pull-request-attention.ts";
 import { SessionWatch } from "./session-watch.ts";
 import {
 	abortGeneration,
@@ -101,6 +102,7 @@ const closeSessionSideEffects = (
 		const startedAt = Date.now();
 		yield* Effect.logInfo("session close teardown started", { sessionId });
 		const sessionWatch = yield* SessionWatch;
+		const attention = yield* AttentionState;
 		const reportFailure: ChatThreadCloseFailureReporter = (failure) =>
 			reportChatCloseFailure(mainContext, failure);
 
@@ -133,7 +135,10 @@ const closeSessionSideEffects = (
 		// in-memory removal even if an unexpected teardown defect occurs.
 		yield* teardown.pipe(
 			Effect.ensuring(
-				sessionWatch.remove(sessionId).pipe(
+				Effect.all([
+					sessionWatch.remove(sessionId),
+					attention.remove(sessionId),
+				]).pipe(
 					Effect.flatMap(() =>
 						Effect.logInfo("session close teardown finished", {
 							sessionId,

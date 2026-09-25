@@ -785,6 +785,20 @@ export function useSessionWatch(
 	}, [sessionId, watched]);
 }
 
+export function usePullRequestAttention(
+	orpc: SidecarQueryUtils,
+	sessionId: string,
+	watching: boolean,
+): void {
+	const mutation = useMutation(orpc.sessions.setAttention.mutationOptions());
+	const mutateRef = useRef(mutation.mutate);
+	mutateRef.current = mutation.mutate;
+	useEffect(() => {
+		mutateRef.current({ sessionId, watched: watching });
+		return () => mutateRef.current({ sessionId, watched: false });
+	}, [sessionId, watching]);
+}
+
 /**
  * `sessions.switchToPr` — the ⌘K "Switch to PR" command available on a
  * branch-diff session, resolving to whatever PR GitHub knows about for the
@@ -918,74 +932,11 @@ export type PullRequestMergeStatusParams = {
 	number: number;
 };
 
-/** While `mergeable` is still being computed (`"UNKNOWN"`), regardless of `watched` — see `usePullRequestMergeStatus`. */
-const MERGE_STATUS_UNSETTLED_POLL_MS = 2000;
-
-/**
- * Once `mergeable` has resolved, but only while `watched` — see
- * `usePullRequestMergeStatus`. Faster than `CI_CHECKS_SETTLED_POLL_MS`: a
- * mergeability check is one cheap `gh pr view` call rather than a full
- * checks fetch, and the cost of staying stale here is someone hitting Merge
- * on a PR that quietly went conflicting after a base-branch push — a
- * mistake, not just a stale badge.
- */
-const MERGE_STATUS_SETTLED_POLL_MS = 10000;
-
-/** Stack membership changes with pushes and merges, so the selected PR refreshes at the settled-CI cadence. */
-const STACK_SETTLED_POLL_MS = 60000;
-
-/**
- * `pullRequests.mergeStatus` — PR mergeability plus the repo's enabled merge
- * methods in one query, everything the PR header's Merge button needs to
- * decide its label/enabled state and its method picker. GitHub computes
- * `mergeable` asynchronously, so this re-polls every
- * `MERGE_STATUS_UNSETTLED_POLL_MS` while it's still `"UNKNOWN"` rather than
- * leaving the button stuck on "Checking mergeability…" until something else
- * triggers a refetch. That fast path runs regardless of `watched`, same as
- * `usePullRequestChecks`'s unsettled path — it's normally a few-second
- * GitHub computation, not something worth gating.
- *
- * Once `mergeable` resolves, polling doesn't stop outright the way it used
- * to — a base-branch push after that point can flip a `MERGEABLE` PR to
- * `CONFLICTING` with nothing else to invalidate this query
- * (`refetchOnWindowFocus` is globally off, see `main.tsx`), and the Merge
- * button reading stale mergeability is a real mistake, not just a stale
- * badge. Instead it drops to `MERGE_STATUS_SETTLED_POLL_MS`, but only while
- * `watched` — the same "selected tab + window focus" signal
- * `usePullRequestChecks` gates its own settled poll on — so a background PR
- * tab never spawns a `gh` subprocess of its own. `useRefreshOnWatchedEdge`
- * layers the same immediate refetch on the watched false→true edge.
- *
- * Once the PR itself is no longer open, GitHub stops computing `mergeable`
- * at all and it stays `"UNKNOWN"` forever — checking `state` first is what
- * stops a merged/closed PR from being polled for the rest of the session,
- * watched or not.
- */
 export function usePullRequestMergeStatus(
 	orpc: SidecarQueryUtils,
 	params: PullRequestMergeStatusParams,
-	watched: boolean,
 ): UseQueryResult<PullRequestMergeStatus> {
-	const queryClient = useQueryClient();
-	const query = useQuery({
-		...orpc.pullRequests.mergeStatus.queryOptions({ input: params }),
-		refetchInterval: (query) => {
-			if (query.state.data?.state !== "OPEN") return false;
-			if (query.state.data.mergeable === "UNKNOWN") {
-				return MERGE_STATUS_UNSETTLED_POLL_MS;
-			}
-			return watched ? MERGE_STATUS_SETTLED_POLL_MS : false;
-		},
-	});
-
-	const refresh = useCallback(() => {
-		queryClient.invalidateQueries({
-			queryKey: orpc.pullRequests.mergeStatus.key({ input: params }),
-		});
-	}, [queryClient, orpc, params]);
-	useRefreshOnWatchedEdge(watched, refresh);
-
-	return query;
+	return useQuery(orpc.pullRequests.mergeStatus.liveOptions({ input: params }));
 }
 
 export type PullRequestStackParams = {
@@ -994,26 +945,11 @@ export type PullRequestStackParams = {
 	number: number;
 };
 
-/** `pullRequests.stack` — read-only membership for the PR header badge and stack merge label. */
 export function usePullRequestStack(
 	orpc: SidecarQueryUtils,
 	params: PullRequestStackParams,
-	watched: boolean,
 ): UseQueryResult<PullRequestStack | null> {
-	const queryClient = useQueryClient();
-	const query = useQuery({
-		...orpc.pullRequests.stack.queryOptions({ input: params }),
-		refetchInterval: watched ? STACK_SETTLED_POLL_MS : false,
-	});
-
-	const refresh = useCallback(() => {
-		queryClient.invalidateQueries({
-			queryKey: orpc.pullRequests.stack.key({ input: params }),
-		});
-	}, [queryClient, orpc, params]);
-	useRefreshOnWatchedEdge(watched, refresh);
-
-	return query;
+	return useQuery(orpc.pullRequests.stack.liveOptions({ input: params }));
 }
 
 export type MergePullRequestParams = {
@@ -1028,13 +964,7 @@ export type MergePullRequestError =
 	| InferClientError<SidecarClient["pullRequests"]["merge"]>
 	| Error;
 
-/**
- * `pullRequests.merge`/`mergeStack` — on success writes the confirmed terminal
- * state into this PR's `mergeStatus` cache, then refetches it and the sessions
- * list. The hook-level success handlers are awaited before `isPending` clears;
- * call-level `.mutate` callbacks run after the mutation has already settled,
- * leaving a gap where the button can briefly show its old merge-method label.
- */
+/** Merge mutations refresh the sessions list; the adapter kicks the live GitHub streams. */
 export function useMergePullRequest(
 	orpc: SidecarQueryUtils,
 	onError: (
@@ -1048,55 +978,19 @@ export function useMergePullRequest(
 } {
 	const queryClient = useQueryClient();
 
-	const onSuccess = useCallback(
-		async (params: MergePullRequestParams) => {
-			const mergeStatusKey = orpc.pullRequests.mergeStatus.key({
-				input: {
-					repoRoot: params.repoRoot,
-					owner: params.owner,
-					repo: params.repo,
-					number: params.number,
-				},
-			});
-			const stackKey = orpc.pullRequests.stack.key({
-				input: {
-					owner: params.owner,
-					repo: params.repo,
-					number: params.number,
-				},
-			});
-
-			// A watched PR can have status or stack polls in flight from before the
-			// merge. Cancel them before updating the cache so stale OPEN responses
-			// cannot overwrite the confirmed terminal state or old membership.
-			await Promise.all([
-				queryClient.cancelQueries({ queryKey: mergeStatusKey }),
-				queryClient.cancelQueries({ queryKey: stackKey }),
-			]);
-			queryClient.setQueryData<PullRequestMergeStatus>(
-				mergeStatusKey,
-				(status) =>
-					status === undefined ? status : { ...status, state: "MERGED" },
-			);
-
-			await Promise.all([
-				queryClient.invalidateQueries({ queryKey: mergeStatusKey }),
-				queryClient.invalidateQueries({ queryKey: stackKey }),
-				queryClient.invalidateQueries({
-					queryKey: orpc.sessions.list.queryKey(),
-				}),
-			]);
-		},
-		[queryClient, orpc],
-	);
+	const onSuccess = useCallback(async () => {
+		await queryClient.invalidateQueries({
+			queryKey: orpc.sessions.list.queryKey(),
+		});
+	}, [queryClient, orpc]);
 	const mutation = useMutation({
 		...orpc.pullRequests.merge.mutationOptions(),
-		onSuccess: (_data, params) => onSuccess(params),
+		onSuccess,
 		onError,
 	});
 	const stackMutation = useMutation({
 		...orpc.pullRequests.mergeStack.mutationOptions(),
-		onSuccess: (_data, params) => onSuccess(params),
+		onSuccess,
 		onError,
 	});
 
@@ -1128,22 +1022,11 @@ export type MarkPullRequestReadyParams = {
 	number: number;
 };
 
-/**
- * `pullRequests.markReady` — fires `gh pr ready`, flipping a draft PR to
- * ready for review. `owner`/`repo` aren't part of the wire call itself (`gh
- * pr ready` only needs `repoRoot`/`number`), but are threaded through so the
- * success handler can invalidate this PR's own `mergeStatus` — the same
- * query `useMergePullRequest` invalidates, since `isDraft` drives both the
- * header's menu-item visibility and the merge button's own draft label, and
- * both must update without a manual refresh. On failure, surfaces a toast
- * rather than touching any cached state — there's nothing honest to predict
- * client-side about draft status before the round trip resolves.
- */
+/** `owner`/`repo` identify the adapter's live sources to refresh after marking ready. */
 export function useMarkPullRequestReady(orpc: SidecarQueryUtils): {
 	markReady: (params: MarkPullRequestReadyParams) => void;
 	isPending: boolean;
 } {
-	const queryClient = useQueryClient();
 	const mutation = useMutation({
 		...orpc.pullRequests.markReady.mutationOptions(),
 		onError: (error) => {
@@ -1156,26 +1039,8 @@ export function useMarkPullRequestReady(orpc: SidecarQueryUtils): {
 	});
 
 	const markReady = useCallback(
-		(params: MarkPullRequestReadyParams) => {
-			mutation.mutate(
-				{ repoRoot: params.repoRoot, number: params.number },
-				{
-					onSuccess: () => {
-						queryClient.invalidateQueries({
-							queryKey: orpc.pullRequests.mergeStatus.key({
-								input: {
-									repoRoot: params.repoRoot,
-									owner: params.owner,
-									repo: params.repo,
-									number: params.number,
-								},
-							}),
-						});
-					},
-				},
-			);
-		},
-		[mutation, queryClient, orpc],
+		(params: MarkPullRequestReadyParams) => mutation.mutate(params),
+		[mutation],
 	);
 
 	return { markReady, isPending: mutation.isPending };
@@ -1216,125 +1081,11 @@ export type PullRequestChecksParams = {
 	number: number;
 };
 
-/** While any check is still `"running"`/`"pending"`, regardless of `watched` — see `usePullRequestChecks`. */
-const CI_CHECKS_UNSETTLED_POLL_MS = 10000;
-
-/**
- * Once every check has settled, but only while `watched` — see
- * `usePullRequestChecks`. Slow because a settled PR rarely gets a fresh push
- * or re-run; this just bounds how stale the ring can get without the user
- * doing anything, not a responsiveness guarantee (that's the focus-refetch's
- * job).
- */
-const CI_CHECKS_SETTLED_POLL_MS = 60000;
-
-/**
- * How long `useAwaitingNewCi`'s flag stays sticky after a local commit —
- * the sole clear condition, alongside checks actually going unsettled (see
- * `usePullRequestChecks`'s `refetchInterval`). Commit→push is normally
- * seconds; this only guards against the user committing and never pushing.
- */
-const CI_CHECKS_AWAITING_NEW_CI_TIMEOUT_MS = 120000;
-
-/** `true` iff any check in `checks` is still `"running"`/`"pending"`. */
-const hasUnsettledCheck = (
-	checks: readonly PullRequestCheck[] | undefined,
-): boolean =>
-	checks?.some(
-		(check) => check.status === "running" || check.status === "pending",
-	) === true;
-
-/**
- * Sticky flag `usePullRequestChecks` folds into its `refetchInterval` so a
- * fresh local commit resumes fast polling immediately rather than waiting
- * out the slow settled-poll: at commit time nothing's been pushed yet, so
- * `pullRequests.checks` still reports the old settled state, and a one-shot
- * invalidate on the sidecar's change event would just refetch that same
- * stale data. Set (or re-armed) on a `session-files-changed` event for
- * `sessionId` (the sidecar's live worktree poller noticing local HEAD
- * moved — `apps/desktop/sidecar/live-poll.ts`,
- * `packages/sidecar-api/src/events.ts`), subscribing the same way
- * `useLiveFileChanges` does (shared query key, no extra connection).
- * Clears only on `CI_CHECKS_AWAITING_NEW_CI_TIMEOUT_MS` — once checks are
- * actually unsettled, `refetchInterval`'s own `hasUnsettledCheck` check
- * already forces the fast poll, so a stale-true flag changes nothing.
- */
-const useAwaitingNewCi = (sessionId: string): boolean => {
-	const [awaitingNewCi, setAwaitingNewCi] = useState(false);
-	const timeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(
-		undefined,
-	);
-
-	useSidecarEvent((event) => {
-		if (event.type !== "session-files-changed") return;
-		if (event.sessionId !== sessionId) return;
-		clearTimeout(timeoutRef.current);
-		timeoutRef.current = setTimeout(
-			() => setAwaitingNewCi(false),
-			CI_CHECKS_AWAITING_NEW_CI_TIMEOUT_MS,
-		);
-		setAwaitingNewCi(true);
-	});
-
-	useEffect(() => () => clearTimeout(timeoutRef.current), []);
-
-	return awaitingNewCi;
-};
-
-export type PullRequestChecksOptions = {
-	/** This PR's tab is both the selected one and the window has focus — see `usePullRequestChecks`. */
-	watched: boolean;
-	/** Identifies which session's `session-files-changed` events count as "a new commit for this PR" — see `useAwaitingNewCi`. */
-	sessionId: string;
-};
-
-/**
- * `pullRequests.checks` — every CI check attached to the PR, backing the
- * header's `CiStatus` ring. Polls at `CI_CHECKS_UNSETTLED_POLL_MS` while
- * something is still unsettled, or while `useAwaitingNewCi` is holding its
- * sticky flag open for a fresh local commit — unlike
- * `usePullRequestMergeStatus`'s 2s cadence, CI is slow, so a tight poll
- * would just spam the sidecar with `gh pr view` calls for no visible
- * benefit. Runs regardless of `watched`, since an in-flight check (or a
- * commit someone just made) is exactly what a user left this tab open to
- * wait on.
- *
- * Once every check has settled and no commit is pending, polling doesn't
- * stop outright — a push or re-run on GitHub would otherwise never reach
- * the ring, since nothing else ever invalidates this query
- * (`refetchOnWindowFocus` is globally off, see `main.tsx`). Instead it
- * drops to `CI_CHECKS_SETTLED_POLL_MS`, only while `watched`, and `false`
- * while unwatched — same shape as `pr-view.tsx`'s Files-Changed `watched`,
- * so a background PR tab never spawns a `gh` subprocess.
- * `useRefreshOnWatchedEdge` covers the other common case: an immediate
- * refetch the instant `watched` flips back to true (alt-tab to GitHub/CI
- * and back), without waiting out the slow poll.
- */
 export function usePullRequestChecks(
 	orpc: SidecarQueryUtils,
 	params: PullRequestChecksParams,
-	options: PullRequestChecksOptions,
 ): UseQueryResult<readonly PullRequestCheck[]> {
-	const queryClient = useQueryClient();
-	const awaitingNewCi = useAwaitingNewCi(options.sessionId);
-	const query = useQuery({
-		...orpc.pullRequests.checks.queryOptions({ input: params }),
-		refetchInterval: (query) =>
-			hasUnsettledCheck(query.state.data) || (options.watched && awaitingNewCi)
-				? CI_CHECKS_UNSETTLED_POLL_MS
-				: options.watched
-					? CI_CHECKS_SETTLED_POLL_MS
-					: false,
-	});
-
-	const refresh = useCallback(() => {
-		queryClient.invalidateQueries({
-			queryKey: orpc.pullRequests.checks.key({ input: params }),
-		});
-	}, [queryClient, orpc, params]);
-	useRefreshOnWatchedEdge(options.watched, refresh);
-
-	return query;
+	return useQuery(orpc.pullRequests.checks.liveOptions({ input: params }));
 }
 
 /**
@@ -1382,34 +1133,9 @@ export type Overview = {
 	commits: readonly OverviewCommit[];
 };
 
-/**
- * `overview.get` — the Overview tab's PR description plus its full commit
- * list. Input is built from `session.target`'s own discriminant, mirroring
- * `OverviewInput`: a `"pr"` session carries owner/repo/number, a `"branch"`
- * session carries baseRef/headRef instead. Same polling shape as
- * `usePullRequestChecks` above, just checked across every commit's `checks`
- * rather than one flat list — `CI_CHECKS_UNSETTLED_POLL_MS` while anything
- * in the whole PR is still `"running"`/`"pending"`, regardless of
- * `watched`, same rationale as `usePullRequestChecks`'s own unsettled path.
- *
- * Once everything's settled (also the steady state for a branch session,
- * whose commits never carry `checks` at all), this drops to
- * `CI_CHECKS_SETTLED_POLL_MS` while `watched` rather than stopping outright
- * — reusing the exact interval `usePullRequestChecks` picked, since this
- * backs the same per-commit CI dots the header's ring already summarizes,
- * and the same nothing-else-invalidates-it gap applies (`main.tsx` disables
- * `refetchOnWindowFocus` globally). `useRefreshOnWatchedEdge` covers the
- * same immediate-refetch-on-return edge.
- *
- * `watched` is the caller's `pr-view.tsx`-level `isHeaderWatched` — "this
- * PR's tab is selected and the window has focus" — not a signal scoped to
- * the Overview sub-tab actually being the one on screen, the same
- * broader-than-sub-tab shape `PrHeader`'s CI ring already uses.
- */
 export function useOverview(
 	orpc: SidecarQueryUtils,
 	session: Session,
-	watched: boolean,
 ): UseQueryResult<Overview> {
 	const target = session.target;
 	const input =
@@ -1424,33 +1150,12 @@ export function useOverview(
 			: {
 					repoRoot: session.repoRoot,
 					kind: "branch" as const,
+					sessionId: session.id,
 					baseRef: target.baseRef,
 					headRef: target.headRef,
 				};
 
-	const queryClient = useQueryClient();
-	const query = useQuery({
-		...orpc.overview.get.queryOptions({ input }),
-		refetchInterval: (query) =>
-			query.state.data?.commits.some((commit) =>
-				commit.checks?.some(
-					(check) => check.status === "running" || check.status === "pending",
-				),
-			) === true
-				? CI_CHECKS_UNSETTLED_POLL_MS
-				: watched
-					? CI_CHECKS_SETTLED_POLL_MS
-					: false,
-	});
-
-	const refresh = useCallback(() => {
-		queryClient.invalidateQueries({
-			queryKey: orpc.overview.get.key({ input }),
-		});
-	}, [queryClient, orpc, input]);
-	useRefreshOnWatchedEdge(watched, refresh);
-
-	return query;
+	return useQuery(orpc.overview.get.liveOptions({ input }));
 }
 
 /**
