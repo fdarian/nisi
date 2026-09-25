@@ -114,20 +114,30 @@ describe("gh watch polling", () => {
 					});
 					const kicks = yield* PubSub.unbounded<string>();
 					const reads = yield* Ref.make(0);
-					const values: number[] = [];
-					const late: number[] = [];
+					const values: Array<{
+						readonly status: string;
+						readonly code: number;
+					}> = [];
+					const late: Array<{
+						readonly status: string;
+						readonly code: number;
+					}> = [];
 					const map = yield* makeWatch(
 						{ changes: () => SubscriptionRef.changes(attention) },
 						kicks,
 						() =>
 							Ref.updateAndGet(reads, (count) => count + 1).pipe(
-								Effect.map(() => 1),
+								Effect.map((count) =>
+									count % 2 === 0
+										? { code: 200, status: "same" }
+										: { status: "same", code: 200 },
+								),
 							),
 						(_value, current) =>
 							current.watched ? Duration.seconds(10) : null,
 					);
 					const first = yield* Stream.runForEach(
-						watchFromMap(map, pr),
+						watchFromMap(map, { ...pr, repoRoot: "/other-worktree" }),
 						(value) =>
 							Effect.sync(() => {
 								values.push(value);
@@ -135,7 +145,7 @@ describe("gh watch polling", () => {
 					).pipe(Effect.forkScoped);
 					yield* settle;
 					yield* TestClock.adjust("1 millis");
-					expect(values).toEqual([1]);
+					expect(values).toEqual([{ status: "same", code: 200 }]);
 					const second = yield* Stream.runForEach(
 						watchFromMap(map, pr),
 						(value) =>
@@ -145,20 +155,26 @@ describe("gh watch polling", () => {
 					).pipe(Effect.forkScoped);
 					yield* settle;
 					yield* TestClock.adjust("1 millis");
-					expect(late).toEqual([1]);
+					expect(late).toEqual([{ status: "same", code: 200 }]);
 					expect(yield* Ref.get(reads)).toBe(1);
 					yield* TestClock.adjust("10 seconds");
 					expect(yield* Ref.get(reads)).toBe(2);
-					expect(values).toEqual([1]);
+					expect(values).toEqual([{ status: "same", code: 200 }]);
 					yield* SubscriptionRef.set(attention, {
 						watched: false,
 						awaitingNewCi: false,
 					});
 					yield* TestClock.adjust("1 millis");
-					expect(yield* Ref.get(reads)).toBe(3);
+					expect(yield* Ref.get(reads)).toBe(2);
 					yield* TestClock.adjust("1 minute");
-					expect(yield* Ref.get(reads)).toBe(3);
+					expect(yield* Ref.get(reads)).toBe(2);
 					yield* kick(kicks, pr);
+					yield* TestClock.adjust("1 millis");
+					expect(yield* Ref.get(reads)).toBe(3);
+					yield* SubscriptionRef.set(attention, {
+						watched: true,
+						awaitingNewCi: false,
+					});
 					yield* TestClock.adjust("1 millis");
 					expect(yield* Ref.get(reads)).toBe(4);
 					yield* Fiber.interrupt(first);

@@ -31,7 +31,7 @@ import type {
 } from "@repo/sidecar-api";
 import { contract } from "@repo/sidecar-api";
 import type { Context } from "effect";
-import { Cause, Effect, Exit, Option, Queue, Stream } from "effect";
+import { Cause, Effect, Equal, Exit, Option, Queue, Stream } from "effect";
 import type { ChildProcessSpawner } from "effect/unstable/process";
 import {
 	ChatSessionNotFound,
@@ -1722,9 +1722,8 @@ export function attachRouter(
 							input.headRef,
 						).pipe(Effect.map((commits) => ({ description: null, commits }))),
 					),
-					Stream.changesWith(
-						(current, previous) =>
-							JSON.stringify(current) === JSON.stringify(previous),
+					Stream.changesWith((current, previous) =>
+						Equal.equals(current, previous),
 					),
 					Stream.mapError(mapFailure),
 				);

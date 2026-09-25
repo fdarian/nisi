@@ -1,4 +1,4 @@
-import { type Context, Effect, Exit, Fiber, Stream } from "effect";
+import { type Context, Effect, Exit, Fiber, Option, Stream } from "effect";
 
 export async function* streamToIterator<A, E, R>(
 	stream: Stream.Stream<A, E, R>,
@@ -42,6 +42,8 @@ export async function* streamToIterator<A, E, R>(
 			exit !== undefined &&
 			Exit.isFailure(exit)
 		) {
+			const failure = Exit.findErrorOption(exit);
+			if (Option.isSome(failure)) throw failure.value;
 			await Effect.runPromise(Effect.failCause(exit.cause));
 		}
 	} finally {
