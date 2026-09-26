@@ -96,6 +96,7 @@ export function OpenPullRequestPalette({
 	const { results, error: searchError } = useSearchPullRequests(
 		orpc,
 		debouncedQuery,
+		open,
 	);
 	const searchErrorMessage = friendlySearchError(searchError);
 

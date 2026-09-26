@@ -6,9 +6,10 @@ import {
 } from "../../src/github/gh/checks.ts";
 
 const operation = process.argv[2];
+if (operation === "fetch-truncated") process.env.NISI_TEST_TRUNCATED = "1";
 const input = { repoRoot: "/tmp", owner: "acme", repo: "widgets" };
 const effect = Effect.gen(function* () {
-	if (operation === "fetch")
+	if (operation === "fetch" || operation === "fetch-truncated")
 		return yield* fetchPullRequestChecks({ ...input, number: 42 });
 	yield* approveWorkflowRuns({
 		...input,
