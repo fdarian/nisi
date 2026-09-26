@@ -161,6 +161,8 @@ const dev = Command.make(
 							"-c",
 							JSON.stringify({
 								build: { devUrl: `http://localhost:${vitePort}` },
+								// CEF's framework and helpers need a complete bundle signature to initialize on macOS.
+								bundle: { macOS: { signingIdentity: "-" } },
 							}),
 						],
 						{ env },
