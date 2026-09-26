@@ -71,6 +71,7 @@ import {
 	resolveOpenRequest,
 } from "./open-requests.ts";
 import { AttentionState } from "./pull-request-attention.ts";
+import { RpcLifecyclePlugin } from "./rpc-lifecycle.ts";
 import type { AppServices } from "./services.ts";
 import {
 	forkSessionCloseSideEffects,
@@ -259,7 +260,6 @@ export function bindHealthCheckServer(token: string, port?: number) {
 		},
 	});
 }
-
 /**
  * Swaps `server`'s handler for the full oRPC router via `server.reload` —
  * same port, no restart, so a concurrent liveness check never observes a gap
@@ -1914,11 +1914,18 @@ export function attachRouter(
 		},
 	});
 
+	const lifecycle = new RpcLifecyclePlugin((message, fields) =>
+		runWithMainContext(Effect.logDebug(message, fields)),
+	);
 	const handler = new FetchRPCHandler(router, {
-		plugins: [new CORSHandlerPlugin(), new RequestHeadersHandlerPlugin()],
+		plugins: [
+			new CORSHandlerPlugin(),
+			new RequestHeadersHandlerPlugin(),
+			lifecycle,
+		],
 	});
 	const websocketHandler = new WebSocketRPCHandler(router, {
-		plugins: [new RequestHeadersHandlerPlugin()],
+		plugins: [new RequestHeadersHandlerPlugin(), lifecycle],
 	});
 
 	server.reload({
@@ -1937,32 +1944,12 @@ export function attachRouter(
 			}
 			const activationResponse = nativeActivation(req);
 			if (activationResponse !== undefined) return activationResponse;
-			// Generic per-call timing, covering every procedure without a
-			// per-handler instrumentation pass — `path` doubles as "which
-			// procedure" since RPCHandler routes `sessions.open` etc. to
-			// `/api/sessions/open`. For `events.subscribe`/`walkthrough.generate`
-			// (long-lived streams) `durationMs` reports the subscriber's whole
-			// connected lifetime, not a request/response round trip — that's the
-			// useful number for a stream, not a bug.
-			const startedAt = Date.now();
-			const path = new URL(req.url).pathname;
-			await runWithMainContext(Effect.logDebug("rpc call started", { path }));
-
-			const { matched, response } = await handler.handle(req, {
+			const result = await handler.handle(req, {
 				prefix: "/api",
 				context: { "effect/context": mainContext },
 			});
 
-			await runWithMainContext(
-				Effect.logDebug("rpc call finished", {
-					path,
-					matched,
-					status: response?.status ?? null,
-					durationMs: Date.now() - startedAt,
-				}),
-			);
-
-			if (matched) return response;
+			if (result.matched) return result.response;
 
 			return new Response("not found", { status: 404 });
 		},

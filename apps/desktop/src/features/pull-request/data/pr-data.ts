@@ -974,6 +974,18 @@ export type PullRequestMergeStatusParams = {
 	number: number;
 };
 
+export function retryDisconnectedLiveQuery(
+	_failureCount: number,
+	error: unknown,
+): boolean {
+	return (
+		error instanceof Error &&
+		error.name === "AbortError" &&
+		(error.message.startsWith("WebSocket closed (code ") ||
+			error.message.startsWith("WebSocket reconnect failed after "))
+	);
+}
+
 export function usePullRequestMergeStatus(
 	orpc: SidecarQueryUtils,
 	params: PullRequestMergeStatusParams,
@@ -983,7 +995,7 @@ export function usePullRequestMergeStatus(
 		orpc.pullRequests.mergeStatus.liveOptions({
 			input: params,
 			enabled,
-			retry: true,
+			retry: retryDisconnectedLiveQuery,
 		}),
 	);
 }
@@ -1033,7 +1045,7 @@ export function usePullRequestStack(
 		orpc.pullRequests.stack.liveOptions({
 			input: params,
 			enabled,
-			retry: true,
+			retry: retryDisconnectedLiveQuery,
 		}),
 	);
 }
@@ -1227,7 +1239,7 @@ export function usePullRequestChecks(
 		orpc.pullRequests.checks.liveOptions({
 			input: params,
 			enabled,
-			retry: true,
+			retry: retryDisconnectedLiveQuery,
 		}),
 	);
 }
@@ -1301,7 +1313,11 @@ export function useOverview(
 				};
 
 	return useQuery(
-		orpc.overview.get.liveOptions({ input, enabled, retry: true }),
+		orpc.overview.get.liveOptions({
+			input,
+			enabled,
+			retry: retryDisconnectedLiveQuery,
+		}),
 	);
 }
 

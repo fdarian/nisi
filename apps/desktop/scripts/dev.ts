@@ -196,4 +196,3 @@ Command.run(dev, { version: "0.1.0" }).pipe(
 	Effect.scoped,
 	BunRuntime.runMain,
 );
-
