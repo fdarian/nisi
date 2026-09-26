@@ -30,6 +30,7 @@ type PrStackBadgeProps = {
 	repo: string;
 	number: number;
 	watched: boolean;
+	isSelectedTab: boolean;
 	findExistingSessionId: (params: OpenPullRequestParams) => string | undefined;
 	onSessionOpened: (sessionId: string) => void;
 };
@@ -115,11 +116,15 @@ export function PrStackBadge(
 	props: PrStackBadgeProps,
 ): React.ReactElement | null {
 	const [open, setOpen] = useDismissOnInactive(props.watched);
-	const stackQuery = usePullRequestStack(props.orpc, {
-		owner: props.owner,
-		repo: props.repo,
-		number: props.number,
-	});
+	const stackQuery = usePullRequestStack(
+		props.orpc,
+		{
+			owner: props.owner,
+			repo: props.repo,
+			number: props.number,
+		},
+		props.isSelectedTab,
+	);
 	const openPullRequest = useOpenPullRequest(props.orpc, props.onSessionOpened);
 	const stack = stackQuery.data;
 	if (stack === undefined || stack === null) return null;

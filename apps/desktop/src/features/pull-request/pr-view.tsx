@@ -174,6 +174,7 @@ export function PrView({
 	return (
 		<div className="flex min-h-0 flex-1 flex-col">
 			<PrHeader
+				isSelectedTab={isSelectedTab}
 				onCloseTab={onCloseTab}
 				orpc={orpc}
 				repoRoot={session.repoRoot}
@@ -201,9 +202,9 @@ export function PrView({
 
 				<TabsContent className="flex min-h-0 flex-1" value="overview">
 					<OverviewView
+						enabled={isSelectedTab && tabsValue === "overview"}
 						orpc={orpc}
 						session={session}
-						watched={isHeaderWatched}
 					/>
 				</TabsContent>
 				<TabsContent className="flex min-h-0 flex-1 flex-col" value="files">

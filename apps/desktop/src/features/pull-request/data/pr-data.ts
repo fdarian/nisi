@@ -977,9 +977,14 @@ export type PullRequestMergeStatusParams = {
 export function usePullRequestMergeStatus(
 	orpc: SidecarQueryUtils,
 	params: PullRequestMergeStatusParams,
+	enabled = true,
 ): UseQueryResult<PullRequestMergeStatus> {
 	return useQuery(
-		orpc.pullRequests.mergeStatus.liveOptions({ input: params, retry: true }),
+		orpc.pullRequests.mergeStatus.liveOptions({
+			input: params,
+			enabled,
+			retry: true,
+		}),
 	);
 }
 
@@ -1022,9 +1027,14 @@ export type PullRequestStackParams = {
 export function usePullRequestStack(
 	orpc: SidecarQueryUtils,
 	params: PullRequestStackParams,
+	enabled = true,
 ): UseQueryResult<PullRequestStack | null> {
 	return useQuery(
-		orpc.pullRequests.stack.liveOptions({ input: params, retry: true }),
+		orpc.pullRequests.stack.liveOptions({
+			input: params,
+			enabled,
+			retry: true,
+		}),
 	);
 }
 
@@ -1211,9 +1221,14 @@ export type PullRequestChecksParams = {
 export function usePullRequestChecks(
 	orpc: SidecarQueryUtils,
 	params: PullRequestChecksParams,
+	enabled = true,
 ): UseQueryResult<readonly PullRequestCheck[]> {
 	return useQuery(
-		orpc.pullRequests.checks.liveOptions({ input: params, retry: true }),
+		orpc.pullRequests.checks.liveOptions({
+			input: params,
+			enabled,
+			retry: true,
+		}),
 	);
 }
 
@@ -1265,6 +1280,7 @@ export type Overview = {
 export function useOverview(
 	orpc: SidecarQueryUtils,
 	session: Session,
+	enabled = true,
 ): UseQueryResult<Overview> {
 	const target = session.target;
 	const input =
@@ -1284,7 +1300,9 @@ export function useOverview(
 					headRef: target.headRef,
 				};
 
-	return useQuery(orpc.overview.get.liveOptions({ input, retry: true }));
+	return useQuery(
+		orpc.overview.get.liveOptions({ input, enabled, retry: true }),
+	);
 }
 
 /**

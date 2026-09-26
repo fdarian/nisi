@@ -40,6 +40,7 @@ type PrMergeButtonProps = {
 	number: number;
 	/** This PR's tab is both the selected one and the window has focus — see `usePullRequestMergeStatus` (`pr-data.ts`). */
 	watched: boolean;
+	isSelectedTab: boolean;
 };
 
 const METHOD_LABEL: Record<MergeMethod, string> = {
@@ -182,14 +183,23 @@ export function PrMergeButton({
 	repo,
 	number,
 	watched,
+	isSelectedTab,
 }: PrMergeButtonProps): React.ReactElement {
-	const statusQuery = usePullRequestMergeStatus(orpc, {
-		repoRoot,
-		owner,
-		repo,
-		number,
-	});
-	const stackQuery = usePullRequestStack(orpc, { owner, repo, number });
+	const statusQuery = usePullRequestMergeStatus(
+		orpc,
+		{
+			repoRoot,
+			owner,
+			repo,
+			number,
+		},
+		isSelectedTab,
+	);
+	const stackQuery = usePullRequestStack(
+		orpc,
+		{ owner, repo, number },
+		isSelectedTab,
+	);
 	const [mergeFailure, setMergeFailure] = useState<MergeFailure | null>(null);
 	const handleMergeError = useCallback(
 		(error: MergePullRequestError, params: { number: number }) => {
