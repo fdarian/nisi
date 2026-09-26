@@ -1,6 +1,6 @@
 # nisi
 
-macOS code review tool for GitHub PRs. Tauri 2 desktop app + Bun/Effect sidecar. Two things make it
+macOS code review tool for GitHub PRs. Tauri 3 alpha desktop app (Chromium/CEF runtime) + Bun/Effect sidecar. Two things make it
 more than a diff viewer: **tracked changes** (ticking Reviewed snapshots the file, so the next push
 shows you `reviewed → head`, not the whole file again) and the **walkthrough** (an agent narrates the
 PR, every claim linked to a set of line ranges). Both are built; see `README.md` for what they do and

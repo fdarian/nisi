@@ -351,6 +351,7 @@ fn find_focused_window<R: Runtime>(app: &tauri::AppHandle<R>) -> Option<tauri::W
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let builder = tauri::Builder::default()
+        .runtime(tauri_runtime_cef::Cef::default())
         .menu(build_macos_menu)
         .on_menu_event(|app, event| {
             if event.id() == CLOSE_TAB_MENU_ID {

@@ -1,8 +1,12 @@
 # @repo/desktop
 
-Tauri 2 desktop app: the port/token handshake between Rust and the Bun/Effect sidecar, the
+Tauri 3 alpha desktop app using Chromium/CEF: the port/token handshake between Rust and the Bun/Effect sidecar, the
 sidecar's git/review/walkthrough/settings domains, and a frontend wired to that live contract —
 see `apps/desktop/sidecar/AGENTS.md` for how the sidecar's own pieces fit together.
+
+Native builds require Rust 1.95+, CMake, and Ninja. The first CEF build downloads ~1 GB into
+`~/Library/Caches/tauri-cef`; allow time and space for it. The packaged frontend origin is
+`http://tauri.localhost`.
 
 Three parts, one seam:
 - `src-tauri/` — **Rust, intentionally thin.** Spawns/discovers the sidecar, hands `{ port, token }` to
