@@ -1,6 +1,7 @@
 import type { WithEffectContext } from "@orpc/experimental-effect";
 import { implement } from "@orpc/server";
-import { RPCHandler } from "@orpc/server/fetch";
+import { RPCHandler as FetchRPCHandler } from "@orpc/server/fetch";
+import { RPCHandler as WebSocketRPCHandler } from "@orpc/server/websocket";
 import {
 	CORSHandlerPlugin,
 	RequestHeadersHandlerPlugin,
@@ -1913,8 +1914,11 @@ export function attachRouter(
 		},
 	});
 
-	const handler = new RPCHandler(router, {
+	const handler = new FetchRPCHandler(router, {
 		plugins: [new CORSHandlerPlugin(), new RequestHeadersHandlerPlugin()],
+	});
+	const websocketHandler = new WebSocketRPCHandler(router, {
+		plugins: [new RequestHeadersHandlerPlugin()],
 	});
 
 	server.reload({
@@ -1922,7 +1926,15 @@ export function attachRouter(
 		// (long-lived connections, e.g. the event stream, shouldn't be cut by
 		// Bun's default 10s timeout).
 		idleTimeout: 0,
-		async fetch(req) {
+		async fetch(req, server) {
+			const requestUrl = new URL(req.url);
+			if (requestUrl.pathname === "/api/ws") {
+				if (requestUrl.searchParams.get("token") !== token) {
+					return new Response("unauthorized", { status: 401 });
+				}
+				if (server.upgrade(req, { data: {} })) return;
+				return new Response("websocket upgrade required", { status: 426 });
+			}
 			const activationResponse = nativeActivation(req);
 			if (activationResponse !== undefined) return activationResponse;
 			// Generic per-call timing, covering every procedure without a
@@ -1953,6 +1965,17 @@ export function attachRouter(
 			if (matched) return response;
 
 			return new Response("not found", { status: 404 });
+		},
+		websocket: {
+			message(ws, message) {
+				void websocketHandler.message(ws, message, {
+					prefix: "/api",
+					context: () => ({ "effect/context": mainContext }),
+				});
+			},
+			close(ws) {
+				void websocketHandler.close(ws);
+			},
 		},
 	});
 }

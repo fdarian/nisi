@@ -978,7 +978,9 @@ export function usePullRequestMergeStatus(
 	orpc: SidecarQueryUtils,
 	params: PullRequestMergeStatusParams,
 ): UseQueryResult<PullRequestMergeStatus> {
-	return useQuery(orpc.pullRequests.mergeStatus.liveOptions({ input: params }));
+	return useQuery(
+		orpc.pullRequests.mergeStatus.liveOptions({ input: params, retry: true }),
+	);
 }
 
 const MERGE_STATUS_WAIT_MS = 15000;
@@ -1021,7 +1023,9 @@ export function usePullRequestStack(
 	orpc: SidecarQueryUtils,
 	params: PullRequestStackParams,
 ): UseQueryResult<PullRequestStack | null> {
-	return useQuery(orpc.pullRequests.stack.liveOptions({ input: params }));
+	return useQuery(
+		orpc.pullRequests.stack.liveOptions({ input: params, retry: true }),
+	);
 }
 
 export type MergePullRequestParams = {
@@ -1208,7 +1212,9 @@ export function usePullRequestChecks(
 	orpc: SidecarQueryUtils,
 	params: PullRequestChecksParams,
 ): UseQueryResult<readonly PullRequestCheck[]> {
-	return useQuery(orpc.pullRequests.checks.liveOptions({ input: params }));
+	return useQuery(
+		orpc.pullRequests.checks.liveOptions({ input: params, retry: true }),
+	);
 }
 
 /**
@@ -1278,7 +1284,7 @@ export function useOverview(
 					headRef: target.headRef,
 				};
 
-	return useQuery(orpc.overview.get.liveOptions({ input }));
+	return useQuery(orpc.overview.get.liveOptions({ input, retry: true }));
 }
 
 /**

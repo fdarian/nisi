@@ -1,5 +1,6 @@
 import { createORPCClient } from "@orpc/client";
 import { RPCLink } from "@orpc/client/fetch";
+import { RPCLink as WebSocketRPCLink } from "@orpc/client/websocket";
 import type { RouterContractClient } from "@orpc/contract";
 import type { contract } from "./contract.ts";
 
@@ -38,5 +39,27 @@ export function makeSidecarClient(options: {
 		},
 	});
 
+	return createORPCClient(link);
+}
+
+export function makeWebSocketSidecarClient(options: {
+	readonly port: number;
+	readonly token: string;
+	readonly host?: string;
+}): SidecarClient {
+	const origin = `ws://${options.host ?? "127.0.0.1"}:${options.port}`;
+	const url = new URL("/api/ws", origin);
+	url.searchParams.set("token", options.token);
+	const link = new WebSocketRPCLink({
+		url: "/api",
+		connect: () => new WebSocket(url),
+		reconnect: {
+			enabled: true,
+			delay: (info) => Math.min(500 * 2 ** (info.attempt - 1), 5000),
+			maxAttempt: Number.POSITIVE_INFINITY,
+			onClose: { enabled: true },
+		},
+		headers: { authorization: `Bearer ${options.token}` },
+	});
 	return createORPCClient(link);
 }
