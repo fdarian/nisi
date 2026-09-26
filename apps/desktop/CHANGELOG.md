@@ -1,5 +1,31 @@
 # @repo/desktop
 
+## 0.6.0
+
+### Minor Changes
+
+- 7993e43: Pull requests whose GitHub Actions workflows are waiting for maintainer approval now show that in the CI status, and you can approve them from nisi.
+- 9f43d8b: You can now mark just part of a file's diff as reviewed by selecting lines in Files Changed.
+
+### Patch Changes
+
+- 3f879ec: The desktop app uses Chromium for its interface.
+- 71675b6: Cmd+K palette now supports Ctrl+N/P navigation to move between items.
+- 665f127: Fixed PRs loading forever and tabs refusing to switch when several PRs were open.
+- 530d6e5: The diff selection toolbar no longer floats outside the diff view when the selection scrolls out of bounds.
+- f62077b: Harness settings load promptly even when a coding agent's model discovery is slow or interrupted.
+- 7572cfc: Files Changed diff pane now focuses the file under the mouse pointer. When the pointer moves outside the pane, focus reverts to the current scroll position.
+- 09b7382: Failed merges now show a reason and copyable details, and bottom-of-stack pull requests can merge successfully.
+- aef029b: The model picker now supports Ctrl+N and Ctrl+P to move through results.
+- aac8ad9: Fix Pi harness walkthrough failures when npm is not on the default PATH.
+- 22146fd: Closing a PR tab no longer causes it to briefly reappear before disappearing.
+- 9b93d3c: The Files Changed tree no longer adds a dark outline to the selected file.
+- 0f0205c: A file edited again after you reviewed it now shows the changes since your review, instead of comparing against the original base for lines you had already seen change.
+- 8e9066a: Dragging a line or text selection past the selection toolbar no longer stops the selection or highlights the toolbar.
+- a8fec86: The selection toolbar no longer blocks scrolling, and it glides smoothly to follow your selection as you drag or scroll.
+- 561a56b: Expanding fully reviewed files no longer causes the diff view to fail.
+- 9fcf707: Reviewed walkthrough blocks now collapse to their header, and show "No changes since your last pass" when expanded, instead of the red drift error.
+
 ## 0.5.0
 
 ### Minor Changes
