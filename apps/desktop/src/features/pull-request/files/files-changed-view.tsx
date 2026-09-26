@@ -26,6 +26,7 @@ import {
 	diffContentMatchesQuery,
 	findDiffMatches,
 } from "#/features/diff/diff-search";
+import { demandedFileContentChunks } from "#/features/pull-request/data/file-content-demand";
 import type {
 	FileChange,
 	FileContentsMap,
@@ -52,7 +53,6 @@ import type { DiffPaneHandle } from "#/features/pull-request/files/diff-pane/dif
 import { DiffPane } from "#/features/pull-request/files/diff-pane/diff-pane";
 import { optimisticRangeBaseline } from "#/features/pull-request/files/diff-pane/optimistic-range-baseline";
 import { EditorPickerPalette } from "#/features/pull-request/files/editor-picker/editor-picker-palette";
-import { demandedFileContentChunks } from "#/features/pull-request/files/file-content-demand";
 import type { SearchMode } from "#/features/pull-request/files/sidebar/files-sidebar";
 import { FilesSidebar } from "#/features/pull-request/files/sidebar/files-sidebar";
 import {

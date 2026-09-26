@@ -52,7 +52,6 @@ import {
 	useSetRangeViewed,
 } from "#/features/pull-request/data/pr-data";
 import { useSessionOpenFiles } from "#/features/pull-request/data/session-ui-store";
-import { demandedFileContentChunks } from "#/features/pull-request/files/file-content-demand";
 import type { SidecarQueryUtils } from "#/infra/backend-context";
 import { splitPath } from "#/lib/tree-paths";
 import type { FileDrift, WalkthroughReferenceBlock } from "./walkthrough-data";
@@ -168,16 +167,12 @@ export function ReferencePane({
 		[itemGroups],
 	);
 	// References need every location in the block, regardless of viewport.
-	const demandedChunks = useMemo(
-		() => demandedFileContentChunks(paths, [], null, true),
-		[paths],
-	);
 	const fileContents = useFileContents(
 		orpc,
 		sessionId,
 		paths,
 		NO_FORCED_PATHS,
-		demandedChunks,
+		"all",
 	);
 	const setRangeViewed = useSetRangeViewed(orpc, sessionId);
 	// A reference block can point at a path outside the current diff entirely

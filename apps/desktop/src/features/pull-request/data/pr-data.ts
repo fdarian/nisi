@@ -30,10 +30,10 @@ import {
 	codeIndexLspIntentForStatus,
 	sessionIdsForCodeIndexLspStatus,
 } from "#/features/code-index/lsp/code-index-lsp-events";
-import { FILE_CONTENTS_CHUNK_SIZE } from "#/features/pull-request/files/file-content-demand";
 import { useIncludeUncommitted } from "#/features/settings/settings-data";
 import type { SidecarQueryUtils } from "#/infra/backend-context";
 import { useSidecarEvent } from "#/infra/sidecar-events";
+import { FILE_CONTENTS_CHUNK_SIZE } from "./file-content-demand";
 import { useSetCodeIndexEnabled } from "./session-ui-store";
 
 /**
@@ -328,8 +328,9 @@ const chunkPaths = (
  * independent ones. `includeUncommitted` is sourced from the persisted
  * setting and folded into every chunk's `input` — same cache-key reasoning
  * as `useFileChanges`. Callers still get the same per-path map back; the
- * `demandedChunks` only controls whether each fixed chunk is enabled, not its
- * query key, so cached data and the existing invalidations keep working.
+ * `demandedChunks` controls whether each fixed chunk is enabled (`"all"`
+ * enables every chunk), not its query key, so cached data and the existing
+ * invalidations keep working.
  * A path absent from its chunk's response (not actually part of the diff,
  * or a request still loading with no cached data) reports `content: undefined`
  * with `isError`/`isLoading`
@@ -340,7 +341,7 @@ export function useFileContents(
 	sessionId: string,
 	paths: readonly string[],
 	forcedPaths: ReadonlySet<string>,
-	demandedChunks: ReadonlySet<number>,
+	demandedChunks: ReadonlySet<number> | "all",
 ): FileContentsMap {
 	const [includeUncommitted] = useIncludeUncommitted(orpc);
 	const chunks = useMemo(
@@ -430,7 +431,7 @@ export function useFileContents(
 					includeUncommitted,
 				},
 			}),
-			enabled: demandedChunks.has(index),
+			enabled: demandedChunks === "all" || demandedChunks.has(index),
 		})),
 		combine: combineFileContents,
 	});
