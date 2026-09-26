@@ -39,12 +39,17 @@ against a review session imports from this directory rather than reaching into a
 - `models.ts` — `getHarnessModels`, the per-harness `walkthrough.models`/`refreshModels` path.
   Checks binary presence first, then calls `HarnessModelCache` with the corresponding discovery
   function. A missing CLI returns unavailable even if a previous model list is cached.
-- `sandbox.ts` — `resolveSandboxSettings`: picks `@repo/harness-local`'s `LocalSandboxSettings` mode
+- `sandbox.ts` — `createHarnessSandbox` selects the experimental microsandbox VM (writable repo bind mount) for Claude Code/Codex/OpenCode when requested; otherwise `resolveSandboxSettings` picks `@repo/harness-local`'s `LocalSandboxSettings` mode
   (`"in-place"` vs `"relocated"`) per harness for a given `repoRoot`, and the fixed
   `~/.nisi/harness-sandbox` scratch root relocated mode uses — see `@repo/harness-local`'s own
   AGENTS.md ("Two sandbox modes") for why claude-code/codex/opencode need relocating and Pi doesn't.
   Every caller that constructs a `HarnessAgent` against a review session's worktree goes through this
-  rather than re-deriving the mode itself.
+   rather than re-deriving the mode itself.
+- `microsandbox-runtime.ts` — on first microsandbox use, installs the SHA-512-pinned
+  `@superradcompany/microsandbox-darwin-arm64` platform tarball under
+  `<data dir>/microsandbox/<version>/darwin-arm64/` (honors `NISI_DATA_DIR`), then points the
+  addon, `msb`, and libkrunfw loaders at that cache before importing `ai-microsandbox`.
+  Update its version and integrity together from `pnpm-lock.yaml` when bumping `microsandbox`.
 - `inactive-tools.ts` — `FILE_MUTATING_BUILTINS`: each adapter's builtin tools that write to the
   filesystem, fed to `HarnessAgent`'s `inactiveTools` so an agent stays read-only against the user's
   real worktree. `bash` is deliberately left active in every case — an agent needs it to explore, and

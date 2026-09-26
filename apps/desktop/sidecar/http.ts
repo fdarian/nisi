@@ -38,7 +38,11 @@ import {
 	resolveChatPromptContext,
 } from "./chat/context.ts";
 import { buildChatInstructions } from "./chat/prompt.ts";
-import { closeChatThread, getOrCreateChatSession } from "./chat/sessions.ts";
+import {
+	closeChatThread,
+	getOrCreateChatSession,
+	hasChatSession,
+} from "./chat/sessions.ts";
 import { streamChatTurn } from "./chat/stream.ts";
 import {
 	buildFileOccurrencesResponse,
@@ -126,6 +130,7 @@ const logMergeFailure = (
  */
 const toWireSettings = (settings: {
 	readonly enabledHarnesses: ReadonlyArray<string> | null;
+	readonly sandboxMode: WireSettings["sandboxMode"];
 	readonly sidebarViewMode: WireSettings["sidebarViewMode"];
 	readonly diffStyleMode: WireSettings["diffStyleMode"];
 	readonly preferredEditor: WireSettings["preferredEditor"];
@@ -138,6 +143,7 @@ const toWireSettings = (settings: {
 	readonly diffThemeLight: WireSettings["diffThemeLight"];
 	readonly diffThemeDark: WireSettings["diffThemeDark"];
 }): WireSettings => ({
+	sandboxMode: settings.sandboxMode,
 	enabledHarnesses:
 		settings.enabledHarnesses === null
 			? null
@@ -1030,24 +1036,56 @@ export function attachRouter(
 					throw error;
 				});
 
-				const live = await getOrCreateChatSession(
-					{
-						sessionId: input.sessionId,
-						threadId: input.threadId,
-						harness: input.harness,
-						model: input.model,
-						repoRoot: promptContext.repoRoot,
-						instructions: buildChatInstructions(promptContext),
-					},
-					mainContext,
-				);
+				try {
+					const settingUp = !(await hasChatSession(
+						input.threadId,
+						mainContext,
+					));
+					if (settingUp) {
+						yield {
+							type: "data-sandbox-status",
+							data: { phase: "setting-up" },
+							transient: true,
+						};
+					}
+					const live = await getOrCreateChatSession(
+						{
+							sessionId: input.sessionId,
+							threadId: input.threadId,
+							harness: input.harness,
+							model: input.model,
+							repoRoot: promptContext.repoRoot,
+							instructions: buildChatInstructions(promptContext),
+						},
+						mainContext,
+					);
+					if (settingUp) {
+						yield {
+							type: "data-sandbox-status",
+							data: { phase: "ready" },
+							transient: true,
+						};
+					}
 
-				yield* streamChatTurn({
-					agent: live.agent,
-					session: live.session,
-					message: input.message,
-					abortSignal: signal,
-				});
+					yield* streamChatTurn({
+						agent: live.agent,
+						session: live.session,
+						message: input.message,
+						abortSignal: signal,
+					});
+				} catch (error) {
+					if (!signal?.aborted) {
+						await Effect.runPromise(
+							Effect.logError("chat turn failed", {
+								sessionId: input.sessionId,
+								threadId: input.threadId,
+								harness: input.harness,
+								cause: error instanceof Error ? error.stack : String(error),
+							}).pipe(Effect.provide(mainContext)),
+						);
+					}
+					throw error;
+				}
 			}),
 			closeThread: authed.chat.closeThread.effect(function* ({ input }) {
 				yield* Effect.promise(() =>

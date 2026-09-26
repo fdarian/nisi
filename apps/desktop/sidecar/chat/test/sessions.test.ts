@@ -63,6 +63,7 @@ const paramsFor = (sessionId: string, threadId: string) => ({
 	model: undefined,
 	repoRoot: "/tmp/does-not-need-to-exist",
 	instructions: "test instructions",
+	sandboxMode: "local" as const,
 });
 
 const reportFailure = (_failure: unknown): void => {};
@@ -176,6 +177,8 @@ describe("closeChatThreadsForSession", () => {
 		const pending = chatSessions.getOrCreateChatSession(
 			paramsFor(sessionId, threadId),
 		);
+		expect(chatSessions.hasChatSession(threadId)).toBe(true);
+		await Promise.resolve();
 		const resolve = resolvePendingCreateSession;
 		if (resolve === undefined) {
 			throw new Error("fake createSession did not expose its resolver");

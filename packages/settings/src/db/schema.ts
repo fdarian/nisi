@@ -47,6 +47,7 @@ export const settings = sqliteTable("settings", {
 	includeUncommitted: integer({ mode: "boolean" }).notNull().default(false),
 	/** Same `ALTER TABLE ADD COLUMN` default story as `hideReviewed` above. */
 	wrapLines: integer({ mode: "boolean" }).notNull().default(false),
+	sandboxMode: text().notNull().default("local"),
 	/**
 	 * Gates the entire walkthrough feature (the tab, its keyboard shortcuts,
 	 * and the harness configuration UI). Defaults to `false` — the walkthrough

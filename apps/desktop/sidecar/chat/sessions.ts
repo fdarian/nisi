@@ -1,9 +1,9 @@
 import { HarnessAgent, type HarnessAgentSession } from "@ai-sdk/harness/agent";
-import { createLocalSandbox } from "@repo/harness-local";
+import { SettingsStore } from "@repo/settings";
 import type { HarnessId } from "@repo/sidecar-api";
 import { Context, Effect, Layer } from "effect";
 import { createHarnessAdapter } from "../harness/harnesses.ts";
-import { resolveSandboxSettings } from "../harness/sandbox.ts";
+import { createHarnessSandbox } from "../harness/sandbox.ts";
 import type { AppServices } from "../services.ts";
 
 /**
@@ -53,13 +53,16 @@ export type ChatSessionParams = {
 	readonly model: string | undefined;
 	readonly repoRoot: string;
 	readonly instructions: string;
+	readonly sandboxMode: "local" | "microsandbox";
 };
 
 const startChatSession = async (
 	params: ChatSessionParams,
 ): Promise<LiveChatSession> => {
-	const sandbox = createLocalSandbox(
-		resolveSandboxSettings(params.harness, params.repoRoot),
+	const sandbox = await createHarnessSandbox(
+		params.harness,
+		params.repoRoot,
+		params.sandboxMode,
 	);
 	// No `inactiveTools` — chat gets every adapter builtin (write, edit, bash,
 	// all of it). Unlike `walkthrough/generate.ts`, which passes
@@ -69,6 +72,7 @@ const startChatSession = async (
 	// do things, not just look.
 	const agent = new HarnessAgent({
 		harness: createHarnessAdapter(params.harness, params.model),
+		model: params.model,
 		sandbox: sandbox.provider,
 		sandboxConfig: { workDir: sandbox.workDir },
 		instructions: params.instructions,
@@ -149,6 +153,8 @@ export class ChatSessions extends Context.Service<ChatSessions>()(
 				trackThread(params.sessionId, params.threadId);
 				return pending;
 			};
+			const hasChatSession = (threadId: string): boolean =>
+				liveThreads.has(threadId);
 
 			/**
 			 * Stops the underlying harness session (releasing its sandbox/port/
@@ -199,6 +205,7 @@ export class ChatSessions extends Context.Service<ChatSessions>()(
 			};
 
 			return {
+				hasChatSession,
 				getOrCreateChatSession,
 				closeChatThread,
 				closeChatThreadsForSession,
@@ -209,8 +216,8 @@ export class ChatSessions extends Context.Service<ChatSessions>()(
 	static readonly layer = Layer.effect(this, this.make);
 }
 
-const runEffect = <A>(
-	effect: Effect.Effect<A, never, AppServices>,
+const runEffect = <A, E>(
+	effect: Effect.Effect<A, E, AppServices>,
 	mainContext: Context.Context<AppServices>,
 ): Promise<A> => Effect.runPromise(Effect.provide(effect, mainContext));
 
@@ -229,11 +236,29 @@ const runEffect = <A>(
  * service, with nothing Effect-specific in the way.
  */
 export const getOrCreateChatSession = (
-	params: ChatSessionParams,
+	params: Omit<ChatSessionParams, "sandboxMode">,
 	mainContext: Context.Context<AppServices>,
 ): Promise<LiveChatSession> =>
-	runEffect(ChatSessions, mainContext).then((chatSessions) =>
-		chatSessions.getOrCreateChatSession(params),
+	runEffect(
+		Effect.gen(function* () {
+			const chatSessions = yield* ChatSessions;
+			const settings = yield* SettingsStore;
+			return { chatSessions, mode: (yield* settings.get()).sandboxMode };
+		}),
+		mainContext,
+	).then((result) =>
+		result.chatSessions.getOrCreateChatSession({
+			...params,
+			sandboxMode: result.mode,
+		}),
+	);
+
+export const hasChatSession = (
+	threadId: string,
+	mainContext: Context.Context<AppServices>,
+): Promise<boolean> =>
+	runEffect(ChatSessions, mainContext).then((sessions) =>
+		sessions.hasChatSession(threadId),
 	);
 
 export const closeChatThread = (

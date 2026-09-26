@@ -79,6 +79,22 @@ describe("SettingsStore", () => {
 		});
 	});
 
+	test("sandbox choice persists alongside other settings", async () => {
+		await withTempDataDir(async (dataDir) => {
+			const result = await run(
+				dataDir,
+				Effect.gen(function* () {
+					const store = yield* SettingsStore;
+					yield* store.update({ sandboxMode: "microsandbox" });
+					yield* store.update({ sidebarViewMode: "flat" });
+					return yield* store.get();
+				}),
+			);
+			expect(result.sandboxMode).toBe("microsandbox");
+			expect(result.sidebarViewMode).toBe("flat");
+		});
+	});
+
 	test("update() returns the merged settings directly", async () => {
 		await withTempDataDir(async (dataDir) => {
 			const updated = await run(

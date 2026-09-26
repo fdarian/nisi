@@ -37,6 +37,7 @@ import type { SidecarQueryUtils } from "#/infra/backend-context";
 
 const DEFAULT_SETTINGS: Settings = {
 	enabledHarnesses: ["claude-code", "codex"],
+	sandboxMode: "local",
 	sidebarViewMode: "tree",
 	diffStyleMode: "unified",
 	preferredEditor: null,

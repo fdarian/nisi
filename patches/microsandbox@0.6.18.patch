@@ -1,0 +1,19 @@
+diff --git a/dist/internal/napi.js b/dist/internal/napi.js
+index b25c1230066b1d2e5041b3d555d9ad8e10a02c07..775a5130d61b72653819c68def98910280160c6e 100644
+--- a/dist/internal/napi.js
++++ b/dist/internal/napi.js
+@@ -1,13 +1,10 @@
+-import { createRequire } from "node:module";
++import native from "../../native/index.cjs";
+ import { msbPath } from "./resolve-binary.js";
+ // Resolve the bundled runtime binary once and push it into the Rust
+ // resolver's SDK tier. User-provided MSB_PATH still wins — Rust reads it
+ // natively as its highest-precedence tier — so we don't duplicate the
+ // env-var read here.
+ const resolvedMsbPath = msbPath();
+-const require = createRequire(import.meta.url);
+-// eslint-disable-next-line @typescript-eslint/no-require-imports
+-const native = require("../../native/index.cjs");
+ if (resolvedMsbPath)
+     native.setRuntimeMsbPath?.(resolvedMsbPath);
+ export const napi = native;

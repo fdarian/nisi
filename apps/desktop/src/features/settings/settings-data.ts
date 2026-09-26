@@ -13,6 +13,7 @@ import type { SidecarQueryUtils } from "#/infra/backend-context";
 
 export type SidebarViewMode = "tree" | "flat";
 export type DiffStyleMode = "unified" | "split";
+export type SandboxMode = "local" | "microsandbox";
 
 export type Settings = {
 	/**
@@ -21,6 +22,7 @@ export type Settings = {
 	 * See `@repo/settings`'s `Settings.enabledHarnesses` doc for the full story.
 	 */
 	enabledHarnesses: readonly HarnessId[] | null;
+	sandboxMode: SandboxMode;
 	sidebarViewMode: SidebarViewMode;
 	diffStyleMode: DiffStyleMode;
 	/**
@@ -67,6 +69,7 @@ export type Settings = {
  */
 const DEFAULT_SETTINGS: Settings = {
 	enabledHarnesses: null,
+	sandboxMode: "local",
 	sidebarViewMode: "tree",
 	diffStyleMode: "unified",
 	preferredEditor: null,

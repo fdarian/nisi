@@ -9,7 +9,7 @@ SQLite, no process spawning, no network. Depends on `@repo/git` for the diff mod
 (`Hunk`/`parseHunks`, `FileChange`) but does no I/O of its own — every function here takes
 already-fetched data (a patch string, a line count) rather than reading files or shelling out.
 Feeds `packages/sidecar-api`'s `walkthrough` contract; consumed by the sidecar together with
-`@repo/harness-local` (the actual agent transport — this package doesn't know it exists).
+the sidecar's sandbox provider (this package doesn't know it exists).
 
 - `schema.ts` — `Walkthrough`/`Section`/`ReferenceBlock`/`Location` (Effect Schema), plus
   `walkthroughJsonSchema`, generated via `Schema.toJsonSchemaDocument` — never hand-written, so

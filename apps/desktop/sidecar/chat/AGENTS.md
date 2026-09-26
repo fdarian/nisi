@@ -28,14 +28,16 @@ own connection.
   `http.ts`'s `sessions.close` handler calls `closeChatThreadsForSession` the same way it already
   stops `walkthrough`'s live session. A thread's `pending` field is the in-flight construction
   *promise*, not the resolved session, so two `chat.send` calls racing on a brand-new thread both
-  await the same construction instead of each starting (and leaking) their own sandbox. The three
-  module-level `getOrCreateChatSession`/`closeChatThread`/`closeChatThreadsForSession` exports are
+  await the same construction instead of each starting (and leaking) their own sandbox. The
+  module-level `getOrCreateChatSession`/`hasChatSession`/`closeChatThread`/`closeChatThreadsForSession` exports are
   the promise-returning bridge `chat.send`'s plain `async function*` handler calls — it can't
   `yield*` the service directly (see that handler's own comment in `http.ts`) — pulling
   `ChatSessions` out of the same captured `mainContext` every `.effect()` handler gets implicitly,
   the same bridge `context.ts`'s `resolveChatPromptContext` and `walkthrough/generate.ts` use. Gone
   on sidecar restart, same posture as `walkthrough/live-sessions.ts` — chat threads are ephemeral by
   design (`packages/sidecar-api/src/chat.ts`'s doc), no stored fallback to reattach to.
+- `http.ts` emits transient `data-sandbox-status` chunks around a new thread's session creation;
+  `hasChatSession` includes pending constructions, so an existing thread goes straight to its turn.
 - `stream.ts` — `streamChatTurn`: runs one turn and forwards it as AI SDK's own `UIMessageChunk`
   stream — no hand-rolled `fullStream` projection the way `walkthrough/generate.ts`'s turn loop has
   one. Calls the *standalone* `toUIMessageStream({ stream, tools })` helper from `ai`, not

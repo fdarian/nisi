@@ -1,10 +1,10 @@
 # @repo/harness-local
 
-`HarnessV1SandboxProvider` for AI SDK's `HarnessAgent` (`@ai-sdk/harness`), implemented over
+The local `HarnessV1SandboxProvider` for AI SDK's `HarnessAgent` (`@ai-sdk/harness`), implemented over
 `node:child_process` + `node:fs` instead of a virtual filesystem or a remote sandbox. This package
-exists because the two shipped providers — `@ai-sdk/sandbox-vercel` (remote-only) and
+exists because the hosted and virtual-filesystem providers — `@ai-sdk/sandbox-vercel` (remote-only) and
 `@ai-sdk/sandbox-just-bash` (a JS-reimplemented bash over an *in-memory* filesystem, despite the
-name) — can't run a coding CLI against the user's actual git worktree. This package's sessions
+name) — can't run a coding CLI directly against the user's actual git worktree. This package's sessions
 operate directly on real disk, so `writeTextFile`, `run`, `spawn`, etc. do exactly what they say.
 
 Template: `@ai-sdk/sandbox-just-bash`'s own source (`node_modules/.bun/@ai-sdk+sandbox-just-bash@*/…/src/`,

@@ -40,6 +40,9 @@ import m0011 from "../drizzle/20260830144031_black_shadowcat/migration.sql" with
 import m0012 from "../drizzle/20260905104645_messy_vertigo/migration.sql" with {
 	type: "text",
 };
+import m0013 from "../drizzle/20260924025309_goofy_peter_quill/migration.sql" with {
+	type: "text",
+};
 
 export default {
 	migrations: [
@@ -56,5 +59,6 @@ export default {
 		{ name: "20260830105025_thick_nebula", sql: m0010 },
 		{ name: "20260830144031_black_shadowcat", sql: m0011 },
 		{ name: "20260905104645_messy_vertigo", sql: m0012 },
+		{ name: "20260924025309_goofy_peter_quill", sql: m0013 },
 	],
 };

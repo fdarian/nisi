@@ -32,11 +32,17 @@ libsql, whose native addon has no way into the binary.
 **There is no source tree at runtime.** Migrations are embedded as text imports rather than read
 from a `drizzle/` folder that won't exist.[^migrations]
 
-**Only *static* asset specifiers get embedded.** `new URL(`./bridge/${name}`, import.meta.url)` is
-invisible to the compiler, yet `import.meta.url` is still rewritten to a virtual `/$bunfs/...` path
-— so the computed path resolves to nothing and fails as `ENOENT: /$bunfs/bridge/package.json`.
-`import x from "./f" with { type: "text" }` is inlined as a string literal and survives. This is what
-three of the five `@ai-sdk/harness*` patches do.
+**Only *static* asset specifiers get embedded.** Computed asset paths are invisible to the compiler;
+`import x from "./f" with { type: "text" }` is inlined as a string literal and survives. The
+Claude Code, Codex, and OpenCode adapters pass literal bridge asset URLs to `createReadBridgeAsset`,
+which reads them at runtime. Their patches (`patches/@ai-sdk%2Fharness-claude-code@1.0.127.patch`,
+`patches/@ai-sdk%2Fharness-codex@1.0.125.patch`, and
+`patches/@ai-sdk%2Fharness-opencode@1.0.125.patch`) replace those reads with static text imports.
+The shared `@ai-sdk/harness` package only implements the reader and has no bridge assets of its own.
+The separate `patches/microsandbox@0.6.18.patch` makes the native loader a static import so
+the compiler can resolve it.
+Verify agent turns in a compiled build after upgrading harness packages — a successful
+`bun run sidecar` turn does not exercise that path.
 
 Same class, different library: `@earendil-works/pi-ai` loads its OAuth flows through a computed
 `import()` (`dist/auth/oauth/load.js`), so the compiled sidecar has no source tree to resolve them
@@ -83,13 +89,6 @@ instead of the one just built (`ps aux | grep com.nisi` shows which is which). R
 protocol in `apps/desktop/AGENTS.md`, then drive `walkthrough.refreshHarnesses` through
 `makeSidecarClient` (`@repo/sidecar-api`) pointed at that sidecar's `{ port, token }` — no need to
 hand-roll the oRPC wire format over raw `curl`.
-
-# The patches are load-bearing and silent
-
-All five `@ai-sdk/harness*` patches are pinned to exact versions and registered in
-`pnpm-workspace.yaml` (not `package.json` — pnpm 10+ ignores that key there without warning). A
-version bump drops them with no error: the build succeeds and the failure shows up at runtime, in
-the packaged app. **Re-verify a compiled build whenever a harness package is bumped.**
 
 [^path-rule]: PATH widening (packages/harness-local/AGENTS.md)
 [^migrations]: applyEmbeddedMigrations (packages/db/AGENTS.md)

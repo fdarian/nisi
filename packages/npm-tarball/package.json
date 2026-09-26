@@ -1,5 +1,5 @@
 {
-	"name": "@repo/code-lsp",
+	"name": "@repo/npm-tarball",
 	"version": "0.1.0",
 	"private": true,
 	"type": "module",
@@ -12,9 +12,7 @@
 		"test": "bun test"
 	},
 	"dependencies": {
-		"@repo/npm-tarball": "workspace:*",
-		"effect": "catalog:",
-		"typescript": "7.0.2"
+		"effect": "catalog:"
 	},
 	"devDependencies": {
 		"@effect/platform-bun": "catalog:",

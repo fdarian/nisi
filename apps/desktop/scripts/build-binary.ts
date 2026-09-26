@@ -41,6 +41,7 @@ const buildBinary = (entrypoint: string, outfile: string) =>
 			"build",
 			"--compile",
 			"--target=bun-darwin-arm64",
+			"--external=@superradcompany/microsandbox-darwin-arm64",
 			entrypoint,
 			"--outfile",
 			outfile,

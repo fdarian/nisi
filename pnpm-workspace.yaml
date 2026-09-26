@@ -18,17 +18,18 @@ minimumReleaseAgeExclude:
   - '@pierre/diffs@1.5.1'
   - '@tanstack/router-core@1.171.19'
   - '@tanstack/router-generator@1.167.25'
-  - '@ai-sdk/gateway@4.0.67'
-  - '@ai-sdk/harness@1.0.91'
-  - '@ai-sdk/provider-utils@5.0.32'
-  - ai@7.0.83
-  - '@ai-sdk/harness-claude-code@1.0.94'
-  - '@ai-sdk/harness-codex@1.0.93'
-  - '@ai-sdk/harness-opencode@1.0.92'
-  - '@ai-sdk/harness-pi@1.0.93'
-  - '@ai-sdk/mcp@2.0.39'
-  - '@ai-sdk/react@4.0.86'
+  - '@ai-sdk/gateway@4.0.67 || 4.0.91'
+  - '@ai-sdk/harness@1.0.91 || 1.0.123'
+  - '@ai-sdk/provider-utils@5.0.32 || 5.0.47'
+  - ai@7.0.83 || 7.0.113
+  - '@ai-sdk/harness-claude-code@1.0.94 || 1.0.127'
+  - '@ai-sdk/harness-codex@1.0.93 || 1.0.125'
+  - '@ai-sdk/harness-opencode@1.0.92 || 1.0.125'
+  - '@ai-sdk/harness-pi@1.0.93 || 1.0.125'
+  - '@ai-sdk/mcp@2.0.39 || 2.0.57'
+  - '@ai-sdk/react@4.0.86 || 4.0.116'
   - devsess@0.3.0 || 0.3.2
+  - '@ai-sdk/provider@4.0.18'
 packageExtensions:
   bun-types:
     dependencies:
@@ -55,8 +56,8 @@ packageExtensions:
     optionalDependencies:
       "@shikijs/themes": "4.4.3"
 patchedDependencies:
-  "@ai-sdk/harness@1.0.91": patches/@ai-sdk%2Fharness@1.0.91.patch
-  "@ai-sdk/harness-claude-code@1.0.94": patches/@ai-sdk%2Fharness-claude-code@1.0.94.patch
-  "@ai-sdk/harness-codex@1.0.93": patches/@ai-sdk%2Fharness-codex@1.0.93.patch
-  "@ai-sdk/harness-opencode@1.0.92": patches/@ai-sdk%2Fharness-opencode@1.0.92.patch
+  "@ai-sdk/harness-claude-code@1.0.127": patches/@ai-sdk%2Fharness-claude-code@1.0.127.patch
+  "@ai-sdk/harness-codex@1.0.125": patches/@ai-sdk%2Fharness-codex@1.0.125.patch
+  "@ai-sdk/harness-opencode@1.0.125": patches/@ai-sdk%2Fharness-opencode@1.0.125.patch
   "@pierre/diffs@1.5.1": patches/@pierre%2Fdiffs@1.5.1.patch
+  microsandbox@0.6.18: patches/microsandbox@0.6.18.patch
