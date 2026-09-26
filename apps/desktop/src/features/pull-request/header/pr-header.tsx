@@ -42,6 +42,7 @@ type PrHeaderProps = {
 	onCloseTab: () => void;
 	/** This PR's tab is both selected and focused; controls menu visibility. */
 	watched: boolean;
+	isSelectedTab: boolean;
 	findExistingSessionId: (params: OpenPullRequestParams) => string | undefined;
 	onSessionOpened: (sessionId: string) => void;
 };
@@ -52,8 +53,7 @@ type MarkReadyMenuItemProps = {
 	owner: string;
 	repo: string;
 	number: number;
-	/** This PR's tab is both the selected one and the window has focus — see `usePullRequestMergeStatus` (`pr-data.ts`). */
-	watched: boolean;
+	isSelectedTab: boolean;
 };
 
 /**
@@ -71,13 +71,18 @@ function MarkReadyMenuItem({
 	owner,
 	repo,
 	number,
+	isSelectedTab,
 }: MarkReadyMenuItemProps): React.ReactElement | null {
-	const statusQuery = usePullRequestMergeStatus(orpc, {
-		repoRoot,
-		owner,
-		repo,
-		number,
-	});
+	const statusQuery = usePullRequestMergeStatus(
+		orpc,
+		{
+			repoRoot,
+			owner,
+			repo,
+			number,
+		},
+		isSelectedTab,
+	);
 	const { markReady, isPending } = useMarkPullRequestReady(orpc);
 
 	if (statusQuery.data?.isDraft !== true) return null;
@@ -100,6 +105,7 @@ export function PrHeader({
 	stat,
 	onCloseTab,
 	watched,
+	isSelectedTab,
 	findExistingSessionId,
 	onSessionOpened,
 }: PrHeaderProps): React.ReactElement {
@@ -125,6 +131,7 @@ export function PrHeader({
 									<div className="flex items-center gap-1.5">
 										<span>#{target.number}</span>
 										<PrStackBadge
+											isSelectedTab={isSelectedTab}
 											number={target.number}
 											orpc={orpc}
 											owner={target.owner}
@@ -158,6 +165,7 @@ export function PrHeader({
 			{target.kind === "pr" && (
 				<div className="flex items-center gap-1">
 					<PrCiStatus
+						isSelectedTab={isSelectedTab}
 						number={target.number}
 						orpc={orpc}
 						owner={target.owner}
@@ -166,6 +174,7 @@ export function PrHeader({
 						watched={watched}
 					/>
 					<PrMergeButton
+						isSelectedTab={isSelectedTab}
 						number={target.number}
 						orpc={orpc}
 						owner={target.owner}
@@ -194,12 +203,12 @@ export function PrHeader({
 				<DropdownMenuContent align="end">
 					{target.kind === "pr" && (
 						<MarkReadyMenuItem
+							isSelectedTab={isSelectedTab}
 							number={target.number}
 							orpc={orpc}
 							owner={target.owner}
 							repo={target.repo}
 							repoRoot={repoRoot}
-							watched={watched}
 						/>
 					)}
 					<DropdownMenuItem onClick={onCloseTab}>Close tab</DropdownMenuItem>

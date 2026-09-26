@@ -106,6 +106,28 @@ const AwaitingWorkflowRuns = Schema.Struct({
 	),
 });
 
+const AwaitingWorkflowRunsForRepo = Schema.Struct({
+	total_count: Schema.Number,
+	workflow_runs: Schema.Array(
+		Schema.Struct({
+			id: Schema.Number,
+			name: Schema.String,
+			html_url: Schema.String,
+			head_sha: Schema.String,
+		}),
+	),
+});
+
+const decodeRepoWorkflowRuns = (raw: string) =>
+	Schema.decodeUnknownEffect(
+		Schema.fromJsonString(AwaitingWorkflowRunsForRepo),
+	)(raw).pipe(
+		Effect.mapError(
+			(cause) =>
+				new GhOutputDecodeError({ command: "gh api actions/runs", raw, cause }),
+		),
+	);
+
 export const decodeAwaitingWorkflowRuns = (command: string, raw: string) =>
 	Schema.decodeUnknownEffect(Schema.fromJsonString(AwaitingWorkflowRuns))(
 		raw,
@@ -113,17 +135,19 @@ export const decodeAwaitingWorkflowRuns = (command: string, raw: string) =>
 		Effect.mapError(
 			(cause) => new GhOutputDecodeError({ command, raw, cause }),
 		),
-		Effect.map(
-			(result): ReadonlyArray<PullRequestCheck> =>
-				result.workflow_runs.map((run) => ({
-					name: run.name,
-					workflowName: run.name,
-					status: "awaiting_approval",
-					detailsUrl: run.html_url,
-					workflowRunId: run.id,
-				})),
-		),
+		Effect.map((result) => toAwaitingWorkflowChecks(result.workflow_runs)),
 	);
+
+const toAwaitingWorkflowChecks = (
+	runs: readonly { id: number; name: string; html_url: string }[],
+): ReadonlyArray<PullRequestCheck> =>
+	runs.map((run) => ({
+		name: run.name,
+		workflowName: run.name,
+		status: "awaiting_approval",
+		detailsUrl: run.html_url,
+		workflowRunId: run.id,
+	}));
 
 /** GitHub's zero-value `DateTime` — how an unset `completedAt`/`startedAt` prints, never a real timestamp. */
 const NO_TIMESTAMP = "0001-01-01T00:00:00Z";
@@ -207,21 +231,38 @@ export const toPullRequestCheck = (
 		? toCheckRunResult(view)
 		: toStatusContextResult(view);
 
-/**
- * `gh pr view <number> --json statusCheckRollup,headRefOid` plus the Actions
- * runs awaiting approval for that head SHA — every CI check attached to
- * a PR, GitHub Actions (`CheckRun`) and external status integrations
- * (`StatusContext`) alike, in the order `gh` reports them (never sorted —
- * that ordering is GitHub's own). `input.owner`/`input.repo` aren't used by
- * the `gh` call itself — like `fetchPullRequestMergeability`, `repoRoot`
- * alone scopes it, since `gh` resolves the repo from the checkout it runs in
- * — kept only so this call's input shape matches `mergeStatus`'s at the
- * contract layer. Failure classification mirrors
- * `fetchPullRequestMergeability`: auth → rate-limited → not-found, the same
- * three-way split every other PR-scoped `gh pr view` caller here uses. A PR
- * with no CI configured legitimately decodes to an empty array (confirmed
- * live), not a failure.
- */
+const runChecksGh = (
+	input: FetchPullRequestChecksInput,
+	args: readonly string[],
+	kind: "pr" | "api",
+) =>
+	Effect.gen(function* () {
+		const result = yield* ghResult(input.repoRoot, args);
+		if (result.exitCode === 0) return result.stdout;
+		if (isAuthFailure(result)) {
+			return yield* new GhNotAuthenticated({ reason: result.stderr.trim() });
+		}
+		if (isRateLimited(result.stderr)) {
+			return yield* new GhRateLimited({ reason: result.stderr.trim() });
+		}
+		if (kind === "pr") {
+			return yield* new PullRequestNotFound({
+				repoRoot: input.repoRoot,
+				number: input.number,
+				reason: result.stderr.trim(),
+			});
+		}
+		return yield* new GitCommandError({
+			command: "gh",
+			args,
+			cwd: input.repoRoot,
+			exitCode: result.exitCode,
+			stderr: result.stderr,
+			cause: new Error(result.stderr),
+		});
+	});
+
+/** Runs the PR rollup and approval-waiting Actions lookup concurrently, falling back to a SHA-scoped lookup when the repo page is truncated. */
 export const fetchPullRequestChecks = (
 	input: FetchPullRequestChecksInput,
 ): Effect.Effect<
@@ -230,56 +271,46 @@ export const fetchPullRequestChecks = (
 	ChildProcessSpawner.ChildProcessSpawner
 > =>
 	Effect.gen(function* () {
-		const result = yield* ghResult(input.repoRoot, [
-			"pr",
-			"view",
-			String(input.number),
-			"--json",
-			"statusCheckRollup,headRefOid",
-		]);
-
-		if (result.exitCode !== 0) {
-			if (isAuthFailure(result)) {
-				return yield* new GhNotAuthenticated({
-					reason: result.stderr.trim() || "gh is not authenticated",
-				});
-			}
-			if (isRateLimited(result.stderr)) {
-				return yield* new GhRateLimited({ reason: result.stderr.trim() });
-			}
-			return yield* new PullRequestNotFound({
-				repoRoot: input.repoRoot,
-				number: input.number,
-				reason: result.stderr.trim(),
-			});
-		}
-
-		const view = yield* decodeStatusCheckRollupView(
-			"gh pr view",
-			result.stdout,
+		const repoRunsEndpoint = `repos/${input.owner}/${input.repo}/actions/runs?status=action_required&per_page=100`;
+		const outputs = yield* Effect.all(
+			[
+				runChecksGh(
+					input,
+					[
+						"pr",
+						"view",
+						String(input.number),
+						"--json",
+						"statusCheckRollup,headRefOid",
+					],
+					"pr",
+				),
+				runChecksGh(input, ["api", repoRunsEndpoint], "api"),
+			],
+			{ concurrency: 2 },
 		);
-		const endpoint = `repos/${input.owner}/${input.repo}/actions/runs?head_sha=${encodeURIComponent(view.headRefOid)}&status=action_required`;
-		const runs = yield* ghResult(input.repoRoot, ["api", endpoint]);
-		if (runs.exitCode !== 0) {
-			if (isAuthFailure(runs)) {
-				return yield* new GhNotAuthenticated({ reason: runs.stderr.trim() });
-			}
-			if (isRateLimited(runs.stderr)) {
-				return yield* new GhRateLimited({ reason: runs.stderr.trim() });
-			}
-			return yield* new GitCommandError({
-				command: "gh",
-				args: ["api", endpoint],
-				cwd: input.repoRoot,
-				exitCode: runs.exitCode,
-				stderr: runs.stderr,
-				cause: new Error(runs.stderr),
-			});
-		}
-		const awaiting = yield* decodeAwaitingWorkflowRuns(
-			"gh api actions/runs",
-			runs.stdout,
-		);
+
+		const view = yield* decodeStatusCheckRollupView("gh pr view", outputs[0]);
+		const repoPage = yield* decodeRepoWorkflowRuns(outputs[1]);
+		const awaiting =
+			repoPage.total_count <= repoPage.workflow_runs.length
+				? toAwaitingWorkflowChecks(
+						repoPage.workflow_runs.filter(
+							(run) => run.head_sha === view.headRefOid,
+						),
+					)
+				: yield* runChecksGh(
+						input,
+						[
+							"api",
+							`repos/${input.owner}/${input.repo}/actions/runs?head_sha=${encodeURIComponent(view.headRefOid)}&status=action_required`,
+						],
+						"api",
+					).pipe(
+						Effect.flatMap((raw) =>
+							decodeAwaitingWorkflowRuns("gh api actions/runs", raw),
+						),
+					);
 		return [...view.statusCheckRollup.map(toPullRequestCheck), ...awaiting];
 	});
 

@@ -1,5 +1,8 @@
 import { createTanstackQueryUtils } from "@orpc/tanstack-query";
-import { makeSidecarClient, type SidecarClient } from "@repo/sidecar-api";
+import {
+	makeWebSocketSidecarClient,
+	type SidecarClient,
+} from "@repo/sidecar-api";
 import type React from "react";
 import { createContext, useContext, useEffect, useState } from "react";
 import type { BackendInfo } from "./backend";
@@ -32,7 +35,7 @@ function BackendProvider({ children }: { children: React.ReactNode }) {
 	useEffect(() => {
 		getBackend()
 			.then((backend) => {
-				const client = makeSidecarClient(backend);
+				const client = makeWebSocketSidecarClient(backend);
 				const orpc = createTanstackQueryUtils(client);
 				setValue({ status: "ready", backend, orpc, client });
 			})

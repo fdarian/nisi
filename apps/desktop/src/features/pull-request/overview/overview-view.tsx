@@ -17,8 +17,7 @@ import { DescriptionPane } from "./description-pane";
 type OverviewViewProps = {
 	orpc: SidecarQueryUtils;
 	session: Session;
-	/** This PR's tab is both the selected one and the window has focus — see `useOverview` (`pr-data.ts`). */
-	watched: boolean;
+	enabled: boolean;
 };
 
 /**
@@ -33,8 +32,9 @@ type OverviewViewProps = {
 export function OverviewView({
 	orpc,
 	session,
+	enabled,
 }: OverviewViewProps): React.ReactElement {
-	const overviewQuery = useOverview(orpc, session);
+	const overviewQuery = useOverview(orpc, session, enabled);
 
 	if (overviewQuery.error != null) {
 		return <OverviewError error={overviewQuery.error} />;

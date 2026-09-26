@@ -974,11 +974,30 @@ export type PullRequestMergeStatusParams = {
 	number: number;
 };
 
+export function retryDisconnectedLiveQuery(
+	_failureCount: number,
+	error: unknown,
+): boolean {
+	return (
+		error instanceof Error &&
+		error.name === "AbortError" &&
+		(error.message.startsWith("WebSocket closed (code ") ||
+			error.message.startsWith("WebSocket reconnect failed after "))
+	);
+}
+
 export function usePullRequestMergeStatus(
 	orpc: SidecarQueryUtils,
 	params: PullRequestMergeStatusParams,
+	enabled = true,
 ): UseQueryResult<PullRequestMergeStatus> {
-	return useQuery(orpc.pullRequests.mergeStatus.liveOptions({ input: params }));
+	return useQuery(
+		orpc.pullRequests.mergeStatus.liveOptions({
+			input: params,
+			enabled,
+			retry: retryDisconnectedLiveQuery,
+		}),
+	);
 }
 
 const MERGE_STATUS_WAIT_MS = 15000;
@@ -1020,8 +1039,15 @@ export type PullRequestStackParams = {
 export function usePullRequestStack(
 	orpc: SidecarQueryUtils,
 	params: PullRequestStackParams,
+	enabled = true,
 ): UseQueryResult<PullRequestStack | null> {
-	return useQuery(orpc.pullRequests.stack.liveOptions({ input: params }));
+	return useQuery(
+		orpc.pullRequests.stack.liveOptions({
+			input: params,
+			enabled,
+			retry: retryDisconnectedLiveQuery,
+		}),
+	);
 }
 
 export type MergePullRequestParams = {
@@ -1207,8 +1233,15 @@ export type PullRequestChecksParams = {
 export function usePullRequestChecks(
 	orpc: SidecarQueryUtils,
 	params: PullRequestChecksParams,
+	enabled = true,
 ): UseQueryResult<readonly PullRequestCheck[]> {
-	return useQuery(orpc.pullRequests.checks.liveOptions({ input: params }));
+	return useQuery(
+		orpc.pullRequests.checks.liveOptions({
+			input: params,
+			enabled,
+			retry: retryDisconnectedLiveQuery,
+		}),
+	);
 }
 
 /**
@@ -1259,6 +1292,7 @@ export type Overview = {
 export function useOverview(
 	orpc: SidecarQueryUtils,
 	session: Session,
+	enabled = true,
 ): UseQueryResult<Overview> {
 	const target = session.target;
 	const input =
@@ -1278,7 +1312,13 @@ export function useOverview(
 					headRef: target.headRef,
 				};
 
-	return useQuery(orpc.overview.get.liveOptions({ input }));
+	return useQuery(
+		orpc.overview.get.liveOptions({
+			input,
+			enabled,
+			retry: retryDisconnectedLiveQuery,
+		}),
+	);
 }
 
 /**

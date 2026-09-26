@@ -93,7 +93,7 @@ describe("awaiting approval workflow runs", () => {
 });
 
 describe("workflow gh calls", () => {
-	test("fetches action_required runs by PR head SHA", async () => {
+	test("filters concurrently fetched action_required runs by PR head SHA", async () => {
 		expect((await runAgainstGhStub("fetch")).value).toEqual([
 			{
 				name: "CI",
@@ -103,6 +103,11 @@ describe("workflow gh calls", () => {
 				workflowRunId: 101,
 			},
 		]);
+	});
+	test("uses a SHA-scoped read when repo-wide runs are truncated", async () => {
+		expect((await runAgainstGhStub("fetch-truncated")).value).toEqual(
+			(await runAgainstGhStub("fetch")).value,
+		);
 	});
 	test("approves each run", async () => {
 		expect((await runAgainstGhStub("approve")).ok).toBe(true);

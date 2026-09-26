@@ -41,13 +41,14 @@ export type PullRequestSearchResult = {
 export function useSearchPullRequests(
 	orpc: SidecarQueryUtils,
 	query: string,
+	enabled: boolean,
 ): {
 	results: readonly PullRequestSearchResult[];
 	isSearching: boolean;
 	error: unknown;
 } {
 	const search = useQuery({
-		...orpc.pullRequests.search.queryOptions({ input: { query } }),
+		...orpc.pullRequests.search.queryOptions({ input: { query }, enabled }),
 		placeholderData: keepPreviousData,
 	});
 	return {

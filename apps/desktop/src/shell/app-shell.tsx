@@ -145,7 +145,7 @@ function AppShellReady({
 	const [requestedActiveSessionId, setRequestedActiveSessionId] = useState<
 		string | null
 	>(null);
-	const [pendingTabSelection, setPendingTabSelection] = useState<{
+	const [userTabSelection, setUserTabSelection] = useState<{
 		requestId: string;
 		sessionId: string;
 	} | null>(null);
@@ -158,11 +158,11 @@ function AppShellReady({
 	const selectSession = useCallback(
 		(sessionId: string) => {
 			setRequestedActiveSessionId(sessionId);
-			if (pendingRequest !== null) {
-				setPendingTabSelection({ requestId: pendingRequest.id, sessionId });
+			if (request !== null) {
+				setUserTabSelection({ requestId: request.id, sessionId });
 			}
 		},
-		[pendingRequest],
+		[request],
 	);
 	// Hooks run before the `sessions.length === 0` early return below, so a
 	// cold start into the empty state (nothing open yet) still opens a
@@ -210,6 +210,13 @@ function AppShellReady({
 	// `value` with no matching `Panel` — an effect only runs after paint,
 	// which would blank the content pane for a frame first.
 	const activeSessionId = useMemo(() => {
+		if (
+			request !== null &&
+			userTabSelection?.requestId === request.id &&
+			sessions.some((session) => session.id === userTabSelection.sessionId)
+		) {
+			return userTabSelection.sessionId;
+		}
 		const openedId =
 			request?.status.kind === "opened" ? request.status.session.id : null;
 		if (
@@ -225,20 +232,22 @@ function AppShellReady({
 			return requestedActiveSessionId;
 		}
 		return sessions[0]?.id ?? null;
-	}, [requestedActiveSessionId, sessions, request]);
+	}, [requestedActiveSessionId, sessions, request, userTabSelection]);
 	const selectedTabId =
-		pendingRequest !== null &&
-		pendingTabSelection?.requestId === pendingRequest.id
-			? pendingTabSelection.sessionId
+		pendingRequest !== null && userTabSelection?.requestId === pendingRequest.id
+			? userTabSelection.sessionId
 			: (pendingTabId ?? activeSessionId);
 	const selectedSessionId =
 		selectedTabId === pendingTabId ? null : selectedTabId;
 	useEffect(() => {
 		if (request?.status.kind !== "opened") return;
-		if (selectedTabId !== request.status.session.id) return;
-		setRequestedActiveSessionId(request.status.session.id);
+		const openedId = request.status.session.id;
+		if (!sessions.some((session) => session.id === openedId)) return;
+		if (userTabSelection?.requestId !== request.id) {
+			setRequestedActiveSessionId(openedId);
+		}
 		open.acknowledge(request.id);
-	}, [request, selectedTabId, open.acknowledge]);
+	}, [request, sessions, userTabSelection, open.acknowledge]);
 
 	const activeSession = useMemo(
 		() => sessions.find((session) => session.id === selectedSessionId) ?? null,
@@ -386,7 +395,7 @@ function AppShellReady({
 			className="flex h-screen flex-col bg-sidebar"
 			onValueChange={(value) => {
 				if (value === pendingTabId) {
-					setPendingTabSelection(null);
+					setUserTabSelection(null);
 				} else if (typeof value === "string") {
 					selectSession(value);
 				}

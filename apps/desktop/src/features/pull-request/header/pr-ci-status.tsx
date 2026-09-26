@@ -25,6 +25,7 @@ type PrCiStatusProps = {
 	number: number;
 	/** This PR's tab is both selected and focused; controls the CI popover. */
 	watched: boolean;
+	isSelectedTab: boolean;
 };
 
 /** `"1m 12s"`/`"48s"` — the one place that decides how a check's run time reads, since neither the sidecar nor `@repo/git` should be minting English text. */
@@ -100,6 +101,7 @@ export function PrCiStatus({
 	repo,
 	number,
 	watched,
+	isSelectedTab,
 }: PrCiStatusProps): React.ReactElement | null {
 	const [approvalFailure, setApprovalFailure] = useState<MergeFailure | null>(
 		null,
@@ -127,12 +129,16 @@ export function PrCiStatus({
 			},
 		});
 	});
-	const checksQuery = usePullRequestChecks(orpc, {
-		repoRoot,
-		owner,
-		repo,
-		number,
-	});
+	const checksQuery = usePullRequestChecks(
+		orpc,
+		{
+			repoRoot,
+			owner,
+			repo,
+			number,
+		},
+		isSelectedTab,
+	);
 
 	if (checksQuery.data === undefined) return null;
 
