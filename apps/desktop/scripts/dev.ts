@@ -7,9 +7,10 @@ import {
 	CurrentSession,
 	DevSessions,
 	getStickyPort,
+	publishRunning,
 	runManagedSubprocess,
 } from "devsess";
-import { Config, Effect, Option } from "effect";
+import { Config, Effect, Option, Schedule } from "effect";
 import { FileSystem } from "effect/FileSystem";
 import { Command, Flag } from "effect/unstable/cli";
 
@@ -165,10 +166,27 @@ const dev = Command.make(
 						{ env },
 					);
 
+			// Readiness for a devsess preset with `awaitPublish`: without it,
+			// `devsess start` waits forever. Vite serves on `vitePort` in both
+			// modes (`tauri dev` starts it via `beforeDevCommand`).
+			const viteUrl = `http://localhost:${vitePort}/`;
+			const publishWhenReady = Effect.gen(function* () {
+				yield* awaitSidecarHandshake(dataDir, { token: sidecarToken });
+				yield* Effect.tryPromise(() => fetch(viteUrl)).pipe(
+					Effect.retry(Schedule.spaced("250 millis")),
+				);
+				yield* publishRunning({ url: viteUrl });
+			});
+
 			// raceAll (not `Effect.all`): whichever subprocess exits first ends the
 			// race, interrupting (and thus killing, via runManagedSubprocess's
-			// acquireRelease) the other — mirrors `concurrently -k`.
-			yield* Effect.raceAll([sidecarProcess, frontendProcess]);
+			// acquireRelease) the other — mirrors `concurrently -k`. The publisher
+			// never finishes, so it can't end the race and unpublish early.
+			yield* Effect.raceAll([
+				sidecarProcess,
+				frontendProcess,
+				publishWhenReady.pipe(Effect.andThen(Effect.never)),
+			]);
 		}).pipe(Effect.provide(CurrentSession.layer)),
 );
 
@@ -178,3 +196,4 @@ Command.run(dev, { version: "0.1.0" }).pipe(
 	Effect.scoped,
 	BunRuntime.runMain,
 );
+
