@@ -478,7 +478,6 @@ export function useDiffSelection<Metadata>({
 			setIsGutterDragInProgress(startsOnGutter);
 		};
 		const endGutterDrag = () => {
-			gutterDragInProgressRef.current = false;
 			setIsGutterDragInProgress(false);
 		};
 		const recomputeTextSelection = (event: Event) => {

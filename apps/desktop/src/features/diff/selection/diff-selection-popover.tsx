@@ -213,9 +213,6 @@ export function DiffSelectionPopover({
 					>
 						<PopoverPrimitive.Popup
 							className="outline-none"
-							style={{
-								pointerEvents: isGutterDragInProgress ? "none" : "auto",
-							}}
 							onWheel={(event) => {
 								if (event.deltaMode !== WheelEvent.DOM_DELTA_PIXEL) return;
 								if (scrollContainer === undefined) return;
