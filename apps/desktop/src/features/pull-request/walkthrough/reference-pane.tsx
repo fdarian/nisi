@@ -166,7 +166,14 @@ export function ReferencePane({
 		() => Array.from(itemGroups.values(), (group) => group.path),
 		[itemGroups],
 	);
-	const fileContents = useFileContents(orpc, sessionId, paths, NO_FORCED_PATHS);
+	// References need every location in the block, regardless of viewport.
+	const fileContents = useFileContents(
+		orpc,
+		sessionId,
+		paths,
+		NO_FORCED_PATHS,
+		"all",
+	);
 	const setRangeViewed = useSetRangeViewed(orpc, sessionId);
 	// A reference block can point at a path outside the current diff entirely
 	// (renamed since generation, or just never touched by this PR) — `openFile`

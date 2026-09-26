@@ -33,6 +33,7 @@ import {
 import { useIncludeUncommitted } from "#/features/settings/settings-data";
 import type { SidecarQueryUtils } from "#/infra/backend-context";
 import { useSidecarEvent } from "#/infra/sidecar-events";
+import { FILE_CONTENTS_CHUNK_SIZE } from "./file-content-demand";
 import { useSetCodeIndexEnabled } from "./session-ui-store";
 
 /**
@@ -302,16 +303,12 @@ export function useFileChanges(
  * git's own work, dominates the sidecar's cost per request (see
  * `@repo/git`'s `getFileContents` doc comment), so collapsing a whole PR's
  * open files into one request is what actually pays off — but `paths` here
- * can be *every* non-binary file in the PR (`DiffPane` passes it every
- * visible `FileChange`, not just what's scrolled into view; `@pierre/diffs`
- * virtualizes rendering, not fetching), and one request is all-or-nothing:
+ * can be every non-binary file in the PR during keyword search, and one request is all-or-nothing:
  * the pane would wait on the slowest file in the whole PR before rendering
  * any of them. Chunking splits the difference — a typical PR (well under
  * this size) still collapses to a single request, while a large one streams
  * in a handful of waves instead of blocking on one giant round trip.
  */
-const FILE_CONTENTS_CHUNK_SIZE = 30;
-
 const chunkPaths = (
 	paths: readonly string[],
 	size: number,
@@ -331,9 +328,12 @@ const chunkPaths = (
  * independent ones. `includeUncommitted` is sourced from the persisted
  * setting and folded into every chunk's `input` — same cache-key reasoning
  * as `useFileChanges`. Callers still get the same per-path map back; the
- * chunking is an internal batching detail; a path absent from its chunk's
- * response (not actually part of the diff, or a request still loading with
- * no cached data) reports `content: undefined` with `isError`/`isLoading`
+ * `demandedChunks` controls whether each fixed chunk is enabled (`"all"`
+ * enables every chunk), not its query key, so cached data and the existing
+ * invalidations keep working.
+ * A path absent from its chunk's response (not actually part of the diff,
+ * or a request still loading with no cached data) reports `content: undefined`
+ * with `isError`/`isLoading`
  * reflecting its chunk's own status.
  */
 export function useFileContents(
@@ -341,6 +341,7 @@ export function useFileContents(
 	sessionId: string,
 	paths: readonly string[],
 	forcedPaths: ReadonlySet<string>,
+	demandedChunks: ReadonlySet<number> | "all",
 ): FileContentsMap {
 	const [includeUncommitted] = useIncludeUncommitted(orpc);
 	const chunks = useMemo(
@@ -420,8 +421,8 @@ export function useFileContents(
 	);
 
 	return useQueries({
-		queries: chunks.map((chunk) =>
-			orpc.diff.fileContents.queryOptions({
+		queries: chunks.map((chunk, index) => ({
+			...orpc.diff.fileContents.queryOptions({
 				input: {
 					sessionId,
 					paths: chunk.map((path) =>
@@ -430,7 +431,8 @@ export function useFileContents(
 					includeUncommitted,
 				},
 			}),
-		),
+			enabled: demandedChunks === "all" || demandedChunks.has(index),
+		})),
 		combine: combineFileContents,
 	});
 }

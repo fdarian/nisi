@@ -56,6 +56,7 @@ type SessionUiState = {
 	searchMode: SearchMode;
 	currentMatchIndex: number;
 	forcedPaths: ReadonlySet<string>;
+	demandedFileContentChunks: ReadonlySet<number>;
 	expandedHiddenPaths: ReadonlySet<string>;
 	fileCollapseOverrides: ReadonlyMap<string, boolean>;
 	activeTab: string;
@@ -111,6 +112,7 @@ function createDefaultSessionUiState(): SessionUiState {
 		searchMode: "files",
 		currentMatchIndex: 0,
 		forcedPaths: new Set(),
+		demandedFileContentChunks: new Set(),
 		expandedHiddenPaths: new Set(),
 		fileCollapseOverrides: new Map(),
 		activeTab: "files",
@@ -129,6 +131,7 @@ function createDefaultSessionUiState(): SessionUiState {
 
 /** Shared read-only fallbacks for a session nothing has written to yet — safe to share across sessions since callers only ever read them (`.get`/`.has`), never mutate. */
 const EMPTY_FORCED_PATHS: ReadonlySet<string> = new Set();
+const EMPTY_DEMANDED_FILE_CONTENT_CHUNKS: ReadonlySet<number> = new Set();
 const EMPTY_EXPANDED_HIDDEN_PATHS: ReadonlySet<string> = new Set();
 const EMPTY_FILE_COLLAPSE_OVERRIDES: ReadonlyMap<string, boolean> = new Map();
 const EMPTY_OPEN_FILES: readonly string[] = [];
@@ -172,6 +175,10 @@ type SessionUiStore = {
 	setSearchMode: (sessionId: string, mode: SearchMode) => void;
 	setCurrentMatchIndex: (sessionId: string, index: number) => void;
 	addForcedPath: (sessionId: string, path: string) => void;
+	addDemandedFileContentChunks: (
+		sessionId: string,
+		chunks: ReadonlySet<number>,
+	) => void;
 	addExpandedHiddenPath: (sessionId: string, path: string) => void;
 	setFileCollapseOverride: (
 		sessionId: string,
@@ -286,6 +293,17 @@ function createSessionUiStore(): StoreApi<SessionUiStore> {
 					const next = new Set(session.forcedPaths);
 					next.add(path);
 					return { ...session, forcedPaths: next };
+				}),
+			})),
+		addDemandedFileContentChunks: (sessionId, chunks) =>
+			set((state) => ({
+				sessions: withSession(state.sessions, sessionId, (session) => {
+					const current = session.demandedFileContentChunks;
+					if ([...chunks].every((chunk) => current.has(chunk))) return session;
+					return {
+						...session,
+						demandedFileContentChunks: new Set([...current, ...chunks]),
+					};
 				}),
 			})),
 		addExpandedHiddenPath: (sessionId, path) =>
@@ -649,6 +667,27 @@ export function useSessionForcedPaths(
 		[addForcedPathAction, sessionId],
 	);
 	return [forcedPaths, addForcedPath] as const;
+}
+
+export function useSessionDemandedFileContentChunks(
+	sessionId: string,
+): readonly [ReadonlySet<number>, (chunks: ReadonlySet<number>) => void] {
+	const store = useSessionUiStore();
+	const chunks = useStore(
+		store,
+		(state) =>
+			state.sessions.get(sessionId)?.demandedFileContentChunks ??
+			EMPTY_DEMANDED_FILE_CONTENT_CHUNKS,
+	);
+	const addAction = useStore(
+		store,
+		(state) => state.addDemandedFileContentChunks,
+	);
+	const addChunks = useCallback(
+		(wanted: ReadonlySet<number>) => addAction(sessionId, wanted),
+		[addAction, sessionId],
+	);
+	return [chunks, addChunks] as const;
 }
 
 /** `addExpandedHiddenPath` is idempotent (mirrors `diff-pane.tsx`'s old `handleShowHiddenFile`) — paths are only ever added, never removed. */

@@ -245,6 +245,8 @@ type DiffPaneProps = {
 	 * `suppressVisiblePathReportRef`.
 	 */
 	onVisiblePathChange?: (path: string) => void;
+	/** Reports the virtualizer's rendered window, including overscan, independently of focus reporting. */
+	onRenderedPathsChange: (paths: readonly string[]) => void;
 	reviewState: ReadonlyMap<string, ReviewStateEntry>;
 	setViewed: (path: string, viewed: boolean) => void;
 	onMarkSelectionReviewed: (path: string, range: HeadRange) => void;
@@ -416,6 +418,7 @@ export function DiffPane({
 	onForceLoad,
 	selectedPath,
 	onVisiblePathChange,
+	onRenderedPathsChange,
 	reviewState,
 	setViewed,
 	onMarkSelectionReviewed,
@@ -524,6 +527,14 @@ export function DiffPane({
 		},
 		[onVisiblePathChange],
 	);
+	const reportRenderedPaths = useCallback(
+		(viewer: CodeViewInstance<DiffAnnotationMetadata>) => {
+			// A smooth jump crosses intermediate windows that must not demand content.
+			if (suppressVisiblePathReportRef.current) return;
+			onRenderedPathsChange(viewer.getRenderedItems().map((item) => item.id));
+		},
+		[onRenderedPathsChange],
+	);
 
 	const clearSettleTimeout = useCallback(() => {
 		if (settleTimeoutRef.current !== null) {
@@ -558,12 +569,14 @@ export function DiffPane({
 			if (pending === null || !handle || !viewer) {
 				suppressVisiblePathReportRef.current = false;
 				settleTimeoutRef.current = null;
+				if (viewer) reportRenderedPaths(viewer);
 				return;
 			}
 			const topPath = findTopVisibleItemId(viewer, viewer.getScrollTop());
 			if (topPath === pending.path || retriesRemaining <= 0) {
 				suppressVisiblePathReportRef.current = false;
 				settleTimeoutRef.current = null;
+				reportRenderedPaths(viewer);
 				return;
 			}
 			handle.scrollTo(pending.target);
@@ -576,7 +589,7 @@ export function DiffPane({
 			() => checkLandedOnTarget(MAX_SETTLE_RECHECKS),
 			SCROLL_SETTLE_MS,
 		);
-	}, [clearSettleTimeout]);
+	}, [clearSettleTimeout, reportRenderedPaths]);
 
 	// A real wheel/touch during an in-flight programmatic scroll means the
 	// user is steering — hand control back immediately instead of waiting
@@ -588,7 +601,9 @@ export function DiffPane({
 		if (!suppressVisiblePathReportRef.current) return;
 		suppressVisiblePathReportRef.current = false;
 		clearSettleTimeout();
-	}, [clearSettleTimeout]);
+		const viewer = codeViewRef.current?.getInstance();
+		if (viewer) reportRenderedPaths(viewer);
+	}, [clearSettleTimeout, reportRenderedPaths]);
 
 	// Owns the CSS Custom Highlight API registry (two `Highlight`s per
 	// instance) and the per-item highlight bookkeeping — see
@@ -1271,6 +1286,23 @@ export function DiffPane({
 	// `DiffCodeView` below — since `codeViewRef` has nothing to attach to
 	// until `DiffCodeView` actually mounts.
 	const hasRenderableFiles = files.length > 0;
+	useEffect(() => {
+		if (items.length === 0) {
+			if (!suppressVisiblePathReportRef.current) onRenderedPathsChange([]);
+			return;
+		}
+		const frame = { current: null as number | null };
+		pollUntilReady(() => {
+			const viewer = codeViewRef.current?.getInstance();
+			if (viewer === undefined || viewer.getRenderedItems().length === 0)
+				return false;
+			reportRenderedPaths(viewer);
+			return true;
+		}, frame);
+		return () => {
+			if (frame.current !== null) cancelAnimationFrame(frame.current);
+		};
+	}, [items, onRenderedPathsChange, reportRenderedPaths]);
 	const markRealScrollInput = useCallback(() => {
 		hasRealScrollInputRef.current = true;
 	}, []);
@@ -1411,6 +1443,7 @@ export function DiffPane({
 				beginProgrammaticScrollSuppression();
 				return;
 			}
+			reportRenderedPaths(viewer);
 			// Not suppressed doesn't yet mean genuine — see
 			// `hasRealScrollInputRef`'s doc comment for why a content-driven
 			// reflow can still reach here unsuppressed.
@@ -1429,6 +1462,7 @@ export function DiffPane({
 		[
 			beginProgrammaticScrollSuppression,
 			diffSelection.refreshAnchorRect,
+			reportRenderedPaths,
 			reportVisiblePath,
 			resolveHoveredPath,
 		],
