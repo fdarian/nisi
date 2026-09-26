@@ -469,6 +469,9 @@ export function FileView({
 							</div>
 							<DiffSelectionPopover
 								anchorRect={diffSelection.anchorRect}
+								isSelectionDragInProgress={
+									diffSelection.isSelectionDragInProgress
+								}
 								onDismiss={diffSelection.clearSelection}
 								orpc={orpc}
 								reference={diffSelection.reference}

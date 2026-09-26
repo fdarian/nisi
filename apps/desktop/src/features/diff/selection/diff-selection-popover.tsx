@@ -45,6 +45,7 @@ type DiffSelectionPopoverProps = {
 	sessionId: string;
 	orpc: SidecarQueryUtils;
 	reference: DiffSelectionReference | null;
+	isSelectionDragInProgress: boolean;
 	headRange?: HeadRange;
 	onMarkReviewed?: (range: HeadRange) => void;
 	/**
@@ -87,6 +88,7 @@ export function DiffSelectionPopover({
 	sessionId,
 	orpc,
 	reference,
+	isSelectionDragInProgress,
 	headRange,
 	onMarkReviewed,
 	anchorRect,
@@ -202,7 +204,13 @@ export function DiffSelectionPopover({
 					side="bottom"
 					sideOffset={8}
 				>
-					<motion.div style={{ x: glide.x, y: glide.y }}>
+					<motion.div
+						style={{
+							x: glide.x,
+							y: glide.y,
+							pointerEvents: isSelectionDragInProgress ? "none" : "auto",
+						}}
+					>
 						<PopoverPrimitive.Popup
 							className="outline-none"
 							onWheel={(event) => {
