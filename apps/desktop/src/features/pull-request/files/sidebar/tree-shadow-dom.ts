@@ -172,11 +172,8 @@ ${FOLDER_ICON_SLOT}::after {
 	height: 16px;
 	margin: auto;
 	background-color: currentcolor;
-	-webkit-mask-repeat: no-repeat;
 	mask-repeat: no-repeat;
-	-webkit-mask-position: center;
 	mask-position: center;
-	-webkit-mask-size: 100% 100%;
 	mask-size: 100% 100%;
 	transform-origin: ${FOLDER_HINGE_ORIGIN};
 	transition: opacity ${CROSSFADE_TRANSITION}, transform ${FLAP_TRANSITION};
@@ -184,13 +181,11 @@ ${FOLDER_ICON_SLOT}::after {
 
 /* Collapsed is the default: closed folder shown, open folder wound back. */
 ${FOLDER_ICON_SLOT}::before {
-	-webkit-mask-image: ${FOLDER_MASK};
 	mask-image: ${FOLDER_MASK};
 	opacity: 1;
 	transform: rotate(0deg);
 }
 ${FOLDER_ICON_SLOT}::after {
-	-webkit-mask-image: ${FOLDER_OPEN_MASK};
 	mask-image: ${FOLDER_OPEN_MASK};
 	opacity: 0;
 	transform: rotate(-${FLAP_ANGLE});
@@ -252,13 +247,9 @@ ${REVIEWED_DECORATION_SLOT}::before {
 	position: absolute;
 	inset: 0;
 	background-color: var(--primary);
-	-webkit-mask-image: ${CHECK_MASK};
 	mask-image: ${CHECK_MASK};
-	-webkit-mask-repeat: no-repeat;
 	mask-repeat: no-repeat;
-	-webkit-mask-position: center;
 	mask-position: center;
-	-webkit-mask-size: 100% 100%;
 	mask-size: 100% 100%;
 }
 `;
@@ -406,27 +397,15 @@ function buildScrollFadeCSS(): string {
 }
 
 ${SCROLL_CONTAINER_SELECTOR} {
-	-webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 var(--scroll-fade-t, 0px), #000 calc(100% - var(--scroll-fade-b, 0px)), transparent 100%);
 	mask-image: linear-gradient(to bottom, transparent 0, #000 var(--scroll-fade-t, 0px), #000 calc(100% - var(--scroll-fade-b, 0px)), transparent 100%);
-	-webkit-mask-repeat: no-repeat;
 	mask-repeat: no-repeat;
 }
 
-/* Scroll-driven animation unsupported (pre-26 WebKit): fall back to a static top+bottom fade. */
-@supports not (animation-timeline: scroll()) {
-	${SCROLL_CONTAINER_SELECTOR} {
-		--scroll-fade-t: ${SCROLL_FADE_SIZE};
-		--scroll-fade-b: ${SCROLL_FADE_SIZE};
-	}
-}
-
-@supports (animation-timeline: scroll()) {
-	${SCROLL_CONTAINER_SELECTOR} {
-		animation: scroll-fade-reveal-t 1ms ease-in-out, scroll-fade-reveal-b 1ms ease-in-out;
-		animation-timeline: scroll(self y), scroll(self y);
-		animation-range: 0 ${SCROLL_FADE_REVEAL}, calc(100% - ${SCROLL_FADE_REVEAL}) 100%;
-		animation-fill-mode: both;
-	}
+${SCROLL_CONTAINER_SELECTOR} {
+	animation: scroll-fade-reveal-t 1ms ease-in-out, scroll-fade-reveal-b 1ms ease-in-out;
+	animation-timeline: scroll(self y), scroll(self y);
+	animation-range: 0 ${SCROLL_FADE_REVEAL}, calc(100% - ${SCROLL_FADE_REVEAL}) 100%;
+	animation-fill-mode: both;
 }
 `;
 }

@@ -37,9 +37,7 @@
  * with this technique: extending it is the browser's own `mousemove`
  * default action, and default actions don't run for untrusted
  * (script-`dispatchEvent`ed) events. Verified live, in the real diff pane
- * (Chromium — the dev-browser harness this was checked in; not separately
- * confirmed on the shipped app's WKWebView, though the trust gate on default
- * actions is standard engine behavior, not a Chromium quirk): mid-drag,
+ * (Chromium — the dev-browser harness this was checked in): mid-drag,
  * dispatching an untrusted `mousemove` at a different point left the active
  * `Selection` unchanged, while the drag's own next *real* `mousemove`
  * extended it normally. So a text drag still arms this hook and the
