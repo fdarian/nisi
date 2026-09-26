@@ -245,6 +245,8 @@ type DiffPaneProps = {
 	 * `suppressVisiblePathReportRef`.
 	 */
 	onVisiblePathChange?: (path: string) => void;
+	/** Reports the virtualizer's rendered window, including overscan, independently of focus reporting. */
+	onRenderedPathsChange: (paths: readonly string[]) => void;
 	reviewState: ReadonlyMap<string, ReviewStateEntry>;
 	setViewed: (path: string, viewed: boolean) => void;
 	onMarkSelectionReviewed: (path: string, range: HeadRange) => void;
@@ -416,6 +418,7 @@ export function DiffPane({
 	onForceLoad,
 	selectedPath,
 	onVisiblePathChange,
+	onRenderedPathsChange,
 	reviewState,
 	setViewed,
 	onMarkSelectionReviewed,
@@ -1271,6 +1274,29 @@ export function DiffPane({
 	// `DiffCodeView` below — since `codeViewRef` has nothing to attach to
 	// until `DiffCodeView` actually mounts.
 	const hasRenderableFiles = files.length > 0;
+	const reportRenderedPaths = useCallback(
+		(viewer: CodeViewInstance<DiffAnnotationMetadata>) => {
+			onRenderedPathsChange(viewer.getRenderedItems().map((item) => item.id));
+		},
+		[onRenderedPathsChange],
+	);
+	useEffect(() => {
+		if (items.length === 0) {
+			onRenderedPathsChange([]);
+			return;
+		}
+		const frame = { current: null as number | null };
+		pollUntilReady(() => {
+			const viewer = codeViewRef.current?.getInstance();
+			if (viewer === undefined || viewer.getRenderedItems().length === 0)
+				return false;
+			reportRenderedPaths(viewer);
+			return true;
+		}, frame);
+		return () => {
+			if (frame.current !== null) cancelAnimationFrame(frame.current);
+		};
+	}, [items, onRenderedPathsChange, reportRenderedPaths]);
 	const markRealScrollInput = useCallback(() => {
 		hasRealScrollInputRef.current = true;
 	}, []);
@@ -1407,6 +1433,7 @@ export function DiffPane({
 			// that tracking happen — see `refreshAnchorRect`'s doc comment
 			// for why a snapshotted rect can't do this on its own.
 			diffSelection.refreshAnchorRect();
+			reportRenderedPaths(viewer);
 			if (suppressVisiblePathReportRef.current) {
 				beginProgrammaticScrollSuppression();
 				return;
@@ -1429,6 +1456,7 @@ export function DiffPane({
 		[
 			beginProgrammaticScrollSuppression,
 			diffSelection.refreshAnchorRect,
+			reportRenderedPaths,
 			reportVisiblePath,
 			resolveHoveredPath,
 		],

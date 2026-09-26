@@ -8,7 +8,7 @@ import {
 	RowsIcon,
 	SlidersHorizontalIcon,
 } from "lucide-react";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button, buttonVariants } from "#/components/ui/button";
 import {
 	DropdownMenu,
@@ -40,6 +40,7 @@ import {
 } from "#/features/pull-request/data/pr-data";
 import {
 	useSessionCurrentMatchIndex,
+	useSessionDemandedFileContentChunks,
 	useSessionFilterQuery,
 	useSessionForcedPaths,
 	useSessionNavigationHistory,
@@ -51,6 +52,7 @@ import type { DiffPaneHandle } from "#/features/pull-request/files/diff-pane/dif
 import { DiffPane } from "#/features/pull-request/files/diff-pane/diff-pane";
 import { optimisticRangeBaseline } from "#/features/pull-request/files/diff-pane/optimistic-range-baseline";
 import { EditorPickerPalette } from "#/features/pull-request/files/editor-picker/editor-picker-palette";
+import { demandedFileContentChunks } from "#/features/pull-request/files/file-content-demand";
 import type { SearchMode } from "#/features/pull-request/files/sidebar/files-sidebar";
 import { FilesSidebar } from "#/features/pull-request/files/sidebar/files-sidebar";
 import {
@@ -194,17 +196,56 @@ export function FilesChangedView({
 	// prop), not `visibleFiles`/`queryFilteredFiles` below, for the same
 	// reason `DiffPane` used to key its chunks off `allFiles`: a file
 	// dropping out of the filtered/hide-reviewed view must never reshuffle
-	// another chunk's boundary.
+	// another chunk's boundary. DiffPane sorts by comparePaths, so use that
+	// same display order even when the incoming files aren't sorted.
 	const contentPaths = useMemo(
-		() => files.filter((file) => !file.binary).map((file) => file.path),
+		() =>
+			files
+				.filter((file) => !file.binary)
+				.map((file) => file.path)
+				.sort(comparePaths),
 		[files],
 	);
+	const [renderedPaths, setRenderedPaths] = useState<readonly string[]>([]);
+	// Unlike the virtualizer's current window, enabled chunks survive tab suspension.
+	const [stickyChunks, addDemandedChunks] = useSessionDemandedFileContentChunks(
+		session.id,
+	);
+	const demandedChunks = useMemo(() => {
+		const wanted = demandedFileContentChunks(
+			contentPaths,
+			renderedPaths,
+			selectedPath,
+			searchMode === "keyword" && filterQuery.trim() !== "",
+		);
+		return new Set([...stickyChunks, ...wanted]);
+	}, [
+		contentPaths,
+		renderedPaths,
+		selectedPath,
+		searchMode,
+		filterQuery,
+		stickyChunks,
+	]);
+	useEffect(() => {
+		if (stickyChunks.size !== demandedChunks.size)
+			addDemandedChunks(demandedChunks);
+	}, [stickyChunks, demandedChunks, addDemandedChunks]);
+	const handleRenderedPathsChange = useCallback((paths: readonly string[]) => {
+		setRenderedPaths((current) =>
+			current.length === paths.length &&
+			current.every((path, index) => path === paths[index])
+				? current
+				: paths,
+		);
+	}, []);
 	const [forcedPaths, addForcedPath] = useSessionForcedPaths(session.id);
 	const fileContents: FileContentsMap = useFileContents(
 		orpc,
 		session.id,
 		contentPaths,
 		forcedPaths,
+		demandedChunks,
 	);
 	const visibleFiles = useMemo(() => {
 		const filtered = hideReviewed
@@ -731,6 +772,7 @@ export function FilesChangedView({
 						onMarkSelectionReviewed={markSelectionReviewed}
 						onForceLoad={addForcedPath}
 						onOpenFile={onOpenFile}
+						onRenderedPathsChange={handleRenderedPathsChange}
 						onVisiblePathChange={handleVisiblePathChange}
 						orpc={orpc}
 						ref={diffPaneRef}
