@@ -197,6 +197,55 @@ test("range claims change the Files Changed patch for a single added line", asyn
 	});
 });
 
+test("a post-review edit to the same line removes the reviewed version, not the base version", async () => {
+	await withTestRepoAndDataDir(async (repoRoot, dataDir) => {
+		await Bun.write(join(repoRoot, "a.ts"), "value = 0;\nunchanged\n");
+		await sh(repoRoot, ["add", "-A"]);
+		await sh(repoRoot, ["commit", "-q", "-m", "base value"]);
+		await sh(repoRoot, ["checkout", "-q", "-b", "feature"]);
+		const reviewed = "value = 1;\nunchanged\n";
+		await Bun.write(join(repoRoot, "a.ts"), reviewed);
+		await sh(repoRoot, ["add", "-A"]);
+		await sh(repoRoot, ["commit", "-q", "-m", "reviewed value"]);
+
+		const session = await Effect.runPromise(
+			Effect.gen(function* () {
+				const store = yield* Store;
+				const opened = yield* store.openSession(repoRoot, {
+					kind: "branch",
+					baseRef: "main",
+				});
+				yield* store.setFileViewed(opened.id, "a.ts", true);
+				return opened;
+			}).pipe(Effect.provide(makeTestLayer(dataDir))),
+		);
+		await Bun.write(
+			join(repoRoot, "a.ts"),
+			"value = 2;\nunchanged\nafterReview\n",
+		);
+		await sh(repoRoot, ["add", "-A"]);
+		await sh(repoRoot, ["commit", "-q", "-m", "post-review edit"]);
+
+		const result = await Effect.runPromise(
+			Effect.gen(function* () {
+				const store = yield* Store;
+				return yield* store.readFileContents(
+					session.id,
+					[{ path: "a.ts", force: false }],
+					false,
+				);
+			}).pipe(Effect.provide(makeTestLayer(dataDir))),
+		);
+		const content = result[0]?.content;
+		expect(content?.review?.baselineKind).toBe("reviewed");
+		expect(content?.review?.changedSinceReview).toBe(true);
+		expect(content?.oldContent).toBe(reviewed);
+		expect(content?.patch).toContain("-value = 1;");
+		expect(content?.patch).not.toContain("-value = 0;");
+		expect(content?.patch).toContain("+value = 2;");
+	});
+});
+
 test("a walkthrough claim and a whole-file tick both produce the empty reviewed patch", async () => {
 	await withTestRepoAndDataDir(async (repoRoot, dataDir) => {
 		await sh(repoRoot, ["checkout", "-q", "-b", "feature"]);
