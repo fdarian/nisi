@@ -1,12 +1,12 @@
 import type { WithEffectContext } from "@orpc/experimental-effect";
 import { implement } from "@orpc/server";
 import { RPCHandler as FetchRPCHandler } from "@orpc/server/fetch";
-import { RPCHandler as WebSocketRPCHandler } from "@orpc/server/websocket";
 import {
 	CORSHandlerPlugin,
 	RequestHeadersHandlerPlugin,
 	type RequestHeadersHandlerPluginContext,
 } from "@orpc/server/plugins";
+import { RPCHandler as WebSocketRPCHandler } from "@orpc/server/websocket";
 import { refreshLoginShellPath } from "@repo/bin-resolver";
 import {
 	fetchBranchCommits,
