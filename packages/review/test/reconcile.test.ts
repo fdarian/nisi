@@ -449,6 +449,77 @@ describe("reconcile — range claims", () => {
 });
 
 describe("reconcile — reviewedBaseline", () => {
+	test("a whole-file snapshot is the baseline when the same line changes again after review", async () => {
+		await withTempRepo(async (repoRoot) => {
+			const base = "value_179 = 179 + 0;\nunchanged\n";
+			const reviewed = "headValue_179 = 179 + 1;\nunchanged\n";
+			const head = "headValue_179 = 179 + 2;\nunchanged\nafterReview_179\n";
+			const result = await run(
+				reconcile(repoRoot, {
+					baseContent: base,
+					headContent: head,
+					claims: [fileClaim(reviewed)],
+				}),
+			);
+
+			expect(result.reviewedBaseline).toBe(reviewed);
+			expect(result.changedSinceReview).toBe(true);
+		});
+	});
+
+	test("a newer range claim advances a whole-file snapshot's baseline", async () => {
+		await withTempRepo(async (repoRoot) => {
+			const base = "first\nbase line\nlast\n";
+			const reviewed = "first\nreviewed line\nlast\n";
+			const rangeSnapshot = "first\nrange-reviewed line\nlast\n";
+			const head = `${rangeSnapshot}unreviewed tail\n`;
+			const result = await run(
+				reconcile(repoRoot, {
+					baseContent: base,
+					headContent: head,
+					claims: [
+						fileClaim(reviewed, 100),
+						rangeClaim(
+							rangeSnapshot,
+							[{ startLine: 1, endLine: 2 }],
+							"later",
+							200,
+						),
+					],
+				}),
+			);
+
+			expect(result.reviewedBaseline).toBe(rangeSnapshot);
+		});
+	});
+
+	test("the newest whole-file tick supersedes older range claims", async () => {
+		await withTempRepo(async (repoRoot) => {
+			const base = "first\nbase line\nlast\n";
+			const olderRangeSnapshot = "first\nolder range line\nlast\n";
+			const newestFileSnapshot = "first\nnewest file line\nlast\n";
+			const head = `${olderRangeSnapshot}unreviewed tail\n`;
+			const result = await run(
+				reconcile(repoRoot, {
+					baseContent: base,
+					headContent: head,
+					claims: [
+						fileClaim(base, 50),
+						rangeClaim(
+							olderRangeSnapshot,
+							[{ startLine: 1, endLine: 2 }],
+							"older",
+							100,
+						),
+						fileClaim(newestFileSnapshot, 200),
+					],
+				}),
+			);
+
+			expect(result.reviewedBaseline).toBe(newestFileSnapshot);
+		});
+	});
+
 	test("null when the file has no active claim at all", async () => {
 		await withTempRepo(async (repoRoot) => {
 			const result = await run(

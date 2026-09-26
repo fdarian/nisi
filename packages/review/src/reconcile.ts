@@ -67,12 +67,10 @@ export type Reconciliation = {
 	readonly ranges: ReadonlyArray<ReviewRange>;
 	/**
 	 * The synthetic "before" file a genuine `reviewedBaseline → head` diff can
-	 * be computed against — `null` when the file has no active claim at all
-	 * (`claims` was empty). See `synthesizeReviewedBaseline`'s doc comment for
-	 * how it's built; the short version is it's the `base → head` alignment
-	 * with every still-`"reviewed"` span pulled back to head's text (so it
-	 * reads as unchanged) and every deletion the user has plausibly already
-	 * seen omitted.
+	 * be computed against — `null` when the file has no active claim at all.
+	 * Its anchor is base for range-only review, or the newest whole-file
+	 * snapshot when one exists, so editing the same line again after a whole-
+	 * file review shows the reviewed text rather than the original base text.
 	 */
 	readonly reviewedBaseline: string | null;
 };
@@ -297,18 +295,18 @@ const splitLines = (content: string): ReadonlyArray<string> => {
 
 /**
  * Synthesizes the "before" side of a `reviewedBaseline → head` diff by
- * walking the `base → head` alignment (`hunks`, already computed by
- * `reconcile` for `ranges`) and, at every point the alignment moves off
+ * walking the `anchor → head` alignment (`hunks`; the anchor is base for
+ * range-only review or the newest whole-file snapshot) and, at every point it moves off
  * "unchanged", asking `coverage` (via `splitRangeByClaims`, the same
  * attribution `ranges` itself is built from — no second pass) whether head's
  * side of that point is still exactly what some claim vouches for:
  *
  * - Context (untouched by any hunk): head's text carries over as-is — it's
- *   identical to base's, so no claim needs to vouch for it.
+ *   identical to the anchor's, so no claim needs to vouch for it.
  * - An added head line: carried over only if `"reviewed"` — it's new
  *   otherwise, and the whole point of the baseline is to not pretend the
  *   user already saw it.
- * - A hunk's deleted base lines: restored — unless *both* the head line
+ * - A hunk's deleted anchor lines: restored — unless *both* the head line
  *   immediately before the hunk and the first head line the hunk resumes at
  *   (its `added` lines when there are any, otherwise the next context line)
  *   are `"reviewed"`, in which case the deletion sits entirely inside
@@ -409,7 +407,11 @@ const synthesizeReviewedBaseline = (
  * `ranges` only ever covers the `base → head` diff's added lines — claims
  * are projected onto head coordinates independently of it, so nothing here
  * is computed relative to a stale line number; everything is re-derived
- * from current content on every call. Pass `claims: []` when the file has
+ * from current content on every call. `reviewedBaseline` instead uses the
+ * newest whole-file snapshot as its anchor when one exists, so a line edited
+ * both before and after review shows the reviewed text on the removed side;
+ * newer range claims may advance that anchor. With range-only claims it stays
+ * base-anchored. Pass `claims: []` when the file has
  * never been reviewed at all — the caller should skip calling this
  * entirely in that case (see `ReviewStore`'s callers), since the result is
  * simply every hunk reported `"new"`.
@@ -460,13 +462,35 @@ export const reconcile = (
 				claim.ranges === null && claim.snapshotContent !== input.headContent,
 		);
 
+		const anchor = input.claims
+			.filter((claim) => claim.ranges === null)
+			.sort((a, b) => b.viewedAt - a.viewedAt)[0];
+		const baselineHunks =
+			anchor === undefined
+				? baseHeadHunks
+				: yield* diffContents(
+						repoRoot,
+						anchor.snapshotContent,
+						input.headContent,
+					);
+		const baselineCoverage =
+			anchor === undefined
+				? coverage
+				: perClaimCoverage.flatMap((claimCoverage, index) => {
+						const claim = input.claims[index];
+						return claim !== undefined &&
+							claim.ranges !== null &&
+							claim.viewedAt > anchor.viewedAt
+							? claimCoverage
+							: [];
+					});
 		const reviewedBaseline =
 			input.claims.length === 0
 				? null
 				: synthesizeReviewedBaseline(
-						baseHeadHunks,
+						baselineHunks,
 						input.headContent,
-						coverage,
+						baselineCoverage,
 					);
 
 		return {
