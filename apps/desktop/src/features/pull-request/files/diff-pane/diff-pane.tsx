@@ -527,6 +527,14 @@ export function DiffPane({
 		},
 		[onVisiblePathChange],
 	);
+	const reportRenderedPaths = useCallback(
+		(viewer: CodeViewInstance<DiffAnnotationMetadata>) => {
+			// A smooth jump crosses intermediate windows that must not demand content.
+			if (suppressVisiblePathReportRef.current) return;
+			onRenderedPathsChange(viewer.getRenderedItems().map((item) => item.id));
+		},
+		[onRenderedPathsChange],
+	);
 
 	const clearSettleTimeout = useCallback(() => {
 		if (settleTimeoutRef.current !== null) {
@@ -561,12 +569,14 @@ export function DiffPane({
 			if (pending === null || !handle || !viewer) {
 				suppressVisiblePathReportRef.current = false;
 				settleTimeoutRef.current = null;
+				if (viewer) reportRenderedPaths(viewer);
 				return;
 			}
 			const topPath = findTopVisibleItemId(viewer, viewer.getScrollTop());
 			if (topPath === pending.path || retriesRemaining <= 0) {
 				suppressVisiblePathReportRef.current = false;
 				settleTimeoutRef.current = null;
+				reportRenderedPaths(viewer);
 				return;
 			}
 			handle.scrollTo(pending.target);
@@ -579,7 +589,7 @@ export function DiffPane({
 			() => checkLandedOnTarget(MAX_SETTLE_RECHECKS),
 			SCROLL_SETTLE_MS,
 		);
-	}, [clearSettleTimeout]);
+	}, [clearSettleTimeout, reportRenderedPaths]);
 
 	// A real wheel/touch during an in-flight programmatic scroll means the
 	// user is steering — hand control back immediately instead of waiting
@@ -591,7 +601,9 @@ export function DiffPane({
 		if (!suppressVisiblePathReportRef.current) return;
 		suppressVisiblePathReportRef.current = false;
 		clearSettleTimeout();
-	}, [clearSettleTimeout]);
+		const viewer = codeViewRef.current?.getInstance();
+		if (viewer) reportRenderedPaths(viewer);
+	}, [clearSettleTimeout, reportRenderedPaths]);
 
 	// Owns the CSS Custom Highlight API registry (two `Highlight`s per
 	// instance) and the per-item highlight bookkeeping — see
@@ -1274,15 +1286,9 @@ export function DiffPane({
 	// `DiffCodeView` below — since `codeViewRef` has nothing to attach to
 	// until `DiffCodeView` actually mounts.
 	const hasRenderableFiles = files.length > 0;
-	const reportRenderedPaths = useCallback(
-		(viewer: CodeViewInstance<DiffAnnotationMetadata>) => {
-			onRenderedPathsChange(viewer.getRenderedItems().map((item) => item.id));
-		},
-		[onRenderedPathsChange],
-	);
 	useEffect(() => {
 		if (items.length === 0) {
-			onRenderedPathsChange([]);
+			if (!suppressVisiblePathReportRef.current) onRenderedPathsChange([]);
 			return;
 		}
 		const frame = { current: null as number | null };
@@ -1433,11 +1439,11 @@ export function DiffPane({
 			// that tracking happen — see `refreshAnchorRect`'s doc comment
 			// for why a snapshotted rect can't do this on its own.
 			diffSelection.refreshAnchorRect();
-			reportRenderedPaths(viewer);
 			if (suppressVisiblePathReportRef.current) {
 				beginProgrammaticScrollSuppression();
 				return;
 			}
+			reportRenderedPaths(viewer);
 			// Not suppressed doesn't yet mean genuine — see
 			// `hasRealScrollInputRef`'s doc comment for why a content-driven
 			// reflow can still reach here unsuppressed.

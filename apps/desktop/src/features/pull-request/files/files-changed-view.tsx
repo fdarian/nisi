@@ -206,7 +206,9 @@ export function FilesChangedView({
 				.sort(comparePaths),
 		[files],
 	);
-	const [renderedPaths, setRenderedPaths] = useState<readonly string[]>([]);
+	const [renderedPaths, setRenderedPaths] = useState<readonly string[] | null>(
+		null,
+	);
 	// Unlike the virtualizer's current window, enabled chunks survive tab suspension.
 	const [stickyChunks, addDemandedChunks] = useSessionDemandedFileContentChunks(
 		session.id,
@@ -233,6 +235,7 @@ export function FilesChangedView({
 	}, [stickyChunks, demandedChunks, addDemandedChunks]);
 	const handleRenderedPathsChange = useCallback((paths: readonly string[]) => {
 		setRenderedPaths((current) =>
+			current !== null &&
 			current.length === paths.length &&
 			current.every((path, index) => path === paths[index])
 				? current

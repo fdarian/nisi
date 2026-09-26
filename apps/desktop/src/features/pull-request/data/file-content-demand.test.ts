@@ -10,6 +10,17 @@ const paths = Array.from(
 );
 
 describe("demandedFileContentChunks", () => {
+	test("demands the first chunk before a rendered-window report, plus the selection", () => {
+		expect([
+			...demandedFileContentChunks(paths, null, "file-95", false),
+		]).toEqual([0, 3]);
+		expect([...demandedFileContentChunks(paths, null, null, false)]).toEqual([
+			0,
+		]);
+		expect([...demandedFileContentChunks([], null, null, false)]).toEqual([]);
+		expect([...demandedFileContentChunks(paths, [], null, false)]).toEqual([]);
+	});
+
 	test("demands rendered chunks and one chunk after the last rendered item", () => {
 		expect([
 			...demandedFileContentChunks(
