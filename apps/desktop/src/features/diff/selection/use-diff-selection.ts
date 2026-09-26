@@ -25,6 +25,7 @@ import type { CodeViewHandle } from "@pierre/diffs/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { DiffSelectionReference } from "#/features/diff/diff-reference";
 import {
+	isEventOriginOnDiffRow,
 	isEventOriginOnGutter,
 	paintedSelectionMatchesRange,
 	pollUntilReady,
@@ -42,7 +43,7 @@ type UseDiffSelectionOptions<Metadata> = {
 type UseDiffSelectionResult = {
 	/** Feed straight to `<DiffCodeView selectedLines>`. */
 	selectedLines: CodeViewLineSelection | null;
-	isGutterDragInProgress: boolean;
+	isSelectionDragInProgress: boolean;
 	/** Feed straight to `<DiffCodeView onSelectedLinesChange>`. */
 	onSelectedLinesChange: (selection: CodeViewLineSelection | null) => void;
 	/** The floating button's target, or `null` when nothing resolves to one — no selection, a collapsed caret, or a text drag that crossed into a second file (see `resolveActiveTextSelection`'s doc comment). */
@@ -272,7 +273,8 @@ export function useDiffSelection<Metadata>({
 	// handling, not read as a stale selection left over from a previous
 	// gesture.
 	const gutterDragInProgressRef = useRef(false);
-	const [isGutterDragInProgress, setIsGutterDragInProgress] = useState(false);
+	const [isSelectionDragInProgress, setIsSelectionDragInProgress] =
+		useState(false);
 	const pendingGutterRectFrame = useRef<number | null>(null);
 
 	/**
@@ -475,10 +477,10 @@ export function useDiffSelection<Metadata>({
 		const handlePointerDown = (event: Event) => {
 			const startsOnGutter = isEventOriginOnGutter(event);
 			gutterDragInProgressRef.current = startsOnGutter;
-			setIsGutterDragInProgress(startsOnGutter);
+			setIsSelectionDragInProgress(isEventOriginOnDiffRow(event));
 		};
-		const endGutterDrag = () => {
-			setIsGutterDragInProgress(false);
+		const endSelectionDrag = () => {
+			setIsSelectionDragInProgress(false);
 		};
 		const recomputeTextSelection = (event: Event) => {
 			const items =
@@ -577,17 +579,17 @@ export function useDiffSelection<Metadata>({
 		document.addEventListener("selectionchange", recomputeTextSelection);
 		document.addEventListener("pointerup", recomputeTextSelection);
 		document.addEventListener("keyup", recomputeTextSelection);
-		window.addEventListener("mouseup", endGutterDrag);
-		window.addEventListener("pointercancel", endGutterDrag);
-		window.addEventListener("blur", endGutterDrag);
+		window.addEventListener("mouseup", endSelectionDrag);
+		window.addEventListener("pointercancel", endSelectionDrag);
+		window.addEventListener("blur", endSelectionDrag);
 		return () => {
 			document.removeEventListener("pointerdown", handlePointerDown);
 			document.removeEventListener("selectionchange", recomputeTextSelection);
 			document.removeEventListener("pointerup", recomputeTextSelection);
 			document.removeEventListener("keyup", recomputeTextSelection);
-			window.removeEventListener("mouseup", endGutterDrag);
-			window.removeEventListener("pointercancel", endGutterDrag);
-			window.removeEventListener("blur", endGutterDrag);
+			window.removeEventListener("mouseup", endSelectionDrag);
+			window.removeEventListener("pointercancel", endSelectionDrag);
+			window.removeEventListener("blur", endSelectionDrag);
 		};
 	}, [codeViewRef, resolveItemPath, resolveItemDiff]);
 
@@ -602,7 +604,7 @@ export function useDiffSelection<Metadata>({
 
 	return {
 		selectedLines: gutterSelection,
-		isGutterDragInProgress,
+		isSelectionDragInProgress,
 		onSelectedLinesChange: handleSelectedLinesChange,
 		reference,
 		headRange,
