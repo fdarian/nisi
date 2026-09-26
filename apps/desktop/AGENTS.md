@@ -1,8 +1,12 @@
 # @repo/desktop
 
-Tauri 2 desktop app: the port/token handshake between Rust and the Bun/Effect sidecar, the
+Tauri 3 alpha desktop app using Chromium/CEF: the port/token handshake between Rust and the Bun/Effect sidecar, the
 sidecar's git/review/walkthrough/settings domains, and a frontend wired to that live contract —
 see `apps/desktop/sidecar/AGENTS.md` for how the sidecar's own pieces fit together.
+
+Native builds require Rust 1.95+, CMake, and Ninja. The first CEF build downloads ~1 GB into
+`~/Library/Caches/tauri-cef`; allow time and space for it. The packaged frontend origin is
+`http://tauri.localhost`.
 
 Three parts, one seam:
 - `src-tauri/` — **Rust, intentionally thin.** Spawns/discovers the sidecar, hands `{ port, token }` to
@@ -257,9 +261,8 @@ fixture PR lives at `src/features/pull-request/walkthrough/walkthrough.fixture.t
 - **The `nisi://` deep-link scheme is registered once, in the base `tauri.conf.json`**
   (`plugins.deep-link.desktop.schemes`), inherited by both `bun run build` and `bun run build:dev` —
   unlike `externalBin` above, there's no dev-vs-build split to protect, since both bundles share
-  the same `identifier` and app-data dir. `tauri dev` produces no `.app` bundle at all
-  (`CFBundleURLTypes` is only emitted by the macOS bundler, which only `tauri build` runs) — a deep
-  link is only testable against a build from `bun run build` or `bun run build:dev`, installed
+  the same `identifier` and app-data dir. CEF's `tauri dev` runs from an `.app` bundle, but deep-link
+  registration should be tested against a build from `bun run build` or `bun run build:dev`, installed
   somewhere LaunchServices can see it (`/Applications` or `~/Applications`; `/tmp` isn't
   LaunchServices-trusted).
 - **`HarnessInfo.available` and `.enabled` are independent, both always present.** `available` is a

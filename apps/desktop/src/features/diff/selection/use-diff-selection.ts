@@ -136,14 +136,9 @@ function rowToReviewBoundary(
 
 /**
  * Finds the one active, non-collapsed selection across every rendered
- * item's shadow root, feature-detecting rather than assuming one engine's
- * behavior: this app has observed both a per-shadow-root `getSelection()`
- * (checked first, per item) and a plain `document.getSelection()` that
- * resolves directly into an open shadow tree's nodes when the whole
- * selection lives inside one (checked as the fallback). Which of the two
- * a given engine actually takes hasn't been confirmed on WKWebView
- * specifically — only that both codepaths exist and this function doesn't
- * assume in advance which one will fire.
+ * item's shadow root via Chromium's `getComposedRanges`. The returned
+ * `StaticRange` is copied into a live `Range` so the floating anchor follows
+ * DOM and scroll changes until the next selection update.
  *
  * A selection whose two boundaries resolve to different items (a drag that
  * crossed a file boundary) returns `undefined` rather than a reference
@@ -153,25 +148,25 @@ function rowToReviewBoundary(
 function resolveActiveTextSelection(
 	items: readonly { id: string; element: HTMLElement }[],
 ): { itemId: string; range: Range } | undefined {
-	for (const item of items) {
-		const shadowRoot = item.element.shadowRoot;
-		const getRootSelection = (
-			shadowRoot as unknown as { getSelection?: () => Selection | null }
-		)?.getSelection;
-		if (typeof getRootSelection !== "function") continue;
-		const selection = getRootSelection.call(shadowRoot);
-		if (selection && selection.rangeCount > 0 && !selection.isCollapsed) {
-			return { itemId: item.id, range: selection.getRangeAt(0) };
-		}
-	}
 	const selection = document.getSelection();
-	if (!selection || selection.rangeCount === 0 || selection.isCollapsed) {
+	if (!selection || selection.isCollapsed) {
 		return undefined;
 	}
-	const range = selection.getRangeAt(0);
-	const root = range.commonAncestorContainer.getRootNode();
-	const item = items.find((candidate) => candidate.element.shadowRoot === root);
-	return item ? { itemId: item.id, range } : undefined;
+	const shadowRoots = items.flatMap((item) =>
+		item.element.shadowRoot ? [item.element.shadowRoot] : [],
+	);
+	const composed = selection.getComposedRanges({ shadowRoots })[0];
+	if (!composed || composed.collapsed) return undefined;
+	const startRoot = composed.startContainer.getRootNode();
+	if (startRoot !== composed.endContainer.getRootNode()) return undefined;
+	const item = items.find(
+		(candidate) => candidate.element.shadowRoot === startRoot,
+	);
+	if (!item) return undefined;
+	const range = new Range();
+	range.setStart(composed.startContainer, composed.startOffset);
+	range.setEnd(composed.endContainer, composed.endOffset);
+	return { itemId: item.id, range };
 }
 
 /**
@@ -334,16 +329,7 @@ export function useDiffSelection<Metadata>({
 		}
 		const activeSelection = document.getSelection();
 		activeSelection?.removeAllRanges();
-		for (const item of codeViewRef.current?.getInstance()?.getRenderedItems() ??
-			[]) {
-			const getRootSelection = (
-				item.element.shadowRoot as unknown as {
-					getSelection?: () => Selection | null;
-				}
-			)?.getSelection;
-			getRootSelection?.call(item.element.shadowRoot)?.removeAllRanges();
-		}
-	}, [codeViewRef]);
+	}, []);
 
 	/**
 	 * Re-measures `anchorRect` against whichever selection source is
@@ -476,13 +462,8 @@ export function useDiffSelection<Metadata>({
 	// The text path: plain browser selection over code, which `@pierre/diffs`
 	// never touches (`enableLineSelection` only intercepts pointer-downs on
 	// the number column, see `use-diff-selection.ts`'s consumer for why).
-	// `selectionchange` is the natural event for this, but its behavior
-	// across an *open* shadow root's own selection (the WebKit path
-	// `resolveActiveTextSelection` feature-detects for) isn't something to
-	// assume without checking live — `pointerup`/`keyup` bubble out of an
-	// open shadow root as ordinary composed events regardless of which
-	// engine's Selection quirks apply, so those are the primary trigger here
-	// and `selectionchange` only a secondary one (e.g. Cmd+A "Select All").
+	// `pointerup`/`keyup` are the primary triggers; `selectionchange` also
+	// catches keyboard selections such as Cmd+A "Select All".
 	useEffect(() => {
 		// Records whether the gesture that's about to unfold started as a
 		// gutter drag — see `gutterDragInProgressRef`'s doc comment. Has to

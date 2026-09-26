@@ -20,7 +20,6 @@ import {
 	buildMatchRange,
 	findMatchRowElement,
 	pollUntilReady,
-	SUPPORTS_HIGHLIGHT_API,
 } from "#/features/diff/viewer/diff-match-dom";
 
 type UseDiffMatchHighlightingOptions<LAnnotation> = {
@@ -84,7 +83,6 @@ export function useDiffMatchHighlighting<LAnnotation>({
 	// its highlights (and its now-meaningless instance-scoped name) into the
 	// registry forever.
 	useEffect(() => {
-		if (!SUPPORTS_HIGHLIGHT_API) return;
 		const all = new Highlight();
 		const current = new Highlight();
 		current.priority = 1;
@@ -131,7 +129,6 @@ export function useDiffMatchHighlighting<LAnnotation>({
 	// catches up.
 	const onItemPostRender = useCallback(
 		(path: string, shadowRoot: ShadowRoot | undefined) => {
-			if (!SUPPORTS_HIGHLIGHT_API) return;
 			const matches = keywordMatchesByPath.get(path);
 			if (
 				shadowRoot === undefined ||
@@ -179,7 +176,6 @@ export function useDiffMatchHighlighting<LAnnotation>({
 	// scroll at all — and retries across frames since the target item (and
 	// this specific row within it) may not be mounted yet.
 	useEffect(() => {
-		if (!SUPPORTS_HIGHLIGHT_API) return;
 		if (currentMatch === undefined) {
 			currentMatchHighlight.current?.clear();
 			return;

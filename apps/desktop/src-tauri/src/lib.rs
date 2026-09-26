@@ -11,7 +11,7 @@ use tauri::menu::{
     Menu, MenuItem, PredefinedMenuItem, Submenu, HELP_SUBMENU_ID, WINDOW_SUBMENU_ID,
 };
 use tauri::webview::PageLoadEvent;
-use tauri::{Emitter, Listener, Manager, Runtime, TitleBarStyle, WebviewUrl, WebviewWindowBuilder};
+use tauri::{Emitter, Listener, Manager, TitleBarStyle, WebviewUrl, WebviewWindowBuilder};
 use tauri_plugin_shell::process::CommandChild;
 #[cfg(not(debug_assertions))]
 use tauri_plugin_shell::ShellExt;
@@ -179,7 +179,7 @@ const ABOUT_WINDOW_LABEL: &str = "about";
  * The Window submenu (still at the stable `WINDOW_SUBMENU_ID`) keeps only
  * minimize/maximize — both ways to close now live in File.
  */
-fn build_macos_menu<R: Runtime>(handle: &tauri::AppHandle<R>) -> tauri::Result<Menu<R>> {
+fn build_macos_menu(handle: &tauri::AppHandle) -> tauri::Result<Menu<tauri::DynRuntime>> {
     let pkg_info = handle.package_info();
 
     let app_menu = Submenu::with_items(
@@ -304,7 +304,7 @@ fn build_macos_menu<R: Runtime>(handle: &tauri::AppHandle<R>) -> tauri::Result<M
  * That race is what made the first click on "About nisi" do nothing; only
  * the second click worked, by hitting the already-exists branch instead.
  */
-fn build_about_window<R: Runtime>(handle: &tauri::AppHandle<R>) -> tauri::Result<()> {
+fn build_about_window(handle: &tauri::AppHandle) -> tauri::Result<()> {
     WebviewWindowBuilder::new(handle, ABOUT_WINDOW_LABEL, WebviewUrl::App("/about".into()))
         .title("About nisi")
         .inner_size(310.0, 450.0)
@@ -335,7 +335,7 @@ fn build_about_window<R: Runtime>(handle: &tauri::AppHandle<R>) -> tauri::Result
  * is logged and skipped rather than silently treated as "not focused", so a
  * lookup failure on one window doesn't hide the one that actually is.
  */
-fn find_focused_window<R: Runtime>(app: &tauri::AppHandle<R>) -> Option<tauri::WebviewWindow<R>> {
+fn find_focused_window(app: &tauri::AppHandle) -> Option<tauri::WebviewWindow> {
     app.webview_windows()
         .into_iter()
         .find_map(|(label, window)| match window.is_focused() {
@@ -351,6 +351,7 @@ fn find_focused_window<R: Runtime>(app: &tauri::AppHandle<R>) -> Option<tauri::W
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let builder = tauri::Builder::default()
+        .runtime(tauri_runtime_cef::Cef::default())
         .menu(build_macos_menu)
         .on_menu_event(|app, event| {
             if event.id() == CLOSE_TAB_MENU_ID {

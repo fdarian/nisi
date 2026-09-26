@@ -2,7 +2,7 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 use serde::Deserialize;
-use tauri::{Manager, Runtime};
+use tauri::Manager;
 
 use crate::{wait_for_sidecar_json, BackendState};
 
@@ -11,7 +11,7 @@ struct ActivationMessage {
     id: String,
 }
 
-pub fn activate_main_window<R: Runtime>(app: &tauri::AppHandle<R>) -> tauri::Result<()> {
+pub fn activate_main_window(app: &tauri::AppHandle) -> tauri::Result<()> {
     let window = app
         .get_webview_window("main")
         .ok_or_else(|| tauri::Error::WindowNotFound)?;
@@ -68,8 +68,8 @@ async fn connect(
     ))
 }
 
-async fn handle_message<R: Runtime>(
-    app: &tauri::AppHandle<R>,
+async fn handle_message(
+    app: &tauri::AppHandle,
     client: &reqwest::Client,
     backend: &BackendState,
     owner_id: &str,
@@ -101,8 +101,8 @@ async fn handle_message<R: Runtime>(
     Ok(())
 }
 
-async fn read_lines<R: Runtime>(
-    app: &tauri::AppHandle<R>,
+async fn read_lines(
+    app: &tauri::AppHandle,
     client: &reqwest::Client,
     backend: &BackendState,
     owner_id: &str,
@@ -128,11 +128,7 @@ async fn read_lines<R: Runtime>(
     }
 }
 
-pub async fn watch<R: Runtime>(
-    app: tauri::AppHandle<R>,
-    handshake_path: PathBuf,
-    owner_id: String,
-) {
+pub async fn watch(app: tauri::AppHandle, handshake_path: PathBuf, owner_id: String) {
     let client = reqwest::Client::new();
     let mut retry_ms = 500u64;
     loop {

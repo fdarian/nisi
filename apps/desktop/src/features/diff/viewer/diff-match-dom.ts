@@ -17,14 +17,8 @@ import type { DiffMatch } from "#/features/diff/diff-search";
  * split or otherwise touch them, which sidesteps both problems that come
  * with wrapping: reconciling raw character offsets against tokens that
  * split mid-match, and re-doing that surgery every time a virtualized row
- * is recycled. This is a single known engine (Tauri/WKWebView on macOS);
- * `Highlight`/`CSS.highlights` shipped in Safari 17.2. Still feature-detected
- * since this project pins no minimum macOS version.
+ * is recycled. The bundled Chromium 152 supports the Highlight API.
  */
-export const SUPPORTS_HIGHLIGHT_API =
-	typeof CSS !== "undefined" &&
-	"highlights" in CSS &&
-	typeof Highlight !== "undefined";
 
 /**
  * Locates one match's own rendered row inside a file item's shadow root.

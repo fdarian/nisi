@@ -124,7 +124,7 @@ export function FilesSidebar({
 						onKeyDown={(event) => {
 							if (event.key === "Escape") {
 								// `<input type="search">` clears itself natively on Escape
-								// (WebKit) — suppressed so this first Escape only blurs and
+								// in Chromium — suppressed so this first Escape only blurs and
 								// hands the query intact to `j`/`k`. A second Escape, once
 								// focus has left the input, clears it via the global
 								// `Escape` binding in `FilesChangedView`.

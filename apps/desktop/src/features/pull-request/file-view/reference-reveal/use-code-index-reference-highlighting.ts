@@ -10,7 +10,6 @@ import {
 import {
 	buildMatchRange,
 	findFileLineRowElement,
-	SUPPORTS_HIGHLIGHT_API,
 } from "#/features/diff/viewer/diff-match-dom";
 
 function referenceHighlightCSS(name: string): string {
@@ -67,7 +66,6 @@ export function useCodeIndexReferenceHighlighting<Metadata>(
 	}, [target]);
 
 	useEffect(() => {
-		if (!SUPPORTS_HIGHLIGHT_API) return;
 		const highlight = new Highlight();
 		highlightRef.current = highlight;
 		CSS.highlights.set(highlightName, highlight);
@@ -114,7 +112,6 @@ export function useCodeIndexReferenceHighlighting<Metadata>(
 				?.getRenderedItems()
 				.find((candidate) => candidate.id === current.path);
 			if (item === undefined) return false;
-			if (!SUPPORTS_HIGHLIGHT_API) return true;
 			const shadowRoot = item.element.shadowRoot;
 			return (
 				shadowRoot !== null && applyTarget(current, current.path, shadowRoot)
@@ -131,14 +128,12 @@ export function useCodeIndexReferenceHighlighting<Metadata>(
 				highlightRef.current?.clear();
 				return false;
 			}
-			if (!SUPPORTS_HIGHLIGHT_API) return true;
 			return applyTarget(current, path, shadowRoot);
 		},
 		[applyTarget],
 	);
 
 	useEffect(() => {
-		if (!SUPPORTS_HIGHLIGHT_API) return;
 		if (target === undefined) {
 			highlightRef.current?.clear();
 			return;
