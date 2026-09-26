@@ -45,6 +45,7 @@ type DiffSelectionPopoverProps = {
 	sessionId: string;
 	orpc: SidecarQueryUtils;
 	reference: DiffSelectionReference | null;
+	isGutterDragInProgress: boolean;
 	headRange?: HeadRange;
 	onMarkReviewed?: (range: HeadRange) => void;
 	/**
@@ -87,6 +88,7 @@ export function DiffSelectionPopover({
 	sessionId,
 	orpc,
 	reference,
+	isGutterDragInProgress,
 	headRange,
 	onMarkReviewed,
 	anchorRect,
@@ -202,9 +204,18 @@ export function DiffSelectionPopover({
 					side="bottom"
 					sideOffset={8}
 				>
-					<motion.div style={{ x: glide.x, y: glide.y }}>
+					<motion.div
+						style={{
+							x: glide.x,
+							y: glide.y,
+							pointerEvents: isGutterDragInProgress ? "none" : "auto",
+						}}
+					>
 						<PopoverPrimitive.Popup
 							className="outline-none"
+							style={{
+								pointerEvents: isGutterDragInProgress ? "none" : "auto",
+							}}
 							onWheel={(event) => {
 								if (event.deltaMode !== WheelEvent.DOM_DELTA_PIXEL) return;
 								if (scrollContainer === undefined) return;

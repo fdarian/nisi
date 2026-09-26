@@ -42,6 +42,7 @@ type UseDiffSelectionOptions<Metadata> = {
 type UseDiffSelectionResult = {
 	/** Feed straight to `<DiffCodeView selectedLines>`. */
 	selectedLines: CodeViewLineSelection | null;
+	isGutterDragInProgress: boolean;
 	/** Feed straight to `<DiffCodeView onSelectedLinesChange>`. */
 	onSelectedLinesChange: (selection: CodeViewLineSelection | null) => void;
 	/** The floating button's target, or `null` when nothing resolves to one — no selection, a collapsed caret, or a text drag that crossed into a second file (see `resolveActiveTextSelection`'s doc comment). */
@@ -271,6 +272,7 @@ export function useDiffSelection<Metadata>({
 	// handling, not read as a stale selection left over from a previous
 	// gesture.
 	const gutterDragInProgressRef = useRef(false);
+	const [isGutterDragInProgress, setIsGutterDragInProgress] = useState(false);
 	const pendingGutterRectFrame = useRef<number | null>(null);
 
 	/**
@@ -471,7 +473,13 @@ export function useDiffSelection<Metadata>({
 		// `pointerup` fires, the pointer itself carries no memory of where
 		// it went down, only where it is now.
 		const handlePointerDown = (event: Event) => {
-			gutterDragInProgressRef.current = isEventOriginOnGutter(event);
+			const startsOnGutter = isEventOriginOnGutter(event);
+			gutterDragInProgressRef.current = startsOnGutter;
+			setIsGutterDragInProgress(startsOnGutter);
+		};
+		const endGutterDrag = () => {
+			gutterDragInProgressRef.current = false;
+			setIsGutterDragInProgress(false);
 		};
 		const recomputeTextSelection = (event: Event) => {
 			const items =
@@ -570,11 +578,17 @@ export function useDiffSelection<Metadata>({
 		document.addEventListener("selectionchange", recomputeTextSelection);
 		document.addEventListener("pointerup", recomputeTextSelection);
 		document.addEventListener("keyup", recomputeTextSelection);
+		window.addEventListener("mouseup", endGutterDrag);
+		window.addEventListener("pointercancel", endGutterDrag);
+		window.addEventListener("blur", endGutterDrag);
 		return () => {
 			document.removeEventListener("pointerdown", handlePointerDown);
 			document.removeEventListener("selectionchange", recomputeTextSelection);
 			document.removeEventListener("pointerup", recomputeTextSelection);
 			document.removeEventListener("keyup", recomputeTextSelection);
+			window.removeEventListener("mouseup", endGutterDrag);
+			window.removeEventListener("pointercancel", endGutterDrag);
+			window.removeEventListener("blur", endGutterDrag);
 		};
 	}, [codeViewRef, resolveItemPath, resolveItemDiff]);
 
@@ -589,6 +603,7 @@ export function useDiffSelection<Metadata>({
 
 	return {
 		selectedLines: gutterSelection,
+		isGutterDragInProgress,
 		onSelectedLinesChange: handleSelectedLinesChange,
 		reference,
 		headRange,

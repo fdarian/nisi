@@ -1525,6 +1525,7 @@ export function DiffPane({
 			<DiffSelectionPopover
 				anchorRect={diffSelection.anchorRect}
 				headRange={diffSelection.headRange}
+				isGutterDragInProgress={diffSelection.isGutterDragInProgress}
 				onMarkReviewed={(range) => {
 					const reference = diffSelection.reference;
 					if (reference === null) return;
