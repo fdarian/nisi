@@ -282,7 +282,7 @@ importers:
         version: 7.0.113(zod@4.5.4)
       ai-microsandbox:
         specifier: file:/Users/farreldarian/code/fdarian/ai-microsandbox/packages/ai-microsandbox
-        version: file:../../../../code/fdarian/ai-microsandbox/packages/ai-microsandbox(@ai-sdk/harness@1.0.123(ws@8.21.0)(zod@4.5.4))(microsandbox@0.6.18(patch_hash=c588b3be9c03653d20e077249f82c4e141827ee72ed39d7441cae8f2fe6efc9d))(zod@4.5.4)
+        version: file:../../../../ai-microsandbox/packages/ai-microsandbox(@ai-sdk/harness@1.0.123(ws@8.21.0)(zod@4.5.4))(microsandbox@0.6.18(patch_hash=c588b3be9c03653d20e077249f82c4e141827ee72ed39d7441cae8f2fe6efc9d))(zod@4.5.4)
       class-variance-authority:
         specifier: ^0.7.1
         version: 0.7.1
@@ -3675,12 +3675,12 @@ packages:
       vite:
         optional: true
 
-  ai-microsandbox@file:../../../../code/fdarian/ai-microsandbox/packages/ai-microsandbox:
-    resolution: {directory: ../../../../code/fdarian/ai-microsandbox/packages/ai-microsandbox, type: directory}
+  ai-microsandbox@file:../../../../ai-microsandbox/packages/ai-microsandbox:
+    resolution: {directory: ../../../../ai-microsandbox/packages/ai-microsandbox, type: directory}
     engines: {node: '>=22'}
     peerDependencies:
-      '@ai-sdk/harness': ^1.0.65
-      microsandbox: ^0.6.8
+      '@ai-sdk/harness': ^1.0.123
+      microsandbox: ~0.6.18
 
   ai@7.0.113:
     resolution: {integrity: sha512-hOowAtiIUXwRqcdVRXll6ToNHYDdfXg+sFF1kYPlNDlgZ63rjR4mp1O29n5lSWZUNcHM1TlSzs30+6/XDUVcAA==}
@@ -9006,7 +9006,7 @@ snapshots:
       react-dom: 19.2.8(react@19.2.8)
       vite: 8.2.2(@types/node@26.4.1)(esbuild@0.28.2)(jiti@2.7.0)(yaml@2.9.0)
 
-  ai-microsandbox@file:../../../../code/fdarian/ai-microsandbox/packages/ai-microsandbox(@ai-sdk/harness@1.0.123(ws@8.21.0)(zod@4.5.4))(microsandbox@0.6.18(patch_hash=c588b3be9c03653d20e077249f82c4e141827ee72ed39d7441cae8f2fe6efc9d))(zod@4.5.4):
+  ai-microsandbox@file:../../../../ai-microsandbox/packages/ai-microsandbox(@ai-sdk/harness@1.0.123(ws@8.21.0)(zod@4.5.4))(microsandbox@0.6.18(patch_hash=c588b3be9c03653d20e077249f82c4e141827ee72ed39d7441cae8f2fe6efc9d))(zod@4.5.4):
     dependencies:
       '@ai-sdk/harness': 1.0.123(ws@8.21.0)(zod@4.5.4)
       '@ai-sdk/provider-utils': 5.0.26(zod@4.5.4)
