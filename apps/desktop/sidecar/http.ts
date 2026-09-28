@@ -290,18 +290,19 @@ export function attachRouter(
 		effect: Effect.Effect<A, never, AppServices>,
 	) => Effect.runPromise(Effect.provide(effect, mainContext));
 
-	const emitSessionTransition = (
-		sourceSessionId: string,
-		outcome: OpenSessionOutcome,
-	) =>
+	const emitSessionTransition = (outcome: OpenSessionOutcome) =>
 		Effect.gen(function* () {
 			if (outcome.kind === "opened") return;
 			if (outcome.kind === "retargeted") {
+				// The same row remains open under the same id, so subscribers need an
+				// update rather than a close event to refresh their session list.
 				emit({ type: "session-updated", session: outcome.session });
 				return;
 			}
-			yield* forkSessionCloseSideEffects(sourceSessionId, mainContext);
-			emit({ type: "session-closed", sessionId: sourceSessionId });
+			// Store closed the source row after finding the PR's existing key;
+			// mirror `sessions.close`'s sidecar-wide teardown here.
+			yield* forkSessionCloseSideEffects(outcome.sourceSessionId, mainContext);
+			emit({ type: "session-closed", sessionId: outcome.sourceSessionId });
 		});
 
 	/**
@@ -383,7 +384,7 @@ export function attachRouter(
 					input.target ?? { kind: "auto" },
 				);
 				const store = yield* Store;
-				const opening = store.openSessionWithOutcome(input.cwd, input.target);
+				const opening = store.openSession(input.cwd, input.target);
 				const outcome = yield* opening.pipe(
 					Effect.catchTag("InvalidCwd", (cause) =>
 						Effect.fail(
@@ -460,7 +461,7 @@ export function attachRouter(
 					),
 				);
 				const session = outcome.session;
-				yield* emitSessionTransition(outcome.sourceSessionId, outcome);
+				yield* emitSessionTransition(outcome);
 				yield* Effect.logInfo("session opened", {
 					sessionId: session.id,
 					repoRoot: session.repoRoot,
@@ -543,7 +544,7 @@ export function attachRouter(
 				);
 				const session = outcome.session;
 
-				yield* emitSessionTransition(outcome.sourceSessionId, outcome);
+				yield* emitSessionTransition(outcome);
 
 				yield* Effect.logInfo("session switched to pull request", {
 					sessionId: session.id,

@@ -144,11 +144,13 @@ export type Session = {
 	readonly target: SessionTarget;
 };
 
-export type OpenSessionOutcome = {
-	readonly kind: "opened" | "retargeted" | "existing";
-	readonly session: Session;
-	readonly sourceSessionId: string;
-};
+export type OpenSessionOutcome =
+	| { readonly kind: "opened"; readonly session: Session }
+	| {
+			readonly kind: "retargeted" | "existing";
+			readonly session: Session;
+			readonly sourceSessionId: string;
+	  };
 
 /** `pullRequests.open`'s input — the palette only ever knows `owner/repo#number`, never a local path; see `openPullRequestSession`'s doc for how the rest gets resolved. */
 export type OpenPullRequestInput = {
@@ -387,6 +389,9 @@ export class Store extends Context.Service<Store>()("Store", {
 			headRef: string,
 		) =>
 			Effect.gen(function* () {
+				// A same-key PR session is a collision: close the source row here,
+				// while the sidecar-wide teardown stays in `http.ts` alongside
+				// `sessions.close`'s cleanup.
 				const outcome = yield* reviewStore.retargetToPullRequest(
 					sessionId,
 					pr,
@@ -403,7 +408,7 @@ export class Store extends Context.Service<Store>()("Store", {
 				} as const;
 			});
 
-		const openSessionWithOutcome = (
+		const openSession = (
 			cwd: string,
 			target: OpenSessionTarget = { kind: "auto" },
 		) =>
@@ -412,6 +417,19 @@ export class Store extends Context.Service<Store>()("Store", {
 					Effect.catchTag("NotAGitRepository", () => new InvalidCwd({ cwd })),
 				);
 				const resolved = yield* resolveSessionTarget(repoRoot, target);
+				const openFreshSession = reviewStore
+					.openSession({
+						repoRoot,
+						baseRef: resolved.baseRef,
+						headRef: resolved.headRef,
+						pr: resolved.pr,
+					})
+					.pipe(
+						Effect.map((session) => ({
+							kind: "opened" as const,
+							session: toWireSession(session),
+						})),
+					);
 				if (
 					resolved.pr !== null &&
 					(target.kind === "auto" || target.kind === "pr")
@@ -430,46 +448,11 @@ export class Store extends Context.Service<Store>()("Store", {
 							resolved.pr,
 							resolved.baseRef,
 							resolved.headRef,
-						).pipe(
-							Effect.catchTag("SessionNotFound", () =>
-								reviewStore
-									.openSession({
-										repoRoot,
-										baseRef: resolved.baseRef,
-										headRef: resolved.headRef,
-										pr: resolved.pr,
-									})
-									.pipe(
-										Effect.map((session) => ({
-											kind: "opened" as const,
-											session: toWireSession(session),
-											sourceSessionId: session.id,
-										})),
-									),
-							),
-						);
+						).pipe(Effect.catchTag("SessionNotFound", () => openFreshSession));
 					}
 				}
-				const session = yield* reviewStore.openSession({
-					repoRoot,
-					baseRef: resolved.baseRef,
-					headRef: resolved.headRef,
-					pr: resolved.pr,
-				});
-				return {
-					kind: "opened" as const,
-					session: toWireSession(session),
-					sourceSessionId: session.id,
-				};
+				return yield* openFreshSession;
 			});
-
-		const openSession = (
-			cwd: string,
-			target: OpenSessionTarget = { kind: "auto" },
-		) =>
-			openSessionWithOutcome(cwd, target).pipe(
-				Effect.map((outcome) => outcome.session),
-			);
 
 		/**
 		 * `owner/repo`'s local checkout path — a known mapping if one's already
@@ -658,11 +641,11 @@ export class Store extends Context.Service<Store>()("Store", {
 					number: input.number,
 					headRef,
 				});
-				const session = yield* openSession(worktreePath, {
+				const outcome = yield* openSession(worktreePath, {
 					kind: "specificPullRequest",
 					number: input.number,
 				});
-				return { status: "opened" as const, session };
+				return { status: "opened" as const, session: outcome.session };
 			});
 
 		/**
@@ -1481,7 +1464,6 @@ export class Store extends Context.Service<Store>()("Store", {
 
 		return {
 			openSession,
-			openSessionWithOutcome,
 			switchToPr,
 			openPullRequestSession,
 			recordRepoPath,

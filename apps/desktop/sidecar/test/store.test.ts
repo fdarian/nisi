@@ -9,7 +9,7 @@ import { ReviewStore } from "@repo/review";
 import { SettingsStore } from "@repo/settings";
 import { ConfigProvider, Effect, Layer, Option, Result, Stream } from "effect";
 import { PullRequestAttentionLive } from "../pull-request-attention.ts";
-import { Store } from "../store.ts";
+import { type OpenSessionOutcome, Store } from "../store.ts";
 
 /** Runs real `git` for test setup — the code under test uses its own Effect-based runner. */
 const sh = async (cwd: string, args: ReadonlyArray<string>): Promise<void> => {
@@ -83,6 +83,9 @@ const makeTestLayer = (dataDir: string, withPullRequest = false) =>
 		),
 	);
 
+const openedSession = <E, R>(effect: Effect.Effect<OpenSessionOutcome, E, R>) =>
+	effect.pipe(Effect.map((outcome) => outcome.session));
+
 const withTestRepoAndDataDir = async <T>(
 	fn: (repoRoot: string, dataDir: string) => Promise<T>,
 ): Promise<T> => {
@@ -102,10 +105,12 @@ describe("Store.openSession — branch target with an explicit baseRef", () => {
 			const result = await Effect.runPromise(
 				Effect.gen(function* () {
 					const store = yield* Store;
-					return yield* store.openSession(repoRoot, {
-						kind: "branch",
-						baseRef: "totally-not-a-real-ref",
-					});
+					return yield* openedSession(
+						store.openSession(repoRoot, {
+							kind: "branch",
+							baseRef: "totally-not-a-real-ref",
+						}),
+					);
 				}).pipe(Effect.result, Effect.provide(makeTestLayer(dataDir))),
 			);
 
@@ -123,10 +128,12 @@ describe("Store.openSession — branch target with an explicit baseRef", () => {
 			const session = await Effect.runPromise(
 				Effect.gen(function* () {
 					const store = yield* Store;
-					return yield* store.openSession(repoRoot, {
-						kind: "branch",
-						baseRef: "main",
-					});
+					return yield* openedSession(
+						store.openSession(repoRoot, {
+							kind: "branch",
+							baseRef: "main",
+						}),
+					);
 				}).pipe(Effect.provide(makeTestLayer(dataDir))),
 			);
 
@@ -155,21 +162,25 @@ describe("Store.openSession — reuses matching branch review state for a PR", (
 				Effect.gen(function* () {
 					const store = yield* Store;
 					const reviewStore = yield* ReviewStore;
-					const branch = yield* store.openSession(repoRoot, {
-						kind: "branch",
-						baseRef: "main",
-					});
+					const branch = yield* openedSession(
+						store.openSession(repoRoot, {
+							kind: "branch",
+							baseRef: "main",
+						}),
+					);
 					yield* reviewStore.markFileViewed(
 						branch.id,
 						"a.ts",
 						Option.some(new TextEncoder().encode("hello\n")),
 					);
-					const opened = yield* store.openSessionWithOutcome(repoRoot, {
+					const opened = yield* store.openSession(repoRoot, {
 						kind: "auto",
 					});
-					const reopened = yield* store.openSession(repoRoot, {
-						kind: "auto",
-					});
+					const reopened = yield* openedSession(
+						store.openSession(repoRoot, {
+							kind: "auto",
+						}),
+					);
 					const state = yield* reviewStore.getFileReviewState(
 						branch.id,
 						"a.ts",
@@ -193,10 +204,12 @@ describe("Store.openSession — reuses matching branch review state for a PR", (
 				Effect.gen(function* () {
 					const store = yield* Store;
 					const reviewStore = yield* ReviewStore;
-					const branch = yield* store.openSession(repoRoot, {
-						kind: "branch",
-						baseRef: "main",
-					});
+					const branch = yield* openedSession(
+						store.openSession(repoRoot, {
+							kind: "branch",
+							baseRef: "main",
+						}),
+					);
 					const prSession = yield* reviewStore.openSession({
 						repoRoot: branch.repoRoot,
 						baseRef: "main",
@@ -208,7 +221,7 @@ describe("Store.openSession — reuses matching branch review state for a PR", (
 							repo: "widgets",
 						},
 					});
-					const opened = yield* store.openSessionWithOutcome(repoRoot, {
+					const opened = yield* store.openSession(repoRoot, {
 						kind: "auto",
 					});
 					return {
@@ -234,7 +247,9 @@ describe("Store.openSession — reuses matching branch review state for a PR", (
 			const session = await Effect.runPromise(
 				Effect.gen(function* () {
 					const store = yield* Store;
-					return yield* store.openSession(repoRoot, { kind: "branch" });
+					return yield* openedSession(
+						store.openSession(repoRoot, { kind: "branch" }),
+					);
 				}).pipe(Effect.provide(makeTestLayer(dataDir, true))),
 			);
 
@@ -263,10 +278,12 @@ test("range claims change the Files Changed patch for a single added line", asyn
 		const result = await Effect.runPromise(
 			Effect.gen(function* () {
 				const store = yield* Store;
-				const session = yield* store.openSession(repoRoot, {
-					kind: "branch",
-					baseRef: "main",
-				});
+				const session = yield* openedSession(
+					store.openSession(repoRoot, {
+						kind: "branch",
+						baseRef: "main",
+					}),
+				);
 				const before = yield* store.readFileContents(
 					session.id,
 					[{ path: "a.ts", force: false }],
@@ -346,10 +363,12 @@ test("a post-review edit to the same line removes the reviewed version, not the 
 		const session = await Effect.runPromise(
 			Effect.gen(function* () {
 				const store = yield* Store;
-				const opened = yield* store.openSession(repoRoot, {
-					kind: "branch",
-					baseRef: "main",
-				});
+				const opened = yield* openedSession(
+					store.openSession(repoRoot, {
+						kind: "branch",
+						baseRef: "main",
+					}),
+				);
 				yield* store.setFileViewed(opened.id, "a.ts", true);
 				return opened;
 			}).pipe(Effect.provide(makeTestLayer(dataDir))),
@@ -391,10 +410,12 @@ test("a walkthrough claim and a whole-file tick both produce the empty reviewed 
 		const result = await Effect.runPromise(
 			Effect.gen(function* () {
 				const store = yield* Store;
-				const session = yield* store.openSession(repoRoot, {
-					kind: "branch",
-					baseRef: "main",
-				});
+				const session = yield* openedSession(
+					store.openSession(repoRoot, {
+						kind: "branch",
+						baseRef: "main",
+					}),
+				);
 				yield* store.setRangeViewed(
 					session.id,
 					"a.ts",
@@ -442,11 +463,13 @@ describe("Store.openSession — branch target with an explicit headRef (two arbi
 			const result = await Effect.runPromise(
 				Effect.gen(function* () {
 					const store = yield* Store;
-					return yield* store.openSession(repoRoot, {
-						kind: "branch",
-						baseRef: "main",
-						headRef: "totally-not-a-real-ref",
-					});
+					return yield* openedSession(
+						store.openSession(repoRoot, {
+							kind: "branch",
+							baseRef: "main",
+							headRef: "totally-not-a-real-ref",
+						}),
+					);
 				}).pipe(Effect.result, Effect.provide(makeTestLayer(dataDir))),
 			);
 
@@ -471,11 +494,13 @@ describe("Store.openSession — branch target with an explicit headRef (two arbi
 			const session = await Effect.runPromise(
 				Effect.gen(function* () {
 					const store = yield* Store;
-					return yield* store.openSession(repoRoot, {
-						kind: "branch",
-						baseRef: "main",
-						headRef: "feature",
-					});
+					return yield* openedSession(
+						store.openSession(repoRoot, {
+							kind: "branch",
+							baseRef: "main",
+							headRef: "feature",
+						}),
+					);
 				}).pipe(Effect.provide(makeTestLayer(dataDir))),
 			);
 
@@ -503,11 +528,13 @@ describe("Store.openSession — branch target with an explicit headRef (two arbi
 			const files = await Effect.runPromise(
 				Effect.gen(function* () {
 					const store = yield* Store;
-					const session = yield* store.openSession(repoRoot, {
-						kind: "branch",
-						baseRef: "main",
-						headRef: "feature",
-					});
+					const session = yield* openedSession(
+						store.openSession(repoRoot, {
+							kind: "branch",
+							baseRef: "main",
+							headRef: "feature",
+						}),
+					);
 					return yield* store.listChangedFiles(session.id, true);
 				}).pipe(Effect.provide(makeTestLayer(dataDir))),
 			);
@@ -549,11 +576,13 @@ describe("Store — tracked-changes writes never snapshot the wrong branch's con
 				Effect.gen(function* () {
 					const store = yield* Store;
 					const reviewStore = yield* ReviewStore;
-					const session = yield* store.openSession(repoRoot, {
-						kind: "branch",
-						baseRef: "main",
-						headRef: "feature",
-					});
+					const session = yield* openedSession(
+						store.openSession(repoRoot, {
+							kind: "branch",
+							baseRef: "main",
+							headRef: "feature",
+						}),
+					);
 					yield* store.setFileViewed(session.id, "a.ts", true);
 					const state = yield* reviewStore.getFileReviewState(
 						session.id,
@@ -583,9 +612,11 @@ describe("Store — tracked-changes writes never snapshot the wrong branch's con
 			const sessionId = await Effect.runPromise(
 				Effect.gen(function* () {
 					const store = yield* Store;
-					const session = yield* store.openSession(repoRoot, {
-						kind: "branch",
-					});
+					const session = yield* openedSession(
+						store.openSession(repoRoot, {
+							kind: "branch",
+						}),
+					);
 					return session.id;
 				}).pipe(Effect.provide(makeTestLayer(dataDir))),
 			);
@@ -649,10 +680,12 @@ describe("Store — tracked-changes writes never snapshot the wrong branch's con
 			const sessionId = await Effect.runPromise(
 				Effect.gen(function* () {
 					const store = yield* Store;
-					const session = yield* store.openSession(repoRoot, {
-						kind: "branch",
-						baseRef: "main",
-					});
+					const session = yield* openedSession(
+						store.openSession(repoRoot, {
+							kind: "branch",
+							baseRef: "main",
+						}),
+					);
 					return session.id;
 				}).pipe(Effect.provide(makeTestLayer(dataDir))),
 			);
@@ -723,9 +756,11 @@ describe("Store.setFileViewed — a committed symlink", () => {
 			const files = await Effect.runPromise(
 				Effect.gen(function* () {
 					const store = yield* Store;
-					const session = yield* store.openSession(repoRoot, {
-						kind: "branch",
-					});
+					const session = yield* openedSession(
+						store.openSession(repoRoot, {
+							kind: "branch",
+						}),
+					);
 					yield* store.setFileViewed(session.id, "link.txt", true);
 					return yield* store.listChangedFiles(session.id, false);
 				}).pipe(Effect.provide(makeTestLayer(dataDir))),
@@ -770,10 +805,12 @@ describe("Store.setFileViewed — working-tree read failures", () => {
 					// committed tree instead, where it still exists.
 					yield* settingsStore.update({ includeUncommitted: true });
 
-					const session = yield* store.openSession(repoRoot, {
-						kind: "branch",
-						baseRef: "main",
-					});
+					const session = yield* openedSession(
+						store.openSession(repoRoot, {
+							kind: "branch",
+							baseRef: "main",
+						}),
+					);
 
 					yield* store.setFileViewed(session.id, "a.ts", true);
 
@@ -814,10 +851,12 @@ describe("Store.setFileViewed — working-tree read failures", () => {
 					// and never sees the stray directory on disk.
 					yield* settingsStore.update({ includeUncommitted: true });
 
-					const session = yield* store.openSession(repoRoot, {
-						kind: "branch",
-						baseRef: "main",
-					});
+					const session = yield* openedSession(
+						store.openSession(repoRoot, {
+							kind: "branch",
+							baseRef: "main",
+						}),
+					);
 
 					const outcome = yield* store
 						.setFileViewed(session.id, "a.ts", true)
@@ -872,10 +911,12 @@ describe("Store — setFileViewed and listChangedFiles agree on 'current content
 				Effect.gen(function* () {
 					const store = yield* Store;
 					const reviewStore = yield* ReviewStore;
-					const session = yield* store.openSession(repoRoot, {
-						kind: "branch",
-						baseRef: "main",
-					});
+					const session = yield* openedSession(
+						store.openSession(repoRoot, {
+							kind: "branch",
+							baseRef: "main",
+						}),
+					);
 
 					yield* store.setFileViewed(session.id, "a.ts", true);
 
@@ -912,10 +953,12 @@ describe("Store — setFileViewed and listChangedFiles agree on 'current content
 				Effect.gen(function* () {
 					const store = yield* Store;
 					const reviewStore = yield* ReviewStore;
-					const session = yield* store.openSession(repoRoot, {
-						kind: "branch",
-						baseRef: "main",
-					});
+					const session = yield* openedSession(
+						store.openSession(repoRoot, {
+							kind: "branch",
+							baseRef: "main",
+						}),
+					);
 
 					yield* store.setFileViewed(session.id, "a.ts", true);
 
@@ -957,10 +1000,12 @@ describe("Store — setFileViewed and listChangedFiles agree on 'current content
 					// Worktree mode, so the write sees the file as genuinely
 					// absent right now (not merely absent from HEAD).
 					yield* settingsStore.update({ includeUncommitted: true });
-					const session = yield* store.openSession(repoRoot, {
-						kind: "branch",
-						baseRef: "main",
-					});
+					const session = yield* openedSession(
+						store.openSession(repoRoot, {
+							kind: "branch",
+							baseRef: "main",
+						}),
+					);
 					yield* store.setFileViewed(session.id, "a.ts", true);
 					return session.id;
 				}).pipe(Effect.provide(makeTestLayer(dataDir))),
@@ -995,10 +1040,12 @@ describe("Store — setFileViewed and listChangedFiles agree on 'current content
 					const store = yield* Store;
 					const settingsStore = yield* SettingsStore;
 					yield* settingsStore.update({ includeUncommitted: true });
-					const session = yield* store.openSession(repoRoot, {
-						kind: "branch",
-						baseRef: "main",
-					});
+					const session = yield* openedSession(
+						store.openSession(repoRoot, {
+							kind: "branch",
+							baseRef: "main",
+						}),
+					);
 					yield* store.setFileViewed(session.id, "a.ts", true);
 					return session.id;
 				}).pipe(Effect.provide(makeTestLayer(dataDir))),
