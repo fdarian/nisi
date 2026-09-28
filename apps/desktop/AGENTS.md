@@ -118,11 +118,6 @@ across restarts of the same session too. The sidecar gets a second, separately-n
 from the same session the same way, so it's stable across restarts too — only its token is minted
 fresh each `bun dev` run, since there's no sticky equivalent for it — see [The seam](#the-seam).
 
-The native CEF runtime uses `<NISI_DATA_DIR>/cef` as its Chromium cache root in dev, keeping its
-ProcessSingleton lock separate from production's `~/Library/Caches/com.nisi.desktop/cef` and from
-other worktrees. A worktree's cloned `.data` must not carry over Chromium's `Singleton*` symlinks;
-`.config/wt.toml` removes them after copying the session tree.
-
 `dev.ts` prints `NISI_DATA_DIR=<path>` on startup — that line is deliberately copy-pasteable.
 Since prod keeps the untouched default, a plain `nisi` from a terminal always reaches the
 **production** app; pointing it at a dev session instead is `NISI_DATA_DIR=<path from that line> nisi`.
