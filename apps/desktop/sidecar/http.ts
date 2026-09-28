@@ -78,7 +78,11 @@ import {
 	reportChatCloseFailure,
 } from "./session-close.ts";
 import { SessionWatch } from "./session-watch.ts";
-import { type SessionNotFound, Store } from "./store.ts";
+import {
+	type OpenSessionOutcome,
+	type SessionNotFound,
+	Store,
+} from "./store.ts";
 import { streamToIterator } from "./stream-bridge.ts";
 import { Updater } from "./updater/service.ts";
 import {
@@ -286,6 +290,21 @@ export function attachRouter(
 		effect: Effect.Effect<A, never, AppServices>,
 	) => Effect.runPromise(Effect.provide(effect, mainContext));
 
+	const emitSessionTransition = (outcome: OpenSessionOutcome) =>
+		Effect.gen(function* () {
+			if (outcome.kind === "opened") return;
+			if (outcome.kind === "retargeted") {
+				// The same row remains open under the same id, so subscribers need an
+				// update rather than a close event to refresh their session list.
+				emit({ type: "session-updated", session: outcome.session });
+				return;
+			}
+			// Store closed the source row after finding the PR's existing key;
+			// mirror `sessions.close`'s sidecar-wide teardown here.
+			yield* forkSessionCloseSideEffects(outcome.sourceSessionId, mainContext);
+			emit({ type: "session-closed", sessionId: outcome.sourceSessionId });
+		});
+
 	/**
 	 * Every `codeIndex.*` handler starts by resolving `sessionId` to a live
 	 * repo root. Mirrors `file.get`'s own repo-root-resolution catch
@@ -365,7 +384,8 @@ export function attachRouter(
 					input.target ?? { kind: "auto" },
 				);
 				const store = yield* Store;
-				const session = yield* store.openSession(input.cwd, input.target).pipe(
+				const opening = store.openSession(input.cwd, input.target);
+				const outcome = yield* opening.pipe(
 					Effect.catchTag("InvalidCwd", (cause) =>
 						Effect.fail(
 							errors.BAD_REQUEST({
@@ -427,7 +447,7 @@ export function attachRouter(
 					Effect.onExit((exit) =>
 						Effect.sync(() => {
 							if (Exit.isSuccess(exit)) {
-								resolveOpenRequest(request.id, exit.value);
+								resolveOpenRequest(request.id, exit.value.session);
 							} else {
 								const error = Option.getOrUndefined(Exit.findErrorOption(exit));
 								failOpenRequest(
@@ -440,6 +460,8 @@ export function attachRouter(
 						}),
 					),
 				);
+				const session = outcome.session;
+				yield* emitSessionTransition(outcome);
 				yield* Effect.logInfo("session opened", {
 					sessionId: session.id,
 					repoRoot: session.repoRoot,
@@ -522,22 +544,7 @@ export function attachRouter(
 				);
 				const session = outcome.session;
 
-				if (outcome.kind === "retargeted") {
-					// Same tab, new PR identity. No row closed, so
-					// `session-updated` (not `session-closed`) is what tells
-					// every `sessions.list` subscriber to refetch.
-					emit({ type: "session-updated", session });
-				} else {
-					// Collision: some other session already held this PR's key, so
-					// `store.switchToPr` closed the source row instead
-					// (`Store.closeSession`, the domain-level state) and answered
-					// with that pre-existing session. The rest of a genuine close
-					// still needs doing — same teardown `sessions.close`'s handler
-					// runs, since this source session's live walkthrough/chat/watch
-					// state has no other owner now either.
-					yield* forkSessionCloseSideEffects(input.sessionId, mainContext);
-					emit({ type: "session-closed", sessionId: input.sessionId });
-				}
+				yield* emitSessionTransition(outcome);
 
 				yield* Effect.logInfo("session switched to pull request", {
 					sessionId: session.id,

@@ -162,6 +162,43 @@ describe("ReviewStore sessions", () => {
 		});
 	});
 
+	test("listOpenBranchSessions filters by repo, head, PR status, and open state", async () => {
+		await withTempDataDir(async (dataDir) => {
+			const matching = await run(
+				dataDir,
+				Effect.gen(function* () {
+					const store = yield* ReviewStore;
+					const branch = yield* store.openSession({ ...prInput, pr: null });
+					yield* store.openSession(prInput);
+					yield* store.openSession({
+						...prInput,
+						repoRoot: "/other-repo",
+						pr: null,
+					});
+					yield* store.openSession({
+						...prInput,
+						headRef: "other-branch",
+						pr: null,
+					});
+					const closed = yield* store.openSession({
+						...prInput,
+						headRef: "closed-branch",
+						pr: null,
+					});
+					yield* store.closeSession(closed.id);
+					return {
+						branch,
+						sessions: yield* store.listOpenBranchSessions("/repo", "feature"),
+					};
+				}),
+			);
+
+			expect(matching.sessions.map((session) => session.id)).toEqual([
+				matching.branch.id,
+			]);
+		});
+	});
+
 	test("closeSession excludes a session from listOpenSessions, but reopening the same repo+PR reuses its id", async () => {
 		await withTempDataDir(async (dataDir) => {
 			const result = await run(
