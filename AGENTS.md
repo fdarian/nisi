@@ -37,6 +37,7 @@ with the detail — this is only the map.
 - `packages/cli` — the `nisi` command; detects the PR and hands off to the app.
 - `packages/logging` — `LOG_LEVEL` config and the rotating file logger.
 - `packages/bin-resolver` — resolves CLI binaries against the login shell's `PATH`, not the GUI's.
+- `packages/code-lsp` — JSON-RPC-over-stdio client for TypeScript 7's native LSP server.
 
 There's no `packages/config`: each package extends `@total-typescript/tsconfig` directly. Add one
 once the duplication actually hurts.
@@ -96,5 +97,4 @@ slow (roughly 13–28s) while nisi installs a pinned copy of it; every run after
     [teardown](knowledge/codeview-teardown-leak-patch.md),
     [scroll target](knowledge/codeview-stale-pending-scroll-target-patch.md), and
     [sticky jitter](knowledge/deferred-frontend-perf-work.md).
-- Path alias is `#/*` → `src/*` in every package, not `@/*`.
-- `AGENTS.md` is the source of truth in every workspace; `CLAUDE.md` is always a symlink to it.
+- `apps/desktop` aliases `#/*` → `src/*` (not `@/*`); the `packages/*` use relative imports.
