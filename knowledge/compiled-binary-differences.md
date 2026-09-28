@@ -70,8 +70,9 @@ models and disappears from the model picker. Fixed with
 alone was sufficient; no need for the broader `com.apple.security.cs.allow-unsigned-executable-memory`
 — referenced via `bundle.macOS.entitlements` in both `tauri.build.conf.json` and
 `tauri.build.dev.conf.json` (both drive `tauri build` and sign the sidecar through the same
-codepath; the base `tauri.conf.json` doesn't need it since `tauri dev` never bundles/signs
-anything).[^entitlements] Confirmed on a real `tauri build`: `codesign -d --entitlements -` on the
+ codepath; `tauri dev` signs a CEF app bundle but does not bundle the compiled sidecar, so the base
+ `tauri.conf.json` does not need the sidecar entitlement).[^entitlements] Confirmed on a real
+ `tauri build`: `codesign -d --entitlements -` on the
 rebuilt sidecar shows the JIT key, and a `walkthrough.refreshHarnesses` call against that sidecar
 (via a hand-built `SidecarClient`, see below) returned the `claude-code` harness with 5 models
 (`default`, `opus[1m]`, `claude-fable-5[1m]`, `sonnet`, `haiku`) and no error.
