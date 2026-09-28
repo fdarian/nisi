@@ -350,8 +350,14 @@ fn find_focused_window(app: &tauri::AppHandle) -> Option<tauri::WebviewWindow> {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    let mut cef = tauri_runtime_cef::Cef::default();
+    if let Ok(data_dir) = std::env::var("NISI_DATA_DIR") {
+        // Chromium's ProcessSingleton locks the cache root; sharing prod's root makes CefInitialize fail while prod runs.
+        cef = cef.root_cache_path(PathBuf::from(data_dir).join("cef"));
+    }
+
     let builder = tauri::Builder::default()
-        .runtime(tauri_runtime_cef::Cef::default())
+        .runtime(cef)
         .menu(build_macos_menu)
         .on_menu_event(|app, event| {
             if event.id() == CLOSE_TAB_MENU_ID {
