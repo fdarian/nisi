@@ -324,6 +324,25 @@ export class ReviewStore extends Context.Service<ReviewStore>()("ReviewStore", {
 					.orderBy(desc(sessions.updatedAt)),
 			).pipe(Effect.map((rows) => rows.map(toSession)));
 
+		const listOpenBranchSessions = (
+			repoRoot: string,
+			headRef: string,
+		): Effect.Effect<ReadonlyArray<Session>, ReviewStoreError> =>
+			query(
+				db
+					.select()
+					.from(sessions)
+					.where(
+						and(
+							eq(sessions.repoRoot, repoRoot),
+							eq(sessions.headRef, headRef),
+							isNull(sessions.prNumber),
+							isNull(sessions.closedAt),
+						),
+					)
+					.orderBy(desc(sessions.updatedAt)),
+			).pipe(Effect.map((rows) => rows.map(toSession)));
+
 		const closeSession = (
 			sessionId: string,
 		): Effect.Effect<void, SessionNotFound | ReviewStoreError> =>
@@ -608,6 +627,7 @@ export class ReviewStore extends Context.Service<ReviewStore>()("ReviewStore", {
 			openSession,
 			retargetToPullRequest,
 			listOpenSessions,
+			listOpenBranchSessions,
 			closeSession,
 			getSession,
 			updateRepoRoot,

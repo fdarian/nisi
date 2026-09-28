@@ -4,10 +4,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { BunServices } from "@effect/platform-bun";
 import { SqliteDb } from "@repo/db";
-import { GhGitHub } from "@repo/git";
+import { GhGitHub, GitHub, type GitHubShape } from "@repo/git";
 import { ReviewStore } from "@repo/review";
 import { SettingsStore } from "@repo/settings";
-import { ConfigProvider, Effect, Layer, Result } from "effect";
+import { ConfigProvider, Effect, Layer, Option, Result, Stream } from "effect";
 import { PullRequestAttentionLive } from "../pull-request-attention.ts";
 import { Store } from "../store.ts";
 
@@ -38,10 +38,41 @@ const makeTestRepo = async (): Promise<string> => {
 };
 
 /** Same composition as `packages/review/test/fixtures.ts`'s `makeTestLayer`, one layer up — `Store.layer` already pulls in `ReviewStore.layer` via `provideMerge`, so this only has to add what `Store.make` needs beyond that: `SqliteDb` and `NISI_DATA_DIR`. */
-const makeTestLayer = (dataDir: string) =>
+const mockGitHub: GitHubShape = {
+	repository: () =>
+		Effect.succeed({ owner: "acme", repo: "widgets", defaultBranch: "main" }),
+	pullRequest: () =>
+		Effect.succeed({
+			number: 42,
+			title: "Add widgets",
+			baseRef: "main",
+			headRef: "main",
+		}),
+	headRef: () => Effect.succeed("main"),
+	search: () => Effect.die(new Error("unused mock GitHub method")),
+	checks: () => Effect.die(new Error("unused mock GitHub method")),
+	approveWorkflowRuns: () => Effect.die(new Error("unused mock GitHub method")),
+	overview: () => Effect.die(new Error("unused mock GitHub method")),
+	stack: () => Effect.die(new Error("unused mock GitHub method")),
+	mergeability: () => Effect.die(new Error("unused mock GitHub method")),
+	mergeMethods: () => Effect.die(new Error("unused mock GitHub method")),
+	merge: () => Effect.die(new Error("unused mock GitHub method")),
+	mergeStack: () => Effect.die(new Error("unused mock GitHub method")),
+	markReady: () => Effect.die(new Error("unused mock GitHub method")),
+	watchChecks: () => Stream.die(new Error("unused mock GitHub method")),
+	watchMergeStatus: () => Stream.die(new Error("unused mock GitHub method")),
+	watchStack: () => Stream.die(new Error("unused mock GitHub method")),
+	watchOverview: () => Stream.die(new Error("unused mock GitHub method")),
+};
+
+const makeTestLayer = (dataDir: string, withPullRequest = false) =>
 	Store.layer.pipe(
 		Layer.provideMerge(
-			GhGitHub.layer.pipe(Layer.provideMerge(PullRequestAttentionLive.layer)),
+			withPullRequest
+				? Layer.succeed(GitHub, mockGitHub)
+				: GhGitHub.layer.pipe(
+						Layer.provideMerge(PullRequestAttentionLive.layer),
+					),
 		),
 		Layer.provideMerge(SqliteDb.layer),
 		Layer.provideMerge(BunServices.layer),
@@ -104,6 +135,110 @@ describe("Store.openSession — branch target with an explicit baseRef", () => {
 				baseRef: "main",
 				headRef: "main",
 			});
+		});
+	});
+});
+
+describe("Store.openSession — reuses matching branch review state for a PR", () => {
+	const addOrigin = (repoRoot: string) =>
+		sh(repoRoot, [
+			"remote",
+			"add",
+			"origin",
+			"https://github.com/acme/widgets.git",
+		]);
+
+	test("auto open retargets a branch session, carries review state, and reuses it", async () => {
+		await withTestRepoAndDataDir(async (repoRoot, dataDir) => {
+			await addOrigin(repoRoot);
+			const result = await Effect.runPromise(
+				Effect.gen(function* () {
+					const store = yield* Store;
+					const reviewStore = yield* ReviewStore;
+					const branch = yield* store.openSession(repoRoot, {
+						kind: "branch",
+						baseRef: "main",
+					});
+					yield* reviewStore.markFileViewed(
+						branch.id,
+						"a.ts",
+						Option.some(new TextEncoder().encode("hello\n")),
+					);
+					const opened = yield* store.openSessionWithOutcome(repoRoot, {
+						kind: "auto",
+					});
+					const reopened = yield* store.openSession(repoRoot, {
+						kind: "auto",
+					});
+					const state = yield* reviewStore.getFileReviewState(
+						branch.id,
+						"a.ts",
+					);
+					return { branch, opened, reopened, state };
+				}).pipe(Effect.provide(makeTestLayer(dataDir, true))),
+			);
+
+			expect(result.opened.kind).toBe("retargeted");
+			expect(result.opened.session.id).toBe(result.branch.id);
+			expect(result.opened.session.target.kind).toBe("pr");
+			expect(result.reopened.id).toBe(result.branch.id);
+			expect(result.state?.viewed).toBe(true);
+		});
+	});
+
+	test("auto open returns an existing PR session and closes the branch session", async () => {
+		await withTestRepoAndDataDir(async (repoRoot, dataDir) => {
+			await addOrigin(repoRoot);
+			const result = await Effect.runPromise(
+				Effect.gen(function* () {
+					const store = yield* Store;
+					const reviewStore = yield* ReviewStore;
+					const branch = yield* store.openSession(repoRoot, {
+						kind: "branch",
+						baseRef: "main",
+					});
+					const prSession = yield* reviewStore.openSession({
+						repoRoot: branch.repoRoot,
+						baseRef: "main",
+						headRef: "main",
+						pr: {
+							number: 42,
+							title: "Add widgets",
+							owner: "acme",
+							repo: "widgets",
+						},
+					});
+					const opened = yield* store.openSessionWithOutcome(repoRoot, {
+						kind: "auto",
+					});
+					return {
+						branch,
+						opened,
+						openSessions: yield* reviewStore.listOpenSessions(),
+						prSession,
+					};
+				}).pipe(Effect.provide(makeTestLayer(dataDir, true))),
+			);
+
+			expect(result.opened.session.id).toBe(result.prSession.id);
+			expect(result.opened.kind).toBe("existing");
+			expect(result.openSessions.map((session) => session.id)).toEqual([
+				result.prSession.id,
+			]);
+		});
+	});
+
+	test("an explicit branch target remains branch-keyed when a PR is open", async () => {
+		await withTestRepoAndDataDir(async (repoRoot, dataDir) => {
+			await addOrigin(repoRoot);
+			const session = await Effect.runPromise(
+				Effect.gen(function* () {
+					const store = yield* Store;
+					return yield* store.openSession(repoRoot, { kind: "branch" });
+				}).pipe(Effect.provide(makeTestLayer(dataDir, true))),
+			);
+
+			expect(session.target.kind).toBe("branch");
 		});
 	});
 });

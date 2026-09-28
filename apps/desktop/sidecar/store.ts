@@ -144,6 +144,12 @@ export type Session = {
 	readonly target: SessionTarget;
 };
 
+export type OpenSessionOutcome = {
+	readonly kind: "opened" | "retargeted" | "existing";
+	readonly session: Session;
+	readonly sourceSessionId: string;
+};
+
 /** `pullRequests.open`'s input — the palette only ever knows `owner/repo#number`, never a local path; see `openPullRequestSession`'s doc for how the rest gets resolved. */
 export type OpenPullRequestInput = {
 	readonly owner: string;
@@ -374,7 +380,30 @@ export class Store extends Context.Service<Store>()("Store", {
 		const reviewStore = yield* ReviewStore;
 		const settingsStore = yield* SettingsStore;
 
-		const openSession = (
+		const retargetSessionToPr = (
+			sessionId: string,
+			pr: SessionPullRequest,
+			baseRef: string,
+			headRef: string,
+		) =>
+			Effect.gen(function* () {
+				const outcome = yield* reviewStore.retargetToPullRequest(
+					sessionId,
+					pr,
+					baseRef,
+					headRef,
+				);
+				if (outcome.kind === "existing") {
+					yield* reviewStore.closeSession(sessionId);
+				}
+				return {
+					kind: outcome.kind,
+					session: toWireSession(outcome.session),
+					sourceSessionId: sessionId,
+				} as const;
+			});
+
+		const openSessionWithOutcome = (
 			cwd: string,
 			target: OpenSessionTarget = { kind: "auto" },
 		) =>
@@ -383,14 +412,64 @@ export class Store extends Context.Service<Store>()("Store", {
 					Effect.catchTag("NotAGitRepository", () => new InvalidCwd({ cwd })),
 				);
 				const resolved = yield* resolveSessionTarget(repoRoot, target);
+				if (
+					resolved.pr !== null &&
+					(target.kind === "auto" || target.kind === "pr")
+				) {
+					const branchSessions = yield* reviewStore.listOpenBranchSessions(
+						repoRoot,
+						resolved.headRef,
+					);
+					const source =
+						branchSessions.find(
+							(session) => session.baseRef === resolved.baseRef,
+						) ?? branchSessions.at(0);
+					if (source !== undefined) {
+						return yield* retargetSessionToPr(
+							source.id,
+							resolved.pr,
+							resolved.baseRef,
+							resolved.headRef,
+						).pipe(
+							Effect.catchTag("SessionNotFound", () =>
+								reviewStore
+									.openSession({
+										repoRoot,
+										baseRef: resolved.baseRef,
+										headRef: resolved.headRef,
+										pr: resolved.pr,
+									})
+									.pipe(
+										Effect.map((session) => ({
+											kind: "opened" as const,
+											session: toWireSession(session),
+											sourceSessionId: session.id,
+										})),
+									),
+							),
+						);
+					}
+				}
 				const session = yield* reviewStore.openSession({
 					repoRoot,
 					baseRef: resolved.baseRef,
 					headRef: resolved.headRef,
 					pr: resolved.pr,
 				});
-				return toWireSession(session);
+				return {
+					kind: "opened" as const,
+					session: toWireSession(session),
+					sourceSessionId: session.id,
+				};
 			});
+
+		const openSession = (
+			cwd: string,
+			target: OpenSessionTarget = { kind: "auto" },
+		) =>
+			openSessionWithOutcome(cwd, target).pipe(
+				Effect.map((outcome) => outcome.session),
+			);
 
 		/**
 		 * `owner/repo`'s local checkout path — a known mapping if one's already
@@ -511,25 +590,12 @@ export class Store extends Context.Service<Store>()("Store", {
 					);
 				}
 
-				const outcome = yield* reviewStore.retargetToPullRequest(
+				return yield* retargetSessionToPr(
 					sessionId,
 					resolved.pr,
 					resolved.baseRef,
 					resolved.headRef,
 				);
-
-				// On collision, the source row is genuinely done — close its
-				// domain state here (`Store.closeSession`); the sidecar-wide
-				// teardown for its live walkthrough/chat/watch state is
-				// `http.ts`'s job, same as `sessions.close`'s own handler.
-				if (outcome.kind === "existing") {
-					yield* reviewStore.closeSession(sessionId);
-				}
-
-				return {
-					kind: outcome.kind,
-					session: toWireSession(outcome.session),
-				};
 			});
 
 		/**
@@ -1415,6 +1481,7 @@ export class Store extends Context.Service<Store>()("Store", {
 
 		return {
 			openSession,
+			openSessionWithOutcome,
 			switchToPr,
 			openPullRequestSession,
 			recordRepoPath,
