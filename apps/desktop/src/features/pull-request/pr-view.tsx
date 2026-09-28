@@ -377,7 +377,7 @@ function FileViewerTab({
 	);
 }
 
-function FilesChangedLoading(): React.ReactElement {
+export function FilesChangedLoading(): React.ReactElement {
 	return (
 		<Empty className="flex-1">
 			<EmptyMedia variant="icon">
