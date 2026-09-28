@@ -1,4 +1,6 @@
 mod activation;
+#[cfg(target_os = "macos")]
+mod chromium_window_drag;
 mod editors;
 
 use std::path::{Path, PathBuf};
@@ -476,6 +478,15 @@ pub fn run() {
             list_available_editors,
             open_in_editor
         ]);
+
+    #[cfg(target_os = "macos")]
+    let builder = builder.on_page_load(|webview, payload| {
+        if webview.label() == "main" && payload.event() == PageLoadEvent::Started {
+            if let Err(error) = chromium_window_drag::install() {
+                eprintln!("failed to disable Chromium native window dragging: {error}");
+            }
+        }
+    });
 
     builder
         .build(tauri::generate_context!())
