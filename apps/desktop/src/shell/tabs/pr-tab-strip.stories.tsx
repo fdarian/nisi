@@ -1,7 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import { GitPullRequestArrowIcon } from "lucide-react";
+import { GitMergeIcon, GitPullRequestArrowIcon } from "lucide-react";
 import type { ComponentProps } from "react";
-import { GitPullRequestMergedIcon } from "#/components/icons/git-pull-request-merged";
 import { PrTabIcon } from "./pr-tab-strip";
 
 const meta: Meta<typeof PrTabIcon> = {
@@ -77,10 +76,8 @@ export const AllStates: Story = {
 
 /**
  * The same states enlarged (48px, well past lucide's own 24px authoring
- * size) so the merged icon's hand-fitted arc — the actual new geometry, as
- * opposed to the unmodified nodes/branch it shares with
- * `git-pull-request-arrow` — can be checked for clean node-edge termination
- * and even spacing. `PrTabIcon` itself has no size prop (the tab badge is
+ * size) so the merged icon can be checked beside the open icon.
+ * `PrTabIcon` itself has no size prop (the tab badge is
  * always 14px), so this row renders the same elements at a larger CSS
  * `font-size`-independent scale via `size-12` instead of going through it.
  */
@@ -94,8 +91,8 @@ export const MergedIconDetail: Story = {
 				</span>
 			</div>
 			<div className="flex flex-col items-center gap-2">
-				<GitPullRequestMergedIcon className="size-12 text-merged" />
-				<span className="text-muted-foreground text-xs">merged (new)</span>
+				<GitMergeIcon className="size-12 text-merged" />
+				<span className="text-muted-foreground text-xs">git-merge</span>
 			</div>
 		</div>
 	),

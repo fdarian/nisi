@@ -28,6 +28,7 @@ import type { OpenRequest } from "@repo/sidecar-api";
 import { cn } from "cn";
 import {
 	AlertTriangleIcon,
+	GitMergeIcon,
 	GitPullRequestArrowIcon,
 	GitPullRequestIcon,
 	LeafIcon,
@@ -35,7 +36,6 @@ import {
 	XIcon,
 } from "lucide-react";
 import { useMemo, useState } from "react";
-import { GitPullRequestMergedIcon } from "#/components/icons/git-pull-request-merged";
 import { Button } from "#/components/ui/button";
 import {
 	ContextMenu,
@@ -317,7 +317,7 @@ const PR_TAB_ICON_CLASS = "size-3.5 shrink-0";
  * keeps exactly the plain `GitPullRequestIcon` this rendered before `status`
  * existed. Only a `"pr"` tab's own five states (suspended handled above,
  * merged/ci-running/ready/default handled here) reach for
- * `GitPullRequestArrowIcon`/`GitPullRequestMergedIcon` and a semantic color.
+ * `GitPullRequestArrowIcon`/`GitMergeIcon` and a semantic color.
  * Exported only for `pr-tab-strip.stories.tsx` — every other caller stays
  * inside this file.
  */
@@ -336,11 +336,7 @@ export function PrTabIcon({
 
 	switch (status) {
 		case "merged":
-			return (
-				<GitPullRequestMergedIcon
-					className={cn(PR_TAB_ICON_CLASS, "text-merged")}
-				/>
-			);
+			return <GitMergeIcon className={cn(PR_TAB_ICON_CLASS, "text-merged")} />;
 		case "ci-running":
 			return (
 				<GitPullRequestArrowIcon
