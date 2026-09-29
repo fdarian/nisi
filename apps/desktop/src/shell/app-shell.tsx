@@ -44,7 +44,7 @@ import {
 	useCycleFileTab,
 	useSetActiveTab,
 } from "#/features/pull-request/data/session-ui-store";
-import { PrView } from "#/features/pull-request/pr-view";
+import { FilesChangedLoading, PrView } from "#/features/pull-request/pr-view";
 import type { SidecarQueryUtils } from "#/infra/backend-context";
 import { useBackendContext } from "#/infra/backend-context";
 import { useDeepLinkOpener } from "./deep-link/deep-link-data";
@@ -424,14 +424,15 @@ function AppShellReady({
 			>
 				{pendingRequest !== null && pendingTabId !== null && (
 					<TabsPrimitive.Panel
-						className="flex flex-1 flex-col items-center justify-center gap-3 p-6"
+						className={cn(
+							"flex min-h-0 flex-1 flex-col",
+							pendingRequest.status.kind === "failed" &&
+								"items-center justify-center gap-3 p-6",
+						)}
 						value={pendingTabId}
 					>
 						{pendingRequest.status.kind === "pending" ? (
-							<>
-								<Spinner className="size-5" />
-								<p>Opening {pendingRequest.cwd}…</p>
-							</>
+							<FilesChangedLoading />
 						) : pendingRequest.status.kind === "failed" ? (
 							<>
 								<p>Couldn’t open {pendingRequest.cwd}</p>
