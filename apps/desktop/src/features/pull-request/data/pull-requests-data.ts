@@ -2,7 +2,7 @@
  * Pull request search + open — mirrors `packages/sidecar-api/src/pull-requests.ts`.
  * Same explicit-`orpc`-param idiom as `#/features/pull-request/data/pr-data.ts`.
  *
- * `search` hits GitHub live via `gh search prs` on every call — no local
+ * `search` hits GitHub live via GraphQL on every call — no local
  * index or cache. `useSearchPullRequests` below is the palette's only data
  * source; the debounce that keeps that live outside GitHub's rate limit
  * lives in the palette itself (`#/features/command-palette/open-pull-request-palette.tsx`),
@@ -25,6 +25,18 @@ export type PullRequestSearchResult = {
 	updatedAt: string;
 	url: string;
 	isDraft: boolean;
+	state: "OPEN" | "CLOSED" | "MERGED";
+	mergeable: "MERGEABLE" | "CONFLICTING" | "UNKNOWN";
+	mergeStateStatus:
+		| "BEHIND"
+		| "BLOCKED"
+		| "CLEAN"
+		| "DIRTY"
+		| "DRAFT"
+		| "HAS_HOOKS"
+		| "UNKNOWN"
+		| "UNSTABLE";
+	rollupState: "EXPECTED" | "ERROR" | "FAILURE" | "PENDING" | "SUCCESS" | null;
 };
 
 /**

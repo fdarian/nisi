@@ -89,14 +89,50 @@ const SearchPrItem = Schema.Struct({
 	updatedAt: Schema.String,
 	url: Schema.String,
 	isDraft: Schema.Boolean,
+	state: Schema.Literals(["OPEN", "CLOSED", "MERGED"]),
+	mergeable: Schema.Literals(["MERGEABLE", "CONFLICTING", "UNKNOWN"]),
+	mergeStateStatus: Schema.Literals([
+		"BEHIND",
+		"BLOCKED",
+		"CLEAN",
+		"DIRTY",
+		"DRAFT",
+		"HAS_HOOKS",
+		"UNKNOWN",
+		"UNSTABLE",
+	]),
+	commits: Schema.Struct({
+		nodes: Schema.Array(
+			Schema.Struct({
+				commit: Schema.Struct({
+					statusCheckRollup: Schema.NullOr(
+						Schema.Struct({
+							state: Schema.Literals([
+								"EXPECTED",
+								"ERROR",
+								"FAILURE",
+								"PENDING",
+								"SUCCESS",
+							]),
+						}),
+					),
+				}),
+			}),
+		),
+	}),
 });
 
+const SearchResponse = Schema.Struct({
+	data: Schema.Struct({
+		search: Schema.Struct({ nodes: Schema.Array(Schema.NullOr(SearchPrItem)) }),
+	}),
+});
 const decodeSearchPrList = (command: string, raw: string) =>
-	Effect.try({
-		try: () =>
-			Schema.decodeUnknownSync(Schema.Array(SearchPrItem))(JSON.parse(raw)),
-		catch: (cause) => new GhOutputDecodeError({ command, raw, cause }),
-	});
+	Schema.decodeUnknownEffect(Schema.fromJsonString(SearchResponse))(raw).pipe(
+		Effect.mapError(
+			(cause) => new GhOutputDecodeError({ command, raw, cause }),
+		),
+	);
 
 /**
  * `repository.nameWithOwner` is `gh`'s own `"owner/name"` string, not a
@@ -111,7 +147,7 @@ const toPullRequestSearchResult = (
 	return owner === undefined || repo === undefined
 		? Effect.fail(
 				new GhOutputDecodeError({
-					command: "gh search prs",
+					command: "gh api graphql",
 					raw: item.repository.nameWithOwner,
 					cause: new Error(
 						`expected "owner/repo", got ${JSON.stringify(item.repository.nameWithOwner)}`,
@@ -127,6 +163,11 @@ const toPullRequestSearchResult = (
 				updatedAt: item.updatedAt,
 				url: item.url,
 				isDraft: item.isDraft,
+				state: item.state,
+				mergeable: item.mergeable,
+				mergeStateStatus: item.mergeStateStatus,
+				rollupState:
+					item.commits.nodes[0]?.commit.statusCheckRollup?.state ?? null,
 			});
 };
 
@@ -214,21 +255,22 @@ const hasStateQualifier = (query: string): boolean =>
 	STATE_QUALIFIER_PATTERN.test(query);
 
 /**
- * Splits a typed query into `gh` positional arguments. `gh search prs` is
- * spawned via a raw argv array (see `exec.ts`), never a shell, so a query
- * like `repo:foo/bar auth` must arrive as two separate argv entries
- * (`"repo:foo/bar"`, `"auth"`) the same way a user's own shell would split
- * it unquoted — passed as one combined string, `gh` parses the whole thing
- * as a single quoted qualifier value instead (confirmed live: `repo:"foo/bar
- * auth"`, a query that matches nothing). Quoted phrases aren't preserved by
- * this split; that's out of scope here the same way it would be for a bare
- * shell-style tokenizer.
+ * Retains the existing whitespace tokenization of typed queries before
+ * joining them into GitHub's GraphQL search string.
  */
 const tokenize = (query: string): ReadonlyArray<string> =>
 	query.split(/\s+/).filter((token) => token.length > 0);
 
-const SEARCH_JSON_FIELDS =
-	"number,title,repository,author,updatedAt,url,isDraft";
+const SEARCH_QUERY = `query($q: String!, $n: Int!) {
+  search(type: ISSUE, query: $q, first: $n) {
+    nodes { ... on PullRequest {
+      number title repository { nameWithOwner } author { login } updatedAt url
+      isDraft state mergeable mergeStateStatus
+      commits(last: 1) { nodes { commit { statusCheckRollup { state } } } }
+    } }
+  }
+}`;
+const SEARCH_LIMIT = 30;
 
 /**
  * `gh` not authenticated — confirmed live with `GH_CONFIG_DIR` pointed at an
@@ -269,26 +311,28 @@ const classifySearchFailure = (result: GhResult): PullRequestSearchError => {
 		return new GhRateLimited({ reason: result.stderr.trim() });
 	}
 	return new GitHubSearchUnreachable({
-		reason: result.stderr.trim() || `gh search prs exited ${result.exitCode}`,
+		reason: result.stderr.trim() || `gh api graphql exited ${result.exitCode}`,
 	});
 };
 
 const searchOnce = (
 	cwd: string,
 	terms: ReadonlyArray<string>,
-	flags: ReadonlyArray<string>,
+	qualifiers: ReadonlyArray<string>,
 ): Effect.Effect<
 	ReadonlyArray<PullRequestSearchResult>,
 	PullRequestSearchError,
 	ChildProcessSpawner.ChildProcessSpawner
 > =>
 	ghResult(cwd, [
-		"search",
-		"prs",
-		...terms,
-		...flags,
-		"--json",
-		SEARCH_JSON_FIELDS,
+		"api",
+		"graphql",
+		"-f",
+		`query=${SEARCH_QUERY}`,
+		"-f",
+		`q=${["is:pr", ...terms, ...qualifiers, "sort:updated-desc"].join(" ")}`,
+		"-F",
+		`n=${SEARCH_LIMIT}`,
 	]).pipe(
 		// `gh` never started at all (missing binary, permissions) — the one
 		// failure that isn't an exit code to classify, same as every other `gh`
@@ -302,9 +346,12 @@ const searchOnce = (
 		),
 		Effect.flatMap((result) =>
 			result.exitCode === 0
-				? decodeSearchPrList("gh search prs", result.stdout).pipe(
-						Effect.flatMap((items) =>
-							Effect.forEach(items, toPullRequestSearchResult),
+				? decodeSearchPrList("gh api graphql", result.stdout).pipe(
+						Effect.flatMap((response) =>
+							Effect.forEach(
+								response.data.search.nodes.filter((item) => item !== null),
+								toPullRequestSearchResult,
+							),
 						),
 					)
 				: Effect.fail(classifySearchFailure(result)),
@@ -316,8 +363,8 @@ const searchOnce = (
  * per-repo `listMyOpenPullRequests`, this spans every repo the account can
  * see, so two different repos can share a PR number) and sorted by
  * `updatedAt` descending. The sort runs client-side rather than trusting
- * `gh`'s own ordering because the "involves me" branch below issues *two*
- * `gh search prs` calls and unions them — each individually sorted by `gh`
+ * GitHub's own ordering because the "involves me" branch below issues *two*
+ * GraphQL calls and unions them — each individually sorted by GitHub
  * is not the same as the merged list being sorted, so this re-sorts once
  * after the union (and, for symmetry, after a single-call search too,
  * rather than having two different result-ordering code paths).
@@ -335,7 +382,7 @@ const mergeResults = (
 };
 
 /**
- * Live `gh search prs` backing the "open pull request" palette — no local
+ * Live GraphQL search backing the "open pull request" palette — no local
  * index or cache, every call asks GitHub directly.
  *
  * - **Empty query**: the user's own latest open PRs, most recently updated
@@ -346,9 +393,8 @@ const mergeResults = (
  * - **Typed query, no qualifier**: scoped to PRs the user is involved in as
  *   *author or review-requested*. GitHub search can't `OR` two qualifiers in
  *   one query, and `involves:@me` is broader than what's wanted here (it
- *   also matches mentions and comments) — so, like the now-removed
- *   `listMyOpenPullRequests` this replaces, this issues two `gh search prs`
- *   calls (`--author=@me`, `--review-requested=@me`) and unions them via
+ *   also matches mentions and comments) — so this issues two GraphQL searches
+ *   (`author:@me`, `review-requested:@me`) and unions them via
  *   `mergeResults`, matching the plan's explicit "author or
  *   review-requested" wording exactly instead of approximating it.
  * - **Typed query with a qualifier already in it** (`repo:`, `author:`,
@@ -356,10 +402,10 @@ const mergeResults = (
  *   `hasSearchQualifier`. This is the escape hatch for finding a PR the user
  *   isn't author or reviewer on (`repo:foo/bar auth`).
  *
- * `--state open` is added to every branch unless the query already names its
+ * `is:open` is added to every branch unless the query already names its
  * own state (`hasStateQualifier`) — forcing it on top of an explicit
  * `is:merged`/`is:closed` would otherwise silently return nothing (confirmed
- * live). `--sort updated` is likewise always requested, needed for
+ * live). `sort:updated-desc` is likewise always requested, needed for
  * `mergeResults` above to produce one coherently-ordered list regardless of
  * how many `gh` calls fed it.
  *
@@ -379,11 +425,10 @@ export const searchPullRequests = (
 	ChildProcessSpawner.ChildProcessSpawner
 > => {
 	const trimmed = query.trim();
-	const stateFlags = hasStateQualifier(trimmed) ? [] : ["--state", "open"];
-	const sharedFlags = [...stateFlags, "--sort", "updated"];
+	const stateQualifiers = hasStateQualifier(trimmed) ? [] : ["is:open"];
 
 	if (trimmed === "") {
-		return searchOnce(cwd, [], ["--author", "@me", ...sharedFlags]).pipe(
+		return searchOnce(cwd, [], ["author:@me", ...stateQualifiers]).pipe(
 			Effect.map(mergeResults),
 		);
 	}
@@ -391,13 +436,15 @@ export const searchPullRequests = (
 	const terms = tokenize(trimmed);
 
 	if (hasSearchQualifier(trimmed)) {
-		return searchOnce(cwd, terms, sharedFlags).pipe(Effect.map(mergeResults));
+		return searchOnce(cwd, terms, stateQualifiers).pipe(
+			Effect.map(mergeResults),
+		);
 	}
 
 	return Effect.all(
 		[
-			searchOnce(cwd, terms, ["--author", "@me", ...sharedFlags]),
-			searchOnce(cwd, terms, ["--review-requested", "@me", ...sharedFlags]),
+			searchOnce(cwd, terms, ["author:@me", ...stateQualifiers]),
+			searchOnce(cwd, terms, ["review-requested:@me", ...stateQualifiers]),
 		],
 		{ concurrency: "unbounded" },
 	).pipe(

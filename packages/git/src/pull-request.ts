@@ -32,6 +32,24 @@ export type PullRequestSearchResult = {
 	readonly updatedAt: string;
 	readonly url: string;
 	readonly isDraft: boolean;
+	readonly state: "OPEN" | "CLOSED" | "MERGED";
+	readonly mergeable: "MERGEABLE" | "CONFLICTING" | "UNKNOWN";
+	readonly mergeStateStatus:
+		| "BEHIND"
+		| "BLOCKED"
+		| "CLEAN"
+		| "DIRTY"
+		| "DRAFT"
+		| "HAS_HOOKS"
+		| "UNKNOWN"
+		| "UNSTABLE";
+	readonly rollupState:
+		| "EXPECTED"
+		| "ERROR"
+		| "FAILURE"
+		| "PENDING"
+		| "SUCCESS"
+		| null;
 };
 
 const hasAnyRemote = (repoRoot: string) =>

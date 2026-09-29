@@ -1,6 +1,5 @@
 "use client";
 
-import { GitPullRequestIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Avatar, AvatarFallback, AvatarImage } from "#/components/ui/avatar";
 import { Badge } from "#/components/ui/badge";
@@ -27,6 +26,8 @@ import {
 	useOpenPullRequest,
 	useSearchPullRequests,
 } from "#/features/pull-request/data/pull-requests-data";
+import { derivePrStatus } from "#/features/pull-request/pr-status";
+import { PrStatusIcon } from "#/features/pull-request/pr-status-icon";
 import type { SidecarQueryUtils } from "#/infra/backend-context";
 
 /**
@@ -64,7 +65,7 @@ function authorInitials(author: string): string {
 /**
  * Cmd+T and the tab strip's ghost "+" button both open this — a floating
  * search dialog listing open pull requests: the user's own latest, for a
- * blank query, or a live `gh search prs` scoped to author-or-review-requested
+ * blank query, or a live GraphQL search scoped to author-or-review-requested
  * for a typed one (see `@repo/git`'s `searchPullRequests` for the full
  * behavior, including the search-qualifier passthrough). Picking one hands
  * off to `pullRequests.open`, which creates or reuses a worktree — prompting
@@ -213,7 +214,16 @@ function PullRequestRow({
 }): React.ReactElement {
 	return (
 		<div className="flex min-w-0 flex-1 items-center gap-2.5">
-			<GitPullRequestIcon className="size-4 shrink-0 text-muted-foreground" />
+			<PrStatusIcon
+				status={derivePrStatus({
+					state: pr.state,
+					isDraft: pr.isDraft,
+					mergeable: pr.mergeable,
+					mergeStateStatus: pr.mergeStateStatus,
+					ciRunning:
+						pr.rollupState === "PENDING" || pr.rollupState === "EXPECTED",
+				})}
+			/>
 			<div className="min-w-0 flex-1">
 				<div className="flex min-w-0 items-center gap-1.5">
 					<span className="min-w-0 truncate">
