@@ -6,9 +6,8 @@ import { Session } from "./sessions.ts";
  * One row the "open pull request" palette renders — mirrors `@repo/git`'s
  * `PullRequestSearchResult` (this package stays dependency-free from every
  * domain package, same reasoning as `diff.ts` mirroring `@repo/git`'s
- * `FileChange`). No `headRef`/`baseRef`, no local `repoPath` — `gh search
- * prs`'s `--json` output doesn't have the former at all (see
- * `@repo/git/src/pull-request.ts`'s `PullRequestSearchResult` doc), and the
+ * `FileChange`). No `headRef`/`baseRef`, no local `repoPath` — the search
+ * query does not request the former, and the
  * latter is exactly what `open` below resolves server-side (a known or
  * inferred mapping, or a `"needs-repo-path"` prompt) once a result is
  * picked — a search row only ever needs to carry enough to identify and
@@ -23,6 +22,21 @@ export const PullRequestSearchResult = Schema.Struct({
 	updatedAt: Schema.String,
 	url: Schema.String,
 	isDraft: Schema.Boolean,
+	state: Schema.Literals(["OPEN", "CLOSED", "MERGED"]),
+	mergeable: Schema.Literals(["MERGEABLE", "CONFLICTING", "UNKNOWN"]),
+	mergeStateStatus: Schema.Literals([
+		"BEHIND",
+		"BLOCKED",
+		"CLEAN",
+		"DIRTY",
+		"DRAFT",
+		"HAS_HOOKS",
+		"UNKNOWN",
+		"UNSTABLE",
+	]),
+	rollupState: Schema.NullOr(
+		Schema.Literals(["EXPECTED", "ERROR", "FAILURE", "PENDING", "SUCCESS"]),
+	),
 });
 export type PullRequestSearchResult = Schema.Schema.Type<
 	typeof PullRequestSearchResult
@@ -179,7 +193,7 @@ const MergeFailure = Schema.toStandardSchemaV1(
 
 /**
  * `search` asks GitHub live via `@repo/git`'s `searchPullRequests` — no
- * local index or cache, so every call is a real `gh search prs` round trip.
+ * local index or cache, so every call is a real GraphQL search round trip.
  * See that function's own doc for the empty-query/typed-query/qualifier-
  * passthrough behavior and the `author`-or-`review-requested` union it
  * performs for a typed, unscoped query.

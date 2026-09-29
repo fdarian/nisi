@@ -28,8 +28,6 @@ import type { OpenRequest } from "@repo/sidecar-api";
 import { cn } from "cn";
 import {
 	AlertTriangleIcon,
-	GitMergeIcon,
-	GitPullRequestArrowIcon,
 	GitPullRequestIcon,
 	LeafIcon,
 	PlusIcon,
@@ -57,9 +55,13 @@ import {
 	usePullRequestChecks,
 	usePullRequestMergeStatus,
 } from "#/features/pull-request/data/pr-data";
+import {
+	derivePrStatus,
+	type PrStatus,
+} from "#/features/pull-request/pr-status";
+import { PrStatusIcon } from "#/features/pull-request/pr-status-icon";
 import type { SidecarQueryUtils } from "#/infra/backend-context";
 import { UpdatePill } from "#/shell/update/update-pill";
-import { derivePrTabStatus, type PrTabStatus } from "./pr-tab-status";
 
 type PrTabStripProps = {
 	pendingRequest?: OpenRequest | null;
@@ -315,9 +317,7 @@ const PR_TAB_ICON_CLASS = "size-3.5 shrink-0";
  * The tab pill's leading icon. Suspension wins over everything (a leaf
  * regardless of PR status), and a branch tab — no PR to poll a status for —
  * keeps exactly the plain `GitPullRequestIcon` this rendered before `status`
- * existed. Only a `"pr"` tab's own five states (suspended handled above,
- * merged/ci-running/ready/default handled here) reach for
- * `GitPullRequestArrowIcon`/`GitMergeIcon` and a semantic color.
+ * existed. Only a `"pr"` tab delegates to the shared status icon.
  * Exported only for `pr-tab-strip.stories.tsx` — every other caller stays
  * inside this file.
  */
@@ -328,30 +328,13 @@ export function PrTabIcon({
 }: {
 	isSuspended: boolean;
 	kind: SessionTarget["kind"];
-	status: PrTabStatus;
+	status: PrStatus;
 }): React.ReactElement {
 	if (isSuspended) return <LeafIcon className={PR_TAB_ICON_CLASS} />;
 	if (kind !== "pr")
 		return <GitPullRequestIcon className={PR_TAB_ICON_CLASS} />;
 
-	switch (status) {
-		case "merged":
-			return <GitMergeIcon className={cn(PR_TAB_ICON_CLASS, "text-merged")} />;
-		case "ci-running":
-			return (
-				<GitPullRequestArrowIcon
-					className={cn(PR_TAB_ICON_CLASS, "animate-pulse text-warning")}
-				/>
-			);
-		case "ready":
-			return (
-				<GitPullRequestArrowIcon
-					className={cn(PR_TAB_ICON_CLASS, "text-success")}
-				/>
-			);
-		case "default":
-			return <GitPullRequestArrowIcon className={PR_TAB_ICON_CLASS} />;
-	}
+	return <PrStatusIcon status={status} />;
 }
 
 /**
@@ -381,7 +364,13 @@ function PrTabStatusIcon({
 	};
 	const mergeStatusQuery = usePullRequestMergeStatus(orpc, params);
 	const checksQuery = usePullRequestChecks(orpc, params);
-	const status = derivePrTabStatus(mergeStatusQuery.data, checksQuery.data);
+	const status = derivePrStatus({
+		state: mergeStatusQuery.data?.state,
+		isDraft: mergeStatusQuery.data?.isDraft,
+		mergeable: mergeStatusQuery.data?.mergeable,
+		mergeStateStatus: mergeStatusQuery.data?.mergeStateStatus,
+		ciRunning: checksQuery.data?.some((check) => check.status === "running"),
+	});
 
 	return <PrTabIcon isSuspended={false} kind="pr" status={status} />;
 }

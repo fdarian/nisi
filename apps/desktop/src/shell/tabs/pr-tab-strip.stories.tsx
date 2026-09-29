@@ -17,7 +17,7 @@ type IconState = {
 	props: ComponentProps<typeof PrTabIcon>;
 };
 
-/** Precedence order matches `derivePrTabStatus`/`PrTabIcon` — suspended first, then the four `"pr"`-only states. */
+/** Suspension precedes the shared PR status states. */
 const STATES: readonly IconState[] = [
 	{
 		label: "Suspended",
@@ -26,6 +26,14 @@ const STATES: readonly IconState[] = [
 	{
 		label: "Merged",
 		props: { isSuspended: false, kind: "pr", status: "merged" },
+	},
+	{
+		label: "Conflicts",
+		props: { isSuspended: false, kind: "pr", status: "conflicts" },
+	},
+	{
+		label: "Draft",
+		props: { isSuspended: false, kind: "pr", status: "draft" },
 	},
 	{
 		label: "CI running",

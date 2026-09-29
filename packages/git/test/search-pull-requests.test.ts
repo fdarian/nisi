@@ -74,6 +74,10 @@ describe("searchPullRequests", () => {
 				updatedAt: "2026-01-01T00:00:00Z",
 				url: "https://github.com/acme/widgets/pull/50",
 				isDraft: false,
+				state: "OPEN",
+				mergeable: "MERGEABLE",
+				mergeStateStatus: "CLEAN",
+				rollupState: null,
 			},
 		]);
 	});
@@ -90,6 +94,16 @@ describe("searchPullRequests", () => {
 		expect(result.ok).toBe(false);
 		if (result.ok) return;
 		expect(result.tag).toBe("GhNotAuthenticated");
+	});
+
+	test("bad credentials fail with GhNotAuthenticated", async () => {
+		const result = await runAgainstGhStub("TRIGGER_BAD_CREDENTIALS");
+		expect(result).toEqual({ ok: false, tag: "GhNotAuthenticated" });
+	});
+
+	test("malformed GraphQL output fails with GhOutputDecodeError", async () => {
+		const result = await runAgainstGhStub("TRIGGER_DECODE");
+		expect(result).toEqual({ ok: false, tag: "GhOutputDecodeError" });
 	});
 
 	test("rate-limited response fails with GhRateLimited", async () => {
