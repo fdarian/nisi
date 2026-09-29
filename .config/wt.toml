@@ -2,7 +2,10 @@
 # -c = clonefile(2): instant CoW copy that preserves mtimes. Both matter — a plain `cp -R` of the
 # 12G target takes minutes and stamps every file with its own copy time, which scrambles the mtime
 # ordering cargo's freshness check relies on and forces a near-full rebuild.
-copy_tauri_target = '''cp -Rc {{ repo_path }}/apps/desktop/src-tauri/target ./apps/desktop/src-tauri/target'''
+#
+# tauri-cef-helper is dropped after the copy: its cef-dll-sys CMake cache records absolute paths, and
+# CMake refuses to reuse a cache created under a different directory, which fails the CEF helper build.
+copy_tauri_target = '''cp -Rc {{ repo_path }}/apps/desktop/src-tauri/target ./apps/desktop/src-tauri/target && rm -rf ./apps/desktop/src-tauri/target/tauri-cef-helper'''
 
 # Same clonefile copy of devsess's session tree (.data/sessions/<slug>/data/...), dropping copied
 # sidecar handshakes and Chromium singleton symlinks so the new worktree can own its own processes.

@@ -41,3 +41,6 @@ percent-encoding = "2.3.2"
 # feature set above so the shipped binary doesn't carry a full multi-thread
 # scheduler it never needs (Tauri drives its own async runtime).
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+libc = "0.2.189"

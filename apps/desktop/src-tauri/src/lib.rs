@@ -2,6 +2,8 @@ mod activation;
 #[cfg(target_os = "macos")]
 mod chromium_window_drag;
 mod editors;
+#[cfg(target_os = "macos")]
+mod termination_signals;
 
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
@@ -488,18 +490,28 @@ pub fn run() {
         }
     });
 
-    builder
+    #[cfg(target_os = "macos")]
+    let pre_cef_signals = termination_signals::TerminationSignals::capture()
+        .expect("failed to snapshot termination signal handlers");
+
+    let app = builder
         .build(tauri::generate_context!())
-        .expect("error while running tauri application")
-        .run(|app, event| {
-            if let tauri::RunEvent::Exit = event {
-                if let Some(state) = app.try_state::<SidecarChild>() {
-                    if let Some(child) = state.0.lock().unwrap().take() {
-                        let _ = child.kill();
-                    }
+        .expect("error while running tauri application");
+
+    #[cfg(target_os = "macos")]
+    pre_cef_signals
+        .restore()
+        .expect("failed to restore termination signal handlers");
+
+    app.run(|app, event| {
+        if let tauri::RunEvent::Exit = event {
+            if let Some(state) = app.try_state::<SidecarChild>() {
+                if let Some(child) = state.0.lock().unwrap().take() {
+                    let _ = child.kill();
                 }
             }
-        });
+        }
+    });
 }
 
 #[cfg(test)]
