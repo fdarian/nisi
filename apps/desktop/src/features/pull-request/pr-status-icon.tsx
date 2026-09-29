@@ -1,7 +1,7 @@
 import { cn } from "cn";
 import {
-	GitMergeIcon,
 	GitMergeConflictIcon,
+	GitMergeIcon,
 	GitPullRequestArrowIcon,
 	GitPullRequestDraftIcon,
 } from "lucide-react";
