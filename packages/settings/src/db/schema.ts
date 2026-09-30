@@ -168,6 +168,7 @@ export const scheduledMerges = sqliteTable(
 		repo: text().notNull(),
 		number: integer().notNull(),
 		repo_root: text().notNull(),
+		route: text().notNull(),
 		method: text().notNull(),
 		created_at: integer({ mode: "timestamp_ms" })
 			.notNull()

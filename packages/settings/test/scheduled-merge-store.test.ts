@@ -6,7 +6,12 @@ import { ScheduledMergeStore } from "../src/scheduled-merge-store.ts";
 import { withTempDataDir } from "./fixtures.ts";
 
 const key = { owner: "fdarian", repo: "nisi", number: 122 };
-const input = { ...key, repoRoot: "/repo", method: "squash" as const };
+const input = {
+	...key,
+	repoRoot: "/repo",
+	method: "squash" as const,
+	route: "merge" as const,
+};
 const run = <A, E>(
 	dataDir: string,
 	effect: Effect.Effect<A, E, ScheduledMergeStore>,
@@ -39,14 +44,21 @@ describe("ScheduledMergeStore", () => {
 					yield* store.put(input);
 					const saved = yield* store.get(key);
 					expect(saved?.method).toBe("squash");
+					expect(saved?.route).toBe("merge");
 					expect(saved?.createdAt).toBeInstanceOf(Date);
-					yield* store.put({ ...input, method: "rebase", repoRoot: "/moved" });
+					yield* store.put({
+						...input,
+						method: "rebase",
+						repoRoot: "/moved",
+						route: "stack",
+					});
 					yield* store.put({ ...input, number: 123 });
 					yield* store.put({ ...input, repo: "other" });
 					yield* store.put({ ...input, owner: "other" });
 					expect(yield* store.list()).toHaveLength(4);
 					expect((yield* store.get(key))?.repoRoot).toBe("/moved");
 					expect((yield* store.get(key))?.method).toBe("rebase");
+					expect((yield* store.get(key))?.route).toBe("stack");
 					yield* store.delete(key);
 					yield* store.delete(key);
 					expect(yield* store.get(key)).toBeNull();
@@ -61,7 +73,7 @@ describe("ScheduledMergeStore", () => {
 				dataDir,
 				Effect.gen(function* () {
 					const store = yield* ScheduledMergeStore;
-					yield* store.put(input);
+					yield* store.put({ ...input, route: "stack" });
 				}),
 			);
 			const saved = await run(
@@ -72,6 +84,7 @@ describe("ScheduledMergeStore", () => {
 				}),
 			);
 			expect(saved?.method).toBe("squash");
+			expect(saved?.route).toBe("stack");
 		});
 	});
 });

@@ -12,16 +12,31 @@ type RunnerResult =
 
 const runAgainstGhStub = async (
 	outcome: "merged" | "failed",
+	route = "stack",
+	matchHeadCommit?: string,
 ): Promise<RunnerResult> => {
-	const proc = Bun.spawn(["bun", "run", RUNNER, outcome], {
-		env: {
-			...process.env,
-			NISI_GH_BIN: GH_STUB,
-			STACK_MERGE_OUTCOME: outcome,
+	const proc = Bun.spawn(
+		[
+			"bun",
+			"run",
+			RUNNER,
+			outcome,
+			route,
+			...(matchHeadCommit === undefined ? [] : [matchHeadCommit]),
+		],
+		{
+			env: {
+				...process.env,
+				NISI_GH_BIN: GH_STUB,
+				STACK_MERGE_OUTCOME: outcome,
+				...(matchHeadCommit === undefined
+					? {}
+					: { MATCH_HEAD_COMMIT: matchHeadCommit }),
+			},
+			stdout: "pipe",
+			stderr: "pipe",
 		},
-		stdout: "pipe",
-		stderr: "pipe",
-	});
+	);
 	const [stdout, stderr, exitCode] = await Promise.all([
 		new Response(proc.stdout).text(),
 		new Response(proc.stderr).text(),
@@ -34,6 +49,19 @@ const runAgainstGhStub = async (
 };
 
 describe("mergeStackPullRequest", () => {
+	test("pins regular scheduled merges with --match-head-commit", async () => {
+		expect(await runAgainstGhStub("merged", "regular", "checked-head")).toEqual(
+			{ ok: true },
+		);
+	});
+	test("manual regular merges omit the head constraint", async () => {
+		expect(await runAgainstGhStub("merged", "regular")).toEqual({ ok: true });
+	});
+	test("pins native stack merges with the async API sha field", async () => {
+		expect(await runAgainstGhStub("merged", "stack", "checked-head")).toEqual({
+			ok: true,
+		});
+	});
 	test("polls pending until the stack merge is merged", async () => {
 		expect(await runAgainstGhStub("merged")).toEqual({ ok: true });
 	});

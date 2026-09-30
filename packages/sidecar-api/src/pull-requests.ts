@@ -397,6 +397,7 @@ export const pullRequestsContract = {
 				repo: Schema.String,
 				number: Schema.Number,
 				method: MergeMethod,
+				route: Schema.Literals(["merge", "stack"]),
 			}),
 		)
 		.output(Schema.Void)

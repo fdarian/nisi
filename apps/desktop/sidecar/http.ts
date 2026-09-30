@@ -1496,6 +1496,11 @@ export function attachRouter(
 					const schedules = yield* ScheduledMerges;
 					yield* schedules.cancel(input).pipe(
 						Effect.mapError((cause) => {
+							if (cause._tag === "AutoMergeAlreadyRan")
+								return request.errors.CONFLICT({
+									message: cause.message,
+									data: { reason: cause.message, detail: cause.message },
+								});
 							return request.errors.SERVICE_UNAVAILABLE({
 								message: "Couldn't cancel auto-merge",
 								data: {

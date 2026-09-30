@@ -14,10 +14,12 @@ export type ScheduledMergeKey = {
 export type ScheduledMerge = ScheduledMergeKey & {
 	readonly repoRoot: string;
 	readonly method: MergeMethod;
+	readonly route: "merge" | "stack";
 	readonly createdAt: Date;
 };
 
 const StoredMethod = Schema.Literals(["merge", "squash", "rebase"]);
+const StoredRoute = Schema.Literals(["merge", "stack"]);
 const whereKey = (key: ScheduledMergeKey) =>
 	and(
 		eq(scheduledMerges.owner, key.owner),
@@ -36,14 +38,20 @@ export class ScheduledMergeStore extends Context.Service<ScheduledMergeStore>()(
 					Effect.mapError((cause) => new SettingsStoreError({ cause })),
 				);
 			const decode = (row: typeof scheduledMerges.$inferSelect) =>
-				query(Schema.decodeUnknownEffect(StoredMethod)(row.method)).pipe(
+				query(
+					Effect.all([
+						Schema.decodeUnknownEffect(StoredMethod)(row.method),
+						Schema.decodeUnknownEffect(StoredRoute)(row.route),
+					]),
+				).pipe(
 					Effect.map(
-						(method): ScheduledMerge => ({
+						(values): ScheduledMerge => ({
 							owner: row.owner,
 							repo: row.repo,
 							number: row.number,
 							repoRoot: row.repo_root,
-							method,
+							method: values[0],
+							route: values[1],
 							createdAt: row.created_at,
 						}),
 					),
@@ -61,33 +69,46 @@ export class ScheduledMergeStore extends Context.Service<ScheduledMergeStore>()(
 						return row === undefined ? Effect.succeed(null) : decode(row);
 					}),
 				);
-			const put = (input: Omit<ScheduledMerge, "createdAt">) => {
-				const createdAt = new Date();
-				return query(
-					db
-						.insert(scheduledMerges)
-						.values({
-							owner: input.owner,
-							repo: input.repo,
-							number: input.number,
-							repo_root: input.repoRoot,
-							method: input.method,
-							created_at: createdAt,
-						})
-						.onConflictDoUpdate({
-							target: [
-								scheduledMerges.owner,
-								scheduledMerges.repo,
-								scheduledMerges.number,
-							],
-							set: {
+			const clock = { lastCreatedAt: Date.now() };
+			const put = (input: Omit<ScheduledMerge, "createdAt">) =>
+				Effect.gen(function* () {
+					const previous = yield* get(input);
+					// Replacement within one millisecond must invalidate an in-flight snapshot.
+					const createdAt = new Date(
+						Math.max(
+							Date.now(),
+							clock.lastCreatedAt + 1,
+							...(previous === null ? [] : [previous.createdAt.getTime() + 1]),
+						),
+					);
+					clock.lastCreatedAt = createdAt.getTime();
+					yield* query(
+						db
+							.insert(scheduledMerges)
+							.values({
+								owner: input.owner,
+								repo: input.repo,
+								number: input.number,
 								repo_root: input.repoRoot,
 								method: input.method,
+								route: input.route,
 								created_at: createdAt,
-							},
-						}),
-				);
-			};
+							})
+							.onConflictDoUpdate({
+								target: [
+									scheduledMerges.owner,
+									scheduledMerges.repo,
+									scheduledMerges.number,
+								],
+								set: {
+									repo_root: input.repoRoot,
+									method: input.method,
+									route: input.route,
+									created_at: createdAt,
+								},
+							}),
+					);
+				});
 			const remove = (key: ScheduledMergeKey) =>
 				query(db.delete(scheduledMerges).where(whereKey(key)));
 			return { list, get, put, delete: remove };
