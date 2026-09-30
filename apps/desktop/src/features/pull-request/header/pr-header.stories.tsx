@@ -4,6 +4,7 @@
  * same query `PrMergeButton` already polls (see `pr-header.tsx`'s
  * `MarkReadyMenuItem`).
  */
+
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import type {
 	PullRequestMergeStatus,
@@ -144,14 +145,12 @@ export const AwaitingApproval: Story = {
 };
 
 export const AutoMergeScheduled: Story = {
-	name: "Auto-merge scheduled — merge now enabled",
 	args: {
 		target: PR_TARGET,
 		orpc: createMockOrpc({
 			mergeStatus: {
 				...BASE_STATUS,
 				mergeStateStatus: "BLOCKED",
-				allowedMethods: ["squash"],
 				autoMerge: { method: "squash" },
 			},
 			checks: [{ name: "Tests", status: "running" }],
