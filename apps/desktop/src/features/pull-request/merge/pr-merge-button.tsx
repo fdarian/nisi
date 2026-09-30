@@ -249,7 +249,7 @@ export function PrMergeButton({
 	> | null>(null);
 
 	// Holds only the user's own dropdown pick — falls back to the
-	// server's `defaultMethod` on every render until there is one, so a later
+	// scheduled method or server's `defaultMethod` until there is one, so a later
 	// refetch (e.g. the one `useMergePullRequest` fires on success) never
 	// overwrites a method the user already chose. `null` (no pick yet, no
 	// status loaded yet) is a real state, not defaulted away — see
@@ -259,7 +259,11 @@ export function PrMergeButton({
 		null,
 	);
 	const [methodMenuOpen, setMethodMenuOpen] = useDismissOnInactive(watched);
-	const method = selectedMethod ?? statusQuery.data?.defaultMethod ?? null;
+	const method =
+		selectedMethod ??
+		statusQuery.data?.autoMerge?.method ??
+		statusQuery.data?.defaultMethod ??
+		null;
 	const stackMerge = deriveStackMerge(stackQuery.data, number);
 
 	const { label, disabled, title } = resolveButtonState(
