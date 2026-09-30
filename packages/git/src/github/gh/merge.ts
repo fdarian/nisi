@@ -85,7 +85,7 @@ const isMergeStatusPermissionFailure = (stderr: string): boolean =>
 	MERGE_STATUS_PERMISSION_MARKERS.some((marker) => stderr.includes(marker));
 
 /**
- * `gh pr view <number> --json state,mergeable,mergeStateStatus,isDraft` —
+ * `gh pr view <number> --json state,mergeable,mergeStateStatus,isDraft,autoMergeRequest` —
  * mergeability alone, distinct from `pull-request.ts`'s `PrView` fields
  * (`title`/`baseRefName`/`headRefName`) since a caller polling this while
  * `mergeable` is still `"UNKNOWN"` (GitHub computes it asynchronously) has
@@ -172,7 +172,7 @@ const toMergeMethods = (
 };
 
 /**
- * `gh repo view <owner>/<repo> --json mergeCommitAllowed,squashMergeAllowed,rebaseMergeAllowed`,
+ * `gh repo view <owner>/<repo> --json mergeCommitAllowed,squashMergeAllowed,rebaseMergeAllowed,autoMergeAllowed`,
  * mapped to the subset of `"merge" | "squash" | "rebase"` the repo actually
  * allows. Every method disabled is a genuine anomaly (GitHub itself requires
  * at least one to merge anything) — failed as `NoMergeMethodsEnabled` rather

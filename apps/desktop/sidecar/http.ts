@@ -121,6 +121,7 @@ const translateMergeFailure = (
 		| "SERVICE_UNAVAILABLE";
 	reason: string;
 	detail: string;
+	message: string;
 } => {
 	switch (cause._tag) {
 		case "GhNotAuthenticated":
@@ -128,30 +129,35 @@ const translateMergeFailure = (
 				code: "GH_NOT_AUTHENTICATED",
 				reason: "Authentication required",
 				detail: cause.reason,
+				message: `gh is not authenticated: ${cause.reason}`,
 			};
 		case "PullRequestNotFound":
 			return {
 				code: "NOT_FOUND",
 				reason: "Pull request not found",
 				detail: cause.reason,
+				message: `pull request #${cause.number} couldn't be resolved on GitHub for ${cause.repoRoot}: ${cause.reason}`,
 			};
 		case "PullRequestNotMergeable":
 			return {
 				code: "CONFLICT",
 				reason: "Merge blocked",
 				detail: cause.reason,
+				message: `pull request #${cause.number} isn't mergeable right now: ${cause.reason}`,
 			};
 		case "GhMergeFailed":
 			return {
 				code: "SERVICE_UNAVAILABLE",
 				reason: "GitHub rejected the merge",
 				detail: cause.reason,
+				message: `gh pr merge failed for pull request #${cause.number}: ${cause.reason}`,
 			};
 		case "GitCommandError":
 			return {
 				code: "SERVICE_UNAVAILABLE",
 				reason: "Couldn't run gh",
 				detail: mergeFailureDetail(cause),
+				message: `${cause.command} could not be run: ${cause.stderr || String(cause.cause)}`,
 			};
 	}
 };
@@ -162,7 +168,7 @@ const logMergeFailure = (
 		| "pull request stack merge"
 		| "enable auto-merge"
 		| "disable auto-merge",
-	input: { owner: string; repo: string; number: number; method: string },
+	input: { owner: string; repo: string; number: number; method?: string },
 	error: MergeError,
 ) =>
 	Effect.logWarning(`${operation} failed`, {
@@ -1492,7 +1498,7 @@ export function attachRouter(
 						Effect.mapError((cause) => {
 							const failure = translateMergeFailure(cause);
 							return errors[failure.code]({
-								message: failure.detail,
+								message: failure.message,
 								data: { reason: failure.reason, detail: failure.detail },
 							});
 						}),
@@ -1540,7 +1546,7 @@ export function attachRouter(
 							Effect.mapError((cause) => {
 								const failure = translateMergeFailure(cause);
 								return request.errors[failure.code]({
-									message: failure.detail,
+									message: failure.message,
 									data: { reason: failure.reason, detail: failure.detail },
 								});
 							}),
@@ -1559,10 +1565,13 @@ export function attachRouter(
 							input.number,
 						)
 						.pipe(
+							Effect.tapError((cause) =>
+								logMergeFailure("disable auto-merge", input, cause),
+							),
 							Effect.mapError((cause) => {
 								const failure = translateMergeFailure(cause);
 								return request.errors[failure.code]({
-									message: failure.detail,
+									message: failure.message,
 									data: { reason: failure.reason, detail: failure.detail },
 								});
 							}),
