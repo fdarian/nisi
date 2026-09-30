@@ -1,6 +1,7 @@
 import { join } from "node:path";
 import {
 	diffContentsPatch,
+	fetchBaseRef,
 	type FileContentRequest,
 	type GhOutputDecodeError,
 	type GitCommandError,
@@ -21,6 +22,7 @@ import {
 	readFileContentsAtRef,
 	readWorktreeBlobContent,
 	resolveCurrentBranch,
+	resolveDiffBaseRef,
 	resolveMergeBase,
 	resolveRepoRoot,
 	resolveReviewTarget,
@@ -381,6 +383,18 @@ export class Store extends Context.Service<Store>()("Store", {
 	make: Effect.gen(function* () {
 		const reviewStore = yield* ReviewStore;
 		const settingsStore = yield* SettingsStore;
+		const baseFetchState = new Map<string, boolean>();
+		const refreshBase = (repoRoot: string, baseRef: string) =>
+			fetchBaseRef(repoRoot, baseRef).pipe(
+				Effect.tap((result) =>
+					Effect.sync(() => {
+						baseFetchState.set(
+							`${repoRoot}\n${baseRef}`,
+							result.baseMayBeStale,
+						);
+					}),
+				),
+			);
 
 		const retargetSessionToPr = (
 			sessionId: string,
@@ -417,6 +431,7 @@ export class Store extends Context.Service<Store>()("Store", {
 					Effect.catchTag("NotAGitRepository", () => new InvalidCwd({ cwd })),
 				);
 				const resolved = yield* resolveSessionTarget(repoRoot, target);
+				yield* refreshBase(repoRoot, resolved.baseRef);
 				const openFreshSession = reviewStore
 					.openSession({
 						repoRoot,
@@ -573,6 +588,7 @@ export class Store extends Context.Service<Store>()("Store", {
 					);
 				}
 
+				yield* refreshBase(repoRoot, resolved.baseRef);
 				return yield* retargetSessionToPr(
 					sessionId,
 					resolved.pr,
@@ -677,9 +693,30 @@ export class Store extends Context.Service<Store>()("Store", {
 			});
 
 		const listSessions = () =>
-			reviewStore
-				.listOpenSessions()
-				.pipe(Effect.map((sessions) => sessions.map(toWireSession)));
+			reviewStore.listOpenSessions().pipe(
+				Effect.tap((sessions) =>
+					Effect.forEach(
+						sessions,
+						(session) => {
+							const key = `${session.repoRoot}\n${session.baseRef}`;
+							if (baseFetchState.has(key)) return Effect.void;
+							return refreshBase(session.repoRoot, session.baseRef).pipe(
+								Effect.catchTag("GitCommandError", (error) =>
+									Effect.logWarning("Could not refresh restored session base", {
+										error,
+									}).pipe(
+										Effect.tap(() =>
+											Effect.sync(() => baseFetchState.set(key, true)),
+										),
+									),
+								),
+							);
+						},
+						{ concurrency: 4 },
+					),
+				),
+				Effect.map((sessions) => sessions.map(toWireSession)),
+			);
 
 		const closeSession = (sessionId: string) =>
 			reviewStore.closeSession(sessionId);
@@ -871,6 +908,23 @@ export class Store extends Context.Service<Store>()("Store", {
 		 */
 		const resolveSessionDiffHead = (session: ReviewSession, repoRoot: string) =>
 			resolveDiffHead(repoRoot, session.headRef, session.pr !== null);
+
+		const refreshSessionBase = (sessionId: string) =>
+			Effect.gen(function* () {
+				const session = yield* reviewStore.getSession(sessionId);
+				const repoRoot = yield* resolveLiveRepoRoot(session);
+				return yield* refreshBase(repoRoot, session.baseRef);
+			});
+
+		const readBaseMayBeStale = (sessionId: string) =>
+			Effect.gen(function* () {
+				const session = yield* reviewStore.getSession(sessionId);
+				const repoRoot = yield* resolveLiveRepoRoot(session);
+				const state = baseFetchState.get(`${repoRoot}\n${session.baseRef}`);
+				if (state !== undefined) return state;
+				const ref = yield* resolveDiffBaseRef(repoRoot, session.baseRef);
+				return ref.startsWith("refs/remotes/");
+			});
 
 		const listChangedFiles = (sessionId: string, includeUncommitted: boolean) =>
 			Effect.gen(function* () {
@@ -1314,7 +1368,7 @@ export class Store extends Context.Service<Store>()("Store", {
 			Effect.gen(function* () {
 				const mergeBase = yield* resolveMergeBase(
 					repoRoot,
-					session.baseRef,
+					yield* resolveDiffBaseRef(repoRoot, session.baseRef),
 					diffHead.headRef,
 				);
 				const baseContentBytes = yield* readFileContentsAtRef(
@@ -1471,6 +1525,8 @@ export class Store extends Context.Service<Store>()("Store", {
 			closeSession,
 			resolveSessionRepoRoot,
 			listChangedFiles,
+			refreshSessionBase,
+			readBaseMayBeStale,
 			readFileContents,
 			readFileViewerContent,
 			setFileViewed,

@@ -613,11 +613,47 @@ export function attachRouter(
 			}),
 		},
 		diff: {
+			refreshBase: authed.diff.refreshBase.effect(function* ({
+				input,
+				errors,
+			}) {
+				const store = yield* Store;
+				return yield* store.refreshSessionBase(input.sessionId).pipe(
+					Effect.catchTag("SessionNotFound", () =>
+						Effect.fail(
+							errors.NOT_FOUND({
+								message: `session not found: ${input.sessionId}`,
+							}),
+						),
+					),
+					Effect.catchTag("GitCommandError", (cause) =>
+						Effect.fail(
+							errors.INTERNAL_SERVER_ERROR({
+								message: formatGitCommandError(cause),
+							}),
+						),
+					),
+					Effect.catchTag("WorktreeRelocationFailed", (cause) =>
+						Effect.fail(
+							errors.INTERNAL_SERVER_ERROR({
+								message: formatWorktreeRelocationFailed(cause),
+							}),
+						),
+					),
+				);
+			}),
 			files: authed.diff.files.effect(function* ({ input, errors }) {
 				const store = yield* Store;
 				return yield* store
 					.listChangedFiles(input.sessionId, input.includeUncommitted ?? false)
 					.pipe(
+						Effect.flatMap((files) =>
+							store
+								.readBaseMayBeStale(input.sessionId)
+								.pipe(
+									Effect.map((baseMayBeStale) => ({ files, baseMayBeStale })),
+								),
+						),
 						Effect.catchTag("SessionNotFound", () =>
 							Effect.fail(
 								errors.NOT_FOUND({

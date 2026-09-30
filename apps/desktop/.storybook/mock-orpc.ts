@@ -250,7 +250,10 @@ export function createMockSidecarClient(
 			closeThread: async () => undefined,
 		},
 		diff: {
-			files: async () => [],
+			files: async () => ({ files: [], baseMayBeStale: false }),
+			refreshBase: async () => {
+				throw new Error("diff.refreshBase has no story fixture yet");
+			},
 			fileContents: async ({ paths }) =>
 				paths.map((request) => ({
 					path: request.path,

@@ -99,6 +99,84 @@ const withTestRepoAndDataDir = async <T>(
 	}
 };
 
+test("base refresh drops upstream-only files without changing head or remaining reviewed state; offline refresh warns", async () => {
+	await withTestRepoAndDataDir(async (repoRoot, dataDir) => {
+		const upstream = await makeTestRepo();
+		try {
+			await sh(upstream, ["fetch", repoRoot, "main"]);
+			await sh(upstream, ["reset", "--hard", "FETCH_HEAD"]);
+			await sh(repoRoot, ["remote", "add", "origin", upstream]);
+			await sh(repoRoot, ["checkout", "-b", "feature"]);
+			await Bun.write(join(repoRoot, "merged.ts"), "upstream changeset\n");
+			await sh(repoRoot, ["add", "-A"]);
+			await sh(repoRoot, ["commit", "-m", "merged changeset"]);
+			await sh(repoRoot, ["branch", "upstream-change"]);
+			await Bun.write(join(repoRoot, "a.ts"), "reviewed PR change\n");
+			await sh(repoRoot, ["add", "-A"]);
+			await sh(repoRoot, ["commit", "-m", "PR change"]);
+			await Effect.runPromise(
+				Effect.gen(function* () {
+					const store = yield* Store;
+					const reviewStore = yield* ReviewStore;
+					const session = yield* openedSession(
+						store.openSession(repoRoot, { kind: "branch", baseRef: "main" }),
+					);
+					expect(
+						(yield* store.listChangedFiles(session.id, false)).map(
+							(file) => file.path,
+						),
+					).toEqual(["a.ts", "merged.ts"]);
+					yield* store.setFileViewed(session.id, "a.ts", true);
+					const reviewed = yield* reviewStore.getFileReviewState(
+						session.id,
+						"a.ts",
+					);
+					yield* Effect.promise(async () => {
+						await sh(upstream, ["fetch", repoRoot, "upstream-change"]);
+						await sh(upstream, ["reset", "--hard", "FETCH_HEAD"]);
+					});
+					expect(
+						(yield* store.refreshSessionBase(session.id)).baseMayBeStale,
+					).toBe(false);
+					const remaining = yield* store.listChangedFiles(session.id, false);
+					expect(remaining.map((file) => file.path)).toEqual(["a.ts"]);
+					expect(remaining[0]?.review?.viewed).toBe(true);
+					expect(remaining[0]?.review?.changedSinceReview).toBe(false);
+					expect(
+						yield* reviewStore.getFileReviewState(session.id, "a.ts"),
+					).toEqual(reviewed);
+					yield* Effect.promise(() =>
+						sh(repoRoot, [
+							"remote",
+							"set-url",
+							"origin",
+							`${upstream}/missing`,
+						]),
+					);
+					expect(
+						(yield* store.refreshSessionBase(session.id)).baseMayBeStale,
+					).toBe(true);
+					expect(yield* store.readBaseMayBeStale(session.id)).toBe(true);
+					expect(
+						(yield* store.listChangedFiles(session.id, false)).map(
+							(file) => file.path,
+						),
+					).toEqual(["a.ts"]);
+					yield* Effect.promise(() =>
+						sh(repoRoot, ["remote", "set-url", "origin", upstream]),
+					);
+					expect(
+						(yield* store.refreshSessionBase(session.id)).baseMayBeStale,
+					).toBe(false);
+					expect(yield* store.readBaseMayBeStale(session.id)).toBe(false);
+				}).pipe(Effect.provide(makeTestLayer(dataDir))),
+			);
+		} finally {
+			await rm(upstream, { recursive: true, force: true });
+		}
+	});
+}, 20_000);
+
 describe("Store.openSession — branch target with an explicit baseRef", () => {
 	test("rejects an unresolvable base with InvalidBaseRef, carrying git's own stderr", async () => {
 		await withTestRepoAndDataDir(async (repoRoot, dataDir) => {
@@ -147,13 +225,19 @@ describe("Store.openSession — branch target with an explicit baseRef", () => {
 });
 
 describe("Store.openSession — reuses matching branch review state for a PR", () => {
-	const addOrigin = (repoRoot: string) =>
-		sh(repoRoot, [
+	const addOrigin = async (repoRoot: string) => {
+		await sh(repoRoot, [
 			"remote",
 			"add",
 			"origin",
 			"https://github.com/acme/widgets.git",
 		]);
+		await sh(repoRoot, [
+			"config",
+			`url.${repoRoot}.insteadOf`,
+			"https://github.com/acme/widgets.git",
+		]);
+	};
 
 	test("auto open retargets a branch session, carries review state, and reuses it", async () => {
 		await withTestRepoAndDataDir(async (repoRoot, dataDir) => {

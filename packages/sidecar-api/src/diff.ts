@@ -162,6 +162,12 @@ export const FileContentResult = Schema.Struct({
 export type FileContentResult = Schema.Schema.Type<typeof FileContentResult>;
 
 export const diffContract = {
+	refreshBase: oc
+		.input(Schema.Struct({ sessionId: Schema.String }))
+		.output(
+			Schema.Struct({ baseRef: Schema.String, baseMayBeStale: Schema.Boolean }),
+		)
+		.errors({ NOT_FOUND: {}, INTERNAL_SERVER_ERROR: {} }),
 	/** Metadata only, every changed file — the sidebar's data source. */
 	files: oc
 		.input(
@@ -170,7 +176,12 @@ export const diffContract = {
 				includeUncommitted: IncludeUncommitted,
 			}),
 		)
-		.output(Schema.Array(FileChange))
+		.output(
+			Schema.Struct({
+				files: Schema.Array(FileChange),
+				baseMayBeStale: Schema.Boolean,
+			}),
+		)
 		.errors({ NOT_FOUND: {}, INTERNAL_SERVER_ERROR: {} }),
 	/**
 	 * Every requested path's patch + contents, in one round trip — the diff
