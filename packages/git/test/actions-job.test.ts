@@ -1,0 +1,141 @@
+import { expect, test } from "bun:test";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { Effect, Schema } from "effect";
+import {
+	flattenActionsLog,
+	parseActionsLog,
+} from "../src/github/actions-log.ts";
+import { findRerunActionsJob } from "../src/github/gh/actions-jobs.ts";
+
+const root = dirname(fileURLToPath(import.meta.url));
+const Result = Schema.Struct({
+	ok: Schema.Boolean,
+	job: Schema.optional(
+		Schema.Struct({
+			name: Schema.String,
+			steps: Schema.Array(
+				Schema.Struct({
+					number: Schema.Number,
+					conclusion: Schema.NullOr(Schema.String),
+				}),
+			),
+		}),
+	),
+	logs: Schema.optional(
+		Schema.Union([
+			Schema.Struct({
+				status: Schema.Literal("available"),
+				raw: Schema.String,
+			}),
+			Schema.Struct({
+				status: Schema.Literal("unavailable"),
+				reason: Schema.String,
+			}),
+		]),
+	),
+	rerunJobId: Schema.optional(Schema.NullOr(Schema.Number)),
+	error: Schema.optional(Schema.Struct({ _tag: Schema.String })),
+});
+
+async function run(action: string, id: number) {
+	const proc = Bun.spawn(
+		[
+			"bun",
+			"run",
+			join(root, "fixtures/actions-job-runner.ts"),
+			root,
+			action,
+			String(id),
+		],
+		{
+			env: {
+				...process.env,
+				NISI_GH_BIN: join(root, "fixtures/gh-actions-job-stub.sh"),
+			},
+			stdout: "pipe",
+			stderr: "pipe",
+		},
+	);
+	const output = await Promise.all([
+		new Response(proc.stdout).text(),
+		new Response(proc.stderr).text(),
+		proc.exited,
+	]);
+	if (output[2] !== 0) throw new Error(output[1]);
+	return Effect.runPromise(
+		Schema.decodeUnknownEffect(Schema.fromJsonString(Result))(output[0]),
+	);
+}
+
+test("Actions metadata decoding and exact job endpoint", async () => {
+	const result = await run("job", 1);
+	expect(result.ok).toBe(true);
+	expect(result.job).toEqual({
+		name: "test",
+		steps: [{ number: 1, conclusion: "failure" }],
+	});
+	expect((await run("job", 2)).error?._tag).toBe("GhOutputDecodeError");
+});
+
+test("ANSI-bearing piped logs opt into gh escape output and retain raw bytes", async () => {
+	const result = await run("logs", 1);
+	expect(result.ok).toBe(true);
+	if (result.logs?.status !== "available") throw new Error("Logs unavailable");
+	expect(result.logs.raw).toBe(
+		"2026-01-01T00:00:01.1234567Z \u001b[36;1mpnpm install\u001b[0m\r\n2026-01-01T00:00:02.1234567Z ##[error]exit 1\r\n",
+	);
+	const parsed = parseActionsLog(result.logs.raw, [
+		{
+			number: 1,
+			started_at: "2026-01-01T00:00:00Z",
+			completed_at: "2026-01-01T00:00:10Z",
+		},
+	]);
+	const step = parsed[0];
+	if (step === undefined) throw new Error("Missing parsed step");
+	expect(flattenActionsLog(step.nodes)).toEqual([
+		{
+			type: "line",
+			timestamp: Date.parse("2026-01-01T00:00:01.123Z"),
+			kind: "plain",
+			text: "\u001b[36;1mpnpm install\u001b[0m",
+		},
+		{
+			type: "line",
+			timestamp: Date.parse("2026-01-01T00:00:02.123Z"),
+			kind: "error",
+			text: "exit 1",
+		},
+	]);
+});
+
+test("missing and expired logs are typed unavailable", async () => {
+	for (const id of [404, 410])
+		expect((await run("logs", id)).logs?.status).toBe("unavailable");
+});
+
+test("permission, auth and rate-limit errors never become unavailable", async () => {
+	expect((await run("logs", 403)).error?._tag).toBe("GitCommandError");
+	expect((await run("logs", 401)).error?._tag).toBe("GhNotAuthenticated");
+	expect((await run("logs", 429)).error?._tag).toBe("GhRateLimited");
+});
+
+test("re-run uses POST and resolves the new job id from the latest run attempt", async () => {
+	const result = await run("rerun", 1);
+	expect(result.ok).toBe(true);
+	expect(result.rerunJobId).toBe(9);
+	expect((await run("rerun", 403)).error?._tag).toBe("GitCommandError");
+});
+
+test("re-run job matching requires the same name and a different id", () => {
+	const jobs = [
+		{ id: 1, name: "test" },
+		{ id: 5, name: "lint" },
+		{ id: 9, name: "test" },
+	];
+	expect(findRerunActionsJob(jobs, { id: 1, name: "test" })).toBe(9);
+	expect(findRerunActionsJob(jobs.slice(0, 2), { id: 1, name: "test" })).toBe(
+		null,
+	);
+});

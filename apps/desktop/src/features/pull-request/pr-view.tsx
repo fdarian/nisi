@@ -50,6 +50,7 @@ import { useWindowFocused } from "#/infra/use-window-focused";
 import { splitPath } from "#/lib/tree-paths";
 import type { KeyBindings } from "#/lib/use-key-bindings";
 import { useKeyBindings } from "#/lib/use-key-bindings";
+import { CiLogProvider } from "./ci-log/ci-log-provider";
 
 type PrViewProps = {
 	session: Session;
@@ -175,98 +176,100 @@ export function PrView({
 	}, [walkthroughEnabled]);
 
 	return (
-		<div className="flex min-h-0 flex-1 flex-col">
-			<PrHeader
-				isSelectedTab={isSelectedTab}
-				onCloseTab={onCloseTab}
-				orpc={orpc}
-				repoRoot={session.repoRoot}
-				stat={stat}
-				target={session.target}
-				watched={isHeaderWatched}
-				findExistingSessionId={findExistingSessionId}
-				onSessionOpened={onSessionOpened}
-			/>
-			<Tabs
-				className="flex min-h-0 flex-1 flex-col gap-0"
-				onValueChange={(value) => setActiveTab(value as string)}
-				value={tabsValue}
-			>
-				<PrViewTabStrip
-					orpc={orpc}
-					session={session}
-					activeTab={activeTab}
+		<CiLogProvider session={session} orpc={orpc} active={isSelectedTab}>
+			<div className="flex min-h-0 flex-1 flex-col">
+				<PrHeader
 					isSelectedTab={isSelectedTab}
-					onCloseFile={closeFile}
-					openFiles={openFiles}
-					setActiveTab={setActiveTab}
-					tabs={tabs}
+					onCloseTab={onCloseTab}
+					orpc={orpc}
+					repoRoot={session.repoRoot}
+					stat={stat}
+					target={session.target}
+					watched={isHeaderWatched}
+					findExistingSessionId={findExistingSessionId}
+					onSessionOpened={onSessionOpened}
 				/>
-
-				<TabsContent className="flex min-h-0 flex-1" value="overview">
-					<OverviewView
-						enabled={isSelectedTab && tabsValue === "overview"}
+				<Tabs
+					className="flex min-h-0 flex-1 flex-col gap-0"
+					onValueChange={(value) => setActiveTab(value as string)}
+					value={tabsValue}
+				>
+					<PrViewTabStrip
 						orpc={orpc}
 						session={session}
+						activeTab={activeTab}
+						isSelectedTab={isSelectedTab}
+						onCloseFile={closeFile}
+						openFiles={openFiles}
+						setActiveTab={setActiveTab}
+						tabs={tabs}
 					/>
-				</TabsContent>
-				<TabsContent className="flex min-h-0 flex-1 flex-col" value="files">
-					{fileChanges.baseMayBeStale && (
-						<p
-							role="status"
-							className="border-b px-4 py-2 text-muted-foreground text-xs"
-						>
-							Base may be stale — could not fetch the base branch. Showing the
-							last fetched base.
-							<button
-								type="button"
-								className="ml-2 underline"
-								onClick={refreshFileChanges}
+
+					<TabsContent className="flex min-h-0 flex-1" value="overview">
+						<OverviewView
+							enabled={isSelectedTab && tabsValue === "overview"}
+							orpc={orpc}
+							session={session}
+						/>
+					</TabsContent>
+					<TabsContent className="flex min-h-0 flex-1 flex-col" value="files">
+						{fileChanges.baseMayBeStale && (
+							<p
+								role="status"
+								className="border-b px-4 py-2 text-muted-foreground text-xs"
 							>
-								Retry
-							</button>
-						</p>
-					)}
-					{error != null ? (
-						<FilesChangedError error={error} />
-					) : isLoading ? (
-						<FilesChangedLoading />
-					) : (
-						<FilesChangedView
-							files={files}
-							hasPendingChanges={hasPendingChanges}
-							onOpenFile={openFile}
-							onRefresh={refreshFileChanges}
-							orpc={orpc}
-							reviewState={reviewState}
-							session={session}
-							setViewed={setViewed}
-							shortcutsEnabled={isSelectedTab}
-						/>
-					)}
-				</TabsContent>
-				{walkthroughEnabled && (
-					<TabsContent className="flex min-h-0 flex-1" value="walkthrough">
-						<WalkthroughView
-							files={files}
-							onSelectionChange={setWalkthroughSelection}
-							orpc={orpc}
-							selection={walkthroughSelection}
-							session={session}
-						/>
+								Base may be stale — could not fetch the base branch. Showing the
+								last fetched base.
+								<button
+									type="button"
+									className="ml-2 underline"
+									onClick={refreshFileChanges}
+								>
+									Retry
+								</button>
+							</p>
+						)}
+						{error != null ? (
+							<FilesChangedError error={error} />
+						) : isLoading ? (
+							<FilesChangedLoading />
+						) : (
+							<FilesChangedView
+								files={files}
+								hasPendingChanges={hasPendingChanges}
+								onOpenFile={openFile}
+								onRefresh={refreshFileChanges}
+								orpc={orpc}
+								reviewState={reviewState}
+								session={session}
+								setViewed={setViewed}
+								shortcutsEnabled={isSelectedTab}
+							/>
+						)}
 					</TabsContent>
-				)}
-				{openFiles.map((path) => (
-					<TabsContent
-						className="flex min-h-0 flex-1 flex-col"
-						key={path}
-						value={fileTabId(path)}
-					>
-						<FileView orpc={orpc} path={path} sessionId={session.id} />
-					</TabsContent>
-				))}
-			</Tabs>
-		</div>
+					{walkthroughEnabled && (
+						<TabsContent className="flex min-h-0 flex-1" value="walkthrough">
+							<WalkthroughView
+								files={files}
+								onSelectionChange={setWalkthroughSelection}
+								orpc={orpc}
+								selection={walkthroughSelection}
+								session={session}
+							/>
+						</TabsContent>
+					)}
+					{openFiles.map((path) => (
+						<TabsContent
+							className="flex min-h-0 flex-1 flex-col"
+							key={path}
+							value={fileTabId(path)}
+						>
+							<FileView orpc={orpc} path={path} sessionId={session.id} />
+						</TabsContent>
+					))}
+				</Tabs>
+			</div>
+		</CiLogProvider>
 	);
 }
 

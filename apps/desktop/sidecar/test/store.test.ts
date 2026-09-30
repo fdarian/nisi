@@ -39,6 +39,9 @@ const makeTestRepo = async (): Promise<string> => {
 
 /** Same composition as `packages/review/test/fixtures.ts`'s `makeTestLayer`, one layer up — `Store.layer` already pulls in `ReviewStore.layer` via `provideMerge`, so this only has to add what `Store.make` needs beyond that: `SqliteDb` and `NISI_DATA_DIR`. */
 const mockGitHub: GitHubShape = {
+	getActionsJob: () => Effect.die(new Error("unused mock GitHub method")),
+	getActionsJobLogs: () => Effect.die(new Error("unused mock GitHub method")),
+	rerunActionsJob: () => Effect.die(new Error("unused mock GitHub method")),
 	repository: () =>
 		Effect.succeed({ owner: "acme", repo: "widgets", defaultBranch: "main" }),
 	pullRequest: () =>

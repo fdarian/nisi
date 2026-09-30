@@ -203,6 +203,8 @@ const toCheckRunResult = (view: CheckRunView): PullRequestCheck => {
 		durationMs: checkRunDurationMs(view),
 		detailsUrl: view.detailsUrl,
 		workflowName: view.workflowName,
+		actionsJobId: actionsJobIdFromUrl(view.detailsUrl),
+		actionsRunId: actionsRunIdFromUrl(view.detailsUrl),
 	};
 };
 
@@ -216,6 +218,30 @@ const STATUS_CONTEXT_STATE: Record<
 	ERROR: "failing",
 	EXPECTED: "pending",
 };
+
+export function actionsJobIdFromUrl(url: string): number | undefined {
+	return actionsIdsFromUrl(url)?.jobId;
+}
+
+export function actionsRunIdFromUrl(url: string): number | undefined {
+	return actionsIdsFromUrl(url)?.runId;
+}
+
+function actionsIdsFromUrl(url: string) {
+	const match =
+		/^https:\/\/github\.com\/[^/]+\/[^/]+\/actions\/runs\/(\d+)\/job\/(\d+)(?:[?#].*)?$/.exec(
+			url,
+		);
+	if (match?.[1] === undefined || match[2] === undefined) return undefined;
+	const runId = Number(match[1]);
+	const jobId = Number(match[2]);
+	return Number.isSafeInteger(runId) &&
+		runId > 0 &&
+		Number.isSafeInteger(jobId) &&
+		jobId > 0
+		? { runId, jobId }
+		: undefined;
+}
 
 const toStatusContextResult = (view: StatusContextView): PullRequestCheck => ({
 	name: view.context,

@@ -1199,6 +1199,8 @@ export type PullRequestCheck = {
 	detailsUrl?: string;
 	workflowName?: string;
 	workflowRunId?: number;
+	actionsJobId?: number;
+	actionsRunId?: number;
 };
 
 export type ApproveWorkflowRunsParams = {
@@ -1267,6 +1269,55 @@ export function usePullRequestChecks(
 	);
 }
 
+export type CiJobParams = PullRequestChecksParams & { jobId: number };
+export type RerunCiJobParams = CiJobParams & { runId: number };
+
+export function useCiJob(orpc: SidecarQueryUtils, params: CiJobParams) {
+	return useQuery(
+		orpc.pullRequests.ciJob.queryOptions({
+			input: params,
+			refetchInterval: (query) =>
+				query.state.status === "error" ||
+				query.state.data?.status === "completed"
+					? false
+					: 5000,
+		}),
+	);
+}
+
+export function useRerunCiJob(orpc: SidecarQueryUtils) {
+	const queryClient = useQueryClient();
+	return useMutation({
+		...orpc.pullRequests.rerunCiJob.mutationOptions(),
+		onSuccess: () =>
+			toastManager.add({ title: "Re-run started", type: "success" }),
+		onSettled: (_data, _error, params) => {
+			void Promise.all([
+				queryClient.invalidateQueries({
+					queryKey: orpc.pullRequests.ciJob.key(),
+				}),
+				queryClient.invalidateQueries({
+					queryKey: orpc.pullRequests.checks.key({
+						input: {
+							repoRoot: params.repoRoot,
+							owner: params.owner,
+							repo: params.repo,
+							number: params.number,
+						},
+					}),
+				}),
+				queryClient.invalidateQueries({ queryKey: orpc.overview.get.key() }),
+			]);
+		},
+		onError: (error) =>
+			toastManager.add({
+				title: "Couldn't re-run job",
+				description: error.message,
+				type: "error",
+			}),
+	});
+}
+
 /**
  * Mirrors `OverviewCheck` (`packages/sidecar-api/src/overview.ts`) — one CI
  * check on a single commit. Deliberately the same field shape as
@@ -1276,6 +1327,8 @@ export function usePullRequestChecks(
  * `pr-ci-status.tsx`'s `toCiChecks`).
  */
 export type OverviewCheck = {
+	actionsJobId?: number;
+	actionsRunId?: number;
 	name: string;
 	status: PullRequestCheckStatus;
 	detail?: string;

@@ -20,6 +20,10 @@ import type {
 	PullRequestSearchResult,
 } from "../pull-request.ts";
 import type {
+	ActionsJob,
+	ActionsJobError,
+	ActionsJobInput,
+	ActionsJobLogs,
 	FetchPullRequestChecksInput,
 	FetchPullRequestOverviewInput,
 	FetchPullRequestStackInput,
@@ -30,6 +34,7 @@ import type {
 	PullRequestOverview,
 	PullRequestStack,
 	PullRequestStackError,
+	RerunActionsJobInput,
 } from "./models.ts";
 
 export type RepositoryIdentity = {
@@ -39,6 +44,15 @@ export type RepositoryIdentity = {
 };
 
 export type GitHubShape = {
+	getActionsJob: (
+		input: ActionsJobInput,
+	) => Effect.Effect<ActionsJob, ActionsJobError>;
+	getActionsJobLogs: (
+		input: ActionsJobInput,
+	) => Effect.Effect<ActionsJobLogs, ActionsJobError>;
+	rerunActionsJob: (
+		input: RerunActionsJobInput,
+	) => Effect.Effect<number | null, ActionsJobError>;
 	repository: (
 		repoRoot: string,
 	) => Effect.Effect<

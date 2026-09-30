@@ -1,6 +1,5 @@
 "use client";
 
-import { openUrl } from "@tauri-apps/plugin-opener";
 import { cn } from "cn";
 import { CirclePause } from "lucide-react";
 import type React from "react";
@@ -12,6 +11,7 @@ import {
 	DropdownMenuTrigger,
 } from "#/components/ui/menu";
 import { useDismissOnInactive } from "#/features/pull-request/use-dismiss-on-inactive";
+import { useOpenCiCheck } from "../ci-log/ci-log-provider";
 
 export type CiCheckStatus =
 	| "passing"
@@ -22,6 +22,9 @@ export type CiCheckStatus =
 	| "skipped";
 
 export type CiCheck = {
+	actionsJobId?: number;
+	actionsRunId?: number;
+	workflowName?: string;
 	name: string;
 	status: CiCheckStatus;
 	/** Free-form line shown under the name — a duration, a conclusion, whatever the source has. */
@@ -146,6 +149,7 @@ function CiChecksMenuContent({
 		(check) => check.status === "awaiting_approval",
 	);
 	const awaitingApproval = awaitingChecks.length > 0;
+	const openCheck = useOpenCiCheck();
 	return (
 		<DropdownMenuContent align="end" className="w-72">
 			<div className="px-2 py-1.5">
@@ -168,13 +172,11 @@ function CiChecksMenuContent({
 					const detailsUrl = check.detailsUrl;
 					return (
 						<DropdownMenuItem
-							disabled={detailsUrl === undefined}
-							key={check.name}
-							onClick={
-								detailsUrl === undefined
-									? undefined
-									: () => void openUrl(detailsUrl)
+							disabled={
+								detailsUrl === undefined && check.actionsJobId === undefined
 							}
+							key={check.name}
+							onClick={() => openCheck(check)}
 						>
 							{check.status === "awaiting_approval" ? (
 								<CirclePause className="size-3 shrink-0 text-warning" />
