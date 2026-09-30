@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, realpath, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { BunServices } from "@effect/platform-bun";
@@ -11,7 +11,12 @@ import {
 	type GitHubShape,
 	type PullRequestMergeability,
 } from "@repo/git";
-import { RepoMergeMethodStore, ScheduledMergeStore } from "@repo/settings";
+import {
+	RepoMergeMethodStore,
+	ScheduledMergeStore,
+	SettingsStore,
+} from "@repo/settings";
+import { ReviewStore } from "@repo/review";
 import {
 	ConfigProvider,
 	Effect,
@@ -80,6 +85,8 @@ const run = async <A, E>(
 		| RepoMergeMethodStore
 		| Scope.Scope
 		| Store
+		| ReviewStore
+		| SettingsStore
 		| FileSystem
 		| ChildProcessSpawner.ChildProcessSpawner
 	>,
@@ -126,6 +133,80 @@ const eventQueue = Effect.gen(function* () {
 });
 
 describe("scheduled merge worker", () => {
+	test("recovers a relocated session worktree before reading GitHub", async () => {
+		const root = await realpath(
+			await mkdtemp(join(tmpdir(), "nisi-scheduled-worktree-test-")),
+		);
+		const source = join(root, "source");
+		const oldPath = join(root, "old");
+		const movedPath = join(root, "moved");
+		const roots: string[] = [];
+		try {
+			for (const args of [
+				["init", "-b", "main", source],
+				[
+					"-C",
+					source,
+					"-c",
+					"user.name=Test",
+					"-c",
+					"user.email=test@example.com",
+					"commit",
+					"--allow-empty",
+					"-m",
+					"initial",
+				],
+				[
+					"-C",
+					source,
+					"remote",
+					"add",
+					"origin",
+					"https://github.com/acme/widgets.git",
+				],
+				["-C", source, "worktree", "add", "-b", "feature", oldPath],
+				["-C", source, "worktree", "move", oldPath, movedPath],
+			]) {
+				const result = Bun.spawnSync(["git", ...args]);
+				expect(result.exitCode, result.stderr.toString()).toBe(0);
+			}
+			await run(
+				{
+					mergeability: (repoRoot) =>
+						Effect.sync(() => {
+							roots.push(repoRoot);
+							return clean;
+						}),
+				},
+				Effect.gen(function* () {
+					const settings = yield* SettingsStore;
+					const reviews = yield* ReviewStore;
+					const worker = yield* ScheduledMerges;
+					yield* settings.setRepoPath(input.owner, input.repo, source);
+					const session = yield* reviews.openSession({
+						repoRoot: oldPath,
+						baseRef: "main",
+						headRef: "feature",
+						pr: {
+							owner: input.owner,
+							repo: input.repo,
+							number: input.number,
+							title: "PR",
+						},
+					});
+					yield* worker.schedule({ ...input, repoRoot: oldPath });
+					yield* worker.check(input);
+					expect(roots).toEqual([movedPath]);
+					expect((yield* reviews.getSession(session.id)).repoRoot).toBe(
+						movedPath,
+					);
+					expect(yield* worker.get(input)).toBeNull();
+				}),
+			);
+		} finally {
+			await rm(root, { recursive: true, force: true });
+		}
+	});
 	test("cancel wins while GitHub reads are in flight", async () => {
 		const entered = await Effect.runPromise(Queue.unbounded<void>());
 		const resume = await Effect.runPromise(Queue.unbounded<void>());
