@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { XIcon } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import { Avatar, AvatarFallback, AvatarImage } from "#/components/ui/avatar";
 import { Badge } from "#/components/ui/badge";
 import {
@@ -22,13 +23,16 @@ import {
 	friendlySearchError,
 	githubAvatarUrl,
 	type OpenPullRequestParams,
+	type PullRequestRepository,
 	type PullRequestSearchResult,
 	useOpenPullRequest,
+	usePullRequestRepositories,
 	useSearchPullRequests,
 } from "#/features/pull-request/data/pull-requests-data";
 import { derivePrStatus } from "#/features/pull-request/pr-status";
 import { PrStatusIcon } from "#/features/pull-request/pr-status-icon";
 import type { SidecarQueryUtils } from "#/infra/backend-context";
+import { paletteRepositories, repositoryKey } from "./palette-repositories";
 
 /**
  * GitHub's search API allows 30 requests/minute authenticated — but that
@@ -49,6 +53,8 @@ import type { SidecarQueryUtils } from "#/infra/backend-context";
 const SEARCH_DEBOUNCE_MS = 400;
 
 type OpenPullRequestPaletteProps = {
+	repositories: readonly PullRequestRepository[];
+	onRepositoriesChange: (repositories: PullRequestRepository[]) => void;
 	open: boolean;
 	onOpenChange: (open: boolean) => void;
 	orpc: SidecarQueryUtils;
@@ -84,26 +90,42 @@ function authorInitials(author: string): string {
  * out from under it" — both look like an ordinary value change from inside
  * the hook.
  */
-export function OpenPullRequestPalette({
-	open,
-	onOpenChange,
-	orpc,
-	onSessionOpened,
-	findExistingSessionId,
-}: OpenPullRequestPaletteProps): React.ReactElement {
+export function OpenPullRequestPalette(
+	props: OpenPullRequestPaletteProps,
+): React.ReactElement {
 	const [query, setQuery] = useState("");
 	const [debouncedQuery, setDebouncedQuery] = useState("");
+	const pickerState = useState(false);
+	const pickingRepository = pickerState[0];
+	const setPickingRepository = pickerState[1];
+	const repositoryQueryState = useState("");
+	const repositoryQuery = repositoryQueryState[0];
+	const setRepositoryQuery = repositoryQueryState[1];
+	const inputRef = useRef<HTMLInputElement>(null);
 
-	const { results, error: searchError } = useSearchPullRequests(
-		orpc,
+	const search = useSearchPullRequests(
+		props.orpc,
 		debouncedQuery,
-		open,
+		props.open,
+		props.repositories.map(repositoryKey),
 	);
-	const searchErrorMessage = friendlySearchError(searchError);
+	const results = search.results;
+	const searchErrorMessage = friendlySearchError(search.error);
+	const recent = useSearchPullRequests(props.orpc, "", props.open);
+	const saved = usePullRequestRepositories(props.orpc, props.open);
+	const repositories = paletteRepositories(
+		recent.results,
+		saved.data === undefined ? [] : saved.data,
+		props.repositories,
+		repositoryQuery,
+	);
+	const repositoryErrorMessage = saved.isError
+		? "Couldn't load saved repositories — try reopening the palette."
+		: friendlySearchError(recent.error);
 
-	const openPr = useOpenPullRequest(orpc, (sessionId) => {
-		onSessionOpened(sessionId);
-		onOpenChange(false);
+	const openPr = useOpenPullRequest(props.orpc, (sessionId) => {
+		props.onSessionOpened(sessionId);
+		props.onOpenChange(false);
 	});
 
 	// Resets to a blank query every time the dialog opens, not just the app's
@@ -114,11 +136,13 @@ export function OpenPullRequestPalette({
 	// transition into it.
 	// biome-ignore lint/correctness/useExhaustiveDependencies: see comment above
 	useEffect(() => {
-		if (!open) return;
+		if (!props.open) return;
 		setQuery("");
 		setDebouncedQuery("");
+		setPickingRepository(false);
+		setRepositoryQuery("");
 		openPr.reset();
-	}, [open]);
+	}, [props.open]);
 
 	// The debounce itself — see `SEARCH_DEBOUNCE_MS`'s doc comment for why
 	// 400ms. Runs independently of the reset effect above; it also fires right
@@ -145,48 +169,171 @@ export function OpenPullRequestPalette({
 				: null;
 
 	return (
-		<CommandDialog onOpenChange={onOpenChange} open={open}>
-			<CommandDialogPopup>
+		<CommandDialog onOpenChange={props.onOpenChange} open={props.open}>
+			<CommandDialogPopup
+				onKeyDownCapture={(event) => {
+					if (event.metaKey && event.key.toLowerCase() === "p") {
+						event.preventDefault();
+						event.stopPropagation();
+						setRepositoryQuery("");
+						setPickingRepository(true);
+						inputRef.current?.focus();
+					} else if (pickingRepository && event.key === "Escape") {
+						// Capture before the dialog handles Escape, so cancelling the picker never closes it.
+						event.preventDefault();
+						event.stopPropagation();
+						setPickingRepository(false);
+					}
+				}}
+			>
 				<CommandPanel>
-					<Command
-						filter={null}
-						items={results}
-						onValueChange={setQuery}
-						value={query}
-					>
-						<CommandInput placeholder="Open pull requests…" />
-						<Separator />
-						<CommandEmpty>
-							{searchErrorMessage ?? "No pull requests found."}
-						</CommandEmpty>
-						<CommandList>
-							{(pr: PullRequestSearchResult) => (
-								<CommandItem
-									key={`${pr.owner}/${pr.repo}#${pr.number}`}
-									onClick={() => handleSelect(pr)}
-									value={pr}
-								>
-									<PullRequestRow
-										isOpening={
-											openPr.isPending &&
-											openPr.pendingParams?.owner === pr.owner &&
-											openPr.pendingParams?.repo === pr.repo &&
-											openPr.pendingParams?.number === pr.number
-										}
-										pr={pr}
+					{pickingRepository ? (
+						<Command
+							key="repositories"
+							filter={null}
+							items={repositories}
+							onValueChange={setRepositoryQuery}
+							value={repositoryQuery}
+						>
+							<div className="flex items-center">
+								<div className="min-w-0 flex-1">
+									<CommandInput
+										ref={inputRef}
+										placeholder="Filter repository..."
 									/>
-								</CommandItem>
+								</div>
+								<span className="mr-4 flex shrink-0 items-center gap-1.5 text-muted-foreground text-xs">
+									Apply <Kbd>↵</Kbd>
+								</span>
+							</div>
+							<Separator />
+							<CommandEmpty>
+								{repositoryErrorMessage !== null
+									? repositoryErrorMessage
+									: saved.isPending || recent.isSearching
+										? "Loading repositories…"
+										: "No repositories found."}
+							</CommandEmpty>
+							<CommandList>
+								{(repository: PullRequestRepository) => (
+									<CommandItem
+										key={repositoryKey(repository)}
+										value={repository}
+										onClick={() => {
+											props.onRepositoriesChange([
+												...props.repositories,
+												repository,
+											]);
+											setPickingRepository(false);
+										}}
+									>
+										<span className="text-muted-foreground">
+											{repository.owner}
+										</span>
+										<span className="ml-2">{repository.repo}</span>
+									</CommandItem>
+								)}
+							</CommandList>
+							{repositoryErrorMessage !== null && repositories.length > 0 && (
+								<p className="px-4 pb-2 text-destructive-foreground text-xs">
+									{repositoryErrorMessage}
+								</p>
 							)}
-						</CommandList>
-					</Command>
+						</Command>
+					) : (
+						<Command
+							key="pull-requests"
+							filter={null}
+							items={results}
+							onValueChange={setQuery}
+							value={query}
+						>
+							<div className="flex flex-wrap items-center">
+								{/* ComboboxChip requires a Combobox root; mirror its styling inside this Autocomplete instead. */}
+								{props.repositories.map((repository) => (
+									<span
+										key={repositoryKey(repository)}
+										className="group ml-2.5 flex items-center gap-1 rounded-[calc(var(--radius-md)-1px)] bg-accent py-1 ps-2 font-medium text-accent-foreground text-xs"
+									>
+										<span className="text-muted-foreground">
+											{repository.owner}
+										</span>
+										<span>{repository.repo}</span>
+										<button
+											type="button"
+											aria-label={`Remove ${repositoryKey(repository)} filter`}
+											className="cursor-pointer px-1.5 opacity-0 outline-none hover:opacity-100 focus-visible:opacity-100 group-hover:opacity-80 group-focus-within:opacity-80"
+											onClick={() => {
+												props.onRepositoriesChange(
+													props.repositories.filter(
+														(candidate) =>
+															repositoryKey(candidate) !==
+															repositoryKey(repository),
+													),
+												);
+												inputRef.current?.focus();
+											}}
+										>
+											<XIcon className="size-3.5" />
+										</button>
+									</span>
+								))}
+								<div className="min-w-40 flex-1">
+									<CommandInput
+										ref={inputRef}
+										placeholder="Open pull requests…"
+										onKeyDown={(event) => {
+											if (
+												event.key === "Backspace" &&
+												query === "" &&
+												props.repositories.length > 0
+											) {
+												event.preventDefault();
+												props.onRepositoriesChange(
+													props.repositories.slice(0, -1),
+												);
+											}
+										}}
+									/>
+								</div>
+							</div>
+							<Separator />
+							<CommandEmpty>
+								{searchErrorMessage ?? "No pull requests found."}
+							</CommandEmpty>
+							<CommandList>
+								{(pr: PullRequestSearchResult) => (
+									<CommandItem
+										key={`${pr.owner}/${pr.repo}#${pr.number}`}
+										onClick={() => handleSelect(pr)}
+										value={pr}
+									>
+										<PullRequestRow
+											isOpening={
+												openPr.isPending &&
+												openPr.pendingParams?.owner === pr.owner &&
+												openPr.pendingParams?.repo === pr.repo &&
+												openPr.pendingParams?.number === pr.number
+											}
+											pr={pr}
+										/>
+									</CommandItem>
+								)}
+							</CommandList>
+						</Command>
+					)}
 				</CommandPanel>
 				<CommandFooter>
 					<span className="flex items-center gap-1.5">
-						<Kbd>↵</Kbd> Open
+						<Kbd>{pickingRepository ? "Esc" : "↵"}</Kbd>{" "}
+						{pickingRepository ? "Cancel" : "Open"}
 					</span>
-					{footerMessage !== null && (
+					{!pickingRepository && footerMessage !== null && (
 						<span className="text-destructive-foreground">{footerMessage}</span>
 					)}
+					<span className="ml-auto flex items-center gap-1.5">
+						<Kbd>⌘P</Kbd> Filter Project
+					</span>
 				</CommandFooter>
 			</CommandDialogPopup>
 		</CommandDialog>
@@ -195,10 +342,10 @@ export function OpenPullRequestPalette({
 	function handleSelect(pr: PullRequestSearchResult) {
 		if (openPr.isPending) return;
 		const params = { owner: pr.owner, repo: pr.repo, number: pr.number };
-		const existingSessionId = findExistingSessionId(params);
+		const existingSessionId = props.findExistingSessionId(params);
 		if (existingSessionId !== undefined) {
-			onSessionOpened(existingSessionId);
-			onOpenChange(false);
+			props.onSessionOpened(existingSessionId);
+			props.onOpenChange(false);
 			return;
 		}
 		openPr.open(params);

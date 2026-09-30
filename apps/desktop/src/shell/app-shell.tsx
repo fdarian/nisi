@@ -177,6 +177,9 @@ function AppShellReady({
 	);
 	const closeSession = listed.closeSession;
 	const [paletteOpen, setPaletteOpen] = useState(false);
+	const paletteRepositories = useState<Array<{ owner: string; repo: string }>>(
+		[],
+	);
 	const openPalette = useCallback(() => setPaletteOpen(true), []);
 	useOpenPrPaletteShortcut(openPalette);
 
@@ -372,6 +375,8 @@ function AppShellReady({
 					</EmptyContent>
 				</Empty>
 				<OpenPullRequestPalette
+					repositories={paletteRepositories[0]}
+					onRepositoriesChange={paletteRepositories[1]}
 					findExistingSessionId={findExistingSessionId}
 					onOpenChange={setPaletteOpen}
 					onSessionOpened={setRequestedActiveSessionId}
@@ -493,6 +498,8 @@ function AppShellReady({
 			</div>
 
 			<OpenPullRequestPalette
+				repositories={paletteRepositories[0]}
+				onRepositoriesChange={paletteRepositories[1]}
 				findExistingSessionId={findExistingSessionId}
 				onOpenChange={setPaletteOpen}
 				onSessionOpened={setRequestedActiveSessionId}
