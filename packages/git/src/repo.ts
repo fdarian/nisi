@@ -1,5 +1,6 @@
 import { stat } from "node:fs/promises";
 import { Effect } from "effect";
+import { resolveBaseRemote } from "./base.ts";
 import {
 	NoDefaultBranch,
 	NoRemoteRefToCompare,
@@ -33,13 +34,17 @@ const gitOutputOrNull = (repoRoot: string, args: ReadonlyArray<string>) =>
 		),
 	);
 
-/** The ref `origin/HEAD` points at (`origin/main`, …), once a clone or `remote set-head` has recorded one. */
-const readOriginHead = (repoRoot: string) =>
-	gitOutputOrNull(repoRoot, [
-		"symbolic-ref",
-		"--short",
-		"refs/remotes/origin/HEAD",
-	]);
+/** The branch the selected remote's HEAD names, once a clone or `remote set-head` has recorded one. */
+const readRemoteDefaultBranch = (repoRoot: string) =>
+	Effect.gen(function* () {
+		const remote = yield* resolveBaseRemote(repoRoot);
+		if (remote === null) return null;
+		const ref = yield* gitOutputOrNull(repoRoot, [
+			"symbolic-ref",
+			`refs/remotes/${remote}/HEAD`,
+		]);
+		return ref === null ? null : ref.slice(`refs/remotes/${remote}/`.length);
+	});
 
 const readConfiguredDefaultBranch = (repoRoot: string) =>
 	gitOutputOrNull(repoRoot, ["config", "--get", "init.defaultBranch"]);
@@ -55,21 +60,30 @@ const refExists = (repoRoot: string, ref: string) =>
 /**
  * The branch a review falls back to when GitHub can't name one — the repo's
  * own idea of its default, in descending order of authority: what
- * `origin/HEAD` points at, then `init.defaultBranch`, then the conventional
+ * the selected remote's HEAD points at, then `init.defaultBranch`, then the conventional
  * names. Every candidate is verified to resolve to a real commit, so the
  * answer is always something `git diff` can actually take.
  */
 export const resolveLocalDefaultBranch = (repoRoot: string) =>
 	Effect.gen(function* () {
-		const [originHead, configured] = yield* Effect.all([
-			readOriginHead(repoRoot),
-			readConfiguredDefaultBranch(repoRoot),
-		]);
-		const candidates = [originHead, configured, "main", "master"].filter(
-			(candidate) => candidate !== null,
-		);
+		const defaults = yield* Effect.all({
+			remoteDefaultBranch: readRemoteDefaultBranch(repoRoot),
+			configured: readConfiguredDefaultBranch(repoRoot),
+		});
+		const candidates = [
+			defaults.remoteDefaultBranch,
+			defaults.configured,
+			"main",
+			"master",
+		].filter((candidate) => candidate !== null);
 		for (const candidate of candidates) {
 			if (yield* refExists(repoRoot, candidate)) return candidate;
+			const remote = yield* resolveBaseRemote(repoRoot);
+			if (
+				remote !== null &&
+				(yield* refExists(repoRoot, `refs/remotes/${remote}/${candidate}`))
+			)
+				return candidate;
 		}
 		return yield* new NoDefaultBranch({ repoRoot });
 	});

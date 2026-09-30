@@ -1,3 +1,4 @@
+export { fetchBaseRef, resolveDiffBaseRef } from "./base.ts";
 export { readFileContentsAtRef, readWorktreeBlobContent } from "./blob.ts";
 export type {
 	FileSignature,

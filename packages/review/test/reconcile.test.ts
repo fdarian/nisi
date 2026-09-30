@@ -3,6 +3,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { BunServices } from "@effect/platform-bun";
+import { getChangedFiles, getFileContents } from "@repo/git";
 import { Effect } from "effect";
 import {
 	hasUnreviewedRanges,
@@ -51,6 +52,107 @@ const rangeClaim = (
 });
 
 describe("reconcile — whole-file claim (Phase 2 behavior, generalized)", () => {
+	test("advancing the git base removes upstream-only files and preserves claims for remaining files", async () => {
+		await withTempRepo(async (repoRoot) => {
+			const git = async (args: readonly string[]) => {
+				const process = Bun.spawn(["git", ...args], {
+					cwd: repoRoot,
+					stdout: "pipe",
+					stderr: "pipe",
+				});
+				const stdout = await new Response(process.stdout).text();
+				const stderr = await new Response(process.stderr).text();
+				if ((await process.exited) !== 0) throw new Error(stderr);
+				return stdout.trim();
+			};
+			await git(["checkout", "-b", "main"]);
+			await git(["config", "user.email", "test@example.com"]);
+			await git(["config", "user.name", "Test"]);
+			await Bun.write(join(repoRoot, "remaining.txt"), "base\n");
+			await git(["add", "-A"]);
+			await git(["commit", "-m", "base"]);
+			await git(["checkout", "-b", "feature"]);
+			await Bun.write(join(repoRoot, "upstream.txt"), "merged\n");
+			await git(["add", "-A"]);
+			await git(["commit", "-m", "upstream changes"]);
+			const advancedBase = await git(["rev-parse", "HEAD"]);
+			await Bun.write(join(repoRoot, "remaining.txt"), "reviewed PR change\n");
+			await git(["add", "-A"]);
+			await git(["commit", "-m", "PR changes"]);
+			const head = await git(["rev-parse", "HEAD"]);
+			const claims = [fileClaim("reviewed PR change\n", 123)];
+			expect(
+				(await run(getChangedFiles(repoRoot, "main"))).map((file) => file.path),
+			).toEqual(["remaining.txt", "upstream.txt"]);
+			await git(["update-ref", "refs/heads/main", advancedBase]);
+			expect(await git(["rev-parse", "HEAD"])).toBe(head);
+			const files = await run(getChangedFiles(repoRoot, "main"));
+			expect(files.map((file) => file.path)).toEqual(["remaining.txt"]);
+			const content = (
+				await run(
+					getFileContents(repoRoot, "main", [{ path: "remaining.txt" }]),
+				)
+			).get("remaining.txt");
+			if (content?.oldContent === undefined || content.newContent === undefined)
+				throw new Error("Expected full remaining file contents");
+			const result = await run(
+				reconcile(repoRoot, {
+					baseContent: content.oldContent,
+					headContent: content.newContent,
+					claims,
+				}),
+			);
+			expect(result.changedSinceReview).toBe(false);
+			expect(result.ranges.every((range) => range.status === "reviewed")).toBe(
+				true,
+			);
+			expect(result.reviewedBaseline).toBe("reviewed PR change\n");
+			expect(claims).toEqual([fileClaim("reviewed PR change\n", 123)]);
+		});
+	});
+	test("base moves forward with unchanged head: upstream-only differences disappear and remaining review survives", async () => {
+		await withTempRepo(async (repoRoot) => {
+			const upstreamHead = "already merged upstream\n";
+			const remainingHead = "upstream line\nreviewed PR line\n";
+			const claims = [fileClaim(remainingHead)];
+			const before = await run(
+				reconcile(repoRoot, {
+					baseContent: "original line\n",
+					headContent: remainingHead,
+					claims,
+				}),
+			);
+			const dropped = await run(
+				reconcile(repoRoot, {
+					baseContent: upstreamHead,
+					headContent: upstreamHead,
+					claims: [fileClaim(upstreamHead)],
+				}),
+			);
+			const remaining = await run(
+				reconcile(repoRoot, {
+					baseContent: "upstream line\n",
+					headContent: remainingHead,
+					claims,
+				}),
+			);
+			expect(before.ranges.every((range) => range.status === "reviewed")).toBe(
+				true,
+			);
+			expect(dropped.ranges).toEqual([]);
+			expect(dropped.changedSinceReview).toBe(false);
+			expect(remaining.ranges).toEqual([
+				{
+					startLine: 2,
+					endLine: 2,
+					status: "reviewed",
+					reviewedVia: { kind: "file" },
+				},
+			]);
+			expect(remaining.changedSinceReview).toBe(false);
+			expect(remaining.reviewedBaseline).toBe(remainingHead);
+		});
+	});
 	test("an edit in a different hunk leaves the reviewed hunk collapsed, only the new one surfaces", async () => {
 		await withTempRepo(async (repoRoot) => {
 			const base = numbered(20);

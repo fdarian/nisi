@@ -284,7 +284,12 @@ export function useSessions(
 export function useFileChanges(
 	orpc: SidecarQueryUtils,
 	sessionId: string,
-): { files: readonly FileChange[]; isLoading: boolean; error: unknown } {
+): {
+	files: readonly FileChange[];
+	baseMayBeStale: boolean | undefined;
+	isLoading: boolean;
+	error: unknown;
+} {
 	const [includeUncommitted] = useIncludeUncommitted(orpc);
 	const query = useQuery(
 		orpc.diff.files.queryOptions({
@@ -292,7 +297,8 @@ export function useFileChanges(
 		}),
 	);
 	return {
-		files: query.data ?? [],
+		files: query.data?.files ?? [],
+		baseMayBeStale: query.data?.baseMayBeStale,
 		isLoading: query.isLoading,
 		error: query.error,
 	};
@@ -758,14 +764,15 @@ export type LiveFileChanges = {
  * change — see `packages/sidecar-api/src/events.ts`) for *this* session, sets
  * `hasPendingChanges` instead of invalidating right away, so the caller can
  * surface a "Refresh" affordance rather than yanking the diff out from under
- * whoever's reading it. Calling `refresh` invalidates both queries so the
- * sidebar and pane refetch, and clears the flag — a later event re-sets it.
+ * whoever's reading it. Calling `refresh` fetches the base before invalidating
+ * both queries so the sidebar and pane refetch, and clears the flag — a later
+ * event re-sets it.
  * Deliberately session-wide (every `diff.fileContents` chunk, not just one
  * path's via `queryCoveredPath` the way `useSetFileViewed`/`useSetRangeViewed`
  * narrow it) — unlike those two, this event doesn't say *which* file moved,
  * only that *something* did (the poller's mtime/size signal, not a diff), so
- * there's no single path to scope the invalidation to. Deliberately just an
- * invalidate, not a manual cache write — `diff-pane.tsx`'s `hashItemVersion`
+ * there's no single path to scope the invalidation to. After fetching, invalidates
+ * rather than writing the cache — `diff-pane.tsx`'s `hashItemVersion`
  * + `FileChange.fingerprint` already make sure only files whose content
  * actually changed get a new `CodeViewItem.version`, so the virtualizer
  * leaves everything else's scroll position and highlight cache alone.
@@ -783,15 +790,29 @@ export function useLiveFileChanges(
 		setHasPendingChanges(true);
 	});
 
-	const refresh = useCallback(() => {
-		queryClient.invalidateQueries({
-			queryKey: orpc.diff.files.key({ input: { sessionId } }),
-		});
-		queryClient.invalidateQueries({
-			queryKey: orpc.diff.fileContents.key({ input: { sessionId } }),
-		});
-		setHasPendingChanges(false);
-	}, [queryClient, orpc, sessionId]);
+	const baseRefresh = useMutation({
+		...orpc.diff.refreshBase.mutationOptions(),
+		onError: (error) =>
+			toastManager.add({
+				type: "error",
+				title: "Could not refresh base",
+				description: error.message,
+			}),
+		onSettled: () => {
+			queryClient.invalidateQueries({
+				queryKey: orpc.diff.files.key({ input: { sessionId } }),
+			});
+			queryClient.invalidateQueries({
+				queryKey: orpc.diff.fileContents.key({ input: { sessionId } }),
+			});
+			setHasPendingChanges(false);
+		},
+	});
+	const refreshBase = baseRefresh.mutate;
+	const refresh = useCallback(
+		() => refreshBase({ sessionId }),
+		[refreshBase, sessionId],
+	);
 
 	return { hasPendingChanges, refresh };
 }
