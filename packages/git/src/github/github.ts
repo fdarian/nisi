@@ -110,10 +110,7 @@ export type GitHubShape = {
 		owner: string,
 		repo: string,
 	) => Effect.Effect<
-		{
-			readonly allowedMethods: ReadonlyArray<MergeMethod>;
-			readonly autoMergeAllowed: boolean;
-		},
+		ReadonlyArray<MergeMethod>,
 		RepoMergeMethodsError | GitCommandError
 	>;
 	merge: (
@@ -130,13 +127,6 @@ export type GitHubShape = {
 		number: number,
 		method: MergeMethod,
 	) => Effect.Effect<void, PullRequestStackMergeError | GitCommandError>;
-	enableAutoMerge: GitHubShape["merge"];
-	disableAutoMerge: (
-		repoRoot: string,
-		owner: string,
-		repo: string,
-		number: number,
-	) => Effect.Effect<void, PullRequestMergeError | GitCommandError>;
 	markReady: (
 		repoRoot: string,
 		owner: string,

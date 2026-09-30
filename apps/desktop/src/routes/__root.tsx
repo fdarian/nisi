@@ -3,6 +3,7 @@ import { Agentation } from "agentation";
 import { Mesurer } from "mesurer";
 import { ThemeProvider } from "next-themes";
 import { ToastProvider } from "#/components/ui/toast";
+import { ScheduledMergeNotifications } from "#/features/pull-request/merge/scheduled-merge-notifications";
 import {
 	DevToolProvider,
 	useAgentationEnabled,
@@ -52,6 +53,7 @@ function ConnectedEvents() {
 	if (backend.status !== "ready") return content;
 	return (
 		<SidecarEventsProvider client={backend.client}>
+			<ScheduledMergeNotifications orpc={backend.orpc} />
 			<OpenRequestProvider>{content}</OpenRequestProvider>
 		</SidecarEventsProvider>
 	);

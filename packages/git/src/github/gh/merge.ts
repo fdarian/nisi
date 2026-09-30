@@ -27,41 +27,10 @@ import {
 } from "../models.ts";
 import { isAuthFailure, isRateLimited } from "./pull-request.ts";
 
-const GhMergeabilityView = Schema.Struct({
-	...MergeabilityView.fields,
-	autoMergeRequest: Schema.NullOr(
-		Schema.Struct({
-			mergeMethod: Schema.Literals(["MERGE", "SQUASH", "REBASE"]),
-		}),
-	),
-});
-
-const AUTO_MERGE_METHOD: Record<"MERGE" | "SQUASH" | "REBASE", MergeMethod> = {
-	MERGE: "merge",
-	SQUASH: "squash",
-	REBASE: "rebase",
-};
-
 export const decodeMergeabilityView = (command: string, raw: string) =>
-	Schema.decodeUnknownEffect(Schema.fromJsonString(GhMergeabilityView))(
-		raw,
-	).pipe(
+	Schema.decodeUnknownEffect(Schema.fromJsonString(MergeabilityView))(raw).pipe(
 		Effect.mapError(
 			(cause) => new GhOutputDecodeError({ command, raw, cause }),
-		),
-		Effect.map(
-			(view): PullRequestMergeability => ({
-				state: view.state,
-				mergeable: view.mergeable,
-				mergeStateStatus: view.mergeStateStatus,
-				isDraft: view.isDraft,
-				autoMerge:
-					view.autoMergeRequest === null
-						? null
-						: {
-								method: AUTO_MERGE_METHOD[view.autoMergeRequest.mergeMethod],
-							},
-			}),
 		),
 	);
 
@@ -85,7 +54,7 @@ const isMergeStatusPermissionFailure = (stderr: string): boolean =>
 	MERGE_STATUS_PERMISSION_MARKERS.some((marker) => stderr.includes(marker));
 
 /**
- * `gh pr view <number> --json state,mergeable,mergeStateStatus,isDraft,autoMergeRequest` —
+ * `gh pr view <number> --json state,mergeable,mergeStateStatus,isDraft` —
  * mergeability alone, distinct from `pull-request.ts`'s `PrView` fields
  * (`title`/`baseRefName`/`headRefName`) since a caller polling this while
  * `mergeable` is still `"UNKNOWN"` (GitHub computes it asynchronously) has
@@ -115,7 +84,7 @@ export const fetchPullRequestMergeability = (
 			"view",
 			String(number),
 			"--json",
-			"state,mergeable,mergeStateStatus,isDraft,autoMergeRequest",
+			"state,mergeable,mergeStateStatus,isDraft",
 		]);
 
 		if (result.exitCode !== 0) {
@@ -148,21 +117,15 @@ const RepoMergeMethodsView = Schema.Struct({
 	mergeCommitAllowed: Schema.Boolean,
 	squashMergeAllowed: Schema.Boolean,
 	rebaseMergeAllowed: Schema.Boolean,
-	autoMergeAllowed: Schema.Boolean,
 });
 
 export const decodeRepoMergeMethodsView = (command: string, raw: string) =>
-	Schema.decodeUnknownEffect(
-		Schema.fromJsonString(
-			Schema.Struct({
-				data: Schema.Struct({ repository: RepoMergeMethodsView }),
-			}),
-		),
-	)(raw).pipe(
+	Schema.decodeUnknownEffect(Schema.fromJsonString(RepoMergeMethodsView))(
+		raw,
+	).pipe(
 		Effect.mapError(
 			(cause) => new GhOutputDecodeError({ command, raw, cause }),
 		),
-		Effect.map((response) => response.data.repository),
 	);
 
 /** GitHub's own UI ordering (Merge → Squash → Rebase) — mirrored server-side by `mergeStatus`'s `defaultMethod` in `packages/sidecar-api`. */
@@ -177,10 +140,9 @@ const toMergeMethods = (
 };
 
 /**
- * Reads repository merge settings through `gh api graphql` because `gh repo view`
- * does not expose `autoMergeAllowed`. Decodes `data.repository` and maps the
- * allowed methods to `"merge" | "squash" | "rebase"`.
- * Every method disabled is a genuine anomaly (GitHub itself requires
+ * `gh repo view <owner>/<repo> --json mergeCommitAllowed,squashMergeAllowed,rebaseMergeAllowed`,
+ * mapped to the subset of `"merge" | "squash" | "rebase"` the repo actually
+ * allows. Every method disabled is a genuine anomaly (GitHub itself requires
  * at least one to merge anything) — failed as `NoMergeMethodsEnabled` rather
  * than defaulted to some method the repo doesn't actually accept.
  */
@@ -189,23 +151,17 @@ export const fetchRepoMergeMethods = (
 	owner: string,
 	repo: string,
 ): Effect.Effect<
-	{
-		readonly allowedMethods: ReadonlyArray<MergeMethod>;
-		readonly autoMergeAllowed: boolean;
-	},
+	ReadonlyArray<MergeMethod>,
 	RepoMergeMethodsError | GitCommandError,
 	ChildProcessSpawner.ChildProcessSpawner
 > =>
 	Effect.gen(function* () {
 		const result = yield* ghResult(repoRoot, [
-			"api",
-			"graphql",
-			"-f",
-			"query=query($owner: String!, $name: String!) { repository(owner: $owner, name: $name) { mergeCommitAllowed squashMergeAllowed rebaseMergeAllowed autoMergeAllowed } }",
-			"-f",
-			`owner=${owner}`,
-			"-f",
-			`name=${repo}`,
+			"repo",
+			"view",
+			`${owner}/${repo}`,
+			"--json",
+			"mergeCommitAllowed,squashMergeAllowed,rebaseMergeAllowed",
 		]);
 
 		if (result.exitCode !== 0) {
@@ -224,14 +180,14 @@ export const fetchRepoMergeMethods = (
 		}
 
 		const view = yield* decodeRepoMergeMethodsView(
-			"gh api graphql (merge settings)",
+			"gh repo view",
 			result.stdout,
 		);
 		const methods = toMergeMethods(view);
 		if (methods.length === 0) {
 			return yield* new NoMergeMethodsEnabled({ owner, repo });
 		}
-		return { allowedMethods: methods, autoMergeAllowed: view.autoMergeAllowed };
+		return methods;
 	});
 
 const MERGE_METHOD_FLAG: Record<MergeMethod, string> = {
@@ -287,25 +243,6 @@ export const mergePullRequest = (
 	PullRequestMergeError | GitCommandError,
 	ChildProcessSpawner.ChildProcessSpawner
 > => runMergeCommand(repoRoot, number, [MERGE_METHOD_FLAG[method]]);
-
-export const enableAutoMerge = (
-	repoRoot: string,
-	number: number,
-	method: MergeMethod,
-): Effect.Effect<
-	void,
-	PullRequestMergeError | GitCommandError,
-	ChildProcessSpawner.ChildProcessSpawner
-> => runMergeCommand(repoRoot, number, ["--auto", MERGE_METHOD_FLAG[method]]);
-
-export const disableAutoMerge = (
-	repoRoot: string,
-	number: number,
-): Effect.Effect<
-	void,
-	PullRequestMergeError | GitCommandError,
-	ChildProcessSpawner.ChildProcessSpawner
-> => runMergeCommand(repoRoot, number, ["--disable-auto"]);
 
 const runMergeCommand = (
 	repoRoot: string,

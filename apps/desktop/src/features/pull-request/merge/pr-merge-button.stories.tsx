@@ -21,8 +21,6 @@ const BASE_STATUS: PullRequestMergeStatus = {
 	isDraft: false,
 	allowedMethods: ["merge", "squash", "rebase"],
 	defaultMethod: "merge",
-	autoMerge: null,
-	autoMergeAllowed: true,
 };
 
 const STACK: PullRequestStack = {
@@ -84,7 +82,6 @@ export const SingleMethod: Story = {
 				...BASE_STATUS,
 				allowedMethods: ["squash"],
 				defaultMethod: "squash",
-				autoMergeAllowed: false,
 			},
 		}),
 	},
@@ -150,10 +147,11 @@ export const SingleMethodAutoMerge: Story = {
 	},
 };
 
-export const AutoMergeNotAllowed: Story = {
+export const AutoMergeScheduled: Story = {
 	args: {
 		orpc: createMockOrpc({
-			mergeStatus: { ...BASE_STATUS, autoMergeAllowed: false },
+			mergeStatus: { ...BASE_STATUS, mergeStateStatus: "BLOCKED" },
+			scheduledMerge: { method: "squash" },
 		}),
 	},
 };

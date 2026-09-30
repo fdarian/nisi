@@ -2,6 +2,14 @@ import type { CodeIndexLspStatus, OpenRequest } from "@repo/sidecar-api";
 import type { Session } from "./store.ts";
 
 type EventPayload =
+	| {
+			readonly type: "scheduledMergeSettled";
+			readonly owner: string;
+			readonly repo: string;
+			readonly number: number;
+			readonly outcome: "merged" | "failed" | "cancelled";
+			readonly reason?: string;
+	  }
 	| { readonly type: "session-opened"; readonly session: Session }
 	| { readonly type: "session-closed"; readonly sessionId: string }
 	| { readonly type: "session-files-changed"; readonly sessionId: string }

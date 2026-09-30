@@ -62,6 +62,8 @@ import {
 import { listHarnesses } from "./harness/harnesses.ts";
 import { getHarnessModels } from "./harness/models.ts";
 import { checkSessionForChanges } from "./live-poll.ts";
+import { translateMergeFailure } from "./merge-failure.ts";
+import { ScheduledMerges } from "./scheduled-merge.ts";
 import { createNativeActivationHandler } from "./native-activation.ts";
 import {
 	acknowledgeOpenRequest,
@@ -111,63 +113,8 @@ const mergeFailureDetail = (error: MergeError): string => {
 	return error.reason;
 };
 
-const translateMergeFailure = (
-	cause: PullRequestMergeError | GitCommandError,
-): {
-	code:
-		| "GH_NOT_AUTHENTICATED"
-		| "NOT_FOUND"
-		| "CONFLICT"
-		| "SERVICE_UNAVAILABLE";
-	reason: string;
-	detail: string;
-	message: string;
-} => {
-	switch (cause._tag) {
-		case "GhNotAuthenticated":
-			return {
-				code: "GH_NOT_AUTHENTICATED",
-				reason: "Authentication required",
-				detail: cause.reason,
-				message: `gh is not authenticated: ${cause.reason}`,
-			};
-		case "PullRequestNotFound":
-			return {
-				code: "NOT_FOUND",
-				reason: "Pull request not found",
-				detail: cause.reason,
-				message: `pull request #${cause.number} couldn't be resolved on GitHub for ${cause.repoRoot}: ${cause.reason}`,
-			};
-		case "PullRequestNotMergeable":
-			return {
-				code: "CONFLICT",
-				reason: "Merge blocked",
-				detail: cause.reason,
-				message: `pull request #${cause.number} isn't mergeable right now: ${cause.reason}`,
-			};
-		case "GhMergeFailed":
-			return {
-				code: "SERVICE_UNAVAILABLE",
-				reason: "GitHub rejected the merge",
-				detail: cause.reason,
-				message: `gh pr merge failed for pull request #${cause.number}: ${cause.reason}`,
-			};
-		case "GitCommandError":
-			return {
-				code: "SERVICE_UNAVAILABLE",
-				reason: "Couldn't run gh",
-				detail: mergeFailureDetail(cause),
-				message: `${cause.command} could not be run: ${cause.stderr || String(cause.cause)}`,
-			};
-	}
-};
-
 const logMergeFailure = (
-	operation:
-		| "pull request merge"
-		| "pull request stack merge"
-		| "enable auto-merge"
-		| "disable auto-merge",
+	operation: "pull request merge" | "pull request stack merge",
 	input: { owner: string; repo: string; number: number; method?: string },
 	error: MergeError,
 ) =>
@@ -1448,7 +1395,6 @@ export function attachRouter(
 										return {
 											...status.mergeability,
 											allowedMethods: status.allowedMethods,
-											autoMergeAllowed: status.autoMergeAllowed,
 											defaultMethod:
 												remembered !== null &&
 												status.allowedMethods.includes(remembered)
@@ -1527,55 +1473,51 @@ export function attachRouter(
 						),
 					);
 			}),
-			enableAutoMerge: authed.pullRequests.enableAutoMerge.effect(
+			scheduleMerge: authed.pullRequests.scheduleMerge.effect(
 				function* (request) {
 					const input = request.input;
-					const github = yield* GitHub;
-					yield* github
-						.enableAutoMerge(
-							input.repoRoot,
-							input.owner,
-							input.repo,
-							input.number,
-							input.method,
-						)
-						.pipe(
-							Effect.tapError((cause) =>
-								logMergeFailure("enable auto-merge", input, cause),
-							),
-							Effect.mapError((cause) => {
-								const failure = translateMergeFailure(cause);
-								return request.errors[failure.code]({
-									message: failure.message,
-									data: { reason: failure.reason, detail: failure.detail },
-								});
-							}),
-						);
+					const schedules = yield* ScheduledMerges;
+					yield* schedules.schedule(input).pipe(
+						Effect.mapError((cause) => {
+							return request.errors.SERVICE_UNAVAILABLE({
+								message: "Couldn't schedule auto-merge",
+								data: {
+									reason: "Couldn't schedule auto-merge",
+									detail: String(cause),
+								},
+							});
+						}),
+					);
 				},
 			),
-			disableAutoMerge: authed.pullRequests.disableAutoMerge.effect(
+			cancelScheduledMerge: authed.pullRequests.cancelScheduledMerge.effect(
 				function* (request) {
 					const input = request.input;
-					const github = yield* GitHub;
-					yield* github
-						.disableAutoMerge(
-							input.repoRoot,
-							input.owner,
-							input.repo,
-							input.number,
-						)
+					const schedules = yield* ScheduledMerges;
+					yield* schedules.cancel(input).pipe(
+						Effect.mapError((cause) => {
+							return request.errors.SERVICE_UNAVAILABLE({
+								message: "Couldn't cancel auto-merge",
+								data: {
+									reason: "Couldn't cancel auto-merge",
+									detail: String(cause),
+								},
+							});
+						}),
+					);
+				},
+			),
+			scheduledMerge: authed.pullRequests.scheduledMerge.effect(
+				function* (request) {
+					const schedules = yield* ScheduledMerges;
+					const scheduled = yield* schedules
+						.get(request.input)
 						.pipe(
-							Effect.tapError((cause) =>
-								logMergeFailure("disable auto-merge", input, cause),
+							Effect.mapError((cause) =>
+								request.errors.SERVICE_UNAVAILABLE({ message: String(cause) }),
 							),
-							Effect.mapError((cause) => {
-								const failure = translateMergeFailure(cause);
-								return request.errors[failure.code]({
-									message: failure.message,
-									data: { reason: failure.reason, detail: failure.detail },
-								});
-							}),
 						);
+					return scheduled === null ? null : { method: scheduled.method };
 				},
 			),
 			mergeStack: authed.pullRequests.mergeStack.effect(function* ({

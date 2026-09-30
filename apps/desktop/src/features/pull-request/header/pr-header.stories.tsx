@@ -25,8 +25,6 @@ const BASE_STATUS: PullRequestMergeStatus = {
 	isDraft: false,
 	allowedMethods: ["merge", "squash", "rebase"],
 	defaultMethod: "merge",
-	autoMerge: null,
-	autoMergeAllowed: true,
 };
 
 const PR_TARGET: SessionTarget = {
@@ -151,9 +149,9 @@ export const AutoMergeScheduled: Story = {
 			mergeStatus: {
 				...BASE_STATUS,
 				mergeStateStatus: "BLOCKED",
-				autoMerge: { method: "squash" },
 			},
 			checks: [{ name: "Tests", status: "running" }],
+			scheduledMerge: { method: "squash" },
 		}),
 	},
 };

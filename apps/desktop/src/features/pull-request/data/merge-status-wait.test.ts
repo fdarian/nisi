@@ -21,8 +21,6 @@ const OPEN: PullRequestMergeStatus = {
 	isDraft: false,
 	allowedMethods: ["squash"],
 	defaultMethod: "squash",
-	autoMerge: null,
-	autoMergeAllowed: false,
 };
 
 describe("waitForMergedStatus", () => {

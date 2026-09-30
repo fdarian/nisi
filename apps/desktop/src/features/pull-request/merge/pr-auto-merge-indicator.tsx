@@ -13,8 +13,8 @@ import {
 import { toastManager } from "#/components/ui/toast";
 import {
 	type MergeMethod,
-	useAutoMerge,
-	usePullRequestMergeStatus,
+	useScheduledMergeMutations,
+	useScheduledMerge,
 } from "#/features/pull-request/data/pr-data";
 import { useDismissOnInactive } from "#/features/pull-request/use-dismiss-on-inactive";
 import type { SidecarQueryUtils } from "#/infra/backend-context";
@@ -45,14 +45,10 @@ export function PrAutoMergeIndicator(props: {
 		repo: props.repo,
 		number: props.number,
 	};
-	const status = usePullRequestMergeStatus(
-		props.orpc,
-		params,
-		props.isSelectedTab,
-	);
+	const status = useScheduledMerge(props.orpc, params, props.isSelectedTab);
 	const popup = useDismissOnInactive(props.watched);
 	const failureState = useState<MergeFailure | null>(null);
-	const autoMerge = useAutoMerge(props.orpc, (error, input) => {
+	const autoMerge = useScheduledMergeMutations(props.orpc, (error, input) => {
 		const failure = {
 			title: `Couldn't cancel auto-merge for #${input.number}`,
 			...mergeFailureMessage(error),
@@ -67,7 +63,7 @@ export function PrAutoMergeIndicator(props: {
 			},
 		});
 	});
-	const request = status.data?.autoMerge;
+	const request = status.data;
 	if (request === undefined || request === null) return null;
 
 	return (
@@ -91,8 +87,8 @@ export function PrAutoMergeIndicator(props: {
 						Auto-merge scheduled
 					</PopoverTitle>
 					<PopoverDescription className="px-2 py-1.5 text-xs">
-						Scheduled to auto-merge using {METHOD_DESCRIPTION[request.method]}{" "}
-						once CI checks pass.
+						nisi will merge this using {METHOD_DESCRIPTION[request.method]} once
+						CI checks pass. Keep nisi running until then.
 					</PopoverDescription>
 					<div className="mx-2 my-1 h-px bg-border" />
 					<div className="px-2 py-1.5 font-medium text-muted-foreground text-xs">
@@ -103,7 +99,7 @@ export function PrAutoMergeIndicator(props: {
 						size="sm"
 						className="w-full justify-start font-normal"
 						disabled={autoMerge.isPending}
-						onClick={() => autoMerge.disable(params)}
+						onClick={() => autoMerge.cancel(params)}
 					>
 						<X />
 						Cancel auto-merge

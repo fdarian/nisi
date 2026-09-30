@@ -969,8 +969,6 @@ export type PullRequestMergeStatus = {
 	isDraft: boolean;
 	allowedMethods: readonly MergeMethod[];
 	defaultMethod: MergeMethod;
-	autoMerge: { method: MergeMethod } | null;
-	autoMergeAllowed: boolean;
 };
 
 /** Mirrors `PullRequestStack` (`packages/sidecar-api/src/pull-requests.ts`). */
@@ -1142,7 +1140,40 @@ export function useMergePullRequest(
 	};
 }
 
-export function useAutoMerge(
+export function useScheduledMerge(
+	orpc: SidecarQueryUtils,
+	params: PullRequestMergeStatusParams,
+	enabled = true,
+) {
+	return useQuery(
+		orpc.pullRequests.scheduledMerge.queryOptions({ input: params, enabled }),
+	);
+}
+
+export function useScheduledMergeEvents(orpc: SidecarQueryUtils) {
+	const queryClient = useQueryClient();
+	useSidecarEvent((event) => {
+		if (event.type !== "scheduledMergeSettled") return;
+		const input = {
+			owner: event.owner,
+			repo: event.repo,
+			number: event.number,
+		};
+		void queryClient.invalidateQueries({
+			queryKey: orpc.pullRequests.scheduledMerge.key({ input }),
+		});
+		if (event.outcome === "merged") {
+			void queryClient.invalidateQueries({
+				queryKey: orpc.pullRequests.mergeStatus.key({ input }),
+			});
+			void queryClient.invalidateQueries({
+				queryKey: orpc.sessions.list.queryKey(),
+			});
+		}
+	});
+}
+
+export function useScheduledMergeMutations(
 	orpc: SidecarQueryUtils,
 	onError: (
 		error: MergePullRequestError,
@@ -1150,22 +1181,30 @@ export function useAutoMerge(
 	) => void,
 ) {
 	const queryClient = useQueryClient();
-	const enableMutation = useMutation({
-		...orpc.pullRequests.enableAutoMerge.mutationOptions(),
-		onSuccess: () =>
-			queryClient.invalidateQueries({
-				queryKey: orpc.sessions.list.queryKey(),
+	const onSuccess = (_data: unknown, params: PullRequestMergeStatusParams) =>
+		queryClient.invalidateQueries({
+			queryKey: orpc.pullRequests.scheduledMerge.key({
+				input: {
+					owner: params.owner,
+					repo: params.repo,
+					number: params.number,
+				},
 			}),
+		});
+	const scheduleMutation = useMutation({
+		...orpc.pullRequests.scheduleMerge.mutationOptions(),
+		onSuccess,
 		onError,
 	});
-	const disableMutation = useMutation({
-		...orpc.pullRequests.disableAutoMerge.mutationOptions(),
+	const cancelMutation = useMutation({
+		...orpc.pullRequests.cancelScheduledMerge.mutationOptions(),
+		onSuccess,
 		onError,
 	});
 	return {
-		enable: enableMutation.mutate,
-		disable: disableMutation.mutate,
-		isPending: enableMutation.isPending || disableMutation.isPending,
+		schedule: scheduleMutation.mutate,
+		cancel: cancelMutation.mutate,
+		isPending: scheduleMutation.isPending || cancelMutation.isPending,
 	};
 }
 

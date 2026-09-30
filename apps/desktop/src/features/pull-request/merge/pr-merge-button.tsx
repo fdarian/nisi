@@ -25,7 +25,8 @@ import type {
 	UnpushedCommitsCheck,
 } from "#/features/pull-request/data/pr-data";
 import {
-	useAutoMerge,
+	useScheduledMerge,
+	useScheduledMergeMutations,
 	useMergePullRequest,
 	usePullRequestMergeStatus,
 	usePullRequestStack,
@@ -104,6 +105,7 @@ const resolveButtonState = (
 	error: unknown,
 	isMerging: boolean,
 	method: MergeMethod | null,
+	hasScheduledMerge: boolean,
 ): { label: string; disabled: boolean; title?: string } => {
 	// Genuine initial loading (no data yet) wins over everything else, even
 	// the terminal states below — there's nothing to read `state` off of.
@@ -157,7 +159,7 @@ const resolveButtonState = (
 		return { label: "Conflicts", disabled: true };
 	}
 	if (status.mergeStateStatus === "BLOCKED") {
-		return status.autoMerge === null
+		return !hasScheduledMerge
 			? { label: "Merge blocked", disabled: true }
 			: { label: "Merge pull request", disabled: false };
 	}
@@ -198,6 +200,11 @@ export function PrMergeButton({
 		{ owner, repo, number },
 		isSelectedTab,
 	);
+	const scheduledQuery = useScheduledMerge(
+		orpc,
+		{ repoRoot, owner, repo, number },
+		isSelectedTab,
+	);
 	const [mergeFailure, setMergeFailure] = useState<MergeFailure | null>(null);
 	const handleMergeError = useCallback(
 		(error: MergePullRequestError, params: { number: number }) => {
@@ -225,7 +232,7 @@ export function PrMergeButton({
 	} = useMergePullRequest(orpc, handleMergeError);
 	const { check: checkUnpushedCommits, isPending: isCheckingUnpushed } =
 		useUnpushedCommitsCheck(orpc);
-	const autoMerge = useAutoMerge(orpc, (error, params) => {
+	const autoMerge = useScheduledMergeMutations(orpc, (error, params) => {
 		const failure = {
 			title: `Couldn't set auto-merge for #${params.number}`,
 			...mergeFailureMessage(error),
@@ -263,7 +270,7 @@ export function PrMergeButton({
 	const [methodMenuOpen, setMethodMenuOpen] = useDismissOnInactive(watched);
 	const method =
 		selectedMethod ??
-		statusQuery.data?.autoMerge?.method ??
+		scheduledQuery.data?.method ??
 		statusQuery.data?.defaultMethod ??
 		null;
 	const stackMerge = deriveStackMerge(stackQuery.data, number);
@@ -275,6 +282,7 @@ export function PrMergeButton({
 		statusQuery.error,
 		isMerging,
 		method,
+		scheduledQuery.data !== undefined && scheduledQuery.data !== null,
 	);
 
 	const performMerge = useCallback(() => {
@@ -313,13 +321,11 @@ export function PrMergeButton({
 	]);
 
 	const allowedMethods = statusQuery.data?.allowedMethods ?? [];
-	const showAutoMergeAction =
-		statusQuery.data?.autoMergeAllowed === true &&
-		statusQuery.data.autoMerge === null;
+	const showAutoMergeAction = scheduledQuery.data === null;
 	const showMethodPicker =
 		allowedMethods.length > 1 ||
 		showAutoMergeAction ||
-		(statusQuery.data !== undefined && statusQuery.data.autoMerge !== null);
+		(scheduledQuery.data !== undefined && scheduledQuery.data !== null);
 	const methodMenuDisabled =
 		statusQuery.data === undefined ||
 		statusQuery.isError ||
@@ -400,7 +406,7 @@ export function PrMergeButton({
 												disabled={autoMerge.isPending || method === null}
 												onClick={() => {
 													if (method !== null)
-														autoMerge.enable({
+														autoMerge.schedule({
 															repoRoot,
 															owner,
 															repo,
