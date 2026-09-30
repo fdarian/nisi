@@ -34,7 +34,8 @@ export function parseActionsLog(raw: string, steps: readonly StepWindow[]) {
 		nodes: [] as ActionsLogNode[],
 	}));
 	const stacks = result.map((step) => [step.nodes]);
-	for (const rawLine of raw.split(/\r?\n/)) {
+	// Job logs start with a UTF-8 BOM, which would break the timestamp match on the first line.
+	for (const rawLine of raw.replace(/^\uFEFF/, "").split(/\r?\n/)) {
 		const match = /^(\S+) (.*)$/.exec(rawLine);
 		if (match === null || match[1] === undefined || match[2] === undefined)
 			continue;

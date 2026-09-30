@@ -64,6 +64,18 @@ describe("Actions logs", () => {
 			["next step"],
 		]);
 	});
+	test("a leading UTF-8 BOM does not drop the first line", () => {
+		const parsed = parseActionsLog(
+			`\uFEFF${iso(2)} first\n${iso(3)} second`,
+			windows,
+		);
+		const first = parsed[0];
+		if (first === undefined) throw new Error("Missing parsed step");
+		expect(flattenActionsLog(first.nodes).map((line) => line.text)).toEqual([
+			"first",
+			"second",
+		]);
+	});
 	test("nested and unbalanced groups, all annotation kinds", () => {
 		const texts = [
 			"##[endgroup]",
