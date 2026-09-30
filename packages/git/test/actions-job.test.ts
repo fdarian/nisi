@@ -2,6 +2,10 @@ import { expect, test } from "bun:test";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Effect, Schema } from "effect";
+import {
+	flattenActionsLog,
+	parseActionsLog,
+} from "../src/github/actions-log.ts";
 
 const root = dirname(fileURLToPath(import.meta.url));
 const Result = Schema.Struct({
@@ -72,11 +76,39 @@ test("Actions metadata decoding and exact job endpoint", async () => {
 	expect((await run("job", 2)).error?._tag).toBe("GhOutputDecodeError");
 });
 
-test("raw logs retain CRLF; missing and expired logs are typed unavailable", async () => {
-	expect((await run("logs", 1)).logs).toEqual({
-		status: "available",
-		raw: "2026-01-01T00:00:01.000Z ##[error]exit 1\r\n",
-	});
+test("ANSI-bearing piped logs opt into gh escape output and retain raw bytes", async () => {
+	const result = await run("logs", 1);
+	expect(result.ok).toBe(true);
+	if (result.logs?.status !== "available") throw new Error("Logs unavailable");
+	expect(result.logs.raw).toBe(
+		"2026-01-01T00:00:01.1234567Z \u001b[36;1mpnpm install\u001b[0m\r\n2026-01-01T00:00:02.1234567Z ##[error]exit 1\r\n",
+	);
+	const parsed = parseActionsLog(result.logs.raw, [
+		{
+			number: 1,
+			started_at: "2026-01-01T00:00:00Z",
+			completed_at: "2026-01-01T00:00:10Z",
+		},
+	]);
+	const step = parsed[0];
+	if (step === undefined) throw new Error("Missing parsed step");
+	expect(flattenActionsLog(step.nodes)).toEqual([
+		{
+			type: "line",
+			timestamp: Date.parse("2026-01-01T00:00:01.123Z"),
+			kind: "plain",
+			text: "\u001b[36;1mpnpm install\u001b[0m",
+		},
+		{
+			type: "line",
+			timestamp: Date.parse("2026-01-01T00:00:02.123Z"),
+			kind: "error",
+			text: "exit 1",
+		},
+	]);
+});
+
+test("missing and expired logs are typed unavailable", async () => {
 	for (const id of [404, 410])
 		expect((await run("logs", id)).logs?.status).toBe("unavailable");
 });

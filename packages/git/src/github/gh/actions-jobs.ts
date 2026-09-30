@@ -69,7 +69,8 @@ export const getActionsJob = (input: ActionsJobInput) =>
 
 export const getActionsJobLogs = (input: ActionsJobInput) =>
 	Effect.gen(function* () {
-		const args = ["api", `${endpoint(input)}/logs`];
+		// gh rejects ANSI-bearing responses on piped stdout unless explicitly allowed.
+		const args = ["api", "--allow-escape-sequences", `${endpoint(input)}/logs`];
 		const result = yield* ghResult(input.repoRoot, args);
 		if (result.exitCode === 0)
 			return {
