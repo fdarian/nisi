@@ -22,8 +22,9 @@ const exit = await Effect.runPromise(
 			if (action === "logs")
 				return { logs: yield* github.getActionsJobLogs(input) };
 			if (action === "rerun") {
-				yield* github.rerunActionsJob(input);
-				return {};
+				return {
+					rerunJobId: yield* github.rerunActionsJob({ ...input, runId: 2 }),
+				};
 			}
 			return yield* Effect.die(new Error("Unknown runner action"));
 		}),

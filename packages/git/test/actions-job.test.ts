@@ -6,6 +6,7 @@ import {
 	flattenActionsLog,
 	parseActionsLog,
 } from "../src/github/actions-log.ts";
+import { findRerunActionsJob } from "../src/github/gh/actions-jobs.ts";
 
 const root = dirname(fileURLToPath(import.meta.url));
 const Result = Schema.Struct({
@@ -33,6 +34,7 @@ const Result = Schema.Struct({
 			}),
 		]),
 	),
+	rerunJobId: Schema.optional(Schema.NullOr(Schema.Number)),
 	error: Schema.optional(Schema.Struct({ _tag: Schema.String })),
 });
 
@@ -119,7 +121,21 @@ test("permission, auth and rate-limit errors never become unavailable", async ()
 	expect((await run("logs", 429)).error?._tag).toBe("GhRateLimited");
 });
 
-test("re-run uses POST and reports permission failures", async () => {
-	expect((await run("rerun", 1)).ok).toBe(true);
+test("re-run uses POST and resolves the new job id from the latest run attempt", async () => {
+	const result = await run("rerun", 1);
+	expect(result.ok).toBe(true);
+	expect(result.rerunJobId).toBe(9);
 	expect((await run("rerun", 403)).error?._tag).toBe("GitCommandError");
+});
+
+test("re-run job matching requires the same name and a different id", () => {
+	const jobs = [
+		{ id: 1, name: "test" },
+		{ id: 5, name: "lint" },
+		{ id: 9, name: "test" },
+	];
+	expect(findRerunActionsJob(jobs, { id: 1, name: "test" })).toBe(9);
+	expect(findRerunActionsJob(jobs.slice(0, 2), { id: 1, name: "test" })).toBe(
+		null,
+	);
 });

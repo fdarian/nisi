@@ -85,6 +85,7 @@ const toCiChecks = (
 				: formatDuration(check.durationMs),
 		detailsUrl: check.detailsUrl,
 		actionsJobId: check.actionsJobId,
+		actionsRunId: check.actionsRunId,
 		workflowName: check.workflowName,
 	}));
 };

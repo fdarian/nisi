@@ -8,6 +8,7 @@ import type {
 } from "../errors.ts";
 
 export type ActionsJobInput = FetchPullRequestChecksInput & { jobId: number };
+export type RerunActionsJobInput = ActionsJobInput & { runId: number };
 export type ActionsJob = {
 	readonly id: number;
 	readonly name: string;
@@ -85,6 +86,7 @@ export type PullRequestCheck = {
 	workflowName?: string;
 	workflowRunId?: number;
 	actionsJobId?: number;
+	actionsRunId?: number;
 };
 
 /**
@@ -101,6 +103,7 @@ export type PullRequestCheck = {
  */
 export type OverviewCommitCheck = {
 	readonly actionsJobId?: number;
+	readonly actionsRunId?: number;
 	readonly name: string;
 	readonly status: PullRequestCheckStatus;
 	readonly detail?: string;

@@ -182,6 +182,7 @@ export const PullRequestCheck = Schema.Struct({
 	workflowName: Schema.optional(Schema.String),
 	workflowRunId: Schema.optional(Schema.Number),
 	actionsJobId: Schema.optional(Schema.Number),
+	actionsRunId: Schema.optional(Schema.Number),
 });
 export type PullRequestCheck = Schema.Schema.Type<typeof PullRequestCheck>;
 
@@ -255,6 +256,10 @@ const CiJobInput = Schema.Struct({
 	repo: Schema.String,
 	number: Schema.Number,
 	jobId: Schema.Number,
+});
+const RerunCiJobInput = Schema.Struct({
+	...CiJobInput.fields,
+	runId: Schema.Number,
 });
 
 /**
@@ -346,11 +351,14 @@ export const pullRequestsContract = {
 		TOO_MANY_REQUESTS: {},
 		SERVICE_UNAVAILABLE: {},
 	}),
-	rerunCiJob: oc.input(CiJobInput).output(Schema.Void).errors({
-		GH_NOT_AUTHENTICATED: {},
-		TOO_MANY_REQUESTS: {},
-		SERVICE_UNAVAILABLE: {},
-	}),
+	rerunCiJob: oc
+		.input(RerunCiJobInput)
+		.output(Schema.NullOr(Schema.Number))
+		.errors({
+			GH_NOT_AUTHENTICATED: {},
+			TOO_MANY_REQUESTS: {},
+			SERVICE_UNAVAILABLE: {},
+		}),
 	repositories: oc
 		.output(
 			Schema.Array(

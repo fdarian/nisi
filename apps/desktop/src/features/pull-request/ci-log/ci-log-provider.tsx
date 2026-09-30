@@ -52,6 +52,7 @@ export function CiLogProvider(props: {
 					<CiLogDialog
 						key={check.actionsJobId}
 						orpc={props.orpc}
+						runId={check.actionsRunId}
 						params={{
 							repoRoot: props.session.repoRoot,
 							owner: target.owner,
@@ -65,6 +66,11 @@ export function CiLogProvider(props: {
 								: check.workflowName
 						}
 						onClose={() => selection[1](null)}
+						onJobChange={(jobId) =>
+							selection[1]((current) =>
+								current === null ? null : { ...current, actionsJobId: jobId },
+							)
+						}
 					/>
 				)}
 		</OpenCiCheck>

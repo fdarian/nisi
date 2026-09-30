@@ -9,6 +9,9 @@ if [ "$2" = "--allow-escape-sequences" ]; then
 	allow_escapes=true
 	endpoint="$3"
 fi
+if [ "$2" = "--paginate" ]; then
+	endpoint="$4"
+fi
 if [ "$2" = "-X" ]; then
 	if [ "$3" = "POST" ] && [ "$4" = "repos/acme/widgets/actions/jobs/1/rerun" ]; then exit 0; fi
 	echo "gh: Resource not accessible (HTTP 403)" >&2
@@ -20,6 +23,12 @@ repos/acme/widgets/actions/jobs/1)
 	;;
 repos/acme/widgets/actions/jobs/2)
 	echo 'not-json'
+	;;
+repos/acme/widgets/actions/jobs/403)
+	echo '{"id":403,"name":"test","status":"completed","conclusion":"failure","html_url":"https://github.com/acme/widgets/actions/runs/2/job/403","started_at":null,"completed_at":null,"steps":[]}'
+	;;
+repos/acme/widgets/actions/runs/2/jobs?filter=latest\&per_page=100)
+	echo '[{"jobs":[{"id":5,"name":"lint"},{"id":1,"name":"test"},{"id":9,"name":"test"}]}]'
 	;;
 repos/acme/widgets/actions/jobs/1/logs)
 	if [ "$allow_escapes" != "true" ]; then

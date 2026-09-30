@@ -34,6 +34,7 @@ import type {
 	PullRequestOverview,
 	PullRequestStack,
 	PullRequestStackError,
+	RerunActionsJobInput,
 } from "./models.ts";
 
 export type RepositoryIdentity = {
@@ -50,8 +51,8 @@ export type GitHubShape = {
 		input: ActionsJobInput,
 	) => Effect.Effect<ActionsJobLogs, ActionsJobError>;
 	rerunActionsJob: (
-		input: ActionsJobInput,
-	) => Effect.Effect<void, ActionsJobError>;
+		input: RerunActionsJobInput,
+	) => Effect.Effect<number | null, ActionsJobError>;
 	repository: (
 		repoRoot: string,
 	) => Effect.Effect<

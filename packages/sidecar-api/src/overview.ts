@@ -17,6 +17,7 @@ export const OverviewCheck = Schema.Struct({
 	detail: Schema.optional(Schema.String),
 	detailsUrl: Schema.optional(Schema.String),
 	actionsJobId: Schema.optional(Schema.Number),
+	actionsRunId: Schema.optional(Schema.Number),
 });
 export type OverviewCheck = Schema.Schema.Type<typeof OverviewCheck>;
 

@@ -49,8 +49,10 @@ import type { SidecarQueryUtils } from "#/infra/backend-context";
 type DialogProps = {
 	orpc: SidecarQueryUtils;
 	params: CiJobParams;
+	runId?: number;
 	workflowName?: string;
 	onClose: () => void;
+	onJobChange: (jobId: number) => void;
 };
 
 function failed(conclusion: string | null) {
@@ -211,8 +213,23 @@ export function CiLogDialog(props: DialogProps) {
 					</Group>
 					<Button
 						variant="outline"
-						disabled={job?.status !== "completed" || rerun.isPending}
-						onClick={() => rerun.mutate(props.params)}
+						disabled={
+							job?.status !== "completed" ||
+							rerun.isPending ||
+							props.runId === undefined
+						}
+						onClick={() => {
+							if (props.runId === undefined) return;
+							rerun.mutate(
+								{ ...props.params, runId: props.runId },
+								{
+									onSuccess: (jobId) => {
+										if (jobId === null) props.onClose();
+										else props.onJobChange(jobId);
+									},
+								},
+							);
+						}}
 					>
 						<RotateCw className={cn(rerun.isPending && "animate-spin")} />
 						Re-run

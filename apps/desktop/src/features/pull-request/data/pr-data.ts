@@ -1200,6 +1200,7 @@ export type PullRequestCheck = {
 	workflowName?: string;
 	workflowRunId?: number;
 	actionsJobId?: number;
+	actionsRunId?: number;
 };
 
 export type ApproveWorkflowRunsParams = {
@@ -1269,6 +1270,7 @@ export function usePullRequestChecks(
 }
 
 export type CiJobParams = PullRequestChecksParams & { jobId: number };
+export type RerunCiJobParams = CiJobParams & { runId: number };
 
 export function useCiJob(orpc: SidecarQueryUtils, params: CiJobParams) {
 	return useQuery(
@@ -1284,11 +1286,12 @@ export function useRerunCiJob(orpc: SidecarQueryUtils) {
 	const queryClient = useQueryClient();
 	return useMutation({
 		...orpc.pullRequests.rerunCiJob.mutationOptions(),
-		onSuccess: async (_data, params) => {
-			toastManager.add({ title: "Job re-run requested", type: "success" });
-			await Promise.all([
+		onSuccess: () =>
+			toastManager.add({ title: "Re-run started", type: "success" }),
+		onSettled: (_data, _error, params) => {
+			void Promise.all([
 				queryClient.invalidateQueries({
-					queryKey: orpc.pullRequests.ciJob.key({ input: params }),
+					queryKey: orpc.pullRequests.ciJob.key(),
 				}),
 				queryClient.invalidateQueries({
 					queryKey: orpc.pullRequests.checks.key({
@@ -1322,6 +1325,7 @@ export function useRerunCiJob(orpc: SidecarQueryUtils) {
  */
 export type OverviewCheck = {
 	actionsJobId?: number;
+	actionsRunId?: number;
 	name: string;
 	status: PullRequestCheckStatus;
 	detail?: string;

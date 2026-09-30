@@ -1,4 +1,4 @@
-import { Effect, Schema } from "effect";
+import { Effect, Option, Schema } from "effect";
 import {
 	GhNotAuthenticated,
 	GhOutputDecodeError,
@@ -6,7 +6,11 @@ import {
 	GitCommandError,
 } from "../../errors.ts";
 import { ghResult } from "../../exec.ts";
-import type { ActionsJobInput, ActionsJobLogs } from "../models.ts";
+import type {
+	ActionsJobInput,
+	ActionsJobLogs,
+	RerunActionsJobInput,
+} from "../models.ts";
 import { isAuthFailure, isRateLimited } from "./pull-request.ts";
 
 const Step = Schema.Struct({
@@ -85,9 +89,63 @@ export const getActionsJobLogs = (input: ActionsJobInput) =>
 		return yield* failure(input, args, result);
 	});
 
-export const rerunActionsJob = (input: ActionsJobInput) =>
+export function findRerunActionsJob(
+	jobs: readonly { id: number; name: string }[],
+	oldJob: { id: number; name: string },
+): number | null {
+	const job = jobs.find(
+		(candidate) => candidate.name === oldJob.name && candidate.id !== oldJob.id,
+	);
+	return job === undefined ? null : job.id;
+}
+
+const JobsPage = Schema.Struct({
+	jobs: Schema.Array(Schema.Struct({ id: Schema.Number, name: Schema.String })),
+});
+
+const pollRerunActionsJob = (
+	input: RerunActionsJobInput,
+	oldJob: { id: number; name: string },
+) =>
 	Effect.gen(function* () {
+		const args = [
+			"api",
+			"--paginate",
+			"--slurp",
+			`repos/${input.owner}/${input.repo}/actions/runs/${input.runId}/jobs?filter=latest&per_page=100`,
+		];
+		while (true) {
+			const result = yield* ghResult(input.repoRoot, args);
+			if (result.exitCode !== 0) return yield* failure(input, args, result);
+			const pages = yield* Schema.decodeUnknownEffect(
+				Schema.fromJsonString(Schema.Array(JobsPage)),
+			)(result.stdout).pipe(
+				Effect.mapError(
+					(cause) =>
+						new GhOutputDecodeError({
+							command: "gh api actions/runs/jobs",
+							raw: result.stdout,
+							cause,
+						}),
+				),
+			);
+			const jobId = findRerunActionsJob(
+				pages.flatMap((page) => page.jobs),
+				oldJob,
+			);
+			if (jobId !== null) return jobId;
+			yield* Effect.sleep("1 second");
+		}
+	});
+
+export const rerunActionsJob = (input: RerunActionsJobInput) =>
+	Effect.gen(function* () {
+		const oldJob = yield* getActionsJob(input);
 		const args = ["api", "-X", "POST", `${endpoint(input)}/rerun`];
 		const result = yield* ghResult(input.repoRoot, args);
 		if (result.exitCode !== 0) return yield* failure(input, args, result);
+		const found = yield* pollRerunActionsJob(input, oldJob).pipe(
+			Effect.timeoutOption("10 seconds"),
+		);
+		return Option.isSome(found) ? found.value : null;
 	});

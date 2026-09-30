@@ -23,6 +23,7 @@ export type CiCheckStatus =
 
 export type CiCheck = {
 	actionsJobId?: number;
+	actionsRunId?: number;
 	workflowName?: string;
 	name: string;
 	status: CiCheckStatus;

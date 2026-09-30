@@ -131,6 +131,7 @@ const toOverviewCommitCheck = (
 	return {
 		name: check.name,
 		actionsJobId: check.actionsJobId,
+		actionsRunId: check.actionsRunId,
 		status: check.status,
 		detail:
 			check.workflowName === undefined || check.workflowName === ""
