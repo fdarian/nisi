@@ -164,25 +164,27 @@ export function PrHeader({
 				</div>
 			</div>
 			{target.kind === "pr" && (
-				<div className="flex items-center gap-1">
-					<PrCiStatus
-						isSelectedTab={isSelectedTab}
-						number={target.number}
-						orpc={orpc}
-						owner={target.owner}
-						repo={target.repo}
-						repoRoot={repoRoot}
-						watched={watched}
-					/>
-					<PrAutoMergeIndicator
-						isSelectedTab={isSelectedTab}
-						number={target.number}
-						orpc={orpc}
-						owner={target.owner}
-						repo={target.repo}
-						repoRoot={repoRoot}
-						watched={watched}
-					/>
+				<div className="flex items-center gap-2">
+					<div className="flex items-center gap-1">
+						<PrCiStatus
+							isSelectedTab={isSelectedTab}
+							number={target.number}
+							orpc={orpc}
+							owner={target.owner}
+							repo={target.repo}
+							repoRoot={repoRoot}
+							watched={watched}
+						/>
+						<PrAutoMergeIndicator
+							isSelectedTab={isSelectedTab}
+							number={target.number}
+							orpc={orpc}
+							owner={target.owner}
+							repo={target.repo}
+							repoRoot={repoRoot}
+							watched={watched}
+						/>
+					</div>
 					<PrMergeButton
 						isSelectedTab={isSelectedTab}
 						number={target.number}

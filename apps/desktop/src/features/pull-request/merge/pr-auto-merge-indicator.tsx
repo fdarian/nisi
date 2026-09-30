@@ -71,15 +71,17 @@ export function PrAutoMergeIndicator(props: {
 	if (request === undefined || request === null) return null;
 
 	return (
-		<>
+		<div className="flex items-center">
 			<span aria-hidden="true" className="h-px w-3 shrink-0 bg-border" />
 			<Popover open={popup[0]} onOpenChange={popup[1]}>
 				<PopoverTrigger
 					aria-label="Auto-merge scheduled"
-					className="flex size-7 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-accent data-popup-open:bg-accent focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-1"
-				>
-					<ClockFading className="size-4" />
-				</PopoverTrigger>
+					render={(props) => (
+						<Button {...props} size="icon-xs" variant="ghost">
+							<ClockFading />
+						</Button>
+					)}
+				/>
 				<PopoverPopup
 					align="end"
 					className="w-80"
@@ -115,6 +117,6 @@ export function PrAutoMergeIndicator(props: {
 					if (!open) failureState[1](null);
 				}}
 			/>
-		</>
+		</div>
 	);
 }
