@@ -49,11 +49,12 @@ describe("gh watch polling", () => {
 			mergeable: "UNKNOWN" as const,
 			mergeStateStatus: "UNKNOWN" as const,
 			isDraft: false,
+			autoMerge: null,
 		};
 		expect(
 			milliseconds(
 				mergeStatusInterval(
-					{ mergeability, allowedMethods: ["merge"] },
+					{ mergeability, allowedMethods: ["merge"], autoMergeAllowed: false },
 					hidden,
 				),
 			),
@@ -64,6 +65,7 @@ describe("gh watch polling", () => {
 					{
 						mergeability: { ...mergeability, mergeable: "MERGEABLE" },
 						allowedMethods: ["merge"],
+						autoMergeAllowed: false,
 					},
 					watched,
 				),
@@ -74,6 +76,7 @@ describe("gh watch polling", () => {
 				{
 					mergeability: { ...mergeability, state: "MERGED" },
 					allowedMethods: ["merge"],
+					autoMergeAllowed: false,
 				},
 				watched,
 			),

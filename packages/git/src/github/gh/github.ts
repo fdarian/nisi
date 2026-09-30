@@ -4,6 +4,8 @@ import { GitHub } from "../github.ts";
 import { PullRequestAttention } from "./attention.ts";
 import { approveWorkflowRuns, fetchPullRequestChecks } from "./checks.ts";
 import {
+	disableAutoMerge,
+	enableAutoMerge,
 	fetchPullRequestMergeability,
 	fetchRepoMergeMethods,
 	markPullRequestReady,
@@ -66,7 +68,7 @@ export const GhGitHub = {
 					).pipe(
 						Effect.map((results) => ({
 							mergeability: results[0],
-							allowedMethods: results[1],
+							...results[1],
 						})),
 					),
 				mergeStatusInterval,
@@ -108,6 +110,16 @@ export const GhGitHub = {
 					),
 				mergeStack: (repoRoot, owner, repo, number, method) =>
 					mergeStackPullRequest(repoRoot, owner, repo, number, method).pipe(
+						provide,
+						Effect.tap(() => kick(kicks, { owner, repo, number })),
+					),
+				enableAutoMerge: (repoRoot, owner, repo, number, method) =>
+					enableAutoMerge(repoRoot, number, method).pipe(
+						provide,
+						Effect.tap(() => kick(kicks, { owner, repo, number })),
+					),
+				disableAutoMerge: (repoRoot, owner, repo, number) =>
+					disableAutoMerge(repoRoot, number).pipe(
 						provide,
 						Effect.tap(() => kick(kicks, { owner, repo, number })),
 					),

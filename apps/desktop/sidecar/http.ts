@@ -111,8 +111,57 @@ const mergeFailureDetail = (error: MergeError): string => {
 	return error.reason;
 };
 
+const translateMergeFailure = (
+	cause: PullRequestMergeError | GitCommandError,
+): {
+	code:
+		| "GH_NOT_AUTHENTICATED"
+		| "NOT_FOUND"
+		| "CONFLICT"
+		| "SERVICE_UNAVAILABLE";
+	reason: string;
+	detail: string;
+} => {
+	switch (cause._tag) {
+		case "GhNotAuthenticated":
+			return {
+				code: "GH_NOT_AUTHENTICATED",
+				reason: "Authentication required",
+				detail: cause.reason,
+			};
+		case "PullRequestNotFound":
+			return {
+				code: "NOT_FOUND",
+				reason: "Pull request not found",
+				detail: cause.reason,
+			};
+		case "PullRequestNotMergeable":
+			return {
+				code: "CONFLICT",
+				reason: "Merge blocked",
+				detail: cause.reason,
+			};
+		case "GhMergeFailed":
+			return {
+				code: "SERVICE_UNAVAILABLE",
+				reason: "GitHub rejected the merge",
+				detail: cause.reason,
+			};
+		case "GitCommandError":
+			return {
+				code: "SERVICE_UNAVAILABLE",
+				reason: "Couldn't run gh",
+				detail: mergeFailureDetail(cause),
+			};
+	}
+};
+
 const logMergeFailure = (
-	operation: "pull request merge" | "pull request stack merge",
+	operation:
+		| "pull request merge"
+		| "pull request stack merge"
+		| "enable auto-merge"
+		| "disable auto-merge",
 	input: { owner: string; repo: string; number: number; method: string },
 	error: MergeError,
 ) =>
@@ -1393,6 +1442,7 @@ export function attachRouter(
 										return {
 											...status.mergeability,
 											allowedMethods: status.allowedMethods,
+											autoMergeAllowed: status.autoMergeAllowed,
 											defaultMethod:
 												remembered !== null &&
 												status.allowedMethods.includes(remembered)
@@ -1439,58 +1489,13 @@ export function attachRouter(
 						Effect.tapError((cause) =>
 							logMergeFailure("pull request merge", input, cause),
 						),
-						Effect.catchTag("GhNotAuthenticated", (cause) =>
-							Effect.fail(
-								errors.GH_NOT_AUTHENTICATED({
-									message: `gh is not authenticated: ${cause.reason}`,
-									data: {
-										reason: "Authentication required",
-										detail: cause.reason,
-									},
-								}),
-							),
-						),
-						Effect.catchTag("PullRequestNotFound", (cause) =>
-							Effect.fail(
-								errors.NOT_FOUND({
-									message: `pull request #${cause.number} couldn't be resolved on GitHub for ${cause.repoRoot}: ${cause.reason}`,
-									data: {
-										reason: "Pull request not found",
-										detail: cause.reason,
-									},
-								}),
-							),
-						),
-						Effect.catchTag("PullRequestNotMergeable", (cause) =>
-							Effect.fail(
-								errors.CONFLICT({
-									message: `pull request #${cause.number} isn't mergeable right now: ${cause.reason}`,
-									data: { reason: "Merge blocked", detail: cause.reason },
-								}),
-							),
-						),
-						Effect.catchTag("GhMergeFailed", (cause) =>
-							Effect.fail(
-								errors.SERVICE_UNAVAILABLE({
-									message: `gh pr merge failed for pull request #${cause.number}: ${cause.reason}`,
-									data: {
-										reason: "GitHub rejected the merge",
-										detail: cause.reason,
-									},
-								}),
-							),
-						),
-						Effect.catchTag("GitCommandError", (cause) =>
-							Effect.fail(
-								errors.SERVICE_UNAVAILABLE({
-									message: `${cause.command} could not be run: ${cause.stderr || String(cause.cause)}`,
-									data: {
-										reason: "Couldn't run gh",
-										detail: mergeFailureDetail(cause),
-									},
-								}),
-							),
-						),
+						Effect.mapError((cause) => {
+							const failure = translateMergeFailure(cause);
+							return errors[failure.code]({
+								message: failure.detail,
+								data: { reason: failure.reason, detail: failure.detail },
+							});
+						}),
 					);
 
 				yield* Effect.logInfo("pull request merged", {
@@ -1516,6 +1521,54 @@ export function attachRouter(
 						),
 					);
 			}),
+			enableAutoMerge: authed.pullRequests.enableAutoMerge.effect(
+				function* (request) {
+					const input = request.input;
+					const github = yield* GitHub;
+					yield* github
+						.enableAutoMerge(
+							input.repoRoot,
+							input.owner,
+							input.repo,
+							input.number,
+							input.method,
+						)
+						.pipe(
+							Effect.tapError((cause) =>
+								logMergeFailure("enable auto-merge", input, cause),
+							),
+							Effect.mapError((cause) => {
+								const failure = translateMergeFailure(cause);
+								return request.errors[failure.code]({
+									message: failure.detail,
+									data: { reason: failure.reason, detail: failure.detail },
+								});
+							}),
+						);
+				},
+			),
+			disableAutoMerge: authed.pullRequests.disableAutoMerge.effect(
+				function* (request) {
+					const input = request.input;
+					const github = yield* GitHub;
+					yield* github
+						.disableAutoMerge(
+							input.repoRoot,
+							input.owner,
+							input.repo,
+							input.number,
+						)
+						.pipe(
+							Effect.mapError((cause) => {
+								const failure = translateMergeFailure(cause);
+								return request.errors[failure.code]({
+									message: failure.detail,
+									data: { reason: failure.reason, detail: failure.detail },
+								});
+							}),
+						);
+				},
+			),
 			mergeStack: authed.pullRequests.mergeStack.effect(function* ({
 				input,
 				errors,

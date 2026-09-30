@@ -27,11 +27,43 @@ import {
 } from "../models.ts";
 import { isAuthFailure, isRateLimited } from "./pull-request.ts";
 
-const decodeMergeabilityView = (command: string, raw: string) =>
-	Effect.try({
-		try: () => Schema.decodeUnknownSync(MergeabilityView)(JSON.parse(raw)),
-		catch: (cause) => new GhOutputDecodeError({ command, raw, cause }),
-	});
+const GhMergeabilityView = Schema.Struct({
+	...MergeabilityView.fields,
+	autoMergeRequest: Schema.NullOr(
+		Schema.Struct({
+			mergeMethod: Schema.Literals(["MERGE", "SQUASH", "REBASE"]),
+		}),
+	),
+});
+
+const AUTO_MERGE_METHOD: Record<"MERGE" | "SQUASH" | "REBASE", MergeMethod> = {
+	MERGE: "merge",
+	SQUASH: "squash",
+	REBASE: "rebase",
+};
+
+export const decodeMergeabilityView = (command: string, raw: string) =>
+	Schema.decodeUnknownEffect(Schema.fromJsonString(GhMergeabilityView))(
+		raw,
+	).pipe(
+		Effect.mapError(
+			(cause) => new GhOutputDecodeError({ command, raw, cause }),
+		),
+		Effect.map(
+			(view): PullRequestMergeability => ({
+				state: view.state,
+				mergeable: view.mergeable,
+				mergeStateStatus: view.mergeStateStatus,
+				isDraft: view.isDraft,
+				autoMerge:
+					view.autoMergeRequest === null
+						? null
+						: {
+								method: AUTO_MERGE_METHOD[view.autoMergeRequest.mergeMethod],
+							},
+			}),
+		),
+	);
 
 /**
  * `mergeStateStatus` specifically (not `state`/`mergeable`/`isDraft`) is the
@@ -83,7 +115,7 @@ export const fetchPullRequestMergeability = (
 			"view",
 			String(number),
 			"--json",
-			"state,mergeable,mergeStateStatus,isDraft",
+			"state,mergeable,mergeStateStatus,isDraft,autoMergeRequest",
 		]);
 
 		if (result.exitCode !== 0) {
@@ -116,13 +148,17 @@ const RepoMergeMethodsView = Schema.Struct({
 	mergeCommitAllowed: Schema.Boolean,
 	squashMergeAllowed: Schema.Boolean,
 	rebaseMergeAllowed: Schema.Boolean,
+	autoMergeAllowed: Schema.Boolean,
 });
 
-const decodeRepoMergeMethodsView = (command: string, raw: string) =>
-	Effect.try({
-		try: () => Schema.decodeUnknownSync(RepoMergeMethodsView)(JSON.parse(raw)),
-		catch: (cause) => new GhOutputDecodeError({ command, raw, cause }),
-	});
+export const decodeRepoMergeMethodsView = (command: string, raw: string) =>
+	Schema.decodeUnknownEffect(Schema.fromJsonString(RepoMergeMethodsView))(
+		raw,
+	).pipe(
+		Effect.mapError(
+			(cause) => new GhOutputDecodeError({ command, raw, cause }),
+		),
+	);
 
 /** GitHub's own UI ordering (Merge → Squash → Rebase) — mirrored server-side by `mergeStatus`'s `defaultMethod` in `packages/sidecar-api`. */
 const toMergeMethods = (
@@ -147,7 +183,10 @@ export const fetchRepoMergeMethods = (
 	owner: string,
 	repo: string,
 ): Effect.Effect<
-	ReadonlyArray<MergeMethod>,
+	{
+		readonly allowedMethods: ReadonlyArray<MergeMethod>;
+		readonly autoMergeAllowed: boolean;
+	},
 	RepoMergeMethodsError | GitCommandError,
 	ChildProcessSpawner.ChildProcessSpawner
 > =>
@@ -157,7 +196,7 @@ export const fetchRepoMergeMethods = (
 			"view",
 			`${owner}/${repo}`,
 			"--json",
-			"mergeCommitAllowed,squashMergeAllowed,rebaseMergeAllowed",
+			"mergeCommitAllowed,squashMergeAllowed,rebaseMergeAllowed,autoMergeAllowed",
 		]);
 
 		if (result.exitCode !== 0) {
@@ -183,7 +222,7 @@ export const fetchRepoMergeMethods = (
 		if (methods.length === 0) {
 			return yield* new NoMergeMethodsEnabled({ owner, repo });
 		}
-		return methods;
+		return { allowedMethods: methods, autoMergeAllowed: view.autoMergeAllowed };
 	});
 
 const MERGE_METHOD_FLAG: Record<MergeMethod, string> = {
@@ -238,13 +277,42 @@ export const mergePullRequest = (
 	void,
 	PullRequestMergeError | GitCommandError,
 	ChildProcessSpawner.ChildProcessSpawner
+> => runMergeCommand(repoRoot, number, [MERGE_METHOD_FLAG[method]]);
+
+export const enableAutoMerge = (
+	repoRoot: string,
+	number: number,
+	method: MergeMethod,
+): Effect.Effect<
+	void,
+	PullRequestMergeError | GitCommandError,
+	ChildProcessSpawner.ChildProcessSpawner
+> => runMergeCommand(repoRoot, number, ["--auto", MERGE_METHOD_FLAG[method]]);
+
+export const disableAutoMerge = (
+	repoRoot: string,
+	number: number,
+): Effect.Effect<
+	void,
+	PullRequestMergeError | GitCommandError,
+	ChildProcessSpawner.ChildProcessSpawner
+> => runMergeCommand(repoRoot, number, ["--disable-auto"]);
+
+const runMergeCommand = (
+	repoRoot: string,
+	number: number,
+	flags: readonly string[],
+): Effect.Effect<
+	void,
+	PullRequestMergeError | GitCommandError,
+	ChildProcessSpawner.ChildProcessSpawner
 > =>
 	Effect.gen(function* () {
 		const result = yield* ghResult(repoRoot, [
 			"pr",
 			"merge",
 			String(number),
-			MERGE_METHOD_FLAG[method],
+			...flags,
 		]);
 
 		if (result.exitCode === 0) return;

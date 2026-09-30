@@ -24,6 +24,8 @@ const BASE_STATUS: PullRequestMergeStatus = {
 	isDraft: false,
 	allowedMethods: ["merge", "squash", "rebase"],
 	defaultMethod: "merge",
+	autoMerge: null,
+	autoMergeAllowed: true,
 };
 
 const PR_TARGET: SessionTarget = {

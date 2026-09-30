@@ -107,6 +107,8 @@ export const PullRequestMergeStatus = Schema.Struct({
 	isDraft: Schema.Boolean,
 	allowedMethods: Schema.Array(MergeMethod),
 	defaultMethod: MergeMethod,
+	autoMerge: Schema.NullOr(Schema.Struct({ method: MergeMethod })),
+	autoMergeAllowed: Schema.Boolean,
 });
 export type PullRequestMergeStatus = Schema.Schema.Type<
 	typeof PullRequestMergeStatus
@@ -380,6 +382,39 @@ export const pullRequestsContract = {
 				repo: Schema.String,
 				number: Schema.Number,
 				method: MergeMethod,
+			}),
+		)
+		.output(Schema.Void)
+		.errors({
+			CONFLICT: { data: MergeFailure },
+			GH_NOT_AUTHENTICATED: { data: MergeFailure },
+			NOT_FOUND: { data: MergeFailure },
+			SERVICE_UNAVAILABLE: { data: MergeFailure },
+		}),
+	enableAutoMerge: oc
+		.input(
+			Schema.Struct({
+				repoRoot: Schema.String,
+				owner: Schema.String,
+				repo: Schema.String,
+				number: Schema.Number,
+				method: MergeMethod,
+			}),
+		)
+		.output(Schema.Void)
+		.errors({
+			CONFLICT: { data: MergeFailure },
+			GH_NOT_AUTHENTICATED: { data: MergeFailure },
+			NOT_FOUND: { data: MergeFailure },
+			SERVICE_UNAVAILABLE: { data: MergeFailure },
+		}),
+	disableAutoMerge: oc
+		.input(
+			Schema.Struct({
+				repoRoot: Schema.String,
+				owner: Schema.String,
+				repo: Schema.String,
+				number: Schema.Number,
 			}),
 		)
 		.output(Schema.Void)

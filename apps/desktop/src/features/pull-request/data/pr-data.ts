@@ -969,6 +969,8 @@ export type PullRequestMergeStatus = {
 	isDraft: boolean;
 	allowedMethods: readonly MergeMethod[];
 	defaultMethod: MergeMethod;
+	autoMerge: { method: MergeMethod } | null;
+	autoMergeAllowed: boolean;
 };
 
 /** Mirrors `PullRequestStack` (`packages/sidecar-api/src/pull-requests.ts`). */

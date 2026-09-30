@@ -314,6 +314,8 @@ export function createMockSidecarClient(
 					? async () => neverIterator()
 					: async () => liveValue(stack),
 			merge: async () => undefined,
+			enableAutoMerge: async () => undefined,
+			disableAutoMerge: async () => undefined,
 			mergeStack: async () => undefined,
 			markReady: async () => undefined,
 			approveWorkflowRuns: async (input) => {
