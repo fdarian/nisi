@@ -244,55 +244,55 @@ export function OpenPullRequestPalette(
 							onValueChange={setQuery}
 							value={query}
 						>
-							<div className="flex flex-wrap items-center">
-								{/* ComboboxChip requires a Combobox root; mirror its styling inside this Autocomplete instead. */}
-								{props.repositories.map((repository) => (
-									<span
-										key={repositoryKey(repository)}
-										className="group ml-2.5 flex items-center gap-1 rounded-[calc(var(--radius-md)-1px)] bg-accent py-1 ps-2 font-medium text-accent-foreground text-xs"
-									>
-										<span className="text-muted-foreground">
-											{repository.owner}
-										</span>
-										<span>{repository.repo}</span>
-										<button
-											type="button"
-											aria-label={`Remove ${repositoryKey(repository)} filter`}
-											className="cursor-pointer px-1.5 opacity-0 outline-none hover:opacity-100 focus-visible:opacity-100 group-hover:opacity-80 group-focus-within:opacity-80"
-											onClick={() => {
-												props.onRepositoriesChange(
-													props.repositories.filter(
-														(candidate) =>
-															repositoryKey(candidate) !==
-															repositoryKey(repository),
-													),
-												);
-												inputRef.current?.focus();
-											}}
-										>
-											<XIcon className="size-3.5" />
-										</button>
-									</span>
-								))}
-								<div className="min-w-40 flex-1">
-									<CommandInput
-										ref={inputRef}
-										placeholder="Open pull requests…"
-										onKeyDown={(event) => {
-											if (
-												event.key === "Backspace" &&
-												query === "" &&
-												props.repositories.length > 0
-											) {
-												event.preventDefault();
-												props.onRepositoriesChange(
-													props.repositories.slice(0, -1),
-												);
-											}
-										}}
-									/>
-								</div>
-							</div>
+							<CommandInput
+								ref={inputRef}
+								placeholder="Open pull requests…"
+								startContent={
+									props.repositories.length > 0 ? (
+										<div className="flex shrink-0 items-center gap-1">
+											{/* ComboboxChip requires a Combobox root; mirror its styling inside this Autocomplete instead. */}
+											{props.repositories.map((repository) => (
+												<span
+													key={repositoryKey(repository)}
+													className="group flex items-center rounded-[calc(var(--radius-md)-1px)] bg-accent px-2 py-1 font-medium text-accent-foreground text-xs"
+												>
+													<span className="text-muted-foreground">
+														{repository.owner}
+													</span>
+													<span className="ms-1">{repository.repo}</span>
+													<button
+														type="button"
+														aria-label={`Remove ${repositoryKey(repository)} filter`}
+														className="w-0 shrink-0 cursor-pointer overflow-hidden opacity-0 outline-none group-hover:ms-1 group-hover:w-3.5 group-hover:opacity-80 group-focus-within:ms-1 group-focus-within:w-3.5 group-focus-within:opacity-80 hover:opacity-100 focus-visible:opacity-100"
+														onClick={() => {
+															props.onRepositoriesChange(
+																props.repositories.filter(
+																	(candidate) =>
+																		repositoryKey(candidate) !==
+																		repositoryKey(repository),
+																),
+															);
+															inputRef.current?.focus();
+														}}
+													>
+														<XIcon className="size-3.5" />
+													</button>
+												</span>
+											))}
+										</div>
+									) : undefined
+								}
+								onKeyDown={(event) => {
+									if (
+										event.key === "Backspace" &&
+										query === "" &&
+										props.repositories.length > 0
+									) {
+										event.preventDefault();
+										props.onRepositoriesChange(props.repositories.slice(0, -1));
+									}
+								}}
+							/>
 							<Separator />
 							<CommandEmpty>
 								{searchErrorMessage ?? "No pull requests found."}

@@ -112,8 +112,13 @@ export function Command({
 }
 
 export function CommandInput(
-	props: React.ComponentProps<typeof AutocompleteInput>,
+	props: React.ComponentProps<typeof AutocompleteInput> & {
+		startContent?: React.ReactNode;
+	},
 ): React.ReactElement {
+	const inputProps = { ...props };
+	delete inputProps.startContent;
+	const hasStartContent = props.startContent !== undefined;
 	const handleKeyDown: NonNullable<
 		React.ComponentProps<typeof AutocompleteInput>["onKeyDown"]
 	> = (event) => {
@@ -135,18 +140,29 @@ export function CommandInput(
 	};
 
 	return (
-		<div className="px-2.5 py-1.5">
-			<AutocompleteInput
-				{...props}
-				autoFocus
-				className={cn(
-					"border-transparent! bg-transparent! shadow-none before:hidden has-focus-visible:ring-0",
-					props.className,
-				)}
-				onKeyDown={handleKeyDown}
-				size="lg"
-				startAddon={<SearchIcon />}
-			/>
+		<div className="flex items-center px-2.5 py-1.5">
+			{hasStartContent && (
+				<>
+					<SearchIcon
+						aria-hidden="true"
+						className="ms-2.5 me-2 size-4 shrink-0 opacity-80"
+					/>
+					{props.startContent}
+				</>
+			)}
+			<div className="min-w-0 flex-1">
+				<AutocompleteInput
+					{...inputProps}
+					autoFocus
+					className={cn(
+						"border-transparent! bg-transparent! shadow-none before:hidden has-focus-visible:ring-0",
+						props.className,
+					)}
+					onKeyDown={handleKeyDown}
+					size="lg"
+					startAddon={hasStartContent ? undefined : <SearchIcon />}
+				/>
+			</div>
 		</div>
 	);
 }
