@@ -144,12 +144,14 @@ export const AwaitingApproval: Story = {
 };
 
 export const AutoMergeScheduled: Story = {
+	name: "Auto-merge scheduled — merge now enabled",
 	args: {
 		target: PR_TARGET,
 		orpc: createMockOrpc({
 			mergeStatus: {
 				...BASE_STATUS,
 				mergeStateStatus: "BLOCKED",
+				allowedMethods: ["squash"],
 				autoMerge: { method: "squash" },
 			},
 			checks: [{ name: "Tests", status: "running" }],

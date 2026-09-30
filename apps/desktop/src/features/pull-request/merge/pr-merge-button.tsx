@@ -157,7 +157,9 @@ const resolveButtonState = (
 		return { label: "Conflicts", disabled: true };
 	}
 	if (status.mergeStateStatus === "BLOCKED") {
-		return { label: "Merge blocked", disabled: true };
+		return status.autoMerge === null
+			? { label: "Merge blocked", disabled: true }
+			: { label: "Merge pull request", disabled: false };
 	}
 	if (status.mergeStateStatus === "BEHIND") {
 		return { label: "Update branch required", disabled: true };
@@ -314,7 +316,10 @@ export function PrMergeButton({
 	const showAutoMergeAction =
 		statusQuery.data?.autoMergeAllowed === true &&
 		statusQuery.data.autoMerge === null;
-	const showMethodPicker = allowedMethods.length > 1 || showAutoMergeAction;
+	const showMethodPicker =
+		allowedMethods.length > 1 ||
+		showAutoMergeAction ||
+		(statusQuery.data !== undefined && statusQuery.data.autoMerge !== null);
 	const methodMenuDisabled =
 		statusQuery.data === undefined ||
 		statusQuery.isError ||
