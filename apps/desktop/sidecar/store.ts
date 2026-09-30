@@ -1,8 +1,8 @@
 import { join } from "node:path";
 import {
 	diffContentsPatch,
-	fetchBaseRef,
 	type FileContentRequest,
+	fetchBaseRef,
 	type GhOutputDecodeError,
 	type GitCommandError,
 	type FileChange as GitFileChange,
