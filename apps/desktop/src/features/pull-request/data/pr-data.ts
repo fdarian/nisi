@@ -1277,7 +1277,10 @@ export function useCiJob(orpc: SidecarQueryUtils, params: CiJobParams) {
 		orpc.pullRequests.ciJob.queryOptions({
 			input: params,
 			refetchInterval: (query) =>
-				query.state.data?.status === "completed" ? false : 5000,
+				query.state.status === "error" ||
+				query.state.data?.status === "completed"
+					? false
+					: 5000,
 		}),
 	);
 }

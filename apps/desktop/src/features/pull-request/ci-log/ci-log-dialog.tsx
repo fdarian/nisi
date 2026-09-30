@@ -143,31 +143,53 @@ export function CiLogDialog(props: DialogProps) {
 				<DialogDescription className="sr-only">
 					GitHub Actions job steps and logs
 				</DialogDescription>
-				{query.isError ? (
-					<div role="alert" className="flex-1 p-6">
-						<p>Couldn't load job logs: {query.error.message}</p>
-						<Button
-							variant="outline"
-							className="mt-3"
-							onClick={() => void query.refetch()}
+				{job === undefined ? (
+					query.isError ? (
+						<div role="alert" className="flex-1 p-6">
+							<p>Couldn't load job logs: {query.error.message}</p>
+							<Button
+								variant="outline"
+								className="mt-3"
+								onClick={() => void query.refetch()}
+							>
+								Retry
+							</Button>
+						</div>
+					) : (
+						<div
+							role="status"
+							className="flex flex-1 items-center justify-center gap-2 text-muted-foreground"
 						>
-							Retry
-						</Button>
-					</div>
-				) : job === undefined ? (
-					<div
-						role="status"
-						className="flex flex-1 items-center justify-center gap-2 text-muted-foreground"
-					>
-						<LoaderCircle className="size-4 animate-spin" />
-						Loading job logs…
-					</div>
+							<LoaderCircle className="size-4 animate-spin" />
+							Loading job logs…
+						</div>
+					)
 				) : (
-					<JobSteps
-						job={job}
-						onRetry={() => void query.refetch()}
-						refreshing={query.isFetching}
-					/>
+					<>
+						{query.isError && (
+							<div
+								role="alert"
+								className="flex shrink-0 items-center gap-3 border-b bg-destructive/4 px-5 py-2 text-destructive-foreground text-sm"
+							>
+								<span className="min-w-0 flex-1 truncate">
+									Couldn't refresh job logs: {query.error.message}
+								</span>
+								<Button
+									size="sm"
+									variant="outline"
+									disabled={query.isFetching}
+									onClick={() => void query.refetch()}
+								>
+									Retry
+								</Button>
+							</div>
+						)}
+						<JobSteps
+							job={job}
+							onRetry={() => void query.refetch()}
+							refreshing={query.isFetching}
+						/>
+					</>
 				)}
 				<DialogFooter className="shrink-0">
 					<Group aria-label="Copy job logs">
