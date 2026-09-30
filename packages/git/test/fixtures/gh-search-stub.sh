@@ -30,6 +30,16 @@ if ! has "is:pr" || ! has "sort:updated-desc" || ! has "n=30"; then
 	echo "missing qualifiers: $joined" >&2
 	exit 1
 fi
+for repo in ${NISI_EXPECT_SEARCH_REPOS:-}; do
+	if ! has "repo:$repo"; then
+		echo "missing repository qualifier: $repo" >&2
+		exit 1
+	fi
+	if ! has "is:merged" && ! has "is:open"; then
+		echo 'missing open qualifier' >&2
+		exit 1
+	fi
+done
 if has "repo:acme/tools"; then
 	if ! has "repo:acme/widgets"; then
 		echo 'missing repeated repo qualifier' >&2

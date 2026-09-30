@@ -24,7 +24,11 @@ const runAgainstGhStub = async (
 	repos: readonly string[] = [],
 ): Promise<RunnerResult> => {
 	const proc = Bun.spawn(["bun", "run", RUNNER, testDir, query, ...repos], {
-		env: { ...process.env, NISI_GH_BIN: GH_STUB },
+		env: {
+			...process.env,
+			NISI_GH_BIN: GH_STUB,
+			NISI_EXPECT_SEARCH_REPOS: repos.join(" "),
+		},
 		stdout: "pipe",
 		stderr: "pipe",
 	});
@@ -40,6 +44,12 @@ const runAgainstGhStub = async (
 };
 
 describe("searchPullRequests", () => {
+	test("a single repository filter scopes an empty query", async () => {
+		const result = await runAgainstGhStub("", ["acme/widgets"]);
+		expect(result.ok).toBe(true);
+		if (!result.ok) return;
+		expect(result.results.map((pr) => pr.number)).toEqual([50]);
+	});
 	for (const query of ["", "engine", "is:merged", "repo:acme/widgets engine"]) {
 		test(`repository filters search without personal scope: ${JSON.stringify(query)}`, async () => {
 			const result = await runAgainstGhStub(query, [
