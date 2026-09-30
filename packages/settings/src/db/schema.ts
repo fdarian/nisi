@@ -1,5 +1,6 @@
 import {
 	integer,
+	primaryKey,
 	sqliteTable,
 	text,
 	uniqueIndex,
@@ -159,3 +160,18 @@ export const repoMergeMethods = sqliteTable(
 export type SettingsRow = typeof settings.$inferSelect;
 export type RepoPathRow = typeof repoPaths.$inferSelect;
 export type RepoMergeMethodRow = typeof repoMergeMethods.$inferSelect;
+
+export const scheduledMerges = sqliteTable(
+	"scheduled_merges",
+	{
+		owner: text().notNull(),
+		repo: text().notNull(),
+		number: integer().notNull(),
+		repo_root: text().notNull(),
+		method: text().notNull(),
+		created_at: integer({ mode: "timestamp_ms" })
+			.notNull()
+			.$defaultFn(() => new Date()),
+	},
+	(table) => [primaryKey({ columns: [table.owner, table.repo, table.number] })],
+);
