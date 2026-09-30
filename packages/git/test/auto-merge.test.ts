@@ -42,11 +42,16 @@ describe("auto-merge decoding", () => {
 		test(`decodes autoMergeAllowed=${allowed}`, async () => {
 			const settings = await Effect.runPromise(
 				decodeRepoMergeMethodsView(
-					"gh repo view",
-					JSON.stringify({ ...repo, autoMergeAllowed: allowed }),
+					"gh api graphql (merge settings)",
+					JSON.stringify({
+						data: { repository: { ...repo, autoMergeAllowed: allowed } },
+					}),
 				),
 			);
 			expect(settings.autoMergeAllowed).toBe(allowed);
+			expect(settings.mergeCommitAllowed).toBe(true);
+			expect(settings.squashMergeAllowed).toBe(true);
+			expect(settings.rebaseMergeAllowed).toBe(false);
 		});
 	}
 	test("rejects missing or invalid auto-merge fields", async () => {
@@ -66,7 +71,29 @@ describe("auto-merge decoding", () => {
 			expect(
 				Exit.isFailure(
 					await Effect.runPromiseExit(
-						decodeRepoMergeMethodsView("gh repo view", JSON.stringify(value)),
+						decodeRepoMergeMethodsView(
+							"gh api graphql (merge settings)",
+							JSON.stringify({ data: { repository: value } }),
+						),
+					),
+				),
+			).toBe(true);
+		}
+	});
+	test("rejects missing or null GraphQL repositories and unwrapped settings", async () => {
+		for (const value of [
+			{},
+			{ data: {} },
+			{ data: { repository: null } },
+			{ ...repo, autoMergeAllowed: true },
+		]) {
+			expect(
+				Exit.isFailure(
+					await Effect.runPromiseExit(
+						decodeRepoMergeMethodsView(
+							"gh api graphql (merge settings)",
+							JSON.stringify(value),
+						),
 					),
 				),
 			).toBe(true);

@@ -152,12 +152,17 @@ const RepoMergeMethodsView = Schema.Struct({
 });
 
 export const decodeRepoMergeMethodsView = (command: string, raw: string) =>
-	Schema.decodeUnknownEffect(Schema.fromJsonString(RepoMergeMethodsView))(
-		raw,
-	).pipe(
+	Schema.decodeUnknownEffect(
+		Schema.fromJsonString(
+			Schema.Struct({
+				data: Schema.Struct({ repository: RepoMergeMethodsView }),
+			}),
+		),
+	)(raw).pipe(
 		Effect.mapError(
 			(cause) => new GhOutputDecodeError({ command, raw, cause }),
 		),
+		Effect.map((response) => response.data.repository),
 	);
 
 /** GitHub's own UI ordering (Merge → Squash → Rebase) — mirrored server-side by `mergeStatus`'s `defaultMethod` in `packages/sidecar-api`. */
@@ -172,9 +177,10 @@ const toMergeMethods = (
 };
 
 /**
- * `gh repo view <owner>/<repo> --json mergeCommitAllowed,squashMergeAllowed,rebaseMergeAllowed,autoMergeAllowed`,
- * mapped to the subset of `"merge" | "squash" | "rebase"` the repo actually
- * allows. Every method disabled is a genuine anomaly (GitHub itself requires
+ * Reads repository merge settings through `gh api graphql` because `gh repo view`
+ * does not expose `autoMergeAllowed`. Decodes `data.repository` and maps the
+ * allowed methods to `"merge" | "squash" | "rebase"`.
+ * Every method disabled is a genuine anomaly (GitHub itself requires
  * at least one to merge anything) — failed as `NoMergeMethodsEnabled` rather
  * than defaulted to some method the repo doesn't actually accept.
  */
@@ -192,11 +198,14 @@ export const fetchRepoMergeMethods = (
 > =>
 	Effect.gen(function* () {
 		const result = yield* ghResult(repoRoot, [
-			"repo",
-			"view",
-			`${owner}/${repo}`,
-			"--json",
-			"mergeCommitAllowed,squashMergeAllowed,rebaseMergeAllowed,autoMergeAllowed",
+			"api",
+			"graphql",
+			"-f",
+			"query=query($owner: String!, $name: String!) { repository(owner: $owner, name: $name) { mergeCommitAllowed squashMergeAllowed rebaseMergeAllowed autoMergeAllowed } }",
+			"-f",
+			`owner=${owner}`,
+			"-f",
+			`name=${repo}`,
 		]);
 
 		if (result.exitCode !== 0) {
@@ -215,7 +224,7 @@ export const fetchRepoMergeMethods = (
 		}
 
 		const view = yield* decodeRepoMergeMethodsView(
-			"gh repo view",
+			"gh api graphql (merge settings)",
 			result.stdout,
 		);
 		const methods = toMergeMethods(view);
