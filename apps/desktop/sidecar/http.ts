@@ -63,7 +63,6 @@ import { listHarnesses } from "./harness/harnesses.ts";
 import { getHarnessModels } from "./harness/models.ts";
 import { checkSessionForChanges } from "./live-poll.ts";
 import { translateMergeFailure } from "./merge-failure.ts";
-import { ScheduledMerges } from "./scheduled-merge.ts";
 import { createNativeActivationHandler } from "./native-activation.ts";
 import {
 	acknowledgeOpenRequest,
@@ -74,6 +73,7 @@ import {
 } from "./open-requests.ts";
 import { AttentionState } from "./pull-request-attention.ts";
 import { RpcLifecyclePlugin } from "./rpc-lifecycle.ts";
+import { ScheduledMerges } from "./scheduled-merge.ts";
 import type { AppServices } from "./services.ts";
 import {
 	forkSessionCloseSideEffects,

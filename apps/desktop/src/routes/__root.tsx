@@ -3,12 +3,12 @@ import { Agentation } from "agentation";
 import { Mesurer } from "mesurer";
 import { ThemeProvider } from "next-themes";
 import { ToastProvider } from "#/components/ui/toast";
-import { ScheduledMergeNotifications } from "#/features/pull-request/merge/scheduled-merge-notifications";
 import {
 	DevToolProvider,
 	useAgentationEnabled,
 	useMesurerEnabled,
 } from "#/features/devtools/dev-tool-context";
+import { ScheduledMergeNotifications } from "#/features/pull-request/merge/scheduled-merge-notifications";
 import { useSettingsShortcut } from "#/features/settings/use-settings-shortcut";
 import { BackendProvider, useBackendContext } from "#/infra/backend-context";
 import { SidecarEventsProvider } from "#/infra/sidecar-events";

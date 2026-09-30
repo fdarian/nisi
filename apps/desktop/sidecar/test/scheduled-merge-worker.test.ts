@@ -17,8 +17,8 @@ import {
 	Effect,
 	Layer,
 	Queue,
-	Stream,
 	type Scope,
+	Stream,
 } from "effect";
 import { type SidecarEvent, subscribe } from "../events.ts";
 import { ScheduledMerges } from "../scheduled-merge.ts";

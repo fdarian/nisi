@@ -5,9 +5,9 @@ import {
 } from "@repo/git";
 import {
 	RepoMergeMethodStore,
-	ScheduledMergeStore,
 	type ScheduledMerge,
 	type ScheduledMergeKey,
+	ScheduledMergeStore,
 } from "@repo/settings";
 import {
 	Cause,

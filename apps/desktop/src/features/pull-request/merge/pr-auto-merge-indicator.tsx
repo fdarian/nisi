@@ -13,8 +13,8 @@ import {
 import { toastManager } from "#/components/ui/toast";
 import {
 	type MergeMethod,
-	useScheduledMergeMutations,
 	useScheduledMerge,
+	useScheduledMergeMutations,
 } from "#/features/pull-request/data/pr-data";
 import { useDismissOnInactive } from "#/features/pull-request/use-dismiss-on-inactive";
 import type { SidecarQueryUtils } from "#/infra/backend-context";

@@ -25,11 +25,11 @@ import type {
 	UnpushedCommitsCheck,
 } from "#/features/pull-request/data/pr-data";
 import {
-	useScheduledMerge,
-	useScheduledMergeMutations,
 	useMergePullRequest,
 	usePullRequestMergeStatus,
 	usePullRequestStack,
+	useScheduledMerge,
+	useScheduledMergeMutations,
 	useUnpushedCommitsCheck,
 } from "#/features/pull-request/data/pr-data";
 import { useDismissOnInactive } from "#/features/pull-request/use-dismiss-on-inactive";
