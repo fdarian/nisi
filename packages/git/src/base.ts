@@ -54,6 +54,7 @@ export const fetchBaseRef = (repoRoot: string, baseRef: string) =>
 		const baseMayBeStale = yield* git(repoRoot, [
 			"fetch",
 			"--no-tags",
+			"--no-write-fetch-head",
 			"--refmap=",
 			target.remote,
 			`+refs/heads/${target.branch}:${target.ref}`,

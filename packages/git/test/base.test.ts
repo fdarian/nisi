@@ -22,7 +22,13 @@ test("remote base excludes upstream additions while local main stays behind", as
 		await repo.git(["fetch", "origin"]);
 		await repo.git(["checkout", "-b", "feature", "origin/main"]);
 		await repo.write("pr.txt", "PR change\n");
-		await repo.commit("unrelated PR");
+		const prHead = await repo.commit("unrelated PR");
+		await repo.git(["fetch", repo.root, "feature"]);
+		await repo.git([
+			"config",
+			"remote.origin.fetch",
+			"+refs/heads/main:refs/heads/main",
+		]);
 		expect((await repo.git(["rev-parse", "main"])).trim()).toBe(oldMain);
 		expect(await run(fetchBaseRef(repo.root, "main"))).toEqual({
 			baseRef: "refs/remotes/origin/main",
@@ -30,6 +36,7 @@ test("remote base excludes upstream additions while local main stays behind", as
 		});
 		expect((await repo.git(["rev-parse", "main"])).trim()).toBe(oldMain);
 		expect((await repo.git(["rev-parse", "origin/main"])).trim()).toBe(newMain);
+		expect((await repo.git(["rev-parse", "FETCH_HEAD"])).trim()).toBe(prHead);
 		expect(
 			(await run(getChangedFiles(repo.root, "main"))).map((file) => file.path),
 		).toEqual(["pr.txt"]);
