@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { Effect } from "effect";
 import { FileSystem } from "effect/FileSystem";
 import type { ChildProcessSpawner } from "effect/unstable/process";
+import { resolveDiffBaseRef } from "./base.ts";
 import { type BlobEntry, readBlobsAtRef } from "./blob.ts";
 import {
 	checkLinguistGenerated,
@@ -320,7 +321,7 @@ export const getChangedFiles = (
 
 		const mergeBase = yield* resolveMergeBase(
 			repoRoot,
-			baseRef,
+			yield* resolveDiffBaseRef(repoRoot, baseRef),
 			options?.headRef,
 		);
 		const target: DiffTarget = includeUncommitted
@@ -543,7 +544,7 @@ export const getFileContents = (
 
 		const mergeBase = yield* resolveMergeBase(
 			repoRoot,
-			baseRef,
+			yield* resolveDiffBaseRef(repoRoot, baseRef),
 			options?.headRef,
 		);
 		const target: DiffTarget = includeUncommitted

@@ -44,6 +44,7 @@ describe("resolveLocalDefaultBranch", () => {
 			await repo.write("a.ts", "hello\n");
 			await repo.commit("base");
 			await repo.git(["checkout", "-q", "-b", "trunk"]);
+			await repo.git(["remote", "add", "origin", repo.root]);
 			// A stand-in for what `git clone` records: a remote-tracking ref plus
 			// the symbolic `origin/HEAD` naming it.
 			await repo.git(["update-ref", "refs/remotes/origin/trunk", "HEAD"]);
@@ -53,9 +54,7 @@ describe("resolveLocalDefaultBranch", () => {
 				"refs/remotes/origin/trunk",
 			]);
 
-			expect(await run(resolveLocalDefaultBranch(repo.root))).toBe(
-				"origin/trunk",
-			);
+			expect(await run(resolveLocalDefaultBranch(repo.root))).toBe("trunk");
 		} finally {
 			await cleanupTestRepo(repo);
 		}

@@ -1,5 +1,6 @@
 import { stat } from "node:fs/promises";
 import { Effect } from "effect";
+import { resolveBaseRemote } from "./base.ts";
 import {
 	NoDefaultBranch,
 	NoRemoteRefToCompare,
@@ -35,11 +36,15 @@ const gitOutputOrNull = (repoRoot: string, args: ReadonlyArray<string>) =>
 
 /** The ref `origin/HEAD` points at (`origin/main`, …), once a clone or `remote set-head` has recorded one. */
 const readOriginHead = (repoRoot: string) =>
-	gitOutputOrNull(repoRoot, [
-		"symbolic-ref",
-		"--short",
-		"refs/remotes/origin/HEAD",
-	]);
+	Effect.gen(function* () {
+		const remote = yield* resolveBaseRemote(repoRoot);
+		if (remote === null) return null;
+		const ref = yield* gitOutputOrNull(repoRoot, [
+			"symbolic-ref",
+			`refs/remotes/${remote}/HEAD`,
+		]);
+		return ref === null ? null : ref.slice(`refs/remotes/${remote}/`.length);
+	});
 
 const readConfiguredDefaultBranch = (repoRoot: string) =>
 	gitOutputOrNull(repoRoot, ["config", "--get", "init.defaultBranch"]);
@@ -70,6 +75,12 @@ export const resolveLocalDefaultBranch = (repoRoot: string) =>
 		);
 		for (const candidate of candidates) {
 			if (yield* refExists(repoRoot, candidate)) return candidate;
+			const remote = yield* resolveBaseRemote(repoRoot);
+			if (
+				remote !== null &&
+				(yield* refExists(repoRoot, `refs/remotes/${remote}/${candidate}`))
+			)
+				return candidate;
 		}
 		return yield* new NoDefaultBranch({ repoRoot });
 	});
