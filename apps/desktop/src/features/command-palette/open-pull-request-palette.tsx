@@ -95,12 +95,8 @@ export function OpenPullRequestPalette(
 ): React.ReactElement {
 	const [query, setQuery] = useState("");
 	const [debouncedQuery, setDebouncedQuery] = useState("");
-	const pickerState = useState(false);
-	const pickingRepository = pickerState[0];
-	const setPickingRepository = pickerState[1];
-	const repositoryQueryState = useState("");
-	const repositoryQuery = repositoryQueryState[0];
-	const setRepositoryQuery = repositoryQueryState[1];
+	const [pickingRepository, setPickingRepository] = useState(false);
+	const [repositoryQuery, setRepositoryQuery] = useState("");
 	const inputRef = useRef<HTMLInputElement>(null);
 
 	const search = useSearchPullRequests(
@@ -111,7 +107,7 @@ export function OpenPullRequestPalette(
 	);
 	const results = search.results;
 	const searchErrorMessage = friendlySearchError(search.error);
-	const recent = useSearchPullRequests(props.orpc, "", props.open);
+	const recent = useSearchPullRequests(props.orpc, "", props.open, []);
 	const saved = usePullRequestRepositories(props.orpc, props.open);
 	const repositories = paletteRepositories(
 		recent.results,

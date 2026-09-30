@@ -53,7 +53,7 @@ export function useSearchPullRequests(
 	orpc: SidecarQueryUtils,
 	query: string,
 	enabled: boolean,
-	repos: readonly string[] = [],
+	repos: readonly string[],
 ): {
 	results: readonly PullRequestSearchResult[];
 	isSearching: boolean;

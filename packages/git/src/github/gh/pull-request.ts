@@ -422,7 +422,7 @@ const mergeResults = (
 export const searchPullRequests = (
 	cwd: string,
 	query: string,
-	repos: ReadonlyArray<string> = [],
+	repos: ReadonlyArray<string>,
 ): Effect.Effect<
 	ReadonlyArray<PullRequestSearchResult>,
 	PullRequestSearchError,
