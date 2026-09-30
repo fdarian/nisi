@@ -64,6 +64,27 @@ describe("Actions logs", () => {
 			["next step"],
 		]);
 	});
+	test("a group opener in the shared end/start second begins the next step", () => {
+		const shared = [
+			{ number: 1, started_at: iso(30), completed_at: iso(45) },
+			{ number: 2, started_at: iso(45), completed_at: iso(50) },
+		];
+		const at = (seconds: number, text: string) =>
+			`${iso(seconds).replace(".000Z", `.${text.startsWith("##[group]") ? "600" : "200"}Z`)} ${text}`;
+		const parsed = parseActionsLog(
+			[
+				at(44, "work"),
+				at(45, "##[error]Process completed with exit code 1."),
+				at(45, "##[group]Run next"),
+				at(46, "inside"),
+			].join("\n"),
+			shared,
+		);
+		expect(parsed[0]?.nodes.map((node) => node.type)).toEqual(["line", "line"]);
+		expect(parsed[1]?.nodes).toMatchObject([
+			{ type: "group", title: "Run next" },
+		]);
+	});
 	test("a leading UTF-8 BOM does not drop the first line", () => {
 		const parsed = parseActionsLog(
 			`\uFEFF${iso(2)} first\n${iso(3)} second`,

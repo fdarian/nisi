@@ -22,18 +22,25 @@ type StepWindow = {
 /**
  * The jobs API reports step times in whole seconds while log lines carry
  * fractions, so a step's trailing output (e.g. the `Process completed with
- * exit code` line) is stamped after its reported end. When a step ends in the
- * same second the next one starts, the earlier step claims that second.
+ * exit code` line) is stamped after its reported end. A step therefore keeps
+ * everything up to the end of its last reported second.
  */
 const endOfSecond = (ms: number) => Math.floor(ms / 1000) * 1000 + 1000;
 
-/** Inter-step runner output belongs to the preceding step; preamble belongs to the first. */
+/**
+ * Lines are assigned by a cursor that only moves forward, so the shared
+ * second where one step ends and the next starts can be split: the cursor
+ * stays put for trailing output, and moves early on a `##[group]` opener,
+ * which is how the next step's own output begins. Inter-step runner output
+ * belongs to the preceding step; preamble belongs to the first.
+ */
 export function parseActionsLog(raw: string, steps: readonly StepWindow[]) {
 	const result = steps.map((step) => ({
 		number: step.number,
 		nodes: [] as ActionsLogNode[],
 	}));
 	const stacks = result.map((step) => [step.nodes]);
+	const cursor = { index: 0 };
 	// Job logs start with a UTF-8 BOM, which would break the timestamp match on the first line.
 	for (const rawLine of raw.replace(/^\uFEFF/, "").split(/\r?\n/)) {
 		const match = /^(\S+) (.*)$/.exec(rawLine);
@@ -41,25 +48,32 @@ export function parseActionsLog(raw: string, steps: readonly StepWindow[]) {
 			continue;
 		const timestamp = Date.parse(match[1]);
 		if (!Number.isFinite(timestamp)) continue;
-		const matching = steps.findIndex(
-			(step) =>
-				step.started_at !== null &&
-				timestamp >= Date.parse(step.started_at) &&
-				(step.completed_at === null ||
-					timestamp < endOfSecond(Date.parse(step.completed_at))),
-		);
-		const preceding = steps.reduce(
-			(found, step, index) =>
-				step.started_at !== null && timestamp >= Date.parse(step.started_at)
-					? index
-					: found,
-			-1,
-		);
-		const index = matching >= 0 ? matching : Math.max(0, preceding);
+		const text = match[2];
+		while (true) {
+			const next = steps.findIndex(
+				(step, index) => index > cursor.index && step.started_at !== null,
+			);
+			const current = steps[cursor.index];
+			const following = steps[next];
+			if (
+				current === undefined ||
+				following === undefined ||
+				following.started_at === null ||
+				timestamp < Date.parse(following.started_at)
+			)
+				break;
+			if (
+				current.completed_at !== null &&
+				timestamp < endOfSecond(Date.parse(current.completed_at)) &&
+				!text.startsWith("##[group]")
+			)
+				break;
+			cursor.index = next;
+		}
+		const index = cursor.index;
 		const stack = stacks[index];
 		const nodes = stack === undefined ? undefined : stack[stack.length - 1];
 		if (stack === undefined || nodes === undefined) continue;
-		const text = match[2];
 		if (text.startsWith("##[group]")) {
 			const group = {
 				type: "group" as const,
