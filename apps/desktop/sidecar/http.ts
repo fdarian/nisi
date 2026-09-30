@@ -1696,6 +1696,83 @@ export function attachRouter(
 				);
 				yield* streamToIterator(stream, mainContext, signal);
 			}),
+			ciJob: authed.pullRequests.ciJob.effect(function* (request) {
+				const github = yield* GitHub;
+				return yield* Effect.gen(function* () {
+					const job = yield* github.getActionsJob(request.input);
+					const logs =
+						job.status === "completed"
+							? yield* github.getActionsJobLogs(request.input)
+							: {
+									status: "unavailable" as const,
+									reason: "Logs appear when the job finishes.",
+								};
+					const parsed =
+						logs.status === "available"
+							? parseActionsLog(logs.raw, job.steps)
+							: job.steps.map((step) => ({ number: step.number, nodes: [] }));
+					const steps = yield* Effect.forEach(job.steps, (step, index) => {
+						const tree = parsed[index];
+						if (tree === undefined)
+							return Effect.die(new Error("Parsed log step is missing"));
+						return Effect.succeed({
+							number: step.number,
+							name: step.name,
+							status: step.status,
+							conclusion: step.conclusion,
+							durationMs:
+								step.started_at === null || step.completed_at === null
+									? null
+									: Date.parse(step.completed_at) - Date.parse(step.started_at),
+							nodes: tree.nodes,
+						});
+					});
+					return {
+						id: job.id,
+						name: job.name,
+						status: job.status,
+						conclusion: job.conclusion,
+						htmlUrl: job.html_url,
+						startedAt: job.started_at,
+						completedAt: job.completed_at,
+						logs,
+						steps,
+					};
+				}).pipe(
+					Effect.mapError((cause) => {
+						if (cause._tag === "GhNotAuthenticated")
+							return request.errors.GH_NOT_AUTHENTICATED({
+								message: cause.reason,
+							});
+						if (cause._tag === "GhRateLimited")
+							return request.errors.TOO_MANY_REQUESTS({
+								message: cause.reason,
+							});
+						return request.errors.SERVICE_UNAVAILABLE({
+							message: String(cause),
+						});
+					}),
+				);
+			}),
+			rerunCiJob: authed.pullRequests.rerunCiJob.effect(function* (request) {
+				const github = yield* GitHub;
+				return yield* github.rerunActionsJob(request.input).pipe(
+					Effect.mapError((cause) => {
+						if (cause._tag === "GhNotAuthenticated")
+							return request.errors.GH_NOT_AUTHENTICATED({
+								message: cause.reason,
+							});
+						if (cause._tag === "GhRateLimited")
+							return request.errors.TOO_MANY_REQUESTS({
+								message: cause.reason,
+							});
+						return request.errors.SERVICE_UNAVAILABLE({
+							message:
+								cause._tag === "GitCommandError" ? cause.stderr : String(cause),
+						});
+					}),
+				);
+			}),
 			approveWorkflowRuns: authed.pullRequests.approveWorkflowRuns.effect(
 				function* ({ input, errors }) {
 					const github = yield* GitHub;
@@ -2029,3 +2106,5 @@ export function attachRouter(
 		},
 	});
 }
+
+import { parseActionsLog } from "@repo/git";

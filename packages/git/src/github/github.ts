@@ -1,5 +1,11 @@
 import { Context, type Effect, type Stream } from "effect";
 import type {
+	ActionsJob,
+	ActionsJobError,
+	ActionsJobInput,
+	ActionsJobLogs,
+} from "./gh/actions-jobs.ts";
+import type {
 	GhNotAuthenticated,
 	GhOutputDecodeError,
 	GitCommandError,
@@ -39,6 +45,15 @@ export type RepositoryIdentity = {
 };
 
 export type GitHubShape = {
+	getActionsJob: (
+		input: ActionsJobInput,
+	) => Effect.Effect<ActionsJob, ActionsJobError>;
+	getActionsJobLogs: (
+		input: ActionsJobInput,
+	) => Effect.Effect<ActionsJobLogs, ActionsJobError>;
+	rerunActionsJob: (
+		input: ActionsJobInput,
+	) => Effect.Effect<void, ActionsJobError>;
 	repository: (
 		repoRoot: string,
 	) => Effect.Effect<

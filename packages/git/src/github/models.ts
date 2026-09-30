@@ -56,6 +56,7 @@ export type PullRequestCheck = {
 	 */
 	workflowName?: string;
 	workflowRunId?: number;
+	actionsJobId?: number;
 };
 
 /**
@@ -71,6 +72,7 @@ export type PullRequestCheck = {
  * same status vocabulary as `PullRequestCheck`.
  */
 export type OverviewCommitCheck = {
+	readonly actionsJobId?: number;
 	readonly name: string;
 	readonly status: PullRequestCheckStatus;
 	readonly detail?: string;

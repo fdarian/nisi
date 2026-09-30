@@ -181,6 +181,7 @@ export const PullRequestCheck = Schema.Struct({
 	detailsUrl: Schema.optional(Schema.String),
 	workflowName: Schema.optional(Schema.String),
 	workflowRunId: Schema.optional(Schema.Number),
+	actionsJobId: Schema.optional(Schema.Number),
 });
 export type PullRequestCheck = Schema.Schema.Type<typeof PullRequestCheck>;
 
@@ -190,6 +191,71 @@ const MergeFailure = Schema.toStandardSchemaV1(
 		detail: Schema.String,
 	}),
 );
+
+export type CiLogNode =
+	| {
+			type: "line";
+			timestamp: number;
+			text: string;
+			kind: "plain" | "error" | "warning" | "notice" | "debug" | "command";
+	  }
+	| { type: "group"; title: string; children: readonly CiLogNode[] };
+const CiLogNode: Schema.Codec<CiLogNode> = Schema.suspend(() =>
+	Schema.Union([
+		Schema.Struct({
+			type: Schema.Literal("line"),
+			timestamp: Schema.Number,
+			text: Schema.String,
+			kind: Schema.Literals([
+				"plain",
+				"error",
+				"warning",
+				"notice",
+				"debug",
+				"command",
+			]),
+		}),
+		Schema.Struct({
+			type: Schema.Literal("group"),
+			title: Schema.String,
+			children: Schema.Array(CiLogNode),
+		}),
+	]),
+);
+export const CiJob = Schema.Struct({
+	id: Schema.Number,
+	name: Schema.String,
+	status: Schema.String,
+	conclusion: Schema.NullOr(Schema.String),
+	htmlUrl: Schema.String,
+	startedAt: Schema.NullOr(Schema.String),
+	completedAt: Schema.NullOr(Schema.String),
+	steps: Schema.Array(
+		Schema.Struct({
+			number: Schema.Number,
+			name: Schema.String,
+			status: Schema.String,
+			conclusion: Schema.NullOr(Schema.String),
+			durationMs: Schema.NullOr(Schema.Number),
+			nodes: Schema.Array(CiLogNode),
+		}),
+	),
+	logs: Schema.Union([
+		Schema.Struct({ status: Schema.Literal("available"), raw: Schema.String }),
+		Schema.Struct({
+			status: Schema.Literal("unavailable"),
+			reason: Schema.String,
+		}),
+	]),
+});
+export type CiJob = Schema.Schema.Type<typeof CiJob>;
+const CiJobInput = Schema.Struct({
+	repoRoot: Schema.String,
+	owner: Schema.String,
+	repo: Schema.String,
+	number: Schema.Number,
+	jobId: Schema.Number,
+});
 
 /**
  * `search` asks GitHub live via `@repo/git`'s `searchPullRequests` — no
@@ -275,6 +341,22 @@ const MergeFailure = Schema.toStandardSchemaV1(
  * mergeability, so there's no analogous "not mergeable right now" outcome.
  */
 export const pullRequestsContract = {
+	ciJob: oc
+		.input(CiJobInput)
+		.output(CiJob)
+		.errors({
+			GH_NOT_AUTHENTICATED: {},
+			TOO_MANY_REQUESTS: {},
+			SERVICE_UNAVAILABLE: {},
+		}),
+	rerunCiJob: oc
+		.input(CiJobInput)
+		.output(Schema.Void)
+		.errors({
+			GH_NOT_AUTHENTICATED: {},
+			TOO_MANY_REQUESTS: {},
+			SERVICE_UNAVAILABLE: {},
+		}),
 	repositories: oc
 		.output(
 			Schema.Array(

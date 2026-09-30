@@ -113,3 +113,4 @@ export type {
 	RevalidateWorktreePathInput,
 } from "./worktree.ts";
 export { openPullRequestWorktree, revalidateWorktreePath } from "./worktree.ts";
+export { parseActionsLog } from "./github/actions-log.ts";

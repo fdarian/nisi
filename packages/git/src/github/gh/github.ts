@@ -1,6 +1,11 @@
 import { Effect, Layer, PubSub } from "effect";
 import { ChildProcessSpawner } from "effect/unstable/process";
 import { GitHub } from "../github.ts";
+import {
+	getActionsJob,
+	getActionsJobLogs,
+	rerunActionsJob,
+} from "./actions-jobs.ts";
 import { PullRequestAttention } from "./attention.ts";
 import { approveWorkflowRuns, fetchPullRequestChecks } from "./checks.ts";
 import {
@@ -84,6 +89,12 @@ export const GhGitHub = {
 				overviewInterval,
 			);
 			return {
+				getActionsJob: (input) => provide(getActionsJob(input)),
+				getActionsJobLogs: (input) => provide(getActionsJobLogs(input)),
+				rerunActionsJob: (input) =>
+					provide(rerunActionsJob(input)).pipe(
+						Effect.tap(() => kick(kicks, input)),
+					),
 				repository: (repoRoot) => provide(repository(repoRoot)),
 				pullRequest: (repoRoot, number) =>
 					provide(pullRequest(repoRoot, number)),
