@@ -1,6 +1,5 @@
 "use client";
 
-import { useOpenCiCheck } from "../ci-log/ci-log-provider";
 import { cn } from "cn";
 import { CirclePause } from "lucide-react";
 import type React from "react";
@@ -12,6 +11,7 @@ import {
 	DropdownMenuTrigger,
 } from "#/components/ui/menu";
 import { useDismissOnInactive } from "#/features/pull-request/use-dismiss-on-inactive";
+import { useOpenCiCheck } from "../ci-log/ci-log-provider";
 
 export type CiCheckStatus =
 	| "passing"

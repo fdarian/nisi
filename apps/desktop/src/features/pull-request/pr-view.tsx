@@ -1,7 +1,6 @@
 "use client";
 
 import { cn } from "cn";
-import { CiLogProvider } from "./ci-log/ci-log-provider";
 import { AlertTriangleIcon, XIcon } from "lucide-react";
 import { useMemo } from "react";
 import {
@@ -51,6 +50,7 @@ import { useWindowFocused } from "#/infra/use-window-focused";
 import { splitPath } from "#/lib/tree-paths";
 import type { KeyBindings } from "#/lib/use-key-bindings";
 import { useKeyBindings } from "#/lib/use-key-bindings";
+import { CiLogProvider } from "./ci-log/ci-log-provider";
 
 type PrViewProps = {
 	session: Session;

@@ -341,22 +341,16 @@ const CiJobInput = Schema.Struct({
  * mergeability, so there's no analogous "not mergeable right now" outcome.
  */
 export const pullRequestsContract = {
-	ciJob: oc
-		.input(CiJobInput)
-		.output(CiJob)
-		.errors({
-			GH_NOT_AUTHENTICATED: {},
-			TOO_MANY_REQUESTS: {},
-			SERVICE_UNAVAILABLE: {},
-		}),
-	rerunCiJob: oc
-		.input(CiJobInput)
-		.output(Schema.Void)
-		.errors({
-			GH_NOT_AUTHENTICATED: {},
-			TOO_MANY_REQUESTS: {},
-			SERVICE_UNAVAILABLE: {},
-		}),
+	ciJob: oc.input(CiJobInput).output(CiJob).errors({
+		GH_NOT_AUTHENTICATED: {},
+		TOO_MANY_REQUESTS: {},
+		SERVICE_UNAVAILABLE: {},
+	}),
+	rerunCiJob: oc.input(CiJobInput).output(Schema.Void).errors({
+		GH_NOT_AUTHENTICATED: {},
+		TOO_MANY_REQUESTS: {},
+		SERVICE_UNAVAILABLE: {},
+	}),
 	repositories: oc
 		.output(
 			Schema.Array(

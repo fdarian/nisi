@@ -60,6 +60,7 @@ export {
 	WorktreeReadFailed,
 	WorktreeRelocationFailed,
 } from "./errors.ts";
+export { parseActionsLog } from "./github/actions-log.ts";
 export { PullRequestAttention } from "./github/gh/attention.ts";
 export { approveWorkflowRuns } from "./github/gh/checks.ts";
 export { GhGitHub } from "./github/gh/github.ts";
@@ -113,4 +114,3 @@ export type {
 	RevalidateWorktreePathInput,
 } from "./worktree.ts";
 export { openPullRequestWorktree, revalidateWorktreePath } from "./worktree.ts";
-export { parseActionsLog } from "./github/actions-log.ts";
