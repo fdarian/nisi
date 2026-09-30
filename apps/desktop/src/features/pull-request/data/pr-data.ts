@@ -1142,6 +1142,33 @@ export function useMergePullRequest(
 	};
 }
 
+export function useAutoMerge(
+	orpc: SidecarQueryUtils,
+	onError: (
+		error: MergePullRequestError,
+		params: PullRequestMergeStatusParams,
+	) => void,
+) {
+	const queryClient = useQueryClient();
+	const enableMutation = useMutation({
+		...orpc.pullRequests.enableAutoMerge.mutationOptions(),
+		onSuccess: () =>
+			queryClient.invalidateQueries({
+				queryKey: orpc.sessions.list.queryKey(),
+			}),
+		onError,
+	});
+	const disableMutation = useMutation({
+		...orpc.pullRequests.disableAutoMerge.mutationOptions(),
+		onError,
+	});
+	return {
+		enable: enableMutation.mutate,
+		disable: disableMutation.mutate,
+		isPending: enableMutation.isPending || disableMutation.isPending,
+	};
+}
+
 export type MarkPullRequestReadyParams = {
 	repoRoot: string;
 	owner: string;

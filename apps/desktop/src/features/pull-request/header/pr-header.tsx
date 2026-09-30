@@ -24,6 +24,7 @@ import {
 	usePullRequestMergeStatus,
 } from "#/features/pull-request/data/pr-data";
 import type { OpenPullRequestParams } from "#/features/pull-request/data/pull-requests-data";
+import { PrAutoMergeIndicator } from "#/features/pull-request/merge/pr-auto-merge-indicator";
 import { PrMergeButton } from "#/features/pull-request/merge/pr-merge-button";
 import { useDismissOnInactive } from "#/features/pull-request/use-dismiss-on-inactive";
 import type { SidecarQueryUtils } from "#/infra/backend-context";
@@ -165,6 +166,15 @@ export function PrHeader({
 			{target.kind === "pr" && (
 				<div className="flex items-center gap-1">
 					<PrCiStatus
+						isSelectedTab={isSelectedTab}
+						number={target.number}
+						orpc={orpc}
+						owner={target.owner}
+						repo={target.repo}
+						repoRoot={repoRoot}
+						watched={watched}
+					/>
+					<PrAutoMergeIndicator
 						isSelectedTab={isSelectedTab}
 						number={target.number}
 						orpc={orpc}

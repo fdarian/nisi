@@ -85,6 +85,7 @@ const meta: Meta<typeof PrHeader> = {
 		findExistingSessionId: () => undefined,
 		onSessionOpened: () => {},
 		watched: true,
+		isSelectedTab: true,
 	},
 };
 export default meta;
@@ -138,6 +139,20 @@ export const AwaitingApproval: Story = {
 					detailsUrl: "https://github.com/acme/widgets/actions/runs/102",
 				},
 			],
+		}),
+	},
+};
+
+export const AutoMergeScheduled: Story = {
+	args: {
+		target: PR_TARGET,
+		orpc: createMockOrpc({
+			mergeStatus: {
+				...BASE_STATUS,
+				mergeStateStatus: "BLOCKED",
+				autoMerge: { method: "squash" },
+			},
+			checks: [{ name: "Tests", status: "running" }],
 		}),
 	},
 };

@@ -62,6 +62,7 @@ const meta: Meta<typeof PrMergeButton> = {
 		repo: "widgets",
 		number: 42,
 		watched: true,
+		isSelectedTab: true,
 	},
 };
 export default meta;
@@ -79,7 +80,12 @@ export const MultipleMethods: Story = {
 export const SingleMethod: Story = {
 	args: {
 		orpc: createMockOrpc({
-			mergeStatus: { ...BASE_STATUS, allowedMethods: ["squash"] },
+			mergeStatus: {
+				...BASE_STATUS,
+				allowedMethods: ["squash"],
+				defaultMethod: "squash",
+				autoMergeAllowed: false,
+			},
 		}),
 	},
 };
@@ -120,5 +126,34 @@ export const FailedQuery: Story = {
 export const Stacked: Story = {
 	args: {
 		orpc: createMockOrpc({ mergeStatus: BASE_STATUS, stack: STACK }),
+	},
+};
+
+export const AutoMergeWhileChecksPending: Story = {
+	args: {
+		orpc: createMockOrpc({
+			mergeStatus: { ...BASE_STATUS, mergeStateStatus: "BLOCKED" },
+		}),
+	},
+};
+
+export const SingleMethodAutoMerge: Story = {
+	args: {
+		orpc: createMockOrpc({
+			mergeStatus: {
+				...BASE_STATUS,
+				allowedMethods: ["squash"],
+				defaultMethod: "squash",
+				mergeStateStatus: "BLOCKED",
+			},
+		}),
+	},
+};
+
+export const AutoMergeNotAllowed: Story = {
+	args: {
+		orpc: createMockOrpc({
+			mergeStatus: { ...BASE_STATUS, autoMergeAllowed: false },
+		}),
 	},
 };

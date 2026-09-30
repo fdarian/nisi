@@ -1,5 +1,6 @@
 "use client";
 
+import { isDefinedError } from "@orpc/client";
 import { Button } from "#/components/ui/button";
 import {
 	Dialog,
@@ -9,11 +10,24 @@ import {
 	DialogPopup,
 	DialogTitle,
 } from "#/components/ui/dialog";
+import type { MergePullRequestError } from "#/features/pull-request/data/pr-data";
 
 export type MergeFailure = {
 	title: string;
 	reason: string;
 	detail: string;
+};
+
+export const mergeFailureMessage = (
+	error: MergePullRequestError,
+): Pick<MergeFailure, "reason" | "detail"> => {
+	if (isDefinedError(error) && error.code !== "UNAUTHORIZED") {
+		return { reason: error.data.reason, detail: error.data.detail };
+	}
+	return {
+		reason: "Merge failed",
+		detail: error instanceof Error ? error.message : String(error),
+	};
 };
 
 export function MergeErrorDialog(props: {
