@@ -2,7 +2,11 @@ import { Effect, Layer, PubSub } from "effect";
 import { ChildProcessSpawner } from "effect/unstable/process";
 import { GitHub } from "../github.ts";
 import { PullRequestAttention } from "./attention.ts";
-import { approveWorkflowRuns, fetchPullRequestChecks } from "./checks.ts";
+import {
+	approveWorkflowRuns,
+	fetchPullRequestChecks,
+	fetchPullRequestChecksSnapshot,
+} from "./checks.ts";
 import {
 	fetchPullRequestMergeability,
 	fetchRepoMergeMethods,
@@ -91,6 +95,8 @@ export const GhGitHub = {
 				search: (cwd, query, repos) =>
 					provide(searchPullRequests(cwd, query, repos)),
 				checks: (input) => provide(fetchPullRequestChecks(input)),
+				checksSnapshot: (input) =>
+					provide(fetchPullRequestChecksSnapshot(input)),
 				approveWorkflowRuns: (input) =>
 					provide(approveWorkflowRuns(input)).pipe(
 						Effect.onExit(() => kick(kicks, input)),
@@ -101,13 +107,20 @@ export const GhGitHub = {
 					provide(fetchPullRequestMergeability(repoRoot, number)),
 				mergeMethods: (repoRoot, owner, repo) =>
 					provide(fetchRepoMergeMethods(repoRoot, owner, repo)),
-				merge: (repoRoot, owner, repo, number, method) =>
-					mergePullRequest(repoRoot, number, method).pipe(
+				merge: (repoRoot, owner, repo, number, method, matchHeadCommit) =>
+					mergePullRequest(repoRoot, number, method, matchHeadCommit).pipe(
 						provide,
 						Effect.tap(() => kick(kicks, { owner, repo, number })),
 					),
-				mergeStack: (repoRoot, owner, repo, number, method) =>
-					mergeStackPullRequest(repoRoot, owner, repo, number, method).pipe(
+				mergeStack: (repoRoot, owner, repo, number, method, matchHeadCommit) =>
+					mergeStackPullRequest(
+						repoRoot,
+						owner,
+						repo,
+						number,
+						method,
+						matchHeadCommit,
+					).pipe(
 						provide,
 						Effect.tap(() => kick(kicks, { owner, repo, number })),
 					),

@@ -238,11 +238,18 @@ export const mergePullRequest = (
 	repoRoot: string,
 	number: number,
 	method: MergeMethod,
+	matchHeadCommit?: string,
 ): Effect.Effect<
 	void,
 	PullRequestMergeError | GitCommandError,
 	ChildProcessSpawner.ChildProcessSpawner
-> => runMergeCommand(repoRoot, number, [MERGE_METHOD_FLAG[method]]);
+> =>
+	runMergeCommand(repoRoot, number, [
+		MERGE_METHOD_FLAG[method],
+		...(matchHeadCommit === undefined
+			? []
+			: ["--match-head-commit", matchHeadCommit]),
+	]);
 
 const runMergeCommand = (
 	repoRoot: string,
@@ -393,6 +400,7 @@ export const mergeStackPullRequest = (
 	repo: string,
 	number: number,
 	method: MergeMethod,
+	matchHeadCommit?: string,
 ): Effect.Effect<
 	void,
 	PullRequestStackMergeError | GitCommandError,
@@ -407,6 +415,9 @@ export const mergeStackPullRequest = (
 			...stackMergeHeaders,
 			"-f",
 			`merge_method=${method}`,
+			...(matchHeadCommit === undefined
+				? []
+				: ["-f", `sha=${matchHeadCommit}`]),
 		]);
 
 		if (result.exitCode !== 0) {
