@@ -88,7 +88,8 @@ export const GhGitHub = {
 				pullRequest: (repoRoot, number) =>
 					provide(pullRequest(repoRoot, number)),
 				headRef: (repoRoot, number) => provide(headRef(repoRoot, number)),
-				search: (cwd, query) => provide(searchPullRequests(cwd, query)),
+				search: (cwd, query, repos) =>
+					provide(searchPullRequests(cwd, query, repos)),
 				checks: (input) => provide(fetchPullRequestChecks(input)),
 				approveWorkflowRuns: (input) =>
 					provide(approveWorkflowRuns(input)).pipe(

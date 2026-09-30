@@ -3,8 +3,7 @@
  * Same explicit-`orpc`-param idiom as `#/features/pull-request/data/pr-data.ts`.
  *
  * `search` hits GitHub live via GraphQL on every call — no local
- * index or cache. `useSearchPullRequests` below is the palette's only data
- * source; the debounce that keeps that live outside GitHub's rate limit
+ * index or cache. The debounce that keeps searches outside GitHub's rate limit
  * lives in the palette itself (`#/features/command-palette/open-pull-request-palette.tsx`),
  * not here, since it has to coordinate with the "reset to a blank query on
  * open" effect that already lives there.
@@ -40,7 +39,7 @@ export type PullRequestSearchResult = {
 };
 
 /**
- * Live `gh`-backed search behind TanStack Query, keyed on `query` — a repeat
+ * Live `gh`-backed search behind TanStack Query, keyed on `query` and `repos` — a repeat
  * of a query already seen this session (retyping after a backspace, opening
  * the palette again with the same search) resolves from cache for free
  * rather than re-asking GitHub. `placeholderData: keepPreviousData` is what
@@ -54,13 +53,17 @@ export function useSearchPullRequests(
 	orpc: SidecarQueryUtils,
 	query: string,
 	enabled: boolean,
+	repos: readonly string[],
 ): {
 	results: readonly PullRequestSearchResult[];
 	isSearching: boolean;
 	error: unknown;
 } {
 	const search = useQuery({
-		...orpc.pullRequests.search.queryOptions({ input: { query }, enabled }),
+		...orpc.pullRequests.search.queryOptions({
+			input: { query, repos: [...repos] },
+			enabled,
+		}),
 		placeholderData: keepPreviousData,
 	});
 	return {
@@ -68,6 +71,15 @@ export function useSearchPullRequests(
 		isSearching: search.isFetching,
 		error: search.error,
 	};
+}
+
+export type PullRequestRepository = { owner: string; repo: string };
+
+export function usePullRequestRepositories(
+	orpc: SidecarQueryUtils,
+	enabled: boolean,
+) {
+	return useQuery(orpc.pullRequests.repositories.queryOptions({ enabled }));
 }
 
 /**

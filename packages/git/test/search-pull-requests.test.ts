@@ -19,9 +19,16 @@ type RunnerResult =
  * `fixtures/gh-search-stub.sh` — see `search-pull-requests-runner.ts` for why
  * this can't just call the function in-process.
  */
-const runAgainstGhStub = async (query: string): Promise<RunnerResult> => {
-	const proc = Bun.spawn(["bun", "run", RUNNER, testDir, query], {
-		env: { ...process.env, NISI_GH_BIN: GH_STUB },
+const runAgainstGhStub = async (
+	query: string,
+	repos: readonly string[] = [],
+): Promise<RunnerResult> => {
+	const proc = Bun.spawn(["bun", "run", RUNNER, testDir, query, ...repos], {
+		env: {
+			...process.env,
+			NISI_GH_BIN: GH_STUB,
+			NISI_EXPECT_SEARCH_REPOS: repos.join(" "),
+		},
 		stdout: "pipe",
 		stderr: "pipe",
 	});
@@ -37,6 +44,23 @@ const runAgainstGhStub = async (query: string): Promise<RunnerResult> => {
 };
 
 describe("searchPullRequests", () => {
+	test("a single repository filter scopes an empty query", async () => {
+		const result = await runAgainstGhStub("", ["acme/widgets"]);
+		expect(result.ok).toBe(true);
+		if (!result.ok) return;
+		expect(result.results.map((pr) => pr.number)).toEqual([50]);
+	});
+	for (const query of ["", "engine", "is:merged", "repo:acme/widgets engine"]) {
+		test(`repository filters search without personal scope: ${JSON.stringify(query)}`, async () => {
+			const result = await runAgainstGhStub(query, [
+				"acme/widgets",
+				"acme/tools",
+			]);
+			expect(result.ok).toBe(true);
+			if (!result.ok) return;
+			expect(result.results.map((pr) => pr.number)).toEqual([50]);
+		});
+	}
 	test("empty query: author-only, not unioned with review-requested", async () => {
 		const result = await runAgainstGhStub("");
 		expect(result.ok).toBe(true);

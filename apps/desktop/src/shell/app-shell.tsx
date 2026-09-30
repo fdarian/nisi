@@ -36,7 +36,10 @@ import { useOpenPrPaletteShortcut } from "#/features/command-palette/use-open-pr
 import { DevToolButton } from "#/features/devtools/dev-tool";
 import { useDevToolVisible } from "#/features/devtools/dev-tool-context";
 import { useSessions } from "#/features/pull-request/data/pr-data";
-import type { OpenPullRequestParams } from "#/features/pull-request/data/pull-requests-data";
+import type {
+	OpenPullRequestParams,
+	PullRequestRepository,
+} from "#/features/pull-request/data/pull-requests-data";
 import { findOpenPullRequestSessionId } from "#/features/pull-request/data/pull-requests-data";
 import {
 	SessionUiProvider,
@@ -177,6 +180,9 @@ function AppShellReady({
 	);
 	const closeSession = listed.closeSession;
 	const [paletteOpen, setPaletteOpen] = useState(false);
+	const [paletteRepositories, setPaletteRepositories] = useState<
+		PullRequestRepository[]
+	>([]);
 	const openPalette = useCallback(() => setPaletteOpen(true), []);
 	useOpenPrPaletteShortcut(openPalette);
 
@@ -372,6 +378,8 @@ function AppShellReady({
 					</EmptyContent>
 				</Empty>
 				<OpenPullRequestPalette
+					repositories={paletteRepositories}
+					onRepositoriesChange={setPaletteRepositories}
 					findExistingSessionId={findExistingSessionId}
 					onOpenChange={setPaletteOpen}
 					onSessionOpened={setRequestedActiveSessionId}
@@ -493,6 +501,8 @@ function AppShellReady({
 			</div>
 
 			<OpenPullRequestPalette
+				repositories={paletteRepositories}
+				onRepositoriesChange={setPaletteRepositories}
 				findExistingSessionId={findExistingSessionId}
 				onOpenChange={setPaletteOpen}
 				onSessionOpened={setRequestedActiveSessionId}

@@ -26,6 +26,10 @@ import type {
 	PullRequestStack,
 } from "#/features/pull-request/data/pr-data";
 import type {
+	PullRequestRepository,
+	PullRequestSearchResult,
+} from "#/features/pull-request/data/pull-requests-data";
+import type {
 	GenerateEvent,
 	HarnessId,
 	HarnessInfo,
@@ -102,6 +106,8 @@ const DEFAULT_MODELS: Record<HarnessId, HarnessModels> = {
 };
 
 export type MockOrpcData = {
+	pullRequestSearchResults?: readonly PullRequestSearchResult[];
+	pullRequestRepositories?: readonly PullRequestRepository[];
 	/** `walkthrough.get`'s result — omit for "nothing generated yet", pass a fixture for the loaded reader. */
 	storedWalkthrough?: StoredWalkthrough | null;
 	/** Overrides `DEFAULT_HARNESSES` wholesale — pass a full four-entry list, not a patch. */
@@ -284,12 +290,15 @@ export function createMockSidecarClient(
 			download: async () => undefined,
 			restart: async () => undefined,
 		},
-		// `search`/`open`/`recordRepoPath` are never referenced by any story
-		// yet — the open-PR palette has no storybook coverage — so those three
-		// stubs exist only to keep `SidecarClient` satisfied, same reasoning as
-		// `events.subscribe` above.
 		pullRequests: {
-			search: async () => [],
+			repositories: async () => data.pullRequestRepositories ?? [],
+			search: async (input) =>
+				(data.pullRequestSearchResults ?? []).filter(
+					(pr) =>
+						(input.repos.length === 0 ||
+							input.repos.includes(`${pr.owner}/${pr.repo}`)) &&
+						pr.title.toLowerCase().includes(input.query.toLowerCase()),
+				),
 			open: neverSettles,
 			recordRepoPath: neverSettles,
 			mergeStatus:
