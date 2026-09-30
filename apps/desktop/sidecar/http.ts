@@ -12,6 +12,7 @@ import {
 	fetchBranchCommits,
 	type GitCommandError,
 	GitHub,
+	parseActionsLog,
 	type PullRequestChecksError,
 	type PullRequestMergeError,
 	type PullRequestStackMergeError,
@@ -2106,5 +2107,3 @@ export function attachRouter(
 		},
 	});
 }
-
-import { parseActionsLog } from "@repo/git";

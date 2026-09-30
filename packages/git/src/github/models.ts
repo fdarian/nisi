@@ -3,8 +3,36 @@ import type {
 	GhNotAuthenticated,
 	GhOutputDecodeError,
 	GhRateLimited,
+	GitCommandError,
 	PullRequestNotFound,
 } from "../errors.ts";
+
+export type ActionsJobInput = FetchPullRequestChecksInput & { jobId: number };
+export type ActionsJob = {
+	readonly id: number;
+	readonly name: string;
+	readonly status: string;
+	readonly conclusion: string | null;
+	readonly html_url: string;
+	readonly started_at: string | null;
+	readonly completed_at: string | null;
+	readonly steps: readonly {
+		readonly number: number;
+		readonly name: string;
+		readonly status: string;
+		readonly conclusion: string | null;
+		readonly started_at: string | null;
+		readonly completed_at: string | null;
+	}[];
+};
+export type ActionsJobLogs =
+	| { status: "available"; raw: string }
+	| { status: "unavailable"; reason: string };
+export type ActionsJobError =
+	| GitCommandError
+	| GhNotAuthenticated
+	| GhRateLimited
+	| GhOutputDecodeError;
 
 /**
  * The six-state vocabulary `apps/desktop/src/features/pull-request/header/ci-status.tsx`'s

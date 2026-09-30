@@ -63,9 +63,14 @@ describe("Actions logs", () => {
 		expect(outer).toMatchObject({ type: "group", title: "outer" });
 		if (outer?.type !== "group") throw new Error("Missing outer group");
 		expect(outer.children[0]).toMatchObject({ type: "group", title: "inner" });
-		expect(
-			flattenActionsLog(parsed[0]?.nodes ?? []).map((line) => line.kind),
-		).toEqual(["warning", "notice", "debug", "command"]);
+		const first = parsed[0];
+		if (first === undefined) throw new Error("Missing parsed step");
+		expect(flattenActionsLog(first.nodes).map((line) => line.kind)).toEqual([
+			"warning",
+			"notice",
+			"debug",
+			"command",
+		]);
 	});
 	test("empty logs, no steps and malformed timestamps", () => {
 		expect(parseActionsLog("", windows).map((step) => step.nodes)).toEqual([
@@ -100,6 +105,9 @@ describe("Actions logs", () => {
 		expect(copied).not.toContain("\u001b");
 		expect(copied).not.toContain("ok");
 		expect(
+			copied.split("\n").filter((line) => line.endsWith("ERROR failed")),
+		).toHaveLength(2);
+		expect(
 			copied.split("\n").filter((line) => line.includes("line 24")),
 		).toHaveLength(0);
 	});
@@ -127,5 +135,34 @@ describe("Actions logs", () => {
 			]),
 		).toContain("  … 4 log entries omitted …");
 		expect(copyActionsErrors([])).toBe("");
+	});
+	test("copy strips terminal hyperlinks and handles short failed steps", () => {
+		const link = "\u001b]8;;https://example.com\u001b\\error ×\u001b]8;;\u0007";
+		const copied = copyActionsErrors([
+			{
+				name: "test",
+				conclusion: "failure",
+				nodes: [
+					{
+						type: "line",
+						timestamp: Date.parse(iso(0)),
+						kind: "plain",
+						text: link,
+					},
+				],
+			},
+		]);
+		expect(copied).toBe(`test\n${iso(0)} error ×`);
+	});
+	test("steps without timestamp windows and unfinished steps", () => {
+		const parsed = parseActionsLog(`${iso(0)} preamble\n${iso(8)} output`, [
+			{ number: 1, started_at: null, completed_at: null },
+			{ number: 2, started_at: iso(6), completed_at: null },
+		]);
+		expect(
+			parsed.map((step) =>
+				flattenActionsLog(step.nodes).map((line) => line.text),
+			),
+		).toEqual([["preamble"], ["output"]]);
 	});
 });

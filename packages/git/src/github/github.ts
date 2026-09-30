@@ -1,11 +1,5 @@
 import { Context, type Effect, type Stream } from "effect";
 import type {
-	ActionsJob,
-	ActionsJobError,
-	ActionsJobInput,
-	ActionsJobLogs,
-} from "./gh/actions-jobs.ts";
-import type {
 	GhNotAuthenticated,
 	GhOutputDecodeError,
 	GitCommandError,
@@ -26,6 +20,10 @@ import type {
 	PullRequestSearchResult,
 } from "../pull-request.ts";
 import type {
+	ActionsJob,
+	ActionsJobError,
+	ActionsJobInput,
+	ActionsJobLogs,
 	FetchPullRequestChecksInput,
 	FetchPullRequestOverviewInput,
 	FetchPullRequestStackInput,

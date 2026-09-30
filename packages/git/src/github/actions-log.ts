@@ -86,9 +86,14 @@ export function flattenActionsLog(
 	);
 }
 
-export function stripLogAnsi(text: string): string {
+function stripLogAnsi(text: string): string {
+	const escapeCharacter = String.fromCharCode(27);
+	const bell = String.fromCharCode(7);
 	return text.replace(
-		new RegExp(`${String.fromCharCode(27)}\\[[0-?]*[ -/]*[@-~]`, "g"),
+		new RegExp(
+			`${escapeCharacter}\\][^${bell}${escapeCharacter}]*(?:${bell}|${escapeCharacter}\\\\)|${escapeCharacter}\\[[0-?]*[ -/]*[@-~]`,
+			"g",
+		),
 		"",
 	);
 }
@@ -111,7 +116,9 @@ export function copyActionsErrors(
 		.map((step) => {
 			const lines = flattenActionsLog(step.nodes);
 			const selected = new Set<number>();
-			for (const [index, line] of lines.entries()) {
+			for (const entry of lines.entries()) {
+				const index = entry[0];
+				const line = entry[1];
 				if (
 					line.kind === "error" ||
 					/\berror\b|✖|×|failed/i.test(stripLogAnsi(line.text))
@@ -130,9 +137,11 @@ export function copyActionsErrors(
 				index++
 			)
 				selected.add(index);
-			const output = [step.name];
+			const output = [stripLogAnsi(step.name)];
 			const gap = { count: 0 };
-			for (const [index, line] of lines.entries()) {
+			for (const entry of lines.entries()) {
+				const index = entry[0];
+				const line = entry[1];
 				if (!selected.has(index)) {
 					gap.count++;
 					continue;

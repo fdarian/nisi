@@ -6,15 +6,8 @@ import {
 	GitCommandError,
 } from "../../errors.ts";
 import { ghResult } from "../../exec.ts";
+import type { ActionsJobInput, ActionsJobLogs } from "../models.ts";
 import { isAuthFailure, isRateLimited } from "./pull-request.ts";
-
-export type ActionsJobInput = {
-	repoRoot: string;
-	owner: string;
-	repo: string;
-	number: number;
-	jobId: number;
-};
 
 const Step = Schema.Struct({
 	number: Schema.Number,
@@ -34,16 +27,6 @@ const Job = Schema.Struct({
 	completed_at: Schema.NullOr(Schema.String),
 	steps: Schema.Array(Step),
 });
-export type ActionsJob = Schema.Schema.Type<typeof Job>;
-export type ActionsJobLogs =
-	| { status: "available"; raw: string }
-	| { status: "unavailable"; reason: string };
-export type ActionsJobError =
-	| GitCommandError
-	| GhNotAuthenticated
-	| GhRateLimited
-	| GhOutputDecodeError;
-
 const failure = (
 	input: ActionsJobInput,
 	args: readonly string[],
@@ -93,7 +76,7 @@ export const getActionsJobLogs = (input: ActionsJobInput) =>
 				status: "available",
 				raw: result.stdout,
 			} satisfies ActionsJobLogs;
-		if (/\b(404|410)\b/.test(result.stderr))
+		if (/\bHTTP (404|410)\b/.test(result.stderr))
 			return {
 				status: "unavailable",
 				reason: "Job logs are not available yet or have expired.",
