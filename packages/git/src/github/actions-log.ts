@@ -19,6 +19,14 @@ type StepWindow = {
 	completed_at: string | null;
 };
 
+/**
+ * The jobs API reports step times in whole seconds while log lines carry
+ * fractions, so a step's trailing output (e.g. the `Process completed with
+ * exit code` line) is stamped after its reported end. When a step ends in the
+ * same second the next one starts, the earlier step claims that second.
+ */
+const endOfSecond = (ms: number) => Math.floor(ms / 1000) * 1000 + 1000;
+
 /** Inter-step runner output belongs to the preceding step; preamble belongs to the first. */
 export function parseActionsLog(raw: string, steps: readonly StepWindow[]) {
 	const result = steps.map((step) => ({
@@ -32,15 +40,12 @@ export function parseActionsLog(raw: string, steps: readonly StepWindow[]) {
 			continue;
 		const timestamp = Date.parse(match[1]);
 		if (!Number.isFinite(timestamp)) continue;
-		const matching = steps.reduce(
-			(found, step, index) =>
+		const matching = steps.findIndex(
+			(step) =>
 				step.started_at !== null &&
 				timestamp >= Date.parse(step.started_at) &&
 				(step.completed_at === null ||
-					timestamp <= Date.parse(step.completed_at))
-					? index
-					: found,
-			-1,
+					timestamp < endOfSecond(Date.parse(step.completed_at))),
 		);
 		const preceding = steps.reduce(
 			(found, step, index) =>

@@ -44,6 +44,26 @@ describe("Actions logs", () => {
 			text: "\u001b[31mline 6\u001b[0m",
 		});
 	});
+	test("trailing lines stamped after a step's whole-second end stay in that step", () => {
+		const adjacent = [
+			{ number: 1, started_at: iso(1), completed_at: iso(4) },
+			{ number: 2, started_at: iso(4), completed_at: iso(10) },
+		];
+		const raw = [
+			`${iso(2).replace(".000Z", ".100Z")} building`,
+			`${iso(4).replace(".000Z", ".400Z")} ##[error]Process completed with exit code 1.`,
+			`${iso(5).replace(".000Z", ".200Z")} next step`,
+		].join("\n");
+		const parsed = parseActionsLog(raw, adjacent);
+		expect(
+			parsed.map((step) =>
+				flattenActionsLog(step.nodes).map((line) => line.text),
+			),
+		).toEqual([
+			["building", "Process completed with exit code 1."],
+			["next step"],
+		]);
+	});
 	test("nested and unbalanced groups, all annotation kinds", () => {
 		const texts = [
 			"##[endgroup]",
