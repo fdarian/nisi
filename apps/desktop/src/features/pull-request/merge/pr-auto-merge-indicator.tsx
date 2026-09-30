@@ -78,7 +78,7 @@ export function PrAutoMergeIndicator(props: {
 					aria-label="Auto-merge scheduled"
 					className="flex size-7 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-accent data-popup-open:bg-accent focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-1"
 				>
-					<ClockFading className="size-5.5" />
+					<ClockFading className="size-4" />
 				</PopoverTrigger>
 				<PopoverPopup
 					align="end"
