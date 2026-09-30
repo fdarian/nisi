@@ -69,6 +69,7 @@
 		"@tauri-apps/plugin-opener": "^3.0.0-alpha.1",
 		"@tauri-apps/plugin-process": "^3.0.0-alpha.1",
 		"ai": "7.0.83",
+		"anser": "^2.3.5",
 		"class-variance-authority": "^0.7.1",
 		"cn": "^0.2.3",
 		"deskkit": "github:fdarian/deskkit",

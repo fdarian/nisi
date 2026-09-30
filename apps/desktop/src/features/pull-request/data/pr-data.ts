@@ -1199,6 +1199,7 @@ export type PullRequestCheck = {
 	detailsUrl?: string;
 	workflowName?: string;
 	workflowRunId?: number;
+	actionsJobId?: number;
 };
 
 export type ApproveWorkflowRunsParams = {
@@ -1267,6 +1268,50 @@ export function usePullRequestChecks(
 	);
 }
 
+export type CiJobParams = PullRequestChecksParams & { jobId: number };
+
+export function useCiJob(orpc: SidecarQueryUtils, params: CiJobParams) {
+	return useQuery(
+		orpc.pullRequests.ciJob.queryOptions({
+			input: params,
+			refetchInterval: (query) =>
+				query.state.data?.status === "completed" ? false : 5000,
+		}),
+	);
+}
+
+export function useRerunCiJob(orpc: SidecarQueryUtils) {
+	const queryClient = useQueryClient();
+	return useMutation({
+		...orpc.pullRequests.rerunCiJob.mutationOptions(),
+		onSuccess: async (_data, params) => {
+			toastManager.add({ title: "Job re-run requested", type: "success" });
+			await Promise.all([
+				queryClient.invalidateQueries({
+					queryKey: orpc.pullRequests.ciJob.key({ input: params }),
+				}),
+				queryClient.invalidateQueries({
+					queryKey: orpc.pullRequests.checks.key({
+						input: {
+							repoRoot: params.repoRoot,
+							owner: params.owner,
+							repo: params.repo,
+							number: params.number,
+						},
+					}),
+				}),
+				queryClient.invalidateQueries({ queryKey: orpc.overview.get.key() }),
+			]);
+		},
+		onError: (error) =>
+			toastManager.add({
+				title: "Couldn't re-run job",
+				description: error.message,
+				type: "error",
+			}),
+	});
+}
+
 /**
  * Mirrors `OverviewCheck` (`packages/sidecar-api/src/overview.ts`) — one CI
  * check on a single commit. Deliberately the same field shape as
@@ -1276,6 +1321,7 @@ export function usePullRequestChecks(
  * `pr-ci-status.tsx`'s `toCiChecks`).
  */
 export type OverviewCheck = {
+	actionsJobId?: number;
 	name: string;
 	status: PullRequestCheckStatus;
 	detail?: string;
