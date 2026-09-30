@@ -275,8 +275,20 @@ const MergeFailure = Schema.toStandardSchemaV1(
  * mergeability, so there's no analogous "not mergeable right now" outcome.
  */
 export const pullRequestsContract = {
+	repositories: oc
+		.output(
+			Schema.Array(
+				Schema.Struct({ owner: Schema.String, repo: Schema.String }),
+			),
+		)
+		.errors({ SERVICE_UNAVAILABLE: {} }),
 	search: oc
-		.input(Schema.Struct({ query: Schema.String }))
+		.input(
+			Schema.Struct({
+				query: Schema.String,
+				repos: Schema.Array(Schema.String),
+			}),
+		)
 		.output(Schema.Array(PullRequestSearchResult))
 		.errors({
 			GH_NOT_AUTHENTICATED: {},

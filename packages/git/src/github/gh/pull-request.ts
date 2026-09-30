@@ -401,6 +401,9 @@ const mergeResults = (
  *   `org:`, `is:`, …): passed straight through, unscoped — see
  *   `hasSearchQualifier`. This is the escape hatch for finding a PR the user
  *   isn't author or reviewer on (`repo:foo/bar auth`).
+ * - **Repository filters**: append one `repo:owner/name` per repository
+ *   (OR semantics), and search unscoped from author/review-requested even
+ *   with an empty query. Explicit state qualifiers still take precedence.
  *
  * `is:open` is added to every branch unless the query already names its
  * own state (`hasStateQualifier`) — forcing it on top of an explicit
@@ -419,6 +422,7 @@ const mergeResults = (
 export const searchPullRequests = (
 	cwd: string,
 	query: string,
+	repos: ReadonlyArray<string> = [],
 ): Effect.Effect<
 	ReadonlyArray<PullRequestSearchResult>,
 	PullRequestSearchError,
@@ -426,6 +430,12 @@ export const searchPullRequests = (
 > => {
 	const trimmed = query.trim();
 	const stateQualifiers = hasStateQualifier(trimmed) ? [] : ["is:open"];
+	if (repos.length > 0) {
+		return searchOnce(cwd, tokenize(trimmed), [
+			...repos.map((repo) => `repo:${repo}`),
+			...stateQualifiers,
+		]).pipe(Effect.map(mergeResults));
+	}
 
 	if (trimmed === "") {
 		return searchOnce(cwd, [], ["author:@me", ...stateQualifiers]).pipe(

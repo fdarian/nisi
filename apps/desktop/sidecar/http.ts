@@ -1090,6 +1090,24 @@ export function attachRouter(
 			}),
 		},
 		pullRequests: {
+			repositories: authed.pullRequests.repositories.effect(
+				function* (options) {
+					const settings = yield* SettingsStore;
+					const mappings = yield* settings.listRepoPaths().pipe(
+						Effect.catchTag("SettingsStoreError", (cause) =>
+							Effect.fail(
+								options.errors.SERVICE_UNAVAILABLE({
+									message: cause.message,
+								}),
+							),
+						),
+					);
+					return mappings.map((mapping) => ({
+						owner: mapping.owner,
+						repo: mapping.repo,
+					}));
+				},
+			),
 			// Live `gh search prs`, no local index — see `@repo/git`'s
 			// `searchPullRequests` for the empty-query/typed-query/qualifier
 			// branching. `process.cwd()` is fine as the invocation directory: a
@@ -1098,36 +1116,38 @@ export function attachRouter(
 			// (verified live — same results run from this repo or from `/tmp`).
 			search: authed.pullRequests.search.effect(function* ({ input, errors }) {
 				const github = yield* GitHub;
-				return yield* github.search(process.cwd(), input.query).pipe(
-					Effect.catchTag("GhNotAuthenticated", (cause) =>
-						Effect.fail(
-							errors.GH_NOT_AUTHENTICATED({
-								message: `gh is not authenticated: ${cause.reason}`,
-							}),
+				return yield* github
+					.search(process.cwd(), input.query, input.repos)
+					.pipe(
+						Effect.catchTag("GhNotAuthenticated", (cause) =>
+							Effect.fail(
+								errors.GH_NOT_AUTHENTICATED({
+									message: `gh is not authenticated: ${cause.reason}`,
+								}),
+							),
 						),
-					),
-					Effect.catchTag("GhRateLimited", (cause) =>
-						Effect.fail(
-							errors.TOO_MANY_REQUESTS({
-								message: `GitHub's search API is rate-limited right now: ${cause.reason}`,
-							}),
+						Effect.catchTag("GhRateLimited", (cause) =>
+							Effect.fail(
+								errors.TOO_MANY_REQUESTS({
+									message: `GitHub's search API is rate-limited right now: ${cause.reason}`,
+								}),
+							),
 						),
-					),
-					Effect.catchTag("GitHubSearchUnreachable", (cause) =>
-						Effect.fail(
-							errors.SERVICE_UNAVAILABLE({
-								message: `could not reach GitHub: ${cause.reason}`,
-							}),
+						Effect.catchTag("GitHubSearchUnreachable", (cause) =>
+							Effect.fail(
+								errors.SERVICE_UNAVAILABLE({
+									message: `could not reach GitHub: ${cause.reason}`,
+								}),
+							),
 						),
-					),
-					Effect.catchTag("GhOutputDecodeError", (cause) =>
-						Effect.fail(
-							errors.SERVICE_UNAVAILABLE({
-								message: `gh returned output nisi couldn't parse (${cause.command})`,
-							}),
+						Effect.catchTag("GhOutputDecodeError", (cause) =>
+							Effect.fail(
+								errors.SERVICE_UNAVAILABLE({
+									message: `gh returned output nisi couldn't parse (${cause.command})`,
+								}),
+							),
 						),
-					),
-				);
+					);
 			}),
 			// Creates (or reuses) a worktree for the PR, then feeds it straight
 			// into `Store.openSession` — the *same* domain logic `sessions.open`

@@ -286,6 +286,7 @@ export function createMockSidecarClient(
 		// stubs exist only to keep `SidecarClient` satisfied, same reasoning as
 		// `events.subscribe` above.
 		pullRequests: {
+			repositories: async () => [],
 			search: async () => [],
 			open: neverSettles,
 			recordRepoPath: neverSettles,

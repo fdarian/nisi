@@ -54,13 +54,17 @@ export function useSearchPullRequests(
 	orpc: SidecarQueryUtils,
 	query: string,
 	enabled: boolean,
+	repos: readonly string[] = [],
 ): {
 	results: readonly PullRequestSearchResult[];
 	isSearching: boolean;
 	error: unknown;
 } {
 	const search = useQuery({
-		...orpc.pullRequests.search.queryOptions({ input: { query }, enabled }),
+		...orpc.pullRequests.search.queryOptions({
+			input: { query, repos: [...repos] },
+			enabled,
+		}),
 		placeholderData: keepPreviousData,
 	});
 	return {
@@ -68,6 +72,15 @@ export function useSearchPullRequests(
 		isSearching: search.isFetching,
 		error: search.error,
 	};
+}
+
+export type PullRequestRepository = { owner: string; repo: string };
+
+export function usePullRequestRepositories(
+	orpc: SidecarQueryUtils,
+	enabled: boolean,
+) {
+	return useQuery(orpc.pullRequests.repositories.queryOptions({ enabled }));
 }
 
 /**

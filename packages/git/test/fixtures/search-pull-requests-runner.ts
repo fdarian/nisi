@@ -20,7 +20,7 @@ const exit = await Effect.runPromise(
 	Effect.exit(
 		Effect.gen(function* () {
 			const github = yield* GitHub;
-			return yield* github.search(cwd, query);
+			return yield* github.search(cwd, query, process.argv.slice(4));
 		}),
 	).pipe(Effect.provide(GitHubTestLayer)),
 );
