@@ -63,6 +63,15 @@ const meta: Meta<typeof PrMergeButton> = {
 		isSelectedTab: true,
 	},
 };
+
+export const AutoMergeWithUnpushedCommits: Story = {
+	args: {
+		orpc: createMockOrpc({
+			mergeStatus: { ...BASE_STATUS, mergeStateStatus: "BLOCKED" },
+			unpushedCommits: { count: 2, remoteRef: "origin/feature" },
+		}),
+	},
+};
 export default meta;
 
 type Story = StoryObj<typeof meta>;

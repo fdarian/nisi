@@ -252,10 +252,10 @@ export function PrMergeButton({
 	// the user resolves the dialog it opens — `null` means either nothing's
 	// been checked yet or the last check came back clean and merged straight
 	// through.
-	const [pendingUnpushedCheck, setPendingUnpushedCheck] = useState<Exclude<
-		UnpushedCommitsCheck,
-		{ status: "clean" }
-	> | null>(null);
+	const [pendingUnpushedCheck, setPendingUnpushedCheck] = useState<{
+		check: Exclude<UnpushedCommitsCheck, { status: "clean" }>;
+		action: "merge" | "schedule";
+	} | null>(null);
 
 	// Holds only the user's own dropdown pick — falls back to the
 	// scheduled method or server's `defaultMethod` until there is one, so a later
@@ -303,22 +303,34 @@ export function PrMergeButton({
 	// resolve one way or the other) parks in `pendingUnpushedCheck` and lets
 	// `UnpushedCommitsDialog` ask the user rather than silently merging or
 	// silently blocking.
-	const handleClick = useCallback(async () => {
-		if (disabled || method === null || isCheckingUnpushed) return;
+	const performAction = (action: "merge" | "schedule") => {
+		if (method === null) return;
+		if (action === "schedule")
+			autoMerge.schedule({
+				repoRoot,
+				owner,
+				repo,
+				number,
+				method,
+				route: stackMerge === null ? "merge" : "stack",
+			});
+		else performMerge();
+	};
+	const handleClick = async (action: "merge" | "schedule") => {
+		if (
+			(action === "merge" && disabled) ||
+			method === null ||
+			isCheckingUnpushed ||
+			autoMerge.isPending
+		)
+			return;
 		const result = await checkUnpushedCommits(repoRoot);
 		if (result.status === "clean") {
-			performMerge();
+			performAction(action);
 			return;
 		}
-		setPendingUnpushedCheck(result);
-	}, [
-		disabled,
-		method,
-		isCheckingUnpushed,
-		checkUnpushedCommits,
-		repoRoot,
-		performMerge,
-	]);
+		setPendingUnpushedCheck({ check: result, action });
+	};
 
 	const allowedMethods = statusQuery.data?.allowedMethods ?? [];
 	const showAutoMergeAction = scheduledQuery.data === null;
@@ -343,7 +355,7 @@ export function PrMergeButton({
 			<Group>
 				<Button
 					disabled={disabled || isCheckingUnpushed || autoMerge.isPending}
-					onClick={handleClick}
+					onClick={() => handleClick("merge")}
 					size="sm"
 					title={title}
 					variant="outline"
@@ -404,16 +416,7 @@ export function PrMergeButton({
 											<DropdownMenuLabel>Actions</DropdownMenuLabel>
 											<DropdownMenuItem
 												disabled={autoMerge.isPending || method === null}
-												onClick={() => {
-													if (method !== null)
-														autoMerge.schedule({
-															repoRoot,
-															owner,
-															repo,
-															number,
-															method,
-														});
-												}}
+												onClick={() => handleClick("schedule")}
 											>
 												<Clock />
 												Set auto-merge when checks pass
@@ -427,10 +430,11 @@ export function PrMergeButton({
 				)}
 			</Group>
 			<UnpushedCommitsDialog
-				check={pendingUnpushedCheck}
+				check={pendingUnpushedCheck?.check ?? null}
 				onMergeAnyway={() => {
+					if (pendingUnpushedCheck === null) return;
 					setPendingUnpushedCheck(null);
-					performMerge();
+					performAction(pendingUnpushedCheck.action);
 				}}
 				onOpenChange={(open) => {
 					if (!open) setPendingUnpushedCheck(null);

@@ -120,6 +120,7 @@ export type MockOrpcData = {
 	/** `pullRequests.mergeStatus`'s result — omit to leave the mock pending forever (`neverSettles`), same as before this field existed. */
 	mergeStatus?: PullRequestMergeStatus;
 	scheduledMerge?: { method: "merge" | "squash" | "rebase" } | null;
+	unpushedCommits?: { count: number; remoteRef: string };
 	/** When set, `pullRequests.mergeStatus` rejects with this message instead of resolving — covers the "query failed and never once succeeded" case. Takes priority over `mergeStatus` if both are set (they shouldn't be). */
 	mergeStatusError?: string;
 	/** `pullRequests.stack`'s result — omit to leave the mock pending forever. */
@@ -347,7 +348,10 @@ export function createMockSidecarClient(
 											: check,
 									),
 								),
-			unpushedCommits: neverSettles,
+			unpushedCommits: async () =>
+				data.unpushedCommits === undefined
+					? { count: 0, remoteRef: "origin/feature" }
+					: data.unpushedCommits,
 		},
 		// No story exercises the Overview tab yet — same reasoning as
 		// `events.subscribe` above.
