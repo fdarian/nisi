@@ -9,6 +9,28 @@ const run = <A, E>(
 ) => Effect.runPromise(effect.pipe(Effect.provide(makeTestLayer(dataDir))));
 
 describe("SettingsStore", () => {
+	test("notification preferences default on and preserve the kind while the master is off", async () => {
+		await withTempDataDir(async (dataDir) => {
+			await run(
+				dataDir,
+				Effect.gen(function* () {
+					const store = yield* SettingsStore;
+					const defaults = yield* store.get();
+					expect(defaults.notificationsEnabled).toBe(true);
+					expect(defaults.notifyScheduledMergeSettled).toBe(true);
+					yield* store.update({ notificationsEnabled: false });
+					const disabled = yield* store.get();
+					expect(disabled.notificationsEnabled).toBe(false);
+					expect(disabled.notifyScheduledMergeSettled).toBe(true);
+					yield* store.update({ notifyScheduledMergeSettled: false });
+					yield* store.update({ notificationsEnabled: true });
+					const enabled = yield* store.get();
+					expect(enabled.notificationsEnabled).toBe(true);
+					expect(enabled.notifyScheduledMergeSettled).toBe(false);
+				}),
+			);
+		});
+	});
 	test("get() returns defaults before any update has been written", async () => {
 		await withTempDataDir(async (dataDir) => {
 			const result = await run(

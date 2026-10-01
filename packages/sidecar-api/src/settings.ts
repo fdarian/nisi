@@ -53,6 +53,8 @@ export const Settings = Schema.Struct({
 	includeUncommitted: Schema.Boolean,
 	/** Gates the entire walkthrough feature — see `@repo/settings`'s `Settings.walkthroughEnabled`. */
 	walkthroughEnabled: Schema.Boolean,
+	notificationsEnabled: Schema.Boolean,
+	notifyScheduledMergeSettled: Schema.Boolean,
 	/** See `@repo/settings`'s `Settings.wrapLines`. */
 	wrapLines: Schema.Boolean,
 	/** Harness id of the last chat model sent with — see `@repo/settings`'s `Settings.lastChatHarness` doc. */
@@ -87,6 +89,8 @@ export const SettingsUpdate = Schema.Struct({
 	hideReviewed: Schema.optional(Schema.Boolean),
 	includeUncommitted: Schema.optional(Schema.Boolean),
 	walkthroughEnabled: Schema.optional(Schema.Boolean),
+	notificationsEnabled: Schema.optional(Schema.Boolean),
+	notifyScheduledMergeSettled: Schema.optional(Schema.Boolean),
 	wrapLines: Schema.optional(Schema.Boolean),
 	lastChatHarness: Schema.optional(Schema.NullOr(HarnessId)),
 	lastChatModel: Schema.optional(Schema.NullOr(Schema.String)),
