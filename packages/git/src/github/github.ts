@@ -73,9 +73,7 @@ export type GitHubShape = {
 		ReadonlyArray<PullRequestCheck>,
 		PullRequestChecksError | GitCommandError
 	>;
-	checksSnapshot: (
-		input: FetchPullRequestChecksInput,
-	) => Effect.Effect<
+	checksSnapshot: (input: FetchPullRequestChecksInput) => Effect.Effect<
 		{
 			readonly headRefOid: string;
 			readonly checks: ReadonlyArray<PullRequestCheck>;

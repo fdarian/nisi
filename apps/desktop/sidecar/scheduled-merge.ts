@@ -1,10 +1,10 @@
 import {
-	GitHub,
 	type GitCommandError,
-	type PullRequestMergeError,
-	type PullRequestStackMergeError,
+	GitHub,
 	type PullRequestCheck,
 	type PullRequestMergeability,
+	type PullRequestMergeError,
+	type PullRequestStackMergeError,
 } from "@repo/git";
 import {
 	RepoMergeMethodStore,
@@ -19,8 +19,8 @@ import {
 	Layer,
 	Queue,
 	Schedule,
-	Semaphore,
 	Schema,
+	Semaphore,
 } from "effect";
 import { emit } from "./events.ts";
 import { translateMergeFailure } from "./merge-failure.ts";

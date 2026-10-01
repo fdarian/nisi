@@ -11,27 +11,27 @@ import {
 	type GitHubShape,
 	type PullRequestMergeability,
 } from "@repo/git";
+import { ReviewStore } from "@repo/review";
 import {
 	RepoMergeMethodStore,
 	ScheduledMergeStore,
 	SettingsStore,
 } from "@repo/settings";
-import { ReviewStore } from "@repo/review";
 import {
 	ConfigProvider,
 	Effect,
-	Fiber,
 	Exit,
+	Fiber,
 	Layer,
 	Queue,
 	type Scope,
 	Stream,
 } from "effect";
+import type { FileSystem } from "effect/FileSystem";
+import type { ChildProcessSpawner } from "effect/unstable/process";
 import { type SidecarEvent, subscribe } from "../events.ts";
 import { AutoMergeAlreadyRan, ScheduledMerges } from "../scheduled-merge.ts";
 import { Store } from "../store.ts";
-import type { FileSystem } from "effect/FileSystem";
-import type { ChildProcessSpawner } from "effect/unstable/process";
 
 const input = {
 	owner: "acme",
