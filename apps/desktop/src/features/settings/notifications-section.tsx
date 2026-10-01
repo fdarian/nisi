@@ -1,10 +1,6 @@
-import { Button } from "#/components/ui/button";
 import { Switch } from "#/components/ui/switch";
 import type { SidecarQueryUtils } from "#/infra/backend-context";
-import {
-	osNotificationsAvailable,
-	sendOsNotification,
-} from "#/infra/os-notification";
+import { osNotificationsAvailable } from "#/infra/os-notification";
 import { NOTIFICATION_KINDS } from "./notification-kinds";
 import {
 	useNotificationsEnabled,
@@ -12,6 +8,7 @@ import {
 	useUpdateSettings,
 } from "./settings-data";
 import { SettingsRow, SettingsSection } from "./settings-section";
+import { TestNotificationButton } from "./test-notification-button";
 
 export function NotificationsSection(props: {
 	orpc: SidecarQueryUtils;
@@ -33,21 +30,11 @@ export function NotificationsSection(props: {
 			</SettingsRow>
 			<SettingsRow
 				title="Test notification"
-				description="Send a sample notification to check that macOS shows them for nisi."
+				description="Sends a sample notification after 5 seconds. Switch to another app to see it as a banner."
 			>
-				<Button
+				<TestNotificationButton
 					disabled={!master[0] || !osNotificationsAvailable()}
-					onClick={() =>
-						sendOsNotification({
-							title: "nisi",
-							body: "Notifications are working.",
-						})
-					}
-					size="sm"
-					variant="outline"
-				>
-					Send test
-				</Button>
+				/>
 			</SettingsRow>
 			{NOTIFICATION_KINDS.map((kind) => (
 				<SettingsRow
