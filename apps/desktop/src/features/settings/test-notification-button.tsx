@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "#/components/ui/button";
 import { sendOsNotification } from "#/infra/os-notification";
 
@@ -7,8 +7,6 @@ export function TestNotificationButton(props: {
 }): React.ReactElement {
 	const [deadline, setDeadline] = useState<number | null>(null);
 	const [now, setNow] = useState(Date.now);
-	const disabled = useRef(props.disabled);
-	disabled.current = props.disabled;
 
 	useEffect(() => {
 		if (props.disabled) {
@@ -18,11 +16,6 @@ export function TestNotificationButton(props: {
 		if (deadline === null) return;
 
 		const timer = window.setInterval(() => {
-			if (disabled.current) {
-				window.clearInterval(timer);
-				setDeadline(null);
-				return;
-			}
 			const currentTime = Date.now();
 			setNow(currentTime);
 			if (currentTime < deadline) return;
