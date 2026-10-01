@@ -27,11 +27,12 @@ import {
 } from "../models.ts";
 import { isAuthFailure, isRateLimited } from "./pull-request.ts";
 
-const decodeMergeabilityView = (command: string, raw: string) =>
-	Effect.try({
-		try: () => Schema.decodeUnknownSync(MergeabilityView)(JSON.parse(raw)),
-		catch: (cause) => new GhOutputDecodeError({ command, raw, cause }),
-	});
+export const decodeMergeabilityView = (command: string, raw: string) =>
+	Schema.decodeUnknownEffect(Schema.fromJsonString(MergeabilityView))(raw).pipe(
+		Effect.mapError(
+			(cause) => new GhOutputDecodeError({ command, raw, cause }),
+		),
+	);
 
 /**
  * `mergeStateStatus` specifically (not `state`/`mergeable`/`isDraft`) is the
@@ -118,11 +119,14 @@ const RepoMergeMethodsView = Schema.Struct({
 	rebaseMergeAllowed: Schema.Boolean,
 });
 
-const decodeRepoMergeMethodsView = (command: string, raw: string) =>
-	Effect.try({
-		try: () => Schema.decodeUnknownSync(RepoMergeMethodsView)(JSON.parse(raw)),
-		catch: (cause) => new GhOutputDecodeError({ command, raw, cause }),
-	});
+export const decodeRepoMergeMethodsView = (command: string, raw: string) =>
+	Schema.decodeUnknownEffect(Schema.fromJsonString(RepoMergeMethodsView))(
+		raw,
+	).pipe(
+		Effect.mapError(
+			(cause) => new GhOutputDecodeError({ command, raw, cause }),
+		),
+	);
 
 /** GitHub's own UI ordering (Merge → Squash → Rebase) — mirrored server-side by `mergeStatus`'s `defaultMethod` in `packages/sidecar-api`. */
 const toMergeMethods = (
@@ -234,6 +238,23 @@ export const mergePullRequest = (
 	repoRoot: string,
 	number: number,
 	method: MergeMethod,
+	matchHeadCommit?: string,
+): Effect.Effect<
+	void,
+	PullRequestMergeError | GitCommandError,
+	ChildProcessSpawner.ChildProcessSpawner
+> =>
+	runMergeCommand(repoRoot, number, [
+		MERGE_METHOD_FLAG[method],
+		...(matchHeadCommit === undefined
+			? []
+			: ["--match-head-commit", matchHeadCommit]),
+	]);
+
+const runMergeCommand = (
+	repoRoot: string,
+	number: number,
+	flags: readonly string[],
 ): Effect.Effect<
 	void,
 	PullRequestMergeError | GitCommandError,
@@ -244,7 +265,7 @@ export const mergePullRequest = (
 			"pr",
 			"merge",
 			String(number),
-			MERGE_METHOD_FLAG[method],
+			...flags,
 		]);
 
 		if (result.exitCode === 0) return;
@@ -379,6 +400,7 @@ export const mergeStackPullRequest = (
 	repo: string,
 	number: number,
 	method: MergeMethod,
+	matchHeadCommit?: string,
 ): Effect.Effect<
 	void,
 	PullRequestStackMergeError | GitCommandError,
@@ -393,6 +415,9 @@ export const mergeStackPullRequest = (
 			...stackMergeHeaders,
 			"-f",
 			`merge_method=${method}`,
+			...(matchHeadCommit === undefined
+				? []
+				: ["-f", `sha=${matchHeadCommit}`]),
 		]);
 
 		if (result.exitCode !== 0) {

@@ -101,6 +101,15 @@ export const SidecarEvent = Schema.Union([
 		request: OpenRequest,
 	}),
 	Schema.Struct({ seq: Schema.Number, type: Schema.Literal("stream-ready") }),
+	Schema.Struct({
+		seq: Schema.Number,
+		type: Schema.Literal("scheduledMergeSettled"),
+		owner: Schema.String,
+		repo: Schema.String,
+		number: Schema.Number,
+		outcome: Schema.Literals(["merged", "failed", "cancelled"]),
+		reason: Schema.optional(Schema.String),
+	}),
 ]);
 export type SidecarEvent = Schema.Schema.Type<typeof SidecarEvent>;
 

@@ -1,6 +1,11 @@
 export { SettingsStoreError } from "./errors.ts";
 export type { MergeMethod } from "./repo-merge-method-store.ts";
 export { RepoMergeMethodStore } from "./repo-merge-method-store.ts";
+export {
+	type ScheduledMerge,
+	type ScheduledMergeKey,
+	ScheduledMergeStore,
+} from "./scheduled-merge-store.ts";
 export type {
 	DiffStyleMode,
 	RepoPathMapping,

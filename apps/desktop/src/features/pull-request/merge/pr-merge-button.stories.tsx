@@ -60,6 +60,16 @@ const meta: Meta<typeof PrMergeButton> = {
 		repo: "widgets",
 		number: 42,
 		watched: true,
+		isSelectedTab: true,
+	},
+};
+
+export const AutoMergeWithUnpushedCommits: Story = {
+	args: {
+		orpc: createMockOrpc({
+			mergeStatus: { ...BASE_STATUS, mergeStateStatus: "BLOCKED" },
+			unpushedCommits: { count: 2, remoteRef: "origin/feature" },
+		}),
 	},
 };
 export default meta;
@@ -77,7 +87,11 @@ export const MultipleMethods: Story = {
 export const SingleMethod: Story = {
 	args: {
 		orpc: createMockOrpc({
-			mergeStatus: { ...BASE_STATUS, allowedMethods: ["squash"] },
+			mergeStatus: {
+				...BASE_STATUS,
+				allowedMethods: ["squash"],
+				defaultMethod: "squash",
+			},
 		}),
 	},
 };
@@ -118,5 +132,35 @@ export const FailedQuery: Story = {
 export const Stacked: Story = {
 	args: {
 		orpc: createMockOrpc({ mergeStatus: BASE_STATUS, stack: STACK }),
+	},
+};
+
+export const AutoMergeWhileChecksPending: Story = {
+	args: {
+		orpc: createMockOrpc({
+			mergeStatus: { ...BASE_STATUS, mergeStateStatus: "BLOCKED" },
+		}),
+	},
+};
+
+export const SingleMethodAutoMerge: Story = {
+	args: {
+		orpc: createMockOrpc({
+			mergeStatus: {
+				...BASE_STATUS,
+				allowedMethods: ["squash"],
+				defaultMethod: "squash",
+				mergeStateStatus: "BLOCKED",
+			},
+		}),
+	},
+};
+
+export const AutoMergeScheduled: Story = {
+	args: {
+		orpc: createMockOrpc({
+			mergeStatus: { ...BASE_STATUS, mergeStateStatus: "BLOCKED" },
+			scheduledMerge: { method: "squash" },
+		}),
 	},
 };

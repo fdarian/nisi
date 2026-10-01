@@ -1,0 +1,409 @@
+{
+	"version": "7",
+	"dialect": "sqlite",
+	"id": "9711adfd-9eb2-44a7-9a28-af1656467e0c",
+	"prevIds": ["c418d2b3-4133-4dcb-aca1-a20838dabb04"],
+	"ddl": [
+		{
+			"name": "repo_merge_methods",
+			"entityType": "tables"
+		},
+		{
+			"name": "repo_paths",
+			"entityType": "tables"
+		},
+		{
+			"name": "scheduled_merges",
+			"entityType": "tables"
+		},
+		{
+			"name": "settings",
+			"entityType": "tables"
+		},
+		{
+			"type": "integer",
+			"notNull": false,
+			"autoincrement": true,
+			"default": null,
+			"generated": null,
+			"name": "id",
+			"entityType": "columns",
+			"table": "repo_merge_methods"
+		},
+		{
+			"type": "text",
+			"notNull": true,
+			"autoincrement": false,
+			"default": null,
+			"generated": null,
+			"name": "owner",
+			"entityType": "columns",
+			"table": "repo_merge_methods"
+		},
+		{
+			"type": "text",
+			"notNull": true,
+			"autoincrement": false,
+			"default": null,
+			"generated": null,
+			"name": "repo",
+			"entityType": "columns",
+			"table": "repo_merge_methods"
+		},
+		{
+			"type": "text",
+			"notNull": true,
+			"autoincrement": false,
+			"default": null,
+			"generated": null,
+			"name": "method",
+			"entityType": "columns",
+			"table": "repo_merge_methods"
+		},
+		{
+			"type": "integer",
+			"notNull": true,
+			"autoincrement": false,
+			"default": null,
+			"generated": null,
+			"name": "updatedAt",
+			"entityType": "columns",
+			"table": "repo_merge_methods"
+		},
+		{
+			"type": "integer",
+			"notNull": false,
+			"autoincrement": true,
+			"default": null,
+			"generated": null,
+			"name": "id",
+			"entityType": "columns",
+			"table": "repo_paths"
+		},
+		{
+			"type": "text",
+			"notNull": true,
+			"autoincrement": false,
+			"default": null,
+			"generated": null,
+			"name": "owner",
+			"entityType": "columns",
+			"table": "repo_paths"
+		},
+		{
+			"type": "text",
+			"notNull": true,
+			"autoincrement": false,
+			"default": null,
+			"generated": null,
+			"name": "repo",
+			"entityType": "columns",
+			"table": "repo_paths"
+		},
+		{
+			"type": "text",
+			"notNull": true,
+			"autoincrement": false,
+			"default": null,
+			"generated": null,
+			"name": "path",
+			"entityType": "columns",
+			"table": "repo_paths"
+		},
+		{
+			"type": "integer",
+			"notNull": true,
+			"autoincrement": false,
+			"default": null,
+			"generated": null,
+			"name": "createdAt",
+			"entityType": "columns",
+			"table": "repo_paths"
+		},
+		{
+			"type": "integer",
+			"notNull": true,
+			"autoincrement": false,
+			"default": null,
+			"generated": null,
+			"name": "updatedAt",
+			"entityType": "columns",
+			"table": "repo_paths"
+		},
+		{
+			"type": "text",
+			"notNull": true,
+			"autoincrement": false,
+			"default": null,
+			"generated": null,
+			"name": "owner",
+			"entityType": "columns",
+			"table": "scheduled_merges"
+		},
+		{
+			"type": "text",
+			"notNull": true,
+			"autoincrement": false,
+			"default": null,
+			"generated": null,
+			"name": "repo",
+			"entityType": "columns",
+			"table": "scheduled_merges"
+		},
+		{
+			"type": "integer",
+			"notNull": true,
+			"autoincrement": false,
+			"default": null,
+			"generated": null,
+			"name": "number",
+			"entityType": "columns",
+			"table": "scheduled_merges"
+		},
+		{
+			"type": "text",
+			"notNull": true,
+			"autoincrement": false,
+			"default": null,
+			"generated": null,
+			"name": "repo_root",
+			"entityType": "columns",
+			"table": "scheduled_merges"
+		},
+		{
+			"type": "text",
+			"notNull": true,
+			"autoincrement": false,
+			"default": null,
+			"generated": null,
+			"name": "route",
+			"entityType": "columns",
+			"table": "scheduled_merges"
+		},
+		{
+			"type": "text",
+			"notNull": true,
+			"autoincrement": false,
+			"default": null,
+			"generated": null,
+			"name": "method",
+			"entityType": "columns",
+			"table": "scheduled_merges"
+		},
+		{
+			"type": "integer",
+			"notNull": true,
+			"autoincrement": false,
+			"default": null,
+			"generated": null,
+			"name": "created_at",
+			"entityType": "columns",
+			"table": "scheduled_merges"
+		},
+		{
+			"type": "integer",
+			"notNull": false,
+			"autoincrement": true,
+			"default": null,
+			"generated": null,
+			"name": "id",
+			"entityType": "columns",
+			"table": "settings"
+		},
+		{
+			"type": "text",
+			"notNull": false,
+			"autoincrement": false,
+			"default": null,
+			"generated": null,
+			"name": "enabledHarnesses",
+			"entityType": "columns",
+			"table": "settings"
+		},
+		{
+			"type": "text",
+			"notNull": true,
+			"autoincrement": false,
+			"default": null,
+			"generated": null,
+			"name": "sidebarViewMode",
+			"entityType": "columns",
+			"table": "settings"
+		},
+		{
+			"type": "text",
+			"notNull": true,
+			"autoincrement": false,
+			"default": null,
+			"generated": null,
+			"name": "diffStyleMode",
+			"entityType": "columns",
+			"table": "settings"
+		},
+		{
+			"type": "text",
+			"notNull": false,
+			"autoincrement": false,
+			"default": null,
+			"generated": null,
+			"name": "preferredEditor",
+			"entityType": "columns",
+			"table": "settings"
+		},
+		{
+			"type": "integer",
+			"notNull": true,
+			"autoincrement": false,
+			"default": "false",
+			"generated": null,
+			"name": "hideReviewed",
+			"entityType": "columns",
+			"table": "settings"
+		},
+		{
+			"type": "integer",
+			"notNull": true,
+			"autoincrement": false,
+			"default": "false",
+			"generated": null,
+			"name": "includeUncommitted",
+			"entityType": "columns",
+			"table": "settings"
+		},
+		{
+			"type": "integer",
+			"notNull": true,
+			"autoincrement": false,
+			"default": "false",
+			"generated": null,
+			"name": "wrapLines",
+			"entityType": "columns",
+			"table": "settings"
+		},
+		{
+			"type": "integer",
+			"notNull": true,
+			"autoincrement": false,
+			"default": "false",
+			"generated": null,
+			"name": "walkthroughEnabled",
+			"entityType": "columns",
+			"table": "settings"
+		},
+		{
+			"type": "text",
+			"notNull": false,
+			"autoincrement": false,
+			"default": null,
+			"generated": null,
+			"name": "lastChatHarness",
+			"entityType": "columns",
+			"table": "settings"
+		},
+		{
+			"type": "text",
+			"notNull": false,
+			"autoincrement": false,
+			"default": null,
+			"generated": null,
+			"name": "lastChatModel",
+			"entityType": "columns",
+			"table": "settings"
+		},
+		{
+			"type": "text",
+			"notNull": true,
+			"autoincrement": false,
+			"default": "'github-light'",
+			"generated": null,
+			"name": "diffThemeLight",
+			"entityType": "columns",
+			"table": "settings"
+		},
+		{
+			"type": "text",
+			"notNull": true,
+			"autoincrement": false,
+			"default": "'github-dark'",
+			"generated": null,
+			"name": "diffThemeDark",
+			"entityType": "columns",
+			"table": "settings"
+		},
+		{
+			"type": "integer",
+			"notNull": true,
+			"autoincrement": false,
+			"default": null,
+			"generated": null,
+			"name": "updatedAt",
+			"entityType": "columns",
+			"table": "settings"
+		},
+		{
+			"columns": ["owner", "repo", "number"],
+			"nameExplicit": false,
+			"name": "scheduled_merges_pk",
+			"entityType": "pks",
+			"table": "scheduled_merges"
+		},
+		{
+			"columns": ["id"],
+			"nameExplicit": false,
+			"name": "repo_merge_methods_pk",
+			"table": "repo_merge_methods",
+			"entityType": "pks"
+		},
+		{
+			"columns": ["id"],
+			"nameExplicit": false,
+			"name": "repo_paths_pk",
+			"table": "repo_paths",
+			"entityType": "pks"
+		},
+		{
+			"columns": ["id"],
+			"nameExplicit": false,
+			"name": "settings_pk",
+			"table": "settings",
+			"entityType": "pks"
+		},
+		{
+			"columns": [
+				{
+					"value": "owner",
+					"isExpression": false
+				},
+				{
+					"value": "repo",
+					"isExpression": false
+				}
+			],
+			"isUnique": true,
+			"where": null,
+			"origin": "manual",
+			"name": "repo_merge_methods_owner_repo_idx",
+			"entityType": "indexes",
+			"table": "repo_merge_methods"
+		},
+		{
+			"columns": [
+				{
+					"value": "owner",
+					"isExpression": false
+				},
+				{
+					"value": "repo",
+					"isExpression": false
+				}
+			],
+			"isUnique": true,
+			"where": null,
+			"origin": "manual",
+			"name": "repo_paths_owner_repo_idx",
+			"entityType": "indexes",
+			"table": "repo_paths"
+		}
+	],
+	"renames": []
+}

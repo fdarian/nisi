@@ -63,6 +63,7 @@ import {
 import { listHarnesses } from "./harness/harnesses.ts";
 import { getHarnessModels } from "./harness/models.ts";
 import { checkSessionForChanges } from "./live-poll.ts";
+import { translateMergeFailure } from "./merge-failure.ts";
 import { createNativeActivationHandler } from "./native-activation.ts";
 import {
 	acknowledgeOpenRequest,
@@ -73,6 +74,7 @@ import {
 } from "./open-requests.ts";
 import { AttentionState } from "./pull-request-attention.ts";
 import { RpcLifecyclePlugin } from "./rpc-lifecycle.ts";
+import { ScheduledMerges } from "./scheduled-merge.ts";
 import type { AppServices } from "./services.ts";
 import {
 	forkSessionCloseSideEffects,
@@ -114,7 +116,7 @@ const mergeFailureDetail = (error: MergeError): string => {
 
 const logMergeFailure = (
 	operation: "pull request merge" | "pull request stack merge",
-	input: { owner: string; repo: string; number: number; method: string },
+	input: { owner: string; repo: string; number: number; method?: string },
 	error: MergeError,
 ) =>
 	Effect.logWarning(`${operation} failed`, {
@@ -1440,58 +1442,13 @@ export function attachRouter(
 						Effect.tapError((cause) =>
 							logMergeFailure("pull request merge", input, cause),
 						),
-						Effect.catchTag("GhNotAuthenticated", (cause) =>
-							Effect.fail(
-								errors.GH_NOT_AUTHENTICATED({
-									message: `gh is not authenticated: ${cause.reason}`,
-									data: {
-										reason: "Authentication required",
-										detail: cause.reason,
-									},
-								}),
-							),
-						),
-						Effect.catchTag("PullRequestNotFound", (cause) =>
-							Effect.fail(
-								errors.NOT_FOUND({
-									message: `pull request #${cause.number} couldn't be resolved on GitHub for ${cause.repoRoot}: ${cause.reason}`,
-									data: {
-										reason: "Pull request not found",
-										detail: cause.reason,
-									},
-								}),
-							),
-						),
-						Effect.catchTag("PullRequestNotMergeable", (cause) =>
-							Effect.fail(
-								errors.CONFLICT({
-									message: `pull request #${cause.number} isn't mergeable right now: ${cause.reason}`,
-									data: { reason: "Merge blocked", detail: cause.reason },
-								}),
-							),
-						),
-						Effect.catchTag("GhMergeFailed", (cause) =>
-							Effect.fail(
-								errors.SERVICE_UNAVAILABLE({
-									message: `gh pr merge failed for pull request #${cause.number}: ${cause.reason}`,
-									data: {
-										reason: "GitHub rejected the merge",
-										detail: cause.reason,
-									},
-								}),
-							),
-						),
-						Effect.catchTag("GitCommandError", (cause) =>
-							Effect.fail(
-								errors.SERVICE_UNAVAILABLE({
-									message: `${cause.command} could not be run: ${cause.stderr || String(cause.cause)}`,
-									data: {
-										reason: "Couldn't run gh",
-										detail: mergeFailureDetail(cause),
-									},
-								}),
-							),
-						),
+						Effect.mapError((cause) => {
+							const failure = translateMergeFailure(cause);
+							return errors[failure.code]({
+								message: failure.message,
+								data: { reason: failure.reason, detail: failure.detail },
+							});
+						}),
 					);
 
 				yield* Effect.logInfo("pull request merged", {
@@ -1517,6 +1474,58 @@ export function attachRouter(
 						),
 					);
 			}),
+			scheduleMerge: authed.pullRequests.scheduleMerge.effect(
+				function* (request) {
+					const input = request.input;
+					const schedules = yield* ScheduledMerges;
+					yield* schedules.schedule(input).pipe(
+						Effect.mapError((cause) => {
+							return request.errors.SERVICE_UNAVAILABLE({
+								message: "Couldn't schedule auto-merge",
+								data: {
+									reason: "Couldn't schedule auto-merge",
+									detail: String(cause),
+								},
+							});
+						}),
+					);
+				},
+			),
+			cancelScheduledMerge: authed.pullRequests.cancelScheduledMerge.effect(
+				function* (request) {
+					const input = request.input;
+					const schedules = yield* ScheduledMerges;
+					yield* schedules.cancel(input).pipe(
+						Effect.mapError((cause) => {
+							if (cause._tag === "AutoMergeAlreadyRan")
+								return request.errors.CONFLICT({
+									message: cause.message,
+									data: { reason: cause.message, detail: cause.message },
+								});
+							return request.errors.SERVICE_UNAVAILABLE({
+								message: "Couldn't cancel auto-merge",
+								data: {
+									reason: "Couldn't cancel auto-merge",
+									detail: String(cause),
+								},
+							});
+						}),
+					);
+				},
+			),
+			scheduledMerge: authed.pullRequests.scheduledMerge.effect(
+				function* (request) {
+					const schedules = yield* ScheduledMerges;
+					const scheduled = yield* schedules
+						.get(request.input)
+						.pipe(
+							Effect.mapError((cause) =>
+								request.errors.SERVICE_UNAVAILABLE({ message: String(cause) }),
+							),
+						);
+					return scheduled === null ? null : { method: scheduled.method };
+				},
+			),
 			mergeStack: authed.pullRequests.mergeStack.effect(function* ({
 				input,
 				errors,

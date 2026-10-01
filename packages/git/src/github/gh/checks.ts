@@ -289,10 +289,18 @@ const runChecksGh = (
 	});
 
 /** Runs the PR rollup and approval-waiting Actions lookup concurrently, falling back to a SHA-scoped lookup when the repo page is truncated. */
-export const fetchPullRequestChecks = (
+export const fetchPullRequestChecks = (input: FetchPullRequestChecksInput) =>
+	fetchPullRequestChecksSnapshot(input).pipe(
+		Effect.map((snapshot) => snapshot.checks),
+	);
+
+export const fetchPullRequestChecksSnapshot = (
 	input: FetchPullRequestChecksInput,
 ): Effect.Effect<
-	ReadonlyArray<PullRequestCheck>,
+	{
+		readonly headRefOid: string;
+		readonly checks: ReadonlyArray<PullRequestCheck>;
+	},
 	PullRequestChecksError | GitCommandError,
 	ChildProcessSpawner.ChildProcessSpawner
 > =>
@@ -337,7 +345,10 @@ export const fetchPullRequestChecks = (
 							decodeAwaitingWorkflowRuns("gh api actions/runs", raw),
 						),
 					);
-		return [...view.statusCheckRollup.map(toPullRequestCheck), ...awaiting];
+		return {
+			headRefOid: view.headRefOid,
+			checks: [...view.statusCheckRollup.map(toPullRequestCheck), ...awaiting],
+		};
 	});
 
 export const approveWorkflowRuns = (input: {

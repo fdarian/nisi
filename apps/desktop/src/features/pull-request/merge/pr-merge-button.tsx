@@ -1,16 +1,20 @@
 "use client";
 
-import { isDefinedError, ORPCError } from "@orpc/client";
+import { ORPCError } from "@orpc/client";
 import { cn } from "cn";
-import { ChevronDownIcon } from "lucide-react";
+import { ChevronDownIcon, Clock } from "lucide-react";
 import { useCallback, useState } from "react";
 import { Button, buttonVariants } from "#/components/ui/button";
 import { Group, GroupSeparator } from "#/components/ui/group";
 import {
 	DropdownMenu,
 	DropdownMenuContent,
+	DropdownMenuGroup,
+	DropdownMenuItem,
+	DropdownMenuLabel,
 	DropdownMenuRadioGroup,
 	DropdownMenuRadioItem,
+	DropdownMenuSeparator,
 	DropdownMenuTrigger,
 } from "#/components/ui/menu";
 import { toastManager } from "#/components/ui/toast";
@@ -24,11 +28,17 @@ import {
 	useMergePullRequest,
 	usePullRequestMergeStatus,
 	usePullRequestStack,
+	useScheduledMerge,
+	useScheduledMergeMutations,
 	useUnpushedCommitsCheck,
 } from "#/features/pull-request/data/pr-data";
 import { useDismissOnInactive } from "#/features/pull-request/use-dismiss-on-inactive";
 import type { SidecarQueryUtils } from "#/infra/backend-context";
-import { MergeErrorDialog, type MergeFailure } from "./merge-error-dialog";
+import {
+	MergeErrorDialog,
+	type MergeFailure,
+	mergeFailureMessage,
+} from "./merge-error-dialog";
 import { deriveStackMerge } from "./pr-stack-merge";
 import { UnpushedCommitsDialog } from "./unpushed-commits-dialog";
 
@@ -80,18 +90,6 @@ const mergeStatusErrorMessage = (error: unknown): string => {
 	return "Couldn't check whether this pull request can be merged.";
 };
 
-const mergeFailureMessage = (
-	error: MergePullRequestError,
-): Pick<MergeFailure, "reason" | "detail"> => {
-	if (isDefinedError(error) && error.code !== "UNAUTHORIZED") {
-		return { reason: error.data.reason, detail: error.data.detail };
-	}
-	return {
-		reason: "Merge failed",
-		detail: error instanceof Error ? error.message : String(error),
-	};
-};
-
 /**
  * Resolves the button's label/disabled/tooltip from `status` in the exact
  * priority order the design settled on — each check short-circuits the
@@ -107,6 +105,7 @@ const resolveButtonState = (
 	error: unknown,
 	isMerging: boolean,
 	method: MergeMethod | null,
+	hasScheduledMerge: boolean,
 ): { label: string; disabled: boolean; title?: string } => {
 	// Genuine initial loading (no data yet) wins over everything else, even
 	// the terminal states below — there's nothing to read `state` off of.
@@ -160,7 +159,9 @@ const resolveButtonState = (
 		return { label: "Conflicts", disabled: true };
 	}
 	if (status.mergeStateStatus === "BLOCKED") {
-		return { label: "Merge blocked", disabled: true };
+		return !hasScheduledMerge
+			? { label: "Merge blocked", disabled: true }
+			: { label: "Merge pull request", disabled: false };
 	}
 	if (status.mergeStateStatus === "BEHIND") {
 		return { label: "Update branch required", disabled: true };
@@ -172,9 +173,8 @@ const resolveButtonState = (
  * The PR header's Merge button — disabled until `mergeStatus` confirms the
  * PR can actually be merged (see `resolveButtonState`), left-click merges
  * immediately with the currently selected method (deliberately no
- * confirmation dialog). When the repo allows more than one merge method, a
- * flush chevron opens a dropdown to switch among them — a single allowed
- * method renders the plain button with no chevron at all.
+ * confirmation dialog). A flush chevron opens a dropdown when there are
+ * multiple methods or auto-merge can be scheduled.
  */
 export function PrMergeButton({
 	orpc,
@@ -198,6 +198,11 @@ export function PrMergeButton({
 	const stackQuery = usePullRequestStack(
 		orpc,
 		{ owner, repo, number },
+		isSelectedTab,
+	);
+	const scheduledQuery = useScheduledMerge(
+		orpc,
+		{ repoRoot, owner, repo, number },
 		isSelectedTab,
 	);
 	const [mergeFailure, setMergeFailure] = useState<MergeFailure | null>(null);
@@ -227,18 +232,33 @@ export function PrMergeButton({
 	} = useMergePullRequest(orpc, handleMergeError);
 	const { check: checkUnpushedCommits, isPending: isCheckingUnpushed } =
 		useUnpushedCommitsCheck(orpc);
+	const autoMerge = useScheduledMergeMutations(orpc, (error, params) => {
+		const failure = {
+			title: `Couldn't set auto-merge for #${params.number}`,
+			...mergeFailureMessage(error),
+		};
+		toastManager.add({
+			title: failure.title,
+			description: failure.reason,
+			type: "error",
+			actionProps: {
+				children: "View details",
+				onClick: () => setMergeFailure(failure),
+			},
+		});
+	});
 
 	// Non-`"clean"` result of the click-time check below, parked here until
 	// the user resolves the dialog it opens — `null` means either nothing's
 	// been checked yet or the last check came back clean and merged straight
 	// through.
-	const [pendingUnpushedCheck, setPendingUnpushedCheck] = useState<Exclude<
-		UnpushedCommitsCheck,
-		{ status: "clean" }
-	> | null>(null);
+	const [pendingUnpushedCheck, setPendingUnpushedCheck] = useState<{
+		check: Exclude<UnpushedCommitsCheck, { status: "clean" }>;
+		action: "merge" | "schedule";
+	} | null>(null);
 
 	// Holds only the user's own dropdown pick — falls back to the
-	// server's `defaultMethod` on every render until there is one, so a later
+	// scheduled method or server's `defaultMethod` until there is one, so a later
 	// refetch (e.g. the one `useMergePullRequest` fires on success) never
 	// overwrites a method the user already chose. `null` (no pick yet, no
 	// status loaded yet) is a real state, not defaulted away — see
@@ -248,7 +268,11 @@ export function PrMergeButton({
 		null,
 	);
 	const [methodMenuOpen, setMethodMenuOpen] = useDismissOnInactive(watched);
-	const method = selectedMethod ?? statusQuery.data?.defaultMethod ?? null;
+	const method =
+		selectedMethod ??
+		scheduledQuery.data?.method ??
+		statusQuery.data?.defaultMethod ??
+		null;
 	const stackMerge = deriveStackMerge(stackQuery.data, number);
 
 	const { label, disabled, title } = resolveButtonState(
@@ -258,6 +282,7 @@ export function PrMergeButton({
 		statusQuery.error,
 		isMerging,
 		method,
+		scheduledQuery.data !== undefined && scheduledQuery.data !== null,
 	);
 
 	const performMerge = useCallback(() => {
@@ -278,25 +303,48 @@ export function PrMergeButton({
 	// resolve one way or the other) parks in `pendingUnpushedCheck` and lets
 	// `UnpushedCommitsDialog` ask the user rather than silently merging or
 	// silently blocking.
-	const handleClick = useCallback(async () => {
-		if (disabled || method === null || isCheckingUnpushed) return;
+	const performAction = (action: "merge" | "schedule") => {
+		if (method === null) return;
+		if (action === "schedule")
+			autoMerge.schedule({
+				repoRoot,
+				owner,
+				repo,
+				number,
+				method,
+				route: stackMerge === null ? "merge" : "stack",
+			});
+		else performMerge();
+	};
+	const handleClick = async (action: "merge" | "schedule") => {
+		if (
+			(action === "merge" && disabled) ||
+			method === null ||
+			isCheckingUnpushed ||
+			autoMerge.isPending
+		)
+			return;
 		const result = await checkUnpushedCommits(repoRoot);
 		if (result.status === "clean") {
-			performMerge();
+			performAction(action);
 			return;
 		}
-		setPendingUnpushedCheck(result);
-	}, [
-		disabled,
-		method,
-		isCheckingUnpushed,
-		checkUnpushedCommits,
-		repoRoot,
-		performMerge,
-	]);
+		setPendingUnpushedCheck({ check: result, action });
+	};
 
 	const allowedMethods = statusQuery.data?.allowedMethods ?? [];
-	const showMethodPicker = allowedMethods.length > 1;
+	const showAutoMergeAction = scheduledQuery.data === null;
+	const showMethodPicker =
+		allowedMethods.length > 1 ||
+		showAutoMergeAction ||
+		(scheduledQuery.data !== undefined && scheduledQuery.data !== null);
+	const methodMenuDisabled =
+		statusQuery.data === undefined ||
+		statusQuery.isError ||
+		statusQuery.data.state !== "OPEN" ||
+		isMerging ||
+		isCheckingUnpushed ||
+		autoMerge.isPending;
 	const buttonLabel =
 		!disabled && stackMerge !== null && stackMerge.count > 1 && method !== null
 			? METHOD_STACK_LABEL[method]
@@ -306,8 +354,8 @@ export function PrMergeButton({
 		<>
 			<Group>
 				<Button
-					disabled={disabled || isCheckingUnpushed}
-					onClick={handleClick}
+					disabled={disabled || isCheckingUnpushed || autoMerge.isPending}
+					onClick={() => handleClick("merge")}
 					size="sm"
 					title={title}
 					variant="outline"
@@ -332,7 +380,7 @@ export function PrMergeButton({
 									buttonVariants({ size: "sm", variant: "outline" }),
 									"w-6 px-0",
 								)}
-								disabled={disabled || isCheckingUnpushed}
+								disabled={methodMenuDisabled}
 							>
 								<ChevronDownIcon />
 							</DropdownMenuTrigger>
@@ -343,6 +391,7 @@ export function PrMergeButton({
 									}
 									value={method ?? undefined}
 								>
+									<DropdownMenuLabel>Select method</DropdownMenuLabel>
 									{allowedMethods.map((candidate) => (
 										<DropdownMenuRadioItem
 											closeOnClick
@@ -360,16 +409,32 @@ export function PrMergeButton({
 										</DropdownMenuRadioItem>
 									))}
 								</DropdownMenuRadioGroup>
+								{showAutoMergeAction && (
+									<>
+										<DropdownMenuSeparator />
+										<DropdownMenuGroup>
+											<DropdownMenuLabel>Actions</DropdownMenuLabel>
+											<DropdownMenuItem
+												disabled={autoMerge.isPending || method === null}
+												onClick={() => handleClick("schedule")}
+											>
+												<Clock />
+												Set auto-merge when checks pass
+											</DropdownMenuItem>
+										</DropdownMenuGroup>
+									</>
+								)}
 							</DropdownMenuContent>
 						</DropdownMenu>
 					</>
 				)}
 			</Group>
 			<UnpushedCommitsDialog
-				check={pendingUnpushedCheck}
+				check={pendingUnpushedCheck?.check ?? null}
 				onMergeAnyway={() => {
+					if (pendingUnpushedCheck === null) return;
 					setPendingUnpushedCheck(null);
-					performMerge();
+					performAction(pendingUnpushedCheck.action);
 				}}
 				onOpenChange={(open) => {
 					if (!open) setPendingUnpushedCheck(null);

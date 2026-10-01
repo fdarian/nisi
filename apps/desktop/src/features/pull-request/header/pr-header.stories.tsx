@@ -4,6 +4,7 @@
  * same query `PrMergeButton` already polls (see `pr-header.tsx`'s
  * `MarkReadyMenuItem`).
  */
+
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import type {
 	PullRequestMergeStatus,
@@ -83,6 +84,7 @@ const meta: Meta<typeof PrHeader> = {
 		findExistingSessionId: () => undefined,
 		onSessionOpened: () => {},
 		watched: true,
+		isSelectedTab: true,
 	},
 };
 export default meta;
@@ -136,6 +138,20 @@ export const AwaitingApproval: Story = {
 					detailsUrl: "https://github.com/acme/widgets/actions/runs/102",
 				},
 			],
+		}),
+	},
+};
+
+export const AutoMergeScheduled: Story = {
+	args: {
+		target: PR_TARGET,
+		orpc: createMockOrpc({
+			mergeStatus: {
+				...BASE_STATUS,
+				mergeStateStatus: "BLOCKED",
+			},
+			checks: [{ name: "Tests", status: "running" }],
+			scheduledMerge: { method: "squash" },
 		}),
 	},
 };

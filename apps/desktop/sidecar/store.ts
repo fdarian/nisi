@@ -51,7 +51,7 @@ import {
 } from "@repo/review";
 import { SettingsStore, type SettingsStoreError } from "@repo/settings";
 import { Context, Effect, Layer, Option, Schema } from "effect";
-import type { FileSystem } from "effect/FileSystem";
+import { FileSystem } from "effect/FileSystem";
 import type { ChildProcessSpawner } from "effect/unstable/process";
 import {
 	type DiffHead,
@@ -690,6 +690,30 @@ export class Store extends Context.Service<Store>()("Store", {
 				const repoRoot = yield* verifyRepoPathMatchesOrigin(path, owner, repo);
 				yield* settingsStore.setRepoPath(owner, repo, repoRoot);
 				return { owner, repo, path: repoRoot };
+			});
+
+		const resolveScheduledMergeRepoRoot = (input: {
+			repoRoot: string;
+			owner: string;
+			repo: string;
+			number: number;
+		}) =>
+			Effect.gen(function* () {
+				const fs = yield* FileSystem;
+				if (yield* fs.exists(input.repoRoot)) return input.repoRoot;
+				const sessions = yield* reviewStore.listOpenSessions();
+				const session = sessions.find(
+					(candidate) =>
+						candidate.pr?.owner === input.owner &&
+						candidate.pr.repo === input.repo &&
+						candidate.pr.number === input.number,
+				);
+				if (session === undefined) return null;
+				return yield* resolveLiveRepoRoot(session).pipe(
+					Effect.catchTag("WorktreeRelocationFailed", () =>
+						Effect.succeed(null),
+					),
+				);
 			});
 
 		const listSessions = () =>
@@ -1524,6 +1548,7 @@ export class Store extends Context.Service<Store>()("Store", {
 			listSessions,
 			closeSession,
 			resolveSessionRepoRoot,
+			resolveScheduledMergeRepoRoot,
 			listChangedFiles,
 			refreshSessionBase,
 			readBaseMayBeStale,

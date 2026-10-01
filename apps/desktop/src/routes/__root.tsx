@@ -8,6 +8,7 @@ import {
 	useAgentationEnabled,
 	useMesurerEnabled,
 } from "#/features/devtools/dev-tool-context";
+import { ScheduledMergeNotifications } from "#/features/pull-request/merge/scheduled-merge-notifications";
 import { useSettingsShortcut } from "#/features/settings/use-settings-shortcut";
 import { BackendProvider, useBackendContext } from "#/infra/backend-context";
 import { SidecarEventsProvider } from "#/infra/sidecar-events";
@@ -52,6 +53,7 @@ function ConnectedEvents() {
 	if (backend.status !== "ready") return content;
 	return (
 		<SidecarEventsProvider client={backend.client}>
+			<ScheduledMergeNotifications orpc={backend.orpc} />
 			<OpenRequestProvider>{content}</OpenRequestProvider>
 		</SidecarEventsProvider>
 	);

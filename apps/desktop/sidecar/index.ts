@@ -3,7 +3,11 @@ import { safe } from "@orpc/client";
 import { resolvedPath } from "@repo/bin-resolver";
 import { getDataDirConfig, SqliteDb } from "@repo/db";
 import { GhGitHub } from "@repo/git";
-import { RepoMergeMethodStore, SettingsStore } from "@repo/settings";
+import {
+	RepoMergeMethodStore,
+	ScheduledMergeStore,
+	SettingsStore,
+} from "@repo/settings";
 import { makeSidecarClient } from "@repo/sidecar-api";
 import {
 	acquireSidecar,
@@ -19,6 +23,7 @@ import { attachRouter, bindHealthCheckServer } from "./http.ts";
 import { startLivePolling } from "./live-poll.ts";
 import { LoggingLive } from "./logging.ts";
 import { PullRequestAttentionLive } from "./pull-request-attention.ts";
+import { ScheduledMerges } from "./scheduled-merge.ts";
 import type { AppServices } from "./services.ts";
 import { SessionWatch } from "./session-watch.ts";
 import { Store } from "./store.ts";
@@ -184,6 +189,8 @@ const program = Effect.scoped(
 				// as the HTTP server above, just via the fiber getting
 				// interrupted instead of an acquireRelease finalizer.
 				yield* startLivePolling();
+				const scheduledMerges = yield* ScheduledMerges;
+				yield* scheduledMerges.start();
 
 				// Same shape as `startLivePolling` above, for auto-update's own
 				// background version check (first run ~10s out, then hourly —
@@ -223,13 +230,20 @@ const MainLayer = Layer.mergeAll(
 	Store.layer,
 	WalkthroughStore.layer,
 	SettingsStore.layer,
-	RepoMergeMethodStore.layer,
+	ScheduledMerges.layer.pipe(
+		Layer.provideMerge(
+			Layer.mergeAll(
+				ScheduledMergeStore.layer,
+				RepoMergeMethodStore.layer,
+				GhGitHub.layer.pipe(Layer.provideMerge(PullRequestAttentionLive.layer)),
+			),
+		),
+	),
 	SessionWatch.layer,
 	Updater.layer,
 	ChatSessions.layer,
 	HarnessModelCache.layer,
 	CodeLspPool.layer,
-	GhGitHub.layer.pipe(Layer.provideMerge(PullRequestAttentionLive.layer)),
 ).pipe(
 	Layer.provideMerge(SqliteDb.layer),
 	Layer.provideMerge(BunServices.layer),

@@ -119,6 +119,8 @@ export type MockOrpcData = {
 	fileContents?: Readonly<Record<string, FileContent>>;
 	/** `pullRequests.mergeStatus`'s result — omit to leave the mock pending forever (`neverSettles`), same as before this field existed. */
 	mergeStatus?: PullRequestMergeStatus;
+	scheduledMerge?: { method: "merge" | "squash" | "rebase" } | null;
+	unpushedCommits?: { count: number; remoteRef: string };
 	/** When set, `pullRequests.mergeStatus` rejects with this message instead of resolving — covers the "query failed and never once succeeded" case. Takes priority over `mergeStatus` if both are set (they shouldn't be). */
 	mergeStatusError?: string;
 	/** `pullRequests.stack`'s result — omit to leave the mock pending forever. */
@@ -204,6 +206,9 @@ export function createMockSidecarClient(
 	const fileContents = data.fileContents ?? {};
 	const runningGeneration = data.runningGeneration;
 	const mergeStatus = data.mergeStatus;
+	const scheduledMergeState = {
+		request: data.scheduledMerge === undefined ? null : data.scheduledMerge,
+	};
 	const mergeStatusError = data.mergeStatusError;
 	const stack = data.stack;
 	const checks = data.checks;
@@ -316,6 +321,13 @@ export function createMockSidecarClient(
 					? async () => neverIterator()
 					: async () => liveValue(stack),
 			merge: async () => undefined,
+			scheduleMerge: async (input) => {
+				scheduledMergeState.request = { method: input.method };
+			},
+			cancelScheduledMerge: async () => {
+				scheduledMergeState.request = null;
+			},
+			scheduledMerge: async () => scheduledMergeState.request,
 			mergeStack: async () => undefined,
 			markReady: async () => undefined,
 			approveWorkflowRuns: async (input) => {
@@ -338,7 +350,10 @@ export function createMockSidecarClient(
 											: check,
 									),
 								),
-			unpushedCommits: neverSettles,
+			unpushedCommits: async () =>
+				data.unpushedCommits === undefined
+					? { count: 0, remoteRef: "origin/feature" }
+					: data.unpushedCommits,
 		},
 		// No story exercises the Overview tab yet — same reasoning as
 		// `events.subscribe` above.

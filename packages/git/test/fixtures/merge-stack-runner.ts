@@ -4,6 +4,8 @@ import { GitHub } from "../../src/github/github.ts";
 import { GitHubTestLayer } from "./github-layer.ts";
 
 const outcome = process.argv[2];
+const route = process.argv[3];
+const matchHeadCommit = process.argv[4];
 if (outcome !== "merged" && outcome !== "failed") {
 	throw new Error("usage: merge-stack-runner.ts <merged|failed>");
 }
@@ -12,7 +14,15 @@ const exit = await Effect.runPromise(
 	Effect.exit(
 		Effect.gen(function* () {
 			const github = yield* GitHub;
-			return yield* github.mergeStack("/tmp", "acme", "widgets", 42, "squash");
+			const merge = route === "regular" ? github.merge : github.mergeStack;
+			return yield* merge(
+				"/tmp",
+				"acme",
+				"widgets",
+				42,
+				"squash",
+				matchHeadCommit,
+			);
 		}),
 	).pipe(Effect.provide(GitHubTestLayer)),
 );

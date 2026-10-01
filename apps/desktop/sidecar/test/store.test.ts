@@ -54,6 +54,7 @@ const mockGitHub: GitHubShape = {
 	headRef: () => Effect.succeed("main"),
 	search: () => Effect.die(new Error("unused mock GitHub method")),
 	checks: () => Effect.die(new Error("unused mock GitHub method")),
+	checksSnapshot: () => Effect.die(new Error("unused mock GitHub method")),
 	approveWorkflowRuns: () => Effect.die(new Error("unused mock GitHub method")),
 	overview: () => Effect.die(new Error("unused mock GitHub method")),
 	stack: () => Effect.die(new Error("unused mock GitHub method")),

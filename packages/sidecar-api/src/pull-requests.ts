@@ -473,6 +473,51 @@ export const pullRequestsContract = {
 			NOT_FOUND: { data: MergeFailure },
 			SERVICE_UNAVAILABLE: { data: MergeFailure },
 		}),
+	scheduleMerge: oc
+		.input(
+			Schema.Struct({
+				repoRoot: Schema.String,
+				owner: Schema.String,
+				repo: Schema.String,
+				number: Schema.Number,
+				method: MergeMethod,
+				route: Schema.Literals(["merge", "stack"]),
+			}),
+		)
+		.output(Schema.Void)
+		.errors({
+			CONFLICT: { data: MergeFailure },
+			GH_NOT_AUTHENTICATED: { data: MergeFailure },
+			NOT_FOUND: { data: MergeFailure },
+			SERVICE_UNAVAILABLE: { data: MergeFailure },
+		}),
+	cancelScheduledMerge: oc
+		.input(
+			Schema.Struct({
+				repoRoot: Schema.String,
+				owner: Schema.String,
+				repo: Schema.String,
+				number: Schema.Number,
+			}),
+		)
+		.output(Schema.Void)
+		.errors({
+			CONFLICT: { data: MergeFailure },
+			GH_NOT_AUTHENTICATED: { data: MergeFailure },
+			NOT_FOUND: { data: MergeFailure },
+			SERVICE_UNAVAILABLE: { data: MergeFailure },
+		}),
+	scheduledMerge: oc
+		.input(
+			Schema.Struct({
+				repoRoot: Schema.String,
+				owner: Schema.String,
+				repo: Schema.String,
+				number: Schema.Number,
+			}),
+		)
+		.output(Schema.NullOr(Schema.Struct({ method: MergeMethod })))
+		.errors({ SERVICE_UNAVAILABLE: {} }),
 	markReady: oc
 		.input(
 			Schema.Struct({

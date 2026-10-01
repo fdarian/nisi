@@ -87,6 +87,13 @@ export type GitHubShape = {
 		ReadonlyArray<PullRequestCheck>,
 		PullRequestChecksError | GitCommandError
 	>;
+	checksSnapshot: (input: FetchPullRequestChecksInput) => Effect.Effect<
+		{
+			readonly headRefOid: string;
+			readonly checks: ReadonlyArray<PullRequestCheck>;
+		},
+		PullRequestChecksError | GitCommandError
+	>;
 	approveWorkflowRuns: (input: {
 		repoRoot: string;
 		owner: string;
@@ -133,6 +140,7 @@ export type GitHubShape = {
 		repo: string,
 		number: number,
 		method: MergeMethod,
+		matchHeadCommit?: string,
 	) => Effect.Effect<void, PullRequestMergeError | GitCommandError>;
 	mergeStack: (
 		repoRoot: string,
@@ -140,6 +148,7 @@ export type GitHubShape = {
 		repo: string,
 		number: number,
 		method: MergeMethod,
+		matchHeadCommit?: string,
 	) => Effect.Effect<void, PullRequestStackMergeError | GitCommandError>;
 	markReady: (
 		repoRoot: string,
