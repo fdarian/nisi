@@ -50,6 +50,8 @@ const DEFAULT_SETTINGS: Settings = {
 	// this setting — on by default here so existing stories don't need to
 	// override it just to keep rendering what they already render.
 	walkthroughEnabled: true,
+	notificationsEnabled: true,
+	notifyScheduledMergeSettled: true,
 	wrapLines: false,
 	lastChatHarness: null,
 	lastChatModel: null,
