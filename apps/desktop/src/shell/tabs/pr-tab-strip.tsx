@@ -44,6 +44,7 @@ import {
 	ContextMenuTrigger,
 } from "#/components/ui/context-menu";
 import { Kbd } from "#/components/ui/kbd";
+import { ScrollArea } from "#/components/ui/scroll-area";
 import { Spinner } from "#/components/ui/spinner";
 import { TabsPrimitive } from "#/components/ui/tabs";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "#/components/ui/tooltip";
@@ -107,20 +108,15 @@ type PrTabStripProps = {
  * top-left corner — so the strip reserves space for them and marks its own
  * background (not the tabs themselves) as a Tauri drag region.
  *
- * That region is `"deep"`, not bare: Tauri's drag script (`drag.js` in the
- * `tauri` crate) treats a bare `data-tauri-drag-region` as *this element
- * only* — `el === composedPath[0]` — and the `Tabs.List` below stretches
- * (`flex-1`) across all the empty space right of the last tab, so every click
- * out there lands on the list, not on this div, and used to do nothing.
- * `"deep"` makes the whole subtree draggable instead. Interactive descendants
- * still opt out on their own: that same script bails on anything with a
- * clickable tag or role, which covers both the tabs (`role="tab"`) and their
- * close `<button>`s — nothing here needs an explicit `="false"`.
+ * The ancestor's `"deep"` drag region keeps the empty spacer draggable.
+ * Tauri's drag script skips clickable tags and roles, so tabs and buttons
+ * opt out without an explicit `="false"`.
  *
  * Reorder uses dnd-kit's sortable preset (same method as Dice UI's Sortable):
  * `DndContext` + `SortableContext` + `useSortable`, horizontal list strategy,
  * closest-center collision, axis/parent modifiers, and a `DragOverlay` so the
- * moving tab isn't clipped by the list's `overflow-x-auto`. The sortable node
+ * moving tab isn't clipped by the scroll area's viewport. The list stays as
+ * wide as its tabs to bound drags to the row. The sortable node
  * is a real wrapper around the tab — `ContextMenuTrigger`'s `display: contents`
  * parent has a zero box, which made `restrictToParentElement` lock leftward
  * drags and sent the overlay's drop animation to `(0, 0)`. Mouse activation
@@ -197,40 +193,45 @@ export function PrTabStrip({
 					items={sessionIds}
 					strategy={horizontalListSortingStrategy}
 				>
-					<TabsPrimitive.List className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto py-2">
-						{sessions.map((session) => (
-							<PrTab
-								checkGenerationRunning={checkGenerationRunning}
-								hasOtherTabs={sessions.length > 1}
-								isActive={session.id === activeSessionId}
-								isSuspended={suspendedSessionIds.has(session.id)}
-								key={session.id}
-								onClose={() => onCloseSession(session.id)}
-								onCloseOthers={() => onCloseOtherSessions(session.id)}
-								onSuspend={() => onSuspendTab(session.id)}
-								orpc={orpc}
-								session={session}
-							/>
-						))}
-						{pendingRequest != null && (
-							<TabsPrimitive.Tab
-								className={PR_TAB_CLASS}
-								value={`open:${pendingRequest.id}`}
-							>
-								{pendingRequest.status.kind === "pending" ? (
-									<Spinner className="size-3.5" />
-								) : (
-									<AlertTriangleIcon className="size-3.5" />
-								)}
-								<span className="truncate">
-									{pendingRequest.status.kind === "pending"
-										? "Opening…"
-										: "Open failed"}
-								</span>
-							</TabsPrimitive.Tab>
-						)}
-						<OpenPullRequestButton onClick={onOpenPullRequest} />
-					</TabsPrimitive.List>
+					<ScrollArea
+						className="h-auto min-w-0 w-auto [&_[data-slot=scroll-area-scrollbar]]:hidden"
+						clampContentMinWidth={false}
+						scrollFade
+					>
+						<TabsPrimitive.List className="flex w-max items-center gap-1 py-2">
+							{sessions.map((session) => (
+								<PrTab
+									checkGenerationRunning={checkGenerationRunning}
+									hasOtherTabs={sessions.length > 1}
+									isActive={session.id === activeSessionId}
+									isSuspended={suspendedSessionIds.has(session.id)}
+									key={session.id}
+									onClose={() => onCloseSession(session.id)}
+									onCloseOthers={() => onCloseOtherSessions(session.id)}
+									onSuspend={() => onSuspendTab(session.id)}
+									orpc={orpc}
+									session={session}
+								/>
+							))}
+							{pendingRequest != null && (
+								<TabsPrimitive.Tab
+									className={PR_TAB_CLASS}
+									value={`open:${pendingRequest.id}`}
+								>
+									{pendingRequest.status.kind === "pending" ? (
+										<Spinner className="size-3.5" />
+									) : (
+										<AlertTriangleIcon className="size-3.5" />
+									)}
+									<span className="truncate">
+										{pendingRequest.status.kind === "pending"
+											? "Opening…"
+											: "Open failed"}
+									</span>
+								</TabsPrimitive.Tab>
+							)}
+						</TabsPrimitive.List>
+					</ScrollArea>
 				</SortableContext>
 				<DragOverlay dropAnimation={null}>
 					{draggingSession === undefined ? null : (
@@ -241,22 +242,15 @@ export function PrTabStrip({
 					)}
 				</DragOverlay>
 			</DndContext>
-			{/* Outside the scrollable, `flex-1` tab list — that's what keeps the
-			 * pill pinned at the strip's right edge instead of scrolling with
-			 * the tabs (see this file's top doc comment on why the list gets
-			 * `flex-1` in the first place). */}
+			<OpenPullRequestButton onClick={onOpenPullRequest} />
+			<div className="flex-1" />
+			{/* The spacer pins the pill right, outside the scrolling tabs. */}
 			<UpdatePill orpc={orpc} />
 		</div>
 	);
 }
 
-/**
- * The ghost "+" that opens the "open pull request" palette
- * (`open-pull-request-palette.tsx`) — a real `<button>` sitting outside
- * `TabsPrimitive.List` as a third child of the strip's own root, matching
- * the close button's own opt-out from the drag region (see this file's top
- * doc comment).
- */
+/** Opens the PR palette; stays beside the tabs, outside their scroll area. */
 function OpenPullRequestButton({
 	onClick,
 }: {
@@ -268,6 +262,7 @@ function OpenPullRequestButton({
 				render={
 					<Button
 						aria-label="Open pull request"
+						className="ml-1 shrink-0 self-center"
 						onClick={onClick}
 						size="icon-xs"
 						variant="ghost"
