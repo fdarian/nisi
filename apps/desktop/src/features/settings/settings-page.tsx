@@ -1,13 +1,10 @@
 "use client";
 
-import { Link } from "@tanstack/react-router";
 import {
 	AlertTriangleIcon,
-	ChevronLeftIcon,
 	MonitorIcon,
 	MoonIcon,
 	RefreshCwIcon,
-	SettingsIcon,
 	SunIcon,
 } from "lucide-react";
 import { useTheme } from "next-themes";
@@ -15,32 +12,12 @@ import { useCallback } from "react";
 import { Button } from "#/components/ui/button";
 import { Checkbox } from "#/components/ui/checkbox";
 import {
-	Empty,
-	EmptyDescription,
-	EmptyMedia,
-	EmptyTitle,
-} from "#/components/ui/empty";
-import {
 	Select,
 	SelectContent,
 	SelectItem,
 	SelectTrigger,
 	SelectValue,
 } from "#/components/ui/select";
-import {
-	Sidebar,
-	SidebarContent,
-	SidebarGroup,
-	SidebarGroupContent,
-	SidebarGroupLabel,
-	SidebarHeader,
-	SidebarInset,
-	SidebarMenu,
-	SidebarMenuButton,
-	SidebarMenuItem,
-	SidebarProvider,
-} from "#/components/ui/sidebar";
-import { Spinner } from "#/components/ui/spinner";
 import { Switch } from "#/components/ui/switch";
 import { ToggleGroup, ToggleGroupItem } from "#/components/ui/toggle-group";
 import {
@@ -51,7 +28,6 @@ import type { SidecarQueryUtils } from "#/infra/backend-context";
 import { useBackendContext } from "#/infra/backend-context";
 import { useAvailableEditors } from "#/infra/use-available-editors";
 import { DiffThemeColumn } from "./diff-theme-picker";
-import { NotificationsSection } from "./notifications-section";
 import {
 	useDiffThemeDark,
 	useDiffThemeLight,
@@ -65,94 +41,10 @@ import {
 	SettingsSection,
 } from "./settings-section";
 
-/**
- * Top-level `/settings` route content — a sibling of the main `AppShell`, not
- * nested inside it, with its own `SidebarProvider` (rheya's pattern). Gates
- * on the sidecar connection the same way `AppShell` does, since the
- * Harnesses section reads/writes through it.
- */
-export function SettingsPage(): React.ReactElement {
+export function SettingsPage(): React.ReactElement | null {
 	const backend = useBackendContext();
-
-	if (backend.status === "loading") {
-		return (
-			<SettingsFrame>
-				<Empty className="flex-1">
-					<EmptyMedia variant="icon">
-						<Spinner className="size-5" />
-					</EmptyMedia>
-					<EmptyTitle>Connecting to sidecar…</EmptyTitle>
-				</Empty>
-			</SettingsFrame>
-		);
-	}
-
-	if (backend.status === "error") {
-		return (
-			<SettingsFrame>
-				<Empty className="flex-1">
-					<EmptyMedia variant="icon">
-						<AlertTriangleIcon />
-					</EmptyMedia>
-					<EmptyTitle>Couldn't reach the sidecar</EmptyTitle>
-					<EmptyDescription>{backend.message}</EmptyDescription>
-				</Empty>
-			</SettingsFrame>
-		);
-	}
-
-	return (
-		<SettingsFrame>
-			<SettingsContent orpc={backend.orpc} />
-		</SettingsFrame>
-	);
-}
-
-/**
- * The macOS overlay titlebar (`titleBarStyle: "Overlay"` + `hiddenTitle`)
- * applies here too — no native title bar remains to drag by, and the traffic
- * lights float over the top-left corner, so the sidebar header reserves space
- * for them and marks itself as a Tauri drag region, same as `PrTabStrip`.
- */
-function SettingsFrame({
-	children,
-}: {
-	children: React.ReactNode;
-}): React.ReactElement {
-	return (
-		<SidebarProvider className="h-screen overflow-hidden">
-			<Sidebar variant="inset">
-				<SidebarHeader
-					className="h-10 justify-center pl-[78px]"
-					data-tauri-drag-region
-				>
-					<Link
-						className="inline-flex w-fit items-center gap-1 text-muted-foreground text-sm transition-colors hover:text-foreground"
-						to="/"
-					>
-						<ChevronLeftIcon className="size-4" />
-						Back to app
-					</Link>
-				</SidebarHeader>
-				<SidebarContent>
-					<SidebarGroup>
-						<SidebarGroupLabel>Preferences</SidebarGroupLabel>
-						<SidebarGroupContent>
-							<SidebarMenu>
-								<SidebarMenuItem>
-									<SidebarMenuButton isActive>
-										<SettingsIcon />
-										General
-									</SidebarMenuButton>
-								</SidebarMenuItem>
-							</SidebarMenu>
-						</SidebarGroupContent>
-					</SidebarGroup>
-				</SidebarContent>
-			</Sidebar>
-			<SidebarInset className="flex flex-col">{children}</SidebarInset>
-		</SidebarProvider>
-	);
+	if (backend.status !== "ready") return null;
+	return <SettingsContent orpc={backend.orpc} />;
 }
 
 function SettingsContent({
@@ -164,9 +56,8 @@ function SettingsContent({
 
 	return (
 		<div className="mx-auto flex w-full max-w-2xl flex-col gap-6 overflow-y-auto px-8 py-12">
-			<h1 className="font-semibold text-2xl tracking-tight">Settings</h1>
+			<h1 className="font-semibold text-2xl tracking-tight">General</h1>
 			<AppearanceSection orpc={orpc} />
-			<NotificationsSection orpc={orpc} />
 			<WalkthroughSection orpc={orpc} />
 			{/* Harness configuration is meaningless while the feature is off, and
 			mounting it triggers a macOS folder-permission prompt via `useHarnesses`
