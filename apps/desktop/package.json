@@ -66,6 +66,7 @@
 		"@tauri-apps/api": "^3.0.0-alpha.1",
 		"@tauri-apps/plugin-deep-link": "^3.0.0-alpha.1",
 		"@tauri-apps/plugin-dialog": "^3.0.0-alpha.1",
+		"@tauri-apps/plugin-notification": "3.0.0-alpha.1",
 		"@tauri-apps/plugin-opener": "^3.0.0-alpha.1",
 		"@tauri-apps/plugin-process": "^3.0.0-alpha.1",
 		"ai": "7.0.83",
