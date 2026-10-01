@@ -13,13 +13,6 @@ import {
 import { useTheme } from "next-themes";
 import { useCallback } from "react";
 import { Button } from "#/components/ui/button";
-import {
-	Card,
-	CardAction,
-	CardContent,
-	CardHeader,
-	CardTitle,
-} from "#/components/ui/card";
 import { Checkbox } from "#/components/ui/checkbox";
 import {
 	Empty,
@@ -58,6 +51,7 @@ import type { SidecarQueryUtils } from "#/infra/backend-context";
 import { useBackendContext } from "#/infra/backend-context";
 import { useAvailableEditors } from "#/infra/use-available-editors";
 import { DiffThemeColumn } from "./diff-theme-picker";
+import { NotificationsSection } from "./notifications-section";
 import {
 	useDiffThemeDark,
 	useDiffThemeLight,
@@ -65,6 +59,11 @@ import {
 	useUpdateSettings,
 	useWalkthroughEnabled,
 } from "./settings-data";
+import {
+	SettingsRow,
+	SettingsRowHeader,
+	SettingsSection,
+} from "./settings-section";
 
 /**
  * Top-level `/settings` route content — a sibling of the main `AppShell`, not
@@ -167,65 +166,12 @@ function SettingsContent({
 		<div className="mx-auto flex w-full max-w-2xl flex-col gap-6 overflow-y-auto px-8 py-12">
 			<h1 className="font-semibold text-2xl tracking-tight">Settings</h1>
 			<AppearanceSection orpc={orpc} />
+			<NotificationsSection orpc={orpc} />
 			<WalkthroughSection orpc={orpc} />
 			{/* Harness configuration is meaningless while the feature is off, and
 			mounting it triggers a macOS folder-permission prompt via `useHarnesses`
 			— so it doesn't mount at all until the setting is on. */}
 			{walkthroughEnabled && <HarnessesSection orpc={orpc} />}
-		</div>
-	);
-}
-
-function SettingsSection({
-	title,
-	action,
-	children,
-}: {
-	title: string;
-	action?: React.ReactNode;
-	children: React.ReactNode;
-}): React.ReactElement {
-	return (
-		<Card>
-			<CardHeader>
-				<CardTitle>{title}</CardTitle>
-				{action !== undefined && <CardAction>{action}</CardAction>}
-			</CardHeader>
-			<CardContent className="flex flex-col divide-y divide-border">
-				{children}
-			</CardContent>
-		</Card>
-	);
-}
-
-function SettingsRowHeader({
-	title,
-	description,
-}: {
-	title: string;
-	description: string;
-}): React.ReactElement {
-	return (
-		<div className="flex flex-col gap-0.5">
-			<span className="font-medium text-foreground text-sm">{title}</span>
-			<span className="text-muted-foreground text-sm">{description}</span>
-		</div>
-	);
-}
-
-function SettingsRow({
-	title,
-	description,
-	children,
-}: {
-	title: string;
-	description: string;
-	children: React.ReactNode;
-}): React.ReactElement {
-	return (
-		<div className="flex items-center justify-between gap-6 py-3 first:pt-0 last:pb-0">
-			<SettingsRowHeader description={description} title={title} />
-			{children}
 		</div>
 	);
 }
