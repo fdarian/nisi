@@ -30,19 +30,23 @@ export function SettingsSection(props: {
 
 export function SettingsRowHeader(props: {
 	title: string;
-	description: string;
+	description?: string;
 }): React.ReactElement {
 	return (
 		<div className="flex flex-col gap-0.5">
 			<span className="font-medium text-foreground text-sm">{props.title}</span>
-			<span className="text-muted-foreground text-sm">{props.description}</span>
+			{props.description !== undefined && (
+				<span className="text-muted-foreground text-sm">
+					{props.description}
+				</span>
+			)}
 		</div>
 	);
 }
 
 export function SettingsRow(props: {
 	title: string;
-	description: string;
+	description?: string;
 	children: React.ReactNode;
 }): React.ReactElement {
 	return (

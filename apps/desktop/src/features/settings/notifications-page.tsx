@@ -9,7 +9,7 @@ import {
 	useUpdateSettings,
 } from "./settings-data";
 import { SettingsRow, SettingsSection } from "./settings-section";
-import { TestNotificationButton } from "./test-notification-button";
+import { TestNotificationRow } from "./test-notification-row";
 
 export function NotificationsPage(): React.ReactElement | null {
 	const backend = useBackendContext();
@@ -37,14 +37,9 @@ function NotificationsContent(props: {
 						onCheckedChange={master[1]}
 					/>
 				</SettingsRow>
-				<SettingsRow
-					title="Test notification"
-					description="Switch to another app to see it as a banner."
-				>
-					<TestNotificationButton
-						disabled={!master[0] || !osNotificationsAvailable()}
-					/>
-				</SettingsRow>
+				<TestNotificationRow
+					disabled={!master[0] || !osNotificationsAvailable()}
+				/>
 			</SettingsSection>
 			<section
 				className="flex flex-col gap-2"
