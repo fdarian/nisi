@@ -151,6 +151,13 @@ const CLOSE_WINDOW_MENU_ID: &str = "close-window";
  * directly, no frontend round trip.
  */
 const ABOUT_MENU_ID: &str = "about";
+/**
+ * Id of the app menu's "Settings…" item (⌘,), and the event it emits to the
+ * main window's `use-settings-shortcut.ts`. A real menu accelerator, so
+ * AppKit swallows ⌘, before the webview's keydown handler would see it.
+ */
+const SETTINGS_MENU_ID: &str = "settings";
+const SETTINGS_EVENT: &str = "menu://open-settings";
 /** Label of the on-demand About window `build_about_window` creates, and the frontend route (`/about`) it loads. */
 const ABOUT_WINDOW_LABEL: &str = "about";
 
@@ -197,6 +204,14 @@ fn build_macos_menu(handle: &tauri::AppHandle) -> tauri::Result<Menu<tauri::DynR
             // build commit shown as one. Opens `build_about_window` via
             // `on_menu_event` below instead.
             &MenuItem::with_id(handle, ABOUT_MENU_ID, "About nisi", true, None::<&str>)?,
+            &PredefinedMenuItem::separator(handle)?,
+            &MenuItem::with_id(
+                handle,
+                SETTINGS_MENU_ID,
+                "Settings…",
+                true,
+                Some("CmdOrCtrl+Comma"),
+            )?,
             &PredefinedMenuItem::separator(handle)?,
             &PredefinedMenuItem::services(handle, None)?,
             &PredefinedMenuItem::separator(handle)?,
@@ -393,6 +408,15 @@ pub fn run() {
                     }
                 } else {
                     eprintln!("Close Window menu event fired but no window is focused");
+                }
+            } else if event.id() == SETTINGS_MENU_ID {
+                // Emitted to "main" only: the About window mounts the same
+                // root layout and would otherwise navigate itself to /settings.
+                if let Err(e) = activation::activate_main_window(app) {
+                    eprintln!("failed to focus the main window for Settings: {e}");
+                }
+                if let Err(e) = app.emit_to("main", SETTINGS_EVENT, ()) {
+                    eprintln!("failed to forward the Settings menu event: {e}");
                 }
             } else if event.id() == ABOUT_MENU_ID {
                 if let Some(window) = app.get_webview_window(ABOUT_WINDOW_LABEL) {
