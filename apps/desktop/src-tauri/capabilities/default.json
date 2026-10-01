@@ -12,6 +12,7 @@
 		"opener:default",
 		"process:allow-exit",
 		"deep-link:default",
+		"notification:default",
 		{
 			"identifier": "shell:allow-spawn",
 			"allow": [{ "name": "binaries/sidecar", "sidecar": true, "args": [] }]

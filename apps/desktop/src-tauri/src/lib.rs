@@ -436,6 +436,7 @@ pub fn run() {
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_deep_link::init())
+        .plugin(tauri_plugin_notification::init())
         .setup(|app| {
             // A deep link activates the native window before the frontend
             // resolves its PR; CLI opens arrive over the sidecar activation stream.
