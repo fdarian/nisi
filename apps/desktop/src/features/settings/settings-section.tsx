@@ -7,16 +7,20 @@ import {
 } from "#/components/ui/card";
 
 export function SettingsSection(props: {
-	title: string;
+	title?: string;
 	action?: React.ReactNode;
 	children: React.ReactNode;
 }): React.ReactElement {
 	return (
 		<Card>
-			<CardHeader>
-				<CardTitle>{props.title}</CardTitle>
-				{props.action !== undefined && <CardAction>{props.action}</CardAction>}
-			</CardHeader>
+			{(props.title !== undefined || props.action !== undefined) && (
+				<CardHeader>
+					{props.title !== undefined && <CardTitle>{props.title}</CardTitle>}
+					{props.action !== undefined && (
+						<CardAction>{props.action}</CardAction>
+					)}
+				</CardHeader>
+			)}
 			<CardContent className="flex flex-col divide-y divide-border">
 				{props.children}
 			</CardContent>
