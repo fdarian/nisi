@@ -45,6 +45,15 @@ export const scheduledMergeHeadMoved = (
 	currentSha: string,
 ) => checkedSha !== currentSha;
 
+export const isHeadMovedRejection = (detail: string): boolean =>
+	/head branch was modified|provided sha does not match head sha|head (?:sha|commit) (?:has )?(?:changed|does not match)/i.test(
+		detail,
+	);
+
+type MergeAttempt =
+	| { readonly outcome: "merged" | "wait" }
+	| { readonly outcome: "failed"; readonly reason: string };
+
 type MergeDecision =
 	| { readonly outcome: "wait" | "merge" }
 	| { readonly outcome: "cancelled" | "failed"; readonly reason: string };
@@ -116,6 +125,103 @@ export class ScheduledMerges extends Context.Service<ScheduledMerges>()(
 						}),
 					);
 				});
+			const settleIfCurrent = (
+				snapshot: ScheduledMerge,
+				outcome: "merged" | "failed" | "cancelled",
+				reason?: string,
+			) =>
+				lock.withPermit(
+					Effect.gen(function* () {
+						if (isSameSchedule(snapshot, yield* store.get(snapshot)))
+							yield* settle(snapshot, outcome, reason);
+					}),
+				);
+
+			const attemptMerge = (
+				input: ScheduledMerge,
+				repoRoot: string,
+				headRefOid: string,
+			) => {
+				const merge: (
+					...args: Parameters<typeof github.merge>
+				) => Effect.Effect<
+					void,
+					GitCommandError | PullRequestMergeError | PullRequestStackMergeError
+				> = input.route === "stack" ? github.mergeStack : github.merge;
+				return merge(
+					repoRoot,
+					input.owner,
+					input.repo,
+					input.number,
+					input.method,
+					headRefOid,
+				).pipe(
+					Effect.map((): MergeAttempt => ({ outcome: "merged" })),
+					Effect.catch((cause): Effect.Effect<MergeAttempt> => {
+						const failure =
+							cause._tag === "GhStackMergeFailed" ||
+							cause._tag === "GhOutputDecodeError"
+								? {
+										reason: "GitHub rejected the merge",
+										detail:
+											cause._tag === "GhOutputDecodeError"
+												? `${cause.raw}: ${String(cause.cause)}`
+												: cause.reason,
+									}
+								: translateMergeFailure(cause);
+						return Effect.succeed(
+							isHeadMovedRejection(failure.detail)
+								? { outcome: "wait" }
+								: {
+										outcome: "failed",
+										reason: `${failure.reason}: ${failure.detail}`,
+									},
+						);
+					}),
+				);
+			};
+
+			const mergeAndSettleIfCurrent = (
+				input: ScheduledMerge,
+				repoRoot: string,
+				headRefOid: string,
+			) =>
+				lock.withPermit(
+					Effect.gen(function* () {
+						if (!isSameSchedule(input, yield* store.get(input)))
+							return { outcome: "stale" as const };
+						const attempt = yield* attemptMerge(input, repoRoot, headRefOid);
+						if (attempt.outcome !== "merged") return attempt;
+						yield* preferences
+							.set(input.owner, input.repo, input.method)
+							.pipe(
+								Effect.catchTag("SettingsStoreError", (cause) =>
+									Effect.logWarning(
+										"failed to remember scheduled merge method",
+										{ input, cause },
+									),
+								),
+							);
+						yield* settle(input, "merged");
+						return attempt;
+					}),
+				);
+
+			// A push racing a pinned merge is retryable even when GitHub's rejection
+			// wording does not identify a head mismatch.
+			const rereadHeadMoved = (
+				input: ScheduledMerge,
+				repoRoot: string,
+				checkedSha: string,
+			) =>
+				github
+					.checksSnapshot({ ...input, repoRoot })
+					.pipe(
+						Effect.map((current) =>
+							scheduledMergeHeadMoved(checkedSha, current.headRefOid),
+						),
+					);
+
 			const check = (key: ScheduledMergeKey) =>
 				Effect.gen(function* () {
 					const input = yield* store.get(key);
@@ -123,15 +229,10 @@ export class ScheduledMerges extends Context.Service<ScheduledMerges>()(
 					const sessions = yield* Store;
 					const repoRoot = yield* sessions.resolveScheduledMergeRepoRoot(input);
 					if (repoRoot === null) {
-						yield* lock.withPermit(
-							Effect.gen(function* () {
-								if (isSameSchedule(input, yield* store.get(key)))
-									yield* settle(
-										input,
-										"failed",
-										"Worktree was moved or removed",
-									);
-							}),
+						yield* settleIfCurrent(
+							input,
+							"failed",
+							"Worktree was moved or removed",
 						);
 						return;
 					}
@@ -139,12 +240,7 @@ export class ScheduledMerges extends Context.Service<ScheduledMerges>()(
 					if (status.state !== "OPEN") {
 						const decision = decideScheduledMerge(status, []);
 						if (decision.outcome === "cancelled")
-							yield* lock.withPermit(
-								Effect.gen(function* () {
-									if (isSameSchedule(input, yield* store.get(key)))
-										yield* settle(input, decision.outcome, decision.reason);
-								}),
-							);
+							yield* settleIfCurrent(input, decision.outcome, decision.reason);
 						return;
 					}
 					const snapshot = yield* github.checksSnapshot({ ...input, repoRoot });
@@ -154,90 +250,18 @@ export class ScheduledMerges extends Context.Service<ScheduledMerges>()(
 						decision.outcome === "cancelled" ||
 						decision.outcome === "failed"
 					) {
-						yield* lock.withPermit(
-							Effect.gen(function* () {
-								if (isSameSchedule(input, yield* store.get(key)))
-									yield* settle(input, decision.outcome, decision.reason);
-							}),
-						);
+						yield* settleIfCurrent(input, decision.outcome, decision.reason);
 						return;
 					}
-					const merge: (
-						...args: Parameters<typeof github.merge>
-					) => Effect.Effect<
-						void,
-						GitCommandError | PullRequestMergeError | PullRequestStackMergeError
-					> = input.route === "stack" ? github.mergeStack : github.merge;
-					const result = yield* lock.withPermit(
-						Effect.gen(function* () {
-							if (!isSameSchedule(input, yield* store.get(key)))
-								return { outcome: "stale" as const };
-							const attempt = yield* merge(
-								repoRoot,
-								input.owner,
-								input.repo,
-								input.number,
-								input.method,
-								snapshot.headRefOid,
-							).pipe(
-								Effect.map(() => ({ outcome: "merged" as const })),
-								Effect.catch(
-									(
-										cause,
-									): Effect.Effect<
-										{ outcome: "wait" } | { outcome: "failed"; reason: string }
-									> => {
-										const failure =
-											cause._tag === "GhStackMergeFailed" ||
-											cause._tag === "GhOutputDecodeError"
-												? {
-														reason: "GitHub rejected the merge",
-														detail:
-															cause._tag === "GhOutputDecodeError"
-																? `${cause.raw}: ${String(cause.cause)}`
-																: cause.reason,
-													}
-												: translateMergeFailure(cause);
-										if (
-											/head branch was modified|provided sha does not match head sha|head (?:sha|commit) (?:has )?(?:changed|does not match)/i.test(
-												failure.detail,
-											)
-										)
-											return Effect.succeed({ outcome: "wait" as const });
-										return Effect.succeed({
-											outcome: "failed" as const,
-											reason: `${failure.reason}: ${failure.detail}`,
-										});
-									},
-								),
-							);
-							if (attempt.outcome !== "merged") return attempt;
-							yield* preferences
-								.set(input.owner, input.repo, input.method)
-								.pipe(
-									Effect.catchTag("SettingsStoreError", (cause) =>
-										Effect.logWarning(
-											"failed to remember scheduled merge method",
-											{ input, cause },
-										),
-									),
-								);
-							yield* settle(input, "merged");
-							return attempt;
-						}),
+					const result = yield* mergeAndSettleIfCurrent(
+						input,
+						repoRoot,
+						snapshot.headRefOid,
 					);
 					if (result.outcome !== "failed") return;
-					// A push racing a pinned merge is retryable, regardless of the
-					// wording of GitHub's synchronous or async rejection.
-					const current = yield* github.checksSnapshot({ ...input, repoRoot });
-					if (scheduledMergeHeadMoved(snapshot.headRefOid, current.headRefOid))
+					if (yield* rereadHeadMoved(input, repoRoot, snapshot.headRefOid))
 						return;
-					yield* lock.withPermit(
-						Effect.gen(function* () {
-							if (isSameSchedule(input, yield* store.get(key)))
-								yield* settle(input, "failed", result.reason);
-						}),
-					);
+					yield* settleIfCurrent(input, "failed", result.reason);
 				});
 			const recover = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
 				effect.pipe(
