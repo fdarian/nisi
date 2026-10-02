@@ -92,7 +92,7 @@ export const DEFAULT_SETTINGS: Settings = {
 	hideReviewed: false,
 	includeUncommitted: false,
 	walkthroughEnabled: false,
-	notificationsEnabled: true,
+	notificationsEnabled: false,
 	notifyScheduledMergeSettled: true,
 	wrapLines: false,
 	lastChatHarness: null,

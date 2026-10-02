@@ -56,7 +56,7 @@ export const settings = sqliteTable("settings", {
 	 * `hideReviewed` above.
 	 */
 	walkthroughEnabled: integer({ mode: "boolean" }).notNull().default(false),
-	notificationsEnabled: integer({ mode: "boolean" }).notNull().default(true),
+	notificationsEnabled: integer({ mode: "boolean" }).notNull().default(false),
 	notifyScheduledMergeSettled: integer({ mode: "boolean" })
 		.notNull()
 		.default(true),
