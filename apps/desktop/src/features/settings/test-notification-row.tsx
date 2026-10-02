@@ -8,6 +8,9 @@ export function TestNotificationRow(props: {
 }): React.ReactElement {
 	const [deadline, setDeadline] = useState<number | null>(null);
 	const [now, setNow] = useState(Date.now);
+	const sendErrorState = useState<string | null>(null);
+	const sendError = sendErrorState[0];
+	const setSendError = sendErrorState[1];
 
 	useEffect(() => {
 		if (props.disabled) {
@@ -22,10 +25,10 @@ export function TestNotificationRow(props: {
 			if (currentTime < deadline) return;
 			window.clearInterval(timer);
 			setDeadline(null);
-			sendOsNotification({
+			void sendOsNotification({
 				title: "nisi",
 				body: "Notifications are working.",
-			});
+			}).catch((error: unknown) => setSendError(String(error)));
 		}, 100);
 		return () => window.clearInterval(timer);
 	}, [deadline, props.disabled]);
@@ -36,15 +39,18 @@ export function TestNotificationRow(props: {
 		<SettingsRow
 			title="Test notification"
 			description={
-				deadline === null
-					? undefined
-					: "Switch to another app to see it as a banner."
+				sendError !== null
+					? sendError
+					: deadline === null
+						? undefined
+						: "Switch to another app to see it as a banner."
 			}
 		>
 			<Button
 				className="min-w-36 tabular-nums"
 				disabled={props.disabled || deadline !== null}
 				onClick={() => {
+					setSendError(null);
 					const currentTime = Date.now();
 					setNow(currentTime);
 					setDeadline(currentTime + 5000);
