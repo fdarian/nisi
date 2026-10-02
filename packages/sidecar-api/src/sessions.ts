@@ -80,9 +80,8 @@ export const sessionsContract = {
 	 * "Switch to PR": retargets `sessionId`'s row onto the pull request open
 	 * for its current branch *in place* — same `id`, so tracked-changes state
 	 * and a generated walkthrough (both keyed by this session's `id`) carry
-	 * over untouched. Unlike `open`'s `{ target: { kind: "pr" } }`, which
-	 * always mints a session under the PR's own key and leaves the caller's
-	 * tab exactly where it was, this transforms the one tab the caller named —
+	 * over untouched. While `open` can reuse a matching branch session,
+	 * this transforms the one tab the caller named —
 	 * see `@repo/review`'s `retargetToPullRequest` for the mechanics. The
 	 * command palette's "Switch to PR" action, shown only on a `"branch"`
 	 * session, is this procedure's only caller.

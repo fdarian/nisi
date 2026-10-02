@@ -50,6 +50,7 @@ const mockGitHub: GitHubShape = {
 			title: "Add widgets",
 			baseRef: "main",
 			headRef: "main",
+			isCrossRepository: false,
 		}),
 	headRef: () => Effect.succeed("main"),
 	search: () => Effect.die(new Error("unused mock GitHub method")),
@@ -69,11 +70,17 @@ const mockGitHub: GitHubShape = {
 	watchOverview: () => Stream.die(new Error("unused mock GitHub method")),
 };
 
-const makeTestLayer = (dataDir: string, withPullRequest = false) =>
+const makeTestLayer = (
+	dataDir: string,
+	withPullRequest: boolean | GitHubShape = false,
+) =>
 	Store.layer.pipe(
 		Layer.provideMerge(
 			withPullRequest
-				? Layer.succeed(GitHub, mockGitHub)
+				? Layer.succeed(
+						GitHub,
+						typeof withPullRequest === "boolean" ? mockGitHub : withPullRequest,
+					)
 				: GhGitHub.layer.pipe(
 						Layer.provideMerge(PullRequestAttentionLive.layer),
 					),
@@ -344,6 +351,164 @@ describe("Store.openSession — reuses matching branch review state for a PR", (
 			expect(session.target.kind).toBe("branch");
 		});
 	});
+});
+
+describe("Store.openPullRequestSession — reuses open review sessions", () => {
+	test("returns an existing PR in another root by case-insensitive identity without GitHub calls", async () => {
+		await withTestRepoAndDataDir(async (repoRoot, dataDir) => {
+			await Effect.runPromise(
+				Effect.gen(function* () {
+					const store = yield* Store;
+					const reviewStore = yield* ReviewStore;
+					const settings = yield* SettingsStore;
+					yield* settings.setRepoPath("acme", "widgets", repoRoot);
+					const existing = yield* reviewStore.openSession({
+						repoRoot: join(dataDir, "another-root"),
+						baseRef: "main",
+						headRef: "feature",
+						pr: {
+							number: 42,
+							title: "Existing",
+							owner: "Acme",
+							repo: "Widgets",
+						},
+					});
+					const opened = yield* store.openPullRequestSession({
+						owner: "acme",
+						repo: "widgets",
+						number: 42,
+					});
+					expect(opened.status).toBe("opened");
+					if (opened.status !== "opened") return;
+					expect(opened.outcome.kind).toBe("opened");
+					expect(opened.outcome.session.id).toBe(existing.id);
+					expect((yield* reviewStore.listOpenSessions()).length).toBe(1);
+				}).pipe(
+					Effect.provide(
+						makeTestLayer(dataDir, {
+							...mockGitHub,
+							pullRequest: () => Effect.die(new Error("must not fetch PR")),
+							headRef: () => Effect.die(new Error("must not fetch head")),
+						}),
+					),
+				),
+			);
+		});
+	});
+
+	for (const scenario of [
+		"matching",
+		"other-branch",
+		"fork",
+		"unrelated",
+		"missing",
+		"no-session",
+	] as const) {
+		test(`${scenario}: only a same-repository checkout on the PR head is retargeted`, async () => {
+			await withTestRepoAndDataDir(async (repoRoot, dataDir) => {
+				await sh(repoRoot, [
+					"remote",
+					"add",
+					"origin",
+					"https://github.com/acme/widgets.git",
+				]);
+				await sh(repoRoot, [
+					"config",
+					`url.${repoRoot}.insteadOf`,
+					"https://github.com/acme/widgets.git",
+				]);
+				await sh(repoRoot, ["branch", "feature"]);
+				await sh(repoRoot, ["update-ref", "refs/pull/42/head", "feature"]);
+				const sibling = join(dataDir, "branch-worktree");
+				await sh(repoRoot, ["worktree", "add", sibling, "feature"]);
+				if (scenario === "other-branch")
+					await sh(sibling, ["checkout", "-b", "other"]);
+				const unrelated =
+					scenario === "unrelated" ? await makeTestRepo() : null;
+				try {
+					await Effect.runPromise(
+						Effect.gen(function* () {
+							const store = yield* Store;
+							const reviewStore = yield* ReviewStore;
+							const settings = yield* SettingsStore;
+							yield* settings.setRepoPath("acme", "widgets", repoRoot);
+							const source =
+								scenario === "no-session"
+									? null
+									: yield* reviewStore.openSession({
+											repoRoot:
+												scenario === "missing"
+													? join(dataDir, "gone")
+													: (unrelated ?? sibling),
+											baseRef: "main",
+											headRef: "feature",
+											pr: null,
+										});
+							if (source !== null) {
+								yield* reviewStore.markFileViewed(
+									source.id,
+									"a.ts",
+									Option.some(new TextEncoder().encode("hello\n")),
+								);
+							}
+							const before =
+								source === null
+									? null
+									: yield* reviewStore.getFileReviewState(source.id, "a.ts");
+							const opened = yield* store.openPullRequestSession({
+								owner: "acme",
+								repo: "widgets",
+								number: 42,
+							});
+							expect(opened.status).toBe("opened");
+							if (opened.status !== "opened") return;
+							expect(opened.outcome.session.target.kind).toBe("pr");
+							if (scenario === "matching" && source !== null) {
+								expect(opened.outcome.kind).toBe("retargeted");
+								expect(opened.outcome.session.id).toBe(source.id);
+								expect(opened.outcome.session.repoRoot).toBe(source.repoRoot);
+								expect(
+									yield* reviewStore.getFileReviewState(source.id, "a.ts"),
+								).toEqual(before);
+							} else {
+								expect(opened.outcome.kind).toBe("opened");
+								expect(opened.outcome.session.id).not.toBe(source?.id);
+								expect(opened.outcome.session.repoRoot).not.toBe(sibling);
+								expect(
+									yield* reviewStore.getFileReviewState(
+										opened.outcome.session.id,
+										"a.ts",
+									),
+								).toBeNull();
+								if (source !== null)
+									expect(
+										(yield* reviewStore.getSession(source.id)).pr,
+									).toBeNull();
+							}
+						}).pipe(
+							Effect.provide(
+								makeTestLayer(dataDir, {
+									...mockGitHub,
+									pullRequest: () =>
+										Effect.succeed({
+											number: 42,
+											title: "Add widgets",
+											baseRef: "main",
+											headRef: "feature",
+											isCrossRepository: scenario === "fork",
+										}),
+									headRef: () => Effect.succeed("feature"),
+								}),
+							),
+						),
+					);
+				} finally {
+					if (unrelated !== null)
+						await rm(unrelated, { recursive: true, force: true });
+				}
+			});
+		});
+	}
 });
 
 test("range claims change the Files Changed patch for a single added line", async () => {
