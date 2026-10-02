@@ -1,12 +1,22 @@
-import { isTauri } from "@tauri-apps/api/core";
-import { sendNotification } from "@tauri-apps/plugin-notification";
+import { invoke, isTauri } from "@tauri-apps/api/core";
 
-export const osNotificationsAvailable = (): boolean => isTauri();
+export type NotificationPermission =
+	| "granted"
+	| "denied"
+	| "not_determined"
+	| "unsupported";
 
-/** Desktop notification delivery is best effort; the alpha plugin exposes no delivery result. */
+export async function notificationPermission(): Promise<NotificationPermission> {
+	return isTauri() ? invoke("notification_permission") : "unsupported";
+}
+
+export async function requestNotificationPermission(): Promise<NotificationPermission> {
+	return isTauri() ? invoke("request_notification_permission") : "unsupported";
+}
+
 export function sendOsNotification(message: {
 	title: string;
 	body: string;
-}): void {
-	sendNotification(message);
+}): Promise<void> {
+	return invoke("send_notification", message);
 }

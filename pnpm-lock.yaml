@@ -322,9 +322,6 @@ importers:
       '@tauri-apps/plugin-deep-link':
         specifier: 3.0.0-alpha.2
         version: 3.0.0-alpha.2
-      '@tauri-apps/plugin-notification':
-        specifier: 3.0.0-alpha.1
-        version: 3.0.0-alpha.1
       '@tauri-apps/plugin-opener':
         specifier: 3.0.0-alpha.2
         version: 3.0.0-alpha.2
@@ -3133,9 +3130,6 @@ packages:
 
   '@tauri-apps/plugin-deep-link@3.0.0-alpha.2':
     resolution: {integrity: sha512-XSDlYwnBZaTZjNMGeGwbSGk6Z3OjJaE/oicYhiDdCVcyqtRl0fCjQQz7SWfaTeSvcu3V9OX/dbA8+JKoQYRYPw==}
-
-  '@tauri-apps/plugin-notification@3.0.0-alpha.1':
-    resolution: {integrity: sha512-Va/ZFHICjOh0RPMTC/BD6F9bGdfvTE8FKHSQI5aeTopN0I0C385yc5ImPTFiTcliBpjtDRO++QK5melBrnPmjQ==}
 
   '@tauri-apps/plugin-opener@3.0.0-alpha.2':
     resolution: {integrity: sha512-T3Y7Y/m+XybZqB2cI6SZD8St47GBONPTbFp+hSYFLHy5Lh0eNh0sv9TRyi7MElzUtUx0NWZltAOHuHzeo2UfWA==}
@@ -8367,10 +8361,6 @@ snapshots:
       '@tauri-apps/cli-win32-x64-msvc': 3.0.0-alpha.4
 
   '@tauri-apps/plugin-deep-link@3.0.0-alpha.2':
-    dependencies:
-      '@tauri-apps/api': 3.0.0-alpha.2
-
-  '@tauri-apps/plugin-notification@3.0.0-alpha.1':
     dependencies:
       '@tauri-apps/api': 3.0.0-alpha.2
 
