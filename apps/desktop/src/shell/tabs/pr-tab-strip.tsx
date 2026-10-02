@@ -432,11 +432,7 @@ function PrTab({
 			>
 				<ContextMenuTrigger render={<div className="contents" />}>
 					<TabsPrimitive.Tab
-						className={cn(
-							PR_TAB_CLASS,
-							hasOtherTabs ? "cursor-grab" : "cursor-pointer",
-							sortable.isDragging && "cursor-grabbing",
-						)}
+						className={PR_TAB_CLASS}
 						nativeButton={false}
 						render={<div />}
 						value={session.id}
@@ -518,10 +514,7 @@ function PrTabPreview({
 }): React.ReactElement {
 	return (
 		<div
-			className={cn(
-				PR_TAB_CLASS,
-				"cursor-grabbing bg-background text-foreground shadow-xs/5",
-			)}
+			className={cn(PR_TAB_CLASS, "bg-background text-foreground shadow-xs/5")}
 			data-tauri-drag-region="false"
 		>
 			<PrTabIcon
