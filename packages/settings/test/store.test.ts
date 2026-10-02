@@ -1,14 +1,55 @@
 import { describe, expect, test } from "bun:test";
+import { SqliteDb } from "@repo/db";
 import { Effect } from "effect";
+import { settings } from "../src/db/schema.ts";
 import { DEFAULT_SETTINGS, SettingsStore } from "../src/store.ts";
 import { makeTestLayer, withTempDataDir } from "./fixtures.ts";
 
 const run = <A, E>(
 	dataDir: string,
-	effect: Effect.Effect<A, E, SettingsStore>,
+	effect: Effect.Effect<A, E, SettingsStore | SqliteDb>,
 ) => Effect.runPromise(effect.pipe(Effect.provide(makeTestLayer(dataDir))));
 
 describe("SettingsStore", () => {
+	test("the database defaults notifications to opt-in for a newly inserted row", async () => {
+		await withTempDataDir(async (dataDir) => {
+			await run(
+				dataDir,
+				Effect.gen(function* () {
+					const store = yield* SettingsStore;
+					const db = yield* SqliteDb;
+					yield* db
+						.insert(settings)
+						.values({ sidebarViewMode: "tree", diffStyleMode: "split" });
+					const result = yield* store.get();
+					expect(result.notificationsEnabled).toBe(false);
+					expect(result.notifyScheduledMergeSettled).toBe(true);
+				}),
+			);
+		});
+	});
+	test("notifications are opt-in and preserve the kind while the master is off", async () => {
+		await withTempDataDir(async (dataDir) => {
+			await run(
+				dataDir,
+				Effect.gen(function* () {
+					const store = yield* SettingsStore;
+					const defaults = yield* store.get();
+					expect(defaults.notificationsEnabled).toBe(false);
+					expect(defaults.notifyScheduledMergeSettled).toBe(true);
+					yield* store.update({ notificationsEnabled: false });
+					const disabled = yield* store.get();
+					expect(disabled.notificationsEnabled).toBe(false);
+					expect(disabled.notifyScheduledMergeSettled).toBe(true);
+					yield* store.update({ notifyScheduledMergeSettled: false });
+					yield* store.update({ notificationsEnabled: true });
+					const enabled = yield* store.get();
+					expect(enabled.notificationsEnabled).toBe(true);
+					expect(enabled.notifyScheduledMergeSettled).toBe(false);
+				}),
+			);
+		});
+	});
 	test("get() returns defaults before any update has been written", async () => {
 		await withTempDataDir(async (dataDir) => {
 			const result = await run(

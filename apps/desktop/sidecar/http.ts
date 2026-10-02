@@ -141,6 +141,8 @@ const toWireSettings = (settings: {
 	readonly hideReviewed: WireSettings["hideReviewed"];
 	readonly includeUncommitted: WireSettings["includeUncommitted"];
 	readonly walkthroughEnabled: WireSettings["walkthroughEnabled"];
+	readonly notificationsEnabled: WireSettings["notificationsEnabled"];
+	readonly notifyScheduledMergeSettled: WireSettings["notifyScheduledMergeSettled"];
 	readonly wrapLines: WireSettings["wrapLines"];
 	readonly lastChatHarness: string | null;
 	readonly lastChatModel: WireSettings["lastChatModel"];
@@ -157,6 +159,8 @@ const toWireSettings = (settings: {
 	hideReviewed: settings.hideReviewed,
 	includeUncommitted: settings.includeUncommitted,
 	walkthroughEnabled: settings.walkthroughEnabled,
+	notificationsEnabled: settings.notificationsEnabled,
+	notifyScheduledMergeSettled: settings.notifyScheduledMergeSettled,
 	wrapLines: settings.wrapLines,
 	lastChatHarness:
 		settings.lastChatHarness === null

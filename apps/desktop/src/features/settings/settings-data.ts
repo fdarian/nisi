@@ -41,6 +41,8 @@ export type Settings = {
 	includeUncommitted: boolean;
 	/** Gates the entire walkthrough feature — see `@repo/settings`'s `Settings.walkthroughEnabled`. */
 	walkthroughEnabled: boolean;
+	notificationsEnabled: boolean;
+	notifyScheduledMergeSettled: boolean;
 	/** When true, long diff lines wrap instead of scrolling horizontally. */
 	wrapLines: boolean;
 	/** Harness id of the last chat model sent with — see `@repo/settings`'s `Settings.lastChatHarness` doc. */
@@ -73,6 +75,8 @@ const DEFAULT_SETTINGS: Settings = {
 	hideReviewed: false,
 	includeUncommitted: false,
 	walkthroughEnabled: false,
+	notificationsEnabled: false,
+	notifyScheduledMergeSettled: true,
 	wrapLines: false,
 	lastChatHarness: null,
 	lastChatModel: null,
@@ -244,6 +248,18 @@ export function useWalkthroughEnabled(
 	);
 
 	return [settings.walkthroughEnabled, setWalkthroughEnabled];
+}
+
+export function useNotificationsEnabled(
+	orpc: SidecarQueryUtils,
+): [boolean, (enabled: boolean) => void] {
+	const query = useSettings(orpc);
+	const update = useUpdateSettings(orpc);
+	const setEnabled = useCallback(
+		(enabled: boolean) => update({ notificationsEnabled: enabled }),
+		[update],
+	);
+	return [query.settings.notificationsEnabled, setEnabled];
 }
 
 /** "Include uncommitted" preference — see `@repo/settings`'s `includeUncommitted`. */
