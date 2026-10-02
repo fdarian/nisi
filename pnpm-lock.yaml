@@ -325,9 +325,6 @@ importers:
       '@tauri-apps/plugin-dialog':
         specifier: ^3.0.0-alpha.1
         version: 3.0.0-alpha.1
-      '@tauri-apps/plugin-notification':
-        specifier: 3.0.0-alpha.1
-        version: 3.0.0-alpha.1
       '@tauri-apps/plugin-opener':
         specifier: ^3.0.0-alpha.1
         version: 3.0.0-alpha.1
@@ -3139,9 +3136,6 @@ packages:
 
   '@tauri-apps/plugin-dialog@3.0.0-alpha.1':
     resolution: {integrity: sha512-h3rLSJ96HG94KC04B4uf1xqVONkmc3ruhg5evGjhvFGqOsRKtZEqttPU6qL8Bz5z5L3ZVgmbMp/y/Hy2NmSNWg==}
-
-  '@tauri-apps/plugin-notification@3.0.0-alpha.1':
-    resolution: {integrity: sha512-Va/ZFHICjOh0RPMTC/BD6F9bGdfvTE8FKHSQI5aeTopN0I0C385yc5ImPTFiTcliBpjtDRO++QK5melBrnPmjQ==}
 
   '@tauri-apps/plugin-opener@3.0.0-alpha.1':
     resolution: {integrity: sha512-3QTvnEqaVXhDrf5N5rmoghReOc0kuSPHpNDgX6R3oWbOdwQBTCriCb2DIkE6uSukuHKFRCx2bjmHcQbr1Gb6GQ==}
@@ -8377,10 +8371,6 @@ snapshots:
       '@tauri-apps/api': 3.0.0-alpha.1
 
   '@tauri-apps/plugin-dialog@3.0.0-alpha.1':
-    dependencies:
-      '@tauri-apps/api': 3.0.0-alpha.1
-
-  '@tauri-apps/plugin-notification@3.0.0-alpha.1':
     dependencies:
       '@tauri-apps/api': 3.0.0-alpha.1
 

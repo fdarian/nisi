@@ -13,7 +13,14 @@
 		"dialog:allow-open",
 		"process:allow-exit",
 		"deep-link:default",
-		"notification:default",
+		{
+			"identifier": "opener:allow-open-url",
+			"allow": [
+				{
+					"url": "x-apple.systempreferences:com.apple.Notifications-Settings.extension"
+				}
+			]
+		},
 		{
 			"identifier": "shell:allow-spawn",
 			"allow": [{ "name": "binaries/sidecar", "sidecar": true, "args": [] }]

@@ -2,6 +2,7 @@ mod activation;
 #[cfg(target_os = "macos")]
 mod chromium_window_drag;
 mod editors;
+mod notifications;
 #[cfg(target_os = "macos")]
 mod termination_signals;
 
@@ -436,7 +437,6 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_deep_link::init())
-        .plugin(tauri_plugin_notification::init())
         .setup(|app| {
             // A deep link activates the native window before the frontend
             // resolves its PR; CLI opens arrive over the sidecar activation stream.
@@ -503,7 +503,10 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             get_backend,
             list_available_editors,
-            open_in_editor
+            open_in_editor,
+            notifications::notification_permission,
+            notifications::request_notification_permission,
+            notifications::send_notification
         ]);
 
     #[cfg(target_os = "macos")]
