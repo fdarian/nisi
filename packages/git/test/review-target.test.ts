@@ -106,6 +106,7 @@ describe("resolveReviewTarget", () => {
 									title: "Feature",
 									baseRef: "main",
 									headRef: "feature",
+									isCrossRepository: false,
 								}),
 						}),
 					);
@@ -119,6 +120,7 @@ describe("resolveReviewTarget", () => {
 					title: "Feature",
 					baseRef: "main",
 					headRef: "feature",
+					isCrossRepository: false,
 				},
 			});
 		} finally {

@@ -107,6 +107,7 @@ export {
 	guessSiblingRepoPath,
 	inferRepoPath,
 	parseOwnerRepoFromRemoteUrl,
+	resolveMainCloneRoot,
 	verifyRepoPathMatchesOrigin,
 } from "./repo-path-mapping.ts";
 export type {

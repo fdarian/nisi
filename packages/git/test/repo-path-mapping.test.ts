@@ -9,6 +9,7 @@ import {
 	inferRepoPath,
 	type KnownRepoPath,
 	parseOwnerRepoFromRemoteUrl,
+	resolveMainCloneRoot,
 	verifyRepoPathMatchesOrigin,
 } from "../src/repo-path-mapping.ts";
 
@@ -44,6 +45,43 @@ const makeRepoAt = async (path: string, remoteUrl?: string): Promise<void> => {
 
 const run = <A, E>(effect: Effect.Effect<A, E, BunServices.BunServices>) =>
 	Effect.runPromise(effect.pipe(Effect.provide(BunServices.layer)));
+
+test("resolveMainCloneRoot normalizes main clones, sibling worktrees, subdirectories, and symlinks", async () => {
+	const parent = await mkdtemp(join(tmpdir(), "nisi-main-clone-"));
+	try {
+		const main = join(parent, "main");
+		const sibling = join(parent, "sibling");
+		const alias = join(parent, "alias");
+		await makeRepoAt(main);
+		await sh(main, [
+			"-c",
+			"user.name=Test",
+			"-c",
+			"user.email=test@example.com",
+			"commit",
+			"--allow-empty",
+			"-m",
+			"base",
+		]);
+		await sh(main, ["worktree", "add", "-b", "feature", sibling]);
+		await mkdir(join(sibling, "nested"));
+		await symlink(sibling, alias);
+		for (const path of [main, sibling, join(sibling, "nested"), alias]) {
+			expect(await run(resolveMainCloneRoot(path))).toBe(await realpath(main));
+		}
+		const other = join(parent, "other");
+		await makeRepoAt(other);
+		expect(await run(resolveMainCloneRoot(other))).not.toBe(
+			await realpath(main),
+		);
+		const missing = await run(
+			resolveMainCloneRoot(join(parent, "gone")).pipe(Effect.result),
+		);
+		expect(missing).toMatchObject({ failure: { _tag: "RepoPathNotFound" } });
+	} finally {
+		await rm(parent, { recursive: true, force: true });
+	}
+});
 
 describe("parseOwnerRepoFromRemoteUrl", () => {
 	test("HTTPS with .git suffix", () => {
