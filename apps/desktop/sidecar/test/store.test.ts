@@ -4,7 +4,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { BunServices } from "@effect/platform-bun";
 import { SqliteDb } from "@repo/db";
-import { GhGitHub, GitHub, type GitHubShape } from "@repo/git";
+import {
+	GhGitHub,
+	GitHub,
+	type GitHubShape,
+	PullRequestNotFound,
+} from "@repo/git";
 import { ReviewStore } from "@repo/review";
 import { SettingsStore } from "@repo/settings";
 import { ConfigProvider, Effect, Layer, Option, Result, Stream } from "effect";
@@ -354,6 +359,44 @@ describe("Store.openSession — reuses matching branch review state for a PR", (
 });
 
 describe("Store.openPullRequestSession — reuses open review sessions", () => {
+	for (const missingResult of ["failure", "null"] as const) {
+		test(`a missing PR (${missingResult}) surfaces PullRequestNotFound without a head-ref lookup`, async () => {
+			await withTestRepoAndDataDir(async (repoRoot, dataDir) => {
+				const failure = new PullRequestNotFound({
+					repoRoot,
+					number: 42,
+					reason: "PR no longer exists",
+				});
+				const result = await Effect.runPromise(
+					Effect.gen(function* () {
+						const store = yield* Store;
+						const settings = yield* SettingsStore;
+						yield* settings.setRepoPath("acme", "widgets", repoRoot);
+						return yield* store.openPullRequestSession({
+							owner: "acme",
+							repo: "widgets",
+							number: 42,
+						});
+					}).pipe(
+						Effect.result,
+						Effect.provide(
+							makeTestLayer(dataDir, {
+								...mockGitHub,
+								pullRequest: () =>
+									missingResult === "failure" ? failure : Effect.succeed(null),
+								headRef: () => Effect.die(new Error("must not fetch head")),
+							}),
+						),
+					),
+				);
+				expect(Result.isFailure(result)).toBe(true);
+				if (!Result.isFailure(result)) return;
+				expect(result.failure._tag).toBe("PullRequestNotFound");
+				if (missingResult === "failure") expect(result.failure).toBe(failure);
+			});
+		});
+	}
+
 	test("returns an existing PR in another root by case-insensitive identity without GitHub calls", async () => {
 		await withTestRepoAndDataDir(async (repoRoot, dataDir) => {
 			await Effect.runPromise(
@@ -497,7 +540,8 @@ describe("Store.openPullRequestSession — reuses open review sessions", () => {
 											headRef: "feature",
 											isCrossRepository: scenario === "fork",
 										}),
-									headRef: () => Effect.succeed("feature"),
+									headRef: () =>
+										Effect.die(new Error("must reuse the fetched PR head")),
 								}),
 							),
 						),

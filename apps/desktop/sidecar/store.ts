@@ -16,7 +16,8 @@ import {
 	type NoDefaultBranch,
 	type NoOriginRemote,
 	openPullRequestWorktree,
-	type PullRequestNotFound,
+	PullRequestNotFound,
+	type PullRequestRef,
 	type PullRequestRefNotFound,
 	type RepoPathVerificationError,
 	readFileContentsAtRef,
@@ -423,26 +424,13 @@ export class Store extends Context.Service<Store>()("Store", {
 				} as const;
 			});
 
-		const findReusablePullRequestSession = (
+		const retargetMatchingBranchSession = (
 			repoRoot: string,
-			input: OpenPullRequestInput,
+			sessions: ReadonlyArray<ReviewSession>,
+			pr: PullRequestRef,
 		) =>
 			Effect.gen(function* () {
-				const sessions = yield* reviewStore.listOpenSessions();
-				const existing = sessions.find(
-					(session) =>
-						session.pr !== null &&
-						session.pr.number === input.number &&
-						session.pr.owner.toLowerCase() === input.owner.toLowerCase() &&
-						session.pr.repo.toLowerCase() === input.repo.toLowerCase(),
-				);
-				if (existing !== undefined) {
-					return { kind: "opened", session: toWireSession(existing) } as const;
-				}
-
-				const github = yield* GitHub;
-				const pr = yield* github.pullRequest(repoRoot, input.number);
-				if (pr === null || pr.isCrossRepository) return null;
+				if (pr.isCrossRepository) return null;
 				const mainCloneRoot = yield* resolveMainCloneRoot(repoRoot);
 				const candidates = yield* Effect.filter(
 					sessions.filter(
@@ -469,7 +457,7 @@ export class Store extends Context.Service<Store>()("Store", {
 				if (source === undefined) return null;
 				const resolved = yield* resolveSessionTarget(source.repoRoot, {
 					kind: "specificPullRequest",
-					number: input.number,
+					number: pr.number,
 				});
 				if (resolved.pr === null) return null;
 				yield* refreshBase(source.repoRoot, resolved.baseRef);
@@ -692,9 +680,37 @@ export class Store extends Context.Service<Store>()("Store", {
 					};
 				}
 
-				const reused = yield* findReusablePullRequestSession(
+				const sessions = yield* reviewStore.listOpenSessions();
+				const existing = sessions.find(
+					(session) =>
+						session.pr !== null &&
+						session.pr.number === input.number &&
+						session.pr.owner.toLowerCase() === input.owner.toLowerCase() &&
+						session.pr.repo.toLowerCase() === input.repo.toLowerCase(),
+				);
+				if (existing !== undefined) {
+					return {
+						status: "opened" as const,
+						outcome: {
+							kind: "opened" as const,
+							session: toWireSession(existing),
+						},
+					};
+				}
+
+				const github = yield* GitHub;
+				const pr = yield* github.pullRequest(repoRoot, input.number);
+				if (pr === null) {
+					return yield* new PullRequestNotFound({
+						repoRoot,
+						number: input.number,
+						reason: "GitHub returned no pull request for the requested number",
+					});
+				}
+				const reused = yield* retargetMatchingBranchSession(
 					repoRoot,
-					input,
+					sessions,
+					pr,
 				).pipe(
 					Effect.catchTags({
 						RepoPathNotFound: () => Effect.succeed(null),
@@ -704,12 +720,10 @@ export class Store extends Context.Service<Store>()("Store", {
 				if (reused !== null)
 					return { status: "opened" as const, outcome: reused };
 
-				const github = yield* GitHub;
-				const headRef = yield* github.headRef(repoRoot, input.number);
 				const worktreePath = yield* openPullRequestWorktree({
 					repoRoot,
 					number: input.number,
-					headRef,
+					headRef: pr.headRef,
 				});
 				const outcome = yield* openSession(worktreePath, {
 					kind: "specificPullRequest",
