@@ -100,6 +100,7 @@ function NotificationsContent(props: {
 				)}
 				<TestNotificationRow
 					disabled={!enabled || permission.data !== "granted"}
+					className="pt-6"
 				/>
 			</SettingsSection>
 			<section
@@ -107,7 +108,7 @@ function NotificationsContent(props: {
 				aria-labelledby="general-notifications-title"
 			>
 				<h2
-					className="px-3.5 font-medium text-sm tracking-tight"
+					className="px-6 font-medium text-sm tracking-tight"
 					id="general-notifications-title"
 				>
 					General notifications

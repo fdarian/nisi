@@ -5,6 +5,7 @@ import { SettingsRow } from "./settings-section";
 
 export function TestNotificationRow(props: {
 	disabled: boolean;
+	className?: string;
 }): React.ReactElement {
 	const [deadline, setDeadline] = useState<number | null>(null);
 	const [now, setNow] = useState(Date.now);
@@ -38,6 +39,7 @@ export function TestNotificationRow(props: {
 	return (
 		<SettingsRow
 			title="Test notification"
+			className={props.className}
 			description={
 				sendError !== null
 					? sendError

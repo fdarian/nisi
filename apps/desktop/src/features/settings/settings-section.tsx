@@ -5,6 +5,7 @@ import {
 	CardHeader,
 	CardTitle,
 } from "#/components/ui/card";
+import { cn } from "cn";
 
 export function SettingsSection(props: {
 	title?: string;
@@ -48,9 +49,15 @@ export function SettingsRow(props: {
 	title: string;
 	description?: string;
 	children: React.ReactNode;
+	className?: string;
 }): React.ReactElement {
 	return (
-		<div className="flex items-center justify-between gap-6 py-3 first:pt-0 last:pb-0">
+		<div
+			className={cn(
+				"flex items-center justify-between gap-6 py-3 first:pt-0 last:pb-0",
+				props.className,
+			)}
+		>
 			<SettingsRowHeader description={props.description} title={props.title} />
 			{props.children}
 		</div>
