@@ -78,9 +78,8 @@ function buildTreeModel(files: readonly FileChange[]): TreeModel {
 /**
  * The row-actions dropdown `@pierre/trees` opens once its hover-revealed "…"
  * button (or a right-click) triggers it — the app's own `DropdownMenu`, not a
- * native Tauri menu, so no `stopPropagation()` dance with `ShellFrame`'s own
- * `onContextMenu` (`app-shell.tsx`) is needed here, unlike the app's
- * OS-menu-backed context menus (`pr-merge-button.tsx`, `app-shell.tsx`).
+ * native Tauri menu. The tree wrapper stops bubbling context-menu events so
+ * ancestor handlers cannot open a second, native menu for the same gesture.
  *
  * Anchored to `context.anchorElement` so Base UI's positioner portals and
  * places it, rather than letting it render where `renderContextMenu` slots it
@@ -333,7 +332,12 @@ export function FileTreeView({
 	);
 
 	return (
-		<div className="min-h-0 flex-1" ref={treeHostRef}>
+		// biome-ignore lint/a11y/noStaticElementInteractions: propagation boundary only; the tree owns context-menu interaction and keyboard support.
+		<div
+			className="min-h-0 flex-1"
+			onContextMenu={(event) => event.stopPropagation()}
+			ref={treeHostRef}
+		>
 			<FileTree
 				model={model}
 				onClick={handleClick}

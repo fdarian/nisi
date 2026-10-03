@@ -3,13 +3,7 @@
 import { Menu } from "@tauri-apps/api/menu";
 import { cn } from "cn";
 import { AlertTriangleIcon, InboxIcon } from "lucide-react";
-import {
-	type ComponentProps,
-	useCallback,
-	useEffect,
-	useMemo,
-	useState,
-} from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "#/components/ui/button";
 import {
 	Empty,
@@ -121,13 +115,11 @@ export function AppShell(): React.ReactElement {
 
 function ShellFrame({
 	children,
-	...rest
 }: {
 	children: React.ReactNode;
-	onContextMenu?: ComponentProps<"div">["onContextMenu"];
 }): React.ReactElement {
 	return (
-		<div className="flex h-screen flex-col bg-sidebar" {...rest}>
+		<div className="flex h-screen flex-col bg-sidebar">
 			<div className="h-10 shrink-0" data-tauri-drag-region />
 			<FramePanel className={INSET_PANE_CLASS}>{children}</FramePanel>
 
@@ -193,6 +185,7 @@ function AppShellReady({
 	const [devToolVisible, setDevToolVisible] = useDevToolVisible();
 	const handleTabStripContextMenu = useCallback(
 		async (event: React.MouseEvent) => {
+			if (event.defaultPrevented) return;
 			event.preventDefault();
 			const menu = await Menu.new({
 				items: [
@@ -361,7 +354,7 @@ function AppShellReady({
 
 	if (sessions.length === 0 && pendingRequest === null) {
 		return (
-			<ShellFrame onContextMenu={handleTabStripContextMenu}>
+			<ShellFrame>
 				<Empty className="flex-1">
 					<EmptyMedia variant="icon">
 						<InboxIcon />
@@ -410,7 +403,6 @@ function AppShellReady({
 			}}
 			value={selectedTabId}
 			data-tauri-drag-region="deep"
-			onContextMenu={handleTabStripContextMenu}
 		>
 			<PrTabStrip
 				pendingRequest={pendingRequest}
@@ -419,6 +411,7 @@ function AppShellReady({
 				onActivateSession={selectSession}
 				onCloseOtherSessions={handleCloseOtherSessions}
 				onCloseSession={handleCloseSession}
+				onContextMenu={handleTabStripContextMenu}
 				onOpenPullRequest={openPalette}
 				onReorderSessions={tabOrder.reorder}
 				onSuspendTab={tabSuspension.suspendNow}
