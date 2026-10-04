@@ -45,11 +45,7 @@ function ConnectedEvents() {
 	const backend = useBackendContext();
 	const content = (
 		<>
-			<div className="flex h-screen min-h-0 flex-col">
-				<div className="min-h-0 flex-1">
-					<Outlet />
-				</div>
-			</div>
+			<Outlet />
 			<AgentationToggle />
 			<MesurerToggle />
 		</>

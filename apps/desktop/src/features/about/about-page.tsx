@@ -68,7 +68,7 @@ export function AboutPage(): React.ReactElement {
 
 	return (
 		<div
-			className="flex h-full w-screen select-none flex-col items-center gap-6 bg-sidebar px-8 pt-[80px] pb-[12px] text-center"
+			className="flex h-screen w-screen select-none flex-col items-center gap-6 bg-sidebar px-8 pt-[80px] pb-[12px] text-center"
 			data-tauri-drag-region=""
 			style={{ fontFamily: MACOS_SYSTEM_FONT }}
 		>
