@@ -50,10 +50,11 @@ seam" for the port/token handshake this boots into.
   "which ref is this session's head right now, and is `repoRoot`'s worktree safe to overlay on it."
   Pure and session-shape-agnostic (no `ReviewStore`/blob dependency, just `@repo/git`'s
   `resolveCurrentBranch`), so it's unit-tested directly against real temp repos rather than through
-  `Store`'s full DB-backed layer. A PR-backed session is always eligible without even checking (its
-  `repoRoot` is a worktree nisi created and keeps checked out to exactly that PR's head — see
-  `@repo/git`'s `worktree.ts` — and the PR's own `headRef` isn't guaranteed to resolve as a ref
-  there at all, since nisi checks it out onto its own `nisi/pr-<n>/<headRef>` branch). A plain
+  `Store`'s full DB-backed layer. A PR-backed session is always eligible without even checking:
+  it uses either a nisi PR worktree or a reused branch checkout. `openPullRequestSession` only
+  retargets a same-repository checkout currently on the PR head, and skips fork PRs. In a nisi
+  worktree the PR's own `headRef` need not resolve locally, since nisi checks it out onto its
+  own `nisi/pr-<n>/<headRef>` branch (see `@repo/git`'s `worktree.ts`). A plain
   branch session compares `headRef` against `resolveCurrentBranch` fresh on every call rather than
   once at open time, so it drifts in and out of eligibility as the caller checks different branches
   out — this is what lets a session self-heal, but also what makes every read (`listChangedFiles`/

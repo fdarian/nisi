@@ -66,9 +66,10 @@ export type DiffHead = {
  * accompanies).
  *
  * `hasPullRequest` sessions are always worktree-eligible without even
- * checking: their `repoRoot` is a worktree nisi created and keeps checked
- * out to exactly that PR's head (see `@repo/git`'s `worktree.ts`) — and
- * `headRef` there is the PR author's own branch name, which isn't
+ * checking: they use a nisi PR worktree or a branch checkout reused by the
+ * sidecar. `openPullRequestSession` verifies that a reused checkout is on
+ * the same-repository PR's head before retargeting it. In a nisi worktree,
+ * `headRef` is the PR author's own branch name, which isn't
  * guaranteed to resolve as a ref in that worktree at all (nisi checks the PR
  * out onto its own `nisi/pr-<n>/<headRef>` branch), so it must never be
  * passed to a git call as an explicit `headRef` either — literal `HEAD` is

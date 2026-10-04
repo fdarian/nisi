@@ -16,13 +16,15 @@ import {
 	type NoDefaultBranch,
 	type NoOriginRemote,
 	openPullRequestWorktree,
-	type PullRequestNotFound,
+	PullRequestNotFound,
+	type PullRequestRef,
 	type PullRequestRefNotFound,
 	type RepoPathVerificationError,
 	readFileContentsAtRef,
 	readWorktreeBlobContent,
 	resolveCurrentBranch,
 	resolveDiffBaseRef,
+	resolveMainCloneRoot,
 	resolveMergeBase,
 	resolveRepoRoot,
 	resolveReviewTarget,
@@ -161,9 +163,9 @@ export type OpenPullRequestInput = {
 	readonly number: number;
 };
 
-/** Mirrors `packages/sidecar-api`'s `OpenPullRequestOutcome` — see that contract's doc for why this is a discriminated union rather than a separate pre-flight route. */
+/** The wire open result plus the internal session transition needed to emit events. */
 export type OpenPullRequestOutcome =
-	| { readonly status: "opened"; readonly session: Session }
+	| { readonly status: "opened"; readonly outcome: OpenSessionOutcome }
 	| {
 			readonly status: "needs-repo-path";
 			readonly owner: string;
@@ -422,6 +424,51 @@ export class Store extends Context.Service<Store>()("Store", {
 				} as const;
 			});
 
+		const retargetMatchingBranchSession = (
+			repoRoot: string,
+			sessions: ReadonlyArray<ReviewSession>,
+			pr: PullRequestRef,
+		) =>
+			Effect.gen(function* () {
+				if (pr.isCrossRepository) return null;
+				const mainCloneRoot = yield* resolveMainCloneRoot(repoRoot);
+				const candidates = yield* Effect.filter(
+					sessions.filter(
+						(session) => session.pr === null && session.headRef === pr.headRef,
+					),
+					(session) =>
+						Effect.gen(function* () {
+							const root = yield* resolveMainCloneRoot(session.repoRoot);
+							if (root !== mainCloneRoot) return false;
+							return (
+								(yield* resolveCurrentBranch(session.repoRoot)) === pr.headRef
+							);
+						}).pipe(
+							Effect.catchTags({
+								RepoPathNotFound: () => Effect.succeed(false),
+								RepoPathNotAGitRepo: () => Effect.succeed(false),
+								GitCommandError: () => Effect.succeed(false),
+							}),
+						),
+				);
+				const source =
+					candidates.find((session) => session.baseRef === pr.baseRef) ??
+					candidates.at(0);
+				if (source === undefined) return null;
+				const resolved = yield* resolveSessionTarget(source.repoRoot, {
+					kind: "specificPullRequest",
+					number: pr.number,
+				});
+				if (resolved.pr === null) return null;
+				yield* refreshBase(source.repoRoot, resolved.baseRef);
+				return yield* retargetSessionToPr(
+					source.id,
+					resolved.pr,
+					resolved.baseRef,
+					resolved.headRef,
+				).pipe(Effect.catchTag("SessionNotFound", () => Effect.succeed(null)));
+			});
+
 		const openSession = (
 			cwd: string,
 			target: OpenSessionTarget = { kind: "auto" },
@@ -597,27 +644,10 @@ export class Store extends Context.Service<Store>()("Store", {
 				);
 			});
 
-		/**
-		 * The palette's "open this PR" action. Resolves `owner/repo` to a local
-		 * checkout first (`resolveRepoPath` above) — the palette never knows a
-		 * path itself, only `owner/repo#number` (`gh search prs` can't return
-		 * ref names either, see `@repo/git`'s `PullRequestSearchResult` doc) —
-		 * short-circuiting to `"needs-repo-path"` when nothing resolves, then
-		 * resolves the PR's `headRef` (`resolvePullRequestHeadRef`, needed
-		 * *before* the worktree exists to name its branch) and create-or-reuses
-		 * a worktree for it (`@repo/git`'s `openPullRequestWorktree`, idempotent
-		 * from git's own `worktree list` registration). Finally opens a session
-		 * against the worktree with `{ kind: "specificPullRequest" }` — the
-		 * worktree's own path becomes the session's `cwd`, and
-		 * `resolveSessionTarget` resolves the PR *by the number the caller
-		 * already knows* rather than re-deriving it from the worktree's
-		 * checked-out branch (see that function's doc comment for why a plain
-		 * `"auto"`/`"pr"` open could never resolve it). Not a parallel
-		 * session-creation path — routes through the same `openSession` every
-		 * other caller uses, so a worktree's own `repoRoot` makes
-		 * `@repo/review`'s session dedup key do the right thing, the same way
-		 * two independent clones of one upstream already get independent
-		 * sessions.
+		/** The palette and deep-link open path: reuse a PR by identity across roots,
+		 * or retarget a same-repository branch checkout with its review state intact.
+		 * Only otherwise create/reuse a nisi PR worktree and open a session there.
+		 * The transition outcome stays internal so HTTP can emit the matching events.
 		 */
 		const openPullRequestSession = (
 			input: OpenPullRequestInput,
@@ -650,18 +680,56 @@ export class Store extends Context.Service<Store>()("Store", {
 					};
 				}
 
+				const sessions = yield* reviewStore.listOpenSessions();
+				const existing = sessions.find(
+					(session) =>
+						session.pr !== null &&
+						session.pr.number === input.number &&
+						session.pr.owner.toLowerCase() === input.owner.toLowerCase() &&
+						session.pr.repo.toLowerCase() === input.repo.toLowerCase(),
+				);
+				if (existing !== undefined) {
+					return {
+						status: "opened" as const,
+						outcome: {
+							kind: "opened" as const,
+							session: toWireSession(existing),
+						},
+					};
+				}
+
 				const github = yield* GitHub;
-				const headRef = yield* github.headRef(repoRoot, input.number);
+				const pr = yield* github.pullRequest(repoRoot, input.number);
+				if (pr === null) {
+					return yield* new PullRequestNotFound({
+						repoRoot,
+						number: input.number,
+						reason: "GitHub returned no pull request for the requested number",
+					});
+				}
+				const reused = yield* retargetMatchingBranchSession(
+					repoRoot,
+					sessions,
+					pr,
+				).pipe(
+					Effect.catchTags({
+						RepoPathNotFound: () => Effect.succeed(null),
+						RepoPathNotAGitRepo: () => Effect.succeed(null),
+					}),
+				);
+				if (reused !== null)
+					return { status: "opened" as const, outcome: reused };
+
 				const worktreePath = yield* openPullRequestWorktree({
 					repoRoot,
 					number: input.number,
-					headRef,
+					headRef: pr.headRef,
 				});
 				const outcome = yield* openSession(worktreePath, {
 					kind: "specificPullRequest",
 					number: input.number,
 				});
-				return { status: "opened" as const, session: outcome.session };
+				return { status: "opened" as const, outcome };
 			});
 
 		/**

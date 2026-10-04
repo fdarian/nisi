@@ -72,8 +72,11 @@ const sameOwnerRepo = (a: string, b: string) =>
  * on a symlinked prefix would never match a later `realpath`'d comparison
  * (the same gotcha `worktree.ts`'s `resolveCanonicalDataDir` exists for).
  */
-const resolveMainCloneRoot = (path: string) =>
+export const resolveMainCloneRoot = (path: string) =>
 	Effect.gen(function* () {
+		if (!(yield* pathExistsOnDisk(path))) {
+			return yield* new RepoPathNotFound({ path });
+		}
 		const commonDir = yield* gitResult(path, [
 			"rev-parse",
 			"--path-format=absolute",
@@ -82,9 +85,10 @@ const resolveMainCloneRoot = (path: string) =>
 		if (commonDir.exitCode !== 0) {
 			return yield* new RepoPathNotAGitRepo({ path });
 		}
-		return yield* Effect.promise(() =>
-			realpath(dirname(commonDir.stdout.trim())),
-		);
+		return yield* Effect.tryPromise({
+			try: () => realpath(dirname(commonDir.stdout.trim())),
+			catch: () => new RepoPathNotFound({ path }),
+		});
 	});
 
 /**

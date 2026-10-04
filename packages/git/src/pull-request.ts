@@ -8,6 +8,7 @@ export type PullRequestRef = {
 	readonly title: string;
 	readonly baseRef: string;
 	readonly headRef: string;
+	readonly isCrossRepository: boolean;
 };
 
 /** The repo's GitHub identity plus the PR open for the current branch, when GitHub knows this repo at all. */

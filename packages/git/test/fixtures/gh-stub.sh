@@ -14,12 +14,12 @@ fi
 if [[ "$1" == "pr" && "$2" == "view" ]]; then
 	# By-number: `["pr","view","<n>","--json",...]` — third arg is the number.
 	if [[ "$3" == "42" ]]; then
-		echo '{"number":42,"title":"Add widgets","baseRefName":"main","headRefName":"feature-42"}'
+		echo '{"number":42,"title":"Add widgets","baseRefName":"main","headRefName":"feature-42","isCrossRepository":false}'
 		exit 0
 	fi
 	# Branch-based: `["pr","view","--json",...]` — no number, third arg is `--json`.
 	if [[ "$3" == "--json" ]]; then
-		echo '{"number":7,"title":"Branch PR","baseRefName":"main","headRefName":"feature-7"}'
+		echo '{"number":7,"title":"Branch PR","baseRefName":"main","headRefName":"feature-7","isCrossRepository":false}'
 		exit 0
 	fi
 	echo "GraphQL: Could not resolve to a PullRequest with the number of $3." >&2

@@ -1188,14 +1188,6 @@ export function attachRouter(
 						),
 					);
 			}),
-			// Creates (or reuses) a worktree for the PR, then feeds it straight
-			// into `Store.openSession` — the *same* domain logic `sessions.open`
-			// itself calls, not a parallel path — so the resulting session dedups
-			// and lists exactly like any other. Synchronous, like `sessions.open`
-			// already is: a `gh`/`git fetch` round trip plus a worktree checkout
-			// is the same duration class as `sessions.open`'s own `gh` calls, not
-			// the open-ended kind `walkthrough.generate`'s streaming handler
-			// exists for.
 			open: authed.pullRequests.open.effect(function* ({ input, errors }) {
 				const store = yield* Store;
 				const outcome = yield* store
@@ -1275,13 +1267,18 @@ export function attachRouter(
 						),
 					);
 				if (outcome.status === "opened") {
-					const session = outcome.session;
-					emit({ type: "session-opened", session });
-					yield* Effect.logInfo("pull request worktree opened", {
+					const session = outcome.outcome.session;
+					if (outcome.outcome.kind === "opened") {
+						emit({ type: "session-opened", session });
+					} else {
+						yield* emitSessionTransition(outcome.outcome);
+					}
+					yield* Effect.logInfo("pull request session opened", {
 						sessionId: session.id,
 						repoRoot: session.repoRoot,
 						pr: session.target.kind === "pr" ? session.target.number : null,
 					});
+					return { status: "opened" as const, session };
 				}
 				return outcome;
 			}),
