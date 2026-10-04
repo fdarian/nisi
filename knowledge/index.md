@@ -30,6 +30,7 @@ importantly, the rules for deciding whether a thing belongs here at all.
 
 # Performance
 
+* [CLI-to-paint launch timing](launch-timing.md) - How to measure CLI-to-landing-tab paint, read the milestones, and compare with the native dev baseline.
 * [Files Changed performance budget](frontend-performance-budget.md) - the numbers to hold at ~221 changed files, and what regressing them looks like
 * [Deferred frontend perf work](deferred-frontend-perf-work.md) - known wins not taken yet, and one open symptom not yet bisected
 * [The @pierre/diffs CodeView teardown leak patch](codeview-teardown-leak-patch.md) - why `cleanAllRenderedItems()` now sweeps every item instead of just the last virtualization window, and the residual leak still open
