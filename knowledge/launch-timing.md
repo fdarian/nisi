@@ -13,39 +13,48 @@ file list for an empty diff; Overview ends at its content.
 
 # Running a measurement
 
-Run these commands from the repository root against a worktree with an open PR. Production needs
-an installed CLI and app containing the instrumentation:
+Run from `apps/desktop` against a worktree with an open PR:
 
 ```sh
-env -u NISI_DATA_DIR bun apps/desktop/scripts/measure-launch.ts --cwd /absolute/path/to/pr-worktree
+bun scripts/measure-launch.ts --cwd /absolute/path/to/pr-worktree [--cold] [--rebuild] [--json]
 ```
 
-For the isolated dev sandbox, start the native app:
+The script always runs this checkout's `packages/cli/src/index.ts` and only targets this checkout's
+instances. It never measures or stops `/Applications/nisi.app`; inherited `NISI_DATA_DIR` and
+`NISI_APP_PATH` do not select a target.
+
+Without flags, it measures **warm only**. It discovers authenticated, healthy sidecars in
+`.data/sessions/*/data/` (native `bun dev` sandboxes) and `.data/measure-launch/data/` (the built
+measurement app). Zero live candidates is an error; start `bun dev` or use `--cold`. Multiple live
+candidates are listed as an ambiguity error; stop the unwanted checkout-local instances first.
+It probes instrumentation before handing off and disables CLI app-launch fallback.
+
+For a built-app cold measurement:
 
 ```sh
-(cd apps/desktop && bun dev)
+bun scripts/measure-launch.ts --cwd /absolute/path/to/pr-worktree --cold
 ```
 
-In another terminal, from the repository root, use the `NISI_DATA_DIR` printed by `bun dev`:
+`--cold` uses `src-tauri/target/release/bundle/macos/nisi.app`. It builds with `bun run build` when
+the bundle is missing, streams build output, stops only that exact bundle's app and sidecar
+executables, and waits for them to exit. Its gitignored `.data/measure-launch/data/` self-initializes
+on the first run. The CLI launches a fresh app instance with that data dir, so `cli.app.launch.*`
+is included. The app stays running; repeat without `--cold` to measure it warm:
 
 ```sh
-NISI_DATA_DIR=/absolute/path/printed/by/bun-dev \
-  bun apps/desktop/scripts/measure-launch.ts \
-  --cwd /absolute/path/to/pr-worktree \
-  --nisi "$PWD/packages/cli/src/index.ts"
+bun scripts/measure-launch.ts --cwd /absolute/path/to/pr-worktree
 ```
 
-The explicit CLI path measures the checkout's implementation rather than the installed CLI.
+To measure native dev instead, stop the built measurement instance, start `bun dev` in this
+checkout, then run the same default command from another terminal. No environment override is needed.
 Keep browser frontends disconnected for a native-only measurement: two frontends can both receive
-the request, making the terminal paint mark ambiguous. To prevent an accidental production launch
-if the dev sidecar is unavailable, set `NISI_APP_PATH` to a nonexistent scratch `.app` path.
+the request, making the terminal paint mark ambiguous.
 
-- `--cold` sends SIGTERM to the selected app executable and waits for it to exit before invoking
-  the CLI. It is rejected when `NISI_DATA_DIR` is set, so it is not a dev-sandbox option. It does
-  not clear caches; a surviving sidecar can still be warm.
+- `--rebuild` requires `--cold` and rebuilds even when the bundle exists. A stale bundle without
+  instrumentation fails with this hint; a dev instance without instrumentation needs a restart.
+- Cold means new app and sidecar processes, not cleared filesystem, GitHub, or review-session caches.
 - `--json` prints the collected records as a JSON array rather than the formatted report.
-- Raw records are JSONL at `<data dir>/logs/launch-traces/<traceId>.jsonl`. Production's data dir is
-  `~/Library/Application Support/com.nisi.desktop/`; dev uses the printed sandbox directory.
+- Raw records are JSONL at `<selected data dir>/logs/launch-traces/<traceId>.jsonl`.
 
 # Reading the report
 
@@ -93,8 +102,8 @@ the resolved list took another **0.7s**; from list to first diff took another **
 
 # Method and its limits
 
-- **Cold path unverified.** The baseline measures a warm native app, not process startup or an
-  installed production build.
+- **Baseline scope.** The reference above measures a warm native dev app, not process startup or
+  an installed production build. `--cold` targets a checkout-local release bundle, not production.
 - **No Rust-side launch marks.** Activation acknowledgment stands in for window shown. Frontend
   paint marks are animation-frame/DOM proxies, not compositor presentation measurements.
 - **One unreproduced native diff-worker timeout.** A native run logged
