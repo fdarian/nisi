@@ -1,19 +1,21 @@
 import { readdir, stat, unlink } from "node:fs/promises";
 import { join } from "node:path";
-
-const isMissing = (error: unknown): boolean =>
-	error instanceof Object && "code" in error && error.code === "ENOENT";
+import { isEnoent } from "./is-enoent.ts";
 
 const isFile = async (path: string): Promise<boolean> => {
 	try {
 		return (await stat(path)).isFile();
 	} catch (error) {
-		if (isMissing(error)) return false;
+		if (isEnoent(error)) return false;
 		throw error;
 	}
 };
 
-/** @ai-sdk/harness trusts markers alone (bootstrap-recipe.ts:113–118); node_modules cleanup sweeps under ~/.nisi leave markers behind and brick chat/walkthrough with missing ws. */
+/**
+ * @ai-sdk/harness's applyBootstrapRecipe in bootstrap-recipe.ts trusts markers
+ * alone. node_modules cleanup sweeps under ~/.nisi leave markers behind and
+ * brick chat/walkthrough with missing ws.
+ */
 export const invalidateStaleBootstraps = async (
 	defaultWorkingDirectory: string,
 ): Promise<void> => {
@@ -21,7 +23,7 @@ export const invalidateStaleBootstraps = async (
 	const directories = await readdir(bootstrapRoot, {
 		withFileTypes: true,
 	}).catch((error: unknown) => {
-		if (isMissing(error)) return [];
+		if (isEnoent(error)) return [];
 		throw error;
 	});
 	for (const directory of directories) {
@@ -37,8 +39,5 @@ export const invalidateStaleBootstraps = async (
 		for (const marker of markers) {
 			await unlink(join(bootstrapDir, marker));
 		}
-		console.warn(
-			`Invalidated stale harness bootstrap markers: ${bootstrapDir}`,
-		);
 	}
 };

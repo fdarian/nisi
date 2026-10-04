@@ -5,6 +5,7 @@ import type {
 	HarnessV1NetworkSandboxSession,
 	HarnessV1SandboxProvider,
 } from "@ai-sdk/harness";
+import { isEnoent } from "./is-enoent.ts";
 import { LocalNetworkSandboxSession } from "./local-network-sandbox-session.ts";
 import { allocatePort } from "./port.ts";
 import { invalidateStaleBootstraps } from "./stale-bootstrap.ts";
@@ -177,12 +178,4 @@ async function ensureRepoSymlink(
 
 	if (currentTarget !== undefined) await unlink(linkPath);
 	await symlink(target, linkPath);
-}
-
-function isEnoent(error: unknown): boolean {
-	return (
-		error instanceof Object &&
-		"code" in error &&
-		(error as NodeJS.ErrnoException).code === "ENOENT"
-	);
 }
