@@ -9,7 +9,6 @@ import {
 	EmptyMedia,
 	EmptyTitle,
 } from "#/components/ui/empty";
-import { FilesChangedLoading } from "#/features/pull-request/files-changed-loading";
 import {
 	Tabs,
 	TabsContent,
@@ -40,6 +39,7 @@ import {
 } from "#/features/pull-request/data/session-ui-store";
 import { FileView } from "#/features/pull-request/file-view/file-view";
 import { FilesChangedView } from "#/features/pull-request/files/files-changed-view";
+import { FilesChangedLoading } from "#/features/pull-request/files-changed-loading";
 import { PrHeader } from "#/features/pull-request/header/pr-header";
 import { useNavigationShortcuts } from "#/features/pull-request/navigation/use-navigation-shortcuts";
 import { OverviewView } from "#/features/pull-request/overview/overview-view";
