@@ -95,6 +95,20 @@ function resolveCommitSha(): string {
 	}
 }
 
+function resolveBranch(): string {
+	try {
+		return execFileSync("git", ["rev-parse", "--abbrev-ref", "HEAD"], {
+			cwd: import.meta.dirname,
+			encoding: "utf-8",
+		}).trim();
+	} catch (cause) {
+		throw new Error(
+			"Could not resolve the build branch: `git rev-parse --abbrev-ref HEAD` failed.",
+			{ cause },
+		);
+	}
+}
+
 // https://vite.dev/config/
 export default defineConfig(async () => ({
 	// Build-time constants for the custom About dialog (`src/features/about/about-page.tsx`)
@@ -103,6 +117,7 @@ export default defineConfig(async () => ({
 	define: {
 		__APP_VERSION__: JSON.stringify(resolveAppVersion()),
 		__APP_COMMIT_SHA__: JSON.stringify(resolveCommitSha()),
+		__DEV_BRANCH__: JSON.stringify(resolveBranch()),
 	},
 
 	plugins: [
