@@ -1,16 +1,20 @@
 import { expect, test } from "bun:test";
-import { appProcessIds } from "./measure-launch-processes.ts";
+import { bundleProcessIds } from "./measure-launch-processes.ts";
 
-test("cold shutdown targets exact app executables, not dev sandboxes or helpers", () => {
+test("cold shutdown selects the exact worktree executable and its bundled sidecar child", () => {
+	const bundle = "/work tree/nisi.app";
 	expect(
-		appProcessIds(
-			" 12 /Applications/nisi.app/Contents/MacOS/nisi\n 13 /scratch/target/debug/bundle/macos/nisi.app/Contents/MacOS/nisi\n 14 /Applications/nisi.app/Contents/Frameworks/nisi Helper.app/Contents/MacOS/nisi Helper",
-			["/Applications/nisi.app"],
+		bundleProcessIds(
+			[
+				`101 1 ${bundle}/Contents/MacOS/nisi`,
+				`102 101 ${bundle}/Contents/MacOS/sidecar`,
+				`104 1 ${bundle}/Contents/MacOS/sidecar`,
+				`103 101 ${bundle}/Contents/Frameworks/nisi Helper.app/Contents/MacOS/nisi Helper`,
+				"200 1 /Applications/nisi.app/Contents/MacOS/nisi",
+				"201 200 /Applications/nisi.app/Contents/MacOS/sidecar",
+				"300 1 /other worktree/nisi.app/Contents/MacOS/nisi",
+			].join("\n"),
+			bundle,
 		),
-	).toEqual([12]);
-	expect(
-		appProcessIds(" 15 /scratch/Custom App.app/Contents/MacOS/nisi", [
-			"/scratch/Custom App.app",
-		]),
-	).toEqual([15]);
+	).toEqual([101, 102, 104]);
 });
