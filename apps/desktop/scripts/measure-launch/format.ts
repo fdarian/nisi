@@ -1,4 +1,4 @@
-import type { LaunchMark } from "../sidecar/launch-trace/file-writer.ts";
+import type { LaunchMark } from "../../sidecar/launch-trace/file-writer.ts";
 
 export function formatVisibility(
 	marks: readonly LaunchMark[],

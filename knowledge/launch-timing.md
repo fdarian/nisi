@@ -16,7 +16,7 @@ file list for an empty diff; Overview ends at its content.
 Run from `apps/desktop` against a worktree with an open PR:
 
 ```sh
-bun scripts/measure-launch.ts --cwd /absolute/path/to/pr-worktree [--cold] [--rebuild] [--json]
+bun scripts/measure-launch --cwd /absolute/path/to/pr-worktree [--cold] [--rebuild] [--json]
 ```
 
 The script always runs this checkout's `packages/cli/src/index.ts` and only targets this checkout's
@@ -32,7 +32,7 @@ It probes instrumentation before handing off and disables CLI app-launch fallbac
 For a built-app cold measurement:
 
 ```sh
-bun scripts/measure-launch.ts --cwd /absolute/path/to/pr-worktree --cold
+bun scripts/measure-launch --cwd /absolute/path/to/pr-worktree --cold
 ```
 
 `--cold` uses `src-tauri/target/release/bundle/macos/nisi.app`. It builds with `bun run build` when
@@ -42,7 +42,7 @@ on the first run. The CLI launches a fresh app instance with that data dir, so `
 is included. The app stays running; repeat without `--cold` to measure it warm:
 
 ```sh
-bun scripts/measure-launch.ts --cwd /absolute/path/to/pr-worktree
+bun scripts/measure-launch --cwd /absolute/path/to/pr-worktree
 ```
 
 To measure native dev instead, stop the built measurement instance, start `bun dev` in this

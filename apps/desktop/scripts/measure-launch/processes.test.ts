@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { bundleProcessIds } from "./measure-launch-processes.ts";
+import { bundleProcessIds } from "./processes.ts";
 
 test("cold shutdown selects the exact worktree executable and its bundled sidecar child", () => {
 	const bundle = "/work tree/nisi.app";

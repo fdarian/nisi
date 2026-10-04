@@ -4,9 +4,9 @@ import { makeSidecarClient } from "@repo/sidecar-api";
 import { readSidecarJson } from "deskkit/sidecar";
 import { Effect } from "effect";
 import { FileSystem } from "effect/FileSystem";
-import { stopBundle } from "./measure-launch-processes.ts";
+import { stopBundle } from "./processes.ts";
 
-export const desktopDir = resolve(import.meta.dir, "..");
+export const desktopDir = resolve(import.meta.dir, "../..");
 export const bundlePath = join(
 	desktopDir,
 	"src-tauri/target/release/bundle/macos/nisi.app",

@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { formatTimeline, formatVisibility } from "./measure-launch-format.ts";
+import { formatTimeline, formatVisibility } from "./format.ts";
 
 test("sorts wall clocks, identifies warm boot and prints waterfall durations", () => {
 	const result = formatTimeline([

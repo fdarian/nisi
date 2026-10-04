@@ -4,8 +4,8 @@ import { FileSystem } from "effect/FileSystem";
 import {
 	type LaunchMark,
 	traceFilePath,
-} from "../sidecar/launch-trace/file-writer.ts";
-import { formatTimeline, formatVisibility } from "./measure-launch-format.ts";
+} from "../../sidecar/launch-trace/file-writer.ts";
+import { formatTimeline, formatVisibility } from "./format.ts";
 import {
 	bundlePath,
 	cliPath,
@@ -14,8 +14,8 @@ import {
 	requireInstrumentation,
 	runningInstance,
 	unavailableAppPath,
-} from "./measure-launch-instance.ts";
-import { parseLaunchOptions } from "./measure-launch-options.ts";
+} from "./instance.ts";
+import { parseLaunchOptions } from "./options.ts";
 
 const Mark = Schema.fromJsonString(
 	Schema.Record(Schema.String, Schema.Unknown),

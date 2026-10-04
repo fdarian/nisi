@@ -25,7 +25,7 @@ export function parseLaunchOptions(argv: readonly string[]) {
 	}
 	if (options.cwd === undefined)
 		throw new Error(
-			"Usage: bun scripts/measure-launch.ts --cwd <pr worktree> [--cold] [--rebuild] [--json]",
+			"Usage: bun scripts/measure-launch --cwd <pr worktree> [--cold] [--rebuild] [--json]",
 		);
 	if (options.rebuild && !options.cold)
 		throw new Error("--rebuild requires --cold");

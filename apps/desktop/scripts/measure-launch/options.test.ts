@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { parseLaunchOptions } from "./measure-launch-options.ts";
+import { parseLaunchOptions } from "./options.ts";
 
 test("requires cwd and only accepts the checkout-local interface", () => {
 	expect(() => parseLaunchOptions([])).toThrow("Usage:");

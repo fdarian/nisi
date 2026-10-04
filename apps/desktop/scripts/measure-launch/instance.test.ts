@@ -9,7 +9,7 @@ import {
 	liveInstance,
 	requireInstrumentation,
 	selectRunningInstance,
-} from "./measure-launch-instance.ts";
+} from "./instance.ts";
 
 test("discovery checks authenticated health and refuses ambiguous live instances", async () => {
 	const dataDir = mkdtempSync(join(tmpdir(), "nisi-measure-detect-"));
