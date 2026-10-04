@@ -2785,12 +2785,12 @@ dependencies = [
  "objc2-foundation",
  "percent-encoding",
  "reqwest 0.12.28",
+ "rfd",
  "serde",
  "serde_json",
  "tauri",
  "tauri-build",
  "tauri-plugin-deep-link",
- "tauri-plugin-dialog",
  "tauri-plugin-opener",
  "tauri-plugin-process",
  "tauri-plugin-shell",
@@ -4692,44 +4692,6 @@ dependencies = [
  "url",
  "windows-registry",
  "windows-result 0.3.4",
-]
-
-[[package]]
-name = "tauri-plugin-dialog"
-version = "3.0.0-alpha.2"
-dependencies = [
- "log",
- "raw-window-handle",
- "rfd",
- "serde",
- "serde_json",
- "tauri",
- "tauri-plugin",
- "tauri-plugin-fs",
- "thiserror 2.0.21",
- "url",
-]
-
-[[package]]
-name = "tauri-plugin-fs"
-version = "3.0.0-alpha.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0a0a22d1a3c95618070afa2e543b6d48d41c6390bed6b5b9df12ef78e34a07fc"
-dependencies = [
- "anyhow",
- "dunce",
- "glob",
- "log",
- "objc2-foundation",
- "percent-encoding",
- "schemars 1.2.2",
- "serde",
- "serde_json",
- "serde_repr",
- "tauri",
- "tauri-plugin",
- "thiserror 2.0.21",
- "url",
 ]
 
 [[package]]

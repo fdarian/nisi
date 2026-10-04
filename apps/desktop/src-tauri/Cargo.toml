@@ -21,7 +21,7 @@ tauri = { version = "=3.0.0-alpha.4", features = [] }
 tauri-runtime-cef = "=3.0.0-alpha.4"
 tauri-plugin-opener = "=3.0.0-alpha.2"
 tauri-plugin-shell = "=3.0.0-alpha.2"
-tauri-plugin-dialog = "=3.0.0-alpha.2"
+rfd = { version = "=0.16.0", default-features = false, features = ["gtk3", "common-controls-v6"] }
 tauri-plugin-process = "=3.0.0-alpha.2"
 tauri-plugin-deep-link = "=3.0.0-alpha.2"
 serde = { version = "1", features = ["derive"] }
@@ -44,7 +44,3 @@ tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 libc = "0.2.189"
-
-# Published dialog alpha.2 lacks the Manager import required by core alpha.3+.
-[patch.crates-io]
-tauri-plugin-dialog = { path = "vendor/tauri-plugin-dialog" }

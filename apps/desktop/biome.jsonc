@@ -2,7 +2,7 @@
 	"root": false,
 	"extends": ["../../biome.jsonc"],
 	"files": {
-		"includes": ["!!**/.data", "!**/routeTree.gen.ts", "!!src-tauri/vendor"]
+		"includes": ["!!**/.data", "!**/routeTree.gen.ts"]
 	},
 	"overrides": [
 		{

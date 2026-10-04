@@ -10,7 +10,7 @@
  */
 import { ORPCError } from "@orpc/client";
 import { keepPreviousData, useMutation, useQuery } from "@tanstack/react-query";
-import { open as openFolderPicker } from "@tauri-apps/plugin-dialog";
+import { invoke } from "@tauri-apps/api/core";
 import type { SidecarQueryUtils } from "#/infra/backend-context";
 import type { Session } from "./pr-data";
 
@@ -127,10 +127,10 @@ export function findOpenPullRequestSessionId(
 
 /**
  * `pullRequests.open`'s `"needs-repo-path"` outcome resolved end-to-end: the
- * native folder picker (`@tauri-apps/plugin-dialog`, already registered in
- * `src-tauri` — see `apps/desktop/AGENTS.md`), `recordRepoPath` to persist
+ * native folder picker (`pick_folder` in `src-tauri/src/folder_picker.rs`),
+ * `recordRepoPath` to persist
  * and verify what the user picked, then `open` again now that the mapping
- * exists. A cancelled picker (`openFolderPicker` resolving `null`) isn't an
+ * exists. A cancelled picker (`pick_folder` resolving `null`) isn't an
  * error — the user just changed their mind — so it resolves to
  * `{status: "cancelled"}` rather than throwing, keeping `useOpenPullRequest`'s
  * mutation from surfacing a spurious failure banner for it.
@@ -150,9 +150,7 @@ async function resolvePullRequestOpen(
 		return { status: "opened", sessionId: outcome.session.id };
 	}
 
-	const picked = await openFolderPicker({
-		directory: true,
-		multiple: false,
+	const picked = await invoke<string | null>("pick_folder", {
 		title: `Where is ${outcome.owner}/${outcome.repo} checked out?`,
 	});
 	if (picked === null) return { status: "cancelled" };

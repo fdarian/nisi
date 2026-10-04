@@ -322,9 +322,6 @@ importers:
       '@tauri-apps/plugin-deep-link':
         specifier: 3.0.0-alpha.2
         version: 3.0.0-alpha.2
-      '@tauri-apps/plugin-dialog':
-        specifier: 3.0.0-alpha.2
-        version: 3.0.0-alpha.2
       '@tauri-apps/plugin-opener':
         specifier: 3.0.0-alpha.2
         version: 3.0.0-alpha.2
@@ -3133,9 +3130,6 @@ packages:
 
   '@tauri-apps/plugin-deep-link@3.0.0-alpha.2':
     resolution: {integrity: sha512-XSDlYwnBZaTZjNMGeGwbSGk6Z3OjJaE/oicYhiDdCVcyqtRl0fCjQQz7SWfaTeSvcu3V9OX/dbA8+JKoQYRYPw==}
-
-  '@tauri-apps/plugin-dialog@3.0.0-alpha.2':
-    resolution: {integrity: sha512-VgLOrwc+4sB8/IRLnC3AtdtOvCwWKkJ39Cfqa+zj6DoZSNt09BI3+YAwGqf4U1B7vAtqfj9tdWQ29ALFU1K+8g==}
 
   '@tauri-apps/plugin-opener@3.0.0-alpha.2':
     resolution: {integrity: sha512-T3Y7Y/m+XybZqB2cI6SZD8St47GBONPTbFp+hSYFLHy5Lh0eNh0sv9TRyi7MElzUtUx0NWZltAOHuHzeo2UfWA==}
@@ -8367,10 +8361,6 @@ snapshots:
       '@tauri-apps/cli-win32-x64-msvc': 3.0.0-alpha.4
 
   '@tauri-apps/plugin-deep-link@3.0.0-alpha.2':
-    dependencies:
-      '@tauri-apps/api': 3.0.0-alpha.2
-
-  '@tauri-apps/plugin-dialog@3.0.0-alpha.2':
     dependencies:
       '@tauri-apps/api': 3.0.0-alpha.2
 
