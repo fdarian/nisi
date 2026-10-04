@@ -24,6 +24,7 @@ import type { WalkthroughStore } from "./walkthrough/store.ts";
  * identically instead of each hand-rolling the union.
  */
 export type AppServices =
+	| LaunchTrace
 	| Store
 	| ReviewStore
 	| WalkthroughStore
@@ -39,3 +40,5 @@ export type AppServices =
 	| GitHub
 	| AttentionState
 	| BunServices.BunServices;
+
+import type { LaunchTrace } from "./launch-trace/service.ts";

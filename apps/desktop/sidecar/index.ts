@@ -1,4 +1,4 @@
-import { BunRuntime, BunServices } from "@effect/platform-bun";
+import { BunRuntime } from "@effect/platform-bun";
 import { safe } from "@orpc/client";
 import { resolvedPath } from "@repo/bin-resolver";
 import { getDataDirConfig, SqliteDb } from "@repo/db";
@@ -20,6 +20,8 @@ import { ChatSessions } from "./chat/sessions.ts";
 import { CodeLspPool } from "./code-index/state.ts";
 import { HarnessModelCache } from "./harness/model-store.ts";
 import { attachRouter, bindHealthCheckServer } from "./http.ts";
+import { bufferBootMark, LaunchTrace } from "./launch-trace/service.ts";
+import { TracedBunServices } from "./launch-trace/spawner.ts";
 import { startLivePolling } from "./live-poll.ts";
 import { LoggingLive } from "./logging.ts";
 import { PullRequestAttentionLive } from "./pull-request-attention.ts";
@@ -119,6 +121,7 @@ const program = Effect.scoped(
 		// an undefined port here would mean Bun itself is broken, not something
 		// safe to paper over with a fallback value.
 		const port = server.port;
+		bufferBootMark("sidecar.health.bound");
 		if (port === undefined) {
 			return yield* Effect.die(
 				new Error("sidecar HTTP server has no port after Bun.serve"),
@@ -157,6 +160,7 @@ const program = Effect.scoped(
 				),
 		);
 
+		bufferBootMark("sidecar.handshake.written");
 		// Only now — sidecar.json claimed and published in the one act above
 		// — does AppServices get built, which is what actually opens
 		// SqliteDb's connection and runs Drizzle's migrations. Scoping
@@ -174,6 +178,7 @@ const program = Effect.scoped(
 				// from its own plain `async function*` via this same captured
 				// context — see `walkthrough/generate.ts`'s `runEffect`.
 				const mainContext = yield* Effect.context<AppServices>();
+				bufferBootMark("sidecar.services.initialized");
 				yield* Effect.sync(() =>
 					attachRouter(
 						server,
@@ -184,6 +189,7 @@ const program = Effect.scoped(
 				);
 
 				yield* Effect.logInfo("ready", { port, dataDir });
+				bufferBootMark("sidecar.router.ready");
 
 				// Backgrounded, tied to this program's scope — same shutdown path
 				// as the HTTP server above, just via the fiber getting
@@ -227,6 +233,7 @@ const program = Effect.scoped(
 // processes get the exact same "dies with the sidecar" scope as everything
 // else here, per that file's own doc comment.
 const MainLayer = Layer.mergeAll(
+	LaunchTrace.layer,
 	Store.layer,
 	WalkthroughStore.layer,
 	SettingsStore.layer,
@@ -246,7 +253,7 @@ const MainLayer = Layer.mergeAll(
 	CodeLspPool.layer,
 ).pipe(
 	Layer.provideMerge(SqliteDb.layer),
-	Layer.provideMerge(BunServices.layer),
+	Layer.provideMerge(TracedBunServices),
 );
 
 // Everything the program's prefix needs before `AppServices` exists:
@@ -254,6 +261,6 @@ const MainLayer = Layer.mergeAll(
 // `LoggingLive` — so even the earliest "starting up" log line reaches the
 // rotating file logger, not just the console, the same as before this file
 // split `MainLayer` in two. Wraps the whole program, unlike `MainLayer`.
-const EarlyLayer = LoggingLive.pipe(Layer.provideMerge(BunServices.layer));
+const EarlyLayer = LoggingLive.pipe(Layer.provideMerge(TracedBunServices));
 
 BunRuntime.runMain(program.pipe(Effect.provide(EarlyLayer)));

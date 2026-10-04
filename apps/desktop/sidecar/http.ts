@@ -378,6 +378,12 @@ export function attachRouter(
 	});
 
 	const router = authed.router({
+		diagnostics: {
+			launchMarks: authed.diagnostics.launchMarks.effect(function* (call) {
+				const trace = yield* LaunchTrace;
+				yield* trace.frontend(call.input.traceId, call.input.marks);
+			}),
+		},
 		health: {
 			// biome-ignore lint/correctness/useYield: .effect() requires a generator function even with no Effect steps
 			check: authed.health.check.effect(function* () {
@@ -386,9 +392,15 @@ export function attachRouter(
 		},
 		sessions: {
 			open: authed.sessions.open.effect(function* ({ input, errors }) {
+				const trace = yield* LaunchTrace;
+				yield* trace.activate(input.traceId);
+				yield* Effect.try(() => writeSidecarMark("sidecar.open.received")).pipe(
+					Effect.orDie,
+				);
 				const request = createOpenRequest(
 					input.cwd,
 					input.target ?? { kind: "auto" },
+					input.traceId,
 				);
 				const store = yield* Store;
 				const opening = store.openSession(input.cwd, input.target);
@@ -2117,3 +2129,5 @@ export function attachRouter(
 		},
 	});
 }
+
+import { LaunchTrace, writeSidecarMark } from "./launch-trace/service.ts";

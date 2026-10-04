@@ -477,8 +477,23 @@ export class Store extends Context.Service<Store>()("Store", {
 				const repoRoot = yield* resolveRepoRoot(cwd).pipe(
 					Effect.catchTag("NotAGitRepository", () => new InvalidCwd({ cwd })),
 				);
+				yield* Effect.try(() =>
+					writeSidecarMark("sidecar.repo-root.resolved", { repoRoot }),
+				).pipe(Effect.orDie);
+				yield* Effect.try(() =>
+					writeSidecarMark("sidecar.repo-identity-pr.lookup.start"),
+				).pipe(Effect.orDie);
 				const resolved = yield* resolveSessionTarget(repoRoot, target);
+				yield* Effect.try(() =>
+					writeSidecarMark("sidecar.target.resolved", {
+						repoRoot,
+						target: target.kind,
+					}),
+				).pipe(Effect.orDie);
 				yield* refreshBase(repoRoot, resolved.baseRef);
+				yield* Effect.try(() =>
+					writeSidecarMark("sidecar.base-ref.refreshed"),
+				).pipe(Effect.orDie);
 				const openFreshSession = reviewStore
 					.openSession({
 						repoRoot,
@@ -487,6 +502,11 @@ export class Store extends Context.Service<Store>()("Store", {
 						pr: resolved.pr,
 					})
 					.pipe(
+						Effect.tap(() =>
+							Effect.try(() =>
+								writeSidecarMark("sidecar.session.persisted"),
+							).pipe(Effect.orDie),
+						),
 						Effect.map((session) => ({
 							kind: "opened" as const,
 							session: toWireSession(session),
@@ -1649,3 +1669,5 @@ export type {
 	WorktreeRelocationFailed,
 };
 export { SessionNotFound };
+
+import { writeSidecarMark } from "./launch-trace/service.ts";

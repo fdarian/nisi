@@ -9,13 +9,13 @@ export const launchTraceId = () => state.trace?.id;
 export function cliMark(
 	name: string,
 	attrs: Record<string, unknown> = {},
-	at = performance.timeOrigin + performance.now(),
+	at?: number,
 ): void {
 	const trace = state.trace;
 	if (trace === undefined) return;
 	appendFileSync(
 		join(trace.directory, `${trace.id}.jsonl`),
-		`${JSON.stringify({ ...attrs, at, source: "cli", name })}\n`,
+		`${JSON.stringify({ ...attrs, at: at === undefined ? performance.timeOrigin + performance.now() : at, source: "cli", name })}\n`,
 	);
 }
 
