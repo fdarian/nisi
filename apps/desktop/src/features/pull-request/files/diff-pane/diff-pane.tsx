@@ -987,6 +987,15 @@ export function DiffPane({
 	// `pointerdown`/`pointerup` handling for a single real click.
 	const itemMetadataRef = useRef(itemMetadata);
 	itemMetadataRef.current = itemMetadata;
+	const launchTrace = useLaunchTrace();
+	useEffect(() => {
+		if (launchTrace === undefined) return;
+		for (const [node, path] of hoveredFileHostsRef.current) {
+			const meta = itemMetadata.get(path);
+			if (node instanceof HTMLElement && meta !== undefined && !meta.isLoading)
+				markDiffPainted(sessionId, node);
+		}
+	}, [launchTrace, itemMetadata, sessionId]);
 	const resolveSelectionItemPath = useCallback(
 		(itemId: string) =>
 			itemMetadataRef.current.has(itemId) ? itemId : undefined,
@@ -1140,6 +1149,8 @@ export function DiffPane({
 							phase === "unmount" ? undefined : (node.shadowRoot ?? undefined),
 						);
 						if (phase !== "unmount") {
+							if (meta !== undefined && !meta.isLoading)
+								markDiffPainted(sessionId, node);
 							codeIndex.notifyItemRendered(context.item.id);
 						}
 					},
@@ -1161,6 +1172,7 @@ export function DiffPane({
 				codeIndex.tokenCSS,
 				codeIndex.notifyItemRendered,
 				codeIndex.codeViewOptions,
+				sessionId,
 			],
 		);
 
@@ -1620,3 +1632,5 @@ function HiddenFileBody({
 		</div>
 	);
 }
+
+import { markDiffPainted, useLaunchTrace } from "#/infra/launch-trace";

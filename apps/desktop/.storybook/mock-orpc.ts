@@ -218,6 +218,7 @@ export function createMockSidecarClient(
 	const checksError = data.checksError;
 
 	const client: SidecarClient = {
+		diagnostics: { launchMarks: async () => {} },
 		health: {
 			check: async () => ({ status: "ok" }),
 		},

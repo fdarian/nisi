@@ -155,6 +155,10 @@ function AppShellReady({
 	const pendingRequest = request?.status.kind === "opened" ? null : request;
 	const pendingTabId =
 		pendingRequest === null ? null : `open:${pendingRequest.id}`;
+	useLaunchMark(
+		"pending-panel.painted",
+		pendingRequest?.status.kind === "pending",
+	);
 	const selectSession = useCallback(
 		(sessionId: string) => {
 			setRequestedActiveSessionId(sessionId);
@@ -515,3 +519,5 @@ function DevTool() {
 		<DevToolButton />
 	) : null;
 }
+
+import { useLaunchMark } from "#/infra/launch-trace";

@@ -9,6 +9,7 @@ import {
 	useState,
 } from "react";
 import { useBackendContext } from "#/infra/backend-context";
+import { receiveTracedOpen } from "#/infra/launch-trace";
 import { useSidecarEvent } from "#/infra/sidecar-events";
 
 type OpenRequestContextValue = {
@@ -29,21 +30,25 @@ export function OpenRequestProvider(props: {
 	const [requests, setRequests] = useState<readonly OpenRequest[]>([]);
 	const acknowledging = useRef(new Set<string>());
 
-	const merge = useCallback((request: OpenRequest) => {
-		setRequests((current) => {
-			if (acknowledging.current.has(request.id)) return current;
-			const previous = current.find((entry) => entry.id === request.id);
-			if (
-				previous !== undefined &&
-				previous.status.kind !== "pending" &&
-				request.status.kind === "pending"
-			)
-				return current;
-			return previous === undefined
-				? [...current, request]
-				: current.map((entry) => (entry.id === request.id ? request : entry));
-		});
-	}, []);
+	const merge = useCallback(
+		(request: OpenRequest) => {
+			receiveTracedOpen(request, client);
+			setRequests((current) => {
+				if (acknowledging.current.has(request.id)) return current;
+				const previous = current.find((entry) => entry.id === request.id);
+				if (
+					previous !== undefined &&
+					previous.status.kind !== "pending" &&
+					request.status.kind === "pending"
+				)
+					return current;
+				return previous === undefined
+					? [...current, request]
+					: current.map((entry) => (entry.id === request.id ? request : entry));
+			});
+		},
+		[client],
+	);
 
 	useSidecarEvent((event) => {
 		if (event.type === "stream-ready") {

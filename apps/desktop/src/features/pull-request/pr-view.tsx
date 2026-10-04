@@ -130,6 +130,25 @@ export function PrView({
 	// other open PR's.
 	const windowFocused = useWindowFocused();
 	const isFilesChangedVisible = tabsValue === "files" && isSelectedTab;
+	useLaunchMark("pr-view.mounted", isSelectedTab, undefined, session.id);
+	useLaunchMark(
+		"diff.files.resolved",
+		!isLoading && error == null,
+		undefined,
+		session.id,
+	);
+	useLaunchMark(
+		"files.loading.painted",
+		isFilesChangedVisible && isLoading,
+		undefined,
+		session.id,
+	);
+	useLaunchMark(
+		"files.list.painted",
+		isFilesChangedVisible && !isLoading && error == null,
+		files.length === 0 ? "files" : undefined,
+		session.id,
+	);
 	const watched = isFilesChangedVisible && windowFocused;
 	useSessionWatch(orpc, session.id, watched);
 	// The same `watched` rising edge doubles as the refetch trigger for
@@ -422,3 +441,5 @@ function FilesChangedError({ error }: { error: unknown }): React.ReactElement {
 		</Empty>
 	);
 }
+
+import { useLaunchMark } from "#/infra/launch-trace";

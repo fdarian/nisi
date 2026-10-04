@@ -1,5 +1,6 @@
 import type { SidecarClient, SidecarEvent } from "@repo/sidecar-api";
 import { createContext, useContext, useEffect, useRef } from "react";
+import { frontendBootMark } from "./launch-trace";
 
 type Listener = (event: SidecarEvent) => void;
 const EventContext = createContext<((listener: Listener) => () => void) | null>(
@@ -22,6 +23,8 @@ export function SidecarEventsProvider(props: {
 							signal: controller.signal,
 						},
 					)) {
+						if (event.type === "stream-ready")
+							frontendBootMark("frontend.events.connected");
 						for (const listener of listeners.current) listener(event);
 					}
 				} catch (error) {

@@ -3,8 +3,11 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createRouter, RouterProvider } from "@tanstack/react-router";
 import React from "react";
 import ReactDOM from "react-dom/client";
+import { frontendBootMark } from "#/infra/launch-trace";
 import { startDeepLinkListener } from "#/shell/deep-link/deep-link-store";
 import { routeTree } from "./routeTree.gen";
+
+frontendBootMark("frontend.main");
 
 // Boot-once, before anything renders — a `nisi://` link can arrive before
 // the webview exists or React mounts. See `deep-link-store.ts`'s doc

@@ -12,6 +12,7 @@ import type { Session } from "#/features/pull-request/data/pr-data";
 import { useOverview } from "#/features/pull-request/data/pr-data";
 import { CommitList } from "#/features/pull-request/overview/commits/commit-list";
 import type { SidecarQueryUtils } from "#/infra/backend-context";
+import { useLaunchMark } from "#/infra/launch-trace";
 import { DescriptionPane } from "./description-pane";
 
 type OverviewViewProps = {
@@ -35,6 +36,18 @@ export function OverviewView({
 	enabled,
 }: OverviewViewProps): React.ReactElement {
 	const overviewQuery = useOverview(orpc, session, enabled);
+	useLaunchMark(
+		"overview.loading.painted",
+		enabled && overviewQuery.data === undefined,
+		undefined,
+		session.id,
+	);
+	useLaunchMark(
+		"overview.content.painted",
+		enabled && overviewQuery.data !== undefined,
+		"overview",
+		session.id,
+	);
 
 	if (overviewQuery.error != null) {
 		return <OverviewError error={overviewQuery.error} />;
