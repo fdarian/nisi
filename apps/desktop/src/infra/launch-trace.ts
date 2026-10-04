@@ -2,6 +2,7 @@ import type { OpenRequest, SidecarClient } from "@repo/sidecar-api";
 import { useEffect, useSyncExternalStore } from "react";
 
 type Mark = { at: number; name: string; tab?: string };
+type LaunchMarkOptions = { when?: boolean; sessionId?: string; tab?: string };
 type Trace = {
 	id: string;
 	client: SidecarClient;
@@ -61,16 +62,20 @@ function flush(trace: Trace): void {
 
 export function launchMark(
 	name: string,
-	tab?: string,
-	sessionId?: string,
+	options: LaunchMarkOptions = {},
 ): void {
 	const trace = state.trace;
 	if (trace === undefined || trace.finished || trace.seen.has(name)) return;
-	if (sessionId !== undefined && trace.sessionId !== sessionId) return;
+	if (options.sessionId !== undefined && trace.sessionId !== options.sessionId)
+		return;
 	trace.seen.add(name);
 	trace.queue.push({ at: now(), name });
-	if (tab !== undefined && !trace.seen.has("tab.content.painted")) {
-		trace.queue.push({ at: now(), name: "tab.content.painted", tab });
+	if (options.tab !== undefined && !trace.seen.has("tab.content.painted")) {
+		trace.queue.push({
+			at: now(),
+			name: "tab.content.painted",
+			tab: options.tab,
+		});
 		trace.seen.add("tab.content.painted");
 	}
 	setTimeout(() => flush(trace), 0);
@@ -89,16 +94,16 @@ const snapshot = () =>
 
 export function useLaunchMark(
 	name: string,
-	enabled = true,
-	tab?: string,
-	sessionId?: string,
+	options: LaunchMarkOptions = {},
 ): void {
 	const trace = useLaunchTrace();
 	useEffect(() => {
-		if (trace === undefined || !enabled) return;
-		const frame = requestAnimationFrame(() => launchMark(name, tab, sessionId));
+		if (trace === undefined || options.when === false) return;
+		const frame = requestAnimationFrame(() =>
+			launchMark(name, { tab: options.tab, sessionId: options.sessionId }),
+		);
 		return () => cancelAnimationFrame(frame);
-	}, [trace, name, enabled, tab, sessionId]);
+	}, [trace, name, options.when, options.tab, options.sessionId]);
 }
 
 export function markDiffPainted(sessionId: string, node: HTMLElement): void {
@@ -107,7 +112,7 @@ export function markDiffPainted(sessionId: string, node: HTMLElement): void {
 		return;
 	requestAnimationFrame(() => {
 		if (node.isConnected && node.getBoundingClientRect().height > 0)
-			launchMark("files.first-diff.painted", "files", sessionId);
+			launchMark("files.first-diff.painted", { tab: "files", sessionId });
 	});
 }
 

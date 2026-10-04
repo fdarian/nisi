@@ -43,6 +43,7 @@ import {
 import { FilesChangedLoading, PrView } from "#/features/pull-request/pr-view";
 import type { SidecarQueryUtils } from "#/infra/backend-context";
 import { useBackendContext } from "#/infra/backend-context";
+import { useLaunchMark } from "#/infra/launch-trace";
 import { useAppViewActive } from "./app-view-context";
 import { useDeepLinkOpener } from "./deep-link/deep-link-data";
 import { DevBranch } from "./dev-branch";
@@ -155,10 +156,9 @@ function AppShellReady({
 	const pendingRequest = request?.status.kind === "opened" ? null : request;
 	const pendingTabId =
 		pendingRequest === null ? null : `open:${pendingRequest.id}`;
-	useLaunchMark(
-		"pending-panel.painted",
-		pendingRequest?.status.kind === "pending",
-	);
+	useLaunchMark("pending-panel.painted", {
+		when: pendingRequest?.status.kind === "pending",
+	});
 	const selectSession = useCallback(
 		(sessionId: string) => {
 			setRequestedActiveSessionId(sessionId);
@@ -519,5 +519,3 @@ function DevTool() {
 		<DevToolButton />
 	) : null;
 }
-
-import { useLaunchMark } from "#/infra/launch-trace";

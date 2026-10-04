@@ -9,6 +9,7 @@ import type {
 import type { ChatSessions } from "./chat/sessions.ts";
 import type { CodeLspPool } from "./code-index/state.ts";
 import type { HarnessModelCache } from "./harness/model-store.ts";
+import type { LaunchTrace } from "./launch-trace/service.ts";
 import type { AttentionState } from "./pull-request-attention.ts";
 import type { ScheduledMerges } from "./scheduled-merge.ts";
 import type { SessionWatch } from "./session-watch.ts";
@@ -40,5 +41,3 @@ export type AppServices =
 	| GitHub
 	| AttentionState
 	| BunServices.BunServices;
-
-import type { LaunchTrace } from "./launch-trace/service.ts";

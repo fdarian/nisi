@@ -1,3 +1,4 @@
+import type { Context } from "@orpc/server";
 import type {
 	StandardHandlerOptions,
 	StandardHandlerPlugin,
@@ -118,5 +119,3 @@ export class RpcLifecyclePlugin<T extends Context>
 		};
 	}
 }
-
-import type { Context } from "@orpc/server";

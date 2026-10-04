@@ -36,18 +36,15 @@ export function OverviewView({
 	enabled,
 }: OverviewViewProps): React.ReactElement {
 	const overviewQuery = useOverview(orpc, session, enabled);
-	useLaunchMark(
-		"overview.loading.painted",
-		enabled && overviewQuery.data === undefined,
-		undefined,
-		session.id,
-	);
-	useLaunchMark(
-		"overview.content.painted",
-		enabled && overviewQuery.data !== undefined,
-		"overview",
-		session.id,
-	);
+	useLaunchMark("overview.loading.painted", {
+		when: enabled && overviewQuery.data === undefined,
+		sessionId: session.id,
+	});
+	useLaunchMark("overview.content.painted", {
+		when: enabled && overviewQuery.data !== undefined,
+		tab: "overview",
+		sessionId: session.id,
+	});
 
 	if (overviewQuery.error != null) {
 		return <OverviewError error={overviewQuery.error} />;

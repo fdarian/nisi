@@ -64,6 +64,7 @@ import {
 import { useDragAutoscroll } from "#/features/pull-request/files/use-drag-autoscroll";
 import type { DiffStyleMode } from "#/features/settings/settings-data";
 import type { SidecarQueryUtils } from "#/infra/backend-context";
+import { markDiffPainted, useLaunchTrace } from "#/infra/launch-trace";
 import type { FileDiffIdentity } from "./build-file-diff";
 import {
 	buildFileDiff,
@@ -1632,5 +1633,3 @@ function HiddenFileBody({
 		</div>
 	);
 }
-
-import { markDiffPainted, useLaunchTrace } from "#/infra/launch-trace";

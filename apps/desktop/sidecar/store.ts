@@ -61,6 +61,7 @@ import {
 	resolveDiffHead,
 	validateHeadRef,
 } from "./diff-head.ts";
+import { writeSidecarMark } from "./launch-trace/service.ts";
 
 /** `sessions.open`'s `cwd` doesn't resolve to a git working tree. */
 export class InvalidCwd extends Schema.TaggedError<InvalidCwd>()("InvalidCwd", {
@@ -1669,5 +1670,3 @@ export type {
 	WorktreeRelocationFailed,
 };
 export { SessionNotFound };
-
-import { writeSidecarMark } from "./launch-trace/service.ts";
