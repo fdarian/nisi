@@ -158,7 +158,7 @@ function AppShellReady({
 	const pendingTabId =
 		pendingRequest === null ? null : `open:${pendingRequest.id}`;
 	useLaunchMark("pending-panel.painted", {
-		when: pendingRequest?.status.kind === "pending",
+		when: appViewActive && pendingRequest?.status.kind === "pending",
 	});
 	const selectSession = useCallback(
 		(sessionId: string) => {
