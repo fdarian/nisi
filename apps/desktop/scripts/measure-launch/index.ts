@@ -1,8 +1,8 @@
 import { BunRuntime, BunServices } from "@effect/platform-bun";
-import { Console, Effect, Logger, Schema } from "effect";
-import { FileSystem } from "effect/FileSystem";
 import { launchTracePath } from "@repo/logging";
 import { LaunchRecord } from "@repo/sidecar-api";
+import { Console, Effect, Logger, Schema } from "effect";
+import { FileSystem } from "effect/FileSystem";
 import { formatTimeline, formatVisibility } from "./format.ts";
 import {
 	bundlePath,
