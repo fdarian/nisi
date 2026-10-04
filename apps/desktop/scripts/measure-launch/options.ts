@@ -9,11 +9,13 @@ export function parseLaunchOptions(argv: readonly string[]) {
 		deeplink?: string;
 		rebuild: boolean;
 		json: boolean;
+		waitPrIndex: boolean;
 	} = {
 		cold: false,
 		newPr: false,
 		rebuild: false,
 		json: false,
+		waitPrIndex: false,
 	};
 	for (const [index, arg] of argv.entries()) {
 		if (
@@ -35,6 +37,7 @@ export function parseLaunchOptions(argv: readonly string[]) {
 		else if (arg === "--new-pr") options.newPr = true;
 		else if (arg === "--rebuild") options.rebuild = true;
 		else if (arg === "--json") options.json = true;
+		else if (arg === "--wait-pr-index") options.waitPrIndex = true;
 		else throw new Error(`Unknown option: ${arg}`);
 	}
 	if (options.cwd === undefined)
@@ -51,6 +54,8 @@ export function parseLaunchOptions(argv: readonly string[]) {
 		throw new Error("--new-pr requires --warmup <other PR worktree>");
 	if (!options.newPr && options.warmup !== undefined)
 		throw new Error("--warmup requires --new-pr");
+	if (options.waitPrIndex && !options.newPr)
+		throw new Error("--wait-pr-index requires --new-pr");
 	if (options.rebuild && !options.cold && !options.newPr)
 		throw new Error("--rebuild requires --cold or --new-pr");
 	return { ...options, cwd: options.cwd };

@@ -1,4 +1,5 @@
 import { BunRuntime, BunServices } from "@effect/platform-bun";
+import { join } from "node:path";
 import { makeLaunchTracer } from "@repo/logging";
 import { Console, Effect, Logger } from "effect";
 import { FileSystem } from "effect/FileSystem";
@@ -117,6 +118,29 @@ const program = Effect.gen(function* () {
 			label: "Warm-up",
 			cliPath: cli.path,
 		});
+	if (options.waitPrIndex) {
+		const deadline = Date.now() + 120_000;
+		while (true) {
+			const log = yield* fs.readFileString(join(dataDir, "logs/sidecar.log"));
+			if (log.includes('message="PR index refreshed"')) break;
+			if (
+				log.includes('message="PR index refresh failed; retaining last index"')
+			)
+				return yield* Effect.fail(
+					new Error(
+						"PR index refresh failed during warm-up; cannot measure a confirmed hit",
+					),
+				);
+			if (Date.now() >= deadline)
+				return yield* Effect.fail(
+					new Error("Timed out waiting for warm-up PR index"),
+				);
+			yield* Effect.sleep("100 millis");
+		}
+		yield* Console.log(
+			"Warm-up PR index populated (target hit must still be confirmed in trace)",
+		);
+	}
 	const traceId = crypto.randomUUID();
 	if (!options.cold) {
 		const instance = yield* liveInstance(dataDir);

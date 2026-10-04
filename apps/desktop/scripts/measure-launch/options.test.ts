@@ -20,5 +20,22 @@ test("requires cwd and only accepts the checkout-local interface", () => {
 		newPr: false,
 		rebuild: true,
 		json: true,
+		waitPrIndex: false,
 	});
+});
+
+test("index waiting is restricted to new-PR measurement mode", () => {
+	expect(() => parseLaunchOptions(["--cwd", "/pr", "--wait-pr-index"])).toThrow(
+		"--wait-pr-index requires --new-pr",
+	);
+	expect(
+		parseLaunchOptions([
+			"--cwd",
+			"/pr",
+			"--new-pr",
+			"--warmup",
+			"/warm",
+			"--wait-pr-index",
+		]).waitPrIndex,
+	).toBe(true);
 });
