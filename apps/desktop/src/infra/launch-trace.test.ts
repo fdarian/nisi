@@ -8,6 +8,7 @@ test("a rejected mark batch warns without blocking terminal delivery", async () 
 	const delivered = Promise.withResolvers<void>();
 	const batches: string[][] = [];
 	const terminalTimestamps: number[] = [];
+	const boot: { navigationAt?: number } = {};
 	const clock = spyOn(Date, "now").mockReturnValue(1234);
 	const warn = spyOn(console, "warn").mockImplementation(() =>
 		warned.resolve(),
@@ -16,7 +17,12 @@ test("a rejected mark batch warns without blocking terminal delivery", async () 
 		diagnostics: {
 			launchMarks: async (input) => {
 				batches.push(input.marks.map((mark) => mark.name));
-				if (batches.length === 1) throw failure;
+				if (batches.length === 1) {
+					boot.navigationAt = input.marks.find(
+						(mark) => mark.name === "frontend.navigation-start",
+					)?.at;
+					throw failure;
+				}
 				terminalTimestamps.push(...input.marks.map((mark) => mark.at));
 				delivered.resolve();
 			},
@@ -44,6 +50,7 @@ test("a rejected mark batch warns without blocking terminal delivery", async () 
 			"trace.done",
 		]);
 		expect(terminalTimestamps).toEqual([1234, 1234, 1234]);
+		expect(boot.navigationAt).toBe(performance.timeOrigin);
 	} finally {
 		clock.mockRestore();
 		warn.mockRestore();

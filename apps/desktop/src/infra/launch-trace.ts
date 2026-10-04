@@ -12,7 +12,9 @@ type Trace = {
 	sending: Promise<void>;
 	finished: boolean;
 };
-const boot: Mark[] = [{ at: Date.now(), name: "frontend.navigation-start" }];
+const boot: Mark[] = [
+	{ at: performance.timeOrigin, name: "frontend.navigation-start" },
+];
 const state: { trace?: Trace } = {};
 const listeners = new Set<() => void>();
 export function frontendBootMark(name: string): void {
