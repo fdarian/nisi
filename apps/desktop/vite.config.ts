@@ -110,14 +110,15 @@ function resolveBranch(): string {
 }
 
 // https://vite.dev/config/
-export default defineConfig(async () => ({
+export default defineConfig(async (env) => ({
 	// Build-time constants for the custom About dialog (`src/features/about/about-page.tsx`)
 	// — see `src/vite-env.d.ts` for their type declarations. The native AppKit about
 	// panel can't render a hyperlink, so the dialog needs the commit baked in itself.
 	define: {
 		__APP_VERSION__: JSON.stringify(resolveAppVersion()),
 		__APP_COMMIT_SHA__: JSON.stringify(resolveCommitSha()),
-		__DEV_BRANCH__: JSON.stringify(resolveBranch()),
+		__DEV_BRANCH__:
+			env.command === "serve" ? JSON.stringify(resolveBranch()) : "undefined",
 	},
 
 	plugins: [

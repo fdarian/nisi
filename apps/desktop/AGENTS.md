@@ -100,7 +100,7 @@ claims and publishes it with, so both ends of the handshake share one dependency
   recovers from that on the next boot.
 
 ## Dev/prod isolation
-Dev windows show the current Git branch in a reserved footer (`src/shell/dev-branch.tsx`); `import.meta.env.DEV` excludes it from production builds.
+`bun dev` windows show the current Git branch in a reserved footer (`src/shell/dev-branch.tsx`); `build:dev` shows `Build <short commit>` there. `import.meta.env.DEV` excludes it from regular production builds.
 
 Dev and prod both resolve their data dir (`sidecar.json` + `app.db`, see [The seam](#the-seam))
 from `NISI_DATA_DIR`, defaulting to the same path — `~/Library/Application Support/com.nisi.desktop/`
