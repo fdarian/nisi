@@ -28,7 +28,7 @@ test("a rejected mark batch warns without blocking terminal delivery", async () 
 				id: "request",
 				traceId: "delivery-recovery",
 				cwd: "/worktree",
-				target: "auto",
+				target: { kind: "auto" },
 				status: { kind: "pending" },
 			},
 			client,
