@@ -1,3 +1,4 @@
+import { cn } from "cn";
 import {
 	Card,
 	CardAction,
@@ -5,7 +6,6 @@ import {
 	CardHeader,
 	CardTitle,
 } from "#/components/ui/card";
-import { cn } from "cn";
 
 export function SettingsSection(props: {
 	title?: string;
