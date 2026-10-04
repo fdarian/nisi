@@ -18,6 +18,26 @@ const session = {
 } as const;
 
 describe("open requests", () => {
+	test("traced opens carry their ID in pending and resolved frontend events", () => {
+		const traceId = "trace-hop-test";
+		const ids: (string | undefined)[] = [];
+		const stop = subscribe((event) => {
+			if (event.type === "open-requested" || event.type === "open-resolved")
+				ids.push(event.request.traceId);
+		});
+		try {
+			const request = createOpenRequest("/repo", target, traceId);
+			resolveOpenRequest(request.id, session);
+			expect(ids).toEqual([traceId, traceId]);
+			expect(
+				listOpenRequests().find((entry) => entry.id === request.id)?.traceId,
+			).toBe(traceId);
+			acknowledgeOpenRequest(request.id);
+			acknowledgeActivation(request.id);
+		} finally {
+			stop();
+		}
+	});
 	test("replays a request and its result to a late subscriber until acknowledged", () => {
 		const request = createOpenRequest("/repo", target);
 		resolveOpenRequest(request.id, session);

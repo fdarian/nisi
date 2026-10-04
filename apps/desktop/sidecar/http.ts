@@ -72,6 +72,7 @@ import {
 import { listHarnesses } from "./harness/harnesses.ts";
 import { getHarnessModels } from "./harness/models.ts";
 import { LaunchTrace } from "./launch-trace/service.ts";
+import { receiveFrontendMarks } from "./launch-trace/handler.ts";
 import { checkSessionForChanges } from "./live-poll.ts";
 import { translateMergeFailure } from "./merge-failure.ts";
 import { createNativeActivationHandler } from "./native-activation.ts";
@@ -397,10 +398,7 @@ export function attachRouter(
 
 	const router = authed.router({
 		diagnostics: {
-			launchMarks: authed.diagnostics.launchMarks.effect(function* (call) {
-				const trace = yield* LaunchTrace;
-				yield* trace.frontend(call.input.traceId, call.input.marks);
-			}),
+			launchMarks: authed.diagnostics.launchMarks.effect(receiveFrontendMarks),
 		},
 		health: {
 			// biome-ignore lint/correctness/useYield: .effect() requires a generator function even with no Effect steps
