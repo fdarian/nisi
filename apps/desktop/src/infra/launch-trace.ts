@@ -159,4 +159,25 @@ export function markDiffPainted(sessionId: string, node: HTMLElement): void {
 	});
 }
 
+export function markFilesLoadingPainted(
+	node: HTMLElement,
+	sessionId?: string,
+): void {
+	const trace = state.trace;
+	if (
+		trace === undefined ||
+		trace.finished ||
+		(sessionId !== undefined && trace.sessionId !== sessionId)
+	)
+		return;
+	requestAnimationFrame(() => {
+		if (
+			state.trace === trace &&
+			node.isConnected &&
+			node.getBoundingClientRect().height > 0
+		)
+			launchMark("files.loading.painted", { sessionId });
+	});
+}
+
 export const useLaunchTrace = () => useSyncExternalStore(subscribe, snapshot);

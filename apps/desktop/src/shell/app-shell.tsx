@@ -40,7 +40,8 @@ import {
 	useCycleFileTab,
 	useSetActiveTab,
 } from "#/features/pull-request/data/session-ui-store";
-import { FilesChangedLoading, PrView } from "#/features/pull-request/pr-view";
+import { FilesChangedLoading } from "#/features/pull-request/files-changed-loading";
+import { PrView } from "#/features/pull-request/pr-view";
 import type { SidecarQueryUtils } from "#/infra/backend-context";
 import { useBackendContext } from "#/infra/backend-context";
 import { useLaunchMark } from "#/infra/launch-trace";
@@ -422,7 +423,9 @@ function AppShellReady({
 						value={pendingTabId}
 					>
 						{pendingRequest.status.kind === "pending" ? (
-							<FilesChangedLoading />
+							<FilesChangedLoading
+								when={appViewActive && selectedTabId === pendingTabId}
+							/>
 						) : pendingRequest.status.kind === "failed" ? (
 							<>
 								<p>Couldn’t open {pendingRequest.cwd}</p>

@@ -9,7 +9,7 @@ import {
 	EmptyMedia,
 	EmptyTitle,
 } from "#/components/ui/empty";
-import { Spinner } from "#/components/ui/spinner";
+import { FilesChangedLoading } from "#/features/pull-request/files-changed-loading";
 import {
 	Tabs,
 	TabsContent,
@@ -139,10 +139,6 @@ export function PrView({
 		when: !isLoading && error == null,
 		sessionId: session.id,
 	});
-	useLaunchMark("files.loading.painted", {
-		when: isFilesChangedVisible && isLoading,
-		sessionId: session.id,
-	});
 	useLaunchMark("files.list.painted", {
 		when: isFilesChangedVisible && !isLoading && error == null,
 		tab: files.length === 0 ? "files" : undefined,
@@ -250,7 +246,10 @@ export function PrView({
 						{error != null ? (
 							<FilesChangedError error={error} />
 						) : isLoading ? (
-							<FilesChangedLoading />
+							<FilesChangedLoading
+								when={isFilesChangedVisible}
+								sessionId={session.id}
+							/>
 						) : (
 							<FilesChangedView
 								files={files}
@@ -414,17 +413,6 @@ function FileViewerTab({
 				<XIcon className="size-3" />
 			</button>
 		</div>
-	);
-}
-
-export function FilesChangedLoading(): React.ReactElement {
-	return (
-		<Empty className="flex-1">
-			<EmptyMedia variant="icon">
-				<Spinner className="size-5" />
-			</EmptyMedia>
-			<EmptyTitle>Loading changed files…</EmptyTitle>
-		</Empty>
 	);
 }
 
