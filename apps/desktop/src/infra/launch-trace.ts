@@ -12,14 +12,12 @@ type Trace = {
 	sending: Promise<void>;
 	finished: boolean;
 };
-const boot: Mark[] = [
-	{ at: performance.timeOrigin, name: "frontend.navigation-start" },
-];
+const boot: Mark[] = [{ at: Date.now(), name: "frontend.navigation-start" }];
 const state: { trace?: Trace } = {};
 const listeners = new Set<() => void>();
-const now = () => performance.timeOrigin + performance.now();
 export function frontendBootMark(name: string): void {
-	if (!boot.some((mark) => mark.name === name)) boot.push({ at: now(), name });
+	if (!boot.some((mark) => mark.name === name))
+		boot.push({ at: Date.now(), name });
 }
 
 export function receiveTracedOpen(
@@ -47,7 +45,7 @@ export function receiveTracedOpen(
 
 function flush(trace: Trace): void {
 	if (trace.seen.has("tab.content.painted") && !trace.finished) {
-		trace.queue.push({ at: now(), name: "trace.done" });
+		trace.queue.push({ at: Date.now(), name: "trace.done" });
 		trace.finished = true;
 	}
 	const marks = trace.queue.splice(0);
@@ -68,10 +66,10 @@ export function launchMark(
 	if (options.sessionId !== undefined && trace.sessionId !== options.sessionId)
 		return;
 	trace.seen.add(name);
-	trace.queue.push({ at: now(), name });
+	trace.queue.push({ at: Date.now(), name });
 	if (options.tab !== undefined && !trace.seen.has("tab.content.painted")) {
 		trace.queue.push({
-			at: now(),
+			at: Date.now(),
 			name: "tab.content.painted",
 			tab: options.tab,
 		});

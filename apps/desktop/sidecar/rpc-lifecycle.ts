@@ -11,11 +11,7 @@ import {
 	wrapAsyncIterator,
 	wrapReadableStream,
 } from "@orpc/shared";
-import {
-	activeTrace,
-	epochNow,
-	writeSidecarMark,
-} from "./launch-trace/service.ts";
+import { activeTrace, writeSidecarMark } from "./launch-trace/service.ts";
 
 type DebugLog = (
 	message: string,
@@ -31,7 +27,7 @@ export class RpcLifecyclePlugin<T extends Context>
 
 	init(options: StandardHandlerOptions<T>): StandardHandlerOptions<T> {
 		const interceptor: StandardHandlerRoutingInterceptor<T> = async (call) => {
-			const startedAt = epochNow();
+			const startedAt = Date.now();
 			const trace = activeTrace();
 			const path = new URL(call.request.url, "http://localhost").pathname;
 			const rpcId = trace === undefined ? undefined : crypto.randomUUID();
@@ -51,7 +47,7 @@ export class RpcLifecyclePlugin<T extends Context>
 							path,
 							rpcId,
 							at: startedAt,
-							durationMs: epochNow() - startedAt,
+							durationMs: Date.now() - startedAt,
 							status: state.status,
 						},
 						trace ?? activeTrace(),

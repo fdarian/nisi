@@ -15,7 +15,7 @@ export function cliMark(
 	if (trace === undefined) return;
 	appendFileSync(
 		join(trace.directory, `${trace.id}.jsonl`),
-		`${JSON.stringify({ ...attrs, at: at === undefined ? performance.timeOrigin + performance.now() : at, source: "cli", name })}\n`,
+		`${JSON.stringify({ ...attrs, at: at === undefined ? Date.now() : at, source: "cli", name })}\n`,
 	);
 }
 

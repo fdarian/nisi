@@ -2,7 +2,6 @@ import { getDataDirConfig } from "@repo/db";
 import { Context, Effect, Layer } from "effect";
 import { appendLaunchMarks, type LaunchMark } from "./file-writer.ts";
 
-export const epochNow = () => performance.timeOrigin + performance.now();
 const boot: LaunchMark[] = [
 	{
 		at: performance.timeOrigin,
@@ -14,11 +13,11 @@ type ActiveTrace = { id: string; dataDir: string; deadline: number };
 const state: { active?: ActiveTrace } = {};
 
 export function bufferBootMark(name: string): void {
-	boot.push({ at: epochNow(), source: "sidecar", name });
+	boot.push({ at: Date.now(), source: "sidecar", name });
 }
 
 export function activeTrace(): ActiveTrace | undefined {
-	if (state.active !== undefined && epochNow() >= state.active.deadline)
+	if (state.active !== undefined && Date.now() >= state.active.deadline)
 		state.active = undefined;
 	return state.active;
 }
@@ -30,7 +29,7 @@ export function writeSidecarMark(
 ): void {
 	if (trace === undefined || activeTrace()?.id !== trace.id) return;
 	appendLaunchMarks(trace.dataDir, trace.id, [
-		{ at: epochNow(), ...attrs, source: "sidecar", name },
+		{ at: Date.now(), ...attrs, source: "sidecar", name },
 	]);
 }
 
@@ -46,7 +45,7 @@ export class LaunchTrace extends Context.Service<LaunchTrace>()(
 						const current = activeTrace();
 						if (current?.id === id) return;
 						appendLaunchMarks(dataDir, id, boot);
-						state.active = { id, dataDir, deadline: epochNow() + 60_000 };
+						state.active = { id, dataDir, deadline: Date.now() + 60_000 };
 					}).pipe(Effect.orDie),
 				frontend: (
 					id: string,

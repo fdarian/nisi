@@ -4,7 +4,7 @@ import {
 	type ChildProcess,
 	ChildProcessSpawner,
 } from "effect/unstable/process";
-import { activeTrace, epochNow, writeSidecarMark } from "./service.ts";
+import { activeTrace, writeSidecarMark } from "./service.ts";
 
 function commands(
 	command: ChildProcess.Command,
@@ -28,7 +28,7 @@ export const decorateSpawner = (
 		Effect.gen(function* () {
 			const trace = activeTrace();
 			if (trace === undefined) return yield* original.spawn(command);
-			const at = epochNow();
+			const at = Date.now();
 			const captured = commands(command);
 			yield* Effect.try(() =>
 				writeSidecarMark(
@@ -51,7 +51,7 @@ export const decorateSpawner = (
 							at,
 							command: captured.map((entry) => entry.command).join(" | "),
 							args: captured.flatMap((entry) => entry.args),
-							durationMs: epochNow() - at,
+							durationMs: Date.now() - at,
 							outcome: "spawn-failed",
 							error: Cause.pretty(result.cause),
 						},
@@ -73,7 +73,7 @@ export const decorateSpawner = (
 								at,
 								command: captured.map((entry) => entry.command).join(" | "),
 								args: captured.flatMap((entry) => entry.args),
-								durationMs: epochNow() - at,
+								durationMs: Date.now() - at,
 								...(Exit.isSuccess(exit)
 									? { exitCode: Number(exit.value) }
 									: {
