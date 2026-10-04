@@ -44,3 +44,7 @@ tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 libc = "0.2.189"
+
+# Published dialog alpha.2 lacks the Manager import required by core alpha.3+.
+[patch.crates-io]
+tauri-plugin-dialog = { path = "vendor/tauri-plugin-dialog" }
