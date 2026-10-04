@@ -5,7 +5,7 @@ type Mark = { at: number; name: string; tab?: string };
 type LaunchMarkOptions = { when?: boolean; sessionId?: string; tab?: string };
 type Trace = {
 	id: string;
-	client: SidecarClient;
+	client: Pick<SidecarClient, "diagnostics">;
 	sessionId?: string;
 	seen: Set<string>;
 	queue: Mark[];
@@ -24,7 +24,7 @@ export function frontendBootMark(name: string): void {
 
 export function receiveTracedOpen(
 	request: OpenRequest,
-	client: SidecarClient,
+	client: Pick<SidecarClient, "diagnostics">,
 ): void {
 	if (request.traceId === undefined) return;
 	if (state.trace?.id !== request.traceId) {
@@ -52,12 +52,11 @@ function flush(trace: Trace): void {
 	}
 	const marks = trace.queue.splice(0);
 	if (marks.length === 0) return;
-	trace.sending = trace.sending.then(() =>
-		trace.client.diagnostics.launchMarks({ traceId: trace.id, marks }),
-	);
-	void trace.sending.catch((error) =>
-		console.error("Launch trace delivery failed", error),
-	);
+	trace.sending = trace.sending
+		.then(() =>
+			trace.client.diagnostics.launchMarks({ traceId: trace.id, marks }),
+		)
+		.catch((error) => console.warn("Launch trace delivery failed", error));
 }
 
 export function launchMark(
