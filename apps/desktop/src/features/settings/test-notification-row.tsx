@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Button } from "#/components/ui/button";
-import { sendOsNotification } from "#/infra/os-notification";
+import { sendOsNotification } from "#/infra/notifications/os-notification";
 import { SettingsRow } from "./settings-section";
 
 export function TestNotificationRow(props: {

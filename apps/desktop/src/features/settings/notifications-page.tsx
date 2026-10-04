@@ -8,8 +8,8 @@ import { useBackendContext } from "#/infra/backend-context";
 import {
 	notificationPermission,
 	requestNotificationPermission,
-} from "#/infra/os-notification";
-import { useNotificationPermission } from "#/infra/use-notification-permission";
+} from "#/infra/notifications/os-notification";
+import { useNotificationPermission } from "#/infra/notifications/use-notification-permission";
 import { NOTIFICATION_KINDS } from "./notification-kinds";
 import { useSettings, useUpdateSettings } from "./settings-data";
 import { SettingsRow, SettingsSection } from "./settings-section";

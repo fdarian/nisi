@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useEffect } from "react";
+import { useWindowFocused } from "../use-window-focused";
 import { notificationPermission } from "./os-notification";
-import { useWindowFocused } from "./use-window-focused";
 
 export function useNotificationPermission() {
 	const focused = useWindowFocused();

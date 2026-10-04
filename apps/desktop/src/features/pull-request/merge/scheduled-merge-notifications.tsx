@@ -2,9 +2,9 @@ import { toastManager } from "#/components/ui/toast";
 import { useScheduledMergeEvents } from "#/features/pull-request/data/pr-data";
 import { useSettings } from "#/features/settings/settings-data";
 import type { SidecarQueryUtils } from "#/infra/backend-context";
-import { sendOsNotification } from "#/infra/os-notification";
+import { sendOsNotification } from "#/infra/notifications/os-notification";
+import { useNotificationPermission } from "#/infra/notifications/use-notification-permission";
 import { useSidecarEvent } from "#/infra/sidecar-events";
-import { useNotificationPermission } from "#/infra/use-notification-permission";
 import { useWindowFocused } from "#/infra/use-window-focused";
 import { scheduledMergeNotificationChannel } from "./scheduled-merge-notification-channel";
 

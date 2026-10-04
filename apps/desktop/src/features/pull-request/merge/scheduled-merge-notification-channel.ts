@@ -1,4 +1,4 @@
-import type { NotificationPermission } from "#/infra/os-notification";
+import type { NotificationPermission } from "#/infra/notifications/os-notification";
 
 export function scheduledMergeNotificationChannel(
 	focused: boolean,
