@@ -59,10 +59,12 @@ the request, making the terminal paint mark ambiguous.
 # Reading the report
 
 All offsets are milliseconds from `cli.process-start`. Negative boot offsets mean the component
-was already running; they are not launch latency. Timeline deltas compare adjacent **state marks**,
-not exclusive work durations. Subprocesses and RPCs appear separately in the Waterfall; diagnostic
-mark-ingestion RPCs are excluded. Slowest first shows at most 15 spans. Parallel spans overlap, so
-do not add their durations to estimate the critical path.
+was already running; they are not launch latency. Timeline deltas compare adjacent marks and
+state-span start/end rows, not exclusive work durations. The Waterfall shows all spans, indented
+by parent depth; subprocess and RPC spans are omitted from the state timeline. Slowest first shows
+at most 15 leaf subprocess/RPC spans. Parallel spans overlap, so do not add their durations to
+estimate the critical path. Sidecar boot records are buffered only until the first traced open;
+later warm measurements of the same process do not contain boot milestones.
 
 | Milestone | Meaning |
 |-----------|---------|

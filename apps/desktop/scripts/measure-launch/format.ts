@@ -152,7 +152,9 @@ export function formatTimeline(
 		...(visibility === undefined ? [] : ["", visibility]),
 		"",
 		"Waterfall (+ms, duration ms, spans indented by parent depth)",
-		...[...spans].sort((a, b) => a.start - b.start).map(row),
+		...[...spans]
+			.sort((a, b) => a.start - b.start || depth(a) - depth(b))
+			.map(row),
 		"",
 		"Slowest first",
 		...slowest.slice(0, 15).map(row),

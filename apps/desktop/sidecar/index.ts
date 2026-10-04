@@ -172,12 +172,8 @@ const program = Effect.scoped(
 			const services = yield* Layer.build(MainLayer).pipe(
 				Effect.withSpan("sidecar.services.init"),
 			);
-			// Captures the ambient context (every service in `AppServices`) so
-			// oRPC handlers — which run as their own detached Effect per
-			// request rather than as part of this program's fiber — can still
-			// reach them. The walkthrough generation loop also bridges Effect
-			// from its own plain `async function*` via this same captured
-			// context — see `walkthrough/generate.ts`'s `runEffect`.
+			// Detached RPC fibers need the services and tracer, but must not inherit
+			// the boot parent after it ends.
 			const mainContext = Context.merge(
 				yield* Effect.context<LaunchTrace>(),
 				services,
