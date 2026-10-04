@@ -10,7 +10,6 @@
 		"core:window:allow-set-focus",
 		"core:menu:default",
 		"opener:default",
-		"dialog:allow-open",
 		"process:allow-exit",
 		"deep-link:default",
 		{

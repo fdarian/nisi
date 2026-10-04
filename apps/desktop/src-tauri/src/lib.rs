@@ -2,6 +2,7 @@ mod activation;
 #[cfg(target_os = "macos")]
 mod chromium_window_drag;
 mod editors;
+mod folder_picker;
 #[cfg(target_os = "macos")]
 mod termination_signals;
 
@@ -433,7 +434,6 @@ pub fn run() {
         })
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_shell::init())
-        .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_deep_link::init())
         .setup(|app| {
@@ -502,7 +502,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             get_backend,
             list_available_editors,
-            open_in_editor
+            open_in_editor,
+            folder_picker::pick_folder
         ]);
 
     #[cfg(target_os = "macos")]

@@ -79,11 +79,10 @@ pub(crate) const PATH_SAFE: &AsciiSet = &NON_ALPHANUMERIC
  * comment. Every other editor keeps the original
  * `<scheme>://file/<percent-encoded-path>` shape, handed to
  * `tauri_plugin_opener`'s Rust `open_url` directly (the plugin already
- * registered in `lib.rs`'s builder; its sibling `tauri_plugin_shell` has an
- * equivalent `open`, but that one is deprecated in favor of this). Called
+ * registered in `lib.rs`'s builder). Called
  * from inside a command function like this rather than invoked over IPC, it
- * bypasses the capability/ACL system entirely — no `shell:allow-open` or
- * opener-equivalent grant is needed for this to work.
+ * bypasses the capability/ACL system entirely — no opener permission grant
+ * is needed for this to work.
  */
 #[tauri::command]
 pub fn open_in_editor(
