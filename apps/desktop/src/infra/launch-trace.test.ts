@@ -84,8 +84,11 @@ test("records initial visibility and every transition only during the active tra
 		diagnostics: {
 			launchMarks: async (input) => {
 				for (const mark of input.marks)
-					if (mark.name === "frontend.visibility" && mark.hidden !== undefined)
-						visibility.push(mark.hidden);
+					if (
+						mark.name === "frontend.visibility" &&
+						typeof mark.attrs.hidden === "boolean"
+					)
+						visibility.push(mark.attrs.hidden);
 				if (input.marks.some((mark) => mark.name === "trace.done"))
 					delivered.resolve();
 			},

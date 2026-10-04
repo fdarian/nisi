@@ -1,7 +1,7 @@
-import type { OpenRequest, SidecarClient } from "@repo/sidecar-api";
+import type { LaunchMark, OpenRequest, SidecarClient } from "@repo/sidecar-api";
 import { useEffect, useSyncExternalStore } from "react";
 
-type Mark = { at: number; name: string; tab?: string; hidden?: boolean };
+type Mark = LaunchMark;
 type LaunchMarkOptions = {
 	when?: boolean;
 	sessionId?: string;
@@ -18,7 +18,13 @@ type Trace = {
 	finished: boolean;
 };
 const boot: Mark[] = [
-	{ at: performance.timeOrigin, name: "frontend.navigation-start" },
+	{
+		type: "mark",
+		source: "frontend",
+		at: performance.timeOrigin,
+		name: "frontend.navigation-start",
+		attrs: {},
+	},
 ];
 const state: { trace?: Trace } = {};
 const listeners = new Set<() => void>();
@@ -27,7 +33,13 @@ function recordVisibility(): void {
 }
 export function frontendBootMark(name: string): void {
 	if (!boot.some((mark) => mark.name === name))
-		boot.push({ at: Date.now(), name });
+		boot.push({
+			type: "mark",
+			source: "frontend",
+			at: Date.now(),
+			name,
+			attrs: {},
+		});
 }
 
 export function receiveTracedOpen(
@@ -58,7 +70,13 @@ export function receiveTracedOpen(
 
 function flush(trace: Trace): void {
 	if (trace.seen.has("tab.content.painted") && !trace.finished) {
-		trace.queue.push({ at: Date.now(), name: "trace.done" });
+		trace.queue.push({
+			type: "mark",
+			source: "frontend",
+			at: Date.now(),
+			name: "trace.done",
+			attrs: {},
+		});
 		trace.finished = true;
 		if (state.trace === trace)
 			document.removeEventListener("visibilitychange", recordVisibility);
@@ -87,15 +105,19 @@ export function launchMark(
 		return;
 	trace.seen.add(name);
 	trace.queue.push({
+		type: "mark",
+		source: "frontend",
 		at: Date.now(),
 		name,
-		...(options.hidden === undefined ? {} : { hidden: options.hidden }),
+		attrs: options.hidden === undefined ? {} : { hidden: options.hidden },
 	});
 	if (options.tab !== undefined && !trace.seen.has("tab.content.painted")) {
 		trace.queue.push({
+			type: "mark",
+			source: "frontend",
 			at: Date.now(),
 			name: "tab.content.painted",
-			tab: options.tab,
+			attrs: { tab: options.tab },
 		});
 		trace.seen.add("tab.content.painted");
 	}

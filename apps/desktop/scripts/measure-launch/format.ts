@@ -1,9 +1,10 @@
-import type { LaunchMark } from "../../sidecar/launch-trace/file-writer.ts";
+import type { LaunchRecord } from "@repo/sidecar-api";
 
 export function formatVisibility(
-	marks: readonly LaunchMark[],
+	records: readonly LaunchRecord[],
 	observedAt: number,
 ): string | undefined {
+	const marks = records.filter((record) => record.type === "mark");
 	const requested = marks.find(
 		(mark) =>
 			mark.source === "frontend" && mark.name === "open-requested.received",
@@ -22,11 +23,11 @@ export function formatVisibility(
 		if (
 			mark.source !== "frontend" ||
 			mark.name !== "frontend.visibility" ||
-			typeof mark.hidden !== "boolean" ||
+			typeof mark.attrs.hidden !== "boolean" ||
 			mark.at > end
 		)
 			continue;
-		if (mark.hidden) {
+		if (mark.attrs.hidden) {
 			if (state.hiddenSince === undefined)
 				state.hiddenSince = Math.max(requested.at, mark.at);
 		} else if (state.hiddenSince !== undefined) {
@@ -57,24 +58,36 @@ export function formatVisibility(
 }
 
 export function formatTimeline(
-	marks: readonly LaunchMark[],
+	records: readonly LaunchRecord[],
 	observedAt = Date.now(),
 ): string {
+	const marks = records.filter((record) => record.type === "mark");
 	const start = marks.find((mark) => mark.name === "cli.process-start");
 	if (start === undefined)
 		return "Missing cli.process-start; no timeline origin available.";
-	const sorted = [...marks].sort((a, b) => a.at - b.at);
-	const states = sorted.filter(
-		(mark) => !["spawn.start", "spawn", "rpc.start", "rpc"].includes(mark.name),
-	);
+	const spans = records.filter((record) => record.type === "span");
+	const states = [
+		...marks,
+		...spans
+			.filter((span) => !["subprocess", "rpc"].includes(span.name))
+			.flatMap((span) => [
+				{
+					at: span.start,
+					source: span.source,
+					name: `${span.name}.start`,
+					attrs: span.attrs,
+				},
+				{
+					at: span.end,
+					source: span.source,
+					name: `${span.name}.end`,
+					attrs: span.attrs,
+				},
+			]),
+	].sort((a, b) => a.at - b.at);
 	const rows = states.map((mark, index) => {
 		const previous = states[index - 1];
-		const attrs = Object.fromEntries(
-			Object.entries(mark).filter(
-				(entry) => !["at", "source", "name"].includes(entry[0]),
-			),
-		);
-		return `${(mark.at - start.at).toFixed(1).padStart(10)} ${(previous === undefined ? "—" : (mark.at - previous.at).toFixed(1)).padStart(9)} ${mark.source.padEnd(8)} ${mark.name} ${JSON.stringify(attrs)}`;
+		return `${(mark.at - start.at).toFixed(1).padStart(10)} ${(previous === undefined ? "—" : (mark.at - previous.at).toFixed(1)).padStart(9)} ${mark.source.padEnd(8)} ${mark.name} ${JSON.stringify(mark.attrs)}`;
 	});
 	const milestones = [
 		"cli.app.launch.end",
@@ -88,30 +101,48 @@ export function formatTimeline(
 		"tab.content.painted",
 	];
 	const summary = milestones.map((name) => {
+		const operation =
+			name === "cli.app.launch.end"
+				? "cli.app.launch"
+				: name === "sidecar.router.ready"
+					? "sidecar.router.attach"
+					: name === "sidecar.activation.acked"
+						? "activation.acked"
+						: undefined;
+		if (operation !== undefined) {
+			const span = spans.find((span) => span.name === operation);
+			if (span === undefined) return `${name}: not observed`;
+			return `${name}: ${(span.end - start.at).toFixed(1)} ms${span.end < start.at ? " (warm)" : ""}`;
+		}
 		const mark = marks.find((entry) => entry.name === name);
 		if (mark === undefined) return `${name}: not observed`;
 		return `${name}: ${(mark.at - start.at).toFixed(1)} ms${mark.at < start.at ? " (warm)" : ""}`;
 	});
-	const spans = sorted.filter(
-		(mark) =>
-			mark.path !== "/api/diagnostics/launchMarks" &&
-			(mark.name === "spawn" ||
-				mark.name === "rpc" ||
-				(mark.name === "spawn.start" &&
-					!sorted.some((end) => end.name === "spawn" && end.at === mark.at)) ||
-				(mark.name === "rpc.start" &&
-					!sorted.some(
-						(end) => end.name === "rpc" && end.rpcId === mark.rpcId,
-					))),
-	);
-	const span = (mark: LaunchMark) =>
-		`${(mark.at - start.at).toFixed(1).padStart(10)} ${typeof mark.durationMs === "number" ? mark.durationMs.toFixed(1).padStart(9) : "pending"} ${String(mark.command ?? mark.path)} ${mark.args === undefined ? "" : JSON.stringify(mark.args)}`;
-	const slowest = [...spans].sort(
-		(a, b) =>
-			(typeof b.durationMs === "number" ? b.durationMs : -1) -
-			(typeof a.durationMs === "number" ? a.durationMs : -1),
-	);
-	const visibility = formatVisibility(marks, observedAt);
+	const byId = new Map(spans.map((span) => [span.spanId, span]));
+	const depth = (span: (typeof spans)[number]): number => {
+		const state = { span, depth: 0 };
+		const seen = new Set<string>();
+		while (state.span.parentSpanId !== undefined) {
+			if (seen.has(state.span.spanId))
+				throw new Error("Cyclic launch span parents");
+			seen.add(state.span.spanId);
+			const parent = byId.get(state.span.parentSpanId);
+			if (parent === undefined) break;
+			state.span = parent;
+			state.depth += 1;
+		}
+		return state.depth;
+	};
+	const row = (span: (typeof spans)[number]) =>
+		`${(span.start - start.at).toFixed(1).padStart(10)} ${(span.end - span.start).toFixed(1).padStart(9)} ${"  ".repeat(depth(span))}${span.source} ${span.name}${span.attrs.command === undefined && span.attrs.path === undefined ? "" : ` ${String(span.attrs.command ?? span.attrs.path)}`}${span.attrs.args === undefined ? "" : ` ${JSON.stringify(span.attrs.args)}`}`;
+	const slowest = spans
+		.filter(
+			(span) =>
+				["subprocess", "rpc"].includes(span.name) &&
+				!spans.some((child) => child.parentSpanId === span.spanId),
+		)
+		.sort((a, b) => b.end - b.start - (a.end - a.start));
+	const visibility = formatVisibility(records, observedAt);
 	return [
 		"Timeline (+ms from CLI, Δ previous, source, name, attrs)",
 		...rows,
@@ -120,11 +151,11 @@ export function formatTimeline(
 		...summary,
 		...(visibility === undefined ? [] : ["", visibility]),
 		"",
-		"Waterfall (+ms, duration ms, command/RPC)",
-		...spans.map(span),
+		"Waterfall (+ms, duration ms, spans indented by parent depth)",
+		...[...spans].sort((a, b) => a.start - b.start).map(row),
 		"",
 		"Slowest first",
-		...slowest.slice(0, 15).map(span),
+		...slowest.slice(0, 15).map(row),
 		"",
 		marks.some((mark) => mark.name === "trace.done") &&
 		marks.some((mark) => mark.name === "tab.content.painted")

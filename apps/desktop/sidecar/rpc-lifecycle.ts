@@ -11,8 +11,7 @@ import {
 	wrapAsyncIterator,
 	wrapReadableStream,
 } from "@orpc/shared";
-import type { Effect } from "effect";
-import { activeTrace, writeSidecarMark } from "./launch-trace/service.ts";
+import { Effect, Exit, type Tracer } from "effect";
 
 type DebugLog = (
 	message: string,
@@ -26,19 +25,20 @@ export class RpcLifecyclePlugin<T extends Context>
 
 	constructor(
 		private readonly debug: DebugLog,
-		private readonly runTrace: (effect: Effect.Effect<void>) => Promise<void>,
+		private readonly runTrace: <A>(effect: Effect.Effect<A>) => Promise<A>,
+		private readonly parentContext?: (context: T, span: Tracer.Span) => T,
 	) {}
 
 	init(options: StandardHandlerOptions<T>): StandardHandlerOptions<T> {
 		const interceptor: StandardHandlerRoutingInterceptor<T> = async (call) => {
-			const startedAt = Date.now();
-			const trace = activeTrace();
 			const path = new URL(call.request.url, "http://localhost").pathname;
-			const rpcId = trace === undefined ? undefined : crypto.randomUUID();
-			if (trace !== undefined)
-				await this.runTrace(
-					writeSidecarMark("rpc.start", { at: startedAt, path, rpcId }, trace),
-				);
+			const span = await this.runTrace(
+				Effect.makeSpan("rpc", {
+					root: true,
+					kind: "server",
+					attributes: { path },
+				}),
+			);
 			const signal = call.request.signal;
 			const state: { finished: boolean; matched?: boolean; status?: number } = {
 				finished: false,
@@ -46,26 +46,13 @@ export class RpcLifecyclePlugin<T extends Context>
 			const finish = async () => {
 				if (state.finished) return;
 				state.finished = true;
-				if ((trace ?? activeTrace()) !== undefined)
-					await this.runTrace(
-						writeSidecarMark(
-							"rpc",
-							{
-								path,
-								rpcId,
-								at: startedAt,
-								durationMs: Date.now() - startedAt,
-								status: state.status,
-							},
-							trace ?? activeTrace(),
-						),
-					);
+				if (state.status !== undefined) span.attribute("status", state.status);
+				span.end(BigInt(Date.now()) * 1_000_000n, Exit.void);
 				signal?.removeEventListener("abort", onAbort);
 				await this.debug("rpc call finished", {
 					path,
 					matched: state.matched,
 					status: state.status,
-					durationMs: Date.now() - startedAt,
 				});
 			};
 			const onAbort = () => {
@@ -75,7 +62,14 @@ export class RpcLifecyclePlugin<T extends Context>
 			await this.debug("rpc call started", { path });
 
 			try {
-				const result = await call.next();
+				const result = await call.next({
+					request: call.request,
+					prefix: call.prefix,
+					context:
+						this.parentContext === undefined
+							? call.context
+							: this.parentContext(call.context, span),
+				});
 				state.matched = result.matched;
 				if (!result.matched) {
 					await finish();

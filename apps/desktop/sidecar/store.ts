@@ -61,7 +61,6 @@ import {
 	resolveDiffHead,
 	validateHeadRef,
 } from "./diff-head.ts";
-import { writeSidecarMark } from "./launch-trace/service.ts";
 
 /** `sessions.open`'s `cwd` doesn't resolve to a git working tree. */
 export class InvalidCwd extends Schema.TaggedError<InvalidCwd>()("InvalidCwd", {
@@ -477,16 +476,16 @@ export class Store extends Context.Service<Store>()("Store", {
 			Effect.gen(function* () {
 				const repoRoot = yield* resolveRepoRoot(cwd).pipe(
 					Effect.catchTag("NotAGitRepository", () => new InvalidCwd({ cwd })),
+					Effect.withSpan("session.repo-root.resolve"),
 				);
-				yield* writeSidecarMark("sidecar.repo-root.resolved", { repoRoot });
-				yield* writeSidecarMark("sidecar.repo-identity-pr.lookup.start");
-				const resolved = yield* resolveSessionTarget(repoRoot, target);
-				yield* writeSidecarMark("sidecar.target.resolved", {
-					repoRoot,
-					target: target.kind,
-				});
-				yield* refreshBase(repoRoot, resolved.baseRef);
-				yield* writeSidecarMark("sidecar.base-ref.refreshed");
+				const resolved = yield* resolveSessionTarget(repoRoot, target).pipe(
+					Effect.withSpan("session.target.resolve", {
+						attributes: { repoRoot, target: target.kind },
+					}),
+				);
+				yield* refreshBase(repoRoot, resolved.baseRef).pipe(
+					Effect.withSpan("session.base-ref.refresh"),
+				);
 				const openFreshSession = reviewStore
 					.openSession({
 						repoRoot,
@@ -495,7 +494,7 @@ export class Store extends Context.Service<Store>()("Store", {
 						pr: resolved.pr,
 					})
 					.pipe(
-						Effect.tap(() => writeSidecarMark("sidecar.session.persisted")),
+						Effect.withSpan("session.persist"),
 						Effect.map((session) => ({
 							kind: "opened" as const,
 							session: toWireSession(session),

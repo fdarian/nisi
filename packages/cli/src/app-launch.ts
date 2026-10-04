@@ -3,7 +3,6 @@ import { fileURLToPath } from "node:url";
 import { Config, Effect, Option, Schema } from "effect";
 import { FileSystem } from "effect/FileSystem";
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
-import { cliMark } from "./launch-trace.ts";
 
 /** Couldn't find an app bundle to launch, or `open` itself failed. */
 export class AppLaunchError extends Schema.TaggedError<AppLaunchError>()(
@@ -77,10 +76,7 @@ export const launchApp = Effect.gen(function* () {
 		command: "open",
 		args,
 	});
-	const startedAt = Date.now();
-	yield* Effect.try(() => cliMark("cli.app.launch.start", { appPath })).pipe(
-		Effect.orDie,
-	);
+	yield* Effect.annotateCurrentSpan({ appPath });
 	const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
 	const exitCode = yield* Effect.scoped(
 		Effect.gen(function* () {
@@ -88,17 +84,10 @@ export const launchApp = Effect.gen(function* () {
 			return yield* handle.exitCode;
 		}),
 	);
-	yield* Effect.try(() =>
-		cliMark("cli.app.launch.end", {
-			appPath,
-			exitCode,
-			durationMs: Date.now() - startedAt,
-		}),
-	).pipe(Effect.orDie);
+	yield* Effect.annotateCurrentSpan({ exitCode });
 	yield* Effect.logDebug("app spawn finished", {
 		appPath,
 		exitCode,
-		durationMs: Date.now() - startedAt,
 	});
 	if (exitCode !== 0) {
 		return yield* new AppLaunchError({
@@ -113,6 +102,7 @@ export const launchApp = Effect.gen(function* () {
 				reason: `failed to launch the app: ${cause.reason.message}`,
 			}),
 	),
+	Effect.withSpan("cli.app.launch"),
 );
 
 export function appLaunchArguments(

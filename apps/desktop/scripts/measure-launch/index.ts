@@ -1,10 +1,8 @@
 import { BunRuntime, BunServices } from "@effect/platform-bun";
 import { Console, Effect, Logger, Schema } from "effect";
 import { FileSystem } from "effect/FileSystem";
-import {
-	type LaunchMark,
-	traceFilePath,
-} from "../../sidecar/launch-trace/file-writer.ts";
+import { launchTracePath } from "@repo/logging";
+import { LaunchRecord } from "@repo/sidecar-api";
 import { formatTimeline, formatVisibility } from "./format.ts";
 import {
 	bundlePath,
@@ -17,9 +15,7 @@ import {
 } from "./instance.ts";
 import { parseLaunchOptions } from "./options.ts";
 
-const Mark = Schema.fromJsonString(
-	Schema.Record(Schema.String, Schema.Unknown),
-);
+const RecordSchema = Schema.fromJsonString(LaunchRecord);
 const program = Effect.gen(function* () {
 	const options = yield* Effect.try(() =>
 		parseLaunchOptions(process.argv.slice(2)),
@@ -35,7 +31,7 @@ const program = Effect.gen(function* () {
 			),
 		);
 	const traceId = crypto.randomUUID();
-	const file = traceFilePath(dataDir, traceId);
+	const file = launchTracePath(dataDir, traceId);
 	const child = yield* Effect.try(() =>
 		Bun.spawn([process.execPath, cliPath], {
 			cwd: options.cwd,
@@ -55,20 +51,10 @@ const program = Effect.gen(function* () {
 	});
 	const deadline = Date.now() + 60_000;
 	const readMarks = Effect.gen(function* () {
-		if (!(yield* fs.exists(file))) return [] as LaunchMark[];
+		if (!(yield* fs.exists(file))) return [] as LaunchRecord[];
 		const text = yield* fs.readFileString(file);
 		return yield* Effect.forEach(text.split("\n").slice(0, -1), (line) =>
-			Schema.decodeUnknownEffect(Mark)(line).pipe(
-				Effect.flatMap((mark) => {
-					if (
-						typeof mark.at !== "number" ||
-						typeof mark.name !== "string" ||
-						!["cli", "sidecar", "frontend"].includes(String(mark.source))
-					)
-						return Effect.fail(new Error("Invalid launch mark"));
-					return Effect.succeed(mark as LaunchMark);
-				}),
-			),
+			Schema.decodeUnknownEffect(RecordSchema)(line),
 		);
 	});
 	const state = { probed: !options.cold };

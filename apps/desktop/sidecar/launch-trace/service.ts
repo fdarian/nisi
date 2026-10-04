@@ -1,79 +1,34 @@
 import { getDataDirConfig } from "@repo/db";
-import { Context, Effect, Layer } from "effect";
-import { appendLaunchMarks, type LaunchMark } from "./file-writer.ts";
-
-const boot: LaunchMark[] = [
-	{
-		at: performance.timeOrigin,
-		source: "sidecar",
-		name: "sidecar.process-start",
-	},
-];
-type ActiveTrace = { id: string; dataDir: string; deadline: number };
-const state: { active?: ActiveTrace } = {};
-
-export function bufferBootMark(name: string): void {
-	boot.push({ at: Date.now(), source: "sidecar", name });
-}
-
-export function activeTrace(): ActiveTrace | undefined {
-	if (state.active !== undefined && Date.now() >= state.active.deadline)
-		state.active = undefined;
-	return state.active;
-}
-
-export function writeSidecarMark(
-	name: string,
-	attrs: Record<string, unknown> = {},
-	trace?: ActiveTrace,
-): Effect.Effect<void> {
-	return Effect.suspend(() => {
-		const current = trace ?? activeTrace();
-		if (current === undefined || activeTrace()?.id !== current.id)
-			return Effect.void;
-		return appendLaunchMarks(current.dataDir, current.id, [
-			{ at: Date.now(), ...attrs, source: "sidecar", name },
-		]);
-	});
-}
+import { makeLaunchTracer } from "@repo/logging";
+import type { LaunchMark } from "@repo/sidecar-api";
+import { Context, Effect, Layer, Tracer } from "effect";
 
 export class LaunchTrace extends Context.Service<LaunchTrace>()(
 	"sidecar/LaunchTrace",
 	{
 		make: Effect.gen(function* () {
 			const dataDir = yield* getDataDirConfig();
+			const exporter = yield* makeLaunchTracer({ dataDir, source: "sidecar" });
 			return {
-				activate: (id: string | undefined) =>
+				exporter,
+				activate: exporter.activate,
+				frontend: (id: string, marks: readonly LaunchMark[]) =>
 					Effect.gen(function* () {
-						if (id === undefined) return;
-						const current = activeTrace();
-						if (current?.id === id) return;
-						yield* appendLaunchMarks(dataDir, id, boot);
-						state.active = { id, dataDir, deadline: Date.now() + 60_000 };
-					}),
-				frontend: (
-					id: string,
-					marks: readonly {
-						at: number;
-						name: string;
-						tab?: string;
-						hidden?: boolean;
-					}[],
-				) =>
-					Effect.gen(function* () {
-						const trace = activeTrace();
-						if (trace?.id !== id) return;
-						yield* appendLaunchMarks(
-							dataDir,
+						if (exporter.activeId() !== id) return;
+						yield* exporter.append(
 							id,
 							marks.map((mark) => ({ ...mark, source: "frontend" as const })),
 						);
 						if (marks.some((mark) => mark.name === "trace.done"))
-							state.active = undefined;
+							yield* exporter.deactivate();
 					}),
 			};
 		}),
 	},
 ) {
 	static readonly layer = Layer.effect(LaunchTrace, LaunchTrace.make);
+	static readonly tracingLayer = Layer.effect(
+		Tracer.Tracer,
+		Effect.map(LaunchTrace, (trace) => trace.exporter.tracer),
+	).pipe(Layer.provideMerge(LaunchTrace.layer));
 }
