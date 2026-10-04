@@ -11,6 +11,7 @@ import {
 import { useBackendContext } from "#/infra/backend-context";
 import { receiveTracedOpen } from "#/infra/launch-trace";
 import { useSidecarEvent } from "#/infra/sidecar-events";
+import { seedResolvedSession } from "./resolved-session-cache";
 
 type OpenRequestContextValue = {
 	request: OpenRequest | null;
@@ -33,6 +34,13 @@ export function OpenRequestProvider(props: {
 	const merge = useCallback(
 		(request: OpenRequest) => {
 			receiveTracedOpen(request, client);
+			if (request.status.kind === "opened") {
+				seedResolvedSession(
+					queryClient,
+					backend.orpc.sessions.list.queryKey(),
+					request.status.session,
+				);
+			}
 			setRequests((current) => {
 				if (acknowledging.current.has(request.id)) return current;
 				const previous = current.find((entry) => entry.id === request.id);
@@ -47,7 +55,7 @@ export function OpenRequestProvider(props: {
 					: current.map((entry) => (entry.id === request.id ? request : entry));
 			});
 		},
-		[client],
+		[client, queryClient, backend.orpc],
 	);
 
 	useSidecarEvent((event) => {
