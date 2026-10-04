@@ -1,5 +1,6 @@
 export {
 	fetchBaseRef,
+	readLocalBase,
 	readLocalBaseCommit,
 	resolveDiffBaseRef,
 } from "./base.ts";

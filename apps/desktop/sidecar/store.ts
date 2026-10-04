@@ -23,7 +23,7 @@ import {
 	type RepoPathNotFound,
 	type RepoPathVerificationError,
 	readFileContentsAtRef,
-	readLocalBaseCommit,
+	readLocalBase,
 	readWorktreeBlobContent,
 	resolveCurrentBranch,
 	resolveDiffBaseRef,
@@ -393,9 +393,8 @@ export class Store extends Context.Service<Store>()("Store", {
 		const baseIdentity = (repoRoot: string, baseRef: string) =>
 			Effect.gen(function* () {
 				const root = yield* resolveMainCloneRoot(repoRoot);
-				const ref = yield* resolveDiffBaseRef(repoRoot, baseRef);
-				const commit = yield* readLocalBaseCommit(repoRoot, baseRef);
-				return { key: `${root}\n${ref}`, commit };
+				const local = yield* readLocalBase(repoRoot, baseRef);
+				return { key: `${root}\n${local.baseRef}`, commit: local.commit };
 			});
 		const baseFetchState = yield* makeBaseRefresh({
 			identity: baseIdentity,
@@ -1075,8 +1074,8 @@ export class Store extends Context.Service<Store>()("Store", {
 				const repoRoot = yield* resolveLiveRepoRoot(session);
 				const ref = yield* resolveDiffBaseRef(repoRoot, session.baseRef);
 				if (!ref.startsWith("refs/remotes/")) return false;
-				const identity = yield* baseIdentity(repoRoot, session.baseRef);
-				return baseFetchState.stale(identity.key);
+				const root = yield* resolveMainCloneRoot(repoRoot);
+				return baseFetchState.stale(`${root}\n${ref}`);
 			});
 
 		const listChangedFiles = (sessionId: string, includeUncommitted: boolean) =>

@@ -67,6 +67,7 @@ export const makeBaseRefresh = <E, R>(options: {
 					}
 					return result;
 				}).pipe(
+					Effect.withSpan("session.base-ref.background", { root: true }),
 					Effect.onExit((exit) =>
 						Effect.gen(function* () {
 							entry.completedAt = options.now();

@@ -45,7 +45,7 @@ const resolveBaseTarget = (repoRoot: string, baseRef: string) =>
 export const resolveDiffBaseRef = (repoRoot: string, baseRef: string) =>
 	resolveBaseTarget(repoRoot, baseRef).pipe(Effect.map((target) => target.ref));
 
-export const readLocalBaseCommit = (repoRoot: string, baseRef: string) =>
+export const readLocalBase = (repoRoot: string, baseRef: string) =>
 	Effect.gen(function* () {
 		const ref = yield* resolveDiffBaseRef(repoRoot, baseRef);
 		const result = yield* gitResult(repoRoot, [
@@ -54,8 +54,14 @@ export const readLocalBaseCommit = (repoRoot: string, baseRef: string) =>
 			"--quiet",
 			`${ref}^{commit}`,
 		]);
-		return result.exitCode === 0 ? result.stdout.trim() : null;
+		return {
+			baseRef: ref,
+			commit: result.exitCode === 0 ? result.stdout.trim() : null,
+		};
 	});
+
+export const readLocalBaseCommit = (repoRoot: string, baseRef: string) =>
+	readLocalBase(repoRoot, baseRef).pipe(Effect.map((local) => local.commit));
 
 /** An explicit destination prevents even unusual remote fetch configuration from moving a local branch. */
 export const fetchBaseRef = (repoRoot: string, baseRef: string) =>
