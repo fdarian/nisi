@@ -854,7 +854,7 @@ export class Store extends Context.Service<Store>()("Store", {
 					Effect.forEach(
 						sessions,
 						(session) => {
-							return prepareBase(session.repoRoot, session.baseRef).pipe(
+							return prepareBase(session.repoRoot, session.baseRef, true).pipe(
 								Effect.andThen(
 									baseFetchState.background(session.repoRoot, session.baseRef),
 								),

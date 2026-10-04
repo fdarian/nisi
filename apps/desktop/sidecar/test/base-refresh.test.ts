@@ -11,14 +11,15 @@ test("local base opens without waiting; background fetch is shared and reports m
 				const state = {
 					commit: "old",
 					fetches: 0,
+					probes: 0,
 					moved: [] as string[],
 					now: 0,
 				};
 				const refresh = yield* makeBaseRefresh({
 					identity: () =>
-						Effect.succeed({
-							key: "shared-repo\norigin/main",
-							commit: state.commit,
+						Effect.sync(() => {
+							state.probes++;
+							return { key: "shared-repo\norigin/main", commit: state.commit };
 						}),
 					fetch: () =>
 						Effect.gen(function* () {
@@ -48,7 +49,10 @@ test("local base opens without waiting; background fetch is shared and reports m
 				expect(state.fetches).toBe(1);
 				expect(refresh.stale("shared-repo\norigin/main")).toBe(false);
 				state.now = 5_001;
+				const probes = state.probes;
+				yield* refresh.prepare("repo", "main", true);
 				yield* refresh.background("repo", "main");
+				expect(state.probes).toBe(probes);
 				expect(state.fetches).toBe(1);
 				yield* refresh.refresh("repo", "main");
 				expect(state.fetches).toBe(2);

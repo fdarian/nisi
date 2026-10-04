@@ -23,6 +23,7 @@ export const makeBaseRefresh = <E, R>(options: {
 }) =>
 	Effect.gen(function* () {
 		const scope = yield* Scope.Scope;
+		const prepared = new Map<string, { key: string; commit: string | null }>();
 		const state = new Map<
 			string,
 			{
@@ -31,9 +32,16 @@ export const makeBaseRefresh = <E, R>(options: {
 				result?: FetchResult;
 			}
 		>();
-		const refresh = (repoRoot: string, baseRef: string) =>
+		const refresh = (
+			repoRoot: string,
+			baseRef: string,
+			snapshot?: { key: string; commit: string | null },
+		) =>
 			Effect.gen(function* () {
-				const before = yield* options.identity(repoRoot, baseRef);
+				const before =
+					snapshot === undefined
+						? yield* options.identity(repoRoot, baseRef)
+						: snapshot;
 				const previous = state.get(before.key);
 				if (
 					previous !== undefined &&
@@ -74,19 +82,32 @@ export const makeBaseRefresh = <E, R>(options: {
 		return {
 			refresh: (repoRoot: string, baseRef: string) =>
 				refresh(repoRoot, baseRef).pipe(Effect.flatMap(Deferred.await)),
-			prepare: (repoRoot: string, baseRef: string) =>
+			prepare: (repoRoot: string, baseRef: string, restored = false) =>
 				Effect.gen(function* () {
+					const previous = prepared.get(`${repoRoot}\n${baseRef}`);
+					if (
+						restored &&
+						previous !== undefined &&
+						previous.commit !== null &&
+						state.has(previous.key)
+					)
+						return;
 					const local = yield* options.identity(repoRoot, baseRef);
+					prepared.set(`${repoRoot}\n${baseRef}`, local);
 					if (local.commit === null)
-						yield* refresh(repoRoot, baseRef).pipe(
+						yield* refresh(repoRoot, baseRef, local).pipe(
 							Effect.flatMap(Deferred.await),
 						);
 				}),
 			background: (repoRoot: string, baseRef: string) =>
 				Effect.gen(function* () {
-					const local = yield* options.identity(repoRoot, baseRef);
+					const previous = prepared.get(`${repoRoot}\n${baseRef}`);
+					const local =
+						previous === undefined
+							? yield* options.identity(repoRoot, baseRef)
+							: previous;
 					if (state.has(local.key)) return;
-					yield* refresh(repoRoot, baseRef);
+					yield* refresh(repoRoot, baseRef, local);
 				}),
 			stale: (key: string) => state.get(key)?.result?.baseMayBeStale ?? true,
 		};
