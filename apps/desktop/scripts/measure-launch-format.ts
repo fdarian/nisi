@@ -5,8 +5,11 @@ export function formatTimeline(marks: readonly LaunchMark[]): string {
 	if (start === undefined)
 		return "Missing cli.process-start; no timeline origin available.";
 	const sorted = [...marks].sort((a, b) => a.at - b.at);
-	const rows = sorted.map((mark, index) => {
-		const previous = sorted[index - 1];
+	const states = sorted.filter(
+		(mark) => !["spawn.start", "spawn", "rpc.start", "rpc"].includes(mark.name),
+	);
+	const rows = states.map((mark, index) => {
+		const previous = states[index - 1];
 		const attrs = Object.fromEntries(
 			Object.entries(mark).filter(
 				(entry) => !["at", "source", "name"].includes(entry[0]),
@@ -20,6 +23,8 @@ export function formatTimeline(marks: readonly LaunchMark[]): string {
 		"sidecar.activation.acked",
 		"pending-panel.painted",
 		"files.loading.painted",
+		"files.list.painted",
+		"files.first-diff.painted",
 		"overview.loading.painted",
 		"tab.content.painted",
 	];
@@ -30,12 +35,15 @@ export function formatTimeline(marks: readonly LaunchMark[]): string {
 	});
 	const spans = sorted.filter(
 		(mark) =>
-			mark.name === "spawn" ||
-			mark.name === "rpc" ||
-			(mark.name === "spawn.start" &&
-				!sorted.some((end) => end.name === "spawn" && end.at === mark.at)) ||
-			(mark.name === "rpc.start" &&
-				!sorted.some((end) => end.name === "rpc" && end.rpcId === mark.rpcId)),
+			mark.path !== "/api/diagnostics/launchMarks" &&
+			(mark.name === "spawn" ||
+				mark.name === "rpc" ||
+				(mark.name === "spawn.start" &&
+					!sorted.some((end) => end.name === "spawn" && end.at === mark.at)) ||
+				(mark.name === "rpc.start" &&
+					!sorted.some(
+						(end) => end.name === "rpc" && end.rpcId === mark.rpcId,
+					))),
 	);
 	const span = (mark: LaunchMark) =>
 		`${(mark.at - start.at).toFixed(1).padStart(10)} ${typeof mark.durationMs === "number" ? mark.durationMs.toFixed(1).padStart(9) : "pending"} ${String(mark.command ?? mark.path)} ${mark.args === undefined ? "" : JSON.stringify(mark.args)}`;
@@ -55,7 +63,7 @@ export function formatTimeline(marks: readonly LaunchMark[]): string {
 		...spans.map(span),
 		"",
 		"Slowest first",
-		...slowest.map(span),
+		...slowest.slice(0, 15).map(span),
 		"",
 		marks.some((mark) => mark.name === "trace.done") &&
 		marks.some((mark) => mark.name === "tab.content.painted")
