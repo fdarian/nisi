@@ -1,4 +1,8 @@
-import { createRootRoute, Outlet } from "@tanstack/react-router";
+import {
+	createRootRoute,
+	Outlet,
+	useRouterState,
+} from "@tanstack/react-router";
 import { Agentation } from "agentation";
 import { Mesurer } from "mesurer";
 import { ThemeProvider } from "next-themes";
@@ -12,6 +16,8 @@ import { ScheduledMergeNotifications } from "#/features/pull-request/merge/sched
 import { useSettingsShortcut } from "#/features/settings/use-settings-shortcut";
 import { BackendProvider, useBackendContext } from "#/infra/backend-context";
 import { SidecarEventsProvider } from "#/infra/sidecar-events";
+import { AppShell } from "#/shell/app-shell";
+import { AppViewActiveContext } from "#/shell/app-view-context";
 import { useRedirectHomeOnPendingDeepLink } from "#/shell/deep-link/deep-link-data";
 import { OpenRequestProvider } from "#/shell/open-request/open-request-data";
 
@@ -21,11 +27,6 @@ export const Route = createRootRoute({
 
 function RootLayout() {
 	useSettingsShortcut();
-	// `AppShellReady` (where `useDeepLinkOpener` actually opens a pending
-	// link) only renders on `/` — this is what gets a link that arrived
-	// while `/settings` was showing back to a route that can see it. See
-	// `deep-link-data.ts`'s doc comment for why this can't live there
-	// instead.
 	useRedirectHomeOnPendingDeepLink();
 
 	return (
@@ -43,8 +44,17 @@ function RootLayout() {
 
 function ConnectedEvents() {
 	const backend = useBackendContext();
+	const appViewActive = useRouterState({
+		select: (state) => state.location.pathname === "/",
+	});
 	const content = (
 		<>
+			<AppViewActiveContext value={appViewActive}>
+				{/* Keep Pierre's CodeViews and their scroll containers alive across routes. */}
+				<div hidden={!appViewActive}>
+					<AppShell />
+				</div>
+			</AppViewActiveContext>
 			<Outlet />
 			<AgentationToggle />
 			<MesurerToggle />

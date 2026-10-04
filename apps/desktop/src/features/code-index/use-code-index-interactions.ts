@@ -31,6 +31,7 @@ import type { CodeViewHandle } from "@pierre/diffs/react";
 import type { CodeIndexOccurrence } from "@repo/sidecar-api";
 import { useQueries, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useAppViewActive } from "#/shell/app-view-context";
 import {
 	buildOccurrenceIndex,
 	findOccurrenceForToken,
@@ -138,6 +139,7 @@ export function useCodeIndexInteractions<Metadata>({
 } {
 	const queryClient = useQueryClient();
 	const active = enabled;
+	const appViewActive = useAppViewActive();
 
 	// Paths whose occurrences have been requested — grows via
 	// `notifyItemRendered` (called from each pane's own `onPostRender`), so a
@@ -279,7 +281,7 @@ export function useCodeIndexInteractions<Metadata>({
 	// at all while `enabled` is false — part of "off costs exactly what it
 	// cost before this feature existed" (this module's own doc comment).
 	useEffect(() => {
-		if (!active) return;
+		if (!active || !appViewActive) return;
 		const applyMetaHeld = (held: boolean) => {
 			metaHeldRef.current = held;
 			const hovered = hoveredTokenRef.current;
@@ -296,11 +298,12 @@ export function useCodeIndexInteractions<Metadata>({
 		window.addEventListener("keyup", handleKeyUp);
 		window.addEventListener("blur", handleBlur);
 		return () => {
+			applyMetaHeld(false);
 			window.removeEventListener("keydown", handleKeyDown);
 			window.removeEventListener("keyup", handleKeyUp);
 			window.removeEventListener("blur", handleBlur);
 		};
-	}, [active]);
+	}, [active, appViewActive]);
 
 	const [peekTarget, setPeekTarget] = useState<CodeIndexPeekTarget | null>(
 		null,

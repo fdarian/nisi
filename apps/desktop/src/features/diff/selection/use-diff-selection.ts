@@ -23,6 +23,7 @@ import type {
 } from "@pierre/diffs";
 import type { CodeViewHandle } from "@pierre/diffs/react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useAppViewActive } from "#/shell/app-view-context";
 import type { DiffSelectionReference } from "#/features/diff/diff-reference";
 import {
 	isEventOriginOnDiffRow,
@@ -233,6 +234,7 @@ export function useDiffSelection<Metadata>({
 	resolveItemPath,
 	resolveItemDiff,
 }: UseDiffSelectionOptions<Metadata>): UseDiffSelectionResult {
+	const appViewActive = useAppViewActive();
 	const [gutterSelection, setGutterSelection] =
 		useState<CodeViewLineSelection | null>(null);
 	// Mirrors `gutterSelection`, updated synchronously alongside every
@@ -469,6 +471,7 @@ export function useDiffSelection<Metadata>({
 	// `pointerup`/`keyup` are the primary triggers; `selectionchange` also
 	// catches keyboard selections such as Cmd+A "Select All".
 	useEffect(() => {
+		if (!appViewActive) return;
 		// Records whether the gesture that's about to unfold started as a
 		// gutter drag — see `gutterDragInProgressRef`'s doc comment. Has to
 		// run on `pointerdown`, not be inferred later: by the time
@@ -591,7 +594,7 @@ export function useDiffSelection<Metadata>({
 			window.removeEventListener("pointercancel", endSelectionDrag);
 			window.removeEventListener("blur", endSelectionDrag);
 		};
-	}, [codeViewRef, resolveItemPath, resolveItemDiff]);
+	}, [codeViewRef, resolveItemPath, resolveItemDiff, appViewActive]);
 
 	useEffect(
 		() => () => {

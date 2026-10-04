@@ -43,6 +43,7 @@ import {
 import { FilesChangedLoading, PrView } from "#/features/pull-request/pr-view";
 import type { SidecarQueryUtils } from "#/infra/backend-context";
 import { useBackendContext } from "#/infra/backend-context";
+import { useAppViewActive } from "./app-view-context";
 import { useDeepLinkOpener } from "./deep-link/deep-link-data";
 import { DevBranch } from "./dev-branch";
 import { useOpenRequest } from "./open-request/open-request-data";
@@ -140,6 +141,7 @@ function AppShellReady({
 }: {
 	orpc: SidecarQueryUtils;
 }): React.ReactElement {
+	const appViewActive = useAppViewActive();
 	const [requestedActiveSessionId, setRequestedActiveSessionId] = useState<
 		string | null
 	>(null);
@@ -360,7 +362,7 @@ function AppShellReady({
 					findExistingSessionId={findExistingSessionId}
 					onOpenChange={setPaletteOpen}
 					onSessionOpened={setRequestedActiveSessionId}
-					open={paletteOpen}
+					open={appViewActive && paletteOpen}
 					orpc={orpc}
 				/>
 				<CommandPalette
@@ -368,7 +370,7 @@ function AppShellReady({
 					onNavigateToTab={setActiveTab}
 					onOpenChange={setCommandPaletteOpen}
 					onSessionOpened={setRequestedActiveSessionId}
-					open={commandPaletteOpen}
+					open={appViewActive && commandPaletteOpen}
 					orpc={orpc}
 				/>
 			</ShellFrame>
@@ -482,7 +484,7 @@ function AppShellReady({
 				findExistingSessionId={findExistingSessionId}
 				onOpenChange={setPaletteOpen}
 				onSessionOpened={setRequestedActiveSessionId}
-				open={paletteOpen}
+				open={appViewActive && paletteOpen}
 				orpc={orpc}
 			/>
 			<CommandPalette
@@ -490,7 +492,7 @@ function AppShellReady({
 				onNavigateToTab={setActiveTab}
 				onOpenChange={setCommandPaletteOpen}
 				onSessionOpened={setRequestedActiveSessionId}
-				open={commandPaletteOpen}
+				open={appViewActive && commandPaletteOpen}
 				orpc={orpc}
 			/>
 		</TabsPrimitive.Root>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import { useAppViewActive } from "#/shell/app-view-context";
 
 const TEXT_ENTRY_TAGS = new Set(["INPUT", "TEXTAREA", "SELECT"]);
 
@@ -44,7 +45,8 @@ export function useKeyBindings(
 	bindings: KeyBindings,
 	options?: UseKeyBindingsOptions,
 ): void {
-	const enabled = options?.enabled ?? true;
+	const appViewActive = useAppViewActive();
+	const enabled = appViewActive && (options?.enabled ?? true);
 
 	// Kept in a ref so callers can pass a fresh object/closures each render
 	// without the listener churning — only `enabled` re-subscribes it.
