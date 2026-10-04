@@ -66,6 +66,7 @@ import {
 	validateHeadRef,
 } from "./diff-head.ts";
 import { emit } from "./events.ts";
+import { makeSpeculativeDiff } from "./speculative-diff.ts";
 
 /** `sessions.open`'s `cwd` doesn't resolve to a git working tree. */
 export class InvalidCwd extends Schema.TaggedError<InvalidCwd>()("InvalidCwd", {
@@ -390,6 +391,7 @@ export class Store extends Context.Service<Store>()("Store", {
 	make: Effect.gen(function* () {
 		const reviewStore = yield* ReviewStore;
 		const settingsStore = yield* SettingsStore;
+		const speculative = yield* makeSpeculativeDiff();
 		const baseIdentity = (repoRoot: string, baseRef: string) =>
 			Effect.gen(function* () {
 				const root = yield* resolveMainCloneRoot(repoRoot);
@@ -501,6 +503,11 @@ export class Store extends Context.Service<Store>()("Store", {
 					Effect.catchTag("NotAGitRepository", () => new InvalidCwd({ cwd })),
 					Effect.withSpan("session.repo-root.resolve"),
 				);
+				const settings = yield* settingsStore.get();
+				const pendingDiff =
+					target.kind === "auto" || target.kind === "pr"
+						? yield* speculative.start(repoRoot, settings.includeUncommitted)
+						: undefined;
 				const resolved = yield* resolveSessionTarget(repoRoot, target).pipe(
 					Effect.withSpan("session.target.resolve", {
 						attributes: { repoRoot, target: target.kind },
@@ -509,6 +516,8 @@ export class Store extends Context.Service<Store>()("Store", {
 				yield* prepareBase(repoRoot, resolved.baseRef).pipe(
 					Effect.withSpan("session.base-ref.refresh"),
 				);
+				if (pendingDiff !== undefined)
+					yield* speculative.confirm(pendingDiff, repoRoot, resolved.baseRef);
 				const openFreshSession = reviewStore
 					.openSession({
 						repoRoot,
@@ -1085,10 +1094,19 @@ export class Store extends Context.Service<Store>()("Store", {
 				const diffHead = yield* resolveSessionDiffHead(session, repoRoot);
 				const effectiveIncludeUncommitted =
 					includeUncommitted && diffHead.worktreeEligible;
-				const files = yield* getChangedFiles(repoRoot, session.baseRef, {
-					includeUncommitted: effectiveIncludeUncommitted,
-					headRef: diffHead.headRef,
-				});
+				const cached = yield* speculative.files(
+					repoRoot,
+					session.baseRef,
+					diffHead.headRef,
+					effectiveIncludeUncommitted,
+				);
+				const files =
+					cached === undefined
+						? yield* getChangedFiles(repoRoot, session.baseRef, {
+								includeUncommitted: effectiveIncludeUncommitted,
+								headRef: diffHead.headRef,
+							})
+						: cached;
 				return yield* attachReviewState(
 					sessionId,
 					repoRoot,
@@ -1272,15 +1290,25 @@ export class Store extends Context.Service<Store>()("Store", {
 				const diffHead = yield* resolveSessionDiffHead(session, repoRoot);
 				const effectiveIncludeUncommitted =
 					includeUncommitted && diffHead.worktreeEligible;
-				const contentByPath = yield* getFileContents(
+				const cached = yield* speculative.contents(
 					repoRoot,
 					session.baseRef,
-					requests satisfies ReadonlyArray<FileContentRequest>,
-					{
-						includeUncommitted: effectiveIncludeUncommitted,
-						headRef: diffHead.headRef,
-					},
+					diffHead.headRef,
+					effectiveIncludeUncommitted,
+					requests,
 				);
+				const contentByPath =
+					cached === undefined
+						? yield* getFileContents(
+								repoRoot,
+								session.baseRef,
+								requests satisfies ReadonlyArray<FileContentRequest>,
+								{
+									includeUncommitted: effectiveIncludeUncommitted,
+									headRef: diffHead.headRef,
+								},
+							)
+						: cached;
 				const states = yield* reviewStore.listReviewStates(sessionId);
 
 				return yield* Effect.forEach(

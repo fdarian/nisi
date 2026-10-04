@@ -2,6 +2,8 @@ import type {
 	FileCategory,
 	FileChange,
 } from "#/features/pull-request/data/pr-data";
+import { comparePaths } from "../../shared/compare-paths";
+export { comparePaths };
 
 export const CATEGORY_ORDER: readonly FileCategory[] = [
 	"implementation",
@@ -14,33 +16,6 @@ export const CATEGORY_LABELS: Record<FileCategory, string> = {
 	test: "Tests",
 	generated: "Generated",
 };
-
-/**
- * Directories sort before files at every level, both alphabetically within
- * their own group — the convention every IDE file tree uses. Walks segment
- * by segment rather than trusting a caller-supplied `isDirectory` flag, so
- * it's safe to use both as `@pierre/trees`' sibling comparator and as the
- * flat-list order.
- */
-export function comparePaths(a: string, b: string): number {
-	const aSegments = a.split("/");
-	const bSegments = b.split("/");
-	const sharedLength = Math.min(aSegments.length, bSegments.length);
-
-	for (let index = 0; index < sharedLength; index += 1) {
-		const aSegment = aSegments[index];
-		const bSegment = bSegments[index];
-		if (aSegment === bSegment) continue;
-
-		const aIsDirectory = index < aSegments.length - 1;
-		const bIsDirectory = index < bSegments.length - 1;
-		if (aIsDirectory !== bIsDirectory) return aIsDirectory ? -1 : 1;
-
-		return aSegment.localeCompare(bSegment);
-	}
-
-	return aSegments.length - bSegments.length;
-}
 
 /**
  * Every ancestor directory of `paths`, trailing-slash-terminated to match
