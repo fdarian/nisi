@@ -1,6 +1,6 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { Effect, Schema } from "effect";
+import { Config, Effect, Option, Schema } from "effect";
 import { FileSystem } from "effect/FileSystem";
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
 import { cliMark } from "./launch-trace.ts";
@@ -64,14 +64,18 @@ const resolveAppPath = Effect.gen(function* () {
 /**
  * Spawns the app via macOS `open`, which hands off to LaunchServices and
  * exits on its own — no detached-process bookkeeping needed on our side, and
- * if the app is already running this just brings its existing window forward
- * instead of starting a second instance.
+ * A data-dir override requires a fresh instance with that environment, rather
+ * than activating another bundle with the same production identifier.
  */
 export const launchApp = Effect.gen(function* () {
 	const appPath = yield* resolveAppPath;
+	const dataDir = Option.getOrUndefined(
+		yield* Config.string("NISI_DATA_DIR").pipe(Config.option, Effect.orDie),
+	);
+	const args = appLaunchArguments(appPath, dataDir);
 	yield* Effect.logDebug("spawning app", {
 		command: "open",
-		args: ["-a", appPath],
+		args,
 	});
 	const startedAt = Date.now();
 	yield* Effect.try(() => cliMark("cli.app.launch.start", { appPath })).pipe(
@@ -80,9 +84,7 @@ export const launchApp = Effect.gen(function* () {
 	const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
 	const exitCode = yield* Effect.scoped(
 		Effect.gen(function* () {
-			const handle = yield* spawner.spawn(
-				ChildProcess.make("open", ["-a", appPath]),
-			);
+			const handle = yield* spawner.spawn(ChildProcess.make("open", args));
 			return yield* handle.exitCode;
 		}),
 	);
@@ -100,7 +102,7 @@ export const launchApp = Effect.gen(function* () {
 	});
 	if (exitCode !== 0) {
 		return yield* new AppLaunchError({
-			reason: `"open -a ${appPath}" exited with code ${exitCode}`,
+			reason: `open ${JSON.stringify(args)} exited with code ${exitCode}`,
 		});
 	}
 }).pipe(
@@ -112,3 +114,12 @@ export const launchApp = Effect.gen(function* () {
 			}),
 	),
 );
+
+export function appLaunchArguments(
+	appPath: string,
+	dataDir?: string,
+): string[] {
+	return dataDir === undefined
+		? ["-a", appPath]
+		: ["-n", "--env", `NISI_DATA_DIR=${dataDir}`, "-a", appPath];
+}
