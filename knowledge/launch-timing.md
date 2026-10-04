@@ -29,6 +29,11 @@ measurement app). Zero live candidates is an error; start `bun dev` or use `--co
 candidates are listed as an ambiguity error; stop the unwanted checkout-local instances first.
 It probes instrumentation before handing off and disables CLI app-launch fallback.
 
+Warm mode does not close an existing tab or clear its query cache. The script snapshots the open
+session IDs before the traced CLI call and warns when the resulting session was already open:
+list/diff paint offsets may reflect cached data, not a fresh-render measurement. The warning appears
+in the text report, or on stderr with `--json`; the session snapshot is retained in the raw records.
+
 For a built-app cold measurement:
 
 ```sh

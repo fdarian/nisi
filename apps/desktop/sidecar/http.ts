@@ -513,6 +513,7 @@ export function attachRouter(
 						),
 					);
 					const session = outcome.session;
+					yield* Effect.annotateCurrentSpan({ sessionId: session.id });
 					yield* emitSessionTransition(outcome);
 					yield* Effect.logInfo("session opened", {
 						sessionId: session.id,

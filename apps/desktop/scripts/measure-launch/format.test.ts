@@ -1,6 +1,10 @@
 import { expect, test } from "bun:test";
 import type { LaunchRecord } from "@repo/sidecar-api";
-import { formatTimeline, formatVisibility } from "./format.ts";
+import {
+	formatAlreadyOpen,
+	formatTimeline,
+	formatVisibility,
+} from "./format.ts";
 
 const mark = (
 	at: number,
@@ -29,6 +33,34 @@ const span = (
 	spanId,
 	parentSpanId,
 	attrs,
+});
+
+test("already-open reports warn without inferring cache state from identical paint times", () => {
+	const records = [
+		mark(100, "cli.process-start"),
+		mark(99, "measurement.sessions-before-open", { sessionIds: ["existing"] }),
+		span("sessions.open", 110, 120, "open", undefined, {
+			sessionId: "existing",
+		}),
+		mark(130, "files.list.painted"),
+		mark(130, "files.first-diff.painted"),
+	];
+	expect(formatTimeline(records)).toContain(
+		"PR was already open in this instance; list/diff timings may reflect cached data",
+	);
+	expect(
+		formatAlreadyOpen(
+			records.filter(
+				(record) => record.name !== "measurement.sessions-before-open",
+			),
+		),
+	).toBeUndefined();
+	expect(
+		formatAlreadyOpen([
+			mark(99, "measurement.sessions-before-open", { sessionIds: ["other"] }),
+			span("sessions.open", 110, 120, "open", undefined, { sessionId: "new" }),
+		]),
+	).toBeUndefined();
 });
 
 test("sorts wall clocks, remaps warm boot and indents children", () => {

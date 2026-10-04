@@ -1,9 +1,13 @@
 import { BunRuntime, BunServices } from "@effect/platform-bun";
-import { launchTracePath } from "@repo/logging";
+import { launchTracePath, makeLaunchTracer } from "@repo/logging";
 import { LaunchRecord } from "@repo/sidecar-api";
 import { Console, Effect, Logger, Schema } from "effect";
 import { FileSystem } from "effect/FileSystem";
-import { formatTimeline, formatVisibility } from "./format.ts";
+import {
+	formatAlreadyOpen,
+	formatTimeline,
+	formatVisibility,
+} from "./format.ts";
 import {
 	bundlePath,
 	cliPath,
@@ -32,6 +36,27 @@ const program = Effect.gen(function* () {
 		);
 	const traceId = crypto.randomUUID();
 	const file = launchTracePath(dataDir, traceId);
+	if (!options.cold) {
+		const instance = yield* liveInstance(dataDir);
+		if (!instance.live)
+			return yield* Effect.fail(
+				new Error("Selected sidecar stopped before measurement"),
+			);
+		const sessions = yield* Effect.tryPromise(() =>
+			instance.client.sessions.list(),
+		);
+		const exporter = yield* makeLaunchTracer({ dataDir, source: "cli" });
+		yield* exporter.activate(traceId);
+		yield* exporter.append(traceId, [
+			{
+				type: "mark",
+				source: "cli",
+				name: "measurement.sessions-before-open",
+				at: Date.now(),
+				attrs: { sessionIds: sessions.map((session) => session.id) },
+			},
+		]);
+	}
 	const child = yield* Effect.try(() =>
 		Bun.spawn([process.execPath, cliPath], {
 			cwd: options.cwd,
@@ -84,6 +109,8 @@ const program = Effect.gen(function* () {
 			: formatTimeline(marks, observedAt),
 	);
 	if (options.json) {
+		const alreadyOpen = formatAlreadyOpen(marks);
+		if (alreadyOpen !== undefined) yield* Console.error(alreadyOpen);
 		const visibility = formatVisibility(marks, observedAt);
 		if (visibility !== undefined) yield* Console.error(visibility);
 	}

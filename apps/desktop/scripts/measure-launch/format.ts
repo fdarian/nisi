@@ -1,5 +1,27 @@
 import type { LaunchRecord } from "@repo/sidecar-api";
 
+export function formatAlreadyOpen(
+	records: readonly LaunchRecord[],
+): string | undefined {
+	const snapshot = records.find(
+		(record) =>
+			record.type === "mark" &&
+			record.name === "measurement.sessions-before-open",
+	);
+	const opened = records.find(
+		(record) => record.type === "span" && record.name === "sessions.open",
+	);
+	if (
+		snapshot === undefined ||
+		opened === undefined ||
+		!Array.isArray(snapshot.attrs.sessionIds) ||
+		typeof opened.attrs.sessionId !== "string" ||
+		!snapshot.attrs.sessionIds.includes(opened.attrs.sessionId)
+	)
+		return undefined;
+	return "PR was already open in this instance; list/diff timings may reflect cached data, not a fresh-render measurement.";
+}
+
 export function formatVisibility(
 	records: readonly LaunchRecord[],
 	observedAt: number,
@@ -66,6 +88,7 @@ export function formatTimeline(
 	if (start === undefined)
 		return "Missing cli.process-start; no timeline origin available.";
 	const spans = records.filter((record) => record.type === "span");
+	const alreadyOpen = formatAlreadyOpen(records);
 	const states = [
 		...marks,
 		...spans
@@ -144,6 +167,7 @@ export function formatTimeline(
 		.sort((a, b) => b.end - b.start - (a.end - a.start));
 	const visibility = formatVisibility(records, observedAt);
 	return [
+		...(alreadyOpen === undefined ? [] : [alreadyOpen, ""]),
 		"Timeline (+ms from CLI, Δ previous, source, name, attrs)",
 		...rows,
 		"",
