@@ -3,6 +3,7 @@ import { fileURLToPath } from "node:url";
 import { Effect, Schema } from "effect";
 import { FileSystem } from "effect/FileSystem";
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
+import { cliMark } from "./launch-trace.ts";
 
 /** Couldn't find an app bundle to launch, or `open` itself failed. */
 export class AppLaunchError extends Schema.TaggedError<AppLaunchError>()(
@@ -73,6 +74,9 @@ export const launchApp = Effect.gen(function* () {
 		args: ["-a", appPath],
 	});
 	const startedAt = Date.now();
+	yield* Effect.try(() => cliMark("cli.app.launch.start", { appPath })).pipe(
+		Effect.orDie,
+	);
 	const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
 	const exitCode = yield* Effect.scoped(
 		Effect.gen(function* () {
@@ -82,6 +86,13 @@ export const launchApp = Effect.gen(function* () {
 			return yield* handle.exitCode;
 		}),
 	);
+	yield* Effect.try(() =>
+		cliMark("cli.app.launch.end", {
+			appPath,
+			exitCode,
+			durationMs: Date.now() - startedAt,
+		}),
+	).pipe(Effect.orDie);
 	yield* Effect.logDebug("app spawn finished", {
 		appPath,
 		exitCode,

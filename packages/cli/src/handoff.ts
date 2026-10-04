@@ -11,6 +11,7 @@ import { Config, Effect } from "effect";
 import type { FileSystem } from "effect/FileSystem";
 import type { ChildProcessSpawner } from "effect/unstable/process";
 import { launchApp } from "./app-launch.ts";
+import { cliMark, launchTraceId } from "./launch-trace.ts";
 
 /**
  * Per-POST-attempt timeout — long enough for a live sidecar, short enough that a dead one
@@ -111,6 +112,10 @@ const attempt = (
 ): Effect.Effect<HandoffOutcome, never, FileSystem> =>
 	Effect.gen(function* () {
 		const handshake = yield* readHandshake(dataDir);
+		yield* Effect.try(() =>
+			cliMark("cli.handshake.read", { found: handshake !== undefined }),
+		).pipe(Effect.orDie);
+		yield* Effect.try(() => cliMark("cli.open.attempt")).pipe(Effect.orDie);
 		if (handshake === undefined) {
 			return { _tag: "unreachable" } as const;
 		}
@@ -125,12 +130,28 @@ const attempt = (
 		const result = yield* Effect.promise(() =>
 			safe(
 				client.sessions.open(
-					{ cwd, target },
+					{ cwd, target, traceId: launchTraceId() },
 					{ signal: AbortSignal.timeout(POST_TIMEOUT_MS) },
 				),
 			),
 		);
 
+		yield* Effect.try(() =>
+			cliMark("cli.open.attempt.end", {
+				outcome: result.isSuccess
+					? "opened"
+					: isDefinedError(result.error)
+						? "rejected"
+						: isOwnTimeout(result.error)
+							? "unresponsive"
+							: "unreachable",
+			}),
+		).pipe(Effect.orDie);
+		if (result.isSuccess || isDefinedError(result.error)) {
+			yield* Effect.try(() => cliMark("cli.sidecar.reachable")).pipe(
+				Effect.orDie,
+			);
+		}
 		if (result.isSuccess) {
 			yield* Effect.logDebug("sessions.open succeeded", {
 				port: handshake.port,

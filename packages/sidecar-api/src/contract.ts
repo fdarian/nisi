@@ -13,6 +13,7 @@ import { oc } from "@orpc/contract";
 import { chatContract } from "./chat.ts";
 import { codeIndexContract } from "./code-index.ts";
 import { diffContract } from "./diff.ts";
+import { diagnosticsContract } from "./diagnostics.ts";
 import { eventsContract } from "./events.ts";
 import { fileContract } from "./file.ts";
 import { healthContract } from "./health.ts";
@@ -43,6 +44,7 @@ export * from "./walkthrough.ts";
 // implementation) has a typed error to throw regardless of which procedure it guards.
 export const contract = oc.errors({ UNAUTHORIZED: {} }).router({
 	health: healthContract,
+	diagnostics: diagnosticsContract,
 	sessions: sessionsContract,
 	diff: diffContract,
 	file: fileContract,

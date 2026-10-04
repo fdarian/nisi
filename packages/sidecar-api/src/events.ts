@@ -48,6 +48,7 @@ export type SessionEvent = Schema.Schema.Type<typeof SessionEvent>;
 
 export const OpenRequest = Schema.Struct({
 	id: Schema.String,
+	traceId: Schema.optional(Schema.String),
 	cwd: Schema.String,
 	target: OpenSessionTarget,
 	status: Schema.Union([

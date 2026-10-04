@@ -9,6 +9,7 @@ import { Argument, Command } from "effect/unstable/cli";
 import { parseBaseArgument } from "./base-argument.ts";
 import { zshCompletionScript } from "./completion.ts";
 import { handoff, logFilePathConfig } from "./handoff.ts";
+import { cliMark, initializeLaunchTrace } from "./launch-trace.ts";
 
 /** Already printed a message for the user — `BunRuntime.runMain` just needs to see a failure to exit non-zero. */
 class ReportedFailure extends Schema.TaggedError<ReportedFailure>()(
@@ -48,7 +49,13 @@ const run = (pathArg: Option.Option<string>, target: OpenSessionTarget) =>
 			),
 		);
 
+		yield* Effect.try(() =>
+			cliMark("cli.repo-root.resolved", { repoRoot }),
+		).pipe(Effect.orDie);
 		const outcome = yield* handoff(repoRoot, target);
+		yield* Effect.try(() =>
+			cliMark("cli.open.response", { outcome: outcome._tag }),
+		).pipe(Effect.orDie);
 
 		switch (outcome._tag) {
 			case "opened": {
@@ -153,10 +160,12 @@ const nisi = Command.make("nisi", { path: pathArgument }, ({ path: pathArg }) =>
 );
 
 BunRuntime.runMain(
-	Command.run(nisi, { version: "0.1.0" }).pipe(
-		Effect.provide(LoggerLive),
-		Effect.provide(MinimumLogLevelLayer),
-		Effect.provide(BunServices.layer),
-	),
+	initializeLaunchTrace
+		.pipe(Effect.andThen(Command.run(nisi, { version: "0.1.0" })))
+		.pipe(
+			Effect.provide(LoggerLive),
+			Effect.provide(MinimumLogLevelLayer),
+			Effect.provide(BunServices.layer),
+		),
 	{ disableErrorReporting: true },
 );
