@@ -50,6 +50,7 @@ const clean: PullRequestMergeability = {
 const unused = () => Effect.die(new Error("unused mock GitHub method"));
 const unusedStream = () => Stream.die(new Error("unused mock GitHub method"));
 const mockGitHub = (overrides: Partial<GitHubShape>): GitHubShape => ({
+	listOpenPullRequests: unused,
 	repository: unused,
 	pullRequest: unused,
 	headRef: unused,
@@ -104,6 +105,7 @@ const run = async <A, E>(
 				Layer.succeed(GitHub, mockGitHub(overrides)),
 			),
 		),
+		Layer.provideMerge(Layer.succeed(GitHub, mockGitHub(overrides))),
 		Layer.provideMerge(SqliteDb.layer),
 		Layer.provideMerge(BunServices.layer),
 		Layer.provide(

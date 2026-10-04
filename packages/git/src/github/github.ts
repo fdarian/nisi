@@ -43,7 +43,22 @@ export type RepositoryIdentity = {
 	readonly defaultBranch: string | null;
 };
 
+export type OpenPullRequestIndex = {
+	readonly repository: RepositoryIdentity;
+	readonly prs: readonly (PullRequestRef & {
+		readonly headOwner: string | null;
+	})[];
+};
+
 export type GitHubShape = {
+	listOpenPullRequests: (
+		cwd: string,
+		owner: string,
+		repo: string,
+	) => Effect.Effect<
+		OpenPullRequestIndex,
+		GitHubUnreachable | GhOutputDecodeError
+	>;
 	getActionsJob: (
 		input: ActionsJobInput,
 	) => Effect.Effect<ActionsJob, ActionsJobError>;

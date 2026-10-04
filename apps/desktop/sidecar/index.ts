@@ -24,6 +24,7 @@ import { LaunchTrace } from "./launch-trace/service.ts";
 import { startLivePolling } from "./live-poll.ts";
 import { LoggingLive } from "./logging.ts";
 import { PullRequestAttentionLive } from "./pull-request-attention.ts";
+import { PrIndex } from "./pr-index.ts";
 import { ScheduledMerges } from "./scheduled-merge.ts";
 import { SessionWatch } from "./session-watch.ts";
 import { Store } from "./store.ts";
@@ -196,6 +197,8 @@ const program = Effect.scoped(
 				// as the HTTP server above, just via the fiber getting
 				// interrupted instead of an acquireRelease finalizer.
 				yield* startLivePolling();
+				const prIndex = yield* PrIndex;
+				yield* prIndex.start.pipe(Effect.forkScoped);
 				const scheduledMerges = yield* ScheduledMerges;
 				yield* scheduledMerges.start();
 
@@ -252,6 +255,9 @@ const MainLayer = Layer.mergeAll(
 	HarnessModelCache.layer,
 	CodeLspPool.layer,
 ).pipe(
+	Layer.provideMerge(
+		GhGitHub.layer.pipe(Layer.provideMerge(PullRequestAttentionLive.layer)),
+	),
 	Layer.provideMerge(SqliteDb.layer),
 	Layer.provideMerge(BunServices.layer),
 );

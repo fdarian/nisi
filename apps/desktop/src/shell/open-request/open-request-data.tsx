@@ -67,6 +67,27 @@ export function OpenRequestProvider(props: {
 	);
 
 	useSidecarEvent((event) => {
+		if (event.type === "session-updated") {
+			void queryClient
+				.resetQueries({
+					queryKey: backend.orpc.diff.files.key({
+						input: { sessionId: event.session.id },
+					}),
+				})
+				.catch((error) =>
+					console.error("Failed to reset corrected file metadata", error),
+				);
+			void queryClient
+				.resetQueries({
+					queryKey: backend.orpc.diff.fileContents.key({
+						input: { sessionId: event.session.id },
+					}),
+				})
+				.catch((error) =>
+					console.error("Failed to reset corrected file contents", error),
+				);
+			return;
+		}
 		if (event.type === "stream-ready") {
 			void client.events
 				.openRequests()

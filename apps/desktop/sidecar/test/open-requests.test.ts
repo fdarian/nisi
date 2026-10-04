@@ -4,6 +4,7 @@ import {
 	acknowledgeActivation,
 	acknowledgeOpenRequest,
 	createOpenRequest,
+	correctOpenRequest,
 	failOpenRequest,
 	listOpenRequests,
 	resolveOpenRequest,
@@ -18,6 +19,32 @@ const session = {
 } as const;
 
 describe("open requests", () => {
+	test("correction remains selectable and replayable after the first result was acknowledged", () => {
+		const request = createOpenRequest("/repo", target);
+		resolveOpenRequest(request.id, session);
+		acknowledgeOpenRequest(request.id);
+		acknowledgeActivation(request.id);
+		const seen: string[] = [];
+		const stop = subscribe((event) => {
+			if (event.type === "open-resolved") seen.push(event.request.id);
+		});
+		try {
+			correctOpenRequest(request, { ...session, id: "corrected-session" });
+			const id = seen[0];
+			expect(id).toBeDefined();
+			expect(id).not.toBe(request.id);
+			expect(
+				listOpenRequests().find((entry) => entry.id === id)?.status,
+			).toEqual({
+				kind: "opened",
+				session: { ...session, id: "corrected-session" },
+			});
+			if (id === undefined) throw new Error("missing correction");
+			acknowledgeOpenRequest(id);
+		} finally {
+			stop();
+		}
+	});
 	test("traced opens carry their ID in pending and resolved frontend events", () => {
 		const traceId = "trace-hop-test";
 		const ids: (string | undefined)[] = [];

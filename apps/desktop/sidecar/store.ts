@@ -55,7 +55,7 @@ import {
 	type SessionPullRequest,
 } from "@repo/review";
 import { SettingsStore, type SettingsStoreError } from "@repo/settings";
-import { Context, Effect, Layer, Option, Schema } from "effect";
+import { Context, Effect, Layer, Option, Schema, Scope } from "effect";
 import { FileSystem } from "effect/FileSystem";
 import type { ChildProcessSpawner } from "effect/unstable/process";
 import { makeBaseRefresh } from "./base-refresh.ts";
@@ -67,6 +67,7 @@ import {
 } from "./diff-head.ts";
 import { emit } from "./events.ts";
 import { makeSpeculativeDiff } from "./speculative-diff.ts";
+import { PrIndex } from "./pr-index.ts";
 
 /** `sessions.open`'s `cwd` doesn't resolve to a git working tree. */
 export class InvalidCwd extends Schema.TaggedError<InvalidCwd>()("InvalidCwd", {
@@ -391,6 +392,8 @@ export class Store extends Context.Service<Store>()("Store", {
 	make: Effect.gen(function* () {
 		const reviewStore = yield* ReviewStore;
 		const settingsStore = yield* SettingsStore;
+		const prIndex = yield* PrIndex;
+		const scope = yield* Scope.Scope;
 		const speculative = yield* makeSpeculativeDiff();
 		const baseIdentity = (repoRoot: string, baseRef: string) =>
 			Effect.gen(function* () {
@@ -494,30 +497,19 @@ export class Store extends Context.Service<Store>()("Store", {
 				);
 			});
 
-		const openSession = (
-			cwd: string,
-			target: OpenSessionTarget = { kind: "auto" },
+		const persistResolved = (
+			repoRoot: string,
+			target: OpenSessionTarget,
+			resolved: {
+				baseRef: string;
+				headRef: string;
+				pr: SessionPullRequest | null;
+			},
 		) =>
 			Effect.gen(function* () {
-				const repoRoot = yield* resolveRepoRoot(cwd).pipe(
-					Effect.catchTag("NotAGitRepository", () => new InvalidCwd({ cwd })),
-					Effect.withSpan("session.repo-root.resolve"),
-				);
-				const settings = yield* settingsStore.get();
-				const pendingDiff =
-					target.kind === "auto" || target.kind === "pr"
-						? yield* speculative.start(repoRoot, settings.includeUncommitted)
-						: undefined;
-				const resolved = yield* resolveSessionTarget(repoRoot, target).pipe(
-					Effect.withSpan("session.target.resolve", {
-						attributes: { repoRoot, target: target.kind },
-					}),
-				);
 				yield* prepareBase(repoRoot, resolved.baseRef).pipe(
 					Effect.withSpan("session.base-ref.refresh"),
 				);
-				if (pendingDiff !== undefined)
-					yield* speculative.confirm(pendingDiff, repoRoot, resolved.baseRef);
 				const openFreshSession = reviewStore
 					.openSession({
 						repoRoot,
@@ -563,6 +555,118 @@ export class Store extends Context.Service<Store>()("Store", {
 				}
 				return yield* openFreshSession;
 			});
+
+		const latestOpens = new Map<string, object>();
+		const validations = new Map<
+			string,
+			{ repoRoot: string; target: OpenSessionTarget; generation: object }
+		>();
+		const openSession = (
+			cwd: string,
+			target: OpenSessionTarget = { kind: "auto" },
+		) =>
+			Effect.gen(function* () {
+				const repoRoot = yield* resolveRepoRoot(cwd).pipe(
+					Effect.catchTag("NotAGitRepository", () => new InvalidCwd({ cwd })),
+					Effect.withSpan("session.repo-root.resolve"),
+				);
+				const generation = {};
+				latestOpens.set(repoRoot, generation);
+				const settings = yield* settingsStore.get();
+				const pendingDiff =
+					target.kind === "auto" || target.kind === "pr"
+						? yield* speculative.start(repoRoot, settings.includeUncommitted)
+						: undefined;
+				const cached =
+					target.kind === "auto" || target.kind === "pr"
+						? yield* prIndex.lookup(repoRoot)
+						: undefined;
+				const resolved =
+					cached === undefined
+						? yield* resolveSessionTarget(repoRoot, target).pipe(
+								Effect.withSpan("session.target.resolve", {
+									attributes: { repoRoot, target: target.kind },
+								}),
+							)
+						: {
+								baseRef: cached.pr.baseRef,
+								headRef: cached.pr.headRef,
+								pr: {
+									number: cached.pr.number,
+									title: cached.pr.title,
+									owner: cached.repository.owner,
+									repo: cached.repository.repo,
+								},
+							};
+				const outcome = yield* persistResolved(repoRoot, target, resolved);
+				if (pendingDiff !== undefined)
+					yield* speculative.confirm(pendingDiff, repoRoot, resolved.baseRef);
+				if (cached !== undefined)
+					validations.set(outcome.session.id, { repoRoot, target, generation });
+				if (resolved.pr !== null) {
+					const pr = resolved.pr;
+					yield* Effect.gen(function* () {
+						const known = yield* settingsStore.getRepoPath(pr.owner, pr.repo);
+						if (known !== null) return;
+						const root = yield* resolveMainCloneRoot(repoRoot);
+						yield* verifyRepoPathMatchesOrigin(root, pr.owner, pr.repo);
+						yield* settingsStore.setRepoPath(pr.owner, pr.repo, root);
+						yield* prIndex.refresh(root, pr.owner, pr.repo);
+					}).pipe(
+						Effect.catchCause((cause) =>
+							Effect.logWarning("could not learn PR index repository path", {
+								cause,
+							}),
+						),
+						Effect.forkIn(scope),
+					);
+				}
+				return outcome;
+			});
+		const revalidateSession = (session: Session) =>
+			Effect.gen(function* () {
+				const validation = validations.get(session.id);
+				if (validation === undefined) return undefined;
+				validations.delete(session.id);
+				const resolved = yield* resolveSessionTarget(validation.repoRoot, {
+					kind: "auto",
+				});
+				if (latestOpens.get(validation.repoRoot) !== validation.generation)
+					return undefined;
+				const stillOpen = (yield* reviewStore.listOpenSessions()).some(
+					(entry) => entry.id === session.id,
+				);
+				if (!stillOpen) return undefined;
+				const same =
+					session.target.baseRef === resolved.baseRef &&
+					session.target.headRef === resolved.headRef &&
+					(session.target.kind === "pr"
+						? resolved.pr !== null &&
+							session.target.number === resolved.pr.number &&
+							session.target.title === resolved.pr.title &&
+							session.target.owner === resolved.pr.owner &&
+							session.target.repo === resolved.pr.repo
+						: resolved.pr === null);
+				if (same) return undefined;
+				const corrected = yield* persistResolved(
+					validation.repoRoot,
+					validation.target,
+					resolved,
+				);
+				if (corrected.session.id === session.id)
+					return {
+						kind: "retargeted" as const,
+						session: corrected.session,
+						sourceSessionId: session.id,
+					};
+				// Never retarget a PR row to a different PR: upsert the correct key and close only the provisional tab.
+				yield* reviewStore.closeSession(session.id);
+				return {
+					kind: "existing" as const,
+					session: corrected.session,
+					sourceSessionId: session.id,
+				};
+			}).pipe(Effect.withSpan("session.pr-index.revalidate", { root: true }));
 
 		/**
 		 * `owner/repo`'s local checkout path — a known mapping if one's already
@@ -1698,6 +1802,23 @@ export class Store extends Context.Service<Store>()("Store", {
 
 		return {
 			openSession,
+			forkRevalidation: (
+				session: Session,
+				corrected: (outcome: OpenSessionOutcome) => Effect.Effect<void>,
+			) =>
+				revalidateSession(session).pipe(
+					Effect.flatMap((outcome) =>
+						outcome === undefined ? Effect.void : corrected(outcome),
+					),
+					Effect.catchCause((cause) =>
+						Effect.logWarning(
+							"PR index revalidation failed; keeping cached target",
+							{ sessionId: session.id, cause },
+						),
+					),
+					Effect.forkIn(scope),
+					Effect.asVoid,
+				),
 			switchToPr,
 			openPullRequestSession,
 			recordRepoPath,
@@ -1724,6 +1845,7 @@ export class Store extends Context.Service<Store>()("Store", {
 	// doesn't open a second connection, it just satisfies `Store.make`'s own
 	// construction-time dependency on it (`resolveRepoPath`/`recordRepoPath`).
 	static layer = Layer.effect(Store, Store.make).pipe(
+		Layer.provideMerge(PrIndex.layer),
 		Layer.provideMerge(ReviewStore.layer),
 		Layer.provideMerge(SettingsStore.layer),
 	);

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { mkdir, mkdtemp, rm, symlink } from "node:fs/promises";
+import { mkdir, mkdtemp, realpath, rm, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { BunServices } from "@effect/platform-bun";
@@ -12,9 +12,19 @@ import {
 } from "@repo/git";
 import { ReviewStore } from "@repo/review";
 import { SettingsStore } from "@repo/settings";
-import { ConfigProvider, Effect, Layer, Option, Result, Stream } from "effect";
+import {
+	ConfigProvider,
+	type Context,
+	Deferred,
+	Effect,
+	Layer,
+	Option,
+	Result,
+	Stream,
+} from "effect";
 import { subscribe } from "../events.ts";
 import { PullRequestAttentionLive } from "../pull-request-attention.ts";
+import { PrIndex } from "../pr-index.ts";
 import { type OpenSessionOutcome, Store } from "../store.ts";
 
 /** Runs real `git` for test setup — the code under test uses its own Effect-based runner. */
@@ -45,6 +55,11 @@ const makeTestRepo = async (): Promise<string> => {
 
 /** Same composition as `packages/review/test/fixtures.ts`'s `makeTestLayer`, one layer up — `Store.layer` already pulls in `ReviewStore.layer` via `provideMerge`, so this only has to add what `Store.make` needs beyond that: `SqliteDb` and `NISI_DATA_DIR`. */
 const mockGitHub: GitHubShape = {
+	listOpenPullRequests: () =>
+		Effect.succeed({
+			repository: { owner: "acme", repo: "widgets", defaultBranch: "main" },
+			prs: [],
+		}),
 	getActionsJob: () => Effect.die(new Error("unused mock GitHub method")),
 	getActionsJobLogs: () => Effect.die(new Error("unused mock GitHub method")),
 	rerunActionsJob: () => Effect.die(new Error("unused mock GitHub method")),
@@ -79,8 +94,16 @@ const mockGitHub: GitHubShape = {
 const makeTestLayer = (
 	dataDir: string,
 	withPullRequest: boolean | GitHubShape = false,
+	index?: Context.Service.Shape<typeof PrIndex>,
 ) =>
-	Store.layer.pipe(
+	(index === undefined
+		? Store.layer
+		: Layer.effect(Store, Store.make).pipe(
+				Layer.provideMerge(ReviewStore.layer),
+				Layer.provideMerge(SettingsStore.layer),
+				Layer.provideMerge(Layer.succeed(PrIndex, index)),
+			)
+	).pipe(
 		Layer.provideMerge(
 			withPullRequest
 				? Layer.succeed(
@@ -115,6 +138,110 @@ const withTestRepoAndDataDir = async <T>(
 		await rm(dataDir, { recursive: true, force: true });
 	}
 };
+
+test("index disagreement upserts the correct PR's existing row without transferring snapshots; no-PR correction uses a branch key", async () => {
+	await withTestRepoAndDataDir(async (repoRoot, dataDir) => {
+		await sh(repoRoot, ["remote", "add", "origin", repoRoot]);
+		const canonicalRoot = await realpath(repoRoot);
+		const state = { number: 43, noPr: false };
+		const index: Context.Service.Shape<typeof PrIndex> = {
+			lookup: () =>
+				Effect.succeed({
+					repository: { owner: "acme", repo: "widgets", defaultBranch: "main" },
+					pr: {
+						number: 42,
+						title: "Old PR",
+						baseRef: "main",
+						headRef: "main",
+						isCrossRepository: false,
+						headOwner: "acme",
+					},
+				}),
+			refresh: () => Effect.succeed(undefined),
+			refreshKnown: Effect.void,
+			start: Effect.never,
+		};
+		const github: GitHubShape = {
+			...mockGitHub,
+			pullRequest: () =>
+				Effect.succeed(
+					state.noPr
+						? null
+						: {
+								number: state.number,
+								title: "Current PR",
+								baseRef: "main",
+								headRef: "main",
+								isCrossRepository: false,
+							},
+				),
+		};
+		await Effect.runPromise(
+			Effect.gen(function* () {
+				const store = yield* Store;
+				const reviews = yield* ReviewStore;
+				const correct = yield* reviews.openSession({
+					repoRoot: canonicalRoot,
+					baseRef: "main",
+					headRef: "main",
+					pr: {
+						number: 43,
+						title: "Current PR",
+						owner: "acme",
+						repo: "widgets",
+					},
+				});
+				yield* reviews.markFileViewed(
+					correct.id,
+					"a.ts",
+					Option.some(new TextEncoder().encode("PR43 snapshot")),
+				);
+				yield* reviews.closeSession(correct.id);
+				const provisional = (yield* store.openSession(repoRoot)).session;
+				yield* reviews.markFileViewed(
+					provisional.id,
+					"a.ts",
+					Option.some(new TextEncoder().encode("PR42 snapshot")),
+				);
+				const original = yield* reviews.getFileReviewState(
+					provisional.id,
+					"a.ts",
+				);
+				const correction = yield* Deferred.make<OpenSessionOutcome>();
+				yield* store.forkRevalidation(provisional, (outcome) =>
+					Deferred.succeed(correction, outcome).pipe(Effect.asVoid),
+				);
+				const corrected = yield* Deferred.await(correction);
+				expect(corrected.session.target).toMatchObject({
+					kind: "pr",
+					number: 43,
+				});
+				expect(corrected.session.id).toBe(correct.id);
+				expect(
+					yield* reviews.getFileReviewState(provisional.id, "a.ts"),
+				).toEqual(original);
+				expect(
+					(yield* reviews.getFileReviewState(correct.id, "a.ts"))?.snapshotHash,
+				).not.toBe(original?.snapshotHash);
+				state.noPr = true;
+				const next = (yield* store.openSession(repoRoot)).session;
+				const branchCorrection = yield* Deferred.make<OpenSessionOutcome>();
+				yield* store.forkRevalidation(next, (outcome) =>
+					Deferred.succeed(branchCorrection, outcome).pipe(Effect.asVoid),
+				);
+				const branch = yield* Deferred.await(branchCorrection);
+				expect(branch.session.target.kind).toBe("branch");
+				expect(branch.session.id).not.toBe(next.id);
+				expect(yield* reviews.getFileReviewState(next.id, "a.ts")).toEqual(
+					original,
+				);
+			}).pipe(
+				Effect.provide(makeTestLayer(dataDir, github, index)),
+				Effect.scoped,
+			),
+		);
+	});
+});
 
 test("base refresh drops upstream-only files without changing head or remaining reviewed state; offline refresh warns", async () => {
 	await withTestRepoAndDataDir(async (repoRoot, dataDir) => {

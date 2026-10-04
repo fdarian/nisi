@@ -83,11 +83,13 @@ import { createNativeActivationHandler } from "./native-activation.ts";
 import {
 	acknowledgeOpenRequest,
 	createOpenRequest,
+	correctOpenRequest,
 	failOpenRequest,
 	listOpenRequests,
 	resolveOpenRequest,
 } from "./open-requests.ts";
 import { AttentionState } from "./pull-request-attention.ts";
+import { PrIndex } from "./pr-index.ts";
 import { RpcErrorsPlugin } from "./rpc-errors.ts";
 import { RpcLifecyclePlugin } from "./rpc-lifecycle.ts";
 import { ScheduledMerges } from "./scheduled-merge.ts";
@@ -554,6 +556,16 @@ export function attachRouter(
 					const session = outcome.session;
 					yield* Effect.annotateCurrentSpan({ sessionId: session.id });
 					yield* emitSessionTransition(outcome);
+					yield* store.forkRevalidation(session, (corrected) =>
+						emitSessionTransition(corrected).pipe(
+							Effect.andThen(
+								Effect.sync(() =>
+									correctOpenRequest(request, corrected.session),
+								),
+							),
+							Effect.provide(mainContext),
+						),
+					);
 					yield* Effect.logInfo("session opened", {
 						sessionId: session.id,
 						repoRoot: session.repoRoot,
@@ -684,6 +696,10 @@ export function attachRouter(
 				const input = request.input;
 				const errors = request.errors;
 				const attention = yield* AttentionState;
+				if (input.watched) {
+					const index = yield* PrIndex;
+					yield* index.refreshKnown;
+				}
 				if (!input.watched) {
 					const store = yield* Store;
 					const session = (yield* store.listSessions()).find(
