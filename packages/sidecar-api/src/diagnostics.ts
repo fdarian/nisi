@@ -11,6 +11,7 @@ export const diagnosticsContract = {
 						at: Schema.Number,
 						name: Schema.String,
 						tab: Schema.optional(Schema.String),
+						hidden: Schema.optional(Schema.Boolean),
 					}),
 				),
 			}),

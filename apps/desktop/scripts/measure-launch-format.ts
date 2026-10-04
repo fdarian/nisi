@@ -1,6 +1,65 @@
 import type { LaunchMark } from "../sidecar/launch-trace/file-writer.ts";
 
-export function formatTimeline(marks: readonly LaunchMark[]): string {
+export function formatVisibility(
+	marks: readonly LaunchMark[],
+	observedAt: number,
+): string | undefined {
+	const requested = marks.find(
+		(mark) =>
+			mark.source === "frontend" && mark.name === "open-requested.received",
+	);
+	const origin = marks.find((mark) => mark.name === "cli.process-start");
+	if (requested === undefined || origin === undefined) return undefined;
+	const terminal = marks.find(
+		(mark) => mark.source === "frontend" && mark.name === "tab.content.painted",
+	);
+	const end = terminal === undefined ? observedAt : terminal.at;
+	const state: {
+		hiddenSince?: number;
+		intervals: { start: number; end: number; ongoing: boolean }[];
+	} = { intervals: [] };
+	for (const mark of [...marks].sort((a, b) => a.at - b.at)) {
+		if (
+			mark.source !== "frontend" ||
+			mark.name !== "frontend.visibility" ||
+			typeof mark.hidden !== "boolean" ||
+			mark.at > end
+		)
+			continue;
+		if (mark.hidden) {
+			if (state.hiddenSince === undefined)
+				state.hiddenSince = Math.max(requested.at, mark.at);
+		} else if (state.hiddenSince !== undefined) {
+			if (mark.at >= requested.at)
+				state.intervals.push({
+					start: state.hiddenSince,
+					end: mark.at,
+					ongoing: false,
+				});
+			state.hiddenSince = undefined;
+		}
+	}
+	if (state.hiddenSince !== undefined)
+		state.intervals.push({ start: state.hiddenSince, end, ongoing: true });
+	if (state.intervals.length === 0) return undefined;
+	const duration = state.intervals.reduce(
+		(total, interval) => total + interval.end - interval.start,
+		0,
+	);
+	return [
+		`window was hidden for ${duration.toFixed(1)} ms (screen locked / window occluded) — paint timings include that wait`,
+		"Hidden intervals (+ms from CLI):",
+		...state.intervals.map(
+			(interval) =>
+				`  ${(interval.start - origin.at).toFixed(1)} → ${(interval.end - origin.at).toFixed(1)} (${(interval.end - interval.start).toFixed(1)} ms)${interval.ongoing ? (terminal === undefined ? " — still hidden at timeout" : " — hidden at terminal mark") : ""}`,
+		),
+	].join("\n");
+}
+
+export function formatTimeline(
+	marks: readonly LaunchMark[],
+	observedAt = Date.now(),
+): string {
 	const start = marks.find((mark) => mark.name === "cli.process-start");
 	if (start === undefined)
 		return "Missing cli.process-start; no timeline origin available.";
@@ -52,12 +111,14 @@ export function formatTimeline(marks: readonly LaunchMark[]): string {
 			(typeof b.durationMs === "number" ? b.durationMs : -1) -
 			(typeof a.durationMs === "number" ? a.durationMs : -1),
 	);
+	const visibility = formatVisibility(marks, observedAt);
 	return [
 		"Timeline (+ms from CLI, Δ previous, source, name, attrs)",
 		...rows,
 		"",
 		"Milestones",
 		...summary,
+		...(visibility === undefined ? [] : ["", visibility]),
 		"",
 		"Waterfall (+ms, duration ms, command/RPC)",
 		...spans.map(span),

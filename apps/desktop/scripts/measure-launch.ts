@@ -5,7 +5,7 @@ import {
 	type LaunchMark,
 	traceFilePath,
 } from "../sidecar/launch-trace/file-writer.ts";
-import { formatTimeline } from "./measure-launch-format.ts";
+import { formatTimeline, formatVisibility } from "./measure-launch-format.ts";
 import {
 	bundlePath,
 	cliPath,
@@ -91,9 +91,16 @@ const program = Effect.gen(function* () {
 		yield* Effect.sleep("100 millis");
 	}
 	const marks = yield* readMarks;
+	const observedAt = Date.now();
 	yield* Console.log(
-		options.json ? JSON.stringify(marks, null, 2) : formatTimeline(marks),
+		options.json
+			? JSON.stringify(marks, null, 2)
+			: formatTimeline(marks, observedAt),
 	);
+	if (options.json) {
+		const visibility = formatVisibility(marks, observedAt);
+		if (visibility !== undefined) yield* Console.error(visibility);
+	}
 	if (!marks.some((mark) => mark.name === "trace.done")) {
 		if (childState.exit === undefined) child.kill();
 		return yield* Effect.fail(new Error(`Launch trace timed out: ${file}`));

@@ -3,6 +3,14 @@ import type { SidecarClient } from "@repo/sidecar-api";
 import { launchMark, receiveTracedOpen } from "./launch-trace";
 
 test("a rejected mark batch warns without blocking terminal delivery", async () => {
+	const previousDocument = Object.getOwnPropertyDescriptor(
+		globalThis,
+		"document",
+	);
+	Object.defineProperty(globalThis, "document", {
+		configurable: true,
+		value: Object.assign(new EventTarget(), { hidden: false }),
+	});
 	const failure = new Error("sidecar unavailable");
 	const warned = Promise.withResolvers<void>();
 	const delivered = Promise.withResolvers<void>();
@@ -54,5 +62,58 @@ test("a rejected mark batch warns without blocking terminal delivery", async () 
 	} finally {
 		clock.mockRestore();
 		warn.mockRestore();
+		if (previousDocument === undefined)
+			Reflect.deleteProperty(globalThis, "document");
+		else Object.defineProperty(globalThis, "document", previousDocument);
+	}
+});
+
+test("records initial visibility and every transition only during the active trace", async () => {
+	const previousDocument = Object.getOwnPropertyDescriptor(
+		globalThis,
+		"document",
+	);
+	const document = Object.assign(new EventTarget(), { hidden: true });
+	Object.defineProperty(globalThis, "document", {
+		configurable: true,
+		value: document,
+	});
+	const delivered = Promise.withResolvers<void>();
+	const visibility: boolean[] = [];
+	const client: Pick<SidecarClient, "diagnostics"> = {
+		diagnostics: {
+			launchMarks: async (input) => {
+				for (const mark of input.marks)
+					if (mark.name === "frontend.visibility" && mark.hidden !== undefined)
+						visibility.push(mark.hidden);
+				if (input.marks.some((mark) => mark.name === "trace.done"))
+					delivered.resolve();
+			},
+		},
+	};
+	try {
+		receiveTracedOpen(
+			{
+				id: "visibility-request",
+				traceId: "visibility-trace",
+				cwd: "/worktree",
+				target: { kind: "auto" },
+				status: { kind: "pending" },
+			},
+			client,
+		);
+		document.hidden = false;
+		document.dispatchEvent(new Event("visibilitychange"));
+		document.hidden = true;
+		document.dispatchEvent(new Event("visibilitychange"));
+		launchMark("tab.content.painted");
+		await delivered.promise;
+		document.hidden = false;
+		document.dispatchEvent(new Event("visibilitychange"));
+		expect(visibility).toEqual([true, false, true]);
+	} finally {
+		if (previousDocument === undefined)
+			Reflect.deleteProperty(globalThis, "document");
+		else Object.defineProperty(globalThis, "document", previousDocument);
 	}
 });

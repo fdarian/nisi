@@ -1,8 +1,13 @@
 import type { OpenRequest, SidecarClient } from "@repo/sidecar-api";
 import { useEffect, useSyncExternalStore } from "react";
 
-type Mark = { at: number; name: string; tab?: string };
-type LaunchMarkOptions = { when?: boolean; sessionId?: string; tab?: string };
+type Mark = { at: number; name: string; tab?: string; hidden?: boolean };
+type LaunchMarkOptions = {
+	when?: boolean;
+	sessionId?: string;
+	tab?: string;
+	hidden?: boolean;
+};
 type Trace = {
 	id: string;
 	client: Pick<SidecarClient, "diagnostics">;
@@ -17,6 +22,9 @@ const boot: Mark[] = [
 ];
 const state: { trace?: Trace } = {};
 const listeners = new Set<() => void>();
+function recordVisibility(): void {
+	launchMark("frontend.visibility", { hidden: document.hidden });
+}
 export function frontendBootMark(name: string): void {
 	if (!boot.some((mark) => mark.name === name))
 		boot.push({ at: Date.now(), name });
@@ -37,6 +45,9 @@ export function receiveTracedOpen(
 			finished: false,
 		};
 		launchMark("open-requested.received");
+		document.removeEventListener("visibilitychange", recordVisibility);
+		document.addEventListener("visibilitychange", recordVisibility);
+		recordVisibility();
 	}
 	if (request.status.kind === "opened") {
 		state.trace.sessionId = request.status.session.id;
@@ -49,6 +60,8 @@ function flush(trace: Trace): void {
 	if (trace.seen.has("tab.content.painted") && !trace.finished) {
 		trace.queue.push({ at: Date.now(), name: "trace.done" });
 		trace.finished = true;
+		if (state.trace === trace)
+			document.removeEventListener("visibilitychange", recordVisibility);
 	}
 	const marks = trace.queue.splice(0);
 	if (marks.length === 0) return;
@@ -64,11 +77,20 @@ export function launchMark(
 	options: LaunchMarkOptions = {},
 ): void {
 	const trace = state.trace;
-	if (trace === undefined || trace.finished || trace.seen.has(name)) return;
+	if (
+		trace === undefined ||
+		trace.finished ||
+		(name !== "frontend.visibility" && trace.seen.has(name))
+	)
+		return;
 	if (options.sessionId !== undefined && trace.sessionId !== options.sessionId)
 		return;
 	trace.seen.add(name);
-	trace.queue.push({ at: Date.now(), name });
+	trace.queue.push({
+		at: Date.now(),
+		name,
+		...(options.hidden === undefined ? {} : { hidden: options.hidden }),
+	});
 	if (options.tab !== undefined && !trace.seen.has("tab.content.painted")) {
 		trace.queue.push({
 			at: Date.now(),

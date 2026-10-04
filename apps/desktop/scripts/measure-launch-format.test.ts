@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { formatTimeline } from "./measure-launch-format.ts";
+import { formatTimeline, formatVisibility } from "./measure-launch-format.ts";
 
 test("sorts wall clocks, identifies warm boot and prints waterfall durations", () => {
 	const result = formatTimeline([
@@ -82,4 +82,145 @@ test("does not invent an origin or claim incomplete traces succeeded", () => {
 	expect(
 		formatTimeline([{ at: 1, source: "cli", name: "cli.process-start" }]),
 	).toContain("INCOMPLETE");
+});
+
+test("reports every hidden interval up to terminal paint, sorting and deduplicating state", () => {
+	const result = formatTimeline(
+		[
+			{ at: 100, source: "cli", name: "cli.process-start" },
+			{ at: 120, source: "frontend", name: "open-requested.received" },
+			{
+				at: 190,
+				source: "frontend",
+				name: "frontend.visibility",
+				hidden: false,
+			},
+			{
+				at: 130,
+				source: "frontend",
+				name: "frontend.visibility",
+				hidden: true,
+			},
+			{
+				at: 140,
+				source: "frontend",
+				name: "frontend.visibility",
+				hidden: true,
+			},
+			{
+				at: 210,
+				source: "frontend",
+				name: "frontend.visibility",
+				hidden: true,
+			},
+			{
+				at: 230,
+				source: "frontend",
+				name: "frontend.visibility",
+				hidden: false,
+			},
+			{ at: 250, source: "frontend", name: "tab.content.painted" },
+			{ at: 251, source: "frontend", name: "trace.done" },
+			{
+				at: 260,
+				source: "frontend",
+				name: "frontend.visibility",
+				hidden: true,
+			},
+		],
+		1000,
+	);
+	expect(result).toContain(
+		"window was hidden for 80.0 ms (screen locked / window occluded) — paint timings include that wait",
+	);
+	expect(result).toContain("30.0 → 90.0 (60.0 ms)");
+	expect(result).toContain("110.0 → 130.0 (20.0 ms)");
+	expect(result).not.toContain("still hidden at timeout");
+	expect(result).toEndWith("Complete");
+});
+
+test("extends an unfinished hidden interval to the observation time, not the last event", () => {
+	const result = formatTimeline(
+		[
+			{ at: 100, source: "cli", name: "cli.process-start" },
+			{ at: 120, source: "frontend", name: "open-requested.received" },
+			{
+				at: 121,
+				source: "frontend",
+				name: "frontend.visibility",
+				hidden: true,
+			},
+			{ at: 130, source: "frontend", name: "open-resolved.received" },
+		],
+		600,
+	);
+	expect(result).toContain("window was hidden for 479.0 ms");
+	expect(result).toContain("21.0 → 500.0 (479.0 ms) — still hidden at timeout");
+	expect(result).toContain("INCOMPLETE");
+});
+
+test("clips initial hidden state to traced open and closes it at terminal paint", () => {
+	expect(
+		formatVisibility(
+			[
+				{ at: 100, source: "cli", name: "cli.process-start" },
+				{
+					at: 110,
+					source: "frontend",
+					name: "frontend.visibility",
+					hidden: true,
+				},
+				{ at: 120, source: "frontend", name: "open-requested.received" },
+				{ at: 150, source: "frontend", name: "tab.content.painted" },
+			],
+			600,
+		),
+	).toContain("20.0 → 50.0 (30.0 ms) — hidden at terminal mark");
+});
+
+test("does not warn for visible, uninstrumented, or out-of-window hidden states", () => {
+	const marks = [
+		{ at: 100, source: "cli" as const, name: "cli.process-start" },
+		{ at: 120, source: "frontend" as const, name: "open-requested.received" },
+		{ at: 150, source: "frontend" as const, name: "tab.content.painted" },
+	];
+	expect(formatVisibility(marks, 600)).toBeUndefined();
+	expect(
+		formatVisibility(
+			[
+				...marks,
+				{
+					at: 105,
+					source: "frontend",
+					name: "frontend.visibility",
+					hidden: true,
+				},
+				{
+					at: 110,
+					source: "frontend",
+					name: "frontend.visibility",
+					hidden: false,
+				},
+				{
+					at: 121,
+					source: "frontend",
+					name: "frontend.visibility",
+					hidden: false,
+				},
+				{
+					at: 130,
+					source: "sidecar",
+					name: "frontend.visibility",
+					hidden: true,
+				},
+				{
+					at: 160,
+					source: "frontend",
+					name: "frontend.visibility",
+					hidden: true,
+				},
+			],
+			600,
+		),
+	).toBeUndefined();
 });

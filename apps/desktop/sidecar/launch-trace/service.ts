@@ -53,7 +53,12 @@ export class LaunchTrace extends Context.Service<LaunchTrace>()(
 					}),
 				frontend: (
 					id: string,
-					marks: readonly { at: number; name: string; tab?: string }[],
+					marks: readonly {
+						at: number;
+						name: string;
+						tab?: string;
+						hidden?: boolean;
+					}[],
 				) =>
 					Effect.gen(function* () {
 						const trace = activeTrace();
