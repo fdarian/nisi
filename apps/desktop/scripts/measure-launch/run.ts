@@ -30,6 +30,7 @@ export const runTracedOpen = (options: {
 	dataDir: string;
 	traceId: string;
 	launch: boolean;
+	managed: boolean;
 	quiet: boolean;
 	label: string;
 }) =>
@@ -41,6 +42,7 @@ export const runTracedOpen = (options: {
 				cwd: options.cwd,
 				env: {
 					...process.env,
+					...(options.managed ? { NISI_MOCK_KEYCHAIN: "1" } : {}),
 					NISI_LAUNCH_TRACE: options.traceId,
 					NISI_DATA_DIR: options.dataDir,
 					NISI_APP_PATH: options.launch ? bundlePath : unavailableAppPath,

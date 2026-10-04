@@ -46,6 +46,7 @@ const program = Effect.gen(function* () {
 			dataDir,
 			traceId: crypto.randomUUID(),
 			launch: true,
+			managed: true,
 			quiet: true,
 			label: "Warm-up",
 		});
@@ -76,6 +77,7 @@ const program = Effect.gen(function* () {
 		dataDir,
 		traceId,
 		launch: options.cold,
+		managed,
 		quiet: options.json,
 		label: "Measured open",
 	});

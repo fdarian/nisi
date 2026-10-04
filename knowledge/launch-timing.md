@@ -86,6 +86,13 @@ reason; matching inputs print a reuse message. The stamp records build time, and
 identify the build commit and any uncommitted content hash. A source change during the build
 fails rather than stamping an inconsistent artifact.
 
+Managed instances opt into `NISI_MOCK_KEYCHAIN=1`, forwarded by the CLI through `open --env`.
+The Rust runtime uses CEF's mock secret storage (`--use-mock-keychain`) to avoid macOS keychain
+prompts. The dedicated opt-in accepts no arbitrary CEF switches; unset production/dev behavior
+is unchanged. Mock storage uses a public encryption constant, so keep it confined to isolated
+measurement data, never production credentials. Confirm prompt absence on the actual Mac;
+trace completion alone is not visual verification of that.
+
 # Reading the report
 
 All offsets are milliseconds from `cli.process-start`. Negative boot offsets mean the component
