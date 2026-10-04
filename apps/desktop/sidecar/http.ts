@@ -73,6 +73,7 @@ import {
 	resolveOpenRequest,
 } from "./open-requests.ts";
 import { AttentionState } from "./pull-request-attention.ts";
+import { RpcErrorsPlugin } from "./rpc-errors.ts";
 import { RpcLifecyclePlugin } from "./rpc-lifecycle.ts";
 import { ScheduledMerges } from "./scheduled-merge.ts";
 import type { AppServices } from "./services.ts";
@@ -1094,6 +1095,9 @@ export function attachRouter(
 				);
 
 				yield* streamChatTurn({
+					sessionId: input.sessionId,
+					threadId: input.threadId,
+					mainContext,
 					agent: live.agent,
 					session: live.session,
 					message: input.message,
@@ -2068,15 +2072,23 @@ export function attachRouter(
 	const lifecycle = new RpcLifecyclePlugin((message, fields) =>
 		runWithMainContext(Effect.logDebug(message, fields)),
 	);
+	const rpcErrors = new RpcErrorsPlugin((error, path) =>
+		runWithMainContext(
+			Effect.logError("rpc call failed", Cause.die(error)).pipe(
+				Effect.annotateLogs({ path: path.join(".") }),
+			),
+		),
+	);
 	const handler = new FetchRPCHandler(router, {
 		plugins: [
 			new CORSHandlerPlugin(),
 			new RequestHeadersHandlerPlugin(),
 			lifecycle,
+			rpcErrors,
 		],
 	});
 	const websocketHandler = new WebSocketRPCHandler(router, {
-		plugins: [new RequestHeadersHandlerPlugin(), lifecycle],
+		plugins: [new RequestHeadersHandlerPlugin(), lifecycle, rpcErrors],
 	});
 
 	server.reload({
@@ -2085,24 +2097,33 @@ export function attachRouter(
 		// Bun's default 10s timeout).
 		idleTimeout: 0,
 		async fetch(req, server) {
-			const requestUrl = new URL(req.url);
-			if (requestUrl.pathname === "/api/ws") {
-				if (requestUrl.searchParams.get("token") !== token) {
-					return new Response("unauthorized", { status: 401 });
+			try {
+				const requestUrl = new URL(req.url);
+				if (requestUrl.pathname === "/api/ws") {
+					if (requestUrl.searchParams.get("token") !== token) {
+						return new Response("unauthorized", { status: 401 });
+					}
+					if (server.upgrade(req, { data: {} })) return;
+					return new Response("websocket upgrade required", { status: 426 });
 				}
-				if (server.upgrade(req, { data: {} })) return;
-				return new Response("websocket upgrade required", { status: 426 });
+				const activationResponse = nativeActivation(req);
+				if (activationResponse !== undefined) return activationResponse;
+				const result = await handler.handle(req, {
+					prefix: "/api",
+					context: { "effect/context": mainContext },
+				});
+
+				if (result.matched) return result.response;
+
+				return new Response("not found", { status: 404 });
+			} catch (error) {
+				await runWithMainContext(
+					Effect.logError("raw HTTP request failed", Cause.die(error)).pipe(
+						Effect.annotateLogs({ path: new URL(req.url).pathname }),
+					),
+				);
+				return new Response("Internal Server Error", { status: 500 });
 			}
-			const activationResponse = nativeActivation(req);
-			if (activationResponse !== undefined) return activationResponse;
-			const result = await handler.handle(req, {
-				prefix: "/api",
-				context: { "effect/context": mainContext },
-			});
-
-			if (result.matched) return result.response;
-
-			return new Response("not found", { status: 404 });
 		},
 		websocket: {
 			message(ws, message) {
