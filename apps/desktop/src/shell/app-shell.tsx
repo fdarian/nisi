@@ -1,15 +1,8 @@
 "use client";
 
-import { Menu } from "@tauri-apps/api/menu";
 import { cn } from "cn";
 import { AlertTriangleIcon, InboxIcon } from "lucide-react";
-import {
-	type ComponentProps,
-	useCallback,
-	useEffect,
-	useMemo,
-	useState,
-} from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "#/components/ui/button";
 import {
 	Empty,
@@ -121,13 +114,11 @@ export function AppShell(): React.ReactElement {
 
 function ShellFrame({
 	children,
-	...rest
 }: {
 	children: React.ReactNode;
-	onContextMenu?: ComponentProps<"div">["onContextMenu"];
 }): React.ReactElement {
 	return (
-		<div className="flex h-screen flex-col bg-sidebar" {...rest}>
+		<div className="flex h-screen flex-col bg-sidebar">
 			<div className="h-10 shrink-0" data-tauri-drag-region />
 			<FramePanel className={INSET_PANE_CLASS}>{children}</FramePanel>
 
@@ -189,24 +180,6 @@ function AppShellReady({
 	const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
 	const openCommandPalette = useCallback(() => setCommandPaletteOpen(true), []);
 	useCommandPaletteShortcut(openCommandPalette);
-
-	const [devToolVisible, setDevToolVisible] = useDevToolVisible();
-	const handleTabStripContextMenu = useCallback(
-		async (event: React.MouseEvent) => {
-			event.preventDefault();
-			const menu = await Menu.new({
-				items: [
-					{
-						id: "toggle-devtool",
-						text: devToolVisible ? "Hide DevTool" : "Enable DevTool",
-						action: () => setDevToolVisible(!devToolVisible),
-					},
-				],
-			});
-			await menu.popup();
-		},
-		[devToolVisible, setDevToolVisible],
-	);
 
 	// Falls back to the first session whenever the requested id no longer
 	// matches any open session — our own close, the CLI opening a session out
@@ -361,7 +334,7 @@ function AppShellReady({
 
 	if (sessions.length === 0 && pendingRequest === null) {
 		return (
-			<ShellFrame onContextMenu={handleTabStripContextMenu}>
+			<ShellFrame>
 				<Empty className="flex-1">
 					<EmptyMedia variant="icon">
 						<InboxIcon />
@@ -410,7 +383,6 @@ function AppShellReady({
 			}}
 			value={selectedTabId}
 			data-tauri-drag-region="deep"
-			onContextMenu={handleTabStripContextMenu}
 		>
 			<PrTabStrip
 				pendingRequest={pendingRequest}
