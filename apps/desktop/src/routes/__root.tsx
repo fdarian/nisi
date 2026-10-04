@@ -13,7 +13,6 @@ import { useSettingsShortcut } from "#/features/settings/use-settings-shortcut";
 import { BackendProvider, useBackendContext } from "#/infra/backend-context";
 import { SidecarEventsProvider } from "#/infra/sidecar-events";
 import { useRedirectHomeOnPendingDeepLink } from "#/shell/deep-link/deep-link-data";
-import { DevCheckoutPath } from "#/shell/dev-checkout-path";
 import { OpenRequestProvider } from "#/shell/open-request/open-request-data";
 
 export const Route = createRootRoute({

@@ -51,7 +51,7 @@ import { FilesChangedLoading, PrView } from "#/features/pull-request/pr-view";
 import type { SidecarQueryUtils } from "#/infra/backend-context";
 import { useBackendContext } from "#/infra/backend-context";
 import { useDeepLinkOpener } from "./deep-link/deep-link-data";
-import { DevCheckoutPath } from "./dev-checkout-path";
+import { DevBranch } from "./dev-branch";
 import { useOpenRequest } from "./open-request/open-request-data";
 import { PrTabStrip } from "./tabs/pr-tab-strip";
 import { useTabOrder } from "./tabs/use-tab-order";
@@ -525,7 +525,7 @@ function DevFooter() {
 	return (
 		<div className="flex items-center">
 			<DevTool />
-			{import.meta.env.DEV === true ? <DevCheckoutPath /> : null}
+			{import.meta.env.DEV === true ? <DevBranch /> : null}
 		</div>
 	);
 }
