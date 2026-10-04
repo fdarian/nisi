@@ -16,16 +16,28 @@ file list for an empty diff; Overview ends at its content.
 Run from `apps/desktop` against a worktree with an open PR:
 
 ```sh
-bun scripts/measure-launch --cwd /absolute/path/to/pr-worktree [--cold] [--rebuild] [--json]
+bun scripts/measure-launch --new-pr --warmup /path/to/other-pr-worktree --cwd /path/to/target-pr-worktree
 ```
 
 The script always runs this checkout's `packages/cli/src/index.ts` and only targets this checkout's
 instances. It never measures or stops `/Applications/nisi.app`; inherited `NISI_DATA_DIR` and
 `NISI_APP_PATH` do not select a target.
 
-Without flags, it measures **warm only**. It discovers authenticated, healthy sidecars in
+## Primary: a new PR into a running app
+
+Use `--new-pr --warmup <other PR worktree>` for regression measurements of the common flow:
+the app is already running and the target PR has never been opened in it. Both worktrees must
+belong to the same repository and resolve to different PRs and branches; validation happens before
+stopping the app or resetting data. The script prepares the checkout release bundle, stops only
+its app/sidecar, and recreates `.data/measure-launch/new-pr/data/` on every run. It never wipes cold
+or dev-sandbox data. A separate CLI trace opens the warm-up and must reach `trace.done` before
+the measured CLI open starts. Warm-up timings are not reported. The app remains running afterward.
+
+## Secondary: a running-instance quick check
+
+Without mode flags, use the script for a quick check against whatever is running. It discovers authenticated, healthy sidecars in
 `.data/sessions/*/data/` (native `bun dev` sandboxes) and `.data/measure-launch/data/` (the built
-measurement app). Zero live candidates is an error; start `bun dev` or use `--cold`. Multiple live
+measurement app), plus `.data/measure-launch/new-pr/data/`. Zero live candidates is an error; start `bun dev` or use a managed mode. Multiple live
 candidates are listed as an ambiguity error; stop the unwanted checkout-local instances first.
 It probes instrumentation before handing off and disables CLI app-launch fallback.
 
@@ -34,7 +46,9 @@ session IDs before the traced CLI call and warns when the resulting session was 
 list/diff paint offsets may reflect cached data, not a fresh-render measurement. The warning appears
 in the text report, or on stderr with `--json`; the session snapshot is retained in the raw records.
 
-For a built-app cold measurement:
+## App startup: cold processes
+
+Use `--cold` to measure startup of the app and sidecar, including CLI app launch:
 
 ```sh
 bun scripts/measure-launch --cwd /absolute/path/to/pr-worktree --cold
@@ -55,7 +69,7 @@ checkout, then run the same default command from another terminal. No environmen
 Keep browser frontends disconnected for a native-only measurement: two frontends can both receive
 the request, making the terminal paint mark ambiguous.
 
-- `--rebuild` requires `--cold` and rebuilds even when the bundle exists. A stale bundle without
+- `--rebuild` requires `--cold` or `--new-pr` and rebuilds even when the bundle exists. A stale bundle without
   instrumentation fails with this hint; a dev instance without instrumentation needs a restart.
 - Cold means new app and sidecar processes, not cleared filesystem, GitHub, or review-session caches.
 - `--json` prints the collected records as a JSON array rather than the formatted report.
@@ -86,6 +100,8 @@ later warm measurements of the same process do not contain boot milestones.
 
 `Complete` requires both `tab.content.painted` and `trace.done`. Missing milestones are reported as
 `not observed`, not zero. The script waits up to 60 seconds; a timeout is an incomplete measurement.
+If the window becomes hidden after being visible, the script stops with the trace path: bring the
+measurement window forward before retrying. Never treat a hidden-window timeout as render latency.
 
 # Baseline — 2026-10-04
 

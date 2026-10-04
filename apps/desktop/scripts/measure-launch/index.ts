@@ -1,7 +1,6 @@
 import { BunRuntime, BunServices } from "@effect/platform-bun";
-import { launchTracePath, makeLaunchTracer } from "@repo/logging";
-import { LaunchRecord } from "@repo/sidecar-api";
-import { Console, Effect, Logger, Schema } from "effect";
+import { makeLaunchTracer } from "@repo/logging";
+import { Console, Effect, Logger } from "effect";
 import { FileSystem } from "effect/FileSystem";
 import {
 	formatAlreadyOpen,
@@ -9,33 +8,44 @@ import {
 	formatVisibility,
 } from "./format.ts";
 import {
-	bundlePath,
-	cliPath,
 	liveInstance,
 	prepareColdInstance,
-	requireInstrumentation,
 	runningInstance,
 	unavailableAppPath,
 } from "./instance.ts";
+import { resolveWarmup } from "./new-pr.ts";
 import { parseLaunchOptions } from "./options.ts";
+import { runTracedOpen } from "./run.ts";
 
-const RecordSchema = Schema.fromJsonString(LaunchRecord);
 const program = Effect.gen(function* () {
 	const options = yield* Effect.try(() =>
 		parseLaunchOptions(process.argv.slice(2)),
 	);
-	const dataDir = yield* options.cold
-		? prepareColdInstance(options.rebuild)
+	const warmupLabel =
+		options.warmup === undefined
+			? undefined
+			: yield* resolveWarmup(options.cwd, options.warmup);
+	const managed = options.cold || options.newPr;
+	const dataDir = yield* managed
+		? prepareColdInstance(options.rebuild, options.newPr)
 		: runningInstance;
 	const fs = yield* FileSystem;
-	if (!options.cold && (yield* fs.exists(unavailableAppPath)))
+	if ((options.newPr || !managed) && (yield* fs.exists(unavailableAppPath)))
 		return yield* Effect.fail(
 			new Error(
 				`Remove unexpected app at ${unavailableAppPath}; warm-mode fallback must be disabled`,
 			),
 		);
+	if (options.warmup !== undefined)
+		yield* runTracedOpen({
+			cwd: options.warmup,
+			dataDir,
+			traceId: crypto.randomUUID(),
+			launch: true,
+			quiet: true,
+			label: "Warm-up",
+		});
 	const traceId = crypto.randomUUID();
-	const file = launchTracePath(dataDir, traceId);
 	if (!options.cold) {
 		const instance = yield* liveInstance(dataDir);
 		if (!instance.live)
@@ -57,70 +67,28 @@ const program = Effect.gen(function* () {
 			},
 		]);
 	}
-	const child = yield* Effect.try(() =>
-		Bun.spawn([process.execPath, cliPath], {
-			cwd: options.cwd,
-			env: {
-				...process.env,
-				NISI_LAUNCH_TRACE: traceId,
-				NISI_DATA_DIR: dataDir,
-				NISI_APP_PATH: options.cold ? bundlePath : unavailableAppPath,
-			},
-			stdout: options.json ? "ignore" : "inherit",
-			stderr: "inherit",
-		}),
-	);
-	const childState: { exit?: number } = {};
-	void child.exited.then((exit) => {
-		childState.exit = exit;
+	const records = yield* runTracedOpen({
+		cwd: options.cwd,
+		dataDir,
+		traceId,
+		launch: options.cold,
+		quiet: options.json,
+		label: "Measured open",
 	});
-	const deadline = Date.now() + 60_000;
-	const readMarks = Effect.gen(function* () {
-		if (!(yield* fs.exists(file))) return [] as LaunchRecord[];
-		const text = yield* fs.readFileString(file);
-		return yield* Effect.forEach(text.split("\n").slice(0, -1), (line) =>
-			Schema.decodeUnknownEffect(RecordSchema)(line),
-		);
-	});
-	const state = { probed: !options.cold };
-	while (Date.now() < deadline) {
-		if (!state.probed) {
-			const instance = yield* liveInstance(dataDir);
-			if (instance.live) {
-				yield* requireInstrumentation(instance.client);
-				state.probed = true;
-			}
-		}
-		const marks = yield* readMarks;
-		if (marks.some((mark) => mark.name === "trace.done")) break;
-		if (childState.exit !== undefined && childState.exit !== 0)
-			return yield* Effect.fail(
-				new Error(
-					`nisi exited with ${childState.exit}${options.cold ? "; if the build is stale, rerun with --cold --rebuild" : ""}`,
-				),
-			);
-		yield* Effect.sleep("100 millis");
-	}
-	const marks = yield* readMarks;
-	const observedAt = Date.now();
-	yield* Console.log(
-		options.json
-			? JSON.stringify(marks, null, 2)
-			: formatTimeline(marks, observedAt),
-	);
+	const header =
+		warmupLabel === undefined
+			? options.cold
+				? "app startup"
+				: "running-instance quick check"
+			: `new PR into running app (warm-up: ${warmupLabel})`;
 	if (options.json) {
-		const alreadyOpen = formatAlreadyOpen(marks);
+		yield* Console.error(header);
+		yield* Console.log(JSON.stringify(records, null, 2));
+		const alreadyOpen = formatAlreadyOpen(records);
 		if (alreadyOpen !== undefined) yield* Console.error(alreadyOpen);
-		const visibility = formatVisibility(marks, observedAt);
+		const visibility = formatVisibility(records, Date.now());
 		if (visibility !== undefined) yield* Console.error(visibility);
-	}
-	if (!marks.some((mark) => mark.name === "trace.done")) {
-		if (childState.exit === undefined) child.kill();
-		return yield* Effect.fail(new Error(`Launch trace timed out: ${file}`));
-	}
-	const exit = yield* Effect.tryPromise(() => child.exited);
-	if (exit !== 0)
-		return yield* Effect.fail(new Error(`nisi exited with ${exit}`));
+	} else yield* Console.log(`${header}\n\n${formatTimeline(records)}`);
 });
 BunRuntime.runMain(
 	program.pipe(

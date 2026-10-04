@@ -12,6 +12,10 @@ export const bundlePath = join(
 	"src-tauri/target/release/bundle/macos/nisi.app",
 );
 export const coldDataDir = join(desktopDir, ".data/measure-launch/data");
+export const newPrDataDir = join(
+	desktopDir,
+	".data/measure-launch/new-pr/data",
+);
 export const cliPath = resolve(desktopDir, "../../packages/cli/src/index.ts");
 export const unavailableAppPath = join(
 	desktopDir,
@@ -79,6 +83,7 @@ export const runningInstance = Effect.gen(function* () {
 		: [];
 	const candidates = [
 		coldDataDir,
+		newPrDataDir,
 		...names.map((name) => join(sessions, name, "data")),
 	];
 	return yield* selectRunningInstance(candidates);
@@ -109,18 +114,27 @@ export const selectRunningInstance = (candidates: readonly string[]) =>
 		return instance.dataDir;
 	});
 
-export const prepareColdInstance = (rebuild: boolean) =>
+export const prepareColdInstance = (rebuild: boolean, newPr = false) =>
 	Effect.gen(function* () {
 		const fs = yield* FileSystem;
+		const dataDir = newPr ? newPrDataDir : coldDataDir;
 		const ignored = yield* Effect.tryPromise(() =>
-			Bun.$`git check-ignore ${coldDataDir}`.cwd(desktopDir).quiet().nothrow(),
+			Bun.$`git check-ignore ${dataDir}`.cwd(desktopDir).quiet().nothrow(),
 		);
 		if (ignored.exitCode !== 0)
 			return yield* Effect.fail(
 				new Error("The measurement data dir must be gitignored"),
 			);
-		yield* fs.makeDirectory(coldDataDir, { recursive: true });
 		yield* stopBundle(bundlePath);
+		if (newPr && (yield* fs.exists(newPrDataDir))) {
+			const real = yield* fs.realPath(newPrDataDir);
+			if (real !== newPrDataDir)
+				return yield* Effect.fail(
+					new Error("Refusing to reset a symlinked new-PR data dir"),
+				);
+			yield* fs.remove(newPrDataDir, { recursive: true });
+		}
+		yield* fs.makeDirectory(dataDir, { recursive: true });
 		if (
 			rebuild ||
 			!(yield* fs.exists(join(bundlePath, "Contents/MacOS/nisi")))
@@ -142,5 +156,5 @@ export const prepareColdInstance = (rebuild: boolean) =>
 					new Error(`Build failed with exit code ${exit}`),
 				);
 		}
-		return coldDataDir;
+		return dataDir;
 	});
