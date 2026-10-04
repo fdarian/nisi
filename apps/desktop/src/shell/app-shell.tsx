@@ -127,7 +127,7 @@ function ShellFrame({
 	onContextMenu?: ComponentProps<"div">["onContextMenu"];
 }): React.ReactElement {
 	return (
-		<div className="flex h-screen flex-col bg-sidebar" {...rest}>
+		<div className="flex h-full min-h-0 flex-col bg-sidebar" {...rest}>
 			<div className="h-10 shrink-0" data-tauri-drag-region />
 			<FramePanel className={INSET_PANE_CLASS}>{children}</FramePanel>
 
@@ -400,7 +400,7 @@ function AppShellReady({
 
 	return (
 		<TabsPrimitive.Root
-			className="flex h-screen flex-col bg-sidebar"
+			className="flex h-full min-h-0 flex-col bg-sidebar"
 			onValueChange={(value) => {
 				if (value === pendingTabId) {
 					setUserTabSelection(null);

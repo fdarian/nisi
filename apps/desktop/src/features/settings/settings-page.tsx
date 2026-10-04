@@ -121,8 +121,8 @@ function SettingsFrame({
 	children: React.ReactNode;
 }): React.ReactElement {
 	return (
-		<SidebarProvider className="h-screen overflow-hidden">
-			<Sidebar variant="inset">
+		<SidebarProvider className="relative h-full min-h-0 overflow-hidden">
+			<Sidebar variant="inset" className="absolute h-full">
 				<SidebarHeader
 					className="h-10 justify-center pl-[78px]"
 					data-tauri-drag-region

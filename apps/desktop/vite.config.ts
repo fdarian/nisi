@@ -103,6 +103,9 @@ export default defineConfig(async () => ({
 	define: {
 		__APP_VERSION__: JSON.stringify(resolveAppVersion()),
 		__APP_COMMIT_SHA__: JSON.stringify(resolveCommitSha()),
+		__DEV_CHECKOUT_PATH__: JSON.stringify(
+			path.resolve(import.meta.dirname, "../.."),
+		),
 	},
 
 	plugins: [
