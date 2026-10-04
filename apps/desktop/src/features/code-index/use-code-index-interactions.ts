@@ -37,6 +37,7 @@ import {
 	type OccurrenceIndex,
 } from "#/features/code-index/navigation/occurrence-index";
 import type { SidecarQueryUtils } from "#/infra/backend-context";
+import { useAppViewActive } from "#/shell/app-view-context";
 
 /** Class toggled directly on a token's `HTMLElement` — `@pierre/diffs` has no keyed decoration API, so this is the supported way to style one token (see `InteractionManager`'s own doc). Styled via `extraCSS`/`unsafeCSS` in each pane's `CodeViewOptions` — see `CODE_INDEX_TOKEN_CSS` below. */
 export const CODE_INDEX_TOKEN_ACTIVE_CLASS = "nisi-code-index-token-active";
@@ -138,6 +139,7 @@ export function useCodeIndexInteractions<Metadata>({
 } {
 	const queryClient = useQueryClient();
 	const active = enabled;
+	const appViewActive = useAppViewActive();
 
 	// Paths whose occurrences have been requested — grows via
 	// `notifyItemRendered` (called from each pane's own `onPostRender`), so a
@@ -279,7 +281,7 @@ export function useCodeIndexInteractions<Metadata>({
 	// at all while `enabled` is false — part of "off costs exactly what it
 	// cost before this feature existed" (this module's own doc comment).
 	useEffect(() => {
-		if (!active) return;
+		if (!active || !appViewActive) return;
 		const applyMetaHeld = (held: boolean) => {
 			metaHeldRef.current = held;
 			const hovered = hoveredTokenRef.current;
@@ -296,11 +298,12 @@ export function useCodeIndexInteractions<Metadata>({
 		window.addEventListener("keyup", handleKeyUp);
 		window.addEventListener("blur", handleBlur);
 		return () => {
+			applyMetaHeld(false);
 			window.removeEventListener("keydown", handleKeyDown);
 			window.removeEventListener("keyup", handleKeyUp);
 			window.removeEventListener("blur", handleBlur);
 		};
-	}, [active]);
+	}, [active, appViewActive]);
 
 	const [peekTarget, setPeekTarget] = useState<CodeIndexPeekTarget | null>(
 		null,

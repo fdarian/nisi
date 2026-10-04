@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { useAppViewActive } from "#/shell/app-view-context";
 
 /**
  * Cmd/Ctrl+J toggles the quick-chat popup for whatever PR tab is active;
@@ -16,7 +17,9 @@ export function useChatShortcut(
 	onToggle: () => void,
 	onNewChat: () => void,
 ): void {
+	const appViewActive = useAppViewActive();
 	useEffect(() => {
+		if (!appViewActive) return;
 		const handleKeyDown = (event: KeyboardEvent) => {
 			if (event.key.toLowerCase() !== "j") return;
 			if (!(event.metaKey || event.ctrlKey)) return;
@@ -30,5 +33,5 @@ export function useChatShortcut(
 
 		window.addEventListener("keydown", handleKeyDown);
 		return () => window.removeEventListener("keydown", handleKeyDown);
-	}, [onToggle, onNewChat]);
+	}, [onToggle, onNewChat, appViewActive]);
 }

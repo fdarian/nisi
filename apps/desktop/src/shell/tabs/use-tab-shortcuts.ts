@@ -3,6 +3,7 @@
 import { isTauri } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { useEffect } from "react";
+import { useAppViewActive } from "#/shell/app-view-context";
 
 /** Emitted by the File menu's "Close Tab" item — see `src-tauri/src/lib.rs`. */
 const CLOSE_TAB_EVENT = "menu://close-tab";
@@ -76,7 +77,9 @@ export function useTabShortcuts({
 	onChatThreadShortcut,
 	onFullFileTabShortcut,
 }: TabShortcutsOptions): void {
+	const appViewActive = useAppViewActive();
 	useEffect(() => {
+		if (!appViewActive) return;
 		const handleKeyDown = (event: KeyboardEvent) => {
 			// Chat gets first refusal, followed by the active full-file view — see
 			// the two callback doc comments above.
@@ -125,6 +128,7 @@ export function useTabShortcuts({
 			unlisten?.then((stop) => stop());
 		};
 	}, [
+		appViewActive,
 		tabIds,
 		activeTabId,
 		onActivateTab,

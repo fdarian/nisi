@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { useAppViewActive } from "#/shell/app-view-context";
 
 /**
  * Cmd+T opens the "open pull request" palette from anywhere in the app —
@@ -11,7 +12,9 @@ import { useEffect } from "react";
  * never intercepts the chord before the webview sees it.
  */
 export function useOpenPrPaletteShortcut(onOpen: () => void): void {
+	const appViewActive = useAppViewActive();
 	useEffect(() => {
+		if (!appViewActive) return;
 		const handleKeyDown = (event: KeyboardEvent) => {
 			if (event.key.toLowerCase() !== "t") return;
 			if (!(event.metaKey || event.ctrlKey) || event.altKey || event.shiftKey)
@@ -22,5 +25,5 @@ export function useOpenPrPaletteShortcut(onOpen: () => void): void {
 
 		window.addEventListener("keydown", handleKeyDown);
 		return () => window.removeEventListener("keydown", handleKeyDown);
-	}, [onOpen]);
+	}, [onOpen, appViewActive]);
 }

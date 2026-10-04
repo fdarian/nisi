@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { useAppViewActive } from "#/shell/app-view-context";
 
 /**
  * Cmd+K opens the app-wide command palette from anywhere — the standard
@@ -10,7 +11,9 @@ import { useEffect } from "react";
  * never intercepts the chord before the webview sees it.
  */
 export function useCommandPaletteShortcut(onOpen: () => void): void {
+	const appViewActive = useAppViewActive();
 	useEffect(() => {
+		if (!appViewActive) return;
 		const handleKeyDown = (event: KeyboardEvent) => {
 			if (event.key.toLowerCase() !== "k") return;
 			if (!(event.metaKey || event.ctrlKey) || event.altKey || event.shiftKey)
@@ -21,5 +24,5 @@ export function useCommandPaletteShortcut(onOpen: () => void): void {
 
 		window.addEventListener("keydown", handleKeyDown);
 		return () => window.removeEventListener("keydown", handleKeyDown);
-	}, [onOpen]);
+	}, [onOpen, appViewActive]);
 }

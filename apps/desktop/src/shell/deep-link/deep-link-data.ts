@@ -12,6 +12,7 @@ import {
 	useOpenPullRequest,
 } from "#/features/pull-request/data/pull-requests-data";
 import type { SidecarQueryUtils } from "#/infra/backend-context";
+import { useAppViewActive } from "#/shell/app-view-context";
 import { parseNisiDeepLink } from "./deep-link";
 import {
 	dequeueDeepLink,
@@ -29,7 +30,7 @@ import {
  * `friendlyOpenPullRequestError` — a parallel open path here would just
  * re-derive all of that.
  *
- * Call once, from `AppShellReady` (mounted only on `/`, the only route
+ * Call once, from `AppShellReady` (active only on `/`, the only route
  * that can render an opened PR's tab). Doesn't need an "already open"
  * check: the sidecar reuses an existing PR tab by identity or retargets a
  * matching branch session, and `useOpenPullRequest` selects the returned id.
@@ -39,6 +40,7 @@ export function useDeepLinkOpener(
 	orpc: SidecarQueryUtils,
 	onOpened: (sessionId: string) => void,
 ): void {
+	const appViewActive = useAppViewActive();
 	const pending = useSyncExternalStore(
 		subscribeToDeepLinks,
 		getPendingDeepLinksSnapshot,
@@ -46,6 +48,7 @@ export function useDeepLinkOpener(
 	const openPr = useOpenPullRequest(orpc, onOpened);
 
 	useEffect(() => {
+		if (!appViewActive) return;
 		if (openPr.isPending) return;
 		if (pending.length === 0) return;
 
@@ -71,7 +74,7 @@ export function useDeepLinkOpener(
 		// not a meaningful trigger — the guards above (`isPending`,
 		// `pending.length`) are what actually gate the work, so an extra
 		// re-run from `open` alone just no-ops.
-	}, [pending, openPr.isPending, openPr.open]);
+	}, [pending, openPr.isPending, openPr.open, appViewActive]);
 
 	useEffect(() => {
 		if (openPr.error === null || openPr.error === undefined) return;
@@ -86,14 +89,8 @@ export function useDeepLinkOpener(
 
 /**
  * Bounces back to `/` the moment a deep link arrives while `/settings` is
- * showing. `/` and `/settings` are sibling routes under one `<Outlet/>`
- * (`routes/__root.tsx`) — navigating between them unmounts one and mounts
- * the other, so `AppShellReady` (which only renders on `/`) can't see a
- * link that arrives while `/settings` is active. This is the piece that
- * can, since it needs no `orpc` and can live somewhere always mounted
- * (`RootLayout`). Doesn't drain the queue itself — once the navigate
- * lands, `AppShellReady` mounts and `useDeepLinkOpener` takes it from
- * there.
+ * showing. The shell stays mounted but doesn't drain links while hidden,
+ * so navigation must finish before opening a PR or its folder picker.
  */
 export function useRedirectHomeOnPendingDeepLink(): void {
 	const hasPending = useSyncExternalStore(
