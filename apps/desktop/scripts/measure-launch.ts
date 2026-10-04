@@ -1,5 +1,5 @@
 import { BunRuntime, BunServices } from "@effect/platform-bun";
-import { Console, Effect, Schema } from "effect";
+import { Console, Effect, Logger, Schema } from "effect";
 import { FileSystem } from "effect/FileSystem";
 import {
 	type LaunchMark,
@@ -102,4 +102,15 @@ const program = Effect.gen(function* () {
 	if (exit !== 0)
 		return yield* Effect.fail(new Error(`nisi exited with ${exit}`));
 });
-BunRuntime.runMain(program.pipe(Effect.provide(BunServices.layer)));
+BunRuntime.runMain(
+	program.pipe(
+		Effect.catchCause((cause) =>
+			Effect.logError(cause).pipe(Effect.andThen(Effect.failCause(cause))),
+		),
+		Effect.provide(BunServices.layer),
+		Effect.provide(
+			Logger.layer([Logger.withConsoleError(Logger.formatLogFmt)]),
+		),
+	),
+	{ disableErrorReporting: true },
+);

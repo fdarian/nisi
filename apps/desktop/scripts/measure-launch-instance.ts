@@ -132,7 +132,7 @@ export const prepareColdInstance = (rebuild: boolean) =>
 						...process.env,
 						CARGO_TARGET_DIR: join(desktopDir, "src-tauri/target"),
 					},
-					stdout: "inherit",
+					stdout: 2,
 					stderr: "inherit",
 				}),
 			);
