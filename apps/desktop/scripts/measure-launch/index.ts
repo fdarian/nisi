@@ -11,8 +11,8 @@ import {
 import {
 	bundlePath,
 	coldDataDir,
-	newPrDataDir,
 	liveInstance,
+	newPrDataDir,
 	prepareColdInstance,
 	runningInstance,
 	unavailableAppPath,
