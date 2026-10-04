@@ -19,8 +19,11 @@ import {
 	PullRequestNotFound,
 	type PullRequestRef,
 	type PullRequestRefNotFound,
+	type RepoPathNotAGitRepo,
+	type RepoPathNotFound,
 	type RepoPathVerificationError,
 	readFileContentsAtRef,
+	readLocalBaseCommit,
 	readWorktreeBlobContent,
 	resolveCurrentBranch,
 	resolveDiffBaseRef,
@@ -55,12 +58,14 @@ import { SettingsStore, type SettingsStoreError } from "@repo/settings";
 import { Context, Effect, Layer, Option, Schema } from "effect";
 import { FileSystem } from "effect/FileSystem";
 import type { ChildProcessSpawner } from "effect/unstable/process";
+import { makeBaseRefresh } from "./base-refresh.ts";
 import {
 	type DiffHead,
 	type InvalidHeadRef,
 	resolveDiffHead,
 	validateHeadRef,
 } from "./diff-head.ts";
+import { emit } from "./events.ts";
 
 /** `sessions.open`'s `cwd` doesn't resolve to a git working tree. */
 export class InvalidCwd extends Schema.TaggedError<InvalidCwd>()("InvalidCwd", {
@@ -385,18 +390,32 @@ export class Store extends Context.Service<Store>()("Store", {
 	make: Effect.gen(function* () {
 		const reviewStore = yield* ReviewStore;
 		const settingsStore = yield* SettingsStore;
-		const baseFetchState = new Map<string, boolean>();
-		const refreshBase = (repoRoot: string, baseRef: string) =>
-			fetchBaseRef(repoRoot, baseRef).pipe(
-				Effect.tap((result) =>
-					Effect.sync(() => {
-						baseFetchState.set(
-							`${repoRoot}\n${baseRef}`,
-							result.baseMayBeStale,
+		const baseIdentity = (repoRoot: string, baseRef: string) =>
+			Effect.gen(function* () {
+				const root = yield* resolveMainCloneRoot(repoRoot);
+				const ref = yield* resolveDiffBaseRef(repoRoot, baseRef);
+				const commit = yield* readLocalBaseCommit(repoRoot, baseRef);
+				return { key: `${root}\n${ref}`, commit };
+			});
+		const baseFetchState = yield* makeBaseRefresh({
+			identity: baseIdentity,
+			fetch: fetchBaseRef,
+			now: Date.now,
+			moved: (key) =>
+				Effect.gen(function* () {
+					const sessions = yield* reviewStore.listOpenSessions();
+					for (const session of sessions) {
+						const identity = yield* baseIdentity(
+							session.repoRoot,
+							session.baseRef,
 						);
-					}),
-				),
-			);
+						if (identity.key === key)
+							emit({ type: "session-files-changed", sessionId: session.id });
+					}
+				}),
+		});
+		const refreshBase = baseFetchState.refresh;
+		const prepareBase = baseFetchState.prepare;
 
 		const retargetSessionToPr = (
 			sessionId: string,
@@ -460,13 +479,18 @@ export class Store extends Context.Service<Store>()("Store", {
 					number: pr.number,
 				});
 				if (resolved.pr === null) return null;
-				yield* refreshBase(source.repoRoot, resolved.baseRef);
+				yield* prepareBase(source.repoRoot, resolved.baseRef);
 				return yield* retargetSessionToPr(
 					source.id,
 					resolved.pr,
 					resolved.baseRef,
 					resolved.headRef,
-				).pipe(Effect.catchTag("SessionNotFound", () => Effect.succeed(null)));
+				).pipe(
+					Effect.tap(() =>
+						baseFetchState.background(source.repoRoot, resolved.baseRef),
+					),
+					Effect.catchTag("SessionNotFound", () => Effect.succeed(null)),
+				);
 			});
 
 		const openSession = (
@@ -483,7 +507,7 @@ export class Store extends Context.Service<Store>()("Store", {
 						attributes: { repoRoot, target: target.kind },
 					}),
 				);
-				yield* refreshBase(repoRoot, resolved.baseRef).pipe(
+				yield* prepareBase(repoRoot, resolved.baseRef).pipe(
 					Effect.withSpan("session.base-ref.refresh"),
 				);
 				const openFreshSession = reviewStore
@@ -495,6 +519,9 @@ export class Store extends Context.Service<Store>()("Store", {
 					})
 					.pipe(
 						Effect.withSpan("session.persist"),
+						Effect.tap(() =>
+							baseFetchState.background(repoRoot, resolved.baseRef),
+						),
 						Effect.map((session) => ({
 							kind: "opened" as const,
 							session: toWireSession(session),
@@ -518,7 +545,12 @@ export class Store extends Context.Service<Store>()("Store", {
 							resolved.pr,
 							resolved.baseRef,
 							resolved.headRef,
-						).pipe(Effect.catchTag("SessionNotFound", () => openFreshSession));
+						).pipe(
+							Effect.tap(() =>
+								baseFetchState.background(repoRoot, resolved.baseRef),
+							),
+							Effect.catchTag("SessionNotFound", () => openFreshSession),
+						);
 					}
 				}
 				return yield* openFreshSession;
@@ -675,6 +707,8 @@ export class Store extends Context.Service<Store>()("Store", {
 			| InvalidHeadRef
 			| NoPullRequest
 			| ReviewStoreError
+			| RepoPathNotFound
+			| RepoPathNotAGitRepo
 			| SettingsStoreError,
 			ChildProcessSpawner.ChildProcessSpawner | FileSystem | GitHub
 		> =>
@@ -820,17 +854,14 @@ export class Store extends Context.Service<Store>()("Store", {
 					Effect.forEach(
 						sessions,
 						(session) => {
-							const key = `${session.repoRoot}\n${session.baseRef}`;
-							if (baseFetchState.has(key)) return Effect.void;
-							return refreshBase(session.repoRoot, session.baseRef).pipe(
+							return prepareBase(session.repoRoot, session.baseRef).pipe(
+								Effect.andThen(
+									baseFetchState.background(session.repoRoot, session.baseRef),
+								),
 								Effect.catchTag("GitCommandError", (error) =>
 									Effect.logWarning("Could not refresh restored session base", {
 										error,
-									}).pipe(
-										Effect.tap(() =>
-											Effect.sync(() => baseFetchState.set(key, true)),
-										),
-									),
+									}),
 								),
 							);
 						},
@@ -1042,10 +1073,10 @@ export class Store extends Context.Service<Store>()("Store", {
 			Effect.gen(function* () {
 				const session = yield* reviewStore.getSession(sessionId);
 				const repoRoot = yield* resolveLiveRepoRoot(session);
-				const state = baseFetchState.get(`${repoRoot}\n${session.baseRef}`);
-				if (state !== undefined) return state;
 				const ref = yield* resolveDiffBaseRef(repoRoot, session.baseRef);
-				return ref.startsWith("refs/remotes/");
+				if (!ref.startsWith("refs/remotes/")) return false;
+				const identity = yield* baseIdentity(repoRoot, session.baseRef);
+				return baseFetchState.stale(identity.key);
 			});
 
 		const listChangedFiles = (sessionId: string, includeUncommitted: boolean) =>

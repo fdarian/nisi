@@ -13,6 +13,7 @@ import {
 import { ReviewStore } from "@repo/review";
 import { SettingsStore } from "@repo/settings";
 import { ConfigProvider, Effect, Layer, Option, Result, Stream } from "effect";
+import { subscribe } from "../events.ts";
 import { PullRequestAttentionLive } from "../pull-request-attention.ts";
 import { type OpenSessionOutcome, Store } from "../store.ts";
 
@@ -137,6 +138,18 @@ test("base refresh drops upstream-only files without changing head or remaining 
 					const session = yield* openedSession(
 						store.openSession(repoRoot, { kind: "branch", baseRef: "main" }),
 					);
+					const other = yield* openedSession(
+						store.openSession(repoRoot, {
+							kind: "branch",
+							baseRef: "origin/main",
+						}),
+					);
+					const movedSessions: string[] = [];
+					const unsubscribe = subscribe((event) => {
+						if (event.type === "session-files-changed")
+							movedSessions.push(event.sessionId);
+					});
+					yield* Effect.addFinalizer(() => Effect.sync(unsubscribe));
 					expect(
 						(yield* store.listChangedFiles(session.id, false)).map(
 							(file) => file.path,
@@ -151,9 +164,13 @@ test("base refresh drops upstream-only files without changing head or remaining 
 						await sh(upstream, ["fetch", repoRoot, "upstream-change"]);
 						await sh(upstream, ["reset", "--hard", "FETCH_HEAD"]);
 					});
+					// Explicit refresh intentionally reuses a successful fetch for five seconds.
+					yield* Effect.sleep("5 seconds");
 					expect(
 						(yield* store.refreshSessionBase(session.id)).baseMayBeStale,
 					).toBe(false);
+					expect(movedSessions).toContain(session.id);
+					expect(movedSessions).toContain(other.id);
 					const remaining = yield* store.listChangedFiles(session.id, false);
 					expect(remaining.map((file) => file.path)).toEqual(["a.ts"]);
 					expect(remaining[0]?.review?.viewed).toBe(true);
@@ -169,6 +186,7 @@ test("base refresh drops upstream-only files without changing head or remaining 
 							`${upstream}/missing`,
 						]),
 					);
+					yield* Effect.sleep("5 seconds");
 					expect(
 						(yield* store.refreshSessionBase(session.id)).baseMayBeStale,
 					).toBe(true);
@@ -185,7 +203,7 @@ test("base refresh drops upstream-only files without changing head or remaining 
 						(yield* store.refreshSessionBase(session.id)).baseMayBeStale,
 					).toBe(false);
 					expect(yield* store.readBaseMayBeStale(session.id)).toBe(false);
-				}).pipe(Effect.provide(makeTestLayer(dataDir))),
+				}).pipe(Effect.scoped, Effect.provide(makeTestLayer(dataDir))),
 			);
 		} finally {
 			await rm(upstream, { recursive: true, force: true });
