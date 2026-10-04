@@ -1,6 +1,5 @@
 "use client";
 
-import { Menu } from "@tauri-apps/api/menu";
 import { cn } from "cn";
 import { AlertTriangleIcon, InboxIcon } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -181,25 +180,6 @@ function AppShellReady({
 	const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
 	const openCommandPalette = useCallback(() => setCommandPaletteOpen(true), []);
 	useCommandPaletteShortcut(openCommandPalette);
-
-	const [devToolVisible, setDevToolVisible] = useDevToolVisible();
-	const handleTabStripContextMenu = useCallback(
-		async (event: React.MouseEvent) => {
-			if (event.defaultPrevented) return;
-			event.preventDefault();
-			const menu = await Menu.new({
-				items: [
-					{
-						id: "toggle-devtool",
-						text: devToolVisible ? "Hide DevTool" : "Enable DevTool",
-						action: () => setDevToolVisible(!devToolVisible),
-					},
-				],
-			});
-			await menu.popup();
-		},
-		[devToolVisible, setDevToolVisible],
-	);
 
 	// Falls back to the first session whenever the requested id no longer
 	// matches any open session — our own close, the CLI opening a session out
@@ -411,7 +391,6 @@ function AppShellReady({
 				onActivateSession={selectSession}
 				onCloseOtherSessions={handleCloseOtherSessions}
 				onCloseSession={handleCloseSession}
-				onContextMenu={handleTabStripContextMenu}
 				onOpenPullRequest={openPalette}
 				onReorderSessions={tabOrder.reorder}
 				onSuspendTab={tabSuspension.suspendNow}

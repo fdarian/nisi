@@ -48,6 +48,7 @@ import { ScrollArea } from "#/components/ui/scroll-area";
 import { Spinner } from "#/components/ui/spinner";
 import { TabsPrimitive } from "#/components/ui/tabs";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "#/components/ui/tooltip";
+import { useDevToolVisible } from "#/features/devtools/dev-tool-context";
 import type {
 	Session,
 	SessionTarget,
@@ -93,7 +94,6 @@ type PrTabStripProps = {
 	 * a tab's context menu opens so the Suspend item can disable itself with
 	 * that as the shown reason, instead of the click just doing nothing. */
 	checkGenerationRunning: (sessionId: string) => Promise<boolean>;
-	onContextMenu?: (event: React.MouseEvent) => void;
 	/** Threaded through only for `UpdatePill` — the strip itself talks to no other sidecar procedure. */
 	orpc: SidecarQueryUtils;
 };
@@ -134,9 +134,9 @@ export function PrTabStrip({
 	onActivateSession,
 	onSuspendTab,
 	checkGenerationRunning,
-	onContextMenu,
 	orpc,
 }: PrTabStripProps): React.ReactElement {
+	const [devToolVisible, setDevToolVisible] = useDevToolVisible();
 	const [draggingId, setDraggingId] = useState<string | null>(null);
 	const sessionIds = useMemo(
 		() => sessions.map((session) => session.id),
@@ -178,75 +178,94 @@ export function PrTabStrip({
 	}
 
 	return (
-		// biome-ignore lint/a11y/noStaticElementInteractions: right-click only, opens a native OS menu — nothing here needs keyboard/focus semantics.
-		<div className="flex shrink-0 pr-2" onContextMenu={onContextMenu}>
-			<TrafficLightSpace />
-			<DndContext
-				collisionDetection={closestCenter}
-				modifiers={[restrictToHorizontalAxis, restrictToParentElement]}
-				onDragCancel={() => setDraggingId(null)}
-				onDragEnd={handleDragEnd}
-				onDragStart={handleDragStart}
-				sensors={sensors}
+		<ContextMenu>
+			<ContextMenuTrigger
+				onContextMenu={(event) => {
+					// preventDefault alone does not cancel Base UI's merged trigger handler.
+					if (
+						event.defaultPrevented ||
+						(event.target instanceof Element &&
+							event.target.closest('[data-slot="context-menu-trigger"]') !==
+								event.currentTarget)
+					) {
+						event.preventBaseUIHandler();
+					}
+				}}
+				render={<div className="flex shrink-0 pr-2" />}
 			>
-				<SortableContext
-					items={sessionIds}
-					strategy={horizontalListSortingStrategy}
+				<TrafficLightSpace />
+				<DndContext
+					collisionDetection={closestCenter}
+					modifiers={[restrictToHorizontalAxis, restrictToParentElement]}
+					onDragCancel={() => setDraggingId(null)}
+					onDragEnd={handleDragEnd}
+					onDragStart={handleDragStart}
+					sensors={sensors}
 				>
-					<ScrollArea
-						className="h-auto min-w-0 w-auto [&_[data-slot=scroll-area-scrollbar]]:hidden"
-						clampContentMinWidth={false}
-						scrollFade
+					<SortableContext
+						items={sessionIds}
+						strategy={horizontalListSortingStrategy}
 					>
-						<TabsPrimitive.List className="flex w-max items-center gap-1 py-2">
-							{sessions.map((session) => (
-								<PrTab
-									checkGenerationRunning={checkGenerationRunning}
-									hasOtherTabs={sessions.length > 1}
-									isActive={session.id === activeSessionId}
-									isSuspended={suspendedSessionIds.has(session.id)}
-									key={session.id}
-									onClose={() => onCloseSession(session.id)}
-									onCloseOthers={() => onCloseOtherSessions(session.id)}
-									onSuspend={() => onSuspendTab(session.id)}
-									orpc={orpc}
-									session={session}
-								/>
-							))}
-							{pendingRequest != null && (
-								<TabsPrimitive.Tab
-									className={PR_TAB_CLASS}
-									value={`open:${pendingRequest.id}`}
-								>
-									{pendingRequest.status.kind === "pending" ? (
-										<Spinner className="size-3.5" />
-									) : (
-										<AlertTriangleIcon className="size-3.5" />
-									)}
-									<span className="truncate">
-										{pendingRequest.status.kind === "pending"
-											? "Opening…"
-											: "Open failed"}
-									</span>
-								</TabsPrimitive.Tab>
-							)}
-						</TabsPrimitive.List>
-					</ScrollArea>
-				</SortableContext>
-				<DragOverlay dropAnimation={null}>
-					{draggingSession === undefined ? null : (
-						<PrTabPreview
-							isSuspended={suspendedSessionIds.has(draggingSession.id)}
-							session={draggingSession}
-						/>
-					)}
-				</DragOverlay>
-			</DndContext>
-			<OpenPullRequestButton onClick={onOpenPullRequest} />
-			<div className="flex-1" />
-			{/* The spacer pins the pill right, outside the scrolling tabs. */}
-			<UpdatePill orpc={orpc} />
-		</div>
+						<ScrollArea
+							className="h-auto min-w-0 w-auto [&_[data-slot=scroll-area-scrollbar]]:hidden"
+							clampContentMinWidth={false}
+							scrollFade
+						>
+							<TabsPrimitive.List className="flex w-max items-center gap-1 py-2">
+								{sessions.map((session) => (
+									<PrTab
+										checkGenerationRunning={checkGenerationRunning}
+										hasOtherTabs={sessions.length > 1}
+										isActive={session.id === activeSessionId}
+										isSuspended={suspendedSessionIds.has(session.id)}
+										key={session.id}
+										onClose={() => onCloseSession(session.id)}
+										onCloseOthers={() => onCloseOtherSessions(session.id)}
+										onSuspend={() => onSuspendTab(session.id)}
+										orpc={orpc}
+										session={session}
+									/>
+								))}
+								{pendingRequest != null && (
+									<TabsPrimitive.Tab
+										className={PR_TAB_CLASS}
+										value={`open:${pendingRequest.id}`}
+									>
+										{pendingRequest.status.kind === "pending" ? (
+											<Spinner className="size-3.5" />
+										) : (
+											<AlertTriangleIcon className="size-3.5" />
+										)}
+										<span className="truncate">
+											{pendingRequest.status.kind === "pending"
+												? "Opening…"
+												: "Open failed"}
+										</span>
+									</TabsPrimitive.Tab>
+								)}
+							</TabsPrimitive.List>
+						</ScrollArea>
+					</SortableContext>
+					<DragOverlay dropAnimation={null}>
+						{draggingSession === undefined ? null : (
+							<PrTabPreview
+								isSuspended={suspendedSessionIds.has(draggingSession.id)}
+								session={draggingSession}
+							/>
+						)}
+					</DragOverlay>
+				</DndContext>
+				<OpenPullRequestButton onClick={onOpenPullRequest} />
+				<div className="flex-1" />
+				{/* The spacer pins the pill right, outside the scrolling tabs. */}
+				<UpdatePill orpc={orpc} />
+			</ContextMenuTrigger>
+			<ContextMenuPopup align="start">
+				<ContextMenuItem onClick={() => setDevToolVisible(!devToolVisible)}>
+					{devToolVisible ? "Hide DevTool" : "Enable DevTool"}
+				</ContextMenuItem>
+			</ContextMenuPopup>
+		</ContextMenu>
 	);
 }
 

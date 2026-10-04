@@ -155,8 +155,8 @@ export function useToastOnRefetch(): readonly [
 
 /**
  * Whether the devtool button should render even outside `import.meta.env.DEV`
- * — flipped from the tab strip's native right-click menu ("Enable DevTool"/
- * "Hide DevTool", see `app-shell.tsx`). Unlike every other option in this
+ * — flipped from the tab strip's Base UI context menu ("Enable DevTool"/
+ * "Hide DevTool", see `pr-tab-strip.tsx`). Unlike every other option in this
  * store, it's persisted to `localStorage` so the choice survives a restart.
  */
 export function useDevToolVisible(): readonly [
