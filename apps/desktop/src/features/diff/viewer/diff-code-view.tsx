@@ -36,6 +36,7 @@ import {
 	useState,
 } from "react";
 import {
+	buildDiffHighlighterOptions,
 	diffCodeViewLayout,
 	diffItemMetrics,
 	diffViewUnsafeCSS,
@@ -56,6 +57,28 @@ function useDiffWorkerPoolOptions() {
 				}),
 		}),
 		[],
+	);
+}
+
+export function DiffWorkerPrewarm(): React.ReactElement {
+	const poolOptions = useDiffWorkerPoolOptions();
+	const highlighterOptions = useMemo<WorkerInitializationRenderOptions>(
+		() => ({
+			...buildDiffHighlighterOptions({
+				light: "github-light",
+				dark: "github-dark",
+			}),
+			langs: ["typescript", "tsx", "javascript", "json"],
+		}),
+		[],
+	);
+	return (
+		<WorkerPoolContextProvider
+			poolOptions={poolOptions}
+			highlighterOptions={highlighterOptions}
+		>
+			{null}
+		</WorkerPoolContextProvider>
 	);
 }
 

@@ -7,6 +7,7 @@ import { Agentation } from "agentation";
 import { Mesurer } from "mesurer";
 import { ThemeProvider } from "next-themes";
 import { ToastProvider } from "#/components/ui/toast";
+import { DiffWorkerPrewarm } from "#/features/diff/viewer/diff-code-view";
 import {
 	DevToolProvider,
 	useAgentationEnabled,
@@ -33,6 +34,7 @@ function RootLayout() {
 		<ThemeProvider attribute="class" defaultTheme="system" enableSystem>
 			<DevToolProvider>
 				<ToastProvider>
+					<DiffWorkerPrewarm />
 					<BackendProvider>
 						<ConnectedEvents />
 					</BackendProvider>
