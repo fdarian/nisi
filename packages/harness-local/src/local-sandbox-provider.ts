@@ -7,6 +7,7 @@ import type {
 } from "@ai-sdk/harness";
 import { LocalNetworkSandboxSession } from "./local-network-sandbox-session.ts";
 import { allocatePort } from "./port.ts";
+import { invalidateStaleBootstraps } from "./stale-bootstrap.ts";
 
 type CreateSessionOptions = Parameters<
 	NonNullable<HarnessV1SandboxProvider["createSession"]>
@@ -129,6 +130,8 @@ export class LocalSandboxProvider implements HarnessV1SandboxProvider {
 		if (this.settings.repoLink !== undefined) {
 			await ensureRepoSymlink(defaultWorkingDirectory, this.settings.repoLink);
 		}
+
+		await invalidateStaleBootstraps(defaultWorkingDirectory);
 
 		const port = await allocatePort();
 		const session = new LocalNetworkSandboxSession({
