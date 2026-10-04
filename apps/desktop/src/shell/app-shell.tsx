@@ -130,8 +130,12 @@ function ShellFrame({
 	return (
 		<div className="flex h-full min-h-0 flex-col bg-sidebar" {...rest}>
 			<div className="h-10 shrink-0" data-tauri-drag-region />
-			<FramePanel className={INSET_PANE_CLASS}>{children}</FramePanel>
-			<DevFooter />
+			<FramePanel className={cn(INSET_PANE_CLASS, "my-0")}>
+				{children}
+			</FramePanel>
+			<div className="relative flex min-h-2 items-center">
+				<DevFooter />
+			</div>
 		</div>
 	);
 }
