@@ -51,6 +51,7 @@ import { FilesChangedLoading, PrView } from "#/features/pull-request/pr-view";
 import type { SidecarQueryUtils } from "#/infra/backend-context";
 import { useBackendContext } from "#/infra/backend-context";
 import { useDeepLinkOpener } from "./deep-link/deep-link-data";
+import { DevCheckoutPath } from "./dev-checkout-path";
 import { useOpenRequest } from "./open-request/open-request-data";
 import { PrTabStrip } from "./tabs/pr-tab-strip";
 import { useTabOrder } from "./tabs/use-tab-order";
@@ -130,8 +131,7 @@ function ShellFrame({
 		<div className="flex h-full min-h-0 flex-col bg-sidebar" {...rest}>
 			<div className="h-10 shrink-0" data-tauri-drag-region />
 			<FramePanel className={INSET_PANE_CLASS}>{children}</FramePanel>
-
-			<DevTool />
+			<DevFooter />
 		</div>
 	);
 }
@@ -491,7 +491,7 @@ function AppShellReady({
 			</FramePanel>
 
 			<div className="relative flex min-h-2 items-center">
-				<DevTool />
+				<DevFooter />
 
 				<div className="grow" />
 
@@ -518,6 +518,15 @@ function AppShellReady({
 				orpc={orpc}
 			/>
 		</TabsPrimitive.Root>
+	);
+}
+
+function DevFooter() {
+	return (
+		<div className="flex items-center">
+			<DevTool />
+			{import.meta.env.DEV === true ? <DevCheckoutPath /> : null}
+		</div>
 	);
 }
 

@@ -50,7 +50,6 @@ function ConnectedEvents() {
 				<div className="min-h-0 flex-1">
 					<Outlet />
 				</div>
-				{import.meta.env.DEV && <DevCheckoutPath />}
 			</div>
 			<AgentationToggle />
 			<MesurerToggle />

@@ -1,7 +1,7 @@
 export function DevCheckoutPath() {
 	return (
 		<footer
-			className="pointer-events-none shrink-0 truncate bg-sidebar px-3 py-1 text-muted-foreground text-xs"
+			className="pointer-events-none shrink-0 truncate py-0.5 bg-sidebar text-tertiary text-[10px]"
 			title={__DEV_CHECKOUT_PATH__}
 		>
 			{__DEV_CHECKOUT_PATH__}
