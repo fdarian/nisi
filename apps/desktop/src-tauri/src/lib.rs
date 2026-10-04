@@ -3,6 +3,7 @@ mod activation;
 mod chromium_window_drag;
 mod editors;
 mod folder_picker;
+mod notifications;
 #[cfg(target_os = "macos")]
 mod termination_signals;
 
@@ -503,7 +504,10 @@ pub fn run() {
             get_backend,
             list_available_editors,
             open_in_editor,
-            folder_picker::pick_folder
+            folder_picker::pick_folder,
+            notifications::notification_permission,
+            notifications::request_notification_permission,
+            notifications::send_notification
         ]);
 
     #[cfg(target_os = "macos")]

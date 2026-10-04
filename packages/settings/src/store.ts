@@ -53,6 +53,8 @@ export type Settings = {
 	 * currently unstable, so existing installs get it off after migration.
 	 */
 	readonly walkthroughEnabled: boolean;
+	readonly notificationsEnabled: boolean;
+	readonly notifyScheduledMergeSettled: boolean;
 	/** When true, long diff lines wrap instead of scrolling horizontally. */
 	readonly wrapLines: boolean;
 	/** Harness id of the last chat model sent with — see `db/schema.ts`'s `lastChatHarness` doc. */
@@ -90,6 +92,8 @@ export const DEFAULT_SETTINGS: Settings = {
 	hideReviewed: false,
 	includeUncommitted: false,
 	walkthroughEnabled: false,
+	notificationsEnabled: false,
+	notifyScheduledMergeSettled: true,
 	wrapLines: false,
 	lastChatHarness: null,
 	lastChatModel: null,
@@ -108,6 +112,8 @@ const toSettings = (row: SettingsRow): Settings => ({
 	hideReviewed: row.hideReviewed,
 	includeUncommitted: row.includeUncommitted,
 	walkthroughEnabled: row.walkthroughEnabled,
+	notificationsEnabled: row.notificationsEnabled,
+	notifyScheduledMergeSettled: row.notifyScheduledMergeSettled,
 	wrapLines: row.wrapLines,
 	lastChatHarness: row.lastChatHarness,
 	lastChatModel: row.lastChatModel,
@@ -171,6 +177,8 @@ export class SettingsStore extends Context.Service<SettingsStore>()(
 						hideReviewed: next.hideReviewed,
 						includeUncommitted: next.includeUncommitted,
 						walkthroughEnabled: next.walkthroughEnabled,
+						notificationsEnabled: next.notificationsEnabled,
+						notifyScheduledMergeSettled: next.notifyScheduledMergeSettled,
 						wrapLines: next.wrapLines,
 						lastChatHarness: next.lastChatHarness,
 						lastChatModel: next.lastChatModel,
