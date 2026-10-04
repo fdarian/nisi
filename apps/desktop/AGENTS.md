@@ -136,13 +136,15 @@ same `NISI_DATA_DIR` default prod does, and `deskkit/sidecar`'s `acquireSidecar`
 any existing owner and refuses to boot (loudly) rather than splitting the data dir between two
 sidecars.
 
-## Browser dev harness
+## Launch timing
 Launch timing: `bun scripts/measure-launch.ts --cwd <PR worktree>` prints the CLI → visible
 landing-tab timeline and subprocess/RPC waterfalls. For dev, set `NISI_DATA_DIR` to the path
 printed by `bun dev` and use `--nisi <absolute path to packages/cli/src/index.ts>`; without the
 override it targets production, which requires a release containing the instrumentation.
 `--cold` terminates the app by process and is not supported with a dev data-dir override.
 Raw records live at `<data dir>/logs/launch-traces/<traceId>.jsonl`; `--json` prints them.
+
+## Browser dev harness
 
 `invoke("get_backend")` (see [The seam](#the-seam)) only resolves inside the Tauri webview — a
 plain `vite dev` tab has no IPC bridge, so it throws immediately and the app can't render.
