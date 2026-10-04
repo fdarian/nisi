@@ -54,8 +54,8 @@ Use `--cold` to measure startup of the app and sidecar, including CLI app launch
 bun scripts/measure-launch --cwd /absolute/path/to/pr-worktree --cold
 ```
 
-`--cold` uses `src-tauri/target/release/bundle/macos/nisi.app`. It builds with `bun run build` when
-the bundle is missing, streams build output, stops only that exact bundle's app and sidecar
+`--cold` uses `src-tauri/target/release/bundle/macos/nisi.app`. It prepares the build, streams any
+build output, stops only that exact bundle's app and sidecar
 executables, and waits for them to exit. Its gitignored `.data/measure-launch/data/` self-initializes
 on the first run. The CLI launches a fresh app instance with that data dir, so `cli.app.launch.*`
 is included. The app stays running; repeat without `--cold` to measure it warm:
@@ -74,6 +74,17 @@ the request, making the terminal paint mark ambiguous.
 - Cold means new app and sidecar processes, not cleared filesystem, GitHub, or review-session caches.
 - `--json` prints the collected records as a JSON array rather than the formatted report.
 - Raw records are JSONL at `<selected data dir>/logs/launch-traces/<traceId>.jsonl`.
+
+## Build reuse
+
+Managed modes compare HEAD and a SHA-256 content hash against `nisi.app.build-stamp.json` beside
+the bundle (never inside the signed bundle). The hash includes `git diff HEAD --binary` and
+untracked, non-ignored file paths and contents, excluding `knowledge/`, Markdown files, and
+`apps/desktop/scripts/measure-launch/`. Uncommitted documentation/script edits do not rebuild the
+app. A changed HEAD, changed hash, missing bundle/stamp, or `--rebuild` rebuilds with an explicit
+reason; matching inputs print a reuse message. The stamp records build time, and report headers
+identify the build commit and any uncommitted content hash. A source change during the build
+fails rather than stamping an inconsistent artifact.
 
 # Reading the report
 

@@ -4,6 +4,7 @@ import { makeSidecarClient } from "@repo/sidecar-api";
 import { readSidecarJson } from "deskkit/sidecar";
 import { Effect } from "effect";
 import { FileSystem } from "effect/FileSystem";
+import { ensureBuild } from "./build.ts";
 import { stopBundle } from "./processes.ts";
 
 export const desktopDir = resolve(import.meta.dir, "../..");
@@ -125,6 +126,7 @@ export const prepareColdInstance = (rebuild: boolean, newPr = false) =>
 			return yield* Effect.fail(
 				new Error("The measurement data dir must be gitignored"),
 			);
+		yield* ensureBuild(desktopDir, bundlePath, rebuild);
 		yield* stopBundle(bundlePath);
 		if (newPr && (yield* fs.exists(newPrDataDir))) {
 			const real = yield* fs.realPath(newPrDataDir);
@@ -135,26 +137,5 @@ export const prepareColdInstance = (rebuild: boolean, newPr = false) =>
 			yield* fs.remove(newPrDataDir, { recursive: true });
 		}
 		yield* fs.makeDirectory(dataDir, { recursive: true });
-		if (
-			rebuild ||
-			!(yield* fs.exists(join(bundlePath, "Contents/MacOS/nisi")))
-		) {
-			const build = yield* Effect.try(() =>
-				Bun.spawn([process.execPath, "run", "build"], {
-					cwd: desktopDir,
-					env: {
-						...process.env,
-						CARGO_TARGET_DIR: join(desktopDir, "src-tauri/target"),
-					},
-					stdout: 2,
-					stderr: "inherit",
-				}),
-			);
-			const exit = yield* Effect.tryPromise(() => build.exited);
-			if (exit !== 0)
-				return yield* Effect.fail(
-					new Error(`Build failed with exit code ${exit}`),
-				);
-		}
 		return dataDir;
 	});

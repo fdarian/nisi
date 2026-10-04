@@ -2,12 +2,16 @@ import { BunRuntime, BunServices } from "@effect/platform-bun";
 import { makeLaunchTracer } from "@repo/logging";
 import { Console, Effect, Logger } from "effect";
 import { FileSystem } from "effect/FileSystem";
+import { formatBuild, readBuildStamp } from "./build.ts";
 import {
 	formatAlreadyOpen,
 	formatTimeline,
 	formatVisibility,
 } from "./format.ts";
 import {
+	bundlePath,
+	coldDataDir,
+	newPrDataDir,
 	liveInstance,
 	prepareColdInstance,
 	runningInstance,
@@ -81,14 +85,19 @@ const program = Effect.gen(function* () {
 				? "app startup"
 				: "running-instance quick check"
 			: `new PR into running app (warm-up: ${warmupLabel})`;
+	const stamp =
+		dataDir === coldDataDir || dataDir === newPrDataDir
+			? yield* readBuildStamp(bundlePath)
+			: undefined;
+	const reportHeader = `${header}\n${stamp === undefined ? "Build stamp unavailable for this instance" : formatBuild(stamp)}`;
 	if (options.json) {
-		yield* Console.error(header);
+		yield* Console.error(reportHeader);
 		yield* Console.log(JSON.stringify(records, null, 2));
 		const alreadyOpen = formatAlreadyOpen(records);
 		if (alreadyOpen !== undefined) yield* Console.error(alreadyOpen);
 		const visibility = formatVisibility(records, Date.now());
 		if (visibility !== undefined) yield* Console.error(visibility);
-	} else yield* Console.log(`${header}\n\n${formatTimeline(records)}`);
+	} else yield* Console.log(`${reportHeader}\n\n${formatTimeline(records)}`);
 });
 BunRuntime.runMain(
 	program.pipe(
