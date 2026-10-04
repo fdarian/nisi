@@ -23,7 +23,6 @@ import type {
 } from "@pierre/diffs";
 import type { CodeViewHandle } from "@pierre/diffs/react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useAppViewActive } from "#/shell/app-view-context";
 import type { DiffSelectionReference } from "#/features/diff/diff-reference";
 import {
 	isEventOriginOnDiffRow,
@@ -31,6 +30,7 @@ import {
 	paintedSelectionMatchesRange,
 	pollUntilReady,
 } from "#/features/diff/viewer/diff-match-dom";
+import { useAppViewActive } from "#/shell/app-view-context";
 import { type HeadRange, selectionHeadRange } from "./selection-head-range";
 
 type UseDiffSelectionOptions<Metadata> = {

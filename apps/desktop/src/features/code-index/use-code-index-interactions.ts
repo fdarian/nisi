@@ -31,13 +31,13 @@ import type { CodeViewHandle } from "@pierre/diffs/react";
 import type { CodeIndexOccurrence } from "@repo/sidecar-api";
 import { useQueries, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useAppViewActive } from "#/shell/app-view-context";
 import {
 	buildOccurrenceIndex,
 	findOccurrenceForToken,
 	type OccurrenceIndex,
 } from "#/features/code-index/navigation/occurrence-index";
 import type { SidecarQueryUtils } from "#/infra/backend-context";
+import { useAppViewActive } from "#/shell/app-view-context";
 
 /** Class toggled directly on a token's `HTMLElement` — `@pierre/diffs` has no keyed decoration API, so this is the supported way to style one token (see `InteractionManager`'s own doc). Styled via `extraCSS`/`unsafeCSS` in each pane's `CodeViewOptions` — see `CODE_INDEX_TOKEN_CSS` below. */
 export const CODE_INDEX_TOKEN_ACTIVE_CLASS = "nisi-code-index-token-active";

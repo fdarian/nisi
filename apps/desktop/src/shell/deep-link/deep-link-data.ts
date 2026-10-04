@@ -6,13 +6,13 @@
  */
 import { useNavigate, useRouterState } from "@tanstack/react-router";
 import { useEffect, useSyncExternalStore } from "react";
-import { useAppViewActive } from "#/shell/app-view-context";
 import { toastManager } from "#/components/ui/toast";
 import {
 	friendlyOpenPullRequestError,
 	useOpenPullRequest,
 } from "#/features/pull-request/data/pull-requests-data";
 import type { SidecarQueryUtils } from "#/infra/backend-context";
+import { useAppViewActive } from "#/shell/app-view-context";
 import { parseNisiDeepLink } from "./deep-link";
 import {
 	dequeueDeepLink,
