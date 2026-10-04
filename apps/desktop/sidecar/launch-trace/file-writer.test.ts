@@ -14,12 +14,16 @@ import { appendLaunchMarks, traceFilePath } from "./file-writer.ts";
 test("appends complete JSONL batches without overwriting another source", () => {
 	const directory = mkdtempSync(join(tmpdir(), "nisi-launch-writer-"));
 	try {
-		appendLaunchMarks(directory, "run-1", [
-			{ at: 1.25, source: "cli", name: "cli.main" },
-		]);
-		appendLaunchMarks(directory, "run-1", [
-			{ at: 2.5, source: "frontend", name: "trace.done" },
-		]);
+		Effect.runSync(
+			appendLaunchMarks(directory, "run-1", [
+				{ at: 1.25, source: "cli", name: "cli.main" },
+			]),
+		);
+		Effect.runSync(
+			appendLaunchMarks(directory, "run-1", [
+				{ at: 2.5, source: "frontend", name: "trace.done" },
+			]),
+		);
 		expect(readFileSync(traceFilePath(directory, "run-1"), "utf8")).toBe(
 			'{"at":1.25,"source":"cli","name":"cli.main"}\n{"at":2.5,"source":"frontend","name":"trace.done"}\n',
 		);
@@ -33,8 +37,8 @@ test("a throwing append does not fail the caller", () => {
 	try {
 		mkdirSync(traceFilePath(directory, "append-failure"), { recursive: true });
 		const result = Effect.runSync(
-			Effect.sync(() => {
-				appendLaunchMarks(directory, "append-failure", [
+			Effect.gen(function* () {
+				yield* appendLaunchMarks(directory, "append-failure", [
 					{
 						at: Date.now(),
 						source: "sidecar",
@@ -58,8 +62,8 @@ test("a directory creation failure does not fail the caller", () => {
 		const blocked = join(directory, "blocked");
 		writeFileSync(blocked, "not a directory");
 		const result = Effect.runSync(
-			Effect.sync(() => {
-				appendLaunchMarks(blocked, "mkdir-failure", []);
+			Effect.gen(function* () {
+				yield* appendLaunchMarks(blocked, "mkdir-failure", []);
 				return "real work completed";
 			}),
 		);

@@ -11,6 +11,7 @@ import {
 	wrapAsyncIterator,
 	wrapReadableStream,
 } from "@orpc/shared";
+import type { Effect } from "effect";
 import { activeTrace, writeSidecarMark } from "./launch-trace/service.ts";
 
 type DebugLog = (
@@ -23,7 +24,10 @@ export class RpcLifecyclePlugin<T extends Context>
 {
 	readonly name = "nisi/rpc-lifecycle";
 
-	constructor(private readonly debug: DebugLog) {}
+	constructor(
+		private readonly debug: DebugLog,
+		private readonly runTrace: (effect: Effect.Effect<void>) => Promise<void>,
+	) {}
 
 	init(options: StandardHandlerOptions<T>): StandardHandlerOptions<T> {
 		const interceptor: StandardHandlerRoutingInterceptor<T> = async (call) => {
@@ -32,7 +36,9 @@ export class RpcLifecyclePlugin<T extends Context>
 			const path = new URL(call.request.url, "http://localhost").pathname;
 			const rpcId = trace === undefined ? undefined : crypto.randomUUID();
 			if (trace !== undefined)
-				writeSidecarMark("rpc.start", { at: startedAt, path, rpcId }, trace);
+				await this.runTrace(
+					writeSidecarMark("rpc.start", { at: startedAt, path, rpcId }, trace),
+				);
 			const signal = call.request.signal;
 			const state: { finished: boolean; matched?: boolean; status?: number } = {
 				finished: false,
@@ -41,16 +47,18 @@ export class RpcLifecyclePlugin<T extends Context>
 				if (state.finished) return;
 				state.finished = true;
 				if ((trace ?? activeTrace()) !== undefined)
-					writeSidecarMark(
-						"rpc",
-						{
-							path,
-							rpcId,
-							at: startedAt,
-							durationMs: Date.now() - startedAt,
-							status: state.status,
-						},
-						trace ?? activeTrace(),
+					await this.runTrace(
+						writeSidecarMark(
+							"rpc",
+							{
+								path,
+								rpcId,
+								at: startedAt,
+								durationMs: Date.now() - startedAt,
+								status: state.status,
+							},
+							trace ?? activeTrace(),
+						),
 					);
 				signal?.removeEventListener("abort", onAbort);
 				await this.debug("rpc call finished", {

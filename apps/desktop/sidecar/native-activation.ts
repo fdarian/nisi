@@ -9,12 +9,13 @@ const OWNER_INITIAL_CONNECT_GRACE_MS = 10_000;
 export function createNativeActivationHandler(
 	token: string,
 	initialOwnerId?: string,
+	onAcknowledged?: (id: string) => Promise<void>,
 ) {
 	let ownerId = initialOwnerId;
 	let activeStreams = 0;
 	let reservedUntil = Date.now() + OWNER_INITIAL_CONNECT_GRACE_MS;
 
-	return (request: Request): Response | undefined => {
+	return async (request: Request): Promise<Response | undefined> => {
 		const url = new URL(request.url);
 		if (!url.pathname.startsWith("/native/activation")) return undefined;
 		if (request.headers.get("authorization") !== `Bearer ${token}`) {
@@ -52,6 +53,7 @@ export function createNativeActivationHandler(
 			const id = url.searchParams.get("id");
 			if (id === null) return new Response("missing id", { status: 400 });
 			acknowledgeActivation(id);
+			await onAcknowledged?.(id);
 			return new Response(null, { status: 204 });
 		}
 		if (url.pathname !== "/native/activation" || request.method !== "GET") {

@@ -1,6 +1,6 @@
 import { appendFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
-import { Effect, Logger } from "effect";
+import { Effect } from "effect";
 
 export type LaunchMark = {
 	at: number;
@@ -20,24 +20,18 @@ export function appendLaunchMarks(
 	dataDir: string,
 	traceId: string,
 	marks: readonly LaunchMark[],
-): void {
-	Effect.runSync(
-		Effect.try(() => {
-			const file = traceFilePath(dataDir, traceId);
-			mkdirSync(join(dataDir, "logs", "launch-traces"), { recursive: true });
-			// One O_APPEND write per batch keeps CLI and sidecar records from interleaving.
-			appendFileSync(
-				file,
-				marks.map((mark) => `${JSON.stringify(mark)}\n`).join(""),
-			);
-		}).pipe(
-			Effect.catch((error) =>
-				Effect.logWarning("Launch trace write failed", { traceId, error }).pipe(
-					Effect.provide(
-						Logger.layer([Logger.withConsoleError(Logger.formatLogFmt)]),
-					),
-				),
-			),
+): Effect.Effect<void> {
+	return Effect.try(() => {
+		const file = traceFilePath(dataDir, traceId);
+		mkdirSync(join(dataDir, "logs", "launch-traces"), { recursive: true });
+		// One O_APPEND write per batch keeps CLI and sidecar records from interleaving.
+		appendFileSync(
+			file,
+			marks.map((mark) => `${JSON.stringify(mark)}\n`).join(""),
+		);
+	}).pipe(
+		Effect.catch((error) =>
+			Effect.logWarning("Launch trace write failed", { traceId, error }),
 		),
 	);
 }

@@ -4,7 +4,6 @@ import type {
 	Session,
 } from "@repo/sidecar-api";
 import { emit, subscribe } from "./events.ts";
-import { writeSidecarMark } from "./launch-trace/service.ts";
 
 const MAX_RETAINED = 100;
 const RETENTION_MS = 30 * 60_000;
@@ -54,7 +53,6 @@ export function createOpenRequest(
 	pendingActivations.set(request.id, Date.now());
 	prune();
 	emit({ type: "open-requested", request });
-	writeSidecarMark("sidecar.open-requested.emitted", { requestId: request.id });
 	return request;
 }
 
@@ -68,7 +66,6 @@ export function resolveOpenRequest(id: string, session: Session): void {
 	requests.set(id, { request: resolved, settledAt: Date.now() });
 	prune();
 	emit({ type: "open-resolved", request: resolved });
-	writeSidecarMark("sidecar.open-resolved.emitted", { requestId: id });
 }
 
 export function failOpenRequest(id: string, message: string): void {
@@ -93,7 +90,6 @@ export function acknowledgeOpenRequest(id: string): void {
 }
 
 export function acknowledgeActivation(id: string): void {
-	writeSidecarMark("sidecar.activation.acked", { requestId: id });
 	pendingActivations.delete(id);
 }
 

@@ -22,12 +22,14 @@ test("only a disconnected owner's authenticated stream can be claimed", async ()
 	const request = createOpenRequest("/repo", { kind: "auto" });
 	const handle = createNativeActivationHandler("token", "old-owner");
 	try {
-		const unauthorized = handle(
+		const unauthorized = await handle(
 			new Request("http://127.0.0.1/native/activation"),
 		);
 		expect(unauthorized?.status).toBe(401);
-		expect(handle(activationRequest("", "new-owner"))?.status).toBe(403);
-		const response = handle(activationRequest("", "old-owner"));
+		expect((await handle(activationRequest("", "new-owner")))?.status).toBe(
+			403,
+		);
+		const response = await handle(activationRequest("", "old-owner"));
 		expect(response?.status).toBe(200);
 		const reader = response?.body?.getReader();
 		if (reader === undefined) throw new Error("activation stream has no body");
@@ -35,27 +37,35 @@ test("only a disconnected owner's authenticated stream can be claimed", async ()
 		expect(new TextDecoder().decode(first.value)).toContain(request.id);
 		now += 11_000;
 		expect(
-			handle(activationRequest("/claim", "new-owner", "POST"))?.status,
+			(await handle(activationRequest("/claim", "new-owner", "POST")))?.status,
 		).toBe(409);
 		await reader.cancel();
 		expect(
-			handle(activationRequest("/claim", "new-owner", "POST"))?.status,
+			(await handle(activationRequest("/claim", "new-owner", "POST")))?.status,
 		).toBe(409);
 		now += 2_001;
 		expect(
-			handle(activationRequest("/claim", "new-owner", "POST"))?.status,
+			(await handle(activationRequest("/claim", "new-owner", "POST")))?.status,
 		).toBe(204);
-		expect(handle(activationRequest("", "old-owner"))?.status).toBe(403);
-		const claimed = handle(activationRequest("", "new-owner"));
+		expect((await handle(activationRequest("", "old-owner")))?.status).toBe(
+			403,
+		);
+		const claimed = await handle(activationRequest("", "new-owner"));
 		expect(claimed?.status).toBe(200);
 		await claimed?.body?.cancel();
 		expect(
-			handle(activationRequest(`/ack?id=${request.id}`, "old-owner", "POST"))
-				?.status,
+			(
+				await handle(
+					activationRequest(`/ack?id=${request.id}`, "old-owner", "POST"),
+				)
+			)?.status,
 		).toBe(403);
 		expect(
-			handle(activationRequest(`/ack?id=${request.id}`, "new-owner", "POST"))
-				?.status,
+			(
+				await handle(
+					activationRequest(`/ack?id=${request.id}`, "new-owner", "POST"),
+				)
+			)?.status,
 		).toBe(204);
 	} finally {
 		clock.mockRestore();

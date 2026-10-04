@@ -285,10 +285,6 @@ export function attachRouter(
 	mainContext: Context.Context<AppServices>,
 	activationOwnerId?: string,
 ) {
-	const nativeActivation = createNativeActivationHandler(
-		token,
-		activationOwnerId,
-	);
 	// `events.subscribe`/`walkthrough.generate` are plain `.handler(async
 	// function* ...)` closures (see the comment on `events` below) — they
 	// never go through `.effect()`'s bridging into `mainContext`, so logging
@@ -297,6 +293,14 @@ export function attachRouter(
 	const runWithMainContext = <A>(
 		effect: Effect.Effect<A, never, AppServices>,
 	) => Effect.runPromise(Effect.provide(effect, mainContext));
+	const nativeActivation = createNativeActivationHandler(
+		token,
+		activationOwnerId,
+		(id) =>
+			runWithMainContext(
+				writeSidecarMark("sidecar.activation.acked", { requestId: id }),
+			),
+	);
 
 	const emitSessionTransition = (outcome: OpenSessionOutcome) =>
 		Effect.gen(function* () {
@@ -395,14 +399,15 @@ export function attachRouter(
 			open: authed.sessions.open.effect(function* ({ input, errors }) {
 				const trace = yield* LaunchTrace;
 				yield* trace.activate(input.traceId);
-				yield* Effect.try(() => writeSidecarMark("sidecar.open.received")).pipe(
-					Effect.orDie,
-				);
+				yield* writeSidecarMark("sidecar.open.received");
 				const request = createOpenRequest(
 					input.cwd,
 					input.target ?? { kind: "auto" },
 					input.traceId,
 				);
+				yield* writeSidecarMark("sidecar.open-requested.emitted", {
+					requestId: request.id,
+				});
 				const store = yield* Store;
 				const opening = store.openSession(input.cwd, input.target);
 				const outcome = yield* opening.pipe(
@@ -465,9 +470,12 @@ export function attachRouter(
 						),
 					),
 					Effect.onExit((exit) =>
-						Effect.sync(() => {
+						Effect.gen(function* () {
 							if (Exit.isSuccess(exit)) {
 								resolveOpenRequest(request.id, exit.value.session);
+								yield* writeSidecarMark("sidecar.open-resolved.emitted", {
+									requestId: request.id,
+								});
 							} else {
 								const error = Option.getOrUndefined(Exit.findErrorOption(exit));
 								failOpenRequest(
@@ -2078,8 +2086,9 @@ export function attachRouter(
 		},
 	});
 
-	const lifecycle = new RpcLifecyclePlugin((message, fields) =>
-		runWithMainContext(Effect.logDebug(message, fields)),
+	const lifecycle = new RpcLifecyclePlugin(
+		(message, fields) => runWithMainContext(Effect.logDebug(message, fields)),
+		runWithMainContext,
 	);
 	const handler = new FetchRPCHandler(router, {
 		plugins: [
@@ -2106,7 +2115,7 @@ export function attachRouter(
 				if (server.upgrade(req, { data: {} })) return;
 				return new Response("websocket upgrade required", { status: 426 });
 			}
-			const activationResponse = nativeActivation(req);
+			const activationResponse = await nativeActivation(req);
 			if (activationResponse !== undefined) return activationResponse;
 			const result = await handler.handle(req, {
 				prefix: "/api",

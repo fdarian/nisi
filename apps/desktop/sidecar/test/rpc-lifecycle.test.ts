@@ -1,13 +1,14 @@
 import { expect, spyOn, test } from "bun:test";
 import { os } from "@orpc/server";
 import { RPCHandler } from "@orpc/server/fetch";
+import { Effect } from "effect";
 import { RpcLifecyclePlugin } from "../rpc-lifecycle.ts";
 
 test("logs completed RPCs through the shared handler plugin", async () => {
 	const entries: { message: string; fields: Record<string, unknown> }[] = [];
 	const plugin = new RpcLifecyclePlugin(async (message, fields) => {
 		entries.push({ message, fields });
-	});
+	}, Effect.runPromise);
 	const handler = new RPCHandler(
 		{ ping: os.handler(() => "pong") },
 		{
@@ -50,7 +51,7 @@ test("RPC debug durations use the same wall clock as the start mark", async () =
 			plugins: [
 				new RpcLifecyclePlugin(async (_, fields) => {
 					entries.push(fields);
-				}),
+				}, Effect.runPromise),
 			],
 		},
 	);

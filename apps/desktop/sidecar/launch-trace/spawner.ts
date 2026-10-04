@@ -30,44 +30,40 @@ export const decorateSpawner = (
 			if (trace === undefined) return yield* original.spawn(command);
 			const at = Date.now();
 			const captured = commands(command);
-			yield* Effect.try(() =>
-				writeSidecarMark(
-					"spawn.start",
+			yield* writeSidecarMark(
+				"spawn.start",
+				{
+					at,
+					command: captured.map((entry) => entry.command).join(" | "),
+					args: captured.flatMap((entry) => entry.args),
+				},
+				trace,
+			);
+			const scope = yield* Effect.scope;
+			const result = yield* original.spawn(command).pipe(Effect.exit);
+			if (Exit.isFailure(result)) {
+				yield* writeSidecarMark(
+					"spawn",
 					{
 						at,
 						command: captured.map((entry) => entry.command).join(" | "),
 						args: captured.flatMap((entry) => entry.args),
+						durationMs: Date.now() - at,
+						outcome: "spawn-failed",
+						error: Cause.pretty(result.cause),
 					},
 					trace,
-				),
-			).pipe(Effect.orDie);
-			const scope = yield* Effect.scope;
-			const result = yield* original.spawn(command).pipe(Effect.exit);
-			if (Exit.isFailure(result)) {
-				yield* Effect.try(() =>
-					writeSidecarMark(
-						"spawn",
-						{
-							at,
-							command: captured.map((entry) => entry.command).join(" | "),
-							args: captured.flatMap((entry) => entry.args),
-							durationMs: Date.now() - at,
-							outcome: "spawn-failed",
-							error: Cause.pretty(result.cause),
-						},
-						trace,
-					),
-				).pipe(Effect.orDie);
+				);
 				return yield* Effect.failCause(result.cause);
 			}
 			const handle = result.value;
 			const observation = { recorded: false };
 			const exitCode = handle.exitCode.pipe(
 				Effect.onExit((exit) =>
-					Effect.try(() => {
+					Effect.gen(function* () {
 						if (observation.recorded) return;
 						observation.recorded = true;
-						writeSidecarMark(
+						yield* writeSidecarMark(
 							"spawn",
 							{
 								at,
@@ -85,7 +81,7 @@ export const decorateSpawner = (
 							},
 							trace,
 						);
-					}).pipe(Effect.orDie),
+					}),
 				),
 			);
 			// Callers may close the spawn scope immediately after awaiting exitCode;

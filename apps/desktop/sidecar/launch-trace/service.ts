@@ -25,12 +25,16 @@ export function activeTrace(): ActiveTrace | undefined {
 export function writeSidecarMark(
 	name: string,
 	attrs: Record<string, unknown> = {},
-	trace = activeTrace(),
-): void {
-	if (trace === undefined || activeTrace()?.id !== trace.id) return;
-	appendLaunchMarks(trace.dataDir, trace.id, [
-		{ at: Date.now(), ...attrs, source: "sidecar", name },
-	]);
+	trace?: ActiveTrace,
+): Effect.Effect<void> {
+	return Effect.suspend(() => {
+		const current = trace ?? activeTrace();
+		if (current === undefined || activeTrace()?.id !== current.id)
+			return Effect.void;
+		return appendLaunchMarks(current.dataDir, current.id, [
+			{ at: Date.now(), ...attrs, source: "sidecar", name },
+		]);
+	});
 }
 
 export class LaunchTrace extends Context.Service<LaunchTrace>()(
@@ -40,28 +44,28 @@ export class LaunchTrace extends Context.Service<LaunchTrace>()(
 			const dataDir = yield* getDataDirConfig();
 			return {
 				activate: (id: string | undefined) =>
-					Effect.try(() => {
+					Effect.gen(function* () {
 						if (id === undefined) return;
 						const current = activeTrace();
 						if (current?.id === id) return;
-						appendLaunchMarks(dataDir, id, boot);
+						yield* appendLaunchMarks(dataDir, id, boot);
 						state.active = { id, dataDir, deadline: Date.now() + 60_000 };
-					}).pipe(Effect.orDie),
+					}),
 				frontend: (
 					id: string,
 					marks: readonly { at: number; name: string; tab?: string }[],
 				) =>
-					Effect.try(() => {
+					Effect.gen(function* () {
 						const trace = activeTrace();
 						if (trace?.id !== id) return;
-						appendLaunchMarks(
+						yield* appendLaunchMarks(
 							dataDir,
 							id,
 							marks.map((mark) => ({ ...mark, source: "frontend" as const })),
 						);
 						if (marks.some((mark) => mark.name === "trace.done"))
 							state.active = undefined;
-					}).pipe(Effect.orDie),
+					}),
 			};
 		}),
 	},
