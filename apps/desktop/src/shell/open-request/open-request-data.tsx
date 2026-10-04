@@ -12,6 +12,7 @@ import { useBackendContext } from "#/infra/backend-context";
 import { receiveTracedOpen } from "#/infra/launch-trace";
 import { useSidecarEvent } from "#/infra/sidecar-events";
 import { seedResolvedSession } from "./resolved-session-cache";
+import { prefetchResolvedFiles } from "./resolved-files";
 
 type OpenRequestContextValue = {
 	request: OpenRequest | null;
@@ -35,6 +36,13 @@ export function OpenRequestProvider(props: {
 		(request: OpenRequest) => {
 			receiveTracedOpen(request, client);
 			if (request.status.kind === "opened") {
+				void prefetchResolvedFiles(
+					queryClient,
+					backend.orpc,
+					request.status.session.id,
+				).catch((error) =>
+					console.error("Failed to prefetch resolved files", error),
+				);
 				seedResolvedSession(
 					queryClient,
 					backend.orpc.sessions.list.queryKey(),
