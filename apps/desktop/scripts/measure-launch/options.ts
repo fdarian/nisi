@@ -6,6 +6,7 @@ export function parseLaunchOptions(argv: readonly string[]) {
 		cold: boolean;
 		newPr: boolean;
 		warmup?: string;
+		deeplink?: string;
 		rebuild: boolean;
 		json: boolean;
 	} = {
@@ -17,15 +18,19 @@ export function parseLaunchOptions(argv: readonly string[]) {
 	for (const [index, arg] of argv.entries()) {
 		if (
 			index > 0 &&
-			(argv[index - 1] === "--cwd" || argv[index - 1] === "--warmup")
+			(argv[index - 1] === "--cwd" ||
+				argv[index - 1] === "--warmup" ||
+				argv[index - 1] === "--deeplink")
 		)
 			continue;
-		if (arg === "--cwd" || arg === "--warmup") {
+		if (arg === "--cwd" || arg === "--warmup" || arg === "--deeplink") {
 			const value = argv[index + 1];
 			if (value === undefined || value.startsWith("--"))
 				throw new Error(`${arg} requires a PR worktree path`);
 			if (arg === "--cwd") options.cwd = resolve(value);
-			else options.warmup = resolve(value);
+			else if (arg === "--deeplink") options.deeplink = value;
+			else
+				options.warmup = argv.includes("--deeplink") ? value : resolve(value);
 		} else if (arg === "--cold") options.cold = true;
 		else if (arg === "--new-pr") options.newPr = true;
 		else if (arg === "--rebuild") options.rebuild = true;
@@ -38,6 +43,10 @@ export function parseLaunchOptions(argv: readonly string[]) {
 		);
 	if (options.cold && options.newPr)
 		throw new Error("--cold and --new-pr are mutually exclusive");
+	if (options.deeplink !== undefined && !options.cold && !options.newPr)
+		throw new Error(
+			"--deeplink requires a managed --cold or --new-pr instance",
+		);
 	if (options.newPr && options.warmup === undefined)
 		throw new Error("--new-pr requires --warmup <other PR worktree>");
 	if (!options.newPr && options.warmup !== undefined)

@@ -20,11 +20,70 @@ import {
 import { resolveWarmup } from "./new-pr.ts";
 import { parseLaunchOptions } from "./options.ts";
 import { runTracedOpen } from "./run.ts";
+import {
+	launchDeepLinkInstance,
+	parseMeasurementPr,
+	runDeepLink,
+	validateDeepLinkTargets,
+	withDeepLinkWorktreeCleanup,
+} from "./deeplink.ts";
 
 const program = Effect.gen(function* () {
 	const options = yield* Effect.try(() =>
 		parseLaunchOptions(process.argv.slice(2)),
 	);
+	if (options.deeplink !== undefined) {
+		const target = yield* Effect.try(() =>
+			parseMeasurementPr(options.deeplink as string),
+		);
+		const warmup =
+			options.warmup === undefined
+				? undefined
+				: yield* Effect.try(() => parseMeasurementPr(options.warmup as string));
+		yield* Effect.try(() => validateDeepLinkTargets(target, warmup));
+		const dataDir = yield* prepareColdInstance(options.rebuild, options.newPr);
+		const traceId = crypto.randomUUID();
+		const warmupId = crypto.randomUUID();
+		const records = yield* Effect.scoped(
+			Effect.gen(function* () {
+				yield* withDeepLinkWorktreeCleanup(options.cwd, dataDir, [
+					warmupId,
+					traceId,
+				]);
+				const client = yield* launchDeepLinkInstance(
+					dataDir,
+					options.newPr ? warmupId : traceId,
+				);
+				yield* Effect.tryPromise(() =>
+					client.pullRequests.recordRepoPath({
+						owner: target.owner,
+						repo: target.repo,
+						path: options.cwd,
+					}),
+				);
+				if (warmup !== undefined)
+					yield* runDeepLink({
+						dataDir,
+						traceId: warmupId,
+						url: warmup.url,
+						label: "Deep-link warm-up",
+					});
+				return yield* runDeepLink({
+					dataDir,
+					traceId,
+					url: target.url,
+					label: "Measured deep link",
+				});
+			}),
+		);
+		const stamp = yield* readBuildStamp(bundlePath);
+		const header = `${options.newPr ? `new PR into running app (warm-up: ${warmup?.url})` : "app startup"} — deep-link frontend injection\nExcludes OS URL delivery and native plugin hop; cold delivery waits for the events stream, later than plugin getCurrent.\n${stamp === undefined ? "Build stamp unavailable" : formatBuild(stamp)}`;
+		if (options.json) {
+			yield* Console.error(header);
+			yield* Console.log(JSON.stringify(records, null, 2));
+		} else yield* Console.log(`${header}\n\n${formatTimeline(records)}`);
+		return;
+	}
 	const warmupLabel =
 		options.warmup === undefined
 			? undefined

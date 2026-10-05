@@ -84,7 +84,11 @@ export function formatTimeline(
 	observedAt = Date.now(),
 ): string {
 	const marks = records.filter((record) => record.type === "mark");
-	const start = marks.find((mark) => mark.name === "cli.process-start");
+	const deepLink = marks.some((mark) => mark.name === "deeplink.received");
+	const start = deepLink
+		? (marks.find((mark) => mark.name === "measurement.app-launch.start") ??
+			marks.find((mark) => mark.name === "deeplink.received"))
+		: marks.find((mark) => mark.name === "cli.process-start");
 	if (start === undefined)
 		return "Missing cli.process-start; no timeline origin available.";
 	const spans = records.filter((record) => record.type === "span");
@@ -113,6 +117,13 @@ export function formatTimeline(
 		return `${(mark.at - start.at).toFixed(1).padStart(10)} ${(previous === undefined ? "—" : (mark.at - previous.at).toFixed(1)).padStart(9)} ${mark.source.padEnd(8)} ${mark.name} ${JSON.stringify(mark.attrs)}`;
 	});
 	const milestones = [
+		...(deepLink
+			? [
+					"deeplink.received",
+					"deeplink.dequeued",
+					"pull-requests.open.resolved",
+				]
+			: []),
 		"cli.app.launch.end",
 		"sidecar.router.ready",
 		"sidecar.activation.acked",
@@ -124,6 +135,15 @@ export function formatTimeline(
 		"tab.content.painted",
 	];
 	const summary = milestones.map((name) => {
+		if (
+			deepLink &&
+			[
+				"cli.app.launch.end",
+				"sidecar.activation.acked",
+				"pending-panel.painted",
+			].includes(name)
+		)
+			return `${name}: N/A (deep-link flow)`;
 		const operation =
 			name === "cli.app.launch.end"
 				? "cli.app.launch"
@@ -168,7 +188,7 @@ export function formatTimeline(
 	const visibility = formatVisibility(records, observedAt);
 	return [
 		...(alreadyOpen === undefined ? [] : [alreadyOpen, ""]),
-		"Timeline (+ms from CLI, Δ previous, source, name, attrs)",
+		`Timeline (+ms from ${deepLink ? (start.name === "measurement.app-launch.start" ? "managed app launch" : "frontend deep-link receipt") : "CLI"}, Δ previous, source, name, attrs)`,
 		...rows,
 		"",
 		"Milestones",

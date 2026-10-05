@@ -86,12 +86,48 @@ reason; matching inputs print a reuse message. The stamp records build time, and
 identify the build commit and any uncommitted content hash. A source change during the build
 fails rather than stamping an inconsistent artifact.
 
-Managed instances opt into `NISI_MOCK_KEYCHAIN=1`, forwarded by the CLI through `open --env`.
+Managed instances opt into `NISI_MEASUREMENT_INSTANCE=1` (renamed from `NISI_MOCK_KEYCHAIN`),
+forwarded by the CLI through `open --env` and inherited by Rust's sidecar subprocess.
 The Rust runtime uses CEF's mock secret storage (`--use-mock-keychain`) to avoid macOS keychain
 prompts. The dedicated opt-in accepts no arbitrary CEF switches; unset production/dev behavior
 is unchanged. Mock storage uses a public encryption constant, so keep it confined to isolated
 measurement data, never production credentials. Confirm prompt absence on the actual Mac;
 trace completion alone is not visual verification of that.
+
+## Deep-link entrypoint
+
+```sh
+bun scripts/measure-launch --new-pr --deeplink https://github.com/fdarian/nisi/pull/87 \
+  --warmup https://github.com/fdarian/nisi/pull/134 --cwd /Users/farreldarian/code/fdarian/nisi
+bun scripts/measure-launch --cold --deeplink https://github.com/fdarian/nisi/pull/87 \
+  --cwd /Users/farreldarian/code/fdarian/nisi
+```
+
+Here `--cwd` is the repository's local clone, not the target PR checkout; `--warmup` is another
+PR URL in the same repository. Unmanaged deep-link measurements are rejected. The script seeds
+the existing `pullRequests.recordRepoPath` mapping before injection, matching a user who already
+mapped the repository. A traced `needs-repo-path` fails loudly before a folder picker can appear.
+
+No `nisi://` URL is ever handed to the OS. The managed instance's authenticated, environment-gated
+diagnostics RPC injects into the same frontend queue as plugin URLs; links retain their trace ID
+and replay on event-stream reconnect until acknowledged. Everything from queue dequeue through
+`pullRequests.open`, mapping, worktree/session resolution and real paint is the production path.
+`NISI_MEASUREMENT_INSTANCE=1` gates both injection and CEF mock keychain; the old variable no
+longer enables either. Production and ordinary dev instances reject injection.
+
+Warm/new-PR offsets start at **frontend deep-link receipt**, excluding OS-to-app URL delivery,
+the native plugin hop, and the injection RPC transport before receipt. Cold offsets start at
+the explicit bundle launch (without the CLI), including startup and mapping preparation. Cold
+injection is delivered after the events stream connects, slightly later than the native plugin's
+startup `getCurrent()` path. Reports state these boundaries; activation ack and pending-panel
+milestones are N/A because this flow has neither CLI open requests nor their pending panel.
+
+PR worktrees follow the normal app policy: reuse an existing PR-head/nisi checkout; otherwise
+create under the strict-majority parent of existing linked worktrees, or `<data dir>/worktrees/`
+when no convention exists. Cleanup snapshots registrations and removes only newly registered paths
+backed by successful `git worktree add` spans from this run. Existing/unrelated worktrees are never
+removed, removal never uses `--force`, and cleanup also runs on failure. If cleanup is needed, the
+managed app is stopped before removal. Git branches/fetched refs are not deleted.
 
 # Reading the report
 
