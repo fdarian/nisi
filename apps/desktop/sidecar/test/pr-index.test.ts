@@ -1,5 +1,8 @@
 import { expect, test } from "bun:test";
-import type { OpenPullRequestIndex } from "@repo/git";
+import type {
+	OpenPullRequestIndex,
+	OpenPullRequestIndexOptions,
+} from "@repo/git";
 import { Deferred, Effect, Fiber } from "effect";
 import { makePrIndex } from "../pr-index.ts";
 
@@ -78,6 +81,92 @@ test("index matches owner and branch exactly, dedupes refreshes, atomically repl
 				expect(
 					index.find("acme", "widgets", "fork", "feature"),
 				).toBeUndefined();
+			}),
+		),
+	);
+});
+
+test("pages are usable before completion; incremental refreshes retain older PRs and full refreshes drop closed PRs", async () => {
+	await Effect.runPromise(
+		Effect.scoped(
+			Effect.gen(function* () {
+				const published = yield* Deferred.make<void>();
+				const finish = yield* Deferred.make<void>();
+				const firstPr = entry.prs[0];
+				const oldPr = entry.prs[1];
+				if (firstPr === undefined || oldPr === undefined)
+					return yield* Effect.die("fixture missing PR");
+				const first = { ...entry, highWaterMark: "2026-10-05T01:00:00Z" };
+				const state = { time: 0, calls: 0, fail: false };
+				const requests: (OpenPullRequestIndexOptions | undefined)[] = [];
+				const index = yield* makePrIndex(
+					(_path, _owner, _repo, options) =>
+						Effect.gen(function* () {
+							state.calls++;
+							requests.push(options);
+							if (options?.onPage === undefined)
+								return yield* Effect.die("missing page callback");
+							if (state.calls === 1) {
+								yield* options.onPage({ ...first, prs: [firstPr] });
+								yield* Deferred.succeed(published, undefined);
+								yield* Deferred.await(finish);
+								yield* options.onPage({ ...first, prs: [oldPr] });
+								return first;
+							}
+							const updated = {
+								...first,
+								highWaterMark: "2026-10-05T02:00:00Z",
+								prs: [{ ...firstPr, title: "Updated", headRef: "new-branch" }],
+							};
+							yield* options.onPage(updated);
+							if (state.fail) return yield* Effect.fail("page failed");
+							return updated;
+						}),
+					() => state.time,
+				);
+				const initial = yield* index.refresh("root", "acme", "widgets");
+				if (initial === undefined)
+					return yield* Effect.die("missing initial refresh");
+				yield* Deferred.await(published);
+				expect(index.findNumber("acme", "widgets", 3)?.pr.title).toBe("Newest");
+				expect(
+					index.find("acme", "widgets", "fork", "feature")?.pr.number,
+				).toBe(3);
+				expect(index.findNumber("acme", "widgets", 2)).toBeUndefined();
+				expect(yield* index.refresh("root", "acme", "widgets")).toBeUndefined();
+				yield* Deferred.succeed(finish, undefined);
+				yield* Fiber.join(initial);
+				state.fail = true;
+				const failed = yield* index.refresh("root", "acme", "widgets");
+				if (failed === undefined)
+					return yield* Effect.die("missing failed refresh");
+				yield* Fiber.join(failed);
+				expect(index.findNumber("acme", "widgets", 3)?.pr.title).toBe(
+					"Updated",
+				);
+				expect(index.findNumber("acme", "widgets", 2)?.pr.title).toBe("Older");
+				state.fail = false;
+				const incremental = yield* index.refresh("root", "acme", "widgets");
+				if (incremental === undefined)
+					return yield* Effect.die("missing incremental refresh");
+				yield* Fiber.join(incremental);
+				expect(requests[0]?.updatedSince).toBeUndefined();
+				expect(requests[1]?.updatedSince).toBe(first.highWaterMark);
+				expect(requests[2]?.updatedSince).toBe(first.highWaterMark);
+				expect(index.findNumber("acme", "widgets", 2)).toBeDefined();
+				state.time = 30 * 60_000;
+				const full = yield* index.refresh("root", "acme", "widgets");
+				if (full === undefined)
+					return yield* Effect.die("missing full refresh");
+				yield* Fiber.join(full);
+				expect(requests[3]?.updatedSince).toBeUndefined();
+				expect(index.findNumber("acme", "widgets", 2)).toBeUndefined();
+				expect(
+					index.find("acme", "widgets", "fork", "feature"),
+				).toBeUndefined();
+				expect(
+					index.find("acme", "widgets", "fork", "new-branch")?.pr.number,
+				).toBe(3);
 			}),
 		),
 	);

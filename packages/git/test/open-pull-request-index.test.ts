@@ -62,6 +62,7 @@ test("open PR index paginates, preserves ordering and surfaces auth/decode failu
 								baseRefName: "main",
 								headRefName: "feature",
 								isCrossRepository: true,
+								updatedAt: `2026-10-0${number}T00:00:00Z`,
 								headRepositoryOwner: { login: "fork" },
 							},
 						],
@@ -75,12 +76,13 @@ test("open PR index paginates, preserves ordering and surfaces auth/decode failu
 		await Bun.write(first, JSON.stringify(page(2, true)));
 		await Bun.write(second, JSON.stringify(page(1, false)));
 		const log = join(repo.root, "calls");
-		const run = async (exit: string) => {
+		const run = async (exit: string, updatedSince?: string) => {
 			const child = Bun.spawn(
 				[
 					process.execPath,
 					join(import.meta.dir, "fixtures/open-pr-index-runner.ts"),
 					repo.root,
+					...(updatedSince === undefined ? [] : [updatedSince]),
 				],
 				{
 					env: {
@@ -109,12 +111,30 @@ test("open PR index paginates, preserves ordering and surfaces auth/decode failu
 		};
 		expect(await run("0")).toMatchObject({
 			ok: true,
-			value: { prs: [{ number: 2, headOwner: "fork" }, { number: 1 }] },
+			value: {
+				highWaterMark: "2026-10-02T00:00:00Z",
+				prs: [{ number: 2, headOwner: "fork" }, { number: 1 }],
+			},
+			pages: [{ prs: [{ number: 2 }] }, { prs: [{ number: 1 }] }],
 		});
 		const calls = (await Bun.file(log).text()).trim().split("\n");
 		expect(calls).toHaveLength(2);
 		expect(calls[1]).toContain("after=next");
 		expect(calls[0]).toContain("states: OPEN");
+		expect(calls[0]).toContain("field: UPDATED_AT");
+		await Bun.write(log, "");
+		expect(await run("0", "2026-10-03T00:00:00Z")).toMatchObject({
+			ok: true,
+			value: { prs: [{ number: 2 }] },
+			pages: [{ prs: [{ number: 2 }] }],
+		});
+		expect((await Bun.file(log).text()).trim().split("\n")).toHaveLength(1);
+		await Bun.write(log, "");
+		expect(await run("0", "2026-10-02T00:00:00Z")).toMatchObject({
+			ok: true,
+			value: { prs: [{ number: 2 }, { number: 1 }] },
+		});
+		expect((await Bun.file(log).text()).trim().split("\n")).toHaveLength(2);
 		expect(await run("1")).toMatchObject({
 			ok: false,
 			tag: "GitHubUnreachable",
@@ -127,4 +147,4 @@ test("open PR index paginates, preserves ordering and surfaces auth/decode failu
 	} finally {
 		await cleanupTestRepo(repo);
 	}
-});
+}, 20_000);

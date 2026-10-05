@@ -76,7 +76,11 @@ export { PullRequestAttention } from "./github/gh/attention.ts";
 export { approveWorkflowRuns } from "./github/gh/checks.ts";
 export { GhGitHub } from "./github/gh/github.ts";
 export type { GitHubShape } from "./github/github.ts";
-export { GitHub, type OpenPullRequestIndex } from "./github/github.ts";
+export {
+	GitHub,
+	type OpenPullRequestIndex,
+	type OpenPullRequestIndexOptions,
+} from "./github/github.ts";
 export type {
 	FetchPullRequestChecksInput,
 	FetchPullRequestOverviewInput,

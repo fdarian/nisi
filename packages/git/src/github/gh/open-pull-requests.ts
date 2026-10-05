@@ -1,7 +1,10 @@
 import { Effect, Schema } from "effect";
 import { GhOutputDecodeError, GitHubUnreachable } from "../../errors.ts";
 import { ghResult } from "../../exec.ts";
-import type { OpenPullRequestIndex } from "../github.ts";
+import type {
+	OpenPullRequestIndex,
+	OpenPullRequestIndexOptions,
+} from "../github.ts";
 
 const Response = Schema.Struct({
 	data: Schema.Struct({
@@ -17,6 +20,7 @@ const Response = Schema.Struct({
 						baseRefName: Schema.String,
 						headRefName: Schema.String,
 						isCrossRepository: Schema.Boolean,
+						updatedAt: Schema.String,
 						headRepositoryOwner: Schema.NullOr(
 							Schema.Struct({ login: Schema.String }),
 						),
@@ -35,10 +39,12 @@ export const listOpenPullRequests = (
 	cwd: string,
 	owner: string,
 	repo: string,
+	options?: OpenPullRequestIndexOptions,
 ) =>
 	Effect.gen(function* () {
+		const updatedSince = options?.updatedSince;
 		const query =
-			"query($owner: String!, $repo: String!, $after: String) { repository(owner: $owner, name: $repo) { owner { login } name defaultBranchRef { name } pullRequests(states: OPEN, first: 100, after: $after, orderBy: { field: CREATED_AT, direction: DESC }) { nodes { number title baseRefName headRefName isCrossRepository headRepositoryOwner { login } } pageInfo { hasNextPage endCursor } } } }";
+			"query($owner: String!, $repo: String!, $after: String) { repository(owner: $owner, name: $repo) { owner { login } name defaultBranchRef { name } pullRequests(states: OPEN, first: 100, after: $after, orderBy: { field: UPDATED_AT, direction: DESC }) { nodes { number title baseRefName headRefName isCrossRepository updatedAt headRepositoryOwner { login } } pageInfo { hasNextPage endCursor } } } }";
 		const fetchPage = (after?: string) =>
 			Effect.gen(function* () {
 				const args = [
@@ -81,17 +87,25 @@ export const listOpenPullRequests = (
 		const first = yield* fetchPage();
 		const prs: OpenPullRequestIndex["prs"][number][] = [];
 		const seen = new Set<string>();
-		const append = (page: typeof first) => {
-			for (const pr of page.pullRequests.nodes)
-				prs.push({
-					number: pr.number,
-					title: pr.title,
-					baseRef: pr.baseRefName,
-					headRef: pr.headRefName,
-					isCrossRepository: pr.isCrossRepository,
-					headOwner: pr.headRepositoryOwner?.login ?? null,
-				});
+		const repository = {
+			owner: first.owner.login,
+			repo: first.name,
+			defaultBranch: first.defaultBranchRef?.name ?? null,
 		};
+		const highWaterMark = first.pullRequests.nodes.reduce<string | undefined>(
+			(latest, pr) =>
+				latest === undefined || pr.updatedAt > latest ? pr.updatedAt : latest,
+			updatedSince,
+		);
+		const seenNumbers = new Set<number>();
+		const toPr = (pr: (typeof first.pullRequests.nodes)[number]) => ({
+			number: pr.number,
+			title: pr.title,
+			baseRef: pr.baseRefName,
+			headRef: pr.headRefName,
+			isCrossRepository: pr.isCrossRepository,
+			headOwner: pr.headRepositoryOwner?.login ?? null,
+		});
 		const collect = (
 			page: typeof first,
 		): Effect.Effect<
@@ -100,7 +114,22 @@ export const listOpenPullRequests = (
 			import("effect/unstable/process").ChildProcessSpawner.ChildProcessSpawner
 		> =>
 			Effect.gen(function* () {
-				append(page);
+				const pagePrs = page.pullRequests.nodes
+					.filter((pr) => !seenNumbers.has(pr.number))
+					.map(toPr);
+				for (const pr of pagePrs) seenNumbers.add(pr.number);
+				prs.push(...pagePrs);
+				if (options?.onPage !== undefined)
+					yield* options.onPage({
+						repository,
+						prs: pagePrs,
+						...(highWaterMark === undefined ? {} : { highWaterMark }),
+					});
+				if (
+					updatedSince !== undefined &&
+					page.pullRequests.nodes.some((pr) => pr.updatedAt < updatedSince)
+				)
+					return;
 				if (!page.pullRequests.pageInfo.hasNextPage) return;
 				const cursor = page.pullRequests.pageInfo.endCursor;
 				if (cursor === null || seen.has(cursor))
@@ -114,11 +143,8 @@ export const listOpenPullRequests = (
 			});
 		yield* collect(first);
 		return {
-			repository: {
-				owner: first.owner.login,
-				repo: first.name,
-				defaultBranch: first.defaultBranchRef?.name ?? null,
-			},
+			repository,
+			...(highWaterMark === undefined ? {} : { highWaterMark }),
 			prs,
 		} satisfies OpenPullRequestIndex;
 	});

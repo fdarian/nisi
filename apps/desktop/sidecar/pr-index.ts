@@ -1,4 +1,9 @@
-import { GitHub, type OpenPullRequestIndex, readIndexHead } from "@repo/git";
+import {
+	GitHub,
+	type OpenPullRequestIndex,
+	type OpenPullRequestIndexOptions,
+	readIndexHead,
+} from "@repo/git";
 import { SettingsStore } from "@repo/settings";
 import { Context, Effect, Layer, Schedule, Scope } from "effect";
 
@@ -7,12 +12,32 @@ export const makePrIndex = <E, R>(
 		path: string,
 		owner: string,
 		repo: string,
+		options?: OpenPullRequestIndexOptions,
 	) => Effect.Effect<OpenPullRequestIndex, E, R>,
+	now = Date.now,
 ) =>
 	Effect.gen(function* () {
 		const scope = yield* Scope.Scope;
 		const entries = new Map<string, OpenPullRequestIndex>();
 		const pending = new Set<string>();
+		const completed = new Map<
+			string,
+			{ highWaterMark?: string; fullAt: number }
+		>();
+		const merge = (
+			previous: OpenPullRequestIndex | undefined,
+			current: OpenPullRequestIndex,
+		): OpenPullRequestIndex => {
+			if (previous === undefined) return current;
+			const numbers = new Set(current.prs.map((pr) => pr.number));
+			return {
+				...current,
+				prs: [
+					...current.prs,
+					...previous.prs.filter((pr) => !numbers.has(pr.number)),
+				],
+			};
+		};
 		const key = (owner: string, repo: string) =>
 			`${owner.toLowerCase()}/${repo.toLowerCase()}`;
 		const refresh = (path: string, owner: string, repo: string) =>
@@ -20,8 +45,41 @@ export const makePrIndex = <E, R>(
 				const id = key(owner, repo);
 				if (pending.has(id)) return;
 				pending.add(id);
-				return yield* fetch(path, owner, repo).pipe(
-					Effect.tap((value) => Effect.sync(() => entries.set(id, value))),
+				const previous = entries.get(id);
+				const last = completed.get(id);
+				const full =
+					last?.highWaterMark === undefined ||
+					now() - last.fullAt >= 30 * 60_000;
+				const pages: OpenPullRequestIndex["prs"][number][] = [];
+				const seen = new Set<number>();
+				return yield* fetch(path, owner, repo, {
+					...(full ? {} : { updatedSince: last.highWaterMark }),
+					onPage: (page) =>
+						Effect.gen(function* () {
+							for (const pr of page.prs)
+								if (!seen.has(pr.number)) {
+									seen.add(pr.number);
+									pages.push(pr);
+								}
+							entries.set(id, merge(previous, { ...page, prs: [...pages] }));
+							yield* Effect.logInfo("PR index page published", {
+								repository: id,
+								count: pages.length,
+								full,
+							});
+						}),
+				}).pipe(
+					Effect.tap((value) =>
+						Effect.sync(() => {
+							entries.set(id, full ? value : merge(previous, value));
+							completed.set(id, {
+								...(value.highWaterMark === undefined
+									? {}
+									: { highWaterMark: value.highWaterMark }),
+								fullAt: full ? now() : last.fullAt,
+							});
+						}),
+					),
 					Effect.tap((value) =>
 						Effect.logInfo("PR index refreshed", {
 							repository: id,

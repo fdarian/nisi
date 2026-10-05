@@ -45,9 +45,15 @@ export type RepositoryIdentity = {
 
 export type OpenPullRequestIndex = {
 	readonly repository: RepositoryIdentity;
+	readonly highWaterMark?: string;
 	readonly prs: readonly (PullRequestRef & {
 		readonly headOwner: string | null;
 	})[];
+};
+
+export type OpenPullRequestIndexOptions = {
+	readonly updatedSince?: string;
+	readonly onPage?: (page: OpenPullRequestIndex) => Effect.Effect<void>;
 };
 
 export type GitHubShape = {
@@ -55,6 +61,7 @@ export type GitHubShape = {
 		cwd: string,
 		owner: string,
 		repo: string,
+		options?: OpenPullRequestIndexOptions,
 	) => Effect.Effect<
 		OpenPullRequestIndex,
 		GitHubUnreachable | GhOutputDecodeError
