@@ -12,6 +12,43 @@ import { readRefState } from "./ref-state.ts";
 
 export const makeDiffPreparation = () =>
 	Effect.gen(function* () {
+		const bases = new Map<
+			string,
+			{ state: string; value: { baseRef: string; commit: string | null } }
+		>();
+		const resolveBase = (
+			repoRoot: string,
+			baseRef: string,
+			state: string | undefined,
+		) =>
+			Effect.gen(function* () {
+				const key = `${repoRoot}\n${baseRef}`;
+				const previous = bases.get(key);
+				if (state !== undefined && previous?.state === state) {
+					yield* Effect.annotateCurrentSpan("reused", true);
+					return previous.value;
+				}
+				const value = yield* readLocalBase(repoRoot, baseRef);
+				if (
+					state !== undefined &&
+					state === (yield* readRefState(repoRoot, baseRef))
+				) {
+					if (bases.size >= 8) {
+						const oldest = bases.keys().next();
+						if (!oldest.done) bases.delete(oldest.value);
+					}
+					bases.set(key, { state, value });
+				}
+				return value;
+			}).pipe(Effect.withSpan("diff.base.resolve"));
+		const localBase = (repoRoot: string, baseRef: string) =>
+			Effect.gen(function* () {
+				return yield* resolveBase(
+					repoRoot,
+					baseRef,
+					yield* readRefState(repoRoot, baseRef),
+				);
+			});
 		const entries = new Map<
 			string,
 			{
@@ -51,7 +88,9 @@ export const makeDiffPreparation = () =>
 				}
 				const refs = yield* Effect.all(
 					[
-						readLocalBase(repoRoot, baseRef),
+						options.headRef === undefined && !options.includeUncommitted
+							? resolveBase(repoRoot, baseRef, state)
+							: localBase(repoRoot, baseRef),
 						resolveHeadSha(repoRoot, options.headRef),
 					],
 					{ concurrency: "unbounded" },
@@ -96,5 +135,5 @@ export const makeDiffPreparation = () =>
 				}
 				return yield* cached;
 			}).pipe(Effect.withSpan("diff.preparation.read"));
-		return { read };
+		return { read, localBase };
 	});

@@ -170,6 +170,7 @@ export const readRefState = (
 		}
 		return hash.digest("hex");
 	}).pipe(
+		Effect.withSpan("diff.refs.fingerprint"),
 		Effect.mapError(
 			(cause) => new WorktreeReadFailed({ path: repoRoot, cause }),
 		),

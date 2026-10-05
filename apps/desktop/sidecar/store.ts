@@ -24,7 +24,6 @@ import {
 	type RepoPathNotFound,
 	type RepoPathVerificationError,
 	readFileContentsAtRef,
-	readLocalBase,
 	readWorktreeBlobContent,
 	resolveCurrentBranch,
 	resolveDiffBaseRef,
@@ -409,7 +408,10 @@ export class Store extends Context.Service<Store>()("Store", {
 		const baseIdentity = (repoRoot: string, baseRef: string) =>
 			Effect.gen(function* () {
 				const identity = yield* Effect.all(
-					[resolveMainCloneRoot(repoRoot), readLocalBase(repoRoot, baseRef)],
+					[
+						resolveMainCloneRoot(repoRoot),
+						preparation.localBase(repoRoot, baseRef),
+					],
 					{ concurrency: "unbounded" },
 				);
 				return {
@@ -852,6 +854,7 @@ export class Store extends Context.Service<Store>()("Store", {
 		): Effect.Effect<
 			OpenPullRequestOutcome,
 			| GitCommandError
+			| WorktreeReadFailed
 			| GhOutputDecodeError
 			| PullRequestNotFound
 			| NoOriginRemote
@@ -1241,7 +1244,7 @@ export class Store extends Context.Service<Store>()("Store", {
 					};
 					return { ...file, review };
 				});
-			});
+			}).pipe(Effect.withSpan("diff.review-state.attach"));
 
 		/**
 		 * `session`'s {@link DiffHead} — see `diff-head.ts`'s `resolveDiffHead`

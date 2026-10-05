@@ -4,7 +4,7 @@ import { Effect } from "effect";
 import { FileSystem } from "effect/FileSystem";
 import type { ChildProcessSpawner } from "effect/unstable/process";
 import { resolveDiffBaseRef } from "./base.ts";
-import { type BlobEntry, readBlobsAtRef, readBlobExpressions } from "./blob.ts";
+import { type BlobEntry, readBlobExpressions, readBlobsAtRef } from "./blob.ts";
 import {
 	checkLinguistGenerated,
 	classifyFile,
@@ -198,7 +198,9 @@ export const prepareDiff = (
 			],
 			{ concurrency: "unbounded" },
 		);
-		const mergeBase = yield* resolveMergeBase(repoRoot, refs[0], refs[1]);
+		const mergeBase = yield* resolveMergeBase(repoRoot, refs[0], refs[1]).pipe(
+			Effect.withSpan("diff.merge-base"),
+		);
 		const target: DiffTarget =
 			options?.headRef === undefined && options?.includeUncommitted === true
 				? { kind: "worktree" }
@@ -222,8 +224,12 @@ export const prepareDiff = (
 			],
 			{ concurrency: "unbounded" },
 		);
-		const combined = parseCombinedDiff(results[0]);
-		const split = splitPatch(combined.patch);
+		const combined = yield* Effect.sync(() =>
+			parseCombinedDiff(results[0]),
+		).pipe(Effect.withSpan("diff.parse"));
+		const split = yield* Effect.sync(() => splitPatch(combined.patch)).pipe(
+			Effect.withSpan("diff.patch.split"),
+		);
 		const patches =
 			split.size === combined.entries.length &&
 			combined.entries.every((entry) => split.has(entry.path))
@@ -237,11 +243,11 @@ export const prepareDiff = (
 				checkLinguistGenerated(repoRoot, [
 					...combined.entries.map((entry) => entry.path),
 					...results[1],
-				]),
+				]).pipe(Effect.withSpan("diff.attributes")),
 				target.kind === "committed"
 					? readBlobsAtRef(repoRoot, target.sha, paths, {
 							maxBytes: CONTENT_PREFIX_CAP,
-						})
+						}).pipe(Effect.withSpan("diff.blobs.prefixes"))
 					: Effect.succeed<ReadonlyMap<string, BlobEntry>>(new Map()),
 				target.kind === "worktree"
 					? readContentPrefixes(repoRoot, target, paths, fs)
@@ -558,7 +564,7 @@ export const getChangedFiles = (
 		return [...trackedChanges, ...untrackedChanges].sort((a, b) =>
 			a.path.localeCompare(b.path),
 		);
-	});
+	}).pipe(Effect.withSpan("diff.files.classify"));
 
 export type FileContentRequest = {
 	readonly path: string;

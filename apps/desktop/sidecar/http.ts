@@ -1313,6 +1313,13 @@ export function attachRouter(
 						number: input.number,
 					})
 					.pipe(
+						Effect.catchTag("WorktreeReadFailed", (cause) =>
+							Effect.fail(
+								errors.SERVICE_UNAVAILABLE({
+									message: formatWorktreeReadFailed(cause),
+								}),
+							),
+						),
 						// `openPullRequestWorktree`'s four tagged errors are each a
 						// distinct, user-actionable situation — kept as four distinct
 						// contract errors rather than collapsed into one, so the

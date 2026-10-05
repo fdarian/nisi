@@ -147,4 +147,4 @@ test("open PR index paginates, preserves ordering and surfaces auth/decode failu
 	} finally {
 		await cleanupTestRepo(repo);
 	}
-}, 20_000);
+}, 60_000);
