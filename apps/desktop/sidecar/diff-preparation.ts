@@ -1,13 +1,14 @@
 import {
+	type GitError,
+	type PreparedDiff,
 	prepareDiff,
 	readLocalBase,
 	resolveHeadSha,
-	type PreparedDiff,
-	type GitError,
 } from "@repo/git";
 import { Effect } from "effect";
 import type { FileSystem } from "effect/FileSystem";
 import type { ChildProcessSpawner } from "effect/unstable/process";
+import { readRefState } from "./ref-state.ts";
 
 export const makeDiffPreparation = () =>
 	Effect.gen(function* () {
@@ -22,12 +23,32 @@ export const makeDiffPreparation = () =>
 				>;
 			}
 		>();
+		const validated = new Map<
+			string,
+			{
+				state: string;
+				read: Effect.Effect<
+					PreparedDiff,
+					GitError,
+					FileSystem | ChildProcessSpawner.ChildProcessSpawner
+				>;
+			}
+		>();
 		const read = (
 			repoRoot: string,
 			baseRef: string,
 			options: { includeUncommitted: boolean; headRef?: string },
 		) =>
 			Effect.gen(function* () {
+				const validationKey = `${repoRoot}\n${baseRef}\n${options.headRef ?? "HEAD"}`;
+				const state = options.includeUncommitted
+					? undefined
+					: yield* readRefState(repoRoot, baseRef, options.headRef);
+				const previous = validated.get(validationKey);
+				if (state !== undefined && previous?.state === state) {
+					yield* Effect.annotateCurrentSpan("refsReused", true);
+					return yield* previous.read;
+				}
 				const refs = yield* Effect.all(
 					[
 						readLocalBase(repoRoot, baseRef),
@@ -54,10 +75,25 @@ export const makeDiffPreparation = () =>
 				}
 				const cached = yield* Effect.cached(
 					effect.pipe(
-						Effect.tapError(() => Effect.sync(() => entries.delete(key))),
+						Effect.tapError(() =>
+							Effect.sync(() => {
+								entries.delete(key);
+								validated.delete(validationKey);
+							}),
+						),
 					),
 				);
 				entries.set(key, { at: Date.now(), read: cached });
+				if (
+					state !== undefined &&
+					state === (yield* readRefState(repoRoot, baseRef, options.headRef))
+				) {
+					if (validated.size >= 8) {
+						const oldest = validated.keys().next();
+						if (!oldest.done) validated.delete(oldest.value);
+					}
+					validated.set(validationKey, { state, read: cached });
+				}
 				return yield* cached;
 			}).pipe(Effect.withSpan("diff.preparation.read"));
 		return { read };
