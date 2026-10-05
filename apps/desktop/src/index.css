@@ -5,6 +5,10 @@
 
 @custom-variant dark (&:is(.dark *));
 
+[data-files-data] {
+	opacity: var(--files-data-opacity, 1);
+}
+
 @theme inline {
 	--animate-skeleton: skeleton 2s -1s infinite linear;
 	--animate-caret-blink: 1s ease-out infinite caret-blink;

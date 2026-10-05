@@ -27,9 +27,9 @@ export function FilesChangedContent(
 				<motion.div
 					key={state}
 					className="absolute inset-0 flex min-h-0"
-					initial={{ opacity: 0 }}
-					animate={{ opacity: 1 }}
-					exit={{ opacity: 0 }}
+					initial={{ "--files-data-opacity": 0 }}
+					animate={{ "--files-data-opacity": 1 }}
+					exit={{ "--files-data-opacity": 0 }}
 					transition={{ duration: reducedMotion ? 0 : 0.2, ease: "easeOut" }}
 				>
 					{state === "error" ? (
@@ -45,7 +45,7 @@ export function FilesChangedContent(
 							</EmptyDescription>
 						</Empty>
 					) : state === "loading" ? (
-						<FilesChangedSkeleton />
+						<FilesChangedSkeleton orpc={props.orpc} />
 					) : (
 						<FilesChangedView {...props} />
 					)}

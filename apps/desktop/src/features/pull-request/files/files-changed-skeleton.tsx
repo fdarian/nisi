@@ -1,13 +1,13 @@
 import { Skeleton } from "#/components/ui/skeleton";
-import {
-	diffCardHeaderClassName,
-	diffCodeViewLayout,
-} from "#/features/diff/diff-view-theme";
+import { diffCodeViewLayout } from "#/features/diff/diff-view-theme";
+import type { SidecarQueryUtils } from "#/infra/backend-context";
+import { DiffFileHeader } from "./diff-pane/diff-file-header";
 import {
 	filesMainClassName,
 	filesSidebarClassName,
-	filesToolbarClassName,
 } from "./files-changed-layout";
+import { FilesViewedToolbar } from "./files-viewed-toolbar";
+import { FilesFilter } from "./sidebar/files-filter";
 
 const treeRows = [0, 1, 2, 2, 2, 1, 2, 2, 1, 2].map((depth, index) => ({
 	id: `row-${index}`,
@@ -16,18 +16,18 @@ const treeRows = [0, 1, 2, 2, 2, 1, 2, 2, 1, 2].map((depth, index) => ({
 }));
 const lineWidths = [48, 72, 58, 84, 36, 64, 76, 44];
 
-export function FilesChangedSkeleton(): React.ReactElement {
+export function FilesChangedSkeleton(props: {
+	orpc: SidecarQueryUtils;
+}): React.ReactElement {
 	return (
 		<div
 			className="flex min-h-0 flex-1 motion-reduce:[&_[data-slot=skeleton]]:animate-none"
 			role="status"
 			aria-label="Loading changed files"
 		>
-			<div className={filesSidebarClassName} aria-hidden>
-				<div className="p-2">
-					<Skeleton className="h-9 w-full rounded-lg sm:h-8" />
-				</div>
-				<div className="px-2">
+			<div className={filesSidebarClassName}>
+				<FilesFilter disabled query="" mode="files" />
+				<div data-files-data className="px-2" aria-hidden>
 					{treeRows.map((row) => (
 						<div
 							key={row.id}
@@ -40,20 +40,8 @@ export function FilesChangedSkeleton(): React.ReactElement {
 					))}
 				</div>
 			</div>
-			<div className={filesMainClassName} aria-hidden>
-				<div className={filesToolbarClassName}>
-					<div className="flex items-center gap-2">
-						<Skeleton className="size-3.5 rounded-full" />
-						<Skeleton className="h-2 w-24" />
-					</div>
-					<div className="flex items-center gap-2">
-						<div className="flex">
-							<Skeleton className="size-8 sm:size-7 rounded-r-none" />
-							<Skeleton className="size-8 sm:size-7 rounded-l-none" />
-						</div>
-						<Skeleton className="size-8 sm:size-7" />
-					</div>
-				</div>
+			<div className={filesMainClassName}>
+				<FilesViewedToolbar orpc={props.orpc} />
 				<div className="min-h-0 flex-1 overflow-hidden px-3">
 					<div
 						className="flex flex-col"
@@ -64,23 +52,12 @@ export function FilesChangedSkeleton(): React.ReactElement {
 								key={card}
 								className="overflow-hidden rounded-xl bg-background"
 							>
+								<DiffFileHeader />
 								<div
-									className={`flex items-center gap-3 px-3 ${diffCardHeaderClassName(false)}`}
+									data-files-data
+									className="border border-t-0 py-2"
+									aria-hidden
 								>
-									<Skeleton className="size-3.5 shrink-0" />
-									<Skeleton className="size-3.5 shrink-0" />
-									<div className="min-w-0 flex-1">
-										<Skeleton className="h-2 w-2/3 max-w-72" />
-									</div>
-									<Skeleton className="h-5 w-14" />
-									<Skeleton className="h-2 w-12" />
-									<div className="flex h-8 items-center gap-1.5 px-[calc(--spacing(2.5)-1px)] sm:h-7">
-										<Skeleton className="size-4" />
-										<Skeleton className="h-2 w-14" />
-									</div>
-									<Skeleton className="size-8 sm:size-7" />
-								</div>
-								<div className="border border-t-0 py-2">
 									{lineWidths.map((width) => (
 										<div
 											key={width}

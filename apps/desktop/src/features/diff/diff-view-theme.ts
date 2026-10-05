@@ -407,6 +407,7 @@ export const diffCardChromeCSS = `
 `;
 
 export const diffViewUnsafeCSS = `
+	[data-code] { opacity: var(--files-data-opacity, 1); }
 	:host {
 		--diffs-font-family: var(--font-mono);
 		--diffs-header-font-family: var(--font-sans);

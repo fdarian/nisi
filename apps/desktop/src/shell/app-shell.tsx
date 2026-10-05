@@ -419,7 +419,7 @@ function AppShellReady({
 						value={pendingTabId}
 					>
 						{pendingRequest.status.kind === "pending" ? (
-							<FilesChangedSkeleton />
+							<FilesChangedSkeleton orpc={orpc} />
 						) : pendingRequest.status.kind === "failed" ? (
 							<>
 								<p>Couldn’t open {pendingRequest.cwd}</p>
