@@ -558,8 +558,20 @@ pub fn run() {
     let pre_cef_signals = termination_signals::TerminationSignals::capture()
         .expect("failed to snapshot termination signal handlers");
 
+    let mut context = tauri::generate_context!();
+    if std::env::var("NISI_MEASUREMENT_INSTANCE").is_ok_and(|value| value == "1") {
+        // CEF activates initially focused windows even when LaunchServices uses open -g.
+        context
+            .config_mut()
+            .app
+            .windows
+            .iter_mut()
+            .find(|window| window.label == "main")
+            .expect("main window configuration missing")
+            .focus = false;
+    }
     let app = builder
-        .build(tauri::generate_context!())
+        .build(context)
         .expect("error while running tauri application");
 
     #[cfg(target_os = "macos")]
