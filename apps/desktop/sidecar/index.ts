@@ -2,7 +2,7 @@ import { BunRuntime, BunServices } from "@effect/platform-bun";
 import { safe } from "@orpc/client";
 import { resolvedPath } from "@repo/bin-resolver";
 import { getDataDirConfig, SqliteDb } from "@repo/db";
-import { GhGitHub } from "@repo/git";
+import { CatFileReaders, GhGitHub } from "@repo/git";
 import {
 	RepoMergeMethodStore,
 	ScheduledMergeStore,
@@ -23,8 +23,8 @@ import { attachRouter, bindHealthCheckServer } from "./http.ts";
 import { LaunchTrace } from "./launch-trace/service.ts";
 import { startLivePolling } from "./live-poll.ts";
 import { LoggingLive } from "./logging.ts";
-import { PullRequestAttentionLive } from "./pull-request-attention.ts";
 import { PrIndex } from "./pr-index.ts";
+import { PullRequestAttentionLive } from "./pull-request-attention.ts";
 import { ScheduledMerges } from "./scheduled-merge.ts";
 import { SessionWatch } from "./session-watch.ts";
 import { Store } from "./store.ts";
@@ -254,6 +254,7 @@ const MainLayer = Layer.mergeAll(
 	ChatSessions.layer,
 	HarnessModelCache.layer,
 	CodeLspPool.layer,
+	CatFileReaders.layer,
 ).pipe(
 	Layer.provideMerge(
 		GhGitHub.layer.pipe(Layer.provideMerge(PullRequestAttentionLive.layer)),

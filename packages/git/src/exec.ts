@@ -244,6 +244,17 @@ export const gitBytes = (
 	input?: string,
 ) => runBytes(cwd, GIT_BIN, args, input);
 
+export const spawnCatFile = (cwd: string) =>
+	Effect.gen(function* () {
+		const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+		const args = ["cat-file", "--batch-command", "--buffer"];
+		return yield* spawner
+			.spawn(ChildProcess.make(GIT_BIN, args, { cwd, stderr: "inherit" }))
+			.pipe(
+				Effect.mapError((cause) => spawnFailure(GIT_BIN, args, cwd, cause)),
+			);
+	}).pipe(Effect.withSpan("git.cat-file.spawn"));
+
 export const gh = (cwd: string, args: ReadonlyArray<string>) =>
 	runText(cwd, GH_BIN, args);
 

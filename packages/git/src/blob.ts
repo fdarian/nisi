@@ -1,6 +1,7 @@
 import { lstat, readFile, readlink } from "node:fs/promises";
 import { Effect, Option } from "effect";
 import type { ChildProcessSpawner } from "effect/unstable/process";
+import { CatFileReaders } from "./cat-file.ts";
 import type { GitCommandError } from "./errors.ts";
 import { WorktreeReadFailed } from "./errors.ts";
 import { git, gitBytes } from "./exec.ts";
@@ -54,8 +55,23 @@ const readPathObjects = (
 > =>
 	Effect.gen(function* () {
 		const entries = new Map<string, PathObject>();
+		const persistent = yield* Effect.serviceOption(CatFileReaders);
 		for (const pathChunk of chunk([...new Set(paths)], PATH_CHUNK_SIZE)) {
 			if (pathChunk.length === 0) continue;
+			if (Option.isSome(persistent)) {
+				const replies = yield* persistent.value.request(
+					repoRoot,
+					pathChunk.map((path) => ({
+						command: "info",
+						expression: ref === undefined ? path : `${ref}:${path}`,
+					})),
+				);
+				pathChunk.forEach((path, index) => {
+					const reply = replies[index];
+					if (reply !== undefined) entries.set(path, reply);
+				});
+				continue;
+			}
 			const raw = yield* git(
 				repoRoot,
 				["cat-file", "--batch-check=%(objectname) %(objecttype) %(objectsize)"],
@@ -97,6 +113,7 @@ const readObjectContents = (
 > =>
 	Effect.gen(function* () {
 		const contents = new Map<string, Uint8Array>();
+		const persistent = yield* Effect.serviceOption(CatFileReaders);
 
 		// Group objects so no single `cat-file --batch` call buffers more than
 		// BATCH_BYTE_LIMIT of content, rather than batching by a fixed count.
@@ -115,6 +132,19 @@ const readObjectContents = (
 		if (current.length > 0) batches.push(current);
 
 		for (const batch of batches) {
+			if (Option.isSome(persistent)) {
+				const replies = yield* persistent.value.request(
+					repoRoot,
+					batch.map((item) => ({
+						command: "contents",
+						expression: item.object,
+					})),
+				);
+				for (const reply of replies)
+					if (reply?.type === "blob" && reply.content !== undefined)
+						contents.set(reply.object, reply.content);
+				continue;
+			}
 			const output = yield* gitBytes(
 				repoRoot,
 				["cat-file", "--batch"],

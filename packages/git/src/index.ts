@@ -5,6 +5,7 @@ export {
 	resolveDiffBaseRef,
 } from "./base.ts";
 export { readFileContentsAtRef, readWorktreeBlobContent } from "./blob.ts";
+export { CatFileReaders } from "./cat-file.ts";
 export type {
 	FileSignature,
 	RepoChangeSignature,
@@ -25,8 +26,8 @@ export type {
 export {
 	getChangedFiles,
 	getFileContents,
-	prepareDiff,
 	type PreparedDiff,
+	prepareDiff,
 } from "./diff.ts";
 export {
 	FileNotChanged,
@@ -76,7 +77,6 @@ export { approveWorkflowRuns } from "./github/gh/checks.ts";
 export { GhGitHub } from "./github/gh/github.ts";
 export type { GitHubShape } from "./github/github.ts";
 export { GitHub, type OpenPullRequestIndex } from "./github/github.ts";
-export { readIndexHead } from "./index-head.ts";
 export type {
 	FetchPullRequestChecksInput,
 	FetchPullRequestOverviewInput,
@@ -94,6 +94,7 @@ export type {
 } from "./github/models.ts";
 export type { Hunk } from "./hunk.ts";
 export { parseHunks } from "./hunk.ts";
+export { readIndexHead } from "./index-head.ts";
 export type {
 	GitHubTarget,
 	PullRequestRef,
