@@ -20,7 +20,6 @@
  * travels through React context so updates don't replace the route tree.
  */
 
-import type { Decorator } from "@storybook/react-vite";
 import type { QueryClientConfig } from "@tanstack/react-query";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
@@ -50,21 +49,23 @@ const STORY_QUERY_CONFIG: QueryClientConfig = {
 
 const storyClient = createMockSidecarClient();
 
-export const withAppShellProviders: Decorator = (Story) => (
-	<DevToolProvider>
-		<ToastProvider>
-			<SidecarEventsProvider client={storyClient}>
-				<AppViewActiveContext value={true}>
-					<SessionUiProvider>
-						<ChatProvider>
-							<Story />
-						</ChatProvider>
-					</SessionUiProvider>
-				</AppViewActiveContext>
-			</SidecarEventsProvider>
-		</ToastProvider>
-	</DevToolProvider>
-);
+function AppShellProviders(props: {
+	children: React.ReactNode;
+}): React.ReactElement {
+	return (
+		<DevToolProvider>
+			<ToastProvider>
+				<SidecarEventsProvider client={storyClient}>
+					<AppViewActiveContext value={true}>
+						<SessionUiProvider>
+							<ChatProvider>{props.children}</ChatProvider>
+						</SessionUiProvider>
+					</AppViewActiveContext>
+				</SidecarEventsProvider>
+			</ToastProvider>
+		</DevToolProvider>
+	);
+}
 
 export function StoryQueryBoundary(props: {
 	children: React.ReactNode;
@@ -128,9 +129,11 @@ export function StoryProviders({
 			forcedTheme={theme === "system" ? undefined : theme}
 		>
 			<QueryClientProvider client={queryClient}>
-				<StoryContentContext value={children}>
-					<RouterProvider router={router} />
-				</StoryContentContext>
+				<AppShellProviders>
+					<StoryContentContext value={children}>
+						<RouterProvider router={router} />
+					</StoryContentContext>
+				</AppShellProviders>
 			</QueryClientProvider>
 		</ThemeProvider>
 	);

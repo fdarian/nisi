@@ -9,10 +9,7 @@ import {
 	useSetFileViewed,
 } from "#/features/pull-request/data/pr-data";
 import { FIXTURE_SESSION } from "#/features/pull-request/walkthrough/walkthrough.fixture";
-import {
-	StoryQueryBoundary,
-	withAppShellProviders,
-} from "../../../../.storybook/decorators";
+import { StoryQueryBoundary } from "../../../../.storybook/decorators";
 import { createMockOrpc } from "../../../../.storybook/mock-orpc";
 import { FilesChangedContent } from "./files-changed-content";
 
@@ -140,7 +137,6 @@ function Demo(props: StoryArgs & { autoplay?: boolean }): React.ReactElement {
 }
 const meta = {
 	title: "Pr/FilesChangedContent",
-	decorators: [withAppShellProviders],
 	parameters: { layout: "fullscreen" },
 	args: { state: "loading" },
 	argTypes: { state: { control: "radio", options: ["loading", "loaded"] } },
