@@ -90,6 +90,7 @@ export const launchDeepLinkInstance = (dataDir: string, traceId: string) =>
 				[
 					"open",
 					"-n",
+					"-g",
 					"--env",
 					`NISI_DATA_DIR=${dataDir}`,
 					"--env",

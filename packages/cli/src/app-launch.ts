@@ -119,6 +119,7 @@ export function appLaunchArguments(
 ): string[] {
 	return [
 		...(dataDir === undefined && !measurementInstance ? [] : ["-n"]),
+		...(measurementInstance ? ["-g"] : []),
 		...(dataDir === undefined ? [] : ["--env", `NISI_DATA_DIR=${dataDir}`]),
 		...(measurementInstance ? ["--env", "NISI_MEASUREMENT_INSTANCE=1"] : []),
 		"-a",

@@ -21,6 +21,7 @@ test("sandbox launch starts a new instance and forwards the data dir", () => {
 test("measurement launch forwards only the dedicated mock-keychain opt-in", () => {
 	expect(appLaunchArguments("/checkout/nisi.app", "/data", true)).toEqual([
 		"-n",
+		"-g",
 		"--env",
 		"NISI_DATA_DIR=/data",
 		"--env",
@@ -30,6 +31,7 @@ test("measurement launch forwards only the dedicated mock-keychain opt-in", () =
 	]);
 	expect(appLaunchArguments("/checkout/nisi.app", undefined, true)).toEqual([
 		"-n",
+		"-g",
 		"--env",
 		"NISI_MEASUREMENT_INSTANCE=1",
 		"-a",

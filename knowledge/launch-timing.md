@@ -177,6 +177,14 @@ Managed measurements continue through hidden intervals and report those interval
 deep links. A **minimized window may still stall**, as may screen locking; never treat such a
 timeout as render latency. Unmanaged instances remain unchanged and stop if visibility is lost.
 
+Managed launches use `open -n -g` with `NISI_MEASUREMENT_INSTANCE=1`. Native activation still
+unminimizes and reveals the window and acknowledges afterward, but does not focus or raise it.
+On macOS this uses AppKit `orderBack`, not Tauri `show()` (which makes the window key). The same
+activation policy applies to plugin deep links; injection itself never requests native focus.
+Production and ordinary dev activation remain unchanged. Verify a full background run by sampling
+`lsappinfo front` before, during and after, without driving the UI: the same app must stay frontmost
+while real paint marks arrive. Hidden intervals remain part of the report.
+
 # Baseline — 2026-10-04
 
 Single native-only run on launch-trace branch revision `5614d52`, **dev sandbox, warm app, PR #87**
