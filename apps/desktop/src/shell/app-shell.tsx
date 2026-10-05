@@ -40,7 +40,8 @@ import {
 	useCycleFileTab,
 	useSetActiveTab,
 } from "#/features/pull-request/data/session-ui-store";
-import { FilesChangedLoading, PrView } from "#/features/pull-request/pr-view";
+import { FilesChangedSkeleton } from "#/features/pull-request/files/files-changed-skeleton";
+import { PrView } from "#/features/pull-request/pr-view";
 import type { SidecarQueryUtils } from "#/infra/backend-context";
 import { useBackendContext } from "#/infra/backend-context";
 import { useAppViewActive } from "./app-view-context";
@@ -418,7 +419,7 @@ function AppShellReady({
 						value={pendingTabId}
 					>
 						{pendingRequest.status.kind === "pending" ? (
-							<FilesChangedLoading />
+							<FilesChangedSkeleton />
 						) : pendingRequest.status.kind === "failed" ? (
 							<>
 								<p>Couldn’t open {pendingRequest.cwd}</p>

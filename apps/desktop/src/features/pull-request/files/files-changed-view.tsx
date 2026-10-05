@@ -71,6 +71,10 @@ import {
 } from "#/infra/use-available-editors";
 import { comparePaths } from "#/lib/tree-paths";
 import { useKeyBindings } from "#/lib/use-key-bindings";
+import {
+	filesMainClassName,
+	filesToolbarClassName,
+} from "./files-changed-layout";
 
 /** Stable identity for the "keyword mode inactive" case — a fresh `[]`/`Map` every render would defeat `DiffPane`'s `items` memo just as surely as a genuinely different value would. */
 const EMPTY_MATCHES: readonly DiffMatch[] = [];
@@ -674,8 +678,8 @@ export function FilesChangedView({
 					viewMode={viewMode}
 				/>
 
-				<div className="flex min-h-0 flex-1 flex-col pt-2 gap-2">
-					<div className="rounded-xl bg-background px-3 py-2 flex shrink-0 items-center justify-between mx-3 text-muted-foreground text-xs">
+				<div className={filesMainClassName}>
+					<div className={filesToolbarClassName}>
 						<span className="flex items-center gap-2">
 							<ProgressCircle total={files.length} value={viewedCount} />
 							<span>

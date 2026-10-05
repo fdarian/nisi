@@ -25,6 +25,7 @@ import type {
 import type { SidebarViewMode } from "#/features/settings/settings-data";
 import { CATEGORY_LABELS, groupFilesByCategory } from "#/lib/tree-paths";
 import { useKeyBindings } from "#/lib/use-key-bindings";
+import { filesSidebarClassName } from "../files-changed-layout";
 import { FileTreeView } from "./file-tree-view";
 import { FlatFileGroup } from "./flat-file-group";
 
@@ -110,7 +111,7 @@ export function FilesSidebar({
 	);
 
 	return (
-		<div className="flex h-full w-72 shrink-0 flex-col bg-pane-surface pb-2">
+		<div className={filesSidebarClassName}>
 			<div className="p-2">
 				<InputGroup>
 					<InputGroupAddon>
