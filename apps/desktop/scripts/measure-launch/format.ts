@@ -29,9 +29,13 @@ export function formatVisibility(
 	const marks = records.filter((record) => record.type === "mark");
 	const requested = marks.find(
 		(mark) =>
-			mark.source === "frontend" && mark.name === "open-requested.received",
+			mark.source === "frontend" &&
+			["open-requested.received", "deeplink.received"].includes(mark.name),
 	);
-	const origin = marks.find((mark) => mark.name === "cli.process-start");
+	const origin =
+		marks.find((mark) =>
+			["cli.process-start", "measurement.app-launch.start"].includes(mark.name),
+		) ?? marks.find((mark) => mark.name === "deeplink.received");
 	if (requested === undefined || origin === undefined) return undefined;
 	const terminal = marks.find(
 		(mark) => mark.source === "frontend" && mark.name === "tab.content.painted",
@@ -71,7 +75,7 @@ export function formatVisibility(
 	);
 	return [
 		`window was hidden for ${duration.toFixed(1)} ms (screen locked / window occluded) — paint timings include that wait`,
-		"Hidden intervals (+ms from CLI):",
+		`Hidden intervals (+ms from ${origin.name === "cli.process-start" ? "CLI" : origin.name === "measurement.app-launch.start" ? "managed app launch" : "frontend deep-link receipt"}):`,
 		...state.intervals.map(
 			(interval) =>
 				`  ${(interval.start - origin.at).toFixed(1)} → ${(interval.end - origin.at).toFixed(1)} (${(interval.end - interval.start).toFixed(1)} ms)${interval.ongoing ? (terminal === undefined ? " — still hidden at timeout" : " — hidden at terminal mark") : ""}`,

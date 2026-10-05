@@ -35,6 +35,20 @@ const span = (
 	attrs,
 });
 
+test("deep-link hidden intervals retain their correct receipt origin", () => {
+	const report = formatVisibility(
+		[
+			mark(100, "deeplink.received"),
+			mark(110, "frontend.visibility", { hidden: true }),
+			mark(160, "frontend.visibility", { hidden: false }),
+			mark(200, "tab.content.painted"),
+		],
+		200,
+	);
+	expect(report).toContain("hidden for 50.0 ms");
+	expect(report).toContain("+ms from frontend deep-link receipt");
+});
+
 test("already-open reports warn without inferring cache state from identical paint times", () => {
 	const records = [
 		mark(100, "cli.process-start"),

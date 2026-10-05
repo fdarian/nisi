@@ -369,11 +369,22 @@ fn find_focused_window(app: &tauri::AppHandle) -> Option<tauri::WebviewWindow> {
         })
 }
 
+const MEASUREMENT_CEF_SWITCHES: &[&str] = &[
+    "disable-backgrounding-occluded-windows",
+    "disable-renderer-backgrounding",
+    "disable-background-timer-throttling",
+];
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let mut cef = tauri_runtime_cef::Cef::default();
     if std::env::var("NISI_MEASUREMENT_INSTANCE").is_ok_and(|value| value == "1") {
         cef = cef.secret_storage(tauri_runtime_cef::SecretStorage::Mock);
+        cef = cef.command_line_args(
+            MEASUREMENT_CEF_SWITCHES
+                .iter()
+                .map(|switch| (format!("--{switch}"), None::<String>)),
+        );
     }
     if let Ok(data_dir) = std::env::var("NISI_DATA_DIR") {
         // Chromium's ProcessSingleton locks the cache root; sharing prod's root makes CefInitialize fail while prod runs.
@@ -462,6 +473,27 @@ pub fn run() {
             };
 
             let sidecar_json_path = app_data_dir.join("sidecar.json");
+            if std::env::var("NISI_MEASUREMENT_INSTANCE").is_ok_and(|value| value == "1") {
+                use cef::ImplCommandLine;
+                let command_line = cef::command_line_get_global()
+                    .ok_or_else(|| std::io::Error::other("CEF global command line unavailable"))?;
+                for switch in MEASUREMENT_CEF_SWITCHES {
+                    if command_line.has_switch(Some(&cef::CefString::from(*switch))) != 1 {
+                        return Err(std::io::Error::other(format!(
+                            "CEF measurement switch missing: {switch}"
+                        ))
+                        .into());
+                    }
+                }
+                std::fs::create_dir_all(&app_data_dir)?;
+                std::fs::write(
+                    app_data_dir.join("measurement-cef-switches.json"),
+                    serde_json::to_vec_pretty(&serde_json::json!({
+                        "verifiedBy": "cef::command_line_get_global().has_switch",
+                        "switches": MEASUREMENT_CEF_SWITCHES,
+                    }))?,
+                )?;
+            }
             let activation_owner_id = if cfg!(debug_assertions) {
                 std::env::var("NISI_ACTIVATION_OWNER_ID")
                     .unwrap_or_else(|_| std::process::id().to_string())

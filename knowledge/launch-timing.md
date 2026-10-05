@@ -162,8 +162,13 @@ later warm measurements of the same process do not contain boot milestones.
 
 `Complete` requires both `tab.content.painted` and `trace.done`. Missing milestones are reported as
 `not observed`, not zero. The script waits up to 60 seconds; a timeout is an incomplete measurement.
-If the window becomes hidden after being visible, the script stops with the trace path: bring the
-measurement window forward before retrying. Never treat a hidden-window timeout as render latency.
+Managed instances disable Chromium's occluded-window backgrounding, renderer backgrounding, and
+background timer throttling through three fixed switches gated by `NISI_MEASUREMENT_INSTANCE`.
+At native setup, CEF's actual global command line is checked with `has_switch`; missing switches
+fail startup. Successful checks write `<data dir>/measurement-cef-switches.json` as evidence.
+Managed measurements continue through hidden intervals and report those intervals, including for
+deep links. A **minimized window may still stall**, as may screen locking; never treat such a
+timeout as render latency. Unmanaged instances remain unchanged and stop if visibility is lost.
 
 # Baseline — 2026-10-04
 

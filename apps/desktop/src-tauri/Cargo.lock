@@ -2780,6 +2780,7 @@ name = "nisi"
 version = "0.5.0"
 dependencies = [
  "block2",
+ "cef",
  "libc",
  "objc2",
  "objc2-app-kit",

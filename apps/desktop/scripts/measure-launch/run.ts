@@ -74,7 +74,7 @@ export const runTracedOpen = (options: {
 				}
 			}
 			const records = yield* readRecords;
-			if (windowWentHidden(records))
+			if (!options.managed && windowWentHidden(records))
 				return yield* Effect.fail(
 					new Error(
 						`${options.label}: window went hidden; bring the measurement window forward and rerun. Trace: ${file}`,

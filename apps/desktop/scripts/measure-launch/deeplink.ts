@@ -8,7 +8,6 @@ import {
 	requireInstrumentation,
 } from "./instance.ts";
 import { stopBundle } from "./processes.ts";
-import { windowWentHidden } from "./run.ts";
 
 export function parseMeasurementPr(raw: string) {
 	const url = new URL(raw);
@@ -128,12 +127,6 @@ export const runDeepLink = (options: {
 		const deadline = Date.now() + 60_000;
 		while (Date.now() < deadline) {
 			const records = yield* readTrace(options.dataDir, options.traceId);
-			if (windowWentHidden(records))
-				return yield* Effect.fail(
-					new Error(
-						`${options.label}: window went hidden; stop and bring the measurement window forward. Trace: ${launchTracePath(options.dataDir, options.traceId)}`,
-					),
-				);
 			if (records.some((record) => record.name === "deeplink.needs-repo-path"))
 				return yield* Effect.fail(
 					new Error(
