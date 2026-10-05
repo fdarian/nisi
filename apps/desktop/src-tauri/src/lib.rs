@@ -560,6 +560,8 @@ pub fn run() {
 
     let mut context = tauri::generate_context!();
     if std::env::var("NISI_MEASUREMENT_INSTANCE").is_ok_and(|value| value == "1") {
+        // TODO: disable app launch activation through the public API once CEF supports it;
+        // see knowledge/launch-timing.md for the residual startup focus caveat.
         // CEF activates initially focused windows even when LaunchServices uses open -g.
         context
             .config_mut()
