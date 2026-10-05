@@ -50,6 +50,7 @@ export const readRefState = (
 				"GIT_REPLACE_REF_BASE",
 				"GIT_NO_REPLACE_OBJECTS",
 				"GIT_SHALLOW_FILE",
+				"GIT_GRAFT_FILE",
 			],
 			(name) => Config.string(name).pipe(Config.option),
 		);

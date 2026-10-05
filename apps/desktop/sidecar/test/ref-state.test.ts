@@ -52,6 +52,7 @@ test("ref fingerprints bypass per-worktree namespaces, pseudorefs and invalid re
 					"GIT_REPLACE_REF_BASE",
 					"GIT_NO_REPLACE_OBJECTS",
 					"GIT_SHALLOW_FILE",
+					"GIT_GRAFT_FILE",
 				]) {
 					expect(
 						yield* readRefState(repo.root, "main").pipe(
