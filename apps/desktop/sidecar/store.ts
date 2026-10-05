@@ -55,7 +55,7 @@ import {
 	type SessionPullRequest,
 } from "@repo/review";
 import { SettingsStore, type SettingsStoreError } from "@repo/settings";
-import { Config, Context, Effect, Layer, Option, Schema, Scope } from "effect";
+import { Context, Effect, Layer, Option, Schema, Scope } from "effect";
 import { FileSystem } from "effect/FileSystem";
 import type { ChildProcessSpawner } from "effect/unstable/process";
 import { makeBaseRefresh } from "./base-refresh.ts";
@@ -66,7 +66,6 @@ import {
 	validateHeadRef,
 } from "./diff-head.ts";
 import { emit } from "./events.ts";
-import { makeSpeculativeDiff } from "./speculative-diff.ts";
 import { makeDiffPreparation } from "./diff-preparation.ts";
 import { PrIndex } from "./pr-index.ts";
 
@@ -396,10 +395,6 @@ export class Store extends Context.Service<Store>()("Store", {
 		const prIndex = yield* PrIndex;
 		const scope = yield* Scope.Scope;
 		const preparation = yield* makeDiffPreparation();
-		const speculative = yield* makeSpeculativeDiff(preparation);
-		const speculationEnabled = yield* Config.boolean(
-			"NISI_SPECULATIVE_DIFF",
-		).pipe(Config.withDefault(true));
 		const baseIdentity = (repoRoot: string, baseRef: string) =>
 			Effect.gen(function* () {
 				const identity = yield* Effect.all(
@@ -582,22 +577,9 @@ export class Store extends Context.Service<Store>()("Store", {
 				);
 				const generation = {};
 				latestOpens.set(repoRoot, generation);
-				const settings = yield* settingsStore.get();
-				yield* Effect.annotateCurrentSpan(
-					"speculationEnabled",
-					speculationEnabled,
-				);
 				const cached =
 					target.kind === "auto" || target.kind === "pr"
 						? yield* prIndex.lookup(repoRoot)
-						: undefined;
-				const pendingDiff =
-					speculationEnabled && (target.kind === "auto" || target.kind === "pr")
-						? yield* speculative.start(
-								repoRoot,
-								settings.includeUncommitted,
-								cached?.pr.baseRef,
-							)
 						: undefined;
 				const resolved =
 					cached === undefined
@@ -617,8 +599,6 @@ export class Store extends Context.Service<Store>()("Store", {
 								},
 							};
 				const outcome = yield* persistResolved(repoRoot, target, resolved);
-				if (pendingDiff !== undefined)
-					yield* speculative.confirm(pendingDiff, repoRoot, resolved.baseRef);
 				if (cached !== undefined)
 					validations.set(outcome.session.id, { repoRoot, target, generation });
 				if (resolved.pr !== null) {
@@ -1218,23 +1198,14 @@ export class Store extends Context.Service<Store>()("Store", {
 				const diffHead = yield* resolveSessionDiffHead(session, repoRoot);
 				const effectiveIncludeUncommitted =
 					includeUncommitted && diffHead.worktreeEligible;
-				const cached = yield* speculative.files(
-					repoRoot,
-					session.baseRef,
-					diffHead.headRef,
-					effectiveIncludeUncommitted,
-				);
-				const files =
-					cached === undefined
-						? yield* getChangedFiles(repoRoot, session.baseRef, {
-								prepared: yield* preparation.read(repoRoot, session.baseRef, {
-									includeUncommitted: effectiveIncludeUncommitted,
-									headRef: diffHead.headRef,
-								}),
-								includeUncommitted: effectiveIncludeUncommitted,
-								headRef: diffHead.headRef,
-							})
-						: cached;
+				const files = yield* getChangedFiles(repoRoot, session.baseRef, {
+					prepared: yield* preparation.read(repoRoot, session.baseRef, {
+						includeUncommitted: effectiveIncludeUncommitted,
+						headRef: diffHead.headRef,
+					}),
+					includeUncommitted: effectiveIncludeUncommitted,
+					headRef: diffHead.headRef,
+				});
 				return yield* attachReviewState(
 					sessionId,
 					repoRoot,
@@ -1418,29 +1389,19 @@ export class Store extends Context.Service<Store>()("Store", {
 				const diffHead = yield* resolveSessionDiffHead(session, repoRoot);
 				const effectiveIncludeUncommitted =
 					includeUncommitted && diffHead.worktreeEligible;
-				const cached = yield* speculative.contents(
+				const contentByPath = yield* getFileContents(
 					repoRoot,
 					session.baseRef,
-					diffHead.headRef,
-					effectiveIncludeUncommitted,
-					requests,
+					requests satisfies ReadonlyArray<FileContentRequest>,
+					{
+						prepared: yield* preparation.read(repoRoot, session.baseRef, {
+							includeUncommitted: effectiveIncludeUncommitted,
+							headRef: diffHead.headRef,
+						}),
+						includeUncommitted: effectiveIncludeUncommitted,
+						headRef: diffHead.headRef,
+					},
 				);
-				const contentByPath =
-					cached === undefined
-						? yield* getFileContents(
-								repoRoot,
-								session.baseRef,
-								requests satisfies ReadonlyArray<FileContentRequest>,
-								{
-									prepared: yield* preparation.read(repoRoot, session.baseRef, {
-										includeUncommitted: effectiveIncludeUncommitted,
-										headRef: diffHead.headRef,
-									}),
-									includeUncommitted: effectiveIncludeUncommitted,
-									headRef: diffHead.headRef,
-								},
-							)
-						: cached;
 				const states = yield* reviewStore.listReviewStates(sessionId);
 
 				return yield* Effect.forEach(
