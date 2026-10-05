@@ -7,6 +7,7 @@ import {
 	extractLines,
 } from "@ai-sdk/provider-utils";
 import { resolvedPath } from "@repo/bin-resolver";
+import { isEnoent } from "./is-enoent.ts";
 import { toSandboxProcess } from "./sandbox-process.ts";
 import { bytesToStream, collectStream } from "./stream-utils.ts";
 
@@ -235,12 +236,4 @@ export class LocalSandboxSession implements Experimental_SandboxSession {
 			abortSignal,
 		});
 	}
-}
-
-function isEnoent(error: unknown): boolean {
-	return (
-		error instanceof Object &&
-		"code" in error &&
-		(error as NodeJS.ErrnoException).code === "ENOENT"
-	);
 }

@@ -5,8 +5,10 @@ import type {
 	HarnessV1NetworkSandboxSession,
 	HarnessV1SandboxProvider,
 } from "@ai-sdk/harness";
+import { isEnoent } from "./is-enoent.ts";
 import { LocalNetworkSandboxSession } from "./local-network-sandbox-session.ts";
 import { allocatePort } from "./port.ts";
+import { invalidateStaleBootstraps } from "./stale-bootstrap.ts";
 
 type CreateSessionOptions = Parameters<
 	NonNullable<HarnessV1SandboxProvider["createSession"]>
@@ -130,6 +132,8 @@ export class LocalSandboxProvider implements HarnessV1SandboxProvider {
 			await ensureRepoSymlink(defaultWorkingDirectory, this.settings.repoLink);
 		}
 
+		await invalidateStaleBootstraps(defaultWorkingDirectory);
+
 		const port = await allocatePort();
 		const session = new LocalNetworkSandboxSession({
 			defaultWorkingDirectory,
@@ -174,12 +178,4 @@ async function ensureRepoSymlink(
 
 	if (currentTarget !== undefined) await unlink(linkPath);
 	await symlink(target, linkPath);
-}
-
-function isEnoent(error: unknown): boolean {
-	return (
-		error instanceof Object &&
-		"code" in error &&
-		(error as NodeJS.ErrnoException).code === "ENOENT"
-	);
 }

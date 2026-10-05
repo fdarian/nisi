@@ -18,7 +18,7 @@ import {
 } from "@repo/walkthrough";
 import { registerTelemetry } from "ai";
 import type { Context } from "effect";
-import { Effect, Result, Schema } from "effect";
+import { Cause, Effect, Result, Schema } from "effect";
 import { createHarnessAdapter } from "../harness/harnesses.ts";
 import { FILE_MUTATING_BUILTINS } from "../harness/inactive-tools.ts";
 import { resolveSandboxSettings } from "../harness/sandbox.ts";
@@ -232,6 +232,13 @@ const resolveContext = async (
 			message: `Can't walk through this session — ${result.failure.headRef} isn't checked out in ${result.failure.repoRoot} (currently on ${result.failure.currentBranch}). A walkthrough narrates the files actually on disk, so check out ${result.failure.headRef} first.`,
 		};
 	}
+	await runEffect(
+		Effect.logError(
+			"walkthrough context resolution failed",
+			Cause.fail(result.failure),
+		).pipe(Effect.annotateLogs({ sessionId })),
+		mainContext,
+	);
 	return {
 		ok: false,
 		message: "Could not read this session's diff — see the sidecar log.",
@@ -402,7 +409,22 @@ export async function* generateWalkthrough(
 				}
 				if (part.type === "error") {
 					const described = describeStreamError(part.error);
-					if (described !== undefined) streamErrors.push(described);
+					if (described !== undefined) {
+						await runEffect(
+							Effect.logError(
+								"walkthrough stream failed",
+								Cause.die(part.error),
+							).pipe(
+								Effect.annotateLogs({
+									sessionId: input.sessionId,
+									harness: input.harness,
+									turn,
+								}),
+							),
+							mainContext,
+						);
+						streamErrors.push(described);
+					}
 				}
 			}
 		} catch (error) {
@@ -410,6 +432,16 @@ export async function* generateWalkthrough(
 			// failure would — checked below, before this is ever read, so an
 			// abort-triggered throw never gets misreported as `failed`.
 			if (!abortSignal.aborted) {
+				await runEffect(
+					Effect.logError("walkthrough stream failed", Cause.die(error)).pipe(
+						Effect.annotateLogs({
+							sessionId: input.sessionId,
+							harness: input.harness,
+							turn,
+						}),
+					),
+					mainContext,
+				);
 				streamErrors.push(
 					describeStreamError(error) ?? "The harness stream failed.",
 				);
@@ -460,6 +492,12 @@ export async function* generateWalkthrough(
 					mainContext,
 				);
 			} catch (error) {
+				await runEffect(
+					Effect.logError("walkthrough save failed", Cause.die(error)).pipe(
+						Effect.annotateLogs({ sessionId: input.sessionId }),
+					),
+					mainContext,
+				);
 				yield {
 					type: "failed",
 					message: `Generated successfully, but saving it failed: ${error instanceof Error ? error.message : String(error)}`,
@@ -563,6 +601,13 @@ export async function beginTrackedGeneration(
 			// and only as its very first step — already handled above, before
 			// this detached loop starts. Anything reaching here is unexpected;
 			// record it rather than let it vanish as an unhandled rejection.
+			await runEffect(
+				Effect.logError(
+					"detached walkthrough generation failed",
+					Cause.die(error),
+				).pipe(Effect.annotateLogs({ sessionId: input.sessionId })),
+				mainContext,
+			);
 			recordGenerationEvent(input.sessionId, {
 				type: "failed",
 				message: error instanceof Error ? error.message : String(error),
