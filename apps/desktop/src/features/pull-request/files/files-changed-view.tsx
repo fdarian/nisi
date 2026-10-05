@@ -74,6 +74,8 @@ type FilesChangedViewProps = {
 	 * open tab, so `j`/`k`/`r`/`u` here (and `mod+f` in `FilesSidebar`) must stay
 	 * off while a background tab's `FilesChangedView` isn't what's on screen. */
 	shortcutsEnabled: boolean;
+	/** Forwarded to `DiffPane` — lets the loading skeleton stay up until the diff has actually painted. */
+	onFirstCardPainted: () => void;
 };
 
 export function FilesChangedView({
@@ -86,6 +88,7 @@ export function FilesChangedView({
 	hasPendingChanges,
 	onRefresh,
 	shortcutsEnabled,
+	onFirstCardPainted,
 }: FilesChangedViewProps): React.ReactElement {
 	// All of `selectedPath` through `forcedPaths`/the undo stack below live in
 	// the per-session UI store (`session-ui-store.ts`), not local `useState` —
@@ -672,6 +675,7 @@ export function FilesChangedView({
 						keywordMatchesByPath={keywordMatchesByPath}
 						onMarkSelectionReviewed={markSelectionReviewed}
 						onForceLoad={addForcedPath}
+						onFirstCardPainted={onFirstCardPainted}
 						onOpenFile={onOpenFile}
 						onRenderedPathsChange={handleRenderedPathsChange}
 						onVisiblePathChange={handleVisiblePathChange}
