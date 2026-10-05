@@ -5,6 +5,7 @@
 	"type": "module",
 	"exports": {
 		".": "./src/index.ts",
+		"./repo": "./src/repo.ts",
 		"./actions-log": "./src/github/actions-log.ts"
 	},
 	"scripts": {

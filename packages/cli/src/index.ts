@@ -1,13 +1,10 @@
 #!/usr/bin/env bun
 import path from "node:path";
 import { BunRuntime, BunServices } from "@effect/platform-bun";
-import { resolveRepoRoot } from "@repo/git";
+import { resolveRepoRoot } from "@repo/git/repo";
 import { MinimumLogLevelLayer } from "@repo/logging";
 import type { OpenSessionTarget } from "@repo/sidecar-api";
 import { Console, Effect, Logger, Option, Schema } from "effect";
-import { Argument, Command } from "effect/unstable/cli";
-import { parseBaseArgument } from "./base-argument.ts";
-import { zshCompletionScript } from "./completion.ts";
 import { handoff, logFilePathConfig } from "./handoff.ts";
 import { LaunchTracingLive } from "./tracing.ts";
 
@@ -27,9 +24,6 @@ const fail = Effect.fail(new ReportedFailure());
  * lines on stderr, never changes what a script piping stdout would see.
  */
 const LoggerLive = Logger.layer([Logger.withConsoleError(Logger.formatLogFmt)]);
-
-/** Every subcommand's own optional positional — resolves the same way `nisi <path>` always has. */
-const pathArgument = Argument.string("path").pipe(Argument.optional);
 
 /**
  * Shared by `nisi`/`nisi pr`/`nisi diff` — they differ only in which
@@ -95,68 +89,22 @@ const run = (pathArg: Option.Option<string>, target: OpenSessionTarget) =>
 		}
 	}).pipe(Effect.withSpan("cli.main"));
 
-const pr = Command.make("pr", { path: pathArgument }, ({ path: pathArg }) =>
-	run(pathArg, { kind: "pr" }),
-).pipe(
-	Command.withDescription(
-		"Require an open PR for the current branch and open it in Nisi — errors if there is none.",
-	),
-);
-
-const diff = Command.make(
-	"diff",
-	{ base: Argument.string("base").pipe(Argument.optional), path: pathArgument },
-	({ base, path: pathArg }) => {
-		if (Option.isNone(base)) return run(pathArg, { kind: "branch" });
-
-		const parsed = parseBaseArgument(base.value);
-		return run(pathArg, {
-			kind: "branch",
-			baseRef: parsed.baseRef,
-			...(parsed.headRef === undefined ? {} : { headRef: parsed.headRef }),
+const args = process.argv.slice(2);
+const simple =
+	args.length === 0 ||
+	(args.length === 1 &&
+		args[0] !== undefined &&
+		!args[0].startsWith("-") &&
+		!["pr", "diff", "completion"].includes(args[0]));
+const program = simple
+	? run(Option.fromUndefinedOr(args[0]), { kind: "auto" })
+	: Effect.gen(function* () {
+			const commands = yield* Effect.promise(() => import("./commands.ts"));
+			return yield* commands.runCommand(run, fail);
 		});
-	},
-).pipe(
-	Command.withDescription(
-		"Diff <base>...HEAD, ignoring any open PR even when one exists. <base> may also be a " +
-			"range — <base>..<head> or <base>...<head>, both meaning merge-base(<base>, <head>) " +
-			"to <head> here, not git's own two-dot/three-dot distinction. With no <base>, diffs " +
-			"against the repo's default branch.",
-	),
-);
-
-const completionZsh = Command.make("zsh", {}, () =>
-	Console.log(zshCompletionScript),
-).pipe(
-	Command.withDescription(
-		"Print the zsh completion script for nisi — eval it in your shell startup file: " +
-			'eval "$(nisi completion zsh)".',
-	),
-);
-
-const completion = Command.make("completion", {}, () =>
-	Console.error("Specify a shell: nisi completion zsh").pipe(
-		Effect.andThen(fail),
-	),
-).pipe(
-	Command.withDescription("Print a shell completion script."),
-	Command.withSubcommands([completionZsh]),
-);
-
-const nisi = Command.make("nisi", { path: pathArgument }, ({ path: pathArg }) =>
-	run(pathArg, { kind: "auto" }),
-).pipe(
-	Command.withDescription(
-		"Open the PR for the current directory in Nisi, or diff against the default branch when " +
-			"there is none. Set LOG_LEVEL=debug for a trace of every step (which sidecar.json was " +
-			"read, each POST attempt, app resolution); the sidecar itself keeps its own rotating " +
-			"log under NISI_DATA_DIR/logs/.",
-	),
-	Command.withSubcommands([pr, diff, completion]),
-);
 
 BunRuntime.runMain(
-	Command.run(nisi, { version: "0.1.0" }).pipe(
+	program.pipe(
 		Effect.withSpan("cli.process", { root: true }),
 		Effect.provide(LaunchTracingLive),
 		Effect.provide(LoggerLive),
