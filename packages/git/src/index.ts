@@ -22,7 +22,12 @@ export type {
 	FileContentRequest,
 	FileStatus,
 } from "./diff.ts";
-export { getChangedFiles, getFileContents } from "./diff.ts";
+export {
+	getChangedFiles,
+	getFileContents,
+	prepareDiff,
+	type PreparedDiff,
+} from "./diff.ts";
 export {
 	FileNotChanged,
 	GhMergeFailed,

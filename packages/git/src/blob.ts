@@ -45,7 +45,7 @@ type PathObject = {
  */
 const readPathObjects = (
 	repoRoot: string,
-	ref: string,
+	ref: string | undefined,
 	paths: ReadonlyArray<string>,
 ): Effect.Effect<
 	ReadonlyMap<string, PathObject>,
@@ -59,7 +59,9 @@ const readPathObjects = (
 			const raw = yield* git(
 				repoRoot,
 				["cat-file", "--batch-check=%(objectname) %(objecttype) %(objectsize)"],
-				pathChunk.map((path) => `${ref}:${path}\n`).join(""),
+				pathChunk
+					.map((path) => `${ref === undefined ? path : `${ref}:${path}`}\n`)
+					.join(""),
 			);
 			const lines = raw.split("\n").filter((line) => line.length > 0);
 			pathChunk.forEach((path, index) => {
@@ -154,8 +156,29 @@ export const readBlobsAtRef = (
 	GitCommandError,
 	ChildProcessSpawner.ChildProcessSpawner
 > =>
+	readBlobExpressions(
+		repoRoot,
+		paths.map((path) => `${ref}:${path}`),
+		options,
+	).pipe(
+		Effect.map((blobs) => {
+			const result = new Map<string, BlobEntry>();
+			for (const path of paths) {
+				const blob = blobs.get(`${ref}:${path}`);
+				if (blob !== undefined) result.set(path, blob);
+			}
+			return result;
+		}),
+	);
+
+/** Both sides of a diff share the same size check and content batch, deduplicated by object id. */
+export const readBlobExpressions = (
+	repoRoot: string,
+	expressions: readonly string[],
+	options?: { readonly maxBytes?: number },
+) =>
 	Effect.gen(function* () {
-		const entries = yield* readPathObjects(repoRoot, ref, paths);
+		const entries = yield* readPathObjects(repoRoot, undefined, expressions);
 
 		const maxBytes = options?.maxBytes;
 		const blobByObject = new Map(
