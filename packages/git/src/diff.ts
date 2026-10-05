@@ -158,7 +158,8 @@ const parseCombinedDiff = (raw: string) => {
 		const record = tokens[cursor.index++];
 		if (record === undefined) break;
 		statTokens.push(record);
-		if (record.endsWith("\t")) {
+		const firstTab = record.indexOf("\t");
+		if (record.indexOf("\t", firstTab + 1) === record.length - 1) {
 			const oldPath = tokens[cursor.index++];
 			const newPath = tokens[cursor.index++];
 			if (oldPath !== undefined && newPath !== undefined)
@@ -663,7 +664,7 @@ export const getFileContents = (
 
 		// Not pathspec-restricted, for the same rename-pairing reason
 		// `getChangedFiles` leaves `name-status` unrestricted.
-		const [nameStatusRaw, untrackedPathsList] =
+		const status =
 			options?.prepared === undefined
 				? yield* Effect.all(
 						[
@@ -678,14 +679,17 @@ export const getFileContents = (
 							untrackedPathsEffect,
 						],
 						{ concurrency: "unbounded" },
+					).pipe(
+						Effect.map((results) => ({
+							entries: parseNameStatus(results[0]),
+							untrackedPaths: results[1],
+						})),
 					)
-				: (["", options.prepared.untrackedPaths] as const);
+				: options.prepared;
 		const nameStatusByPath = new Map(
-			(options?.prepared?.entries ?? parseNameStatus(nameStatusRaw)).map(
-				(entry) => [entry.path, entry] as const,
-			),
+			status.entries.map((entry) => [entry.path, entry] as const),
 		);
-		const untrackedPaths = new Set(untrackedPathsList);
+		const untrackedPaths = new Set(status.untrackedPaths);
 
 		type ResolvedRequest = {
 			readonly request: FileContentRequest;

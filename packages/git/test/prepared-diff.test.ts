@@ -10,11 +10,13 @@ test("combined preparation preserves rename, binary, deleted and quoted path con
 		await repo.write("old.txt", "old\n");
 		await repo.write("delete.txt", "deleted\n");
 		await repo.write("tab\tname.txt", "before\n");
+		await repo.write("trailing\t", "before\n");
 		await repo.commit("base");
 		await repo.git(["checkout", "-b", "feature"]);
 		await repo.git(["mv", "old.txt", "new.txt"]);
 		await repo.git(["rm", "delete.txt"]);
 		await repo.write("tab\tname.txt", "after\n");
+		await repo.write("trailing\t", "after\n");
 		await repo.write("binary.bin", "\0binary");
 		await repo.commit("head");
 		await Effect.runPromise(
@@ -30,6 +32,10 @@ test("combined preparation preserves rename, binary, deleted and quoted path con
 				expect(
 					files.find((file) => file.path === "tab\tname.txt"),
 				).toMatchObject({ additions: 1, deletions: 1 });
+				expect(files.find((file) => file.path === "trailing\t")).toMatchObject({
+					additions: 1,
+					deletions: 1,
+				});
 				expect(files.find((file) => file.path === "binary.bin")?.binary).toBe(
 					true,
 				);
