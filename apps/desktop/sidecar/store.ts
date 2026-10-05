@@ -15,6 +15,7 @@ import {
 	inferRepoPath,
 	type NoDefaultBranch,
 	type NoOriginRemote,
+	openPullRequestWorktree,
 	openPullRequestWorktreeResult,
 	PullRequestNotFound,
 	type PullRequestRef,
