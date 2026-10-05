@@ -19,6 +19,8 @@
  * settings page. One router is built per story render (`useMemo`), each
  * wrapping that story's own children as its index route's component.
  */
+
+import type { Decorator } from "@storybook/react-vite";
 import type { QueryClientConfig } from "@tanstack/react-query";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
@@ -31,6 +33,13 @@ import {
 } from "@tanstack/react-router";
 import { ThemeProvider } from "next-themes";
 import { useMemo } from "react";
+import { ToastProvider } from "#/components/ui/toast";
+import { ChatProvider } from "#/features/chat/chat-store";
+import { DevToolProvider } from "#/features/devtools/dev-tool-context";
+import { SessionUiProvider } from "#/features/pull-request/data/session-ui-store";
+import { SidecarEventsProvider } from "#/infra/sidecar-events";
+import { AppViewActiveContext } from "#/shell/app-view-context";
+import { createMockSidecarClient } from "./mock-orpc";
 
 // Stories should never actually hit the network — a query that somehow
 // misses `createMockOrpc`'s coverage should surface as a visibly stuck
@@ -38,6 +47,35 @@ import { useMemo } from "react";
 const STORY_QUERY_CONFIG: QueryClientConfig = {
 	defaultOptions: { queries: { retry: false, refetchOnWindowFocus: false } },
 };
+
+const storyClient = createMockSidecarClient();
+
+export const withAppShellProviders: Decorator = (Story) => (
+	<DevToolProvider>
+		<ToastProvider>
+			<SidecarEventsProvider client={storyClient}>
+				<AppViewActiveContext value={true}>
+					<SessionUiProvider>
+						<ChatProvider>
+							<Story />
+						</ChatProvider>
+					</SessionUiProvider>
+				</AppViewActiveContext>
+			</SidecarEventsProvider>
+		</ToastProvider>
+	</DevToolProvider>
+);
+
+export function StoryQueryBoundary(props: {
+	children: React.ReactNode;
+}): React.ReactElement {
+	const queryClient = useMemo(() => new QueryClient(STORY_QUERY_CONFIG), []);
+	return (
+		<QueryClientProvider client={queryClient}>
+			{props.children}
+		</QueryClientProvider>
+	);
+}
 
 function createStoryRouter(content: React.ReactNode) {
 	const rootRoute = createRootRoute({ component: () => <Outlet /> });

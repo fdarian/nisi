@@ -1,5 +1,4 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { Button } from "#/components/ui/button";
 import {
@@ -10,11 +9,11 @@ import {
 	useSetFileViewed,
 } from "#/features/pull-request/data/pr-data";
 import { FIXTURE_SESSION } from "#/features/pull-request/walkthrough/walkthrough.fixture";
-import { SidecarEventsProvider } from "#/infra/sidecar-events";
 import {
-	createMockOrpc,
-	createMockSidecarClient,
-} from "../../../../.storybook/mock-orpc";
+	StoryQueryBoundary,
+	withAppShellProviders,
+} from "../../../../.storybook/decorators";
+import { createMockOrpc } from "../../../../.storybook/mock-orpc";
 import { FilesChangedContent } from "./files-changed-content";
 
 const paths = [
@@ -66,6 +65,18 @@ const fileContents: Readonly<Record<string, FileContent>> = Object.fromEntries(
 		return [
 			file.path,
 			{
+				oldContent:
+					file.status === "added"
+						? ""
+						: `${lines
+								.filter((line) => line !== "  name: string;")
+								.map((line) =>
+									line === '  return ["project", project.id].join(":");'
+										? "  return project.id;"
+										: line,
+								)
+								.join("\n")}\n`,
+				newContent: `${lines.join("\n")}\n`,
 				patch: [
 					`diff --git a/${file.path} b/${file.path}`,
 					`--- ${file.status === "added" ? "/dev/null" : `a/${file.path}`}`,
@@ -108,7 +119,6 @@ function Pane(props: {
 		/>
 	);
 }
-const client = createMockSidecarClient();
 function Demo(props: StoryArgs & { autoplay?: boolean }): React.ReactElement {
 	const replay = useState(0);
 	return (
@@ -118,37 +128,18 @@ function Demo(props: StoryArgs & { autoplay?: boolean }): React.ReactElement {
 					Replay
 				</Button>
 			</div>
-			<FreshPane
-				key={replay[0]}
-				state={props.autoplay ? undefined : props.state}
-				delay={props.autoplay ? 1500 : 0}
-			/>
+			<StoryQueryBoundary key={replay[0]}>
+				<Pane
+					state={props.autoplay ? undefined : props.state}
+					delay={props.autoplay ? 1500 : 0}
+				/>
+			</StoryQueryBoundary>
 		</div>
-	);
-}
-function FreshPane(props: {
-	state?: StoryArgs["state"];
-	delay: number;
-}): React.ReactElement {
-	const queryClient = useMemo(
-		() =>
-			new QueryClient({
-				defaultOptions: {
-					queries: { retry: false, refetchOnWindowFocus: false },
-				},
-			}),
-		[],
-	);
-	return (
-		<QueryClientProvider client={queryClient}>
-			<SidecarEventsProvider client={client}>
-				<Pane {...props} />
-			</SidecarEventsProvider>
-		</QueryClientProvider>
 	);
 }
 const meta = {
 	title: "Pr/FilesChangedContent",
+	decorators: [withAppShellProviders],
 	parameters: { layout: "fullscreen" },
 	args: { state: "loading" },
 	argTypes: { state: { control: "radio", options: ["loading", "loaded"] } },
