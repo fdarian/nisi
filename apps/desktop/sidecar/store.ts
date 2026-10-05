@@ -55,7 +55,7 @@ import {
 	type SessionPullRequest,
 } from "@repo/review";
 import { SettingsStore, type SettingsStoreError } from "@repo/settings";
-import { Context, Effect, Layer, Option, Schema, Scope } from "effect";
+import { Config, Context, Effect, Layer, Option, Schema, Scope } from "effect";
 import { FileSystem } from "effect/FileSystem";
 import type { ChildProcessSpawner } from "effect/unstable/process";
 import { makeBaseRefresh } from "./base-refresh.ts";
@@ -67,6 +67,7 @@ import {
 } from "./diff-head.ts";
 import { emit } from "./events.ts";
 import { makeSpeculativeDiff } from "./speculative-diff.ts";
+import { makeDiffPreparation } from "./diff-preparation.ts";
 import { PrIndex } from "./pr-index.ts";
 
 /** `sessions.open`'s `cwd` doesn't resolve to a git working tree. */
@@ -394,7 +395,11 @@ export class Store extends Context.Service<Store>()("Store", {
 		const settingsStore = yield* SettingsStore;
 		const prIndex = yield* PrIndex;
 		const scope = yield* Scope.Scope;
-		const speculative = yield* makeSpeculativeDiff();
+		const preparation = yield* makeDiffPreparation();
+		const speculative = yield* makeSpeculativeDiff(preparation);
+		const speculationEnabled = yield* Config.boolean(
+			"NISI_SPECULATIVE_DIFF",
+		).pipe(Config.withDefault(true));
 		const baseIdentity = (repoRoot: string, baseRef: string) =>
 			Effect.gen(function* () {
 				const identity = yield* Effect.all(
@@ -578,13 +583,21 @@ export class Store extends Context.Service<Store>()("Store", {
 				const generation = {};
 				latestOpens.set(repoRoot, generation);
 				const settings = yield* settingsStore.get();
-				const pendingDiff =
-					target.kind === "auto" || target.kind === "pr"
-						? yield* speculative.start(repoRoot, settings.includeUncommitted)
-						: undefined;
+				yield* Effect.annotateCurrentSpan(
+					"speculationEnabled",
+					speculationEnabled,
+				);
 				const cached =
 					target.kind === "auto" || target.kind === "pr"
 						? yield* prIndex.lookup(repoRoot)
+						: undefined;
+				const pendingDiff =
+					speculationEnabled && (target.kind === "auto" || target.kind === "pr")
+						? yield* speculative.start(
+								repoRoot,
+								settings.includeUncommitted,
+								cached?.pr.baseRef,
+							)
 						: undefined;
 				const resolved =
 					cached === undefined
@@ -1214,6 +1227,10 @@ export class Store extends Context.Service<Store>()("Store", {
 				const files =
 					cached === undefined
 						? yield* getChangedFiles(repoRoot, session.baseRef, {
+								prepared: yield* preparation.read(repoRoot, session.baseRef, {
+									includeUncommitted: effectiveIncludeUncommitted,
+									headRef: diffHead.headRef,
+								}),
 								includeUncommitted: effectiveIncludeUncommitted,
 								headRef: diffHead.headRef,
 							})
@@ -1415,6 +1432,10 @@ export class Store extends Context.Service<Store>()("Store", {
 								session.baseRef,
 								requests satisfies ReadonlyArray<FileContentRequest>,
 								{
+									prepared: yield* preparation.read(repoRoot, session.baseRef, {
+										includeUncommitted: effectiveIncludeUncommitted,
+										headRef: diffHead.headRef,
+									}),
 									includeUncommitted: effectiveIncludeUncommitted,
 									headRef: diffHead.headRef,
 								},

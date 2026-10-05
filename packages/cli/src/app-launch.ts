@@ -74,10 +74,15 @@ export const launchApp = Effect.gen(function* () {
 	const measurementInstance = yield* Config.string(
 		"NISI_MEASUREMENT_INSTANCE",
 	).pipe(Config.option, Effect.orDie);
+	const speculativeDiff = yield* Config.string("NISI_SPECULATIVE_DIFF").pipe(
+		Config.option,
+		Effect.orDie,
+	);
 	const args = appLaunchArguments(
 		appPath,
 		dataDir,
 		Option.getOrUndefined(measurementInstance) === "1",
+		Option.getOrUndefined(speculativeDiff),
 	);
 	yield* Effect.logDebug("spawning app", {
 		command: "open",
@@ -116,12 +121,16 @@ export function appLaunchArguments(
 	appPath: string,
 	dataDir?: string,
 	measurementInstance = false,
+	speculativeDiff?: string,
 ): string[] {
 	return [
 		...(dataDir === undefined && !measurementInstance ? [] : ["-n"]),
 		...(measurementInstance ? ["-g"] : []),
 		...(dataDir === undefined ? [] : ["--env", `NISI_DATA_DIR=${dataDir}`]),
 		...(measurementInstance ? ["--env", "NISI_MEASUREMENT_INSTANCE=1"] : []),
+		...(dataDir !== undefined && speculativeDiff !== undefined
+			? ["--env", `NISI_SPECULATIVE_DIFF=${speculativeDiff}`]
+			: []),
 		"-a",
 		appPath,
 	];

@@ -8,6 +8,15 @@ test("production activation is unchanged without a data-dir override", () => {
 	]);
 });
 
+test("speculation A/B override is forwarded only to an explicit sandbox", () => {
+	expect(
+		appLaunchArguments("/checkout/nisi.app", "/data", true, "false"),
+	).toContain("NISI_SPECULATIVE_DIFF=false");
+	expect(
+		appLaunchArguments("/Applications/nisi.app", undefined, false, "false"),
+	).not.toContain("NISI_SPECULATIVE_DIFF=false");
+});
+
 test("sandbox launch starts a new instance and forwards the data dir", () => {
 	expect(appLaunchArguments("/work tree/nisi.app", "/work tree/data")).toEqual([
 		"-n",

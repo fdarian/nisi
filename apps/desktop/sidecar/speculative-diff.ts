@@ -11,9 +11,10 @@ import {
 	type FileContentRequest,
 	type RepoChangeSignature,
 } from "@repo/git";
-import { Deferred, Effect, Option, Scope } from "effect";
+import { Deferred, Effect, Scope } from "effect";
 import { FILE_CONTENTS_CHUNK_SIZE } from "../src/features/pull-request/data/file-content-demand.ts";
 import { comparePaths } from "../shared/compare-paths.ts";
+import { makeDiffPreparation } from "./diff-preparation.ts";
 
 type Candidate = {
 	createdAt: number;
@@ -28,21 +29,43 @@ type Candidate = {
 };
 
 /** Raw git results only: session review claims must always be attached fresh. */
-export const makeSpeculativeDiff = () =>
+export const makeSpeculativeDiff = (
+	provided?: Effect.Success<ReturnType<typeof makeDiffPreparation>>,
+) =>
 	Effect.gen(function* () {
+		const preparation =
+			provided === undefined ? yield* makeDiffPreparation() : provided;
 		const scope = yield* Scope.Scope;
-		const confirmed = new Map<string, Candidate>();
-		const start = (repoRoot: string, includeUncommitted: boolean) =>
+		const confirmed = new Map<
+			string,
+			{
+				pending: Deferred.Deferred<Candidate | undefined>;
+				baseRef: string;
+				at: number;
+			}
+		>();
+		const start = (
+			repoRoot: string,
+			includeUncommitted: boolean,
+			knownBase?: string,
+		) =>
 			Effect.gen(function* () {
 				const pending = yield* Deferred.make<Candidate | undefined>();
 				const compute = Effect.gen(function* () {
-					const baseRef = yield* resolveLocalDefaultBranch(repoRoot);
+					const baseRef =
+						knownBase === undefined
+							? yield* resolveLocalDefaultBranch(repoRoot)
+							: knownBase;
 					const base = yield* readLocalBase(repoRoot, baseRef);
 					if (base.commit === null) return undefined;
 					const before = yield* readRepoChangeSignature(repoRoot, {
 						includeUncommitted,
 					});
+					const prepared = yield* preparation.read(repoRoot, baseRef, {
+						includeUncommitted,
+					});
 					const files = yield* getChangedFiles(repoRoot, base.commit, {
+						prepared,
 						includeUncommitted,
 					});
 					const paths = files
@@ -54,7 +77,10 @@ export const makeSpeculativeDiff = () =>
 						repoRoot,
 						base.commit,
 						paths.map((path) => ({ path })),
-						{ includeUncommitted },
+						{
+							includeUncommitted,
+							prepared,
+						},
 					);
 					const after = yield* readRepoChangeSignature(repoRoot, {
 						includeUncommitted,
@@ -89,24 +115,11 @@ export const makeSpeculativeDiff = () =>
 			baseRef: string,
 		) =>
 			Effect.gen(function* () {
-				// Do not extend resolution to wait for speculation. A late result is discarded.
-				const polled = yield* Deferred.poll(pending);
-				if (Option.isNone(polled)) return;
-				const candidate = yield* polled.value;
-				if (candidate === undefined) return;
-				if (candidate.baseRef !== baseRef) return;
-				const base = yield* readLocalBase(repoRoot, baseRef);
-				const head = yield* resolveHeadSha(repoRoot);
-				if (
-					base.commit !== candidate.baseCommit ||
-					head !== candidate.headCommit
-				)
-					return;
 				if (confirmed.size >= 8) {
 					const oldest = confirmed.keys().next();
 					if (!oldest.done) confirmed.delete(oldest.value);
 				}
-				confirmed.set(repoRoot, candidate);
+				confirmed.set(repoRoot, { pending, baseRef, at: Date.now() });
 				yield* Effect.annotateCurrentSpan("confirmed", true);
 			}).pipe(Effect.withSpan("session.diff.confirm"));
 		const lookup = (
@@ -116,19 +129,27 @@ export const makeSpeculativeDiff = () =>
 			includeUncommitted: boolean,
 		) =>
 			Effect.gen(function* () {
-				const candidate = confirmed.get(repoRoot);
+				const entry = confirmed.get(repoRoot);
 				if (
-					candidate === undefined ||
-					Date.now() - candidate.createdAt > 30_000 ||
-					candidate.includeUncommitted !== includeUncommitted ||
-					candidate.baseRef !== baseRef
+					entry === undefined ||
+					Date.now() - entry.at > 30_000 ||
+					entry.baseRef !== baseRef
 				)
 					return undefined;
-				const base = yield* readLocalBase(repoRoot, baseRef);
-				const head = yield* resolveHeadSha(repoRoot, headRef);
+				const candidate = yield* Deferred.await(entry.pending);
 				if (
-					base.commit !== candidate.baseCommit ||
-					head !== candidate.headCommit
+					candidate === undefined ||
+					candidate.baseRef !== baseRef ||
+					candidate.includeUncommitted !== includeUncommitted
+				)
+					return undefined;
+				const refs = yield* Effect.all(
+					[readLocalBase(repoRoot, baseRef), resolveHeadSha(repoRoot, headRef)],
+					{ concurrency: "unbounded" },
+				);
+				if (
+					refs[0].commit !== candidate.baseCommit ||
+					refs[1] !== candidate.headCommit
 				) {
 					confirmed.delete(repoRoot);
 					return undefined;
