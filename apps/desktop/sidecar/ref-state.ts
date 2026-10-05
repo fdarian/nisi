@@ -1,8 +1,29 @@
 import { createHash } from "node:crypto";
 import { join, resolve } from "node:path";
 import { WorktreeReadFailed } from "@repo/git";
-import { Effect } from "effect";
+import { Config, Effect, Option } from "effect";
 import { FileSystem } from "effect/FileSystem";
+
+const sharedRef = (ref: string) =>
+	/^refs\/(heads|tags|remotes)\//.test(ref) && validRef(ref);
+
+const validRef = (ref: string) =>
+	/^[a-zA-Z0-9_./-]+$/.test(ref) &&
+	!ref.includes("..") &&
+	!ref.endsWith(".") &&
+	ref
+		.split("/")
+		.every(
+			(part) =>
+				part.length > 0 && !part.startsWith(".") && !part.endsWith(".lock"),
+		);
+
+const supportedRef = (ref: string) =>
+	ref === "HEAD" ||
+	(validRef(ref) &&
+		(!/^[a-fA-F0-9]+$/.test(ref) || ref.length === 40 || ref.length === 64) &&
+		!/^([A-Z_]+|main-worktree|worktrees)(\/|$)/.test(ref) &&
+		(!ref.startsWith("refs/") || sharedRef(ref)));
 
 /** Content fingerprints catch packed refs and same-size/same-mtime rewrites; unsupported layouts stay on git. */
 export const readRefState = (
@@ -11,12 +32,28 @@ export const readRefState = (
 	headRef = "HEAD",
 ) =>
 	Effect.gen(function* () {
-		if (
-			[baseRef, headRef].some(
-				(ref) => !/^[a-zA-Z0-9_./-]+$/.test(ref) || ref.includes(".."),
-			)
-		)
-			return undefined;
+		if (![baseRef, headRef].every(supportedRef)) return undefined;
+		const overrides = yield* Effect.forEach(
+			[
+				"GIT_DIR",
+				"GIT_COMMON_DIR",
+				"GIT_WORK_TREE",
+				"GIT_NAMESPACE",
+				"GIT_OBJECT_DIRECTORY",
+				"GIT_ALTERNATE_OBJECT_DIRECTORIES",
+				"GIT_CONFIG",
+				"GIT_CONFIG_COUNT",
+				"GIT_CONFIG_PARAMETERS",
+				"GIT_CONFIG_SYSTEM",
+				"GIT_CONFIG_GLOBAL",
+				"GIT_CONFIG_NOSYSTEM",
+				"GIT_REPLACE_REF_BASE",
+				"GIT_NO_REPLACE_OBJECTS",
+				"GIT_SHALLOW_FILE",
+			],
+			(name) => Config.string(name).pipe(Config.option),
+		);
+		if (overrides.some(Option.isSome)) return undefined;
 		const fs = yield* FileSystem;
 		const optional = (path: string) =>
 			fs.stat(path).pipe(
@@ -62,6 +99,8 @@ export const readRefState = (
 		const remotes = (yield* fs.exists(remoteDir))
 			? yield* fs.readDirectory(remoteDir)
 			: [];
+		// Base resolution scans remote refs; nested remote names are outside this fast path.
+		if (/\[remote "[^"\n]*\//.test(config)) return undefined;
 		hash.update(JSON.stringify(remotes.sort()));
 		const files = [
 			join(gitDir, "HEAD"),
@@ -86,18 +125,29 @@ export const readRefState = (
 			)
 				return undefined;
 			files.push(
+				join(gitDir, ref),
 				join(commonDir, ref),
 				join(commonDir, `refs/${ref}`),
 				join(commonDir, `refs/heads/${ref}`),
 				join(commonDir, `refs/tags/${ref}`),
 				join(commonDir, `refs/remotes/${ref}`),
 			);
+			const branch = ref.startsWith("refs/heads/")
+				? ref.slice("refs/heads/".length)
+				: ref;
 			for (const remote of remotes)
-				files.push(join(commonDir, `refs/remotes/${remote}/${ref}`));
+				files.push(join(commonDir, `refs/remotes/${remote}/${branch}`));
+			files.push(join(commonDir, `refs/remotes/origin/${branch}`));
 		}
 		const head = yield* optional(join(gitDir, "HEAD"));
-		if (head?.startsWith("ref: "))
-			files.push(join(commonDir, head.slice(5).trim()));
+		if (head === undefined) return undefined;
+		if (head.startsWith("ref: ")) {
+			const target = head.slice(5).trim();
+			if (!target.startsWith("refs/heads/") || !sharedRef(target))
+				return undefined;
+			files.push(join(commonDir, target));
+		} else if (!/^[a-fA-F0-9]{40}(?:[a-fA-F0-9]{24})?$/.test(head.trim()))
+			return undefined;
 		const values = yield* Effect.forEach(
 			files.sort(),
 			(path) => optional(path).pipe(Effect.map((text) => ({ path, text }))),
