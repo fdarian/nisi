@@ -114,4 +114,8 @@ export type {
 	OpenPullRequestWorktreeInput,
 	RevalidateWorktreePathInput,
 } from "./worktree.ts";
-export { openPullRequestWorktree, revalidateWorktreePath } from "./worktree.ts";
+export {
+	openPullRequestWorktree,
+	openPullRequestWorktreeResult,
+	revalidateWorktreePath,
+} from "./worktree.ts";

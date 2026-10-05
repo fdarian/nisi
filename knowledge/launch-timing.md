@@ -137,6 +137,13 @@ backed by successful `git worktree add` spans from this run. Existing/unrelated 
 removed, removal never uses `--force`, and cleanup also runs on failure. If cleanup is needed, the
 managed app is stopped before removal. Git branches/fetched refs are not deleted.
 
+The `pull-requests.open` span and report header distinguish **reused**, **created**, and **retargeted**
+worktrees, with the actual path. Compare like outcomes: creation includes checkout and PR-head
+fetching, while reuse may skip both. Created worktrees are removed after the run, but Git objects
+remain in the repository. After the first created run, later created runs may fetch less; the
+report warns about retained objects and flags an already-present local head ref. This is not an
+object-cold benchmark—do not label repeated creation as a fresh clone/network transfer measurement.
+
 # Reading the report
 
 All offsets are milliseconds from `cli.process-start`. Negative boot offsets mean the component

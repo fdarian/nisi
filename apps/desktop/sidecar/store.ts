@@ -15,7 +15,7 @@ import {
 	inferRepoPath,
 	type NoDefaultBranch,
 	type NoOriginRemote,
-	openPullRequestWorktree,
+	openPullRequestWorktreeResult,
 	PullRequestNotFound,
 	type PullRequestRef,
 	type PullRequestRefNotFound,
@@ -701,6 +701,10 @@ export class Store extends Context.Service<Store>()("Store", {
 						session.pr.repo.toLowerCase() === input.repo.toLowerCase(),
 				);
 				if (existing !== undefined) {
+					yield* Effect.annotateCurrentSpan({
+						worktree: "reused",
+						worktreePath: existing.repoRoot,
+					});
 					return {
 						status: "opened" as const,
 						outcome: {
@@ -730,14 +734,27 @@ export class Store extends Context.Service<Store>()("Store", {
 						RepoPathNotAGitRepo: () => Effect.succeed(null),
 					}),
 				);
-				if (reused !== null)
+				if (reused !== null) {
+					yield* Effect.annotateCurrentSpan({
+						worktree: "retargeted",
+						worktreePath: reused.session.repoRoot,
+					});
 					return { status: "opened" as const, outcome: reused };
+				}
 
-				const worktreePath = yield* openPullRequestWorktree({
+				const worktree = yield* openPullRequestWorktreeResult({
 					repoRoot,
 					number: input.number,
 					headRef: pr.headRef,
 				}).pipe(Effect.withSpan("pull-request.worktree.open"));
+				yield* Effect.annotateCurrentSpan({
+					worktree: worktree.worktree,
+					worktreePath: worktree.path,
+					...(worktree.localHeadRefPresent === undefined
+						? {}
+						: { localHeadRefPresent: worktree.localHeadRefPresent }),
+				});
+				const worktreePath = worktree.path;
 				const outcome = yield* openSession(worktreePath, {
 					kind: "specificPullRequest",
 					number: input.number,

@@ -180,6 +180,22 @@ const snapshot = (cwd: string) =>
 		Bun.$`git worktree list --porcelain`.cwd(cwd).text(),
 	).pipe(Effect.map(worktreePaths));
 
+export function formatWorktree(records: readonly LaunchRecord[]): string {
+	const opened = records.find(
+		(record) => record.type === "span" && record.name === "pull-requests.open",
+	);
+	if (opened === undefined || typeof opened.attrs.worktreePath !== "string")
+		throw new Error("Deep-link trace is missing its worktree outcome");
+	if (opened.attrs.worktree === "created")
+		return `worktree: created (removed after run) ${opened.attrs.worktreePath}\n${opened.attrs.localHeadRefPresent === true ? "Local head ref already present; this fetch may transfer fewer objects than the first creation." : "Git objects/fetched refs are retained after cleanup; subsequent created runs may fetch less."}`;
+	if (
+		opened.attrs.worktree === "reused" ||
+		opened.attrs.worktree === "retargeted"
+	)
+		return `worktree: ${opened.attrs.worktree} ${opened.attrs.worktreePath}`;
+	throw new Error("Deep-link trace has an unknown worktree outcome");
+}
+
 export const withDeepLinkWorktreeCleanup = (
 	cwd: string,
 	dataDir: string,

@@ -6,6 +6,7 @@ import { formatBuild, readBuildStamp } from "./build.ts";
 import { formatCli, prepareCli } from "./cli.ts";
 import {
 	launchDeepLinkInstance,
+	formatWorktree,
 	parseMeasurementPr,
 	runDeepLink,
 	validateDeepLinkTargets,
@@ -78,11 +79,15 @@ const program = Effect.gen(function* () {
 			}),
 		);
 		const stamp = yield* readBuildStamp(bundlePath);
+		const worktreeHeader = yield* Effect.try(() => formatWorktree(records));
 		const header = `${options.newPr ? `new PR into running app (warm-up: ${warmup?.url})` : "app startup"} — deep-link frontend injection\nCLI: n/a\nExcludes OS URL delivery and native plugin hop; cold delivery waits for the events stream, later than plugin getCurrent.\n${stamp === undefined ? "Build stamp unavailable" : formatBuild(stamp)}`;
 		if (options.json) {
-			yield* Console.error(header);
+			yield* Console.error(`${header}\n${worktreeHeader}`);
 			yield* Console.log(JSON.stringify(records, null, 2));
-		} else yield* Console.log(`${header}\n\n${formatTimeline(records)}`);
+		} else
+			yield* Console.log(
+				`${header}\n${worktreeHeader}\n\n${formatTimeline(records)}`,
+			);
 		return;
 	}
 	const warmupLabel =

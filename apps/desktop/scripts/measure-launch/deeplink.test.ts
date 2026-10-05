@@ -1,12 +1,44 @@
 import { expect, test } from "bun:test";
 import type { LaunchRecord } from "@repo/sidecar-api";
 import {
+	formatWorktree,
 	createdWorktrees,
 	parseMeasurementPr,
 	validateDeepLinkTargets,
 } from "./deeplink.ts";
 import { formatTimeline } from "./format.ts";
 import { parseLaunchOptions } from "./options.ts";
+
+test("worktree header distinguishes creation, reuse and retargeting and warns about cached refs", () => {
+	const record: LaunchRecord = {
+		type: "span",
+		source: "sidecar",
+		name: "pull-requests.open",
+		spanId: "open",
+		start: 0,
+		end: 1,
+		attrs: {
+			worktree: "created",
+			worktreePath: "/created",
+			localHeadRefPresent: true,
+		},
+	};
+	expect(formatWorktree([record])).toContain("created (removed after run)");
+	expect(formatWorktree([record])).toContain("already present");
+	expect(
+		formatWorktree([
+			{ ...record, attrs: { worktree: "reused", worktreePath: "/existing" } },
+		]),
+	).toBe("worktree: reused /existing");
+	expect(
+		formatWorktree([
+			{
+				...record,
+				attrs: { worktree: "retargeted", worktreePath: "/existing" },
+			},
+		]),
+	).toBe("worktree: retargeted /existing");
+});
 
 test("deep-link mode requires managed instances and preserves warm-up URL", () => {
 	expect(() =>
