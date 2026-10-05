@@ -1,5 +1,5 @@
-import { BunRuntime, BunServices } from "@effect/platform-bun";
 import { join } from "node:path";
+import { BunRuntime, BunServices } from "@effect/platform-bun";
 import { makeLaunchTracer } from "@repo/logging";
 import { Console, Effect, Logger } from "effect";
 import { FileSystem } from "effect/FileSystem";
@@ -30,6 +30,29 @@ import {
 import { resolveWarmup } from "./new-pr.ts";
 import { parseLaunchOptions } from "./options.ts";
 import { runTracedOpen } from "./run.ts";
+
+const waitForPrIndex = (dataDir: string) =>
+	Effect.gen(function* () {
+		const fs = yield* FileSystem;
+		const deadline = Date.now() + 120_000;
+		while (true) {
+			const log = yield* fs.readFileString(join(dataDir, "logs/sidecar.log"));
+			if (log.includes('message="PR index refreshed"')) return;
+			if (
+				log.includes('message="PR index refresh failed; retaining last index"')
+			)
+				return yield* Effect.fail(
+					new Error(
+						"PR index refresh failed during warm-up; cannot measure a confirmed hit",
+					),
+				);
+			if (Date.now() >= deadline)
+				return yield* Effect.fail(
+					new Error("timed out waiting for PR index refresh"),
+				);
+			yield* Effect.sleep("100 millis");
+		}
+	});
 
 const program = Effect.gen(function* () {
 	const options = yield* Effect.try(() =>
@@ -71,6 +94,25 @@ const program = Effect.gen(function* () {
 						url: warmup.url,
 						label: "Deep-link warm-up",
 					});
+				if (options.waitPrIndex) {
+					const sessions = yield* Effect.tryPromise(() =>
+						client.sessions.list(),
+					);
+					const session = sessions[0];
+					if (session === undefined)
+						return yield* Effect.fail(
+							new Error(
+								"index-hit deep-link measurement requires a warm-up session",
+							),
+						);
+					yield* Effect.tryPromise(() =>
+						client.sessions.setAttention({
+							sessionId: session.id,
+							watched: true,
+						}),
+					);
+					yield* waitForPrIndex(dataDir);
+				}
 				return yield* runDeepLink({
 					dataDir,
 					traceId,
@@ -119,24 +161,7 @@ const program = Effect.gen(function* () {
 			cliPath: cli.path,
 		});
 	if (options.waitPrIndex) {
-		const deadline = Date.now() + 120_000;
-		while (true) {
-			const log = yield* fs.readFileString(join(dataDir, "logs/sidecar.log"));
-			if (log.includes('message="PR index refreshed"')) break;
-			if (
-				log.includes('message="PR index refresh failed; retaining last index"')
-			)
-				return yield* Effect.fail(
-					new Error(
-						"PR index refresh failed during warm-up; cannot measure a confirmed hit",
-					),
-				);
-			if (Date.now() >= deadline)
-				return yield* Effect.fail(
-					new Error("Timed out waiting for warm-up PR index"),
-				);
-			yield* Effect.sleep("100 millis");
-		}
+		yield* waitForPrIndex(dataDir);
 		yield* Console.log(
 			"Warm-up PR index populated (target hit must still be confirmed in trace)",
 		);

@@ -1014,6 +1014,7 @@ export class Store extends Context.Service<Store>()("Store", {
 			Effect.gen(function* () {
 				const repoRoot = yield* verifyRepoPathMatchesOrigin(path, owner, repo);
 				yield* settingsStore.setRepoPath(owner, repo, repoRoot);
+				yield* prIndex.refresh(repoRoot, owner, repo);
 				return { owner, repo, path: repoRoot };
 			});
 

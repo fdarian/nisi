@@ -139,6 +139,44 @@ const withTestRepoAndDataDir = async <T>(
 	}
 };
 
+test("recording a repository path starts a non-blocking index refresh for deep links", async () => {
+	await withTestRepoAndDataDir(async (repoRoot, dataDir) => {
+		await sh(repoRoot, [
+			"remote",
+			"add",
+			"origin",
+			"https://github.com/acme/widgets.git",
+		]);
+		const started = await Effect.runPromise(Deferred.make<void>());
+		const finish = await Effect.runPromise(Deferred.make<void>());
+		const canonicalRoot = await realpath(repoRoot);
+		const github: GitHubShape = {
+			...mockGitHub,
+			listOpenPullRequests: (path, owner, repo) =>
+				Effect.gen(function* () {
+					expect(path).toBe(canonicalRoot);
+					expect(`${owner}/${repo}`).toBe("acme/widgets");
+					yield* Deferred.succeed(started, undefined);
+					yield* Deferred.await(finish);
+					return {
+						repository: { owner, repo, defaultBranch: "main" },
+						prs: [],
+					};
+				}),
+		};
+		await Effect.runPromise(
+			Effect.gen(function* () {
+				const store = yield* Store;
+				expect(
+					(yield* store.recordRepoPath("acme", "widgets", repoRoot)).path,
+				).toBe(canonicalRoot);
+				yield* Deferred.await(started);
+				yield* Deferred.succeed(finish, undefined);
+			}).pipe(Effect.provide(makeTestLayer(dataDir, github))),
+		);
+	});
+});
+
 test("index disagreement upserts the correct PR's existing row without transferring snapshots; no-PR correction uses a branch key", async () => {
 	await withTestRepoAndDataDir(async (repoRoot, dataDir) => {
 		await sh(repoRoot, ["remote", "add", "origin", repoRoot]);
