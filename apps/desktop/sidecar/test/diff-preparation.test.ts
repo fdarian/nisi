@@ -6,6 +6,7 @@ import {
 	makeTestRepo,
 } from "../../../../packages/git/test/fixtures.ts";
 import { makeDiffPreparation } from "../diff-preparation.ts";
+import { readRefState } from "../ref-state.ts";
 
 test("metadata and contents share one committed preparation, but changed refs and worktree edits do not", async () => {
 	const repo = await makeTestRepo();
@@ -19,6 +20,7 @@ test("metadata and contents share one committed preparation, but changed refs an
 		await repo.commit("head");
 		await Effect.runPromise(
 			Effect.gen(function* () {
+				expect(yield* readRefState(repo.root, "main")).toBeDefined();
 				const preparation = yield* makeDiffPreparation();
 				const first = yield* preparation.read(repo.root, "main", {
 					includeUncommitted: false,
@@ -55,6 +57,13 @@ test("metadata and contents share one committed preparation, but changed refs an
 					includeUncommitted: false,
 				});
 				expect(packed.mergeBase).toBe(afterBase.mergeBase);
+				expect(yield* readRefState(repo.root, "origin/main")).toBeDefined();
+				const explicitRemote = yield* preparation.read(
+					repo.root,
+					"origin/main",
+					{ includeUncommitted: false },
+				);
+				expect(explicitRemote.entries).toHaveLength(0);
 				const dirty = yield* preparation.read(repo.root, "main", {
 					includeUncommitted: true,
 				});

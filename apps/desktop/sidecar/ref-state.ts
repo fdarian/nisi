@@ -79,13 +79,18 @@ export const readRefState = (
 			return undefined;
 		for (const ref of [baseRef, headRef]) {
 			if (ref === "HEAD") continue;
+			const remoteCandidate = join(commonDir, `refs/remotes/${ref}`);
+			if (
+				(yield* fs.exists(remoteCandidate)) &&
+				(yield* fs.stat(remoteCandidate)).type === "Directory"
+			)
+				return undefined;
 			files.push(
 				join(commonDir, ref),
 				join(commonDir, `refs/${ref}`),
 				join(commonDir, `refs/heads/${ref}`),
 				join(commonDir, `refs/tags/${ref}`),
 				join(commonDir, `refs/remotes/${ref}`),
-				join(commonDir, `refs/remotes/${ref}/HEAD`),
 			);
 			for (const remote of remotes)
 				files.push(join(commonDir, `refs/remotes/${remote}/${ref}`));
