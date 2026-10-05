@@ -82,14 +82,14 @@ import { translateMergeFailure } from "./merge-failure.ts";
 import { createNativeActivationHandler } from "./native-activation.ts";
 import {
 	acknowledgeOpenRequest,
-	createOpenRequest,
 	correctOpenRequest,
+	createOpenRequest,
 	failOpenRequest,
 	listOpenRequests,
 	resolveOpenRequest,
 } from "./open-requests.ts";
-import { AttentionState } from "./pull-request-attention.ts";
 import { PrIndex } from "./pr-index.ts";
+import { AttentionState } from "./pull-request-attention.ts";
 import { RpcErrorsPlugin } from "./rpc-errors.ts";
 import { RpcLifecyclePlugin } from "./rpc-lifecycle.ts";
 import { ScheduledMerges } from "./scheduled-merge.ts";
@@ -468,7 +468,11 @@ export function attachRouter(
 						},
 					);
 					const store = yield* Store;
-					const opening = store.openSession(input.cwd, input.target);
+					const opening = store.openSession(
+						input.cwd,
+						input.target,
+						input.repoRoot,
+					);
 					const outcome = yield* opening.pipe(
 						Effect.catchTag("InvalidCwd", (cause) =>
 							Effect.fail(

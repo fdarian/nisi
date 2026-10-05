@@ -70,6 +70,7 @@ export const sessionsContract = {
 		.input(
 			Schema.Struct({
 				cwd: Schema.String,
+				repoRoot: Schema.optional(Schema.String),
 				traceId: Schema.optional(Schema.String),
 				target: Schema.optional(OpenSessionTarget),
 			}),

@@ -29,7 +29,6 @@ import {
 	resolveDiffBaseRef,
 	resolveMainCloneRoot,
 	resolveMergeBase,
-	resolveRepoRoot,
 	resolveReviewTarget,
 	resolveReviewTargetForPullRequest,
 	revalidateWorktreePath,
@@ -65,9 +64,10 @@ import {
 	resolveDiffHead,
 	validateHeadRef,
 } from "./diff-head.ts";
-import { emit } from "./events.ts";
 import { makeDiffPreparation } from "./diff-preparation.ts";
+import { emit } from "./events.ts";
 import { PrIndex } from "./pr-index.ts";
+import { resolveOpenRepoRoot } from "./repo-root.ts";
 
 /** `sessions.open`'s `cwd` doesn't resolve to a git working tree. */
 export class InvalidCwd extends Schema.TaggedError<InvalidCwd>()("InvalidCwd", {
@@ -569,9 +569,10 @@ export class Store extends Context.Service<Store>()("Store", {
 		const openSession = (
 			cwd: string,
 			target: OpenSessionTarget = { kind: "auto" },
+			providedRepoRoot?: string,
 		) =>
 			Effect.gen(function* () {
-				const repoRoot = yield* resolveRepoRoot(cwd).pipe(
+				const repoRoot = yield* resolveOpenRepoRoot(cwd, providedRepoRoot).pipe(
 					Effect.catchTag("NotAGitRepository", () => new InvalidCwd({ cwd })),
 					Effect.withSpan("session.repo-root.resolve"),
 				);

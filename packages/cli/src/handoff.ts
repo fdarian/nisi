@@ -135,7 +135,7 @@ const attempt = (
 		const result = yield* Effect.promise(() =>
 			safe(
 				client.sessions.open(
-					{ cwd, target, traceId },
+					{ cwd, repoRoot: cwd, target, traceId },
 					{ signal: AbortSignal.timeout(POST_TIMEOUT_MS) },
 				),
 			),
