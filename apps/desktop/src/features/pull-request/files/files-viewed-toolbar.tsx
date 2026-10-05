@@ -4,6 +4,7 @@ import {
 	RowsIcon,
 	SlidersHorizontalIcon,
 } from "lucide-react";
+import { motion, useReducedMotion } from "motion/react";
 import { Button, buttonVariants } from "#/components/ui/button";
 import {
 	DropdownMenu,
@@ -39,33 +40,56 @@ export function FilesViewedToolbar(props: {
 	const includeUncommitted = useIncludeUncommitted(props.orpc);
 	const wrapLines = useWrapLines(props.orpc);
 	const loading = props.counts === undefined;
+	const reducedMotion = useReducedMotion();
+	const transition = {
+		duration: reducedMotion ? 0 : 0.2,
+		ease: "easeOut" as const,
+	};
 	return (
 		<div className={filesToolbarClassName}>
 			<span className="flex items-center gap-2">
 				<ProgressCircle counts={props.counts} />
-				<span>
-					<span
-						data-files-data
+				<span className="flex items-center gap-1">
+					<motion.span
+						layout="position"
+						transition={transition}
 						className="font-medium text-foreground tabular-nums"
 					>
 						{props.counts === undefined ? (
-							<Skeleton className="inline-block h-2 w-2" />
+							<Skeleton className="inline-block h-2 w-[2ch]" />
 						) : (
-							props.counts.viewed
+							<motion.span
+								initial={{ opacity: 0 }}
+								animate={{ opacity: 1 }}
+								transition={transition}
+							>
+								{props.counts.viewed}
+							</motion.span>
 						)}
-					</span>{" "}
-					of{" "}
-					<span
-						data-files-data
+					</motion.span>
+					<motion.span layout="position" transition={transition}>
+						of
+					</motion.span>
+					<motion.span
+						layout="position"
+						transition={transition}
 						className="font-medium text-foreground tabular-nums"
 					>
 						{props.counts === undefined ? (
-							<Skeleton className="inline-block h-2 w-4" />
+							<Skeleton className="inline-block h-2 w-[2ch]" />
 						) : (
-							props.counts.total
+							<motion.span
+								initial={{ opacity: 0 }}
+								animate={{ opacity: 1 }}
+								transition={transition}
+							>
+								{props.counts.total}
+							</motion.span>
 						)}
-					</span>{" "}
-					viewed
+					</motion.span>
+					<motion.span layout="position" transition={transition}>
+						viewed
+					</motion.span>
 				</span>
 			</span>
 			<div className="flex items-center gap-2">

@@ -18,6 +18,7 @@ const lineWidths = [48, 72, 58, 84, 36, 64, 76, 44];
 
 export function FilesChangedSkeleton(props: {
 	orpc: SidecarQueryUtils;
+	toolbarVisible?: boolean;
 }): React.ReactElement {
 	return (
 		<div
@@ -41,8 +42,12 @@ export function FilesChangedSkeleton(props: {
 				</div>
 			</div>
 			<div className={filesMainClassName}>
-				<FilesViewedToolbar orpc={props.orpc} />
-				<div className="min-h-0 flex-1 overflow-hidden px-3">
+				{props.toolbarVisible !== false ? (
+					<FilesViewedToolbar orpc={props.orpc} />
+				) : (
+					<div className="h-12 shrink-0" aria-hidden />
+				)}
+				<div className="min-h-0 flex-1 overflow-hidden bg-pane-surface px-3">
 					<div
 						className="flex flex-col"
 						style={{ gap: diffCodeViewLayout.gap }}

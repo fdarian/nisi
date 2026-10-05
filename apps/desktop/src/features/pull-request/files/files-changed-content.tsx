@@ -16,7 +16,7 @@ const REVEAL_TIMEOUT_MS = 1500;
 
 type FilesChangedContentProps = Omit<
 	ComponentProps<typeof FilesChangedView>,
-	"onFirstCardPainted"
+	"onFirstCardPainted" | "countsRevealed"
 > & {
 	isLoading: boolean;
 	error: unknown;
@@ -101,13 +101,17 @@ function FilesChangedReveal(
 					animate={{ "--files-data-opacity": revealed ? 1 : 0 }}
 					transition={{ duration, ease: "easeOut" }}
 				>
-					<FilesChangedView {...props} onFirstCardPainted={reveal} />
+					<FilesChangedView
+						{...props}
+						countsRevealed={revealed}
+						onFirstCardPainted={reveal}
+					/>
 				</motion.div>
 			)}
 			{!(revealed && skeletonGone) && (
 				<motion.div
 					className={cn(
-						"absolute inset-0 flex min-h-0 bg-pane-surface",
+						"absolute inset-0 flex min-h-0 pointer-events-none",
 						revealed && "pointer-events-none",
 					)}
 					initial={false}
@@ -117,7 +121,7 @@ function FilesChangedReveal(
 						if (revealed) setSkeletonGone(true);
 					}}
 				>
-					<FilesChangedSkeleton orpc={props.orpc} />
+					<FilesChangedSkeleton orpc={props.orpc} toolbarVisible={!settled} />
 				</motion.div>
 			)}
 		</>

@@ -61,6 +61,7 @@ const EMPTY_MATCHES_BY_PATH: ReadonlyMap<string, readonly DiffMatch[]> =
 	new Map();
 
 type FilesChangedViewProps = {
+	countsRevealed: boolean;
 	session: Session;
 	orpc: SidecarQueryUtils;
 	files: readonly FileChange[];
@@ -89,6 +90,7 @@ export function FilesChangedView({
 	onRefresh,
 	shortcutsEnabled,
 	onFirstCardPainted,
+	countsRevealed,
 }: FilesChangedViewProps): React.ReactElement {
 	// All of `selectedPath` through `forcedPaths`/the undo stack below live in
 	// the per-session UI store (`session-ui-store.ts`), not local `useState` —
@@ -661,7 +663,11 @@ export function FilesChangedView({
 				<div className={filesMainClassName}>
 					<FilesViewedToolbar
 						orpc={orpc}
-						counts={{ total: files.length, viewed: viewedCount }}
+						counts={
+							countsRevealed
+								? { total: files.length, viewed: viewedCount }
+								: undefined
+						}
 						hasPendingChanges={hasPendingChanges}
 						onRefresh={onRefresh}
 					/>
