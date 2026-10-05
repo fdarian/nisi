@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { Effect, ConfigProvider } from "effect";
+import { ConfigProvider, Effect } from "effect";
 import {
 	createInjectedDeepLinks,
 	measurementInstance,

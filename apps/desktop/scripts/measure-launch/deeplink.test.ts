@@ -5,8 +5,8 @@ import {
 	parseMeasurementPr,
 	validateDeepLinkTargets,
 } from "./deeplink.ts";
-import { parseLaunchOptions } from "./options.ts";
 import { formatTimeline } from "./format.ts";
+import { parseLaunchOptions } from "./options.ts";
 
 test("deep-link mode requires managed instances and preserves warm-up URL", () => {
 	expect(() =>

@@ -1,7 +1,7 @@
 import type { SidecarClient, SidecarEvent } from "@repo/sidecar-api";
 import { createContext, useContext, useEffect, useRef } from "react";
-import { frontendBootMark, receiveTracedDeepLink } from "./launch-trace";
 import { enqueueInjectedDeepLink } from "#/shell/deep-link/deep-link-store";
+import { frontendBootMark, receiveTracedDeepLink } from "./launch-trace";
 
 type Listener = (event: SidecarEvent) => void;
 const EventContext = createContext<((listener: Listener) => () => void) | null>(

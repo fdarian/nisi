@@ -73,11 +73,11 @@ import { listHarnesses } from "./harness/harnesses.ts";
 import { getHarnessModels } from "./harness/models.ts";
 import { receiveFrontendMarks } from "./launch-trace/handler.ts";
 import { LaunchTrace } from "./launch-trace/service.ts";
+import { checkSessionForChanges } from "./live-poll.ts";
 import {
 	injectedDeepLinks,
 	measurementInstance,
 } from "./measurement-deep-links.ts";
-import { checkSessionForChanges } from "./live-poll.ts";
 import { translateMergeFailure } from "./merge-failure.ts";
 import { createNativeActivationHandler } from "./native-activation.ts";
 import {

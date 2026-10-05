@@ -4,6 +4,13 @@ import { Console, Effect, Logger } from "effect";
 import { FileSystem } from "effect/FileSystem";
 import { formatBuild, readBuildStamp } from "./build.ts";
 import {
+	launchDeepLinkInstance,
+	parseMeasurementPr,
+	runDeepLink,
+	validateDeepLinkTargets,
+	withDeepLinkWorktreeCleanup,
+} from "./deeplink.ts";
+import {
 	formatAlreadyOpen,
 	formatTimeline,
 	formatVisibility,
@@ -20,13 +27,6 @@ import {
 import { resolveWarmup } from "./new-pr.ts";
 import { parseLaunchOptions } from "./options.ts";
 import { runTracedOpen } from "./run.ts";
-import {
-	launchDeepLinkInstance,
-	parseMeasurementPr,
-	runDeepLink,
-	validateDeepLinkTargets,
-	withDeepLinkWorktreeCleanup,
-} from "./deeplink.ts";
 
 const program = Effect.gen(function* () {
 	const options = yield* Effect.try(() =>
