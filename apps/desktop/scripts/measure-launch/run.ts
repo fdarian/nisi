@@ -4,7 +4,6 @@ import { Effect, Schema } from "effect";
 import { FileSystem } from "effect/FileSystem";
 import {
 	bundlePath,
-	cliPath,
 	liveInstance,
 	requireInstrumentation,
 	unavailableAppPath,
@@ -33,12 +32,13 @@ export const runTracedOpen = (options: {
 	managed: boolean;
 	quiet: boolean;
 	label: string;
+	cliPath: string;
 }) =>
 	Effect.gen(function* () {
 		const fs = yield* FileSystem;
 		const file = launchTracePath(options.dataDir, options.traceId);
 		const child = yield* Effect.try(() =>
-			Bun.spawn([process.execPath, cliPath], {
+			Bun.spawn([options.cliPath], {
 				cwd: options.cwd,
 				env: {
 					...process.env,

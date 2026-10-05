@@ -17,7 +17,6 @@ export const newPrDataDir = join(
 	desktopDir,
 	".data/measure-launch/new-pr/data",
 );
-export const cliPath = resolve(desktopDir, "../../packages/cli/src/index.ts");
 export const unavailableAppPath = join(
 	desktopDir,
 	".data/measure-launch/app-launch-disabled.app",

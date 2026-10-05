@@ -18,17 +18,20 @@ const scope = [
 	":(exclude)apps/desktop/scripts/measure-launch/**",
 ];
 
-export const buildFingerprint = (root: string) =>
+export const buildFingerprint = (
+	root: string,
+	paths: readonly string[] = scope,
+) =>
 	Effect.gen(function* () {
 		const fs = yield* FileSystem;
 		const head = (yield* Effect.tryPromise(() =>
 			Bun.$`git rev-parse HEAD`.cwd(root).text(),
 		)).trim();
 		const diff = yield* Effect.tryPromise(() =>
-			Bun.$`git diff HEAD --binary -- ${scope}`.cwd(root).arrayBuffer(),
+			Bun.$`git diff HEAD --binary -- ${paths}`.cwd(root).arrayBuffer(),
 		);
-		const paths = (yield* Effect.tryPromise(() =>
-			Bun.$`git ls-files --others --exclude-standard -z -- ${scope}`
+		const untracked = (yield* Effect.tryPromise(() =>
+			Bun.$`git ls-files --others --exclude-standard -z -- ${paths}`
 				.cwd(root)
 				.text(),
 		))
@@ -36,14 +39,14 @@ export const buildFingerprint = (root: string) =>
 			.filter((path) => path.length > 0)
 			.sort();
 		const hash = createHash("sha256").update(new Uint8Array(diff));
-		for (const path of paths) {
+		for (const path of untracked) {
 			const contents = yield* fs.readFile(join(root, path));
 			hash.update(`\0${path}\0${contents.length}\0`).update(contents);
 		}
 		return {
 			head,
 			hash: hash.digest("hex"),
-			hasChanges: diff.byteLength > 0 || paths.length > 0,
+			hasChanges: diff.byteLength > 0 || untracked.length > 0,
 		};
 	});
 
@@ -86,7 +89,8 @@ export const ensureBuild = (
 			current,
 			stamp,
 			forced,
-			yield* fs.exists(join(bundle, "Contents/MacOS/nisi")),
+			(yield* fs.exists(join(bundle, "Contents/MacOS/nisi"))) &&
+				(yield* fs.exists(join(bundle, "Contents/MacOS/nisi-cli"))),
 		);
 		if (reason === undefined && stamp !== undefined) {
 			yield* Console.error(
@@ -123,12 +127,14 @@ export const ensureBuild = (
 		return result;
 	});
 
-export const readBuildStamp = (bundle: string) =>
+export const readStamp = (path: string) =>
 	Effect.gen(function* () {
 		const fs = yield* FileSystem;
-		const path = join(dirname(bundle), "nisi.app.build-stamp.json");
 		if (!(yield* fs.exists(path))) return undefined;
 		return yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Stamp))(
 			yield* fs.readFileString(path),
 		);
 	});
+
+export const readBuildStamp = (bundle: string) =>
+	readStamp(join(dirname(bundle), "nisi.app.build-stamp.json"));

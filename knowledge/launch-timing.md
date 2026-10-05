@@ -19,7 +19,7 @@ Run from `apps/desktop` against a worktree with an open PR:
 bun scripts/measure-launch --new-pr --warmup /path/to/other-pr-worktree --cwd /path/to/target-pr-worktree
 ```
 
-The script always runs this checkout's `packages/cli/src/index.ts` and only targets this checkout's
+The script runs this checkout's compiled CLI and only targets this checkout's
 instances. It never measures or stops `/Applications/nisi.app`; inherited `NISI_DATA_DIR` and
 `NISI_APP_PATH` do not select a target.
 
@@ -85,6 +85,14 @@ app. A changed HEAD, changed hash, missing bundle/stamp, or `--rebuild` rebuilds
 reason; matching inputs print a reuse message. The stamp records build time, and report headers
 identify the build commit and any uncommitted content hash. A source change during the build
 fails rather than stamping an inconsistent artifact.
+
+CLI measurements use the shipped compiled artifact, not `bun packages/cli/src/index.ts`:
+managed modes use `nisi.app/Contents/MacOS/nisi-cli`, produced by the app's `beforeBuildCommand`
+and covered by the app stamp. Unmanaged warm mode builds only the CLI with the same
+`build-binary.ts` compile/sign helper and reuses `.data/measure-launch/cli/nisi` with its own
+`nisi.build-stamp.json`. Its content scope covers CLI/transitive workspace packages, dependency
+lock/config/patches, and the binary builder, excluding Markdown and tests, not desktop UI or Rust.
+The report names the compiled binary and its commit/content hash. Deep-link reports say `CLI: n/a`.
 
 Managed instances opt into `NISI_MEASUREMENT_INSTANCE=1` (renamed from `NISI_MOCK_KEYCHAIN`),
 forwarded by the CLI through `open --env` and inherited by Rust's sidecar subprocess.

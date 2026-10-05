@@ -3,6 +3,7 @@ import { makeLaunchTracer } from "@repo/logging";
 import { Console, Effect, Logger } from "effect";
 import { FileSystem } from "effect/FileSystem";
 import { formatBuild, readBuildStamp } from "./build.ts";
+import { formatCli, prepareCli } from "./cli.ts";
 import {
 	launchDeepLinkInstance,
 	parseMeasurementPr,
@@ -77,7 +78,7 @@ const program = Effect.gen(function* () {
 			}),
 		);
 		const stamp = yield* readBuildStamp(bundlePath);
-		const header = `${options.newPr ? `new PR into running app (warm-up: ${warmup?.url})` : "app startup"} — deep-link frontend injection\nExcludes OS URL delivery and native plugin hop; cold delivery waits for the events stream, later than plugin getCurrent.\n${stamp === undefined ? "Build stamp unavailable" : formatBuild(stamp)}`;
+		const header = `${options.newPr ? `new PR into running app (warm-up: ${warmup?.url})` : "app startup"} — deep-link frontend injection\nCLI: n/a\nExcludes OS URL delivery and native plugin hop; cold delivery waits for the events stream, later than plugin getCurrent.\n${stamp === undefined ? "Build stamp unavailable" : formatBuild(stamp)}`;
 		if (options.json) {
 			yield* Console.error(header);
 			yield* Console.log(JSON.stringify(records, null, 2));
@@ -93,6 +94,7 @@ const program = Effect.gen(function* () {
 		? prepareColdInstance(options.rebuild, options.newPr)
 		: runningInstance;
 	const fs = yield* FileSystem;
+	const cli = yield* prepareCli(managed);
 	if ((options.newPr || !managed) && (yield* fs.exists(unavailableAppPath)))
 		return yield* Effect.fail(
 			new Error(
@@ -108,6 +110,7 @@ const program = Effect.gen(function* () {
 			managed: true,
 			quiet: true,
 			label: "Warm-up",
+			cliPath: cli.path,
 		});
 	const traceId = crypto.randomUUID();
 	if (!options.cold) {
@@ -139,6 +142,7 @@ const program = Effect.gen(function* () {
 		managed,
 		quiet: options.json,
 		label: "Measured open",
+		cliPath: cli.path,
 	});
 	const header =
 		warmupLabel === undefined
@@ -150,7 +154,7 @@ const program = Effect.gen(function* () {
 		dataDir === coldDataDir || dataDir === newPrDataDir
 			? yield* readBuildStamp(bundlePath)
 			: undefined;
-	const reportHeader = `${header}\n${stamp === undefined ? "Build stamp unavailable for this instance" : formatBuild(stamp)}`;
+	const reportHeader = `${header}\n${stamp === undefined ? "Build stamp unavailable for this instance" : formatBuild(stamp)}\n${formatCli(cli)}`;
 	if (options.json) {
 		yield* Console.error(reportHeader);
 		yield* Console.log(JSON.stringify(records, null, 2));
