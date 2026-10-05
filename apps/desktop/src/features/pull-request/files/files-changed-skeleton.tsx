@@ -25,7 +25,7 @@ export function FilesChangedSkeleton(): React.ReactElement {
 		>
 			<div className={filesSidebarClassName} aria-hidden>
 				<div className="p-2">
-					<Skeleton className="h-8 w-full rounded-md" />
+					<Skeleton className="h-9 w-full rounded-lg sm:h-8" />
 				</div>
 				<div className="px-2">
 					{treeRows.map((row) => (
@@ -74,11 +74,11 @@ export function FilesChangedSkeleton(): React.ReactElement {
 									</div>
 									<Skeleton className="h-5 w-14" />
 									<Skeleton className="h-2 w-12" />
-									<div className="flex h-8 items-center gap-2 px-2">
+									<div className="flex h-8 items-center gap-1.5 px-[calc(--spacing(2.5)-1px)] sm:h-7">
 										<Skeleton className="size-4" />
 										<Skeleton className="h-2 w-14" />
 									</div>
-									<Skeleton className="size-8" />
+									<Skeleton className="size-8 sm:size-7" />
 								</div>
 								<div className="border border-t-0 py-2">
 									{lineWidths.map((width) => (
