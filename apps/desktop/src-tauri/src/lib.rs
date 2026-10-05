@@ -372,7 +372,7 @@ fn find_focused_window(app: &tauri::AppHandle) -> Option<tauri::WebviewWindow> {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let mut cef = tauri_runtime_cef::Cef::default();
-    if std::env::var("NISI_MOCK_KEYCHAIN").is_ok_and(|value| value == "1") {
+    if std::env::var("NISI_MEASUREMENT_INSTANCE").is_ok_and(|value| value == "1") {
         cef = cef.secret_storage(tauri_runtime_cef::SecretStorage::Mock);
     }
     if let Ok(data_dir) = std::env::var("NISI_DATA_DIR") {

@@ -73,6 +73,10 @@ import { listHarnesses } from "./harness/harnesses.ts";
 import { getHarnessModels } from "./harness/models.ts";
 import { receiveFrontendMarks } from "./launch-trace/handler.ts";
 import { LaunchTrace } from "./launch-trace/service.ts";
+import {
+	injectedDeepLinks,
+	measurementInstance,
+} from "./measurement-deep-links.ts";
 import { checkSessionForChanges } from "./live-poll.ts";
 import { translateMergeFailure } from "./merge-failure.ts";
 import { createNativeActivationHandler } from "./native-activation.ts";
@@ -399,6 +403,40 @@ export function attachRouter(
 	const router = authed.router({
 		diagnostics: {
 			launchMarks: authed.diagnostics.launchMarks.effect(receiveFrontendMarks),
+			injectDeepLink: authed.diagnostics.injectDeepLink.effect(
+				function* (call) {
+					if (!(yield* measurementInstance))
+						return yield* Effect.fail(
+							call.errors.FORBIDDEN({
+								message: "Deep-link injection requires a measurement instance",
+							}),
+						);
+					const url = yield* Effect.try(() => new URL(call.input.url)).pipe(
+						Effect.mapError(() =>
+							call.errors.BAD_REQUEST({ message: "Invalid deep-link URL" }),
+						),
+					);
+					if (url.protocol !== "nisi:" || url.hostname !== "open")
+						return yield* Effect.fail(
+							call.errors.BAD_REQUEST({ message: "Expected a nisi open link" }),
+						);
+					const trace = yield* LaunchTrace;
+					yield* trace.activate(call.input.traceId);
+					yield* Effect.try(() =>
+						injectedDeepLinks.inject(call.input.url, call.input.traceId),
+					);
+				},
+			),
+			ackDeepLink: authed.diagnostics.ackDeepLink.effect(function* (call) {
+				if (!(yield* measurementInstance))
+					return yield* Effect.fail(
+						call.errors.FORBIDDEN({
+							message:
+								"Deep-link acknowledgment requires a measurement instance",
+						}),
+					);
+				yield* Effect.sync(() => injectedDeepLinks.ack(call.input.traceId));
+			}),
 		},
 		health: {
 			// biome-ignore lint/correctness/useYield: .effect() requires a generator function even with no Effect steps
@@ -947,6 +985,7 @@ export function attachRouter(
 
 				try {
 					yield ready;
+					for (const event of injectedDeepLinks.list()) yield event;
 					while (signal?.aborted !== true) {
 						const event = pending.shift();
 						if (event !== undefined) {
@@ -1240,6 +1279,8 @@ export function attachRouter(
 					);
 			}),
 			open: authed.pullRequests.open.effect(function* ({ input, errors }) {
+				const trace = yield* LaunchTrace;
+				yield* trace.activate(input.traceId);
 				const store = yield* Store;
 				const outcome = yield* store
 					.openPullRequestSession({
@@ -1319,6 +1360,7 @@ export function attachRouter(
 					);
 				if (outcome.status === "opened") {
 					const session = outcome.outcome.session;
+					yield* Effect.annotateCurrentSpan({ sessionId: session.id });
 					if (outcome.outcome.kind === "opened") {
 						emit({ type: "session-opened", session });
 					} else {
@@ -1331,6 +1373,16 @@ export function attachRouter(
 					});
 					return { status: "opened" as const, session };
 				}
+				if (input.traceId !== undefined)
+					yield* trace.exporter.append(input.traceId, [
+						{
+							type: "mark",
+							source: "sidecar",
+							name: "deeplink.needs-repo-path",
+							at: Date.now(),
+							attrs: {},
+						},
+					]);
 				return outcome;
 			}),
 			// The other half of the `"needs-repo-path"` flow: persists the

@@ -23,9 +23,9 @@ test("diagnostics RPC validates and appends frontend marks to the active trace",
 				const diagnostics =
 					implement(contract).$context<WithEffectContext<LaunchTrace>>()
 						.diagnostics;
-				const router = diagnostics.router({
+				const router = {
 					launchMarks: diagnostics.launchMarks.effect(receiveFrontendMarks),
-				});
+				};
 				const run = <A>(effect: Effect.Effect<A>) =>
 					Effect.runPromise(Effect.provide(effect, context));
 				const handler = new RPCHandler(

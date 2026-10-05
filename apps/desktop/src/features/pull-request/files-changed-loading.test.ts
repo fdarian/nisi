@@ -23,7 +23,9 @@ test("the shared pending/session skeleton records one loading paint per traced o
 	});
 	const delivered = Promise.withResolvers<void>();
 	const names: string[] = [];
-	const client: Pick<SidecarClient, "diagnostics"> = {
+	const client: {
+		diagnostics: Pick<SidecarClient["diagnostics"], "launchMarks">;
+	} = {
 		diagnostics: {
 			launchMarks: async (input) => {
 				names.push(...input.marks.map((mark) => mark.name));

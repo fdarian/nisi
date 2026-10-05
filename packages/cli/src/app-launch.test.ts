@@ -24,14 +24,14 @@ test("measurement launch forwards only the dedicated mock-keychain opt-in", () =
 		"--env",
 		"NISI_DATA_DIR=/data",
 		"--env",
-		"NISI_MOCK_KEYCHAIN=1",
+		"NISI_MEASUREMENT_INSTANCE=1",
 		"-a",
 		"/checkout/nisi.app",
 	]);
 	expect(appLaunchArguments("/checkout/nisi.app", undefined, true)).toEqual([
 		"-n",
 		"--env",
-		"NISI_MOCK_KEYCHAIN=1",
+		"NISI_MEASUREMENT_INSTANCE=1",
 		"-a",
 		"/checkout/nisi.app",
 	]);

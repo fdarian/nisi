@@ -71,14 +71,13 @@ export const launchApp = Effect.gen(function* () {
 	const dataDir = Option.getOrUndefined(
 		yield* Config.string("NISI_DATA_DIR").pipe(Config.option, Effect.orDie),
 	);
-	const mockKeychain = yield* Config.string("NISI_MOCK_KEYCHAIN").pipe(
-		Config.option,
-		Effect.orDie,
-	);
+	const measurementInstance = yield* Config.string(
+		"NISI_MEASUREMENT_INSTANCE",
+	).pipe(Config.option, Effect.orDie);
 	const args = appLaunchArguments(
 		appPath,
 		dataDir,
-		Option.getOrUndefined(mockKeychain) === "1",
+		Option.getOrUndefined(measurementInstance) === "1",
 	);
 	yield* Effect.logDebug("spawning app", {
 		command: "open",
@@ -116,12 +115,12 @@ export const launchApp = Effect.gen(function* () {
 export function appLaunchArguments(
 	appPath: string,
 	dataDir?: string,
-	mockKeychain = false,
+	measurementInstance = false,
 ): string[] {
 	return [
-		...(dataDir === undefined && !mockKeychain ? [] : ["-n"]),
+		...(dataDir === undefined && !measurementInstance ? [] : ["-n"]),
 		...(dataDir === undefined ? [] : ["--env", `NISI_DATA_DIR=${dataDir}`]),
-		...(mockKeychain ? ["--env", "NISI_MOCK_KEYCHAIN=1"] : []),
+		...(measurementInstance ? ["--env", "NISI_MEASUREMENT_INSTANCE=1"] : []),
 		"-a",
 		appPath,
 	];

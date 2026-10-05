@@ -10,7 +10,7 @@ type LaunchMarkOptions = {
 };
 type Trace = {
 	id: string;
-	client: Pick<SidecarClient, "diagnostics">;
+	client: { diagnostics: Pick<SidecarClient["diagnostics"], "launchMarks"> };
 	sessionId?: string;
 	seen: Set<string>;
 	queue: Mark[];
@@ -44,7 +44,7 @@ export function frontendBootMark(name: string): void {
 
 export function receiveTracedOpen(
 	request: OpenRequest,
-	client: Pick<SidecarClient, "diagnostics">,
+	client: { diagnostics: Pick<SidecarClient["diagnostics"], "launchMarks"> },
 ): void {
 	if (request.traceId === undefined) return;
 	if (state.trace?.id !== request.traceId) {
@@ -181,3 +181,33 @@ export function markFilesLoadingPainted(
 }
 
 export const useLaunchTrace = () => useSyncExternalStore(subscribe, snapshot);
+
+export function receiveTracedDeepLink(
+	traceId: string,
+	client: Trace["client"],
+): void {
+	if (state.trace?.id === traceId) return;
+	state.trace = {
+		id: traceId,
+		client,
+		seen: new Set(),
+		queue: [...boot],
+		sending: Promise.resolve(),
+		finished: false,
+	};
+	launchMark("deeplink.received");
+	document.removeEventListener("visibilitychange", recordVisibility);
+	document.addEventListener("visibilitychange", recordVisibility);
+	recordVisibility();
+	for (const listener of listeners) listener();
+}
+
+export function resolveTracedDeepLink(
+	traceId: string,
+	sessionId: string,
+): void {
+	if (state.trace?.id !== traceId) return;
+	state.trace.sessionId = sessionId;
+	launchMark("pull-requests.open.resolved", { sessionId });
+	for (const listener of listeners) listener();
+}

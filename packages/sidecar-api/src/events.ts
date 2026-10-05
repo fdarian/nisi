@@ -62,6 +62,12 @@ export type OpenRequest = Schema.Schema.Type<typeof OpenRequest>;
 export const SidecarEvent = Schema.Union([
 	Schema.Struct({
 		seq: Schema.Number,
+		type: Schema.Literal("deep-link-injected"),
+		url: Schema.String,
+		traceId: Schema.String,
+	}),
+	Schema.Struct({
+		seq: Schema.Number,
 		type: Schema.Literal("session-opened"),
 		session: Session,
 	}),

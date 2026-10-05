@@ -21,7 +21,9 @@ test("a rejected mark batch warns without blocking terminal delivery", async () 
 	const warn = spyOn(console, "warn").mockImplementation(() =>
 		warned.resolve(),
 	);
-	const client: Pick<SidecarClient, "diagnostics"> = {
+	const client: {
+		diagnostics: Pick<SidecarClient["diagnostics"], "launchMarks">;
+	} = {
 		diagnostics: {
 			launchMarks: async (input) => {
 				batches.push(input.marks.map((mark) => mark.name));
@@ -80,7 +82,9 @@ test("records initial visibility and every transition only during the active tra
 	});
 	const delivered = Promise.withResolvers<void>();
 	const visibility: boolean[] = [];
-	const client: Pick<SidecarClient, "diagnostics"> = {
+	const client: {
+		diagnostics: Pick<SidecarClient["diagnostics"], "launchMarks">;
+	} = {
 		diagnostics: {
 			launchMarks: async (input) => {
 				for (const mark of input.marks)
