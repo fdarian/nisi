@@ -16,8 +16,8 @@
  * A `RouterProvider` is here only so `<Link to="/settings">`
  * (`generate-panel.tsx`) has a router context to call into — its route tree
  * is just enough to register `/settings` as a valid target, not a working
- * settings page. One router is built per story render (`useMemo`), each
- * wrapping that story's own children as its index route's component.
+ * settings page. The router stays mounted across args updates; story content
+ * travels through React context so updates don't replace the route tree.
  */
 
 import type { Decorator } from "@storybook/react-vite";
@@ -32,7 +32,7 @@ import {
 	RouterProvider,
 } from "@tanstack/react-router";
 import { ThemeProvider } from "next-themes";
-import { useMemo } from "react";
+import { createContext, useContext, useMemo } from "react";
 import { ToastProvider } from "#/components/ui/toast";
 import { ChatProvider } from "#/features/chat/chat-store";
 import { DevToolProvider } from "#/features/devtools/dev-tool-context";
@@ -77,12 +77,18 @@ export function StoryQueryBoundary(props: {
 	);
 }
 
-function createStoryRouter(content: React.ReactNode) {
+const StoryContentContext = createContext<React.ReactNode>(null);
+
+function StoryContent() {
+	return useContext(StoryContentContext);
+}
+
+function createStoryRouter() {
 	const rootRoute = createRootRoute({ component: () => <Outlet /> });
 	const indexRoute = createRoute({
 		getParentRoute: () => rootRoute,
 		path: "/",
-		component: () => content,
+		component: StoryContent,
 	});
 	const settingsRoute = createRoute({
 		getParentRoute: () => rootRoute,
@@ -112,7 +118,7 @@ export function StoryProviders({
 	// One `QueryClient` per story render — sharing one across stories would
 	// leak a previous story's cached query results into the next.
 	const queryClient = useMemo(() => new QueryClient(STORY_QUERY_CONFIG), []);
-	const router = useMemo(() => createStoryRouter(children), [children]);
+	const router = useMemo(() => createStoryRouter(), []);
 
 	return (
 		<ThemeProvider
@@ -122,7 +128,9 @@ export function StoryProviders({
 			forcedTheme={theme === "system" ? undefined : theme}
 		>
 			<QueryClientProvider client={queryClient}>
-				<RouterProvider router={router} />
+				<StoryContentContext value={children}>
+					<RouterProvider router={router} />
+				</StoryContentContext>
 			</QueryClientProvider>
 		</ThemeProvider>
 	);
