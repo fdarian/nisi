@@ -5,8 +5,8 @@ import { FileSystem } from "effect/FileSystem";
 import { formatBuild, readBuildStamp } from "./build.ts";
 import { formatCli, prepareCli } from "./cli.ts";
 import {
-	launchDeepLinkInstance,
 	formatWorktree,
+	launchDeepLinkInstance,
 	parseMeasurementPr,
 	runDeepLink,
 	validateDeepLinkTargets,

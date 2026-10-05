@@ -1,8 +1,8 @@
 import { expect, test } from "bun:test";
 import type { LaunchRecord } from "@repo/sidecar-api";
 import {
-	formatWorktree,
 	createdWorktrees,
+	formatWorktree,
 	parseMeasurementPr,
 	validateDeepLinkTargets,
 } from "./deeplink.ts";
