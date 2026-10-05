@@ -397,9 +397,14 @@ export class Store extends Context.Service<Store>()("Store", {
 		const speculative = yield* makeSpeculativeDiff();
 		const baseIdentity = (repoRoot: string, baseRef: string) =>
 			Effect.gen(function* () {
-				const root = yield* resolveMainCloneRoot(repoRoot);
-				const local = yield* readLocalBase(repoRoot, baseRef);
-				return { key: `${root}\n${local.baseRef}`, commit: local.commit };
+				const identity = yield* Effect.all(
+					[resolveMainCloneRoot(repoRoot), readLocalBase(repoRoot, baseRef)],
+					{ concurrency: "unbounded" },
+				);
+				return {
+					key: `${identity[0]}\n${identity[1].baseRef}`,
+					commit: identity[1].commit,
+				};
 			});
 		const baseFetchState = yield* makeBaseRefresh({
 			identity: baseIdentity,
@@ -1185,6 +1190,8 @@ export class Store extends Context.Service<Store>()("Store", {
 			Effect.gen(function* () {
 				const session = yield* reviewStore.getSession(sessionId);
 				const repoRoot = yield* resolveLiveRepoRoot(session);
+				const preparedKey = baseFetchState.key(repoRoot, session.baseRef);
+				if (preparedKey !== undefined) return baseFetchState.stale(preparedKey);
 				const ref = yield* resolveDiffBaseRef(repoRoot, session.baseRef);
 				if (!ref.startsWith("refs/remotes/")) return false;
 				const root = yield* resolveMainCloneRoot(repoRoot);

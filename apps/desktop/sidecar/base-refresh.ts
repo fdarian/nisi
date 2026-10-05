@@ -81,6 +81,8 @@ export const makeBaseRefresh = <E, R>(options: {
 				return pending;
 			});
 		return {
+			key: (repoRoot: string, baseRef: string) =>
+				prepared.get(`${repoRoot}\n${baseRef}`)?.key,
 			refresh: (repoRoot: string, baseRef: string) =>
 				refresh(repoRoot, baseRef).pipe(Effect.flatMap(Deferred.await)),
 			prepare: (repoRoot: string, baseRef: string, restored = false) =>

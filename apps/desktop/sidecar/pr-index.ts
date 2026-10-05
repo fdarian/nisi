@@ -44,6 +44,7 @@ export const makePrIndex = <E, R>(
 			});
 		return {
 			refresh,
+			empty: () => entries.size === 0,
 			find: (
 				owner: string,
 				repo: string,
@@ -74,6 +75,10 @@ export class PrIndex extends Context.Service<PrIndex>()("sidecar/PrIndex", {
 		});
 		const lookup = (repoRoot: string) =>
 			Effect.gen(function* () {
+				if (index.empty()) {
+					yield* Effect.annotateCurrentSpan("hit", false);
+					return undefined;
+				}
 				const head = yield* readIndexHead(repoRoot);
 				const found =
 					head === undefined
