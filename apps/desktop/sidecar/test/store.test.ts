@@ -23,8 +23,8 @@ import {
 	Stream,
 } from "effect";
 import { subscribe } from "../events.ts";
-import { PullRequestAttentionLive } from "../pull-request-attention.ts";
 import { PrIndex } from "../pr-index.ts";
+import { PullRequestAttentionLive } from "../pull-request-attention.ts";
 import { type OpenSessionOutcome, Store } from "../store.ts";
 
 /** Runs real `git` for test setup — the code under test uses its own Effect-based runner. */
@@ -145,6 +145,7 @@ test("index disagreement upserts the correct PR's existing row without transferr
 		const canonicalRoot = await realpath(repoRoot);
 		const state = { number: 43, noPr: false };
 		const index: Context.Service.Shape<typeof PrIndex> = {
+			lookupPullRequest: () => Effect.succeed(undefined),
 			lookup: () =>
 				Effect.succeed({
 					repository: { owner: "acme", repo: "widgets", defaultBranch: "main" },
@@ -504,6 +505,136 @@ describe("Store.openSession — reuses matching branch review state for a PR", (
 });
 
 describe("Store.openPullRequestSession — reuses open review sessions", () => {
+	for (const changedHead of [false, true]) {
+		test(`indexed deep link is GitHub-free in foreground and revalidates by number (${changedHead ? "head changes" : "title changes"})`, async () => {
+			await withTestRepoAndDataDir(async (repoRoot, dataDir) => {
+				await sh(repoRoot, ["remote", "add", "origin", repoRoot]);
+				await sh(repoRoot, ["update-ref", "refs/remotes/origin/main", "HEAD"]);
+				await sh(repoRoot, ["branch", "feature"]);
+				const featurePath = join(dataDir, "feature-worktree");
+				await sh(repoRoot, ["worktree", "add", featurePath, "feature"]);
+				const canonicalRoot = await realpath(repoRoot);
+				const canonicalFeature = await realpath(featurePath);
+				const calls = { pr: 0 };
+				const index: Context.Service.Shape<typeof PrIndex> = {
+					lookup: () =>
+						Effect.die(
+							new Error("deep links must not probe local branch index keys"),
+						),
+					lookupPullRequest: (owner, repo, number) =>
+						Effect.sync(() => {
+							expect(owner.toLowerCase()).toBe("acme");
+							expect(repo.toLowerCase()).toBe("widgets");
+							expect(number).toBe(42);
+							return {
+								repository: {
+									owner: "acme",
+									repo: "widgets",
+									defaultBranch: "main",
+								},
+								pr: {
+									number: 42,
+									title: "Cached",
+									baseRef: "main",
+									headRef: "main",
+									isCrossRepository: false,
+									headOwner: "acme",
+								},
+							};
+						}),
+					refresh: () => Effect.succeed(undefined),
+					refreshKnown: Effect.void,
+					start: Effect.never,
+				};
+				await Effect.runPromise(
+					Effect.gen(function* () {
+						const store = yield* Store;
+						const review = yield* ReviewStore;
+						const settings = yield* SettingsStore;
+						yield* settings.setRepoPath("acme", "widgets", repoRoot);
+						const opened = yield* store.openPullRequestSession({
+							owner: "ACME",
+							repo: "Widgets",
+							number: 42,
+						});
+						expect(opened.status).toBe("opened");
+						if (opened.status !== "opened")
+							return yield* Effect.die(new Error("Expected indexed open"));
+						expect(calls.pr).toBe(0);
+						expect(opened.outcome.session.repoRoot).toBe(canonicalRoot);
+						expect(opened.outcome.session.target.kind).toBe("pr");
+						yield* review.markFileViewed(
+							opened.outcome.session.id,
+							"a.ts",
+							Option.some(new TextEncoder().encode("hello\n")),
+						);
+						const before = yield* review.getFileReviewState(
+							opened.outcome.session.id,
+							"a.ts",
+						);
+						const corrected = yield* Deferred.make<OpenSessionOutcome>();
+						yield* store.forkRevalidation(opened.outcome.session, (outcome) =>
+							Deferred.succeed(corrected, outcome).pipe(Effect.asVoid),
+						);
+						const result = yield* Deferred.await(corrected);
+						expect(calls.pr).toBe(1);
+						expect(result.session.target).toMatchObject({
+							kind: "pr",
+							number: 42,
+							title: "Fresh",
+							headRef: changedHead ? "feature" : "main",
+						});
+						expect(result.session.repoRoot).toBe(
+							changedHead ? canonicalFeature : canonicalRoot,
+						);
+						if (changedHead) {
+							expect(result.session.id).not.toBe(opened.outcome.session.id);
+							expect(
+								yield* review.getFileReviewState(result.session.id, "a.ts"),
+							).toBeNull();
+							expect(
+								(yield* review.listOpenSessions()).some(
+									(session) => session.id === opened.outcome.session.id,
+								),
+							).toBe(false);
+						} else {
+							expect(result.session.id).toBe(opened.outcome.session.id);
+							expect(
+								yield* review.getFileReviewState(result.session.id, "a.ts"),
+							).toEqual(before);
+						}
+					}).pipe(
+						Effect.provide(
+							makeTestLayer(
+								dataDir,
+								{
+									...mockGitHub,
+									repository: () =>
+										Effect.die(
+											new Error("deep link must not fetch repository metadata"),
+										),
+									pullRequest: (root, number) =>
+										Effect.sync(() => {
+											expect(root).toBe(repoRoot);
+											expect(number).toBe(42);
+											calls.pr++;
+											return {
+												number: 42,
+												title: "Fresh",
+												baseRef: "main",
+												headRef: changedHead ? "feature" : "main",
+												isCrossRepository: false,
+											};
+										}),
+								},
+								index,
+							),
+						),
+					),
+				);
+			});
+		});
+	}
 	for (const missingResult of ["failure", "null"] as const) {
 		test(`a missing PR (${missingResult}) surfaces PullRequestNotFound without a head-ref lookup`, async () => {
 			await withTestRepoAndDataDir(async (repoRoot, dataDir) => {
@@ -613,6 +744,7 @@ describe("Store.openPullRequestSession — reuses open review sessions", () => {
 					await sh(sibling, ["checkout", "-b", "other"]);
 				const unrelated =
 					scenario === "unrelated" ? await makeTestRepo() : null;
+				const reads = { pr: 0 };
 				try {
 					await Effect.runPromise(
 						Effect.gen(function* () {
@@ -648,6 +780,7 @@ describe("Store.openPullRequestSession — reuses open review sessions", () => {
 								repo: "widgets",
 								number: 42,
 							});
+							expect(reads.pr).toBe(1);
 							expect(opened.status).toBe("opened");
 							if (opened.status !== "opened") return;
 							expect(opened.outcome.session.target.kind).toBe("pr");
@@ -677,13 +810,20 @@ describe("Store.openPullRequestSession — reuses open review sessions", () => {
 							Effect.provide(
 								makeTestLayer(dataDir, {
 									...mockGitHub,
+									repository: () =>
+										Effect.die(
+											new Error("known PR must not look up repository again"),
+										),
 									pullRequest: () =>
-										Effect.succeed({
-											number: 42,
-											title: "Add widgets",
-											baseRef: "main",
-											headRef: "feature",
-											isCrossRepository: scenario === "fork",
+										Effect.sync(() => {
+											reads.pr++;
+											return {
+												number: 42,
+												title: "Add widgets",
+												baseRef: "main",
+												headRef: "feature",
+												isCrossRepository: scenario === "fork",
+											};
 										}),
 									headRef: () =>
 										Effect.die(new Error("must reuse the fetched PR head")),

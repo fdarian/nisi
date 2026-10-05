@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { type OpenPullRequestIndex } from "@repo/git";
+import type { OpenPullRequestIndex } from "@repo/git";
 import { Deferred, Effect, Fiber } from "effect";
 import { makePrIndex } from "../pr-index.ts";
 
@@ -49,6 +49,9 @@ test("index matches owner and branch exactly, dedupes refreshes, atomically repl
 					return yield* Effect.die("first refresh not started");
 				yield* Fiber.join(refresh);
 				expect(state.calls).toBe(1);
+				expect(index.findNumber("ACME", "Widgets", 2)?.pr.title).toBe("Older");
+				expect(index.findNumber("acme", "other", 2)).toBeUndefined();
+				expect(index.findNumber("acme", "widgets", 99)).toBeUndefined();
 				expect(
 					index.find("acme", "widgets", "fork", "feature")?.pr.number,
 				).toBe(3);

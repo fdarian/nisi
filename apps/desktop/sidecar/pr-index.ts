@@ -1,4 +1,4 @@
-import { GitHub, readIndexHead, type OpenPullRequestIndex } from "@repo/git";
+import { GitHub, type OpenPullRequestIndex, readIndexHead } from "@repo/git";
 import { SettingsStore } from "@repo/settings";
 import { Context, Effect, Layer, Schedule, Scope } from "effect";
 
@@ -45,6 +45,13 @@ export const makePrIndex = <E, R>(
 		return {
 			refresh,
 			empty: () => entries.size === 0,
+			findNumber: (owner: string, repo: string, number: number) => {
+				const entry = entries.get(key(owner, repo));
+				const pr = entry?.prs.find((candidate) => candidate.number === number);
+				return entry === undefined || pr === undefined
+					? undefined
+					: { repository: entry.repository, pr };
+			},
 			find: (
 				owner: string,
 				repo: string,
@@ -90,7 +97,19 @@ export class PrIndex extends Context.Service<PrIndex>()("sidecar/PrIndex", {
 		const start = refreshKnown.pipe(
 			Effect.repeat(Schedule.spaced("5 minutes")),
 		);
-		return { lookup, refresh: index.refresh, refreshKnown, start };
+		const lookupPullRequest = (owner: string, repo: string, number: number) =>
+			Effect.gen(function* () {
+				const found = index.findNumber(owner, repo, number);
+				yield* Effect.annotateCurrentSpan("hit", found !== undefined);
+				return found;
+			}).pipe(Effect.withSpan("pull-request.pr-index.lookup"));
+		return {
+			lookup,
+			lookupPullRequest,
+			refresh: index.refresh,
+			refreshKnown,
+			start,
+		};
 	}),
 }) {
 	static readonly layer = Layer.effect(PrIndex, PrIndex.make);

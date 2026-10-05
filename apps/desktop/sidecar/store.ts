@@ -382,6 +382,16 @@ const resolveSessionTarget = (repoRoot: string, target: OpenSessionTarget) =>
 		};
 	});
 
+const resolvedPullRequest = (
+	owner: string,
+	repo: string,
+	pr: PullRequestRef,
+) => ({
+	baseRef: pr.baseRef,
+	headRef: pr.headRef,
+	pr: { owner, repo, number: pr.number, title: pr.title },
+});
+
 /**
  * Combines `@repo/git` (pure PR/diff detection) and `@repo/review`
  * (persistence) into the one service the sidecar's oRPC handlers depend on.
@@ -456,6 +466,7 @@ export class Store extends Context.Service<Store>()("Store", {
 			repoRoot: string,
 			sessions: ReadonlyArray<ReviewSession>,
 			pr: PullRequestRef,
+			identity: { owner: string; repo: string },
 		) =>
 			Effect.gen(function* () {
 				if (pr.isCrossRepository) return null;
@@ -483,11 +494,7 @@ export class Store extends Context.Service<Store>()("Store", {
 					candidates.find((session) => session.baseRef === pr.baseRef) ??
 					candidates.at(0);
 				if (source === undefined) return null;
-				const resolved = yield* resolveSessionTarget(source.repoRoot, {
-					kind: "specificPullRequest",
-					number: pr.number,
-				});
-				if (resolved.pr === null) return null;
+				const resolved = resolvedPullRequest(identity.owner, identity.repo, pr);
 				yield* prepareBase(source.repoRoot, resolved.baseRef);
 				return yield* retargetSessionToPr(
 					source.id,
@@ -564,12 +571,18 @@ export class Store extends Context.Service<Store>()("Store", {
 		const latestOpens = new Map<string, object>();
 		const validations = new Map<
 			string,
-			{ repoRoot: string; target: OpenSessionTarget; generation: object }
+			{
+				repoRoot: string;
+				target: OpenSessionTarget;
+				generation: object;
+				requestedPullRequest?: OpenPullRequestInput & { repoRoot: string };
+			}
 		>();
 		const openSession = (
 			cwd: string,
 			target: OpenSessionTarget = { kind: "auto" },
 			providedRepoRoot?: string,
+			knownPullRequest?: ReturnType<typeof resolvedPullRequest>,
 		) =>
 			Effect.gen(function* () {
 				const repoRoot = yield* resolveOpenRepoRoot(cwd, providedRepoRoot).pipe(
@@ -583,7 +596,8 @@ export class Store extends Context.Service<Store>()("Store", {
 						? yield* prIndex.lookup(repoRoot)
 						: undefined;
 				const resolved =
-					cached === undefined
+					knownPullRequest ??
+					(cached === undefined
 						? yield* resolveSessionTarget(repoRoot, target).pipe(
 								Effect.withSpan("session.target.resolve", {
 									attributes: { repoRoot, target: target.kind },
@@ -598,7 +612,7 @@ export class Store extends Context.Service<Store>()("Store", {
 									owner: cached.repository.owner,
 									repo: cached.repository.repo,
 								},
-							};
+							});
 				const outcome = yield* persistResolved(repoRoot, target, resolved);
 				if (cached !== undefined)
 					validations.set(outcome.session.id, { repoRoot, target, generation });
@@ -627,9 +641,25 @@ export class Store extends Context.Service<Store>()("Store", {
 				const validation = validations.get(session.id);
 				if (validation === undefined) return undefined;
 				validations.delete(session.id);
-				const resolved = yield* resolveSessionTarget(validation.repoRoot, {
-					kind: "auto",
-				});
+				const requested = validation.requestedPullRequest;
+				const resolved =
+					requested === undefined
+						? yield* resolveSessionTarget(validation.repoRoot, { kind: "auto" })
+						: yield* Effect.gen(function* () {
+								const github = yield* GitHub;
+								const pr = yield* github.pullRequest(
+									requested.repoRoot,
+									requested.number,
+								);
+								if (pr === null || pr.number !== requested.number)
+									return yield* new PullRequestNotFound({
+										repoRoot: requested.repoRoot,
+										number: requested.number,
+										reason:
+											"GitHub returned no pull request during index revalidation",
+									});
+								return resolvedPullRequest(requested.owner, requested.repo, pr);
+							});
 				if (latestOpens.get(validation.repoRoot) !== validation.generation)
 					return undefined;
 				const stillOpen = (yield* reviewStore.listOpenSessions()).some(
@@ -647,8 +677,18 @@ export class Store extends Context.Service<Store>()("Store", {
 							session.target.repo === resolved.pr.repo
 						: resolved.pr === null);
 				if (same) return undefined;
+				const correctedRoot =
+					requested !== undefined && session.target.headRef !== resolved.headRef
+						? yield* openPullRequestWorktree({
+								repoRoot: requested.repoRoot,
+								number: requested.number,
+								headRef: resolved.headRef,
+							})
+						: validation.repoRoot;
+				if (latestOpens.get(validation.repoRoot) !== validation.generation)
+					return undefined;
 				const corrected = yield* persistResolved(
-					validation.repoRoot,
+					correctedRoot,
 					validation.target,
 					resolved,
 				);
@@ -682,6 +722,12 @@ export class Store extends Context.Service<Store>()("Store", {
 				if (known !== null) return known;
 
 				const everyKnownPath = yield* settingsStore.listRepoPaths();
+				const sameRepository = everyKnownPath.find(
+					(entry) =>
+						entry.owner.toLowerCase() === owner.toLowerCase() &&
+						entry.repo.toLowerCase() === repo.toLowerCase(),
+				);
+				if (sameRepository !== undefined) return sameRepository.path;
 				const inferred = yield* inferRepoPath(everyKnownPath, owner, repo);
 				if (inferred === null) return null;
 
@@ -860,18 +906,32 @@ export class Store extends Context.Service<Store>()("Store", {
 				}
 
 				const github = yield* GitHub;
-				const pr = yield* github.pullRequest(repoRoot, input.number);
-				if (pr === null) {
+				const cached = yield* prIndex.lookupPullRequest(
+					input.owner,
+					input.repo,
+					input.number,
+				);
+				const pr =
+					cached === undefined
+						? yield* github.pullRequest(repoRoot, input.number)
+						: cached.pr;
+				if (pr === null || pr.number !== input.number) {
 					return yield* new PullRequestNotFound({
 						repoRoot,
 						number: input.number,
 						reason: "GitHub returned no pull request for the requested number",
 					});
 				}
+				const resolved = resolvedPullRequest(
+					cached?.repository.owner ?? input.owner,
+					cached?.repository.repo ?? input.repo,
+					pr,
+				);
 				const reused = yield* retargetMatchingBranchSession(
 					repoRoot,
 					sessions,
 					pr,
+					resolved.pr,
 				).pipe(
 					Effect.withSpan("pull-request.session.retarget"),
 					Effect.catchTags({
@@ -879,31 +939,49 @@ export class Store extends Context.Service<Store>()("Store", {
 						RepoPathNotAGitRepo: () => Effect.succeed(null),
 					}),
 				);
-				if (reused !== null) {
+				const target = {
+					kind: "specificPullRequest" as const,
+					number: input.number,
+				};
+				if (reused !== null)
 					yield* Effect.annotateCurrentSpan({
 						worktree: "retargeted",
 						worktreePath: reused.session.repoRoot,
 					});
-					return { status: "opened" as const, outcome: reused };
+				const outcome =
+					reused === null
+						? yield* Effect.gen(function* () {
+								const worktree = yield* openPullRequestWorktreeResult({
+									repoRoot,
+									number: input.number,
+									headRef: pr.headRef,
+								}).pipe(Effect.withSpan("pull-request.worktree.open"));
+								yield* Effect.annotateCurrentSpan({
+									worktree: worktree.worktree,
+									worktreePath: worktree.path,
+									...(worktree.localHeadRefPresent === undefined
+										? {}
+										: { localHeadRefPresent: worktree.localHeadRefPresent }),
+								});
+								const worktreePath = worktree.path;
+								return yield* openSession(
+									worktreePath,
+									target,
+									worktreePath,
+									resolved,
+								).pipe(Effect.withSpan("pull-request.session.open"));
+							})
+						: reused;
+				if (cached !== undefined) {
+					const generation = {};
+					latestOpens.set(outcome.session.repoRoot, generation);
+					validations.set(outcome.session.id, {
+						repoRoot: outcome.session.repoRoot,
+						target,
+						generation,
+						requestedPullRequest: { ...resolved.pr, repoRoot },
+					});
 				}
-
-				const worktree = yield* openPullRequestWorktreeResult({
-					repoRoot,
-					number: input.number,
-					headRef: pr.headRef,
-				}).pipe(Effect.withSpan("pull-request.worktree.open"));
-				yield* Effect.annotateCurrentSpan({
-					worktree: worktree.worktree,
-					worktreePath: worktree.path,
-					...(worktree.localHeadRefPresent === undefined
-						? {}
-						: { localHeadRefPresent: worktree.localHeadRefPresent }),
-				});
-				const worktreePath = worktree.path;
-				const outcome = yield* openSession(worktreePath, {
-					kind: "specificPullRequest",
-					number: input.number,
-				}).pipe(Effect.withSpan("pull-request.session.open"));
 				return { status: "opened" as const, outcome };
 			}).pipe(Effect.withSpan("pull-requests.open"));
 

@@ -1390,6 +1390,21 @@ export function attachRouter(
 					} else {
 						yield* emitSessionTransition(outcome.outcome);
 					}
+					yield* store.forkRevalidation(session, (corrected) =>
+						emitSessionTransition(corrected).pipe(
+							Effect.andThen(
+								Effect.sync(() => {
+									const request = createOpenRequest(
+										corrected.session.repoRoot,
+										{ kind: "pr" },
+										input.traceId,
+									);
+									resolveOpenRequest(request.id, corrected.session);
+								}),
+							),
+							Effect.provide(mainContext),
+						),
+					);
 					yield* Effect.logInfo("pull request session opened", {
 						sessionId: session.id,
 						repoRoot: session.repoRoot,
