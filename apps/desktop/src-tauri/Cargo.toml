@@ -16,9 +16,6 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 [build-dependencies]
 tauri-build = { version = "=3.0.0-alpha.3", features = [] }
 
-[patch.crates-io]
-tauri-runtime-cef = { path = "../../../patches/tauri-runtime-cef" }
-
 [dependencies]
 tauri = { version = "=3.0.0-alpha.4", features = [] }
 tauri-runtime-cef = "=3.0.0-alpha.4"
