@@ -3,6 +3,7 @@ import type {
 	FileChange,
 } from "#/features/pull-request/data/pr-data";
 import { comparePaths } from "../../shared/compare-paths";
+
 export { comparePaths };
 
 export const CATEGORY_ORDER: readonly FileCategory[] = [

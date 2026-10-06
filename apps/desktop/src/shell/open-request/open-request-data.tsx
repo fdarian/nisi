@@ -11,8 +11,8 @@ import {
 import { useBackendContext } from "#/infra/backend-context";
 import { receiveTracedOpen } from "#/infra/launch-trace";
 import { useSidecarEvent } from "#/infra/sidecar-events";
-import { seedResolvedSession } from "./resolved-session-cache";
 import { prefetchResolvedFiles } from "./resolved-files";
+import { seedResolvedSession } from "./resolved-session-cache";
 
 type OpenRequestContextValue = {
 	request: OpenRequest | null;

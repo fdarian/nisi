@@ -3,8 +3,8 @@ import { emit, streamReady, subscribe } from "../events.ts";
 import {
 	acknowledgeActivation,
 	acknowledgeOpenRequest,
-	createOpenRequest,
 	correctOpenRequest,
+	createOpenRequest,
 	failOpenRequest,
 	listOpenRequests,
 	resolveOpenRequest,
