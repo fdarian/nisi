@@ -97,5 +97,5 @@ slow (roughly 13–28s) while nisi installs a pinned copy of it; every run after
     [teardown](knowledge/codeview-teardown-leak-patch.md),
     [scroll target](knowledge/codeview-stale-pending-scroll-target-patch.md), and
     [sticky jitter](knowledge/deferred-frontend-perf-work.md).
-  - `tauri-runtime-cef` — vendored alpha.4 adds a macOS launch-activation builder option; see [README](patches/tauri-runtime-cef/README.md).
+  - `tauri-runtime-cef` — vendored alpha.4 adds a macOS launch-activation builder option; re-check on every tauri-runtime-cef bump; see [README](patches/tauri-runtime-cef/README.md).
 - `apps/desktop` aliases `#/*` → `src/*` (not `@/*`); the `packages/*` use relative imports.

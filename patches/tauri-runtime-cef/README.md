@@ -7,3 +7,17 @@ The default preserves upstream launch activation. The public runtime
 `set_activate_ignoring_other_apps` setter is a no-op, and Winit only accepts this
 flag at event-loop build time. Remove this vendored override once upstream
 supports launch activation configuration.
+
+## When to re-evaluate
+
+Re-evaluate on every `tauri-runtime-cef` / `tauri` version bump. The
+`[patch.crates-io]` entry only supplies 3.0.0-alpha.4: after a bump selects a new
+runtime version, Cargo warns that the patch is unused. If upstream lacks the
+builder option, any `.activate_ignoring_other_apps(...)` call on `Cef` stops
+compiling, so a consumer's bump cannot silently drop the behavior.
+
+- Check whether upstream lets an app disable macOS launch activation through a
+  CEF builder option or a working `set_activate_ignoring_other_apps`. If so,
+  delete `patches/tauri-runtime-cef/` and its `[patch.crates-io]` entry in
+  `apps/desktop/src-tauri/Cargo.toml`, and switch to the upstream API.
+- Otherwise, re-vendor the new version and port this one change.
