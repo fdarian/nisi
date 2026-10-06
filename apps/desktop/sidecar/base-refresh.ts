@@ -88,11 +88,15 @@ export const makeBaseRefresh = <E, R>(options: {
 			prepare: (repoRoot: string, baseRef: string, restored = false) =>
 				Effect.gen(function* () {
 					const previous = prepared.get(`${repoRoot}\n${baseRef}`);
+					const recent =
+						previous === undefined ? undefined : state.get(previous.key);
 					if (
 						restored &&
 						previous !== undefined &&
 						previous.commit !== null &&
-						state.has(previous.key)
+						recent !== undefined &&
+						(recent.completedAt === undefined ||
+							options.now() - recent.completedAt < 5_000)
 					)
 						return;
 					const local = yield* options.identity(repoRoot, baseRef);
@@ -109,7 +113,6 @@ export const makeBaseRefresh = <E, R>(options: {
 						previous === undefined
 							? yield* options.identity(repoRoot, baseRef)
 							: previous;
-					if (state.has(local.key)) return;
 					yield* refresh(repoRoot, baseRef, local);
 				}),
 			stale: (key: string) => state.get(key)?.result?.baseMayBeStale ?? true,

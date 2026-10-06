@@ -26,7 +26,7 @@ test("local base opens without waiting; background fetch is shared and reports m
 							state.fetches++;
 							yield* Deferred.succeed(started, undefined);
 							yield* Deferred.await(gate);
-							state.commit = "new";
+							state.commit = state.fetches < 3 ? "new" : "newer";
 							return { baseRef: "origin/main", baseMayBeStale: false };
 						}),
 					moved: (key) =>
@@ -52,11 +52,16 @@ test("local base opens without waiting; background fetch is shared and reports m
 				const probes = state.probes;
 				yield* refresh.prepare("repo", "main", true);
 				yield* refresh.background("repo", "main");
-				expect(state.probes).toBe(probes);
-				expect(state.fetches).toBe(1);
+				expect(state.probes).toBeGreaterThan(probes);
 				yield* refresh.refresh("repo", "main");
 				expect(state.fetches).toBe(2);
 				expect(state.moved).toHaveLength(1);
+				state.now = 3_600_000;
+				yield* refresh.prepare("repo", "main");
+				yield* refresh.background("repo", "main");
+				yield* refresh.refresh("repo", "main");
+				expect(state.fetches).toBe(3);
+				expect(state.moved).toHaveLength(2);
 			}),
 		),
 	);
