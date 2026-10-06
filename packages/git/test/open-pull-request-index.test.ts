@@ -63,6 +63,7 @@ test("open PR index paginates, preserves ordering and surfaces auth/decode failu
 								headRefName: "feature",
 								isCrossRepository: true,
 								updatedAt: `2026-10-0${number}T00:00:00Z`,
+								state: "OPEN",
 								headRepositoryOwner: { login: "fork" },
 							},
 						],
@@ -135,6 +136,20 @@ test("open PR index paginates, preserves ordering and surfaces auth/decode failu
 			value: { prs: [{ number: 2 }, { number: 1 }] },
 		});
 		expect((await Bun.file(log).text()).trim().split("\n")).toHaveLength(2);
+		const closed = page(2, false);
+		const closedNode = closed.data.repository.pullRequests.nodes[0];
+		if (closedNode === undefined) throw new Error("missing PR fixture");
+		closedNode.state = "MERGED";
+		await Bun.write(first, JSON.stringify(closed));
+		await Bun.write(log, "");
+		expect(await run("0", "2026-10-02T00:00:00Z")).toMatchObject({
+			ok: true,
+			value: { prs: [], removedNumbers: [2] },
+			pages: [{ prs: [], removedNumbers: [2] }],
+		});
+		expect(await Bun.file(log).text()).toContain(
+			"states: [OPEN, CLOSED, MERGED]",
+		);
 		expect(await run("1")).toMatchObject({
 			ok: false,
 			tag: "GitHubUnreachable",

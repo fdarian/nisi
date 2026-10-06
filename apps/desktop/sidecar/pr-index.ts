@@ -29,7 +29,10 @@ export const makePrIndex = <E, R>(
 			current: OpenPullRequestIndex,
 		): OpenPullRequestIndex => {
 			if (previous === undefined) return current;
-			const numbers = new Set(current.prs.map((pr) => pr.number));
+			const numbers = new Set([
+				...current.prs.map((pr) => pr.number),
+				...(current.removedNumbers ?? []),
+			]);
 			return {
 				...current,
 				prs: [
@@ -51,17 +54,27 @@ export const makePrIndex = <E, R>(
 					last?.highWaterMark === undefined ||
 					now() - last.fullAt >= 30 * 60_000;
 				const pages: OpenPullRequestIndex["prs"][number][] = [];
+				const removed = new Set<number>();
 				const seen = new Set<number>();
 				return yield* fetch(path, owner, repo, {
 					...(full ? {} : { updatedSince: last.highWaterMark }),
 					onPage: (page) =>
 						Effect.gen(function* () {
+							for (const number of page.removedNumbers ?? [])
+								removed.add(number);
 							for (const pr of page.prs)
 								if (!seen.has(pr.number)) {
 									seen.add(pr.number);
 									pages.push(pr);
 								}
-							entries.set(id, merge(previous, { ...page, prs: [...pages] }));
+							entries.set(
+								id,
+								merge(previous, {
+									...page,
+									prs: [...pages],
+									removedNumbers: [...removed],
+								}),
+							);
 							yield* Effect.logInfo("PR index page published", {
 								repository: id,
 								count: pages.length,
@@ -119,7 +132,8 @@ export const makePrIndex = <E, R>(
 				const entry = entries.get(key(owner, repo));
 				const pr = entry?.prs.find(
 					(candidate) =>
-						candidate.headOwner === headOwner && candidate.headRef === branch,
+						candidate.headOwner?.toLowerCase() === headOwner.toLowerCase() &&
+						candidate.headRef === branch,
 				);
 				return pr === undefined || entry === undefined
 					? undefined

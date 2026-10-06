@@ -21,6 +21,7 @@ const Response = Schema.Struct({
 						headRefName: Schema.String,
 						isCrossRepository: Schema.Boolean,
 						updatedAt: Schema.String,
+						state: Schema.Literals(["OPEN", "CLOSED", "MERGED"]),
 						headRepositoryOwner: Schema.NullOr(
 							Schema.Struct({ login: Schema.String }),
 						),
@@ -43,8 +44,9 @@ export const listOpenPullRequests = (
 ) =>
 	Effect.gen(function* () {
 		const updatedSince = options?.updatedSince;
-		const query =
-			"query($owner: String!, $repo: String!, $after: String) { repository(owner: $owner, name: $repo) { owner { login } name defaultBranchRef { name } pullRequests(states: OPEN, first: 100, after: $after, orderBy: { field: UPDATED_AT, direction: DESC }) { nodes { number title baseRefName headRefName isCrossRepository updatedAt headRepositoryOwner { login } } pageInfo { hasNextPage endCursor } } } }";
+		const states =
+			updatedSince === undefined ? "OPEN" : "[OPEN, CLOSED, MERGED]";
+		const query = `query($owner: String!, $repo: String!, $after: String) { repository(owner: $owner, name: $repo) { owner { login } name defaultBranchRef { name } pullRequests(states: ${states}, first: 100, after: $after, orderBy: { field: UPDATED_AT, direction: DESC }) { nodes { number title baseRefName headRefName isCrossRepository updatedAt state headRepositoryOwner { login } } pageInfo { hasNextPage endCursor } } } }`;
 		const fetchPage = (after?: string) =>
 			Effect.gen(function* () {
 				const args = [
@@ -86,6 +88,7 @@ export const listOpenPullRequests = (
 			});
 		const first = yield* fetchPage();
 		const prs: OpenPullRequestIndex["prs"][number][] = [];
+		const removedNumbers: number[] = [];
 		const seen = new Set<string>();
 		const repository = {
 			owner: first.owner.login,
@@ -114,15 +117,21 @@ export const listOpenPullRequests = (
 			import("effect/unstable/process").ChildProcessSpawner.ChildProcessSpawner
 		> =>
 			Effect.gen(function* () {
-				const pagePrs = page.pullRequests.nodes
-					.filter((pr) => !seenNumbers.has(pr.number))
-					.map(toPr);
-				for (const pr of pagePrs) seenNumbers.add(pr.number);
+				const nodes = page.pullRequests.nodes.filter(
+					(pr) => !seenNumbers.has(pr.number),
+				);
+				for (const pr of nodes) seenNumbers.add(pr.number);
+				const pagePrs = nodes.filter((pr) => pr.state === "OPEN").map(toPr);
+				const pageRemoved = nodes
+					.filter((pr) => pr.state !== "OPEN")
+					.map((pr) => pr.number);
+				removedNumbers.push(...pageRemoved);
 				prs.push(...pagePrs);
 				if (options?.onPage !== undefined)
 					yield* options.onPage({
 						repository,
 						prs: pagePrs,
+						removedNumbers: pageRemoved,
 						...(highWaterMark === undefined ? {} : { highWaterMark }),
 					});
 				if (
@@ -146,5 +155,6 @@ export const listOpenPullRequests = (
 			repository,
 			...(highWaterMark === undefined ? {} : { highWaterMark }),
 			prs,
+			removedNumbers,
 		} satisfies OpenPullRequestIndex;
 	});

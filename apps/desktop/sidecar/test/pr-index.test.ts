@@ -61,7 +61,7 @@ test("maintenance survives failed settings reads and attention refresh returns b
 	);
 });
 
-test("index matches owner and branch exactly, dedupes refreshes, atomically replaces successful data, retains data on error", async () => {
+test("index matches owner case-insensitively and branch exactly, dedupes refreshes and retains data on error", async () => {
 	await Effect.runPromise(
 		Effect.scoped(
 			Effect.gen(function* () {
@@ -92,8 +92,8 @@ test("index matches owner and branch exactly, dedupes refreshes, atomically repl
 					index.find("acme", "widgets", "fork", "feature")?.pr.number,
 				).toBe(3);
 				expect(
-					index.find("acme", "widgets", "Fork", "feature"),
-				).toBeUndefined();
+					index.find("acme", "widgets", "Fork", "feature")?.pr.number,
+				).toBe(3);
 				expect(
 					index.find("acme", "widgets", "fork", "Feature"),
 				).toBeUndefined();
@@ -114,6 +114,52 @@ test("index matches owner and branch exactly, dedupes refreshes, atomically repl
 				expect(
 					index.find("acme", "widgets", "fork", "feature"),
 				).toBeUndefined();
+			}),
+		),
+	);
+});
+
+test("incremental pages remove closed and merged PRs immediately and allow a later reopen", async () => {
+	await Effect.runPromise(
+		Effect.scoped(
+			Effect.gen(function* () {
+				const state = {
+					value: {
+						...entry,
+						highWaterMark: "2026-10-01T00:00:00Z",
+					} as OpenPullRequestIndex,
+				};
+				const index = yield* makePrIndex((_path, _owner, _repo, options) =>
+					Effect.gen(function* () {
+						if (options?.onPage === undefined)
+							return yield* Effect.die("missing callback");
+						yield* options.onPage(state.value);
+						return state.value;
+					}),
+				);
+				const initial = yield* index.refresh("root", "acme", "widgets");
+				if (initial === undefined) return yield* Effect.die("missing refresh");
+				yield* Fiber.join(initial);
+				state.value = {
+					...entry,
+					highWaterMark: "2026-10-02T00:00:00Z",
+					prs: [],
+					removedNumbers: [2, 3],
+				};
+				const closed = yield* index.refresh("root", "acme", "widgets");
+				if (closed === undefined) return yield* Effect.die("missing refresh");
+				yield* Fiber.join(closed);
+				expect(index.findNumber("acme", "widgets", 2)).toBeUndefined();
+				expect(index.findNumber("acme", "widgets", 3)).toBeUndefined();
+				state.value = {
+					...entry,
+					highWaterMark: "2026-10-03T00:00:00Z",
+					prs: entry.prs.filter((pr) => pr.number === 3),
+				};
+				const reopened = yield* index.refresh("root", "acme", "widgets");
+				if (reopened === undefined) return yield* Effect.die("missing refresh");
+				yield* Fiber.join(reopened);
+				expect(index.findNumber("acme", "widgets", 3)).toBeDefined();
 			}),
 		),
 	);

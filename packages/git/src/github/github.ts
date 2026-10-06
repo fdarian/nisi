@@ -46,6 +46,7 @@ export type RepositoryIdentity = {
 export type OpenPullRequestIndex = {
 	readonly repository: RepositoryIdentity;
 	readonly highWaterMark?: string;
+	readonly removedNumbers?: readonly number[];
 	readonly prs: readonly (PullRequestRef & {
 		readonly headOwner: string | null;
 	})[];
