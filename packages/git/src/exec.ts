@@ -249,7 +249,7 @@ export const spawnCatFile = (cwd: string) =>
 		const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
 		const args = ["cat-file", "--batch-command", "--buffer"];
 		return yield* spawner
-			.spawn(ChildProcess.make(GIT_BIN, args, { cwd, stderr: "inherit" }))
+			.spawn(ChildProcess.make(GIT_BIN, args, { cwd, stderr: "pipe" }))
 			.pipe(
 				Effect.mapError((cause) => spawnFailure(GIT_BIN, args, cwd, cause)),
 			);
