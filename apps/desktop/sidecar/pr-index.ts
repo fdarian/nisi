@@ -128,6 +128,25 @@ export const makePrIndex = <E, R>(
 		};
 	});
 
+export const makePrIndexMaintenance = <E, R>(
+	refresh: Effect.Effect<void, E, R>,
+	schedule = Schedule.spaced("5 minutes"),
+) =>
+	Effect.gen(function* () {
+		const scope = yield* Scope.Scope;
+		const iteration = refresh.pipe(
+			Effect.catchCause((cause) =>
+				Effect.logWarning("Could not refresh known PR index repositories", {
+					cause,
+				}),
+			),
+		);
+		return {
+			refreshKnown: iteration.pipe(Effect.forkIn(scope), Effect.asVoid),
+			start: iteration.pipe(Effect.repeat(schedule)),
+		};
+	});
+
 export class PrIndex extends Context.Service<PrIndex>()("sidecar/PrIndex", {
 	make: Effect.gen(function* () {
 		const github = yield* GitHub;
@@ -152,9 +171,7 @@ export class PrIndex extends Context.Service<PrIndex>()("sidecar/PrIndex", {
 				yield* Effect.annotateCurrentSpan("hit", found !== undefined);
 				return found;
 			}).pipe(Effect.withSpan("session.pr-index.lookup"));
-		const start = refreshKnown.pipe(
-			Effect.repeat(Schedule.spaced("5 minutes")),
-		);
+		const maintenance = yield* makePrIndexMaintenance(refreshKnown);
 		const lookupPullRequest = (owner: string, repo: string, number: number) =>
 			Effect.gen(function* () {
 				const found = index.findNumber(owner, repo, number);
@@ -165,8 +182,8 @@ export class PrIndex extends Context.Service<PrIndex>()("sidecar/PrIndex", {
 			lookup,
 			lookupPullRequest,
 			refresh: index.refresh,
-			refreshKnown,
-			start,
+			refreshKnown: maintenance.refreshKnown,
+			start: maintenance.start,
 		};
 	}),
 }) {

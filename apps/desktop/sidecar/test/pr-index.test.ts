@@ -3,8 +3,8 @@ import type {
 	OpenPullRequestIndex,
 	OpenPullRequestIndexOptions,
 } from "@repo/git";
-import { Deferred, Effect, Fiber } from "effect";
-import { makePrIndex } from "../pr-index.ts";
+import { Deferred, Effect, Fiber, Schedule } from "effect";
+import { makePrIndex, makePrIndexMaintenance } from "../pr-index.ts";
 
 const entry: OpenPullRequestIndex = {
 	repository: { owner: "acme", repo: "widgets", defaultBranch: "main" },
@@ -27,6 +27,39 @@ const entry: OpenPullRequestIndex = {
 		},
 	],
 };
+
+test("maintenance survives failed settings reads and attention refresh returns before settings", async () => {
+	await Effect.runPromise(
+		Effect.scoped(
+			Effect.gen(function* () {
+				const state = { calls: 0 };
+				const maintenance = yield* makePrIndexMaintenance(
+					Effect.suspend(() => {
+						state.calls++;
+						return state.calls === 1
+							? Effect.fail("settings unavailable")
+							: Effect.void;
+					}),
+					Schedule.recurs(1),
+				);
+				yield* maintenance.start;
+				expect(state.calls).toBe(2);
+				const started = yield* Deferred.make<void>();
+				const gate = yield* Deferred.make<void>();
+				const background = yield* makePrIndexMaintenance(
+					Effect.gen(function* () {
+						yield* Deferred.succeed(started, undefined);
+						yield* Deferred.await(gate);
+						return yield* Effect.fail("settings unavailable");
+					}),
+				);
+				yield* background.refreshKnown;
+				yield* Deferred.await(started);
+				yield* Deferred.succeed(gate, undefined);
+			}),
+		),
+	);
+});
 
 test("index matches owner and branch exactly, dedupes refreshes, atomically replaces successful data, retains data on error", async () => {
 	await Effect.runPromise(
