@@ -2,8 +2,8 @@ import { join, resolve } from "node:path";
 import { Console, Effect } from "effect";
 import { FileSystem } from "effect/FileSystem";
 import {
-	buildFingerprint,
 	type BuildStamp,
+	buildFingerprint,
 	formatBuild,
 	readBuildStamp,
 	readStamp,
