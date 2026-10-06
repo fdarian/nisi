@@ -137,6 +137,7 @@ any existing owner and refuses to boot (loudly) rather than splitting the data d
 sidecars.
 
 ## Browser dev harness
+
 `invoke("get_backend")` (see [The seam](#the-seam)) only resolves inside the Tauri webview — a
 plain `vite dev` tab has no IPC bridge, so it throws immediately and the app can't render.
 `src/infra/backend.ts`'s `getBackend()` has a **dev-only** escape hatch for this: when

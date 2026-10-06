@@ -1,5 +1,7 @@
 import type { SidecarClient, SidecarEvent } from "@repo/sidecar-api";
 import { createContext, useContext, useEffect, useRef } from "react";
+import { enqueueInjectedDeepLink } from "#/shell/deep-link/deep-link-store";
+import { frontendBootMark, receiveTracedDeepLink } from "./launch-trace";
 
 type Listener = (event: SidecarEvent) => void;
 const EventContext = createContext<((listener: Listener) => () => void) | null>(
@@ -22,6 +24,17 @@ export function SidecarEventsProvider(props: {
 							signal: controller.signal,
 						},
 					)) {
+						if (event.type === "stream-ready")
+							frontendBootMark("frontend.events.connected");
+						if (event.type === "deep-link-injected") {
+							receiveTracedDeepLink(event.traceId, props.client);
+							enqueueInjectedDeepLink(event.url, event.traceId);
+							void props.client.diagnostics
+								.ackDeepLink({ traceId: event.traceId })
+								.catch((error) =>
+									console.warn("Deep-link acknowledgment failed", error),
+								);
+						}
 						for (const listener of listeners.current) listener(event);
 					}
 				} catch (error) {

@@ -7,7 +7,7 @@ import {
 	type Session,
 } from "@repo/sidecar-api";
 import { readSidecarJson } from "deskkit/sidecar";
-import { Config, Effect } from "effect";
+import { Config, Effect, Option } from "effect";
 import type { FileSystem } from "effect/FileSystem";
 import type { ChildProcessSpawner } from "effect/unstable/process";
 import { launchApp } from "./app-launch.ts";
@@ -93,6 +93,10 @@ const readHandshake = (dataDir: string) =>
 				{ dataDir, port: handshake?.port },
 			),
 		),
+		Effect.tap((handshake) =>
+			Effect.annotateCurrentSpan({ found: handshake !== undefined }),
+		),
+		Effect.withSpan("cli.handshake.read"),
 	);
 
 /**
@@ -122,15 +126,30 @@ const attempt = (
 		});
 
 		const client = makeSidecarClient(handshake);
+		const traceId = Option.getOrUndefined(
+			yield* Config.string("NISI_LAUNCH_TRACE").pipe(
+				Config.option,
+				Effect.orDie,
+			),
+		);
 		const result = yield* Effect.promise(() =>
 			safe(
 				client.sessions.open(
-					{ cwd, target },
+					{ cwd, target, traceId },
 					{ signal: AbortSignal.timeout(POST_TIMEOUT_MS) },
 				),
 			),
 		);
 
+		yield* Effect.annotateCurrentSpan({
+			outcome: result.isSuccess
+				? "opened"
+				: isDefinedError(result.error)
+					? "rejected"
+					: isOwnTimeout(result.error)
+						? "unresponsive"
+						: "unreachable",
+		});
 		if (result.isSuccess) {
 			yield* Effect.logDebug("sessions.open succeeded", {
 				port: handshake.port,
@@ -156,7 +175,7 @@ const attempt = (
 			error: String(result.error),
 		});
 		return { _tag: "unreachable" } as const;
-	});
+	}).pipe(Effect.withSpan("cli.open.attempt"));
 
 /** Keeps retrying through either flavor of "no answer yet" — only a conclusive outcome ends the poll early. */
 const pollUntilReachable = (

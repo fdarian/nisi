@@ -9,6 +9,7 @@ import { Argument, Command } from "effect/unstable/cli";
 import { parseBaseArgument } from "./base-argument.ts";
 import { zshCompletionScript } from "./completion.ts";
 import { handoff, logFilePathConfig } from "./handoff.ts";
+import { LaunchTracingLive } from "./tracing.ts";
 
 /** Already printed a message for the user — `BunRuntime.runMain` just needs to see a failure to exit non-zero. */
 class ReportedFailure extends Schema.TaggedError<ReportedFailure>()(
@@ -41,6 +42,7 @@ const run = (pathArg: Option.Option<string>, target: OpenSessionTarget) =>
 		const logFilePath = yield* logFilePathConfig.pipe(Effect.orDie);
 
 		const repoRoot = yield* resolveRepoRoot(cwd).pipe(
+			Effect.withSpan("cli.repo-root.resolve"),
 			Effect.catchTag("NotAGitRepository", () =>
 				Console.error(`${cwd} is not inside a git repository.`).pipe(
 					Effect.andThen(fail),
@@ -49,6 +51,7 @@ const run = (pathArg: Option.Option<string>, target: OpenSessionTarget) =>
 		);
 
 		const outcome = yield* handoff(repoRoot, target);
+		yield* Effect.annotateCurrentSpan({ outcome: outcome._tag });
 
 		switch (outcome._tag) {
 			case "opened": {
@@ -90,7 +93,7 @@ const run = (pathArg: Option.Option<string>, target: OpenSessionTarget) =>
 				return yield* fail;
 			}
 		}
-	});
+	}).pipe(Effect.withSpan("cli.main"));
 
 const pr = Command.make("pr", { path: pathArgument }, ({ path: pathArg }) =>
 	run(pathArg, { kind: "pr" }),
@@ -154,6 +157,8 @@ const nisi = Command.make("nisi", { path: pathArgument }, ({ path: pathArg }) =>
 
 BunRuntime.runMain(
 	Command.run(nisi, { version: "0.1.0" }).pipe(
+		Effect.withSpan("cli.process", { root: true }),
+		Effect.provide(LaunchTracingLive),
 		Effect.provide(LoggerLive),
 		Effect.provide(MinimumLogLevelLayer),
 		Effect.provide(BunServices.layer),

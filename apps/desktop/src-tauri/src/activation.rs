@@ -15,11 +15,41 @@ pub fn activate_main_window(app: &tauri::AppHandle) -> tauri::Result<()> {
     let window = app
         .get_webview_window("main")
         .ok_or_else(|| tauri::Error::WindowNotFound)?;
+    if !focus_main_window(std::env::var("NISI_MEASUREMENT_INSTANCE").ok().as_deref()) {
+        window.unminimize()?;
+        #[cfg(target_os = "macos")]
+        {
+            let native_window = window.ns_window()? as usize;
+            // Tauri show() makes the window key; orderBack reveals it without raising or activating the app.
+            app.run_on_main_thread_blocking(move || {
+                let native_window = unsafe { &*(native_window as *const objc2_app_kit::NSWindow) };
+                native_window.orderBack(None);
+            })?;
+        }
+        #[cfg(not(target_os = "macos"))]
+        window.show()?;
+        return Ok(());
+    }
     window.show()?;
     window.unminimize()?;
     // Tauri's macOS dispatcher reaches tao's set_focus, which calls both
     // makeKeyAndOrderFront and NSApplication.activateIgnoringOtherApps.
     window.set_focus()
+}
+
+fn focus_main_window(measurement_instance: Option<&str>) -> bool {
+    measurement_instance != Some("1")
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn only_measurement_instances_skip_focus() {
+        assert!(super::focus_main_window(None));
+        assert!(super::focus_main_window(Some("0")));
+        assert!(super::focus_main_window(Some("true")));
+        assert!(!super::focus_main_window(Some("1")));
+    }
 }
 
 enum Connection {

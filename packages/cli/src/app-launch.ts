@@ -1,6 +1,6 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { Effect, Schema } from "effect";
+import { Config, Effect, Option, Schema } from "effect";
 import { FileSystem } from "effect/FileSystem";
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
 
@@ -63,33 +63,42 @@ const resolveAppPath = Effect.gen(function* () {
 /**
  * Spawns the app via macOS `open`, which hands off to LaunchServices and
  * exits on its own — no detached-process bookkeeping needed on our side, and
- * if the app is already running this just brings its existing window forward
- * instead of starting a second instance.
+ * A data-dir override requires a fresh instance with that environment, rather
+ * than activating another bundle with the same production identifier.
  */
 export const launchApp = Effect.gen(function* () {
 	const appPath = yield* resolveAppPath;
+	const dataDir = Option.getOrUndefined(
+		yield* Config.string("NISI_DATA_DIR").pipe(Config.option, Effect.orDie),
+	);
+	const measurementInstance = yield* Config.string(
+		"NISI_MEASUREMENT_INSTANCE",
+	).pipe(Config.option, Effect.orDie);
+	const args = appLaunchArguments(
+		appPath,
+		dataDir,
+		Option.getOrUndefined(measurementInstance) === "1",
+	);
 	yield* Effect.logDebug("spawning app", {
 		command: "open",
-		args: ["-a", appPath],
+		args,
 	});
-	const startedAt = Date.now();
+	yield* Effect.annotateCurrentSpan({ appPath });
 	const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
 	const exitCode = yield* Effect.scoped(
 		Effect.gen(function* () {
-			const handle = yield* spawner.spawn(
-				ChildProcess.make("open", ["-a", appPath]),
-			);
+			const handle = yield* spawner.spawn(ChildProcess.make("open", args));
 			return yield* handle.exitCode;
 		}),
 	);
+	yield* Effect.annotateCurrentSpan({ exitCode });
 	yield* Effect.logDebug("app spawn finished", {
 		appPath,
 		exitCode,
-		durationMs: Date.now() - startedAt,
 	});
 	if (exitCode !== 0) {
 		return yield* new AppLaunchError({
-			reason: `"open -a ${appPath}" exited with code ${exitCode}`,
+			reason: `open ${JSON.stringify(args)} exited with code ${exitCode}`,
 		});
 	}
 }).pipe(
@@ -100,4 +109,20 @@ export const launchApp = Effect.gen(function* () {
 				reason: `failed to launch the app: ${cause.reason.message}`,
 			}),
 	),
+	Effect.withSpan("cli.app.launch"),
 );
+
+export function appLaunchArguments(
+	appPath: string,
+	dataDir?: string,
+	measurementInstance = false,
+): string[] {
+	return [
+		...(dataDir === undefined && !measurementInstance ? [] : ["-n"]),
+		...(measurementInstance ? ["-g"] : []),
+		...(dataDir === undefined ? [] : ["--env", `NISI_DATA_DIR=${dataDir}`]),
+		...(measurementInstance ? ["--env", "NISI_MEASUREMENT_INSTANCE=1"] : []),
+		"-a",
+		appPath,
+	];
+}

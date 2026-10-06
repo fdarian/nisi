@@ -15,6 +15,9 @@ stderr, never a file — see `packages/cli/AGENTS.md`).
   the file passes `maxBytes` (default 10MB) — checked at the start of each flush, so rotation needs
   a second flush after crossing the cap to actually happen, not the write that crossed it.
 
+- `src/launch-tracer.ts` — opt-in Effect Tracer shared by CLI and sidecar; record schemas live in
+  `@repo/sidecar-api` without pulling oRPC into logging. Measurement protocol: [launch timing](../../knowledge/launch-timing.md).
+
 ## Gotchas
 
 - Effect v4 has no `Layer.setConfigProvider`; override `LOG_LEVEL` in a test via

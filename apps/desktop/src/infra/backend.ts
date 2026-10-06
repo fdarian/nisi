@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { frontendBootMark } from "./launch-trace";
 
 type BackendInfo = {
 	port: number;
@@ -35,7 +36,10 @@ function devBackendOverride(): BackendInfo | undefined {
 
 /** Invoke the Rust get_backend command to get sidecar connection info. Throws on failure. */
 async function getBackend(): Promise<BackendInfo> {
-	return devBackendOverride() ?? invoke<BackendInfo>("get_backend");
+	const backend = await (devBackendOverride() ??
+		invoke<BackendInfo>("get_backend"));
+	frontendBootMark("frontend.backend.resolved");
+	return backend;
 }
 
 export type { BackendInfo };

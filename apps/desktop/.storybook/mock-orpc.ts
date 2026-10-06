@@ -218,6 +218,15 @@ export function createMockSidecarClient(
 	const checksError = data.checksError;
 
 	const client: SidecarClient = {
+		diagnostics: {
+			launchMarks: async () => {},
+			injectDeepLink: async () => {
+				throw new Error("Deep-link measurement is unavailable in Storybook");
+			},
+			ackDeepLink: async () => {
+				throw new Error("Deep-link measurement is unavailable in Storybook");
+			},
+		},
 		health: {
 			check: async () => ({ status: "ok" }),
 		},

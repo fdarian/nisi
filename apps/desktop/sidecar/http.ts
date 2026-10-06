@@ -32,8 +32,17 @@ import type {
 	Settings as WireSettings,
 } from "@repo/sidecar-api";
 import { contract } from "@repo/sidecar-api";
-import type { Context } from "effect";
-import { Cause, Effect, Equal, Exit, Option, Queue, Stream } from "effect";
+import {
+	Cause,
+	Context,
+	Effect,
+	Equal,
+	Exit,
+	Option,
+	Queue,
+	Stream,
+	Tracer,
+} from "effect";
 import type { ChildProcessSpawner } from "effect/unstable/process";
 import {
 	ChatSessionNotFound,
@@ -62,7 +71,13 @@ import {
 } from "./events.ts";
 import { listHarnesses } from "./harness/harnesses.ts";
 import { getHarnessModels } from "./harness/models.ts";
+import { receiveFrontendMarks } from "./launch-trace/handler.ts";
+import { LaunchTrace } from "./launch-trace/service.ts";
 import { checkSessionForChanges } from "./live-poll.ts";
+import {
+	injectedDeepLinks,
+	measurementInstance,
+} from "./measurement-deep-links.ts";
 import { translateMergeFailure } from "./merge-failure.ts";
 import { createNativeActivationHandler } from "./native-activation.ts";
 import {
@@ -285,10 +300,6 @@ export function attachRouter(
 	mainContext: Context.Context<AppServices>,
 	activationOwnerId?: string,
 ) {
-	const nativeActivation = createNativeActivationHandler(
-		token,
-		activationOwnerId,
-	);
 	// `events.subscribe`/`walkthrough.generate` are plain `.handler(async
 	// function* ...)` closures (see the comment on `events` below) — they
 	// never go through `.effect()`'s bridging into `mainContext`, so logging
@@ -297,6 +308,18 @@ export function attachRouter(
 	const runWithMainContext = <A>(
 		effect: Effect.Effect<A, never, AppServices>,
 	) => Effect.runPromise(Effect.provide(effect, mainContext));
+	const nativeActivation = createNativeActivationHandler(
+		token,
+		activationOwnerId,
+		(id) =>
+			runWithMainContext(
+				Effect.void.pipe(
+					Effect.withSpan("activation.acked", {
+						attributes: { requestId: id },
+					}),
+				),
+			),
+	);
 
 	const emitSessionTransition = (outcome: OpenSessionOutcome) =>
 		Effect.gen(function* () {
@@ -379,6 +402,43 @@ export function attachRouter(
 	});
 
 	const router = authed.router({
+		diagnostics: {
+			launchMarks: authed.diagnostics.launchMarks.effect(receiveFrontendMarks),
+			injectDeepLink: authed.diagnostics.injectDeepLink.effect(
+				function* (call) {
+					if (!(yield* measurementInstance))
+						return yield* Effect.fail(
+							call.errors.FORBIDDEN({
+								message: "Deep-link injection requires a measurement instance",
+							}),
+						);
+					const url = yield* Effect.try(() => new URL(call.input.url)).pipe(
+						Effect.mapError(() =>
+							call.errors.BAD_REQUEST({ message: "Invalid deep-link URL" }),
+						),
+					);
+					if (url.protocol !== "nisi:" || url.hostname !== "open")
+						return yield* Effect.fail(
+							call.errors.BAD_REQUEST({ message: "Expected a nisi open link" }),
+						);
+					const trace = yield* LaunchTrace;
+					yield* trace.activate(call.input.traceId);
+					yield* Effect.try(() =>
+						injectedDeepLinks.inject(call.input.url, call.input.traceId),
+					);
+				},
+			),
+			ackDeepLink: authed.diagnostics.ackDeepLink.effect(function* (call) {
+				if (!(yield* measurementInstance))
+					return yield* Effect.fail(
+						call.errors.FORBIDDEN({
+							message:
+								"Deep-link acknowledgment requires a measurement instance",
+						}),
+					);
+				yield* Effect.sync(() => injectedDeepLinks.ack(call.input.traceId));
+			}),
+		},
 		health: {
 			// biome-ignore lint/correctness/useYield: .effect() requires a generator function even with no Effect steps
 			check: authed.health.check.effect(function* () {
@@ -386,96 +446,121 @@ export function attachRouter(
 			}),
 		},
 		sessions: {
-			open: authed.sessions.open.effect(function* ({ input, errors }) {
-				const request = createOpenRequest(
-					input.cwd,
-					input.target ?? { kind: "auto" },
-				);
-				const store = yield* Store;
-				const opening = store.openSession(input.cwd, input.target);
-				const outcome = yield* opening.pipe(
-					Effect.catchTag("InvalidCwd", (cause) =>
-						Effect.fail(
-							errors.BAD_REQUEST({
-								message: `not a git repository: ${cause.cwd}`,
+			open: authed.sessions.open.effect(function* (call) {
+				const input = call.input;
+				const errors = call.errors;
+				const trace = yield* LaunchTrace;
+				yield* trace.activate(input.traceId);
+				return yield* Effect.gen(function* () {
+					const span = yield* Effect.currentSpan.pipe(Effect.orDie);
+					const request = createOpenRequest(
+						input.cwd,
+						input.target ?? { kind: "auto" },
+						input.traceId,
+					);
+					span.event(
+						"open-requested.emitted",
+						BigInt(Date.now()) * 1_000_000n,
+						{
+							requestId: request.id,
+						},
+					);
+					const store = yield* Store;
+					const opening = store.openSession(input.cwd, input.target);
+					const outcome = yield* opening.pipe(
+						Effect.catchTag("InvalidCwd", (cause) =>
+							Effect.fail(
+								errors.BAD_REQUEST({
+									message: `not a git repository: ${cause.cwd}`,
+								}),
+							),
+						),
+						// `target: { kind: "pr" }` asked for a PR that isn't there —
+						// the one case that refuses to degrade to a branch diff on
+						// its own (see `store.ts`'s `resolveSessionTarget`). Its own
+						// `NOT_FOUND` code (not `BAD_REQUEST`) so a caller can tell
+						// "no PR" apart from the request itself being malformed —
+						// see the contract's doc comment (`packages/sidecar-api/src/sessions.ts`).
+						Effect.catchTag("NoPullRequest", (cause) =>
+							Effect.fail(
+								errors.NOT_FOUND({
+									message: `no open pull request for the current branch in ${cause.repoRoot}`,
+								}),
+							),
+						),
+						// `target: { kind: "branch", baseRef }` named a ref `git` couldn't
+						// resolve (typically a typo) — caught here, before the session is
+						// persisted, so it fails the request instead of surfacing later as
+						// an opaque error the first time Files Changed loads.
+						Effect.catchTag("InvalidBaseRef", (cause) =>
+							Effect.fail(
+								errors.BAD_REQUEST({
+									message: `unknown base ref '${cause.baseRef}' in ${cause.repoRoot}: ${cause.stderr.trim()}`,
+								}),
+							),
+						),
+						// Same as `InvalidBaseRef` above, for the range-spelling form's
+						// `<head>` side (`nisi diff <base>..<head>`).
+						Effect.catchTag("InvalidHeadRef", (cause) =>
+							Effect.fail(
+								errors.BAD_REQUEST({
+									message: `unknown head ref '${cause.headRef}' in ${cause.repoRoot}: ${cause.stderr.trim()}`,
+								}),
+							),
+						),
+						// A repo GitHub doesn't know about reviews against its default
+						// branch instead (see `@repo/git`'s `resolveReviewTarget`) —
+						// these two are the cases where there's genuinely nothing to
+						// review against, or where we couldn't find out.
+						Effect.catchTag("NoDefaultBranch", (cause) =>
+							Effect.fail(
+								errors.BAD_REQUEST({
+									message: `no branch to review against in ${cause.repoRoot} — the repository has no commits on a default branch`,
+								}),
+							),
+						),
+						Effect.catchTag("GitHubUnreachable", (cause) =>
+							Effect.fail(
+								errors.SERVICE_UNAVAILABLE({
+									message: `could not reach GitHub for ${cause.repoRoot}: ${cause.reason}`,
+								}),
+							),
+						),
+						Effect.onExit((exit) =>
+							Effect.sync(() => {
+								if (Exit.isSuccess(exit)) {
+									resolveOpenRequest(request.id, exit.value.session);
+									span.event(
+										"open-resolved.emitted",
+										BigInt(Date.now()) * 1_000_000n,
+										{
+											requestId: request.id,
+										},
+									);
+								} else {
+									const error = Option.getOrUndefined(
+										Exit.findErrorOption(exit),
+									);
+									failOpenRequest(
+										request.id,
+										error instanceof Error
+											? error.message
+											: Cause.pretty(exit.cause),
+									);
+								}
 							}),
 						),
-					),
-					// `target: { kind: "pr" }` asked for a PR that isn't there —
-					// the one case that refuses to degrade to a branch diff on
-					// its own (see `store.ts`'s `resolveSessionTarget`). Its own
-					// `NOT_FOUND` code (not `BAD_REQUEST`) so a caller can tell
-					// "no PR" apart from the request itself being malformed —
-					// see the contract's doc comment (`packages/sidecar-api/src/sessions.ts`).
-					Effect.catchTag("NoPullRequest", (cause) =>
-						Effect.fail(
-							errors.NOT_FOUND({
-								message: `no open pull request for the current branch in ${cause.repoRoot}`,
-							}),
-						),
-					),
-					// `target: { kind: "branch", baseRef }` named a ref `git` couldn't
-					// resolve (typically a typo) — caught here, before the session is
-					// persisted, so it fails the request instead of surfacing later as
-					// an opaque error the first time Files Changed loads.
-					Effect.catchTag("InvalidBaseRef", (cause) =>
-						Effect.fail(
-							errors.BAD_REQUEST({
-								message: `unknown base ref '${cause.baseRef}' in ${cause.repoRoot}: ${cause.stderr.trim()}`,
-							}),
-						),
-					),
-					// Same as `InvalidBaseRef` above, for the range-spelling form's
-					// `<head>` side (`nisi diff <base>..<head>`).
-					Effect.catchTag("InvalidHeadRef", (cause) =>
-						Effect.fail(
-							errors.BAD_REQUEST({
-								message: `unknown head ref '${cause.headRef}' in ${cause.repoRoot}: ${cause.stderr.trim()}`,
-							}),
-						),
-					),
-					// A repo GitHub doesn't know about reviews against its default
-					// branch instead (see `@repo/git`'s `resolveReviewTarget`) —
-					// these two are the cases where there's genuinely nothing to
-					// review against, or where we couldn't find out.
-					Effect.catchTag("NoDefaultBranch", (cause) =>
-						Effect.fail(
-							errors.BAD_REQUEST({
-								message: `no branch to review against in ${cause.repoRoot} — the repository has no commits on a default branch`,
-							}),
-						),
-					),
-					Effect.catchTag("GitHubUnreachable", (cause) =>
-						Effect.fail(
-							errors.SERVICE_UNAVAILABLE({
-								message: `could not reach GitHub for ${cause.repoRoot}: ${cause.reason}`,
-							}),
-						),
-					),
-					Effect.onExit((exit) =>
-						Effect.sync(() => {
-							if (Exit.isSuccess(exit)) {
-								resolveOpenRequest(request.id, exit.value.session);
-							} else {
-								const error = Option.getOrUndefined(Exit.findErrorOption(exit));
-								failOpenRequest(
-									request.id,
-									error instanceof Error
-										? error.message
-										: Cause.pretty(exit.cause),
-								);
-							}
-						}),
-					),
-				);
-				const session = outcome.session;
-				yield* emitSessionTransition(outcome);
-				yield* Effect.logInfo("session opened", {
-					sessionId: session.id,
-					repoRoot: session.repoRoot,
-					target: session.target.kind,
-				});
-				return session;
+					);
+					const session = outcome.session;
+					yield* Effect.annotateCurrentSpan({ sessionId: session.id });
+					yield* emitSessionTransition(outcome);
+					yield* Effect.logInfo("session opened", {
+						sessionId: session.id,
+						repoRoot: session.repoRoot,
+						target: session.target.kind,
+					});
+					return session;
+				}).pipe(Effect.withSpan("sessions.open", { root: true }));
 			}),
 			list: authed.sessions.list.effect(function* () {
 				const store = yield* Store;
@@ -901,6 +986,7 @@ export function attachRouter(
 
 				try {
 					yield ready;
+					for (const event of injectedDeepLinks.list()) yield event;
 					while (signal?.aborted !== true) {
 						const event = pending.shift();
 						if (event !== undefined) {
@@ -1197,6 +1283,8 @@ export function attachRouter(
 					);
 			}),
 			open: authed.pullRequests.open.effect(function* ({ input, errors }) {
+				const trace = yield* LaunchTrace;
+				yield* trace.activate(input.traceId);
 				const store = yield* Store;
 				const outcome = yield* store
 					.openPullRequestSession({
@@ -1276,6 +1364,7 @@ export function attachRouter(
 					);
 				if (outcome.status === "opened") {
 					const session = outcome.outcome.session;
+					yield* Effect.annotateCurrentSpan({ sessionId: session.id });
 					if (outcome.outcome.kind === "opened") {
 						emit({ type: "session-opened", session });
 					} else {
@@ -1288,6 +1377,16 @@ export function attachRouter(
 					});
 					return { status: "opened" as const, session };
 				}
+				if (input.traceId !== undefined)
+					yield* trace.exporter.append(input.traceId, [
+						{
+							type: "mark",
+							source: "sidecar",
+							name: "deeplink.needs-repo-path",
+							at: Date.now(),
+							attrs: {},
+						},
+					]);
 				return outcome;
 			}),
 			// The other half of the `"needs-repo-path"` flow: persists the
@@ -2069,8 +2168,17 @@ export function attachRouter(
 		},
 	});
 
-	const lifecycle = new RpcLifecyclePlugin((message, fields) =>
-		runWithMainContext(Effect.logDebug(message, fields)),
+	const lifecycle = new RpcLifecyclePlugin(
+		(message, fields) => runWithMainContext(Effect.logDebug(message, fields)),
+		runWithMainContext,
+		(context, span) => ({
+			...context,
+			"effect/context": Context.add(
+				context["effect/context"],
+				Tracer.ParentSpan,
+				span,
+			),
+		}),
 	);
 	const rpcErrors = new RpcErrorsPlugin((error, path) =>
 		runWithMainContext(
@@ -2106,7 +2214,7 @@ export function attachRouter(
 					if (server.upgrade(req, { data: {} })) return;
 					return new Response("websocket upgrade required", { status: 426 });
 				}
-				const activationResponse = nativeActivation(req);
+				const activationResponse = await nativeActivation(req);
 				if (activationResponse !== undefined) return activationResponse;
 				const result = await handler.handle(req, {
 					prefix: "/api",

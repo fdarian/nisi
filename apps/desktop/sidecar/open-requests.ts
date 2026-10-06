@@ -39,11 +39,13 @@ function prune(): void {
 export function createOpenRequest(
 	cwd: string,
 	target: OpenSessionTarget,
+	traceId?: string,
 ): OpenRequest {
 	prune();
 	const request: OpenRequest = {
 		id: crypto.randomUUID(),
 		cwd,
+		traceId,
 		target,
 		status: { kind: "pending" },
 	};
