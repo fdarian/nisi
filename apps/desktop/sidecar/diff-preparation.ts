@@ -1,8 +1,10 @@
 import {
 	type GitError,
 	type PreparedDiff,
+	type WorktreeReadFailed,
 	prepareDiff,
 	readLocalBase,
+	readRepoChangeSignature,
 	resolveHeadSha,
 } from "@repo/git";
 import { Effect } from "effect";
@@ -55,7 +57,7 @@ export const makeDiffPreparation = () =>
 				at: number;
 				read: Effect.Effect<
 					PreparedDiff,
-					GitError,
+					GitError | WorktreeReadFailed,
 					FileSystem | ChildProcessSpawner.ChildProcessSpawner
 				>;
 			}
@@ -66,7 +68,7 @@ export const makeDiffPreparation = () =>
 				state: string;
 				read: Effect.Effect<
 					PreparedDiff,
-					GitError,
+					GitError | WorktreeReadFailed,
 					FileSystem | ChildProcessSpawner.ChildProcessSpawner
 				>;
 			}
@@ -77,10 +79,19 @@ export const makeDiffPreparation = () =>
 			options: { includeUncommitted: boolean; headRef?: string },
 		) =>
 			Effect.gen(function* () {
-				const validationKey = `${repoRoot}\n${baseRef}\n${options.headRef ?? "HEAD"}`;
-				const state = options.includeUncommitted
-					? undefined
-					: yield* readRefState(repoRoot, baseRef, options.headRef);
+				const worktree =
+					options.includeUncommitted && options.headRef === undefined;
+				const validationKey = `${repoRoot}\n${baseRef}\n${options.headRef ?? "HEAD"}\n${worktree}`;
+				const validationState = Effect.gen(function* () {
+					const refs = yield* readRefState(repoRoot, baseRef, options.headRef);
+					if (refs === undefined || !worktree) return refs;
+					const signature = yield* readRepoChangeSignature(repoRoot, {
+						includeUncommitted: true,
+					});
+					if (signature.complete === false) return undefined;
+					return `${refs}\n${JSON.stringify([signature.headSha, signature.status, [...signature.files].sort((a, b) => a[0].localeCompare(b[0]))])}`;
+				});
+				const state = yield* validationState;
 				const previous = validated.get(validationKey);
 				if (state !== undefined && previous?.state === state) {
 					yield* Effect.annotateCurrentSpan("refsReused", true);
@@ -88,7 +99,7 @@ export const makeDiffPreparation = () =>
 				}
 				const refs = yield* Effect.all(
 					[
-						options.headRef === undefined && !options.includeUncommitted
+						options.headRef === undefined && !worktree
 							? resolveBase(repoRoot, baseRef, state)
 							: localBase(repoRoot, baseRef),
 						resolveHeadSha(repoRoot, options.headRef),
@@ -101,8 +112,8 @@ export const makeDiffPreparation = () =>
 					...(baseCommit === null ? {} : { baseCommit }),
 					headCommit: refs[1],
 				});
-				if (options.includeUncommitted) return yield* effect;
-				const key = `${repoRoot}\n${refs[0].baseRef}\n${baseCommit}\n${refs[1]}`;
+				if (worktree && state === undefined) return yield* effect;
+				const key = `${repoRoot}\n${refs[0].baseRef}\n${baseCommit}\n${refs[1]}\n${worktree ? state : "committed"}`;
 				const existing = entries.get(key);
 				if (existing !== undefined && Date.now() - existing.at < 30_000) {
 					yield* Effect.annotateCurrentSpan("reused", true);
@@ -112,8 +123,23 @@ export const makeDiffPreparation = () =>
 					const oldest = entries.keys().next();
 					if (!oldest.done) entries.delete(oldest.value);
 				}
-				const cached = yield* Effect.cached(
+				const cached: Effect.Effect<
+					PreparedDiff,
+					GitError | WorktreeReadFailed,
+					FileSystem | ChildProcessSpawner.ChildProcessSpawner
+				> = yield* Effect.cached(
 					effect.pipe(
+						Effect.tap(() =>
+							Effect.gen(function* () {
+								if (state !== undefined && state === (yield* validationState)) {
+									if (validated.size >= 8) {
+										const oldest = validated.keys().next();
+										if (!oldest.done) validated.delete(oldest.value);
+									}
+									validated.set(validationKey, { state, read: cached });
+								} else if (worktree) entries.delete(key);
+							}),
+						),
 						Effect.tapError(() =>
 							Effect.sync(() => {
 								entries.delete(key);
@@ -123,16 +149,6 @@ export const makeDiffPreparation = () =>
 					),
 				);
 				entries.set(key, { at: Date.now(), read: cached });
-				if (
-					state !== undefined &&
-					state === (yield* readRefState(repoRoot, baseRef, options.headRef))
-				) {
-					if (validated.size >= 8) {
-						const oldest = validated.keys().next();
-						if (!oldest.done) validated.delete(oldest.value);
-					}
-					validated.set(validationKey, { state, read: cached });
-				}
 				return yield* cached;
 			}).pipe(Effect.withSpan("diff.preparation.read"));
 		return { read, localBase };

@@ -1,4 +1,6 @@
 import { expect, test } from "bun:test";
+import { chmod, rm, symlink } from "node:fs/promises";
+import { join } from "node:path";
 import { BunServices } from "@effect/platform-bun";
 import { Effect } from "effect";
 import {
@@ -76,7 +78,52 @@ test("metadata and contents share one committed preparation, but changed refs an
 					yield* preparation.read(repo.root, "main", {
 						includeUncommitted: true,
 					}),
-				).not.toBe(dirty);
+				).toBe(dirty);
+				yield* Effect.promise(() => repo.write("file", "edit\n"));
+				const edited = yield* preparation.read(repo.root, "main", {
+					includeUncommitted: true,
+				});
+				expect(edited).not.toBe(dirty);
+				expect(edited.patches.get("file")).toContain("+edit");
+				yield* Effect.promise(() => repo.write("file", "EDIT\n"));
+				const sameSize = yield* preparation.read(repo.root, "main", {
+					includeUncommitted: true,
+				});
+				expect(sameSize).not.toBe(edited);
+				yield* Effect.promise(() => chmod(join(repo.root, "file"), 0o755));
+				const executable = yield* preparation.read(repo.root, "main", {
+					includeUncommitted: true,
+				});
+				expect(executable).not.toBe(sameSize);
+				yield* Effect.promise(() => symlink("file", join(repo.root, "link")));
+				const link = yield* preparation.read(repo.root, "main", {
+					includeUncommitted: true,
+				});
+				yield* Effect.promise(async () => {
+					await rm(join(repo.root, "link"));
+					await symlink("other", join(repo.root, "link"));
+				});
+				expect(
+					yield* preparation.read(repo.root, "main", {
+						includeUncommitted: true,
+					}),
+				).not.toBe(link);
+				yield* Effect.promise(() => repo.write("new-dir/untracked", "one\n"));
+				const untracked = yield* preparation.read(repo.root, "main", {
+					includeUncommitted: true,
+				});
+				expect(untracked.untrackedPaths).toContain("new-dir/untracked");
+				expect(
+					yield* preparation.read(repo.root, "main", {
+						includeUncommitted: true,
+					}),
+				).toBe(untracked);
+				yield* Effect.promise(() => repo.write("new-dir/untracked", "two\n"));
+				expect(
+					yield* preparation.read(repo.root, "main", {
+						includeUncommitted: true,
+					}),
+				).not.toBe(untracked);
 			}).pipe(Effect.provide(BunServices.layer)),
 		);
 	} finally {

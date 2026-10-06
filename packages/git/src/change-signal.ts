@@ -1,9 +1,10 @@
 import { createHash } from "node:crypto";
+import { lstat, readlink } from "node:fs/promises";
 import { join } from "node:path";
 import { Effect, Option } from "effect";
 import { FileSystem } from "effect/FileSystem";
 import type { ChildProcessSpawner } from "effect/unstable/process";
-import type { GitCommandError } from "./errors.ts";
+import { type GitCommandError, WorktreeReadFailed } from "./errors.ts";
 import { git } from "./exec.ts";
 
 /**
@@ -35,6 +36,8 @@ export type FileSignature = { readonly contentHash: string };
 export type RepoChangeSignature = {
 	readonly headSha: string;
 	readonly files: ReadonlyMap<string, FileSignature>;
+	readonly status?: string;
+	readonly complete?: boolean;
 };
 
 /** Parses `git status --porcelain=v1 -z`'s NUL-separated output into the set of paths it reports. */
@@ -104,17 +107,39 @@ export const readRepoChangeSignature = (
 			git(repoRoot, ["rev-parse", "HEAD"]).pipe(
 				Effect.map((out) => out.trim()),
 			),
-			git(repoRoot, ["status", "--porcelain=v1", "-z"]),
+			git(repoRoot, [
+				"status",
+				"--porcelain=v1",
+				"-z",
+				"--untracked-files=all",
+			]),
 		]);
 
 		const paths = parseStatusPaths(statusRaw);
 		const entries = yield* Effect.forEach(
 			paths,
 			(path) =>
-				fs.readFile(join(repoRoot, path)).pipe(
-					Effect.map(
-						(bytes) => [path, { contentHash: hashBytes(bytes) }] as const,
-					),
+				Effect.gen(function* () {
+					const fullPath = join(repoRoot, path);
+					const stat = yield* Effect.tryPromise({
+						try: () => lstat(fullPath),
+						catch: (cause) => new WorktreeReadFailed({ path: fullPath, cause }),
+					});
+					const bytes = stat.isSymbolicLink()
+						? new TextEncoder().encode(
+								yield* Effect.tryPromise({
+									try: () => readlink(fullPath),
+									catch: (cause) =>
+										new WorktreeReadFailed({ path: fullPath, cause }),
+								}),
+							)
+						: yield* fs.readFile(fullPath);
+					return createHash("sha256")
+						.update(String(stat.mode))
+						.update(hashBytes(bytes))
+						.digest("hex");
+				}).pipe(
+					Effect.map((contentHash) => [path, { contentHash }] as const),
 					Effect.option,
 				),
 			{ concurrency: "unbounded" },
@@ -125,7 +150,12 @@ export const readRepoChangeSignature = (
 			if (Option.isSome(entry)) files.set(entry.value[0], entry.value[1]);
 		}
 
-		return { headSha, files };
+		return {
+			headSha,
+			files,
+			status: statusRaw,
+			complete: files.size === paths.length,
+		};
 	});
 
 /** Whether two signatures indicate the repo's changed files have actually moved — new/removed/edited paths, or a new HEAD. */
@@ -134,6 +164,7 @@ export const repoChangeSignatureEquals = (
 	b: RepoChangeSignature,
 ): boolean => {
 	if (a.headSha !== b.headSha) return false;
+	if (a.status !== b.status) return false;
 	if (a.files.size !== b.files.size) return false;
 	for (const [path, signature] of a.files) {
 		const other = b.files.get(path);
