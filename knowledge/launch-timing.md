@@ -181,15 +181,12 @@ Managed launches use `open -n -g` with `NISI_MEASUREMENT_INSTANCE=1`. Native act
 unminimizes and reveals the window and acknowledges afterward, but does not focus or raise it.
 On macOS this uses AppKit `orderBack`, not Tauri `show()` (which makes the window key). The same
 activation policy applies to plugin deep links; injection itself never requests native focus.
-Production and ordinary dev activation remain unchanged. Traced opens into a running managed
-instance do not take focus, but **managed launches may still activate the app once at app start**.
-The pinned CEF runtime's `set_activate_ignoring_other_apps` is a no-op: its macOS event loop
-activates the app independently of `open -g` and the gated initial window `focus=false`. Fully
-background startup depends on that public setting working upstream; no runtime fork is shipped.
-Verify by sampling `lsappinfo front` before, during and after, without driving the UI. Record any
-launch-time change and whether focus returns rather than calling startup fully background. For
-opens into the running instance, the frontmost app should stay unchanged while real paint marks
-arrive. Hidden intervals remain part of the report.
+Managed startup also disables CEF event-loop activation with the vendored runtime's
+`Cef::activate_ignoring_other_apps(false)` builder option, alongside initial window `focus=false`.
+Production and ordinary dev activation remain unchanged.
+Verify by sampling `lsappinfo front` before, during and after, without driving the UI: the
+measurement instance must never become frontmost, including at startup and while real paint marks
+arrive for opens into the running instance. Hidden intervals remain part of the report.
 
 # Baseline — 2026-10-04
 
