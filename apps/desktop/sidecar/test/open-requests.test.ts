@@ -19,6 +19,33 @@ const session = {
 } as const;
 
 describe("open requests", () => {
+	test("PR-open corrections emit no native activation or open-requested event", () => {
+		const activations: string[] = [];
+		const requested: string[] = [];
+		const stopActivation = subscribeToActivations((id) => activations.push(id));
+		const stop = subscribe((event) => {
+			if (event.type === "open-requested") requested.push(event.request.id);
+		});
+		try {
+			activations.length = 0;
+			correctOpenRequest(
+				{
+					id: "pr-open",
+					cwd: "/repo",
+					target: { kind: "pr" },
+					status: { kind: "opened", session },
+				},
+				session,
+			);
+			expect(requested).toEqual([]);
+			expect(activations).toEqual([]);
+			for (const request of listOpenRequests())
+				acknowledgeOpenRequest(request.id);
+		} finally {
+			stop();
+			stopActivation();
+		}
+	});
 	test("correction remains selectable and replayable after the first result was acknowledged", () => {
 		const request = createOpenRequest("/repo", target);
 		resolveOpenRequest(request.id, session);

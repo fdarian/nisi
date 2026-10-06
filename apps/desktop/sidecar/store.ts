@@ -155,13 +155,14 @@ export type Session = {
 	readonly target: SessionTarget;
 };
 
-export type OpenSessionOutcome =
+export type OpenSessionOutcome = (
 	| { readonly kind: "opened"; readonly session: Session }
 	| {
 			readonly kind: "retargeted" | "existing";
 			readonly session: Session;
 			readonly sourceSessionId: string;
-	  };
+	  }
+) & { readonly transitions?: readonly OpenSessionOutcome[] };
 
 /** `pullRequests.open`'s input — the palette only ever knows `owner/repo#number`, never a local path; see `openPullRequestSession`'s doc for how the rest gets resolved. */
 export type OpenPullRequestInput = {
@@ -647,7 +648,10 @@ export class Store extends Context.Service<Store>()("Store", {
 				const requested = validation.requestedPullRequest;
 				const resolved =
 					requested === undefined
-						? yield* resolveSessionTarget(validation.repoRoot, { kind: "auto" })
+						? yield* resolveSessionTarget(
+								validation.repoRoot,
+								validation.target,
+							)
 						: yield* Effect.gen(function* () {
 								const github = yield* GitHub;
 								const pr = yield* github.pullRequest(
@@ -696,17 +700,20 @@ export class Store extends Context.Service<Store>()("Store", {
 					resolved,
 				);
 				if (corrected.session.id === session.id)
-					return {
-						kind: "retargeted" as const,
-						session: corrected.session,
-						sourceSessionId: session.id,
-					};
+					return corrected.kind !== "opened"
+						? corrected
+						: {
+								kind: "retargeted" as const,
+								session: corrected.session,
+								sourceSessionId: session.id,
+							};
 				// Never retarget a PR row to a different PR: upsert the correct key and close only the provisional tab.
 				yield* reviewStore.closeSession(session.id);
 				return {
 					kind: "existing" as const,
 					session: corrected.session,
 					sourceSessionId: session.id,
+					transitions: corrected.kind === "opened" ? [] : [corrected],
 				};
 			}).pipe(Effect.withSpan("session.pr-index.revalidate", { root: true }));
 
@@ -1890,7 +1897,6 @@ export class Store extends Context.Service<Store>()("Store", {
 						),
 					),
 					Effect.forkIn(scope),
-					Effect.asVoid,
 				),
 			switchToPr,
 			openPullRequestSession,

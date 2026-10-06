@@ -17,6 +17,7 @@ import {
 	type Context,
 	Deferred,
 	Effect,
+	Fiber,
 	Layer,
 	Option,
 	Result,
@@ -247,6 +248,12 @@ test("index disagreement upserts the correct PR's existing row without transferr
 					"a.ts",
 				);
 				const correction = yield* Deferred.make<OpenSessionOutcome>();
+				const branchSource = yield* reviews.openSession({
+					repoRoot: canonicalRoot,
+					baseRef: "main",
+					headRef: "main",
+					pr: null,
+				});
 				yield* store.forkRevalidation(provisional, (outcome) =>
 					Deferred.succeed(correction, outcome).pipe(Effect.asVoid),
 				);
@@ -256,6 +263,9 @@ test("index disagreement upserts the correct PR's existing row without transferr
 					number: 43,
 				});
 				expect(corrected.session.id).toBe(correct.id);
+				expect(corrected.transitions).toMatchObject([
+					{ kind: "existing", sourceSessionId: branchSource.id },
+				]);
 				expect(
 					yield* reviews.getFileReviewState(provisional.id, "a.ts"),
 				).toEqual(original);
@@ -274,6 +284,36 @@ test("index disagreement upserts the correct PR's existing row without transferr
 				expect(yield* reviews.getFileReviewState(next.id, "a.ts")).toEqual(
 					original,
 				);
+				const required = (yield* store.openSession(repoRoot, { kind: "pr" }))
+					.session;
+				const requiredValidation = yield* store.forkRevalidation(required, () =>
+					Effect.die("an explicit PR open must never downgrade to a branch"),
+				);
+				yield* Fiber.join(requiredValidation);
+				expect(
+					(yield* store.listSessions()).find(
+						(session) => session.id === required.id,
+					)?.target.kind,
+				).toBe("pr");
+				state.noPr = false;
+				state.number = 44;
+				const retargeted = yield* Deferred.make<OpenSessionOutcome>();
+				const pending = (yield* store.openSession(repoRoot)).session;
+				const anotherBranch = yield* reviews.openSession({
+					repoRoot: canonicalRoot,
+					baseRef: "main",
+					headRef: "main",
+					pr: null,
+				});
+				const retargetValidation = yield* store.forkRevalidation(
+					pending,
+					(outcome) =>
+						Deferred.succeed(retargeted, outcome).pipe(Effect.asVoid),
+				);
+				yield* Fiber.join(retargetValidation);
+				expect((yield* Deferred.await(retargeted)).transitions).toMatchObject([
+					{ kind: "retargeted", sourceSessionId: anotherBranch.id },
+				]);
 			}).pipe(
 				Effect.provide(makeTestLayer(dataDir, github, index)),
 				Effect.scoped,

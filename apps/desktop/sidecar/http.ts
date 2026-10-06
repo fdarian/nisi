@@ -93,6 +93,7 @@ import { AttentionState } from "./pull-request-attention.ts";
 import { RpcErrorsPlugin } from "./rpc-errors.ts";
 import { RpcLifecyclePlugin } from "./rpc-lifecycle.ts";
 import { ScheduledMerges } from "./scheduled-merge.ts";
+import { emitSessionTransition as emitTransition } from "./session-transition.ts";
 import type { AppServices } from "./services.ts";
 import {
 	forkSessionCloseSideEffects,
@@ -324,19 +325,9 @@ export function attachRouter(
 	);
 
 	const emitSessionTransition = (outcome: OpenSessionOutcome) =>
-		Effect.gen(function* () {
-			if (outcome.kind === "opened") return;
-			if (outcome.kind === "retargeted") {
-				// The same row remains open under the same id, so subscribers need an
-				// update rather than a close event to refresh their session list.
-				emit({ type: "session-updated", session: outcome.session });
-				return;
-			}
-			// Store closed the source row after finding the PR's existing key;
-			// mirror `sessions.close`'s sidecar-wide teardown here.
-			yield* forkSessionCloseSideEffects(outcome.sourceSessionId, mainContext);
-			emit({ type: "session-closed", sessionId: outcome.sourceSessionId });
-		});
+		emitTransition(outcome, (id) =>
+			forkSessionCloseSideEffects(id, mainContext),
+		);
 
 	/**
 	 * Every `codeIndex.*` handler starts by resolving `sessionId` to a live
@@ -1401,12 +1392,16 @@ export function attachRouter(
 						emitSessionTransition(corrected).pipe(
 							Effect.andThen(
 								Effect.sync(() => {
-									const request = createOpenRequest(
-										corrected.session.repoRoot,
-										{ kind: "pr" },
-										input.traceId,
+									correctOpenRequest(
+										{
+											id: crypto.randomUUID(),
+											cwd: session.repoRoot,
+											target: { kind: "pr" },
+											traceId: input.traceId,
+											status: { kind: "opened", session },
+										},
+										corrected.session,
 									);
-									resolveOpenRequest(request.id, corrected.session);
 								}),
 							),
 							Effect.provide(mainContext),
