@@ -1,8 +1,53 @@
 import { expect, test } from "bun:test";
 import { BunServices } from "@effect/platform-bun";
 import { Effect } from "effect";
+import { CatFileReaders } from "../src/cat-file.ts";
 import { getChangedFiles, getFileContents, prepareDiff } from "../src/diff.ts";
 import { cleanupTestRepo, makeTestRepo } from "./fixtures.ts";
+
+test("shared prefix conversion preserves classification without reading committed blobs twice", async () => {
+	const repo = await makeTestRepo();
+	try {
+		await repo.write("base", "base\n");
+		await repo.commit("base");
+		await repo.git(["checkout", "-b", "feature"]);
+		await repo.write("generated.ts", "// @generated\nexport const x = 1;\n");
+		await repo.commit("generated");
+		await Effect.runPromise(
+			Effect.scoped(
+				Effect.gen(function* () {
+					const readers = yield* CatFileReaders.make;
+					const state = { requests: 0 };
+					const prepared = yield* prepareDiff(repo.root, "main").pipe(
+						Effect.provideService(CatFileReaders, {
+							request: (root, inputs) =>
+								Effect.sync(() => {
+									state.requests++;
+								}).pipe(Effect.andThen(readers.request(root, inputs))),
+						}),
+					);
+					expect(state.requests).toBe(2);
+					expect(prepared.prefixes.get("generated.ts")).toBe(
+						"// @generated\nexport const x = 1;\n",
+					);
+					expect(
+						(yield* getChangedFiles(repo.root, "main", { prepared })).find(
+							(file) => file.path === "generated.ts",
+						)?.category,
+					).toBe("generated");
+					const worktree = yield* prepareDiff(repo.root, "main", {
+						includeUncommitted: true,
+					});
+					expect(worktree.prefixes.get("generated.ts")).toBe(
+						prepared.prefixes.get("generated.ts"),
+					);
+				}),
+			).pipe(Effect.provide(BunServices.layer)),
+		);
+	} finally {
+		await cleanupTestRepo(repo);
+	}
+});
 
 test("combined preparation preserves rename, binary, deleted and quoted path contents and stats", async () => {
 	const repo = await makeTestRepo();

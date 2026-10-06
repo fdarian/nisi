@@ -34,7 +34,6 @@ function RootLayout() {
 		<ThemeProvider attribute="class" defaultTheme="system" enableSystem>
 			<DevToolProvider>
 				<ToastProvider>
-					<DiffWorkerPrewarm />
 					<BackendProvider>
 						<ConnectedEvents />
 					</BackendProvider>
@@ -65,6 +64,7 @@ function ConnectedEvents() {
 	if (backend.status !== "ready") return content;
 	return (
 		<SidecarEventsProvider client={backend.client}>
+			<DiffWorkerPrewarm orpc={backend.orpc} />
 			<ScheduledMergeNotifications orpc={backend.orpc} />
 			<OpenRequestProvider>{content}</OpenRequestProvider>
 		</SidecarEventsProvider>

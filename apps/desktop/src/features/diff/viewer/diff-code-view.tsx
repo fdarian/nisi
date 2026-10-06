@@ -36,7 +36,7 @@ import {
 	useState,
 } from "react";
 import {
-	buildDiffHighlighterOptions,
+	buildDiffPrewarmOptions,
 	diffCodeViewLayout,
 	diffItemMetrics,
 	diffViewUnsafeCSS,
@@ -45,7 +45,11 @@ import {
 	createTokenInteractionLeaseRegistry,
 	type TokenInteractionLeaseRegistry,
 } from "#/features/diff/selection/token-interaction-leases";
-import type { DiffStyleMode } from "#/features/settings/settings-data";
+import {
+	type DiffStyleMode,
+	useSettings,
+} from "#/features/settings/settings-data";
+import type { SidecarQueryUtils } from "#/infra/backend-context";
 
 function useDiffWorkerPoolOptions() {
 	return useMemo(
@@ -60,18 +64,20 @@ function useDiffWorkerPoolOptions() {
 	);
 }
 
-export function DiffWorkerPrewarm(): React.ReactElement {
+export function DiffWorkerPrewarm(props: {
+	orpc: SidecarQueryUtils;
+}): React.ReactElement {
+	const settings = useSettings(props.orpc);
 	const poolOptions = useDiffWorkerPoolOptions();
 	const highlighterOptions = useMemo<WorkerInitializationRenderOptions>(
-		() => ({
-			...buildDiffHighlighterOptions({
-				light: "github-light",
-				dark: "github-dark",
+		() =>
+			buildDiffPrewarmOptions({
+				light: settings.settings.diffThemeLight,
+				dark: settings.settings.diffThemeDark,
 			}),
-			langs: ["typescript", "tsx", "javascript", "json"],
-		}),
-		[],
+		[settings.settings.diffThemeLight, settings.settings.diffThemeDark],
 	);
+	if (settings.isLoading) return <></>;
 	return (
 		<WorkerPoolContextProvider
 			poolOptions={poolOptions}

@@ -183,6 +183,13 @@ export function buildDiffHighlighterOptions(
 	};
 }
 
+export const buildDiffPrewarmOptions = (
+	theme: ThemesType,
+): WorkerInitializationRenderOptions => ({
+	...buildDiffHighlighterOptions(theme),
+	langs: ["typescript", "tsx", "javascript", "json"],
+});
+
 /** `useDiffTheme`'s return shape — see its doc comment. */
 export type DiffTheme = {
 	theme: ThemesType;

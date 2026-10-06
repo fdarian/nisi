@@ -2,7 +2,7 @@ import { BunRuntime, BunServices } from "@effect/platform-bun";
 import { safe } from "@orpc/client";
 import { resolvedPath } from "@repo/bin-resolver";
 import { getDataDirConfig, SqliteDb } from "@repo/db";
-import { CatFileReaders, GhGitHub } from "@repo/git";
+import { CatFileReaders } from "@repo/git";
 import {
 	RepoMergeMethodStore,
 	ScheduledMergeStore,
@@ -24,7 +24,7 @@ import { LaunchTrace } from "./launch-trace/service.ts";
 import { startLivePolling } from "./live-poll.ts";
 import { LoggingLive } from "./logging.ts";
 import { PrIndex } from "./pr-index.ts";
-import { PullRequestAttentionLive } from "./pull-request-attention.ts";
+import { GitHubLive } from "./github-live.ts";
 import { ScheduledMerges } from "./scheduled-merge.ts";
 import { SessionWatch } from "./session-watch.ts";
 import { Store } from "./store.ts";
@@ -245,7 +245,7 @@ const MainLayer = Layer.mergeAll(
 			Layer.mergeAll(
 				ScheduledMergeStore.layer,
 				RepoMergeMethodStore.layer,
-				GhGitHub.layer.pipe(Layer.provideMerge(PullRequestAttentionLive.layer)),
+				GitHubLive,
 			),
 		),
 	),
@@ -256,9 +256,7 @@ const MainLayer = Layer.mergeAll(
 	CodeLspPool.layer,
 	CatFileReaders.layer,
 ).pipe(
-	Layer.provideMerge(
-		GhGitHub.layer.pipe(Layer.provideMerge(PullRequestAttentionLive.layer)),
-	),
+	Layer.provideMerge(GitHubLive),
 	Layer.provideMerge(SqliteDb.layer),
 	Layer.provideMerge(BunServices.layer),
 );

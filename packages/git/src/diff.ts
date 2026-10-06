@@ -258,18 +258,7 @@ export const prepareDiff = (
 		const prefixes =
 			target.kind === "worktree"
 				? details[2]
-				: new Map(
-						[...details[1]].flatMap((entry) =>
-							entry[1].content === null
-								? []
-								: [
-										[
-											entry[0],
-											new TextDecoder().decode(entry[1].content),
-										] as const,
-									],
-						),
-					);
+				: yield* readContentPrefixes(repoRoot, target, paths, fs, details[1]);
 		return {
 			mergeBase,
 			target,
@@ -335,15 +324,20 @@ const readContentPrefixes = (
 	target: DiffTarget,
 	paths: ReadonlyArray<string>,
 	fs: FileSystem,
+	preparedBlobs?: ReadonlyMap<string, BlobEntry>,
 ): Effect.Effect<
 	ReadonlyMap<string, string>,
 	GitCommandError,
 	ChildProcessSpawner.ChildProcessSpawner | FileSystem
 > => {
 	if (target.kind === "committed") {
-		return readBlobsAtRef(repoRoot, target.sha, paths, {
-			maxBytes: CONTENT_PREFIX_CAP,
-		}).pipe(
+		return (
+			preparedBlobs === undefined
+				? readBlobsAtRef(repoRoot, target.sha, paths, {
+						maxBytes: CONTENT_PREFIX_CAP,
+					})
+				: Effect.succeed(preparedBlobs)
+		).pipe(
 			Effect.map((blobs) => {
 				const prefixes = new Map<string, string>();
 				for (const [path, blob] of blobs) {
