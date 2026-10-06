@@ -93,12 +93,12 @@ import { AttentionState } from "./pull-request-attention.ts";
 import { RpcErrorsPlugin } from "./rpc-errors.ts";
 import { RpcLifecyclePlugin } from "./rpc-lifecycle.ts";
 import { ScheduledMerges } from "./scheduled-merge.ts";
-import { emitSessionTransition as emitTransition } from "./session-transition.ts";
 import type { AppServices } from "./services.ts";
 import {
 	forkSessionCloseSideEffects,
 	reportChatCloseFailure,
 } from "./session-close.ts";
+import { emitSessionTransition as emitTransition } from "./session-transition.ts";
 import { SessionWatch } from "./session-watch.ts";
 import {
 	type OpenSessionOutcome,

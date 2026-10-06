@@ -1,11 +1,11 @@
 import {
 	type GitError,
 	type PreparedDiff,
-	type WorktreeReadFailed,
 	prepareDiff,
 	readLocalBase,
 	readRepoChangeSignature,
 	resolveHeadSha,
+	type WorktreeReadFailed,
 } from "@repo/git";
 import { Effect } from "effect";
 import type { FileSystem } from "effect/FileSystem";
