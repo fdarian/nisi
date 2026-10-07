@@ -15,7 +15,7 @@ import {
 	type MergeFailure,
 } from "../merge/merge-error-dialog";
 import type { CiCheck } from "./ci-status";
-import { CiStatus } from "./ci-status";
+import { CiStatus, CiStatusSkeleton } from "./ci-status";
 
 type PrCiStatusProps = {
 	orpc: SidecarQueryUtils;
@@ -92,10 +92,10 @@ const toCiChecks = (
 
 /**
  * Data-fetching wrapper around the purely presentational `CiStatus` —
- * renders `null` while `pullRequests.checks` is still loading and on error, a
- * PR whose checks failed to load must not show a ring implying real state
- * (unlike a genuinely empty check list, which `CiStatus` already renders as
- * nothing on its own).
+ * renders a ring-sized skeleton while `pullRequests.checks` is still loading
+ * and `null` on error — a PR whose checks failed to load must not show a ring
+ * implying real state (unlike a genuinely empty check list, which `CiStatus`
+ * already renders as nothing on its own).
  */
 export function PrCiStatus({
 	orpc,
@@ -143,7 +143,8 @@ export function PrCiStatus({
 		isSelectedTab,
 	);
 
-	if (checksQuery.data === undefined) return null;
+	if (checksQuery.data === undefined)
+		return checksQuery.isError ? null : <CiStatusSkeleton />;
 
 	const runIds = checksQuery.data.flatMap((check) =>
 		check.status === "awaiting_approval" && check.workflowRunId !== undefined

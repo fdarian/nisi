@@ -32,15 +32,17 @@ import {
 	openInEditor,
 	useAvailableEditors,
 } from "#/infra/use-available-editors";
+import type { DiffStat } from "./diff-stat";
 import { PrBaseStaleNotice } from "./pr-base-stale-notice";
 import { PrCiStatus } from "./pr-ci-status";
+import { PrDiffStat } from "./pr-diff-stat";
 import { PrStackBadge } from "./pr-stack-badge";
 
 type PrHeaderProps = {
 	orpc: SidecarQueryUtils;
 	target: SessionTarget;
 	repoRoot: string;
-	stat: { additions: number; deletions: number };
+	stat: DiffStat;
 	/** Only `true` once a completed base fetch has failed — never while one is still running. */
 	baseMayBeStale: boolean;
 	isRetryingBase: boolean;
@@ -172,12 +174,7 @@ export function PrHeader({
 					<h1 className="truncate font-heading font-semibold text-base">
 						{target.kind === "pr" ? target.title : target.headRef}
 					</h1>
-					<span className="shrink-0 font-mono text-xs tabular-nums">
-						<span className="text-success-foreground">+{stat.additions}</span>{" "}
-						<span className="text-destructive-foreground">
-							-{stat.deletions}
-						</span>
-					</span>
+					<PrDiffStat stat={stat} />
 				</div>
 			</div>
 			{target.kind === "pr" && (

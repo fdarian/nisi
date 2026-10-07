@@ -33,6 +33,7 @@ import {
 } from "#/features/pull-request/data/session-ui-store";
 import { FileView } from "#/features/pull-request/file-view/file-view";
 import { FilesChangedContent } from "#/features/pull-request/files/files-changed-content";
+import { diffStat } from "#/features/pull-request/header/diff-stat";
 import { PrHeader } from "#/features/pull-request/header/pr-header";
 import { useNavigationShortcuts } from "#/features/pull-request/navigation/use-navigation-shortcuts";
 import { OverviewView } from "#/features/pull-request/overview/overview-view";
@@ -156,17 +157,7 @@ export function PrView({
 	useDevToolScope("files-changed", isFilesChangedVisible);
 	useRefetchToasts(orpc, session.id);
 
-	const stat = useMemo(
-		() =>
-			files.reduce(
-				(totals, file) => ({
-					additions: totals.additions + file.additions,
-					deletions: totals.deletions + file.deletions,
-				}),
-				{ additions: 0, deletions: 0 },
-			),
-		[files],
-	);
+	const stat = diffStat({ files, isLoading, error });
 
 	// Overview and Files Changed always exist regardless of the walkthrough
 	// setting; Walkthrough only joins the strip when it's enabled. A single

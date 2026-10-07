@@ -10,6 +10,7 @@ import {
 	DropdownMenuSeparator,
 	DropdownMenuTrigger,
 } from "#/components/ui/menu";
+import { Skeleton } from "#/components/ui/skeleton";
 import { useDismissOnInactive } from "#/features/pull-request/use-dismiss-on-inactive";
 import { useOpenCiCheck } from "../ci-log/ci-log-provider";
 
@@ -212,6 +213,18 @@ function CiChecksMenuContent({
 				</>
 			)}
 		</DropdownMenuContent>
+	);
+}
+
+/** Same footprint as `CiStatus`'s trigger (`size-7` hit area, `size-5.5` ring), so the ring replaces it in place. */
+export function CiStatusSkeleton(): React.ReactElement {
+	return (
+		<div
+			aria-hidden
+			className="flex size-7 shrink-0 items-center justify-center motion-reduce:[&_[data-slot=skeleton]]:animate-none"
+		>
+			<Skeleton className="size-5.5 rounded-full" />
+		</div>
 	);
 }
 

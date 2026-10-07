@@ -334,7 +334,10 @@ export function PrMergeButton({
 
 	const allowedMethods = statusQuery.data?.allowedMethods ?? [];
 	const showAutoMergeAction = scheduledQuery.data === null;
+	// While the status is still loading the chevron is already in place (disabled,
+	// see `methodMenuDisabled`) so it doesn't appear and push the header around.
 	const showMethodPicker =
+		(statusQuery.data === undefined && !statusQuery.isError) ||
 		allowedMethods.length > 1 ||
 		showAutoMergeAction ||
 		(scheduledQuery.data !== undefined && scheduledQuery.data !== null);
@@ -354,6 +357,9 @@ export function PrMergeButton({
 		<>
 			<Group>
 				<Button
+					// Wide enough for "Checking mergeability…" and the longest method
+					// label, so the label changing never resizes the button.
+					className="min-w-44"
 					disabled={disabled || isCheckingUnpushed || autoMerge.isPending}
 					onClick={() => handleClick("merge")}
 					size="sm"
