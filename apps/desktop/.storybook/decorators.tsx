@@ -16,9 +16,11 @@
  * A `RouterProvider` is here only so `<Link to="/settings">`
  * (`generate-panel.tsx`) has a router context to call into — its route tree
  * is just enough to register `/settings` as a valid target, not a working
- * settings page. One router is built per story render (`useMemo`), each
- * wrapping that story's own children as its index route's component.
+ * settings page. The router stays mounted across args updates; story content
+ * travels through React context so updates don't replace the route tree.
  */
+
+import type { Decorator } from "@storybook/react-vite";
 import type { QueryClientConfig } from "@tanstack/react-query";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
@@ -30,7 +32,14 @@ import {
 	RouterProvider,
 } from "@tanstack/react-router";
 import { ThemeProvider } from "next-themes";
-import { useMemo } from "react";
+import { createContext, useContext, useMemo } from "react";
+import { ToastProvider } from "#/components/ui/toast";
+import { ChatProvider } from "#/features/chat/chat-store";
+import { DevToolProvider } from "#/features/devtools/dev-tool-context";
+import { SessionUiProvider } from "#/features/pull-request/data/session-ui-store";
+import { SidecarEventsProvider } from "#/infra/sidecar-events";
+import { AppViewActiveContext } from "#/shell/app-view-context";
+import { createMockSidecarClient } from "./mock-orpc";
 
 // Stories should never actually hit the network — a query that somehow
 // misses `createMockOrpc`'s coverage should surface as a visibly stuck
@@ -39,12 +48,47 @@ const STORY_QUERY_CONFIG: QueryClientConfig = {
 	defaultOptions: { queries: { retry: false, refetchOnWindowFocus: false } },
 };
 
-function createStoryRouter(content: React.ReactNode) {
+const storyClient = createMockSidecarClient();
+
+export const withAppShellProviders: Decorator = (Story) => (
+	<DevToolProvider>
+		<ToastProvider>
+			<SidecarEventsProvider client={storyClient}>
+				<AppViewActiveContext value={true}>
+					<SessionUiProvider>
+						<ChatProvider>
+							<Story />
+						</ChatProvider>
+					</SessionUiProvider>
+				</AppViewActiveContext>
+			</SidecarEventsProvider>
+		</ToastProvider>
+	</DevToolProvider>
+);
+
+export function StoryQueryBoundary(props: {
+	children: React.ReactNode;
+}): React.ReactElement {
+	const queryClient = useMemo(() => new QueryClient(STORY_QUERY_CONFIG), []);
+	return (
+		<QueryClientProvider client={queryClient}>
+			{props.children}
+		</QueryClientProvider>
+	);
+}
+
+const StoryContentContext = createContext<React.ReactNode>(null);
+
+function StoryContent() {
+	return useContext(StoryContentContext);
+}
+
+function createStoryRouter() {
 	const rootRoute = createRootRoute({ component: () => <Outlet /> });
 	const indexRoute = createRoute({
 		getParentRoute: () => rootRoute,
 		path: "/",
-		component: () => content,
+		component: StoryContent,
 	});
 	const settingsRoute = createRoute({
 		getParentRoute: () => rootRoute,
@@ -74,7 +118,7 @@ export function StoryProviders({
 	// One `QueryClient` per story render — sharing one across stories would
 	// leak a previous story's cached query results into the next.
 	const queryClient = useMemo(() => new QueryClient(STORY_QUERY_CONFIG), []);
-	const router = useMemo(() => createStoryRouter(children), [children]);
+	const router = useMemo(() => createStoryRouter(), []);
 
 	return (
 		<ThemeProvider
@@ -84,7 +128,9 @@ export function StoryProviders({
 			forcedTheme={theme === "system" ? undefined : theme}
 		>
 			<QueryClientProvider client={queryClient}>
-				<RouterProvider router={router} />
+				<StoryContentContext value={children}>
+					<RouterProvider router={router} />
+				</StoryContentContext>
 			</QueryClientProvider>
 		</ThemeProvider>
 	);

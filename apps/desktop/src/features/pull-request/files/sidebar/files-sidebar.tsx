@@ -1,22 +1,7 @@
 "use client";
 
-import { cn } from "cn";
-import { SearchIcon, SlidersHorizontalIcon, XIcon } from "lucide-react";
 import { useMemo, useRef } from "react";
-import { Button, buttonVariants } from "#/components/ui/button";
 import { Empty, EmptyDescription, EmptyTitle } from "#/components/ui/empty";
-import {
-	InputGroup,
-	InputGroupAddon,
-	InputGroupInput,
-} from "#/components/ui/input-group";
-import {
-	DropdownMenu,
-	DropdownMenuContent,
-	DropdownMenuRadioGroup,
-	DropdownMenuRadioItem,
-	DropdownMenuTrigger,
-} from "#/components/ui/menu";
 import { ScrollArea } from "#/components/ui/scroll-area";
 import type {
 	FileChange,
@@ -25,16 +10,13 @@ import type {
 import type { SidebarViewMode } from "#/features/settings/settings-data";
 import { CATEGORY_LABELS, groupFilesByCategory } from "#/lib/tree-paths";
 import { useKeyBindings } from "#/lib/use-key-bindings";
+import { filesSidebarClassName } from "../files-changed-layout";
 import { FileTreeView } from "./file-tree-view";
+import { FilesFilter } from "./files-filter";
 import { FlatFileGroup } from "./flat-file-group";
 
 /** The files sidebar's search box: filter by file path (today's default) or grep loaded diff content. */
 export type SearchMode = "files" | "keyword";
-
-const SEARCH_MODE_PLACEHOLDER: Record<SearchMode, string> = {
-	files: "Filter files…",
-	keyword: "Search in diffs…",
-};
 
 type FilesSidebarProps = {
 	files: readonly FileChange[];
@@ -110,121 +92,51 @@ export function FilesSidebar({
 	);
 
 	return (
-		<div className="flex h-full w-72 shrink-0 flex-col bg-pane-surface pb-2">
-			<div className="p-2">
-				<InputGroup>
-					<InputGroupAddon>
-						<SearchIcon className="size-3.5" />
-					</InputGroupAddon>
-					<InputGroupInput
-						aria-label={
-							searchMode === "keyword" ? "Search diff content" : "Filter files"
-						}
-						onChange={(event) => onFilterQueryChange(event.currentTarget.value)}
-						onKeyDown={(event) => {
-							if (event.key === "Escape") {
-								// `<input type="search">` clears itself natively on Escape
-								// in Chromium — suppressed so this first Escape only blurs and
-								// hands the query intact to `j`/`k`. A second Escape, once
-								// focus has left the input, clears it via the global
-								// `Escape` binding in `FilesChangedView`.
-								event.preventDefault();
-								event.currentTarget.blur();
-								return;
-							}
-							if (event.key === "Enter") {
-								// Blurs unconditionally (same as Escape) so the natural
-								// type→Enter→`n`→`n` flow works — `n`/`N` are bare
-								// bindings, suppressed while this input has focus.
-								event.preventDefault();
-								onQuerySubmit();
-								event.currentTarget.blur();
-							}
-						}}
-						placeholder={SEARCH_MODE_PLACEHOLDER[searchMode]}
-						ref={filterInputRef}
-						type="search"
-						value={filterQuery}
+		<div className={filesSidebarClassName}>
+			<FilesFilter
+				query={filterQuery}
+				mode={searchMode}
+				inputRef={filterInputRef}
+				onQueryChange={onFilterQueryChange}
+				onModeChange={onSearchModeChange}
+				onSubmit={onQuerySubmit}
+			/>
+			<div data-files-data className="flex min-h-0 flex-1 flex-col">
+				{groups.length === 0 ? (
+					<Empty className="px-4 py-8">
+						<EmptyTitle className="text-sm">No matching files</EmptyTitle>
+						<EmptyDescription>Try a different filter query.</EmptyDescription>
+					</Empty>
+				) : viewMode === "tree" ? (
+					// The tree scrolls itself — that internal scroller *is* the sidebar's
+					// one scroll region, and wrapping it in another one would take its
+					// height away and stop it windowing rows. Flat mode has no scroller
+					// of its own, so it keeps the `ScrollArea`.
+					<FileTreeView
+						files={files}
+						onMarkReviewed={onMarkReviewed}
+						onSelectPath={onSelectPath}
+						repoRoot={repoRoot}
+						reviewState={reviewState}
+						selectedPath={selectedPath}
 					/>
-					{filterQuery.length > 0 && (
-						<InputGroupAddon align="inline-end">
-							<Button
-								variant="ghost"
-								size="icon-xs"
-								aria-label="Clear filter"
-								onClick={() => {
-									onFilterQueryChange("");
-									filterInputRef.current?.focus();
-								}}
-								type="button"
-							>
-								<XIcon aria-hidden="true" />
-							</Button>
-						</InputGroupAddon>
-					)}
-					<InputGroupAddon align="inline-end">
-						<DropdownMenu>
-							<DropdownMenuTrigger
-								aria-label="Search mode"
-								className={cn(
-									buttonVariants({ variant: "ghost", size: "icon-xs" }),
-								)}
-							>
-								<SlidersHorizontalIcon aria-hidden="true" />
-							</DropdownMenuTrigger>
-							<DropdownMenuContent align="end">
-								<DropdownMenuRadioGroup
-									onValueChange={(value) =>
-										onSearchModeChange(value as SearchMode)
-									}
-									value={searchMode}
-								>
-									<DropdownMenuRadioItem closeOnClick value="files">
-										Files
-									</DropdownMenuRadioItem>
-									<DropdownMenuRadioItem closeOnClick value="keyword">
-										Keyword
-									</DropdownMenuRadioItem>
-								</DropdownMenuRadioGroup>
-							</DropdownMenuContent>
-						</DropdownMenu>
-					</InputGroupAddon>
-				</InputGroup>
+				) : (
+					<ScrollArea className="min-h-0 flex-1" scrollFade>
+						<div className="flex flex-col gap-1 pb-3">
+							{groups.map((group) => (
+								<FlatFileGroup
+									key={group.category}
+									files={group.files}
+									onSelectPath={onSelectPath}
+									reviewState={reviewState}
+									selectedPath={selectedPath}
+									title={CATEGORY_LABELS[group.category]}
+								/>
+							))}
+						</div>
+					</ScrollArea>
+				)}
 			</div>
-			{groups.length === 0 ? (
-				<Empty className="px-4 py-8">
-					<EmptyTitle className="text-sm">No matching files</EmptyTitle>
-					<EmptyDescription>Try a different filter query.</EmptyDescription>
-				</Empty>
-			) : viewMode === "tree" ? (
-				// The tree scrolls itself — that internal scroller *is* the sidebar's
-				// one scroll region, and wrapping it in another one would take its
-				// height away and stop it windowing rows. Flat mode has no scroller
-				// of its own, so it keeps the `ScrollArea`.
-				<FileTreeView
-					files={files}
-					onMarkReviewed={onMarkReviewed}
-					onSelectPath={onSelectPath}
-					repoRoot={repoRoot}
-					reviewState={reviewState}
-					selectedPath={selectedPath}
-				/>
-			) : (
-				<ScrollArea className="min-h-0 flex-1" scrollFade>
-					<div className="flex flex-col gap-1 pb-3">
-						{groups.map((group) => (
-							<FlatFileGroup
-								key={group.category}
-								files={group.files}
-								onSelectPath={onSelectPath}
-								reviewState={reviewState}
-								selectedPath={selectedPath}
-								title={CATEGORY_LABELS[group.category]}
-							/>
-						))}
-					</div>
-				</ScrollArea>
-			)}
 		</div>
 	);
 }

@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import type { SidecarClient } from "@repo/sidecar-api";
 import { receiveTracedOpen } from "#/infra/launch-trace";
-import { FilesChangedLoading } from "./files-changed-loading";
+import { loadingPaintRef } from "./files-changed-skeleton";
 
 test("the shared pending/session skeleton records one loading paint per traced open", async () => {
 	const previous = Object.getOwnPropertyDescriptor(globalThis, "document");
@@ -37,10 +37,8 @@ test("the shared pending/session skeleton records one loading paint per traced o
 		isConnected: true,
 		getBoundingClientRect: () => ({ height: 100 }),
 	} as HTMLElement;
-	const paint = (props: Parameters<typeof FilesChangedLoading>[0]) => {
-		const ref = FilesChangedLoading(props).props.ref;
-		if (typeof ref !== "function") throw new Error("Skeleton has no paint ref");
-		ref(node);
+	const paint = (props: Parameters<typeof loadingPaintRef>[0]) => {
+		loadingPaintRef(props)(node);
 		for (const callback of frames.splice(0)) callback(0);
 	};
 	try {

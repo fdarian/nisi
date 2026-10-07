@@ -20,6 +20,7 @@ import { AsyncIteratorClass } from "@orpc/shared";
 import { createTanstackQueryUtils } from "@orpc/tanstack-query";
 import type { SidecarClient } from "@repo/sidecar-api";
 import type {
+	FileChange,
 	FileContent,
 	PullRequestCheck,
 	PullRequestMergeStatus,
@@ -108,6 +109,8 @@ const DEFAULT_MODELS: Record<HarnessId, HarnessModels> = {
 };
 
 export type MockOrpcData = {
+	files?: readonly FileChange[];
+	filesDelayMs?: number;
 	pullRequestSearchResults?: readonly PullRequestSearchResult[];
 	pullRequestRepositories?: readonly PullRequestRepository[];
 	/** `walkthrough.get`'s result — omit for "nothing generated yet", pass a fixture for the loaded reader. */
@@ -272,7 +275,13 @@ export function createMockSidecarClient(
 			closeThread: async () => undefined,
 		},
 		diff: {
-			files: async () => ({ files: [], baseMayBeStale: false }),
+			files: async () => {
+				if (data.filesDelayMs !== undefined)
+					await new Promise((resolve) =>
+						setTimeout(resolve, data.filesDelayMs),
+					);
+				return { files: [...(data.files ?? [])], baseMayBeStale: false };
+			},
 			refreshBase: async () => {
 				throw new Error("diff.refreshBase has no story fixture yet");
 			},

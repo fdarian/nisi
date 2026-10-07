@@ -3,6 +3,7 @@
 *.local*
 dist
 routeTree.gen.ts
+apps/desktop/.storybook-shots/
 
 # Rust
 **/src-tauri/target

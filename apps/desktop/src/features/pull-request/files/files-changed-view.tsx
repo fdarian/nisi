@@ -1,26 +1,8 @@
 "use client";
 
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { cn } from "cn";
-import {
-	Columns2Icon,
-	RefreshCwIcon,
-	RowsIcon,
-	SlidersHorizontalIcon,
-} from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Button, buttonVariants } from "#/components/ui/button";
-import {
-	DropdownMenu,
-	DropdownMenuCheckboxItem,
-	DropdownMenuContent,
-	DropdownMenuRadioGroup,
-	DropdownMenuRadioItem,
-	DropdownMenuSeparator,
-	DropdownMenuTrigger,
-} from "#/components/ui/menu";
 import { toastManager } from "#/components/ui/toast";
-import { ToggleGroup, ToggleGroupItem } from "#/components/ui/toggle-group";
 import {
 	type DiffMatch,
 	diffContentMatchesQuery,
@@ -58,7 +40,6 @@ import { FilesSidebar } from "#/features/pull-request/files/sidebar/files-sideba
 import {
 	useDiffStyleMode,
 	useHideReviewed,
-	useIncludeUncommitted,
 	usePreferredEditor,
 	useSidebarViewMode,
 	useWrapLines,
@@ -71,6 +52,8 @@ import {
 } from "#/infra/use-available-editors";
 import { comparePaths } from "#/lib/tree-paths";
 import { useKeyBindings } from "#/lib/use-key-bindings";
+import { filesMainClassName } from "./files-changed-layout";
+import { FilesViewedToolbar } from "./files-viewed-toolbar";
 
 /** Stable identity for the "keyword mode inactive" case — a fresh `[]`/`Map` every render would defeat `DiffPane`'s `items` memo just as surely as a genuinely different value would. */
 const EMPTY_MATCHES: readonly DiffMatch[] = [];
@@ -78,6 +61,7 @@ const EMPTY_MATCHES_BY_PATH: ReadonlyMap<string, readonly DiffMatch[]> =
 	new Map();
 
 type FilesChangedViewProps = {
+	countsRevealed: boolean;
 	session: Session;
 	orpc: SidecarQueryUtils;
 	files: readonly FileChange[];
@@ -91,6 +75,8 @@ type FilesChangedViewProps = {
 	 * open tab, so `j`/`k`/`r`/`u` here (and `mod+f` in `FilesSidebar`) must stay
 	 * off while a background tab's `FilesChangedView` isn't what's on screen. */
 	shortcutsEnabled: boolean;
+	/** Forwarded to `DiffPane` — lets the loading skeleton stay up until the diff has actually painted. */
+	onFirstCardPainted: () => void;
 };
 
 export function FilesChangedView({
@@ -103,6 +89,8 @@ export function FilesChangedView({
 	hasPendingChanges,
 	onRefresh,
 	shortcutsEnabled,
+	onFirstCardPainted,
+	countsRevealed,
 }: FilesChangedViewProps): React.ReactElement {
 	// All of `selectedPath` through `forcedPaths`/the undo stack below live in
 	// the per-session UI store (`session-ui-store.ts`), not local `useState` —
@@ -170,12 +158,10 @@ export function FilesChangedView({
 		[setCurrentMatchIndex],
 	);
 
-	const [viewMode, setViewMode] = useSidebarViewMode(orpc);
-	const [diffStyle, setDiffStyle] = useDiffStyleMode(orpc);
-	const [hideReviewed, setHideReviewed] = useHideReviewed(orpc);
-	const [includeUncommitted, setIncludeUncommitted] =
-		useIncludeUncommitted(orpc);
-	const [wrapLines, setWrapLines] = useWrapLines(orpc);
+	const viewMode = useSidebarViewMode(orpc)[0];
+	const diffStyle = useDiffStyleMode(orpc)[0];
+	const hideReviewed = useHideReviewed(orpc)[0];
+	const wrapLines = useWrapLines(orpc)[0];
 	const [preferredEditor, setPreferredEditor] = usePreferredEditor(orpc);
 	const { editors, loadEditors } = useAvailableEditors();
 	const [editorPickerOpen, setEditorPickerOpen] = useState(false);
@@ -674,96 +660,17 @@ export function FilesChangedView({
 					viewMode={viewMode}
 				/>
 
-				<div className="flex min-h-0 flex-1 flex-col pt-2 gap-2">
-					<div className="rounded-xl bg-background px-3 py-2 flex shrink-0 items-center justify-between mx-3 text-muted-foreground text-xs">
-						<span className="flex items-center gap-2">
-							<ProgressCircle total={files.length} value={viewedCount} />
-							<span>
-								<span className="font-medium text-foreground tabular-nums">
-									{viewedCount}
-								</span>{" "}
-								of{" "}
-								<span className="font-medium text-foreground tabular-nums">
-									{files.length}
-								</span>{" "}
-								viewed
-							</span>
-						</span>
-
-						<div className="flex items-center gap-2">
-							{hasPendingChanges && (
-								<Button
-									onClick={onRefresh}
-									size="xs"
-									variant="warning-secondary"
-								>
-									<RefreshCwIcon />
-									Refresh
-								</Button>
-							)}
-							<ToggleGroup
-								onValueChange={(value) => {
-									const next = value[0];
-									if (next === "unified" || next === "split")
-										setDiffStyle(next);
-								}}
-								size="sm"
-								value={[diffStyle]}
-								variant="outline"
-							>
-								<ToggleGroupItem aria-label="Unified diff" value="unified">
-									<RowsIcon />
-								</ToggleGroupItem>
-								<ToggleGroupItem aria-label="Split diff" value="split">
-									<Columns2Icon />
-								</ToggleGroupItem>
-							</ToggleGroup>
-							<DropdownMenu>
-								<DropdownMenuTrigger
-									aria-label="Files sidebar display options"
-									className={cn(
-										buttonVariants({ variant: "ghost", size: "icon-sm" }),
-									)}
-								>
-									<SlidersHorizontalIcon />
-								</DropdownMenuTrigger>
-								<DropdownMenuContent align="end">
-									<DropdownMenuRadioGroup
-										onValueChange={(value) =>
-											setViewMode(value as "tree" | "flat")
-										}
-										value={viewMode}
-									>
-										<DropdownMenuRadioItem closeOnClick value="tree">
-											Tree
-										</DropdownMenuRadioItem>
-										<DropdownMenuRadioItem closeOnClick value="flat">
-											Flat
-										</DropdownMenuRadioItem>
-									</DropdownMenuRadioGroup>
-									<DropdownMenuSeparator />
-									<DropdownMenuCheckboxItem
-										checked={hideReviewed}
-										onCheckedChange={setHideReviewed}
-									>
-										Hide reviewed
-									</DropdownMenuCheckboxItem>
-									<DropdownMenuCheckboxItem
-										checked={wrapLines}
-										onCheckedChange={setWrapLines}
-									>
-										Wrap lines
-									</DropdownMenuCheckboxItem>
-									<DropdownMenuCheckboxItem
-										checked={includeUncommitted}
-										onCheckedChange={setIncludeUncommitted}
-									>
-										Include uncommitted
-									</DropdownMenuCheckboxItem>
-								</DropdownMenuContent>
-							</DropdownMenu>
-						</div>
-					</div>
+				<div className={filesMainClassName}>
+					<FilesViewedToolbar
+						orpc={orpc}
+						counts={
+							countsRevealed
+								? { total: files.length, viewed: viewedCount }
+								: undefined
+						}
+						hasPendingChanges={hasPendingChanges}
+						onRefresh={onRefresh}
+					/>
 					<DiffPane
 						optimisticBaselines={optimisticBaselines}
 						currentMatch={currentMatch}
@@ -774,6 +681,7 @@ export function FilesChangedView({
 						keywordMatchesByPath={keywordMatchesByPath}
 						onMarkSelectionReviewed={markSelectionReviewed}
 						onForceLoad={addForcedPath}
+						onFirstCardPainted={onFirstCardPainted}
 						onOpenFile={onOpenFile}
 						onRenderedPathsChange={handleRenderedPathsChange}
 						onVisiblePathChange={handleVisiblePathChange}
@@ -813,64 +721,5 @@ export function FilesChangedView({
 				open={editorPickerOpen}
 			/>
 		</>
-	);
-}
-
-// Adapted from magicui's Animated Circular Progress Bar
-// (https://magicui.design/docs/components/animated-circular-progress-bar),
-// scaled down to an inline badge with no center label — the "N of M viewed"
-// text next to it already says the number.
-function ProgressCircle({
-	value,
-	total,
-}: {
-	value: number;
-	total: number;
-}): React.ReactElement {
-	const circumference = 2 * Math.PI * 45;
-	const percentPx = circumference / 100;
-	const currentPercent = total === 0 ? 0 : Math.round((value / total) * 100);
-
-	return (
-		<svg
-			aria-label={`${value} of ${total} viewed`}
-			className="size-3.5 shrink-0"
-			fill="none"
-			role="img"
-			strokeWidth="2"
-			style={
-				{
-					"--circumference": circumference,
-					"--percent-to-px": `${percentPx}px`,
-				} as React.CSSProperties
-			}
-			viewBox="0 0 100 100"
-		>
-			<circle
-				cx="50"
-				cy="50"
-				fill="none"
-				r="45"
-				strokeWidth="10"
-				className="stroke-border"
-			/>
-			<circle
-				className="stroke-foreground transition-[stroke-dasharray] duration-300 ease-linear"
-				cx="50"
-				cy="50"
-				fill="none"
-				r="45"
-				strokeDasharray="calc(var(--percent-current) * var(--percent-to-px)) var(--circumference)"
-				strokeLinecap="round"
-				strokeWidth="10"
-				style={
-					{
-						"--percent-current": currentPercent,
-						transform: "rotate(-90deg)",
-						transformOrigin: "50px 50px",
-					} as React.CSSProperties
-				}
-			/>
-		</svg>
 	);
 }

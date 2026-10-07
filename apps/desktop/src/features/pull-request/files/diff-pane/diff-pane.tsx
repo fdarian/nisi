@@ -248,6 +248,8 @@ type DiffPaneProps = {
 	onVisiblePathChange?: (path: string) => void;
 	/** Reports the virtualizer's rendered window, including overscan, independently of focus reporting. */
 	onRenderedPathsChange: (paths: readonly string[]) => void;
+	/** Fires once per mount: when the first card with real content has painted, or immediately when there are no files to paint. */
+	onFirstCardPainted: () => void;
 	reviewState: ReadonlyMap<string, ReviewStateEntry>;
 	setViewed: (path: string, viewed: boolean) => void;
 	onMarkSelectionReviewed: (path: string, range: HeadRange) => void;
@@ -420,6 +422,7 @@ export function DiffPane({
 	selectedPath,
 	onVisiblePathChange,
 	onRenderedPathsChange,
+	onFirstCardPainted,
 	reviewState,
 	setViewed,
 	onMarkSelectionReviewed,
@@ -443,6 +446,12 @@ export function DiffPane({
 	const diffTheme = useDiffTheme(orpc, {
 		tokenInteractions: codeIndex.tokenInteractionsActive,
 	});
+	const firstCardPaintedRef = useRef(false);
+	const reportFirstCardPainted = useCallback(() => {
+		if (firstCardPaintedRef.current) return;
+		firstCardPaintedRef.current = true;
+		onFirstCardPainted();
+	}, [onFirstCardPainted]);
 	const fileDiffCache = useRef(new Map<string, CachedFileDiff>());
 	const fileDiffIdentityCache = useRef(createFileDiffIdentityCache());
 	// Pierre compares rendered and prepared-layout files by reference; memo passes rebuild placeholders even when their cacheKey stays the same.
@@ -1153,6 +1162,9 @@ export function DiffPane({
 							if (meta !== undefined && !meta.isLoading)
 								markDiffPainted(sessionId, node);
 							codeIndex.notifyItemRendered(context.item.id);
+							// `update` counts too: a card painted as a loading placeholder
+							// becomes real content through an update, not a fresh mount.
+							if (meta?.isLoading === false) reportFirstCardPainted();
 						}
 					},
 				}),
@@ -1170,6 +1182,7 @@ export function DiffPane({
 				itemMetadata,
 				highlightCSS,
 				onItemPostRender,
+				reportFirstCardPainted,
 				codeIndex.tokenCSS,
 				codeIndex.notifyItemRendered,
 				codeIndex.codeViewOptions,
@@ -1281,6 +1294,10 @@ export function DiffPane({
 		},
 		[],
 	);
+
+	useEffect(() => {
+		if (files.length === 0) reportFirstCardPainted();
+	}, [files.length, reportFirstCardPainted]);
 
 	// Real wheel/touch input takes back control from an in-flight
 	// programmatic scroll immediately, instead of waiting out the settle

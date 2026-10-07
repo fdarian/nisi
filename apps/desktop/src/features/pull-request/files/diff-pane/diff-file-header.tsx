@@ -5,6 +5,7 @@ import {
 	FileIcon,
 	MoreHorizontalIcon,
 } from "lucide-react";
+import { useId } from "react";
 import type { BadgeProps } from "#/components/ui/badge";
 import { Badge } from "#/components/ui/badge";
 import { buttonVariants } from "#/components/ui/button";
@@ -19,6 +20,7 @@ import {
 	DropdownMenuSubTrigger,
 	DropdownMenuTrigger,
 } from "#/components/ui/menu";
+import { Skeleton } from "#/components/ui/skeleton";
 import { diffCardHeaderClassName } from "#/features/diff/diff-view-theme";
 import type {
 	FileChange,
@@ -46,17 +48,17 @@ const STATUS_VARIANT: Record<FileStatus, BadgeProps["variant"]> = {
 };
 
 type DiffFileHeaderProps = {
-	file: FileChange;
+	file?: FileChange;
 	/** The session's repo root — joined with `file.path` for "Copy absolute path". */
-	repoRoot: string;
-	reviewStatus: ReviewState;
-	viewed: boolean;
-	onToggleViewed: () => void;
+	repoRoot?: string;
+	reviewStatus?: ReviewState;
+	viewed?: boolean;
+	onToggleViewed?: () => void;
 	/** Whether this file's card currently shows header-only — see `diff-pane.tsx`'s `fileCollapseOverrides`. */
-	collapsed: boolean;
-	onToggleCollapse: () => void;
+	collapsed?: boolean;
+	onToggleCollapse?: () => void;
 	/** Opens `file.path` in a whole-file viewer tab — the "…" menu's "View full file" item. */
-	onViewFullFile: () => void;
+	onViewFullFile?: () => void;
 };
 
 /**
@@ -85,26 +87,29 @@ export function DiffFileHeader({
 	onToggleCollapse,
 	onViewFullFile,
 }: DiffFileHeaderProps): React.ReactElement {
-	const { dirname, basename } = splitPath(file.path);
+	const path = file === undefined ? undefined : splitPath(file.path);
+	const checkboxId = useId();
+	const loading = file === undefined;
 	const { editors, loadEditors } = useAvailableEditors();
-	const absolutePath = `${repoRoot}/${file.path}`;
 
 	return (
 		// biome-ignore lint/a11y/useSemanticElements: can't be a real <button> — it hosts the Reviewed <label>/<Checkbox> and the "…" dropdown trigger, controls a nested <button> would break.
 		<div
+			aria-disabled={loading}
 			aria-expanded={!collapsed}
 			className={cn(
-				"flex min-w-0 flex-1 cursor-pointer items-center gap-3 px-3",
-				diffCardHeaderClassName(collapsed),
+				"flex min-w-0 flex-1 items-center gap-3 px-3",
+				!loading && "cursor-pointer",
+				diffCardHeaderClassName(collapsed === true),
 			)}
 			onClick={onToggleCollapse}
 			onKeyDown={(event) => {
 				if (event.key !== "Enter" && event.key !== " ") return;
 				event.preventDefault();
-				onToggleCollapse();
+				onToggleCollapse?.();
 			}}
 			role="button"
-			tabIndex={0}
+			tabIndex={loading ? -1 : 0}
 		>
 			{collapsed ? (
 				<ChevronRightIcon className="size-3.5 shrink-0 text-muted-foreground" />
@@ -112,42 +117,63 @@ export function DiffFileHeader({
 				<ChevronDownIcon className="size-3.5 shrink-0 text-muted-foreground" />
 			)}
 			<FileIcon className="size-3.5 shrink-0 text-muted-foreground" />
-			<span className="flex min-w-0 flex-1 items-baseline gap-1.5 truncate font-mono text-xs">
-				{dirname && (
-					<span className="truncate text-muted-foreground">{dirname}/</span>
+			<span
+				data-files-data
+				className="flex min-w-0 flex-1 items-baseline gap-1.5 truncate font-mono text-xs"
+			>
+				{loading && <Skeleton className="h-2 w-2/3 max-w-72" />}
+				{path?.dirname && (
+					<span className="truncate text-muted-foreground">
+						{path.dirname}/
+					</span>
 				)}
-				<span className="truncate font-medium text-foreground">{basename}</span>
-				{file.oldPath && (
+				<span className="truncate font-medium text-foreground">
+					{path?.basename}
+				</span>
+				{file?.oldPath && (
 					<span className="truncate text-muted-foreground text-[0.6875rem]">
 						← {file.oldPath}
 					</span>
 				)}
 			</span>
-			<Badge size="sm" variant={STATUS_VARIANT[file.status]}>
-				{STATUS_LABEL[file.status]}
-			</Badge>
+			{file === undefined ? (
+				<Skeleton data-files-data className="h-5 w-14" />
+			) : (
+				<Badge data-files-data size="sm" variant={STATUS_VARIANT[file.status]}>
+					{STATUS_LABEL[file.status]}
+				</Badge>
+			)}
 			{reviewStatus === "changed-after-review" && (
 				<Badge size="sm" variant="warning">
 					Modified after review
 				</Badge>
 			)}
-			<span className="shrink-0 font-mono text-xs tabular-nums">
-				<span className="text-success-foreground">+{file.additions}</span>{" "}
-				<span className="text-destructive-foreground">-{file.deletions}</span>
+			<span data-files-data className="shrink-0 font-mono text-xs tabular-nums">
+				{file === undefined ? (
+					<Skeleton className="h-2 w-12" />
+				) : (
+					<>
+						<span className="text-success-foreground">+{file.additions}</span>{" "}
+						<span className="text-destructive-foreground">
+							-{file.deletions}
+						</span>
+					</>
+				)}
 			</span>
 			<label
 				className={cn(
 					buttonVariants({ variant: "ghost", size: "sm" }),
 					"shrink-0 text-muted-foreground",
 				)}
-				htmlFor={`reviewed-${file.path}`}
+				htmlFor={checkboxId}
 				onClick={(event) => event.stopPropagation()}
 				onKeyDown={(event) => event.stopPropagation()}
 			>
 				<Checkbox
+					disabled={loading}
 					checked={viewed}
-					id={`reviewed-${file.path}`}
-					onCheckedChange={() => onToggleViewed()}
+					id={checkboxId}
+					onCheckedChange={onToggleViewed}
 				/>
 				Reviewed
 			</label>
@@ -157,6 +183,7 @@ export function DiffFileHeader({
 				}}
 			>
 				<DropdownMenuTrigger
+					disabled={loading}
 					aria-label="File actions"
 					className={cn(
 						buttonVariants({ variant: "ghost", size: "icon-sm" }),
@@ -177,12 +204,18 @@ export function DiffFileHeader({
 					</DropdownMenuItem>
 					<DropdownMenuSeparator />
 					<DropdownMenuItem
-						onClick={() => navigator.clipboard.writeText(file.path)}
+						onClick={() => {
+							if (file !== undefined)
+								void navigator.clipboard.writeText(file.path);
+						}}
 					>
 						Copy path
 					</DropdownMenuItem>
 					<DropdownMenuItem
-						onClick={() => navigator.clipboard.writeText(absolutePath)}
+						onClick={() => {
+							if (file !== undefined && repoRoot !== undefined)
+								void navigator.clipboard.writeText(`${repoRoot}/${file.path}`);
+						}}
 					>
 						Copy absolute path
 					</DropdownMenuItem>
@@ -194,11 +227,13 @@ export function DiffFileHeader({
 									<DropdownMenuItem
 										key={editor.id}
 										onClick={() =>
+											file !== undefined &&
+											repoRoot !== undefined &&
 											openInEditor(
 												editor.id,
 												editor.name,
 												repoRoot,
-												absolutePath,
+												`${repoRoot}/${file.path}`,
 											)
 										}
 									>

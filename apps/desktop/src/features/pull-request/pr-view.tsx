@@ -1,14 +1,8 @@
 "use client";
 
 import { cn } from "cn";
-import { AlertTriangleIcon, XIcon } from "lucide-react";
+import { XIcon } from "lucide-react";
 import { useMemo } from "react";
-import {
-	Empty,
-	EmptyDescription,
-	EmptyMedia,
-	EmptyTitle,
-} from "#/components/ui/empty";
 import {
 	Tabs,
 	TabsContent,
@@ -38,8 +32,7 @@ import {
 	useSessionWalkthroughSelection,
 } from "#/features/pull-request/data/session-ui-store";
 import { FileView } from "#/features/pull-request/file-view/file-view";
-import { FilesChangedView } from "#/features/pull-request/files/files-changed-view";
-import { FilesChangedLoading } from "#/features/pull-request/files-changed-loading";
+import { FilesChangedContent } from "#/features/pull-request/files/files-changed-content";
 import { PrHeader } from "#/features/pull-request/header/pr-header";
 import { useNavigationShortcuts } from "#/features/pull-request/navigation/use-navigation-shortcuts";
 import { OverviewView } from "#/features/pull-request/overview/overview-view";
@@ -243,26 +236,20 @@ export function PrView({
 								</button>
 							</p>
 						)}
-						{error != null ? (
-							<FilesChangedError error={error} />
-						) : isLoading ? (
-							<FilesChangedLoading
-								when={isFilesChangedVisible}
-								sessionId={session.id}
-							/>
-						) : (
-							<FilesChangedView
-								files={files}
-								hasPendingChanges={hasPendingChanges}
-								onOpenFile={openFile}
-								onRefresh={refreshFileChanges}
-								orpc={orpc}
-								reviewState={reviewState}
-								session={session}
-								setViewed={setViewed}
-								shortcutsEnabled={isSelectedTab}
-							/>
-						)}
+						<FilesChangedContent
+							isLoading={isLoading}
+							error={error}
+							files={files}
+							hasPendingChanges={hasPendingChanges}
+							onOpenFile={openFile}
+							onRefresh={refreshFileChanges}
+							orpc={orpc}
+							reviewState={reviewState}
+							session={session}
+							setViewed={setViewed}
+							shortcutsEnabled={isSelectedTab}
+							isVisible={isFilesChangedVisible}
+						/>
 					</TabsContent>
 					{walkthroughEnabled && (
 						<TabsContent className="flex min-h-0 flex-1" value="walkthrough">
@@ -413,18 +400,5 @@ function FileViewerTab({
 				<XIcon className="size-3" />
 			</button>
 		</div>
-	);
-}
-
-function FilesChangedError({ error }: { error: unknown }): React.ReactElement {
-	const message = error instanceof Error ? error.message : String(error);
-	return (
-		<Empty className="flex-1">
-			<EmptyMedia variant="icon">
-				<AlertTriangleIcon />
-			</EmptyMedia>
-			<EmptyTitle>Couldn't load changed files</EmptyTitle>
-			<EmptyDescription>{message}</EmptyDescription>
-		</Empty>
 	);
 }
