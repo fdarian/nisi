@@ -1,5 +1,58 @@
 # @repo/desktop
 
+## 0.6.0
+
+### Minor Changes
+
+- 7993e43: Pull requests whose GitHub Actions workflows are waiting for maintainer approval now show that in the CI status, and you can approve them from nisi.
+- 9f676eb: GitHub Actions logs for a PR's checks now open inside nisi, where you can copy the errors or re-run the job.
+- d30ac38: Opening a pull request while nisi is already running is now about 4–6× faster, from the `nisi` command or a `nisi://` link.
+
+  | Opening a PR nisi hasn't shown yet           | Before   | After     |
+  | -------------------------------------------- | -------- | --------- |
+  | `nisi` in the PR's worktree                  | 2.2–2.5s | 0.5–0.7s  |
+  | `nisi://open?url=…`, worktree already exists | 3.0–3.7s | 0.5–0.65s |
+  | A PR created moments ago                     | 2.2–2.5s | 1.2–1.3s  |
+
+  Times are until the first diff is on screen, measured on open vercel/ai and openai/codex pull requests.
+
+- 9f43d8b: You can now mark just part of a file's diff as reviewed by selecting lines in Files Changed.
+- 05832a7: Optional system notifications for auto-merge outcomes while nisi is in the background.
+- bb40e38: Filter the open pull request palette by one or more repositories.
+- af2295d: You can now schedule a pull request to auto-merge once its checks pass, and cancel it again.
+
+### Patch Changes
+
+- 3f879ec: The desktop app uses Chromium for its interface.
+- 71675b6: Cmd+K palette now supports Ctrl+N/P navigation to move between items.
+- edc47c3: Files Changed no longer shows changes already merged upstream when your local base branch is behind the remote.
+- a45819b: Files Changed tab now shows a skeleton animation while loading instead of a spinner, with the UI chrome disabled and data fading in once the first diff card renders.
+- b0599d1: Chat and walkthroughs recover on their own when an agent's installed dependencies were deleted, and failed requests now show the actual error instead of "Internal Server Error".
+- 665f127: Fixed PRs loading forever and tabs refusing to switch when several PRs were open.
+- d548f2a: Right-clicking a file in Files Changed or the tab strip no longer freezes the app.
+- 530d6e5: The diff selection toolbar no longer floats outside the diff view when the selection scrolls out of bounds.
+- f62077b: Harness settings load promptly even when a coding agent's model discovery is slow or interrupted.
+- 7572cfc: Files Changed diff pane now focuses the file under the mouse pointer. When the pointer moves outside the pane, focus reverts to the current scroll position.
+- 9ce70e0: Returning from Settings keeps the PR you had open and your place in its diff.
+- 09b7382: Failed merges now show a reason and copyable details, and bottom-of-stack pull requests can merge successfully.
+- aef029b: The model picker now supports Ctrl+N and Ctrl+P to move through results.
+- aac8ad9: Fix Pi harness walkthrough failures when npm is not on the default PATH.
+- c39684c: The pull request icon in tabs and the pull request search now shows whether a PR is ready to merge, has conflicts, is a draft, or is still running CI.
+- 22146fd: Closing a PR tab no longer causes it to briefly reappear before disappearing.
+- 9b93d3c: The Files Changed tree no longer adds a dark outline to the selected file.
+- 4d11c26: When opening a PR via `nisi` or "Switch to PR", any existing review state on the branch is now carried over instead of discarded.
+- db4ce4f: Opening a PR through a deep link or "Open Pull Request" reuses its existing tab and matching branch review state instead of starting fresh.
+- 0f0205c: A file edited again after you reviewed it now shows the changes since your review, instead of comparing against the original base for lines you had already seen change.
+- 8e9066a: Dragging a line or text selection past the selection toolbar no longer stops the selection or highlights the toolbar.
+- a8fec86: The selection toolbar no longer blocks scrolling, and it glides smoothly to follow your selection as you drag or scroll.
+- efcf61d: Settings is now in the nisi menu, with its ⌘, shortcut shown next to it.
+- 9617018: Opening a PR now shows a single loading screen instead of two back-to-back.
+- 561a56b: Expanding fully reviewed files no longer causes the diff view to fail.
+- 76375ed: Update the native desktop runtime.
+- dbc7930: PR tabs no longer change the mouse cursor on hover or while dragging.
+- 159a04c: When there are more tabs than fit, the tab strip now fades at its edges and the new-tab button stays in view.
+- 9fcf707: Reviewed walkthrough blocks now collapse to their header, and show "No changes since your last pass" when expanded, instead of the red drift error.
+
 ## 0.5.0
 
 ### Minor Changes
