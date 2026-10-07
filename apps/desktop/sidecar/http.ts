@@ -154,6 +154,7 @@ const logMergeFailure = (
  */
 const toWireSettings = (settings: {
 	readonly enabledHarnesses: ReadonlyArray<string> | null;
+	readonly sandboxMode: WireSettings["sandboxMode"];
 	readonly sidebarViewMode: WireSettings["sidebarViewMode"];
 	readonly diffStyleMode: WireSettings["diffStyleMode"];
 	readonly preferredEditor: WireSettings["preferredEditor"];
@@ -168,6 +169,7 @@ const toWireSettings = (settings: {
 	readonly diffThemeLight: WireSettings["diffThemeLight"];
 	readonly diffThemeDark: WireSettings["diffThemeDark"];
 }): WireSettings => ({
+	sandboxMode: settings.sandboxMode,
 	enabledHarnesses:
 		settings.enabledHarnesses === null
 			? null

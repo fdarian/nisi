@@ -1,4 +1,5 @@
 import { oc } from "@orpc/contract";
+import { SANDBOX_MODES } from "@repo/settings/sandbox-mode";
 import { Schema } from "effect";
 import { HarnessId } from "./walkthrough.ts";
 
@@ -15,6 +16,9 @@ export type SidebarViewMode = Schema.Schema.Type<typeof SidebarViewMode>;
 /** Split/unified diff display preference — mirrors `use-diff-style-mode.ts`'s `DiffStyleMode`. */
 export const DiffStyleMode = Schema.Literals(["unified", "split"]);
 export type DiffStyleMode = Schema.Schema.Type<typeof DiffStyleMode>;
+/** The value list lives in `@repo/settings` so adding a sandbox backend edits one enum, not two. */
+export const SandboxMode = Schema.Literals(SANDBOX_MODES);
+export type SandboxMode = Schema.Schema.Type<typeof SandboxMode>;
 
 /**
  * A handful of user preferences that live in the sidecar rather than the
@@ -39,6 +43,7 @@ export type DiffStyleMode = Schema.Schema.Type<typeof DiffStyleMode>;
  */
 export const Settings = Schema.Struct({
 	enabledHarnesses: Schema.NullOr(Schema.Array(HarnessId)),
+	sandboxMode: SandboxMode,
 	sidebarViewMode: SidebarViewMode,
 	diffStyleMode: DiffStyleMode,
 	/**
@@ -83,6 +88,7 @@ export type Settings = Schema.Schema.Type<typeof Settings>;
  */
 export const SettingsUpdate = Schema.Struct({
 	enabledHarnesses: Schema.optional(Schema.NullOr(Schema.Array(HarnessId))),
+	sandboxMode: Schema.optional(SandboxMode),
 	sidebarViewMode: Schema.optional(SidebarViewMode),
 	diffStyleMode: Schema.optional(DiffStyleMode),
 	preferredEditor: Schema.optional(Schema.NullOr(Schema.String)),

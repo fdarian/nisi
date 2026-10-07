@@ -754,6 +754,9 @@ importers:
       '@orpc/experimental-effect':
         specifier: 2.0.0-beta.21
         version: 2.0.0-beta.21(@opentelemetry/api@1.9.0)(effect@4.0.0-rc.112)
+      '@repo/settings':
+        specifier: workspace:*
+        version: link:../settings
       effect:
         specifier: 'catalog:'
         version: 4.0.0-rc.112
