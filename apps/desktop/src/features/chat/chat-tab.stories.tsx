@@ -19,7 +19,7 @@ import type { SidecarClient } from "@repo/sidecar-api";
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { useEffect, useState } from "react";
 import type { SidecarQueryUtils } from "#/infra/backend-context";
-import { getOrCreateChat } from "./chat-store";
+import { ChatProvider, getOrCreateChat, useChatStore } from "./chat-store";
 import { ChatTab } from "./chat-tab";
 
 const SESSION_ID = "storybook-session";
@@ -53,13 +53,14 @@ function orpcStreaming(): SidecarQueryUtils {
 
 function StreamingChatTab(): React.ReactElement {
 	const [orpc] = useState(orpcStreaming);
+	const store = useChatStore();
 
 	useEffect(() => {
-		void getOrCreateChat(orpc, SESSION_ID, THREAD_ID).sendMessage(
+		void getOrCreateChat(orpc, SESSION_ID, THREAD_ID, store).sendMessage(
 			{ text: "How does the diff review flow work?" },
 			{ body: { harness: "claude-code", model: undefined } },
 		);
-	}, [orpc]);
+	}, [orpc, store]);
 
 	return (
 		<ChatTab
@@ -72,6 +73,7 @@ function StreamingChatTab(): React.ReactElement {
 				id: THREAD_ID,
 				harness: null,
 				model: undefined,
+				sandboxPhase: null,
 				references: [],
 			}}
 		/>
@@ -81,6 +83,13 @@ function StreamingChatTab(): React.ReactElement {
 const meta: Meta<typeof StreamingChatTab> = {
 	title: "ChatDock/ChatTab",
 	component: StreamingChatTab,
+	decorators: [
+		(Story) => (
+			<ChatProvider>
+				<Story />
+			</ChatProvider>
+		),
+	],
 	parameters: { layout: "centered" },
 };
 export default meta;

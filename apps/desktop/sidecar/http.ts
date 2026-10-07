@@ -49,7 +49,11 @@ import {
 	resolveChatPromptContext,
 } from "./chat/context.ts";
 import { buildChatInstructions } from "./chat/prompt.ts";
-import { closeChatThread, getOrCreateChatSession } from "./chat/sessions.ts";
+import {
+	closeChatThread,
+	getOrCreateChatSession,
+	hasChatSession,
+} from "./chat/sessions.ts";
 import { streamChatTurn } from "./chat/stream.ts";
 import {
 	buildFileOccurrencesResponse,
@@ -1181,6 +1185,14 @@ export function attachRouter(
 					throw error;
 				});
 
+				const settingUp = !(await hasChatSession(input.threadId, mainContext));
+				if (settingUp) {
+					yield {
+						type: "data-sandbox-status",
+						data: { phase: "setting-up" },
+						transient: true,
+					};
+				}
 				const live = await getOrCreateChatSession(
 					{
 						sessionId: input.sessionId,
@@ -1192,6 +1204,13 @@ export function attachRouter(
 					},
 					mainContext,
 				);
+				if (settingUp) {
+					yield {
+						type: "data-sandbox-status",
+						data: { phase: "ready" },
+						transient: true,
+					};
+				}
 
 				yield* streamChatTurn({
 					sessionId: input.sessionId,

@@ -233,6 +233,7 @@ describe("closeChatThreadsForSession", () => {
 		const pending = chatSessions.getOrCreateChatSession(
 			paramsFor(sessionId, threadId),
 		);
+		expect(chatSessions.hasChatSession(threadId)).toBe(true);
 		await createSessionReached();
 		const resolve = resolvePendingCreateSession;
 		if (resolve === undefined) {

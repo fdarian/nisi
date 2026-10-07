@@ -38,6 +38,7 @@ import {
 	useChatComposerFocusRequest,
 	useChatDockActions,
 	useChatPopupMinimized,
+	useChatStore,
 	useChatThreads,
 } from "#/features/chat/chat-store";
 import { useLastChatModel } from "#/features/settings/settings-data";
@@ -144,9 +145,11 @@ function MessageBubble({
 export function MessageList({
 	messages,
 	isWaitingForFirstReply,
+	sandboxPhase,
 }: {
 	messages: readonly UIMessage[];
 	isWaitingForFirstReply: boolean;
+	sandboxPhase: "setting-up" | "ready" | null;
 }): React.ReactElement {
 	if (messages.length === 0) {
 		return (
@@ -165,7 +168,7 @@ export function MessageList({
 			{isWaitingForFirstReply && (
 				<div className="flex items-center gap-1.5 text-muted-foreground text-xs">
 					<LoaderCircleIcon className="size-3 animate-spin" />
-					Thinking…
+					{sandboxPhase === "setting-up" ? "Setting up sandbox…" : "Thinking…"}
 				</div>
 			)}
 		</div>
@@ -219,7 +222,7 @@ function ChatPanelBody({
 	} = useChatPanelSize();
 	const [, setLastChatModel] = useLastChatModel(orpc);
 	const { messages, status, error, sendMessage, stop } = useChat({
-		chat: getOrCreateChat(orpc, sessionId, thread.id),
+		chat: getOrCreateChat(orpc, sessionId, thread.id, useChatStore()),
 	});
 
 	const title = deriveThreadTitle(messages);
@@ -282,6 +285,7 @@ function ChatPanelBody({
 							<MessageList
 								isWaitingForFirstReply={isWaitingForFirstReply}
 								messages={messages}
+								sandboxPhase={thread.sandboxPhase}
 							/>
 						</ScrollArea>
 						{status === "error" && error !== undefined && (

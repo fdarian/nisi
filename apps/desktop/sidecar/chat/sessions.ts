@@ -160,6 +160,8 @@ export class ChatSessions extends Context.Service<ChatSessions>()(
 				trackThread(params.sessionId, params.threadId);
 				return pending;
 			};
+			const hasChatSession = (threadId: string): boolean =>
+				liveThreads.has(threadId);
 
 			/**
 			 * Stops the underlying harness session (releasing its sandbox/port/
@@ -210,6 +212,7 @@ export class ChatSessions extends Context.Service<ChatSessions>()(
 			};
 
 			return {
+				hasChatSession,
 				getOrCreateChatSession,
 				closeChatThread,
 				closeChatThreadsForSession,
@@ -255,6 +258,14 @@ export const getOrCreateChatSession = (
 			...params,
 			sandboxMode: result.sandboxMode,
 		}),
+	);
+
+export const hasChatSession = (
+	threadId: string,
+	mainContext: Context.Context<AppServices>,
+): Promise<boolean> =>
+	runEffect(ChatSessions, mainContext).then((sessions) =>
+		sessions.hasChatSession(threadId),
 	);
 
 export const closeChatThread = (
