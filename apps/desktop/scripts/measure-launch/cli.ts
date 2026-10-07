@@ -26,6 +26,8 @@ export const cliScope = [
 	":(glob,exclude)**/test/**",
 ];
 
+const cliBuildFlags = ["--bytecode"];
+
 export type MeasurementCli = { path: string; stamp: BuildStamp };
 
 export function formatCli(cli: MeasurementCli): string {
@@ -46,7 +48,8 @@ export const prepareCli = (managed: boolean) =>
 		}
 		const dir = join(desktopDir, ".data/measure-launch/cli");
 		const path = join(dir, "nisi");
-		const stampPath = join(dir, "nisi.build-stamp.json");
+		// Renamed from nisi.build-stamp.json so binaries built without --bytecode get rebuilt.
+		const stampPath = join(dir, "nisi-cli.build-stamp.json");
 		const root = resolve(desktopDir, "../..");
 		const current = yield* buildFingerprint(root, cliScope);
 		const stamp = yield* readStamp(stampPath);
@@ -66,6 +69,7 @@ export const prepareCli = (managed: boolean) =>
 					"scripts/build-binary.ts",
 					"../../packages/cli/src/index.ts",
 					path,
+					...cliBuildFlags,
 				],
 				{ cwd: desktopDir, stdout: 2, stderr: "inherit" },
 			),

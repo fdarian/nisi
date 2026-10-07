@@ -1,6 +1,7 @@
 import { lstat, readFile, readlink } from "node:fs/promises";
 import { Effect, Option } from "effect";
 import type { ChildProcessSpawner } from "effect/unstable/process";
+import { CatFileReaders } from "./cat-file.ts";
 import type { GitCommandError } from "./errors.ts";
 import { WorktreeReadFailed } from "./errors.ts";
 import { git, gitBytes } from "./exec.ts";
@@ -45,7 +46,7 @@ type PathObject = {
  */
 const readPathObjects = (
 	repoRoot: string,
-	ref: string,
+	ref: string | undefined,
 	paths: ReadonlyArray<string>,
 ): Effect.Effect<
 	ReadonlyMap<string, PathObject>,
@@ -54,12 +55,29 @@ const readPathObjects = (
 > =>
 	Effect.gen(function* () {
 		const entries = new Map<string, PathObject>();
+		const persistent = yield* Effect.serviceOption(CatFileReaders);
 		for (const pathChunk of chunk([...new Set(paths)], PATH_CHUNK_SIZE)) {
 			if (pathChunk.length === 0) continue;
+			if (Option.isSome(persistent)) {
+				const replies = yield* persistent.value.request(
+					repoRoot,
+					pathChunk.map((path) => ({
+						command: "info",
+						expression: ref === undefined ? path : `${ref}:${path}`,
+					})),
+				);
+				pathChunk.forEach((path, index) => {
+					const reply = replies[index];
+					if (reply !== undefined) entries.set(path, reply);
+				});
+				continue;
+			}
 			const raw = yield* git(
 				repoRoot,
 				["cat-file", "--batch-check=%(objectname) %(objecttype) %(objectsize)"],
-				pathChunk.map((path) => `${ref}:${path}\n`).join(""),
+				pathChunk
+					.map((path) => `${ref === undefined ? path : `${ref}:${path}`}\n`)
+					.join(""),
 			);
 			const lines = raw.split("\n").filter((line) => line.length > 0);
 			pathChunk.forEach((path, index) => {
@@ -95,6 +113,7 @@ const readObjectContents = (
 > =>
 	Effect.gen(function* () {
 		const contents = new Map<string, Uint8Array>();
+		const persistent = yield* Effect.serviceOption(CatFileReaders);
 
 		// Group objects so no single `cat-file --batch` call buffers more than
 		// BATCH_BYTE_LIMIT of content, rather than batching by a fixed count.
@@ -113,6 +132,19 @@ const readObjectContents = (
 		if (current.length > 0) batches.push(current);
 
 		for (const batch of batches) {
+			if (Option.isSome(persistent)) {
+				const replies = yield* persistent.value.request(
+					repoRoot,
+					batch.map((item) => ({
+						command: "contents",
+						expression: item.object,
+					})),
+				);
+				for (const reply of replies)
+					if (reply?.type === "blob" && reply.content !== undefined)
+						contents.set(reply.object, reply.content);
+				continue;
+			}
 			const output = yield* gitBytes(
 				repoRoot,
 				["cat-file", "--batch"],
@@ -154,8 +186,29 @@ export const readBlobsAtRef = (
 	GitCommandError,
 	ChildProcessSpawner.ChildProcessSpawner
 > =>
+	readBlobExpressions(
+		repoRoot,
+		paths.map((path) => `${ref}:${path}`),
+		options,
+	).pipe(
+		Effect.map((blobs) => {
+			const result = new Map<string, BlobEntry>();
+			for (const path of paths) {
+				const blob = blobs.get(`${ref}:${path}`);
+				if (blob !== undefined) result.set(path, blob);
+			}
+			return result;
+		}),
+	);
+
+/** Both sides of a diff share the same size check and content batch, deduplicated by object id. */
+export const readBlobExpressions = (
+	repoRoot: string,
+	expressions: readonly string[],
+	options?: { readonly maxBytes?: number },
+) =>
 	Effect.gen(function* () {
-		const entries = yield* readPathObjects(repoRoot, ref, paths);
+		const entries = yield* readPathObjects(repoRoot, undefined, expressions);
 
 		const maxBytes = options?.maxBytes;
 		const blobByObject = new Map(

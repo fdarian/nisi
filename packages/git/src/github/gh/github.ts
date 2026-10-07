@@ -19,6 +19,7 @@ import {
 	mergePullRequest,
 	mergeStackPullRequest,
 } from "./merge.ts";
+import { listOpenPullRequests } from "./open-pull-requests.ts";
 import { fetchPullRequestOverview } from "./overview.ts";
 import {
 	headRef,
@@ -93,6 +94,8 @@ export const GhGitHub = {
 				overviewInterval,
 			);
 			return {
+				listOpenPullRequests: (cwd, owner, repo, options) =>
+					provide(listOpenPullRequests(cwd, owner, repo, options)),
 				getActionsJob: (input) => provide(getActionsJob(input)),
 				getActionsJobLogs: (input) => provide(getActionsJobLogs(input)),
 				rerunActionsJob: (input) =>

@@ -1,6 +1,7 @@
+import { join } from "node:path";
 import { BunRuntime, BunServices } from "@effect/platform-bun";
 import { makeLaunchTracer } from "@repo/logging";
-import { Console, Effect, Logger } from "effect";
+import { Console, Effect, Logger, Option } from "effect";
 import { FileSystem } from "effect/FileSystem";
 import { formatBuild, readBuildStamp } from "./build.ts";
 import { formatCli, prepareCli } from "./cli.ts";
@@ -28,6 +29,7 @@ import {
 } from "./instance.ts";
 import { resolveWarmup } from "./new-pr.ts";
 import { parseLaunchOptions } from "./options.ts";
+import { waitForPrIndex } from "./pr-index.ts";
 import { runTracedOpen } from "./run.ts";
 
 const program = Effect.gen(function* () {
@@ -52,6 +54,7 @@ const program = Effect.gen(function* () {
 					warmupId,
 					traceId,
 				]);
+				const startedAt = Date.now();
 				const client = yield* launchDeepLinkInstance(
 					dataDir,
 					options.newPr ? warmupId : traceId,
@@ -70,6 +73,25 @@ const program = Effect.gen(function* () {
 						url: warmup.url,
 						label: "Deep-link warm-up",
 					});
+				if (options.waitPrIndex) {
+					const sessions = yield* Effect.tryPromise(() =>
+						client.sessions.list(),
+					);
+					const session = sessions[0];
+					if (session === undefined)
+						return yield* Effect.fail(
+							new Error(
+								"index-hit deep-link measurement requires a warm-up session",
+							),
+						);
+					yield* Effect.tryPromise(() =>
+						client.sessions.setAttention({
+							sessionId: session.id,
+							watched: true,
+						}),
+					);
+					yield* waitForPrIndex(dataDir, startedAt);
+				}
 				return yield* runDeepLink({
 					dataDir,
 					traceId,
@@ -100,6 +122,19 @@ const program = Effect.gen(function* () {
 		: runningInstance;
 	const fs = yield* FileSystem;
 	const cli = yield* prepareCli(managed);
+	const startedAt = managed
+		? Date.now()
+		: yield* fs
+				.stat(join(dataDir, "sidecar.json"))
+				.pipe(
+					Effect.flatMap((stat) =>
+						Option.isSome(stat.mtime)
+							? Effect.succeed(stat.mtime.value.getTime())
+							: Effect.fail(
+									new Error("sidecar handshake has no start timestamp"),
+								),
+					),
+				);
 	if ((options.newPr || !managed) && (yield* fs.exists(unavailableAppPath)))
 		return yield* Effect.fail(
 			new Error(
@@ -117,6 +152,12 @@ const program = Effect.gen(function* () {
 			label: "Warm-up",
 			cliPath: cli.path,
 		});
+	if (options.waitPrIndex) {
+		yield* waitForPrIndex(dataDir, startedAt);
+		yield* Console.log(
+			"Warm-up PR index populated (target hit must still be confirmed in trace)",
+		);
+	}
 	const traceId = crypto.randomUUID();
 	if (!options.cold) {
 		const instance = yield* liveInstance(dataDir);

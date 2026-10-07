@@ -14,6 +14,12 @@ import { OpenSessionTarget, Session } from "./sessions.ts";
  * *what*; the existing fetch procedures are already the source of truth for
  * the actual content.
  *
+ * `session-base-staleness-changed` is the background base fetch settling
+ * without the base moving but flipping whether `diff.files` should report
+ * `baseMayBeStale`: the diff itself is unchanged, so unlike
+ * `session-files-changed` it must not raise the Refresh button — the
+ * frontend just refetches `diff.files` for that session.
+ *
  * `session-updated` covers a session whose *own* data changed under an
  * unchanged `id` — today, only `sessions.switchToPr` retargeting a branch
  * session onto a PR in place. Distinct from `session-opened`: no new tab
@@ -32,6 +38,10 @@ export const SessionEvent = Schema.Union([
 	}),
 	Schema.Struct({
 		type: Schema.Literal("session-files-changed"),
+		sessionId: Schema.String,
+	}),
+	Schema.Struct({
+		type: Schema.Literal("session-base-staleness-changed"),
 		sessionId: Schema.String,
 	}),
 	Schema.Struct({
@@ -79,6 +89,11 @@ export const SidecarEvent = Schema.Union([
 	Schema.Struct({
 		seq: Schema.Number,
 		type: Schema.Literal("session-files-changed"),
+		sessionId: Schema.String,
+	}),
+	Schema.Struct({
+		seq: Schema.Number,
+		type: Schema.Literal("session-base-staleness-changed"),
 		sessionId: Schema.String,
 	}),
 	Schema.Struct({

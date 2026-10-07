@@ -12,6 +12,7 @@ import {
 	useAgentationEnabled,
 	useMesurerEnabled,
 } from "#/features/devtools/dev-tool-context";
+import { DiffWorkerPrewarm } from "#/features/diff/viewer/diff-code-view";
 import { ScheduledMergeNotifications } from "#/features/pull-request/merge/scheduled-merge-notifications";
 import { useSettingsShortcut } from "#/features/settings/use-settings-shortcut";
 import { BackendProvider, useBackendContext } from "#/infra/backend-context";
@@ -63,6 +64,7 @@ function ConnectedEvents() {
 	if (backend.status !== "ready") return content;
 	return (
 		<SidecarEventsProvider client={backend.client}>
+			<DiffWorkerPrewarm orpc={backend.orpc} />
 			<ScheduledMergeNotifications orpc={backend.orpc} />
 			<OpenRequestProvider>{content}</OpenRequestProvider>
 		</SidecarEventsProvider>

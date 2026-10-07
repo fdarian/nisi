@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { mkdir, mkdtemp, rm, symlink } from "node:fs/promises";
+import { mkdir, mkdtemp, realpath, rm, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { BunServices } from "@effect/platform-bun";
@@ -12,7 +12,19 @@ import {
 } from "@repo/git";
 import { ReviewStore } from "@repo/review";
 import { SettingsStore } from "@repo/settings";
-import { ConfigProvider, Effect, Layer, Option, Result, Stream } from "effect";
+import {
+	ConfigProvider,
+	type Context,
+	Deferred,
+	Effect,
+	Fiber,
+	Layer,
+	Option,
+	Result,
+	Stream,
+} from "effect";
+import { subscribe } from "../events.ts";
+import { PrIndex } from "../pr-index.ts";
 import { PullRequestAttentionLive } from "../pull-request-attention.ts";
 import { type OpenSessionOutcome, Store } from "../store.ts";
 
@@ -44,6 +56,11 @@ const makeTestRepo = async (): Promise<string> => {
 
 /** Same composition as `packages/review/test/fixtures.ts`'s `makeTestLayer`, one layer up — `Store.layer` already pulls in `ReviewStore.layer` via `provideMerge`, so this only has to add what `Store.make` needs beyond that: `SqliteDb` and `NISI_DATA_DIR`. */
 const mockGitHub: GitHubShape = {
+	listOpenPullRequests: () =>
+		Effect.succeed({
+			repository: { owner: "acme", repo: "widgets", defaultBranch: "main" },
+			prs: [],
+		}),
 	getActionsJob: () => Effect.die(new Error("unused mock GitHub method")),
 	getActionsJobLogs: () => Effect.die(new Error("unused mock GitHub method")),
 	rerunActionsJob: () => Effect.die(new Error("unused mock GitHub method")),
@@ -78,8 +95,16 @@ const mockGitHub: GitHubShape = {
 const makeTestLayer = (
 	dataDir: string,
 	withPullRequest: boolean | GitHubShape = false,
+	index?: Context.Service.Shape<typeof PrIndex>,
 ) =>
-	Store.layer.pipe(
+	(index === undefined
+		? Store.layer
+		: Layer.effect(Store, Store.make).pipe(
+				Layer.provideMerge(ReviewStore.layer),
+				Layer.provideMerge(SettingsStore.layer),
+				Layer.provideMerge(Layer.succeed(PrIndex, index)),
+			)
+	).pipe(
 		Layer.provideMerge(
 			withPullRequest
 				? Layer.succeed(
@@ -115,6 +140,188 @@ const withTestRepoAndDataDir = async <T>(
 	}
 };
 
+test("recording a repository path starts a non-blocking index refresh for deep links", async () => {
+	await withTestRepoAndDataDir(async (repoRoot, dataDir) => {
+		await sh(repoRoot, [
+			"remote",
+			"add",
+			"origin",
+			"https://github.com/acme/widgets.git",
+		]);
+		const started = await Effect.runPromise(Deferred.make<void>());
+		const finish = await Effect.runPromise(Deferred.make<void>());
+		const canonicalRoot = await realpath(repoRoot);
+		const github: GitHubShape = {
+			...mockGitHub,
+			listOpenPullRequests: (path, owner, repo) =>
+				Effect.gen(function* () {
+					expect(path).toBe(canonicalRoot);
+					expect(`${owner}/${repo}`).toBe("acme/widgets");
+					yield* Deferred.succeed(started, undefined);
+					yield* Deferred.await(finish);
+					return {
+						repository: { owner, repo, defaultBranch: "main" },
+						prs: [],
+					};
+				}),
+		};
+		await Effect.runPromise(
+			Effect.gen(function* () {
+				const store = yield* Store;
+				expect(
+					(yield* store.recordRepoPath("acme", "widgets", repoRoot)).path,
+				).toBe(canonicalRoot);
+				yield* Deferred.await(started);
+				yield* Deferred.succeed(finish, undefined);
+			}).pipe(Effect.provide(makeTestLayer(dataDir, github))),
+		);
+	});
+});
+
+test("index disagreement upserts the correct PR's existing row without transferring snapshots; no-PR correction uses a branch key", async () => {
+	await withTestRepoAndDataDir(async (repoRoot, dataDir) => {
+		await sh(repoRoot, ["remote", "add", "origin", repoRoot]);
+		const canonicalRoot = await realpath(repoRoot);
+		const state = { number: 43, noPr: false };
+		const index: Context.Service.Shape<typeof PrIndex> = {
+			lookupPullRequest: () => Effect.succeed(undefined),
+			lookup: () =>
+				Effect.succeed({
+					repository: { owner: "acme", repo: "widgets", defaultBranch: "main" },
+					pr: {
+						number: 42,
+						title: "Old PR",
+						baseRef: "main",
+						headRef: "main",
+						isCrossRepository: false,
+						headOwner: "acme",
+					},
+				}),
+			refresh: () => Effect.succeed(undefined),
+			refreshKnown: Effect.void,
+			start: Effect.never,
+		};
+		const github: GitHubShape = {
+			...mockGitHub,
+			pullRequest: () =>
+				Effect.succeed(
+					state.noPr
+						? null
+						: {
+								number: state.number,
+								title: "Current PR",
+								baseRef: "main",
+								headRef: "main",
+								isCrossRepository: false,
+							},
+				),
+		};
+		await Effect.runPromise(
+			Effect.gen(function* () {
+				const store = yield* Store;
+				const reviews = yield* ReviewStore;
+				const correct = yield* reviews.openSession({
+					repoRoot: canonicalRoot,
+					baseRef: "main",
+					headRef: "main",
+					pr: {
+						number: 43,
+						title: "Current PR",
+						owner: "acme",
+						repo: "widgets",
+					},
+				});
+				yield* reviews.markFileViewed(
+					correct.id,
+					"a.ts",
+					Option.some(new TextEncoder().encode("PR43 snapshot")),
+				);
+				yield* reviews.closeSession(correct.id);
+				const provisional = (yield* store.openSession(repoRoot)).session;
+				yield* reviews.markFileViewed(
+					provisional.id,
+					"a.ts",
+					Option.some(new TextEncoder().encode("PR42 snapshot")),
+				);
+				const original = yield* reviews.getFileReviewState(
+					provisional.id,
+					"a.ts",
+				);
+				const correction = yield* Deferred.make<OpenSessionOutcome>();
+				const branchSource = yield* reviews.openSession({
+					repoRoot: canonicalRoot,
+					baseRef: "main",
+					headRef: "main",
+					pr: null,
+				});
+				yield* store.forkRevalidation(provisional, (outcome) =>
+					Deferred.succeed(correction, outcome).pipe(Effect.asVoid),
+				);
+				const corrected = yield* Deferred.await(correction);
+				expect(corrected.session.target).toMatchObject({
+					kind: "pr",
+					number: 43,
+				});
+				expect(corrected.session.id).toBe(correct.id);
+				expect(corrected.transitions).toMatchObject([
+					{ kind: "existing", sourceSessionId: branchSource.id },
+				]);
+				expect(
+					yield* reviews.getFileReviewState(provisional.id, "a.ts"),
+				).toEqual(original);
+				expect(
+					(yield* reviews.getFileReviewState(correct.id, "a.ts"))?.snapshotHash,
+				).not.toBe(original?.snapshotHash);
+				state.noPr = true;
+				const next = (yield* store.openSession(repoRoot)).session;
+				const branchCorrection = yield* Deferred.make<OpenSessionOutcome>();
+				yield* store.forkRevalidation(next, (outcome) =>
+					Deferred.succeed(branchCorrection, outcome).pipe(Effect.asVoid),
+				);
+				const branch = yield* Deferred.await(branchCorrection);
+				expect(branch.session.target.kind).toBe("branch");
+				expect(branch.session.id).not.toBe(next.id);
+				expect(yield* reviews.getFileReviewState(next.id, "a.ts")).toEqual(
+					original,
+				);
+				const required = (yield* store.openSession(repoRoot, { kind: "pr" }))
+					.session;
+				const requiredValidation = yield* store.forkRevalidation(required, () =>
+					Effect.die("an explicit PR open must never downgrade to a branch"),
+				);
+				yield* Fiber.join(requiredValidation);
+				expect(
+					(yield* store.listSessions()).find(
+						(session) => session.id === required.id,
+					)?.target.kind,
+				).toBe("pr");
+				state.noPr = false;
+				state.number = 44;
+				const retargeted = yield* Deferred.make<OpenSessionOutcome>();
+				const pending = (yield* store.openSession(repoRoot)).session;
+				const anotherBranch = yield* reviews.openSession({
+					repoRoot: canonicalRoot,
+					baseRef: "main",
+					headRef: "main",
+					pr: null,
+				});
+				const retargetValidation = yield* store.forkRevalidation(
+					pending,
+					(outcome) =>
+						Deferred.succeed(retargeted, outcome).pipe(Effect.asVoid),
+				);
+				yield* Fiber.join(retargetValidation);
+				expect((yield* Deferred.await(retargeted)).transitions).toMatchObject([
+					{ kind: "retargeted", sourceSessionId: anotherBranch.id },
+				]);
+			}).pipe(
+				Effect.provide(makeTestLayer(dataDir, github, index)),
+				Effect.scoped,
+			),
+		);
+	});
+});
+
 test("base refresh drops upstream-only files without changing head or remaining reviewed state; offline refresh warns", async () => {
 	await withTestRepoAndDataDir(async (repoRoot, dataDir) => {
 		const upstream = await makeTestRepo();
@@ -137,6 +344,21 @@ test("base refresh drops upstream-only files without changing head or remaining 
 					const session = yield* openedSession(
 						store.openSession(repoRoot, { kind: "branch", baseRef: "main" }),
 					);
+					const other = yield* openedSession(
+						store.openSession(repoRoot, {
+							kind: "branch",
+							baseRef: "origin/main",
+						}),
+					);
+					const movedSessions: string[] = [];
+					const staleSessions: string[] = [];
+					const unsubscribe = subscribe((event) => {
+						if (event.type === "session-files-changed")
+							movedSessions.push(event.sessionId);
+						if (event.type === "session-base-staleness-changed")
+							staleSessions.push(event.sessionId);
+					});
+					yield* Effect.addFinalizer(() => Effect.sync(unsubscribe));
 					expect(
 						(yield* store.listChangedFiles(session.id, false)).map(
 							(file) => file.path,
@@ -151,9 +373,14 @@ test("base refresh drops upstream-only files without changing head or remaining 
 						await sh(upstream, ["fetch", repoRoot, "upstream-change"]);
 						await sh(upstream, ["reset", "--hard", "FETCH_HEAD"]);
 					});
+					// Explicit refresh intentionally reuses a successful fetch for five seconds.
+					yield* Effect.sleep("5 seconds");
 					expect(
 						(yield* store.refreshSessionBase(session.id)).baseMayBeStale,
 					).toBe(false);
+					expect(movedSessions).toContain(session.id);
+					expect(movedSessions).toContain(other.id);
+					expect(staleSessions).toEqual([]);
 					const remaining = yield* store.listChangedFiles(session.id, false);
 					expect(remaining.map((file) => file.path)).toEqual(["a.ts"]);
 					expect(remaining[0]?.review?.viewed).toBe(true);
@@ -169,10 +396,14 @@ test("base refresh drops upstream-only files without changing head or remaining 
 							`${upstream}/missing`,
 						]),
 					);
+					yield* Effect.sleep("5 seconds");
 					expect(
 						(yield* store.refreshSessionBase(session.id)).baseMayBeStale,
 					).toBe(true);
 					expect(yield* store.readBaseMayBeStale(session.id)).toBe(true);
+					expect(staleSessions).toContain(session.id);
+					expect(staleSessions).toContain(other.id);
+					staleSessions.length = 0;
 					expect(
 						(yield* store.listChangedFiles(session.id, false)).map(
 							(file) => file.path,
@@ -185,7 +416,8 @@ test("base refresh drops upstream-only files without changing head or remaining 
 						(yield* store.refreshSessionBase(session.id)).baseMayBeStale,
 					).toBe(false);
 					expect(yield* store.readBaseMayBeStale(session.id)).toBe(false);
-				}).pipe(Effect.provide(makeTestLayer(dataDir))),
+					expect(staleSessions).toContain(session.id);
+				}).pipe(Effect.scoped, Effect.provide(makeTestLayer(dataDir))),
 			);
 		} finally {
 			await rm(upstream, { recursive: true, force: true });
@@ -359,6 +591,136 @@ describe("Store.openSession — reuses matching branch review state for a PR", (
 });
 
 describe("Store.openPullRequestSession — reuses open review sessions", () => {
+	for (const changedHead of [false, true]) {
+		test(`indexed deep link is GitHub-free in foreground and revalidates by number (${changedHead ? "head changes" : "title changes"})`, async () => {
+			await withTestRepoAndDataDir(async (repoRoot, dataDir) => {
+				await sh(repoRoot, ["remote", "add", "origin", repoRoot]);
+				await sh(repoRoot, ["update-ref", "refs/remotes/origin/main", "HEAD"]);
+				await sh(repoRoot, ["branch", "feature"]);
+				const featurePath = join(dataDir, "feature-worktree");
+				await sh(repoRoot, ["worktree", "add", featurePath, "feature"]);
+				const canonicalRoot = await realpath(repoRoot);
+				const canonicalFeature = await realpath(featurePath);
+				const calls = { pr: 0 };
+				const index: Context.Service.Shape<typeof PrIndex> = {
+					lookup: () =>
+						Effect.die(
+							new Error("deep links must not probe local branch index keys"),
+						),
+					lookupPullRequest: (owner, repo, number) =>
+						Effect.sync(() => {
+							expect(owner.toLowerCase()).toBe("acme");
+							expect(repo.toLowerCase()).toBe("widgets");
+							expect(number).toBe(42);
+							return {
+								repository: {
+									owner: "acme",
+									repo: "widgets",
+									defaultBranch: "main",
+								},
+								pr: {
+									number: 42,
+									title: "Cached",
+									baseRef: "main",
+									headRef: "main",
+									isCrossRepository: false,
+									headOwner: "acme",
+								},
+							};
+						}),
+					refresh: () => Effect.succeed(undefined),
+					refreshKnown: Effect.void,
+					start: Effect.never,
+				};
+				await Effect.runPromise(
+					Effect.gen(function* () {
+						const store = yield* Store;
+						const review = yield* ReviewStore;
+						const settings = yield* SettingsStore;
+						yield* settings.setRepoPath("acme", "widgets", repoRoot);
+						const opened = yield* store.openPullRequestSession({
+							owner: "ACME",
+							repo: "Widgets",
+							number: 42,
+						});
+						expect(opened.status).toBe("opened");
+						if (opened.status !== "opened")
+							return yield* Effect.die(new Error("Expected indexed open"));
+						expect(calls.pr).toBe(0);
+						expect(opened.outcome.session.repoRoot).toBe(canonicalRoot);
+						expect(opened.outcome.session.target.kind).toBe("pr");
+						yield* review.markFileViewed(
+							opened.outcome.session.id,
+							"a.ts",
+							Option.some(new TextEncoder().encode("hello\n")),
+						);
+						const before = yield* review.getFileReviewState(
+							opened.outcome.session.id,
+							"a.ts",
+						);
+						const corrected = yield* Deferred.make<OpenSessionOutcome>();
+						yield* store.forkRevalidation(opened.outcome.session, (outcome) =>
+							Deferred.succeed(corrected, outcome).pipe(Effect.asVoid),
+						);
+						const result = yield* Deferred.await(corrected);
+						expect(calls.pr).toBe(1);
+						expect(result.session.target).toMatchObject({
+							kind: "pr",
+							number: 42,
+							title: "Fresh",
+							headRef: changedHead ? "feature" : "main",
+						});
+						expect(result.session.repoRoot).toBe(
+							changedHead ? canonicalFeature : canonicalRoot,
+						);
+						if (changedHead) {
+							expect(result.session.id).not.toBe(opened.outcome.session.id);
+							expect(
+								yield* review.getFileReviewState(result.session.id, "a.ts"),
+							).toBeNull();
+							expect(
+								(yield* review.listOpenSessions()).some(
+									(session) => session.id === opened.outcome.session.id,
+								),
+							).toBe(false);
+						} else {
+							expect(result.session.id).toBe(opened.outcome.session.id);
+							expect(
+								yield* review.getFileReviewState(result.session.id, "a.ts"),
+							).toEqual(before);
+						}
+					}).pipe(
+						Effect.provide(
+							makeTestLayer(
+								dataDir,
+								{
+									...mockGitHub,
+									repository: () =>
+										Effect.die(
+											new Error("deep link must not fetch repository metadata"),
+										),
+									pullRequest: (root, number) =>
+										Effect.sync(() => {
+											expect(root).toBe(repoRoot);
+											expect(number).toBe(42);
+											calls.pr++;
+											return {
+												number: 42,
+												title: "Fresh",
+												baseRef: "main",
+												headRef: changedHead ? "feature" : "main",
+												isCrossRepository: false,
+											};
+										}),
+								},
+								index,
+							),
+						),
+					),
+				);
+			});
+		});
+	}
 	for (const missingResult of ["failure", "null"] as const) {
 		test(`a missing PR (${missingResult}) surfaces PullRequestNotFound without a head-ref lookup`, async () => {
 			await withTestRepoAndDataDir(async (repoRoot, dataDir) => {
@@ -468,6 +830,7 @@ describe("Store.openPullRequestSession — reuses open review sessions", () => {
 					await sh(sibling, ["checkout", "-b", "other"]);
 				const unrelated =
 					scenario === "unrelated" ? await makeTestRepo() : null;
+				const reads = { pr: 0 };
 				try {
 					await Effect.runPromise(
 						Effect.gen(function* () {
@@ -503,6 +866,7 @@ describe("Store.openPullRequestSession — reuses open review sessions", () => {
 								repo: "widgets",
 								number: 42,
 							});
+							expect(reads.pr).toBe(1);
 							expect(opened.status).toBe("opened");
 							if (opened.status !== "opened") return;
 							expect(opened.outcome.session.target.kind).toBe("pr");
@@ -532,13 +896,20 @@ describe("Store.openPullRequestSession — reuses open review sessions", () => {
 							Effect.provide(
 								makeTestLayer(dataDir, {
 									...mockGitHub,
+									repository: () =>
+										Effect.die(
+											new Error("known PR must not look up repository again"),
+										),
 									pullRequest: () =>
-										Effect.succeed({
-											number: 42,
-											title: "Add widgets",
-											baseRef: "main",
-											headRef: "feature",
-											isCrossRepository: scenario === "fork",
+										Effect.sync(() => {
+											reads.pr++;
+											return {
+												number: 42,
+												title: "Add widgets",
+												baseRef: "main",
+												headRef: "feature",
+												isCrossRepository: scenario === "fork",
+											};
 										}),
 									headRef: () =>
 										Effect.die(new Error("must reuse the fetched PR head")),

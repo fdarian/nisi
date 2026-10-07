@@ -2,7 +2,7 @@ import { BunRuntime, BunServices } from "@effect/platform-bun";
 import { safe } from "@orpc/client";
 import { resolvedPath } from "@repo/bin-resolver";
 import { getDataDirConfig, SqliteDb } from "@repo/db";
-import { GhGitHub } from "@repo/git";
+import { CatFileReaders } from "@repo/git";
 import {
 	RepoMergeMethodStore,
 	ScheduledMergeStore,
@@ -18,12 +18,13 @@ import { Config, Context, Effect, Layer, Option, Tracer } from "effect";
 import { FileSystem } from "effect/FileSystem";
 import { ChatSessions } from "./chat/sessions.ts";
 import { CodeLspPool } from "./code-index/state.ts";
+import { GitHubLive } from "./github-live.ts";
 import { HarnessModelCache } from "./harness/model-store.ts";
 import { attachRouter, bindHealthCheckServer } from "./http.ts";
 import { LaunchTrace } from "./launch-trace/service.ts";
 import { startLivePolling } from "./live-poll.ts";
 import { LoggingLive } from "./logging.ts";
-import { PullRequestAttentionLive } from "./pull-request-attention.ts";
+import { PrIndex } from "./pr-index.ts";
 import { ScheduledMerges } from "./scheduled-merge.ts";
 import { SessionWatch } from "./session-watch.ts";
 import { Store } from "./store.ts";
@@ -196,6 +197,8 @@ const program = Effect.scoped(
 				// as the HTTP server above, just via the fiber getting
 				// interrupted instead of an acquireRelease finalizer.
 				yield* startLivePolling();
+				const prIndex = yield* PrIndex;
+				yield* prIndex.start.pipe(Effect.forkScoped);
 				const scheduledMerges = yield* ScheduledMerges;
 				yield* scheduledMerges.start();
 
@@ -242,7 +245,7 @@ const MainLayer = Layer.mergeAll(
 			Layer.mergeAll(
 				ScheduledMergeStore.layer,
 				RepoMergeMethodStore.layer,
-				GhGitHub.layer.pipe(Layer.provideMerge(PullRequestAttentionLive.layer)),
+				GitHubLive,
 			),
 		),
 	),
@@ -251,7 +254,9 @@ const MainLayer = Layer.mergeAll(
 	ChatSessions.layer,
 	HarnessModelCache.layer,
 	CodeLspPool.layer,
+	CatFileReaders.layer,
 ).pipe(
+	Layer.provideMerge(GitHubLive),
 	Layer.provideMerge(SqliteDb.layer),
 	Layer.provideMerge(BunServices.layer),
 );

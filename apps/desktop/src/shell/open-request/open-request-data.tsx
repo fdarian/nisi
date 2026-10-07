@@ -11,6 +11,8 @@ import {
 import { useBackendContext } from "#/infra/backend-context";
 import { receiveTracedOpen } from "#/infra/launch-trace";
 import { useSidecarEvent } from "#/infra/sidecar-events";
+import { prefetchResolvedFiles } from "./resolved-files";
+import { seedResolvedSession } from "./resolved-session-cache";
 
 type OpenRequestContextValue = {
 	request: OpenRequest | null;
@@ -33,6 +35,20 @@ export function OpenRequestProvider(props: {
 	const merge = useCallback(
 		(request: OpenRequest) => {
 			receiveTracedOpen(request, client);
+			if (request.status.kind === "opened") {
+				void prefetchResolvedFiles(
+					queryClient,
+					backend.orpc,
+					request.status.session.id,
+				).catch((error) =>
+					console.error("Failed to prefetch resolved files", error),
+				);
+				seedResolvedSession(
+					queryClient,
+					backend.orpc.sessions.list.queryKey(),
+					request.status.session,
+				);
+			}
 			setRequests((current) => {
 				if (acknowledging.current.has(request.id)) return current;
 				const previous = current.find((entry) => entry.id === request.id);
@@ -47,10 +63,31 @@ export function OpenRequestProvider(props: {
 					: current.map((entry) => (entry.id === request.id ? request : entry));
 			});
 		},
-		[client],
+		[client, queryClient, backend.orpc],
 	);
 
 	useSidecarEvent((event) => {
+		if (event.type === "session-updated") {
+			void queryClient
+				.resetQueries({
+					queryKey: backend.orpc.diff.files.key({
+						input: { sessionId: event.session.id },
+					}),
+				})
+				.catch((error) =>
+					console.error("Failed to reset corrected file metadata", error),
+				);
+			void queryClient
+				.resetQueries({
+					queryKey: backend.orpc.diff.fileContents.key({
+						input: { sessionId: event.session.id },
+					}),
+				})
+				.catch((error) =>
+					console.error("Failed to reset corrected file contents", error),
+				);
+			return;
+		}
 		if (event.type === "stream-ready") {
 			void client.events
 				.openRequests()

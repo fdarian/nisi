@@ -4,7 +4,7 @@ import { Effect } from "effect";
 import { FileSystem } from "effect/FileSystem";
 import type { ChildProcessSpawner } from "effect/unstable/process";
 import { resolveDiffBaseRef } from "./base.ts";
-import { type BlobEntry, readBlobsAtRef } from "./blob.ts";
+import { type BlobEntry, readBlobExpressions, readBlobsAtRef } from "./blob.ts";
 import {
 	checkLinguistGenerated,
 	classifyFile,
@@ -17,6 +17,7 @@ import {
 	createAddedFilePatch,
 	patchLooksBinary,
 	readPatches,
+	splitPatch,
 } from "./patch.ts";
 import {
 	type DiffTarget,
@@ -53,6 +54,18 @@ export type FileContent = {
 };
 
 type Requirements = ChildProcessSpawner.ChildProcessSpawner | FileSystem;
+
+export type PreparedDiff = {
+	readonly mergeBase: string;
+	readonly target: DiffTarget;
+	readonly entries: readonly NameStatusEntry[];
+	readonly stats: ReadonlyMap<string, NumstatEntry>;
+	readonly untrackedPaths: readonly string[];
+	readonly patches: ReadonlyMap<string, string>;
+	readonly linguistGenerated: ReadonlySet<string>;
+	readonly prefixes: ReadonlyMap<string, string>;
+	readonly newBlobs: ReadonlyMap<string, BlobEntry>;
+};
 
 const normalizeStatus = (code: string | undefined): FileStatus =>
 	code === "A" ? "added" : code === "D" ? "deleted" : "modified";
@@ -101,7 +114,11 @@ const parseNumstat = (raw: string): ReadonlyArray<NumstatEntry> => {
 	while (index < tokens.length) {
 		const record = tokens[index++];
 		if (record === undefined) break;
-		const [addedText, deletedText, inlinePath] = record.split("\t");
+		const firstTab = record.indexOf("\t");
+		const secondTab = record.indexOf("\t", firstTab + 1);
+		const addedText = record.slice(0, firstTab);
+		const deletedText = record.slice(firstTab + 1, secondTab);
+		const inlinePath = record.slice(secondTab + 1);
 		const additions = addedText === "-" ? null : Number(addedText);
 		const deletions = deletedText === "-" ? null : Number(deletedText);
 		if (inlinePath !== undefined && inlinePath.length > 0) {
@@ -118,6 +135,142 @@ const parseNumstat = (raw: string): ReadonlyArray<NumstatEntry> => {
 	}
 	return entries;
 };
+
+/** Git emits raw records, numstat records, then a NUL separator and the patch. Paths are consumed by record grammar. */
+const parseCombinedDiff = (raw: string) => {
+	const tokens = raw.split("\0");
+	const cursor = { index: 0 };
+	const entries: NameStatusEntry[] = [];
+	while (tokens[cursor.index]?.startsWith(":")) {
+		const header = tokens[cursor.index++];
+		if (header === undefined) break;
+		const status = header.slice(header.lastIndexOf(" ") + 1);
+		const first = tokens[cursor.index++];
+		if (first === undefined) break;
+		if (status.startsWith("R") || status.startsWith("C")) {
+			const path = tokens[cursor.index++];
+			if (path !== undefined)
+				entries.push({ path, oldPath: first, status: "renamed" });
+		} else entries.push({ path: first, status: normalizeStatus(status[0]) });
+	}
+	const statTokens: string[] = [];
+	while (tokens[cursor.index] !== undefined && tokens[cursor.index] !== "") {
+		const record = tokens[cursor.index++];
+		if (record === undefined) break;
+		statTokens.push(record);
+		const firstTab = record.indexOf("\t");
+		if (record.indexOf("\t", firstTab + 1) === record.length - 1) {
+			const oldPath = tokens[cursor.index++];
+			const newPath = tokens[cursor.index++];
+			if (oldPath !== undefined && newPath !== undefined)
+				statTokens.push(oldPath, newPath);
+		}
+	}
+	return {
+		entries,
+		stats: new Map(
+			parseNumstat(statTokens.join("\0")).map((entry) => [entry.path, entry]),
+		),
+		patch: tokens.slice(cursor.index + 1).join("\0"),
+	};
+};
+
+export const prepareDiff = (
+	repoRoot: string,
+	baseRef: string,
+	options?: {
+		readonly includeUncommitted?: boolean;
+		readonly headRef?: string;
+		readonly baseCommit?: string;
+		readonly headCommit?: string;
+	},
+) =>
+	Effect.gen(function* () {
+		const fs = yield* FileSystem;
+		const refs = yield* Effect.all(
+			[
+				options?.baseCommit === undefined
+					? resolveDiffBaseRef(repoRoot, baseRef)
+					: Effect.succeed(options.baseCommit),
+				options?.headCommit === undefined
+					? resolveHeadSha(repoRoot, options?.headRef)
+					: Effect.succeed(options.headCommit),
+			],
+			{ concurrency: "unbounded" },
+		);
+		const mergeBase = yield* resolveMergeBase(repoRoot, refs[0], refs[1]).pipe(
+			Effect.withSpan("diff.merge-base"),
+		);
+		const target: DiffTarget =
+			options?.headRef === undefined && options?.includeUncommitted === true
+				? { kind: "worktree" }
+				: { kind: "committed", sha: refs[1] };
+		const results = yield* Effect.all(
+			[
+				git(repoRoot, [
+					"diff",
+					"--no-ext-diff",
+					"--raw",
+					"--numstat",
+					"-p",
+					"-z",
+					"-M",
+					mergeBase,
+					...diffTargetArgs(target),
+				]),
+				target.kind === "worktree"
+					? listUntrackedFiles(repoRoot)
+					: Effect.succeed<readonly string[]>([]),
+			],
+			{ concurrency: "unbounded" },
+		);
+		const combined = yield* Effect.sync(() =>
+			parseCombinedDiff(results[0]),
+		).pipe(Effect.withSpan("diff.parse"));
+		const split = yield* Effect.sync(() => splitPatch(combined.patch)).pipe(
+			Effect.withSpan("diff.patch.split"),
+		);
+		const patches =
+			split.size === combined.entries.length &&
+			combined.entries.every((entry) => split.has(entry.path))
+				? split
+				: yield* readPatches(repoRoot, mergeBase, target, combined.entries);
+		const paths = combined.entries
+			.filter((entry) => entry.status !== "deleted")
+			.map((entry) => entry.path);
+		const details = yield* Effect.all(
+			[
+				checkLinguistGenerated(repoRoot, [
+					...combined.entries.map((entry) => entry.path),
+					...results[1],
+				]).pipe(Effect.withSpan("diff.attributes")),
+				target.kind === "committed"
+					? readBlobsAtRef(repoRoot, target.sha, paths, {
+							maxBytes: CONTENT_PREFIX_CAP,
+						}).pipe(Effect.withSpan("diff.blobs.prefixes"))
+					: Effect.succeed<ReadonlyMap<string, BlobEntry>>(new Map()),
+				target.kind === "worktree"
+					? readContentPrefixes(repoRoot, target, paths, fs)
+					: Effect.succeed<ReadonlyMap<string, string>>(new Map()),
+			],
+			{ concurrency: "unbounded" },
+		);
+		const prefixes =
+			target.kind === "worktree"
+				? details[2]
+				: yield* readContentPrefixes(repoRoot, target, paths, fs, details[1]);
+		return {
+			mergeBase,
+			target,
+			entries: combined.entries,
+			stats: combined.stats,
+			untrackedPaths: results[1],
+			patches,
+			linguistGenerated: details[0],
+			prefixes,
+			newBlobs: details[1],
+		} satisfies PreparedDiff;
+	}).pipe(Effect.withSpan("diff.prepare"));
 
 /** `git ls-files --others --exclude-standard -z` — untracked paths, only meaningful against `{ kind: "worktree" }`. */
 const listUntrackedFiles = (repoRoot: string) =>
@@ -171,15 +324,20 @@ const readContentPrefixes = (
 	target: DiffTarget,
 	paths: ReadonlyArray<string>,
 	fs: FileSystem,
+	preparedBlobs?: ReadonlyMap<string, BlobEntry>,
 ): Effect.Effect<
 	ReadonlyMap<string, string>,
 	GitCommandError,
 	ChildProcessSpawner.ChildProcessSpawner | FileSystem
 > => {
 	if (target.kind === "committed") {
-		return readBlobsAtRef(repoRoot, target.sha, paths, {
-			maxBytes: CONTENT_PREFIX_CAP,
-		}).pipe(
+		return (
+			preparedBlobs === undefined
+				? readBlobsAtRef(repoRoot, target.sha, paths, {
+						maxBytes: CONTENT_PREFIX_CAP,
+					})
+				: Effect.succeed(preparedBlobs)
+		).pipe(
 			Effect.map((blobs) => {
 				const prefixes = new Map<string, string>();
 				for (const [path, blob] of blobs) {
@@ -312,81 +470,21 @@ export const getChangedFiles = (
 	options?: {
 		readonly includeUncommitted?: boolean;
 		readonly headRef?: string;
+		readonly prepared?: PreparedDiff;
 	},
 ): Effect.Effect<ReadonlyArray<FileChange>, GitError, Requirements> =>
 	Effect.gen(function* () {
 		const fs = yield* FileSystem;
-		const includeUncommitted =
-			options?.headRef === undefined && (options?.includeUncommitted ?? false);
-
-		const mergeBase = yield* resolveMergeBase(
-			repoRoot,
-			yield* resolveDiffBaseRef(repoRoot, baseRef),
-			options?.headRef,
-		);
-		const target: DiffTarget = includeUncommitted
-			? { kind: "worktree" }
-			: {
-					kind: "committed",
-					sha: yield* resolveHeadSha(repoRoot, options?.headRef),
-				};
-
-		const untrackedPathsEffect =
-			target.kind === "worktree"
-				? listUntrackedFiles(repoRoot)
-				: Effect.succeed<ReadonlyArray<string>>([]);
-
-		const [nameStatusRaw, numstatRaw, untrackedPaths] = yield* Effect.all(
-			[
-				git(repoRoot, [
-					"diff",
-					"--name-status",
-					"-z",
-					"-M",
-					mergeBase,
-					...diffTargetArgs(target),
-				]),
-				git(repoRoot, [
-					"diff",
-					"--numstat",
-					"-z",
-					"-M",
-					mergeBase,
-					...diffTargetArgs(target),
-				]),
-				untrackedPathsEffect,
-			],
-			{ concurrency: "unbounded" },
-		);
-
-		const trackedEntries = parseNameStatus(nameStatusRaw);
-		const numstatByPath = new Map(
-			parseNumstat(numstatRaw).map((entry) => [entry.path, entry] as const),
-		);
-
-		const trackedPatches = yield* readPatches(
-			repoRoot,
-			mergeBase,
-			target,
-			trackedEntries.map((entry) => ({
-				path: entry.path,
-				oldPath: entry.oldPath,
-			})),
-		);
-
-		const linguistGenerated = yield* checkLinguistGenerated(repoRoot, [
-			...trackedEntries.map((entry) => entry.path),
-			...untrackedPaths,
-		]);
-
-		const prefixByPath = yield* readContentPrefixes(
-			repoRoot,
-			target,
-			trackedEntries
-				.filter((entry) => entry.status !== "deleted")
-				.map((entry) => entry.path),
-			fs,
-		);
+		const prepared =
+			options?.prepared === undefined
+				? yield* prepareDiff(repoRoot, baseRef, options)
+				: options.prepared;
+		const trackedEntries = prepared.entries;
+		const numstatByPath = prepared.stats;
+		const trackedPatches = prepared.patches;
+		const linguistGenerated = prepared.linguistGenerated;
+		const prefixByPath = prepared.prefixes;
+		const untrackedPaths = prepared.untrackedPaths;
 
 		const trackedChanges: Array<FileChange> = trackedEntries.map((entry) => {
 			const numstat = numstatByPath.get(entry.path);
@@ -460,7 +558,7 @@ export const getChangedFiles = (
 		return [...trackedChanges, ...untrackedChanges].sort((a, b) =>
 			a.path.localeCompare(b.path),
 		);
-	});
+	}).pipe(Effect.withSpan("diff.files.classify"));
 
 export type FileContentRequest = {
 	readonly path: string;
@@ -533,6 +631,7 @@ export const getFileContents = (
 	options?: {
 		readonly includeUncommitted?: boolean;
 		readonly headRef?: string;
+		readonly prepared?: PreparedDiff;
 	},
 ): Effect.Effect<ReadonlyMap<string, FileContent>, GitError, Requirements> =>
 	Effect.gen(function* () {
@@ -542,17 +641,21 @@ export const getFileContents = (
 		const includeUncommitted =
 			options?.headRef === undefined && (options?.includeUncommitted ?? false);
 
-		const mergeBase = yield* resolveMergeBase(
-			repoRoot,
-			yield* resolveDiffBaseRef(repoRoot, baseRef),
-			options?.headRef,
-		);
-		const target: DiffTarget = includeUncommitted
-			? { kind: "worktree" }
-			: {
-					kind: "committed",
-					sha: yield* resolveHeadSha(repoRoot, options?.headRef),
-				};
+		const mergeBase =
+			options?.prepared?.mergeBase ??
+			(yield* resolveMergeBase(
+				repoRoot,
+				yield* resolveDiffBaseRef(repoRoot, baseRef),
+				options?.headRef,
+			));
+		const target: DiffTarget =
+			options?.prepared?.target ??
+			(includeUncommitted
+				? { kind: "worktree" }
+				: {
+						kind: "committed",
+						sha: yield* resolveHeadSha(repoRoot, options?.headRef),
+					});
 
 		const untrackedPathsEffect =
 			target.kind === "worktree"
@@ -561,26 +664,32 @@ export const getFileContents = (
 
 		// Not pathspec-restricted, for the same rename-pairing reason
 		// `getChangedFiles` leaves `name-status` unrestricted.
-		const [nameStatusRaw, untrackedPathsList] = yield* Effect.all(
-			[
-				git(repoRoot, [
-					"diff",
-					"--name-status",
-					"-z",
-					"-M",
-					mergeBase,
-					...diffTargetArgs(target),
-				]),
-				untrackedPathsEffect,
-			],
-			{ concurrency: "unbounded" },
-		);
+		const status =
+			options?.prepared === undefined
+				? yield* Effect.all(
+						[
+							git(repoRoot, [
+								"diff",
+								"--name-status",
+								"-z",
+								"-M",
+								mergeBase,
+								...diffTargetArgs(target),
+							]),
+							untrackedPathsEffect,
+						],
+						{ concurrency: "unbounded" },
+					).pipe(
+						Effect.map((results) => ({
+							entries: parseNameStatus(results[0]),
+							untrackedPaths: results[1],
+						})),
+					)
+				: options.prepared;
 		const nameStatusByPath = new Map(
-			parseNameStatus(nameStatusRaw).map(
-				(entry) => [entry.path, entry] as const,
-			),
+			status.entries.map((entry) => [entry.path, entry] as const),
 		);
-		const untrackedPaths = new Set(untrackedPathsList);
+		const untrackedPaths = new Set(status.untrackedPaths);
 
 		type ResolvedRequest = {
 			readonly request: FileContentRequest;
@@ -607,21 +716,41 @@ export const getFileContents = (
 		const oldBlobPaths = resolved
 			.filter((item) => item.status !== "added" && !item.isUntracked)
 			.map((item) => item.oldBlobPath);
-		const oldBlobs = yield* readBlobsAtRef(repoRoot, mergeBase, oldBlobPaths, {
-			maxBytes: LOAD_ON_DEMAND_LIMIT,
-		});
-
-		const newBlobs: ReadonlyMap<string, BlobEntry> =
+		const missingNewPaths =
 			target.kind === "committed"
-				? yield* readBlobsAtRef(
-						repoRoot,
-						target.sha,
-						resolved
-							.filter((item) => item.status !== "deleted" && !item.isUntracked)
-							.map((item) => item.request.path),
-						{ maxBytes: LOAD_ON_DEMAND_LIMIT },
-					)
-				: new Map();
+				? resolved
+						.filter((item) => {
+							if (item.status === "deleted" || item.isUntracked) return false;
+							const cached = options?.prepared?.newBlobs.get(item.request.path);
+							return (
+								cached === undefined ||
+								(cached.content === null && cached.size <= LOAD_ON_DEMAND_LIMIT)
+							);
+						})
+						.map((item) => item.request.path)
+				: [];
+		const blobs = yield* readBlobExpressions(
+			repoRoot,
+			[
+				...oldBlobPaths.map((path) => `${mergeBase}:${path}`),
+				...(target.kind === "committed"
+					? missingNewPaths.map((path) => `${target.sha}:${path}`)
+					: []),
+			],
+			{ maxBytes: LOAD_ON_DEMAND_LIMIT },
+		);
+		const oldBlobs = new Map(
+			oldBlobPaths.flatMap((path) => {
+				const blob = blobs.get(`${mergeBase}:${path}`);
+				return blob === undefined ? [] : [[path, blob] as const];
+			}),
+		);
+		const newBlobs = new Map(options?.prepared?.newBlobs);
+		if (target.kind === "committed")
+			for (const path of missingNewPaths) {
+				const blob = blobs.get(`${target.sha}:${path}`);
+				if (blob !== undefined) newBlobs.set(path, blob);
+			}
 
 		const newGateEntries = yield* Effect.forEach(
 			resolved,
@@ -643,19 +772,21 @@ export const getFileContents = (
 		);
 		const newGateByPath = new Map(newGateEntries);
 
-		const patches = yield* readPatches(
-			repoRoot,
-			mergeBase,
-			target,
-			resolved
-				.filter((item) => !item.isUntracked)
-				.map((item) => ({
-					path: item.request.path,
-					...(item.entry?.oldPath === undefined
-						? {}
-						: { oldPath: item.entry.oldPath }),
-				})),
-		);
+		const patches =
+			options?.prepared?.patches ??
+			(yield* readPatches(
+				repoRoot,
+				mergeBase,
+				target,
+				resolved
+					.filter((item) => !item.isUntracked)
+					.map((item) => ({
+						path: item.request.path,
+						...(item.entry?.oldPath === undefined
+							? {}
+							: { oldPath: item.entry.oldPath }),
+					})),
+			));
 
 		const result = new Map<string, FileContent>();
 		for (const item of resolved) {

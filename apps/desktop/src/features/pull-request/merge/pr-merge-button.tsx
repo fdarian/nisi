@@ -17,6 +17,7 @@ import {
 	DropdownMenuSeparator,
 	DropdownMenuTrigger,
 } from "#/components/ui/menu";
+import { Skeleton } from "#/components/ui/skeleton";
 import { toastManager } from "#/components/ui/toast";
 import type {
 	MergeMethod,
@@ -52,6 +53,9 @@ type PrMergeButtonProps = {
 	watched: boolean;
 	isSelectedTab: boolean;
 };
+
+/** Wide enough for "Checking mergeability…" and the longest method label, so the label changing never resizes the button. */
+const MERGE_BUTTON_MIN_WIDTH = "min-w-44";
 
 const METHOD_LABEL: Record<MergeMethod, string> = {
 	merge: "Merge pull request",
@@ -168,6 +172,32 @@ const resolveButtonState = (
 	}
 	return { label: METHOD_LABEL[method], disabled: false };
 };
+
+/** The merge group's footprint before anything is known about the PR — used while the PR itself is still opening. */
+export function PrMergeButtonSkeleton(): React.ReactElement {
+	return (
+		<Group>
+			<Button
+				className={MERGE_BUTTON_MIN_WIDTH}
+				disabled
+				size="sm"
+				variant="outline"
+			>
+				<Skeleton className="h-2 w-24" />
+			</Button>
+			<GroupSeparator />
+			<Button
+				aria-label="Select merge method"
+				className="w-6 px-0"
+				disabled
+				size="sm"
+				variant="outline"
+			>
+				<ChevronDownIcon />
+			</Button>
+		</Group>
+	);
+}
 
 /**
  * The PR header's Merge button — disabled until `mergeStatus` confirms the
@@ -334,7 +364,10 @@ export function PrMergeButton({
 
 	const allowedMethods = statusQuery.data?.allowedMethods ?? [];
 	const showAutoMergeAction = scheduledQuery.data === null;
+	// While the status is still loading the chevron is already in place (disabled,
+	// see `methodMenuDisabled`) so it doesn't appear and push the header around.
 	const showMethodPicker =
+		(statusQuery.data === undefined && !statusQuery.isError) ||
 		allowedMethods.length > 1 ||
 		showAutoMergeAction ||
 		(scheduledQuery.data !== undefined && scheduledQuery.data !== null);
@@ -354,6 +387,7 @@ export function PrMergeButton({
 		<>
 			<Group>
 				<Button
+					className={MERGE_BUTTON_MIN_WIDTH}
 					disabled={disabled || isCheckingUnpushed || autoMerge.isPending}
 					onClick={() => handleClick("merge")}
 					size="sm"

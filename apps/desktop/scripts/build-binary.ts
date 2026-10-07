@@ -35,11 +35,12 @@ const run = (cmd: string, args: ReadonlyArray<string>) =>
  * one-liner — so this comment has somewhere to live and nobody deletes the
  * step as redundant.
  */
-const buildBinary = (entrypoint: string, outfile: string) =>
+const buildBinary = (entrypoint: string, outfile: string, bytecode: boolean) =>
 	Effect.gen(function* () {
 		yield* run("bun", [
 			"build",
 			"--compile",
+			...(bytecode ? ["--bytecode", "--format=esm"] : []),
 			"--target=bun-darwin-arm64",
 			entrypoint,
 			"--outfile",
@@ -52,11 +53,11 @@ const buildBinary = (entrypoint: string, outfile: string) =>
 const entrypoint = process.argv[2];
 const outfile = process.argv[3];
 if (entrypoint === undefined || outfile === undefined) {
-	console.error("usage: build-binary.ts <entrypoint> <outfile>");
+	console.error("usage: build-binary.ts <entrypoint> <outfile> [--bytecode]");
 	process.exit(1);
 }
 
-buildBinary(entrypoint, outfile).pipe(
+buildBinary(entrypoint, outfile, process.argv[4] === "--bytecode").pipe(
 	Effect.provide(BunServices.layer),
 	BunRuntime.runMain,
 );

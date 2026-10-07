@@ -1,16 +1,12 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { isDefinedError, safe } from "@orpc/client";
-import {
-	makeSidecarClient,
-	type OpenSessionTarget,
-	type Session,
-} from "@repo/sidecar-api";
+import type { OpenSessionTarget, Session } from "@repo/sidecar-api";
+import { makeSidecarClient } from "@repo/sidecar-api/client";
 import { readSidecarJson } from "deskkit/sidecar";
 import { Config, Effect, Option } from "effect";
 import type { FileSystem } from "effect/FileSystem";
 import type { ChildProcessSpawner } from "effect/unstable/process";
-import { launchApp } from "./app-launch.ts";
 
 /**
  * Per-POST-attempt timeout — long enough for a live sidecar, short enough that a dead one
@@ -135,7 +131,7 @@ const attempt = (
 		const result = yield* Effect.promise(() =>
 			safe(
 				client.sessions.open(
-					{ cwd, target, traceId },
+					{ cwd, repoRoot: cwd, target, traceId },
 					{ signal: AbortSignal.timeout(POST_TIMEOUT_MS) },
 				),
 			),
@@ -224,7 +220,8 @@ const openSession = (
 			);
 		}
 
-		const launched = yield* Effect.match(launchApp, {
+		const app = yield* Effect.promise(() => import("./app-launch.ts"));
+		const launched = yield* Effect.match(app.launchApp, {
 			onFailure: (error) =>
 				({ _tag: "launchFailed", reason: error.reason }) as const,
 			onSuccess: () => undefined,

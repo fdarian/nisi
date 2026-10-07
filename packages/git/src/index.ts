@@ -1,5 +1,11 @@
-export { fetchBaseRef, resolveDiffBaseRef } from "./base.ts";
+export {
+	fetchBaseRef,
+	readLocalBase,
+	readLocalBaseCommit,
+	resolveDiffBaseRef,
+} from "./base.ts";
 export { readFileContentsAtRef, readWorktreeBlobContent } from "./blob.ts";
+export { CatFileReaders } from "./cat-file.ts";
 export type {
 	FileSignature,
 	RepoChangeSignature,
@@ -17,7 +23,12 @@ export type {
 	FileContentRequest,
 	FileStatus,
 } from "./diff.ts";
-export { getChangedFiles, getFileContents } from "./diff.ts";
+export {
+	getChangedFiles,
+	getFileContents,
+	type PreparedDiff,
+	prepareDiff,
+} from "./diff.ts";
 export {
 	FileNotChanged,
 	GhMergeFailed,
@@ -65,7 +76,11 @@ export { PullRequestAttention } from "./github/gh/attention.ts";
 export { approveWorkflowRuns } from "./github/gh/checks.ts";
 export { GhGitHub } from "./github/gh/github.ts";
 export type { GitHubShape } from "./github/github.ts";
-export { GitHub } from "./github/github.ts";
+export {
+	GitHub,
+	type OpenPullRequestIndex,
+	type OpenPullRequestIndexOptions,
+} from "./github/github.ts";
 export type {
 	FetchPullRequestChecksInput,
 	FetchPullRequestOverviewInput,
@@ -83,6 +98,7 @@ export type {
 } from "./github/models.ts";
 export type { Hunk } from "./hunk.ts";
 export { parseHunks } from "./hunk.ts";
+export { readIndexHead } from "./index-head.ts";
 export type {
 	GitHubTarget,
 	PullRequestRef,

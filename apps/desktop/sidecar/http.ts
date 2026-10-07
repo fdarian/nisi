@@ -82,11 +82,13 @@ import { translateMergeFailure } from "./merge-failure.ts";
 import { createNativeActivationHandler } from "./native-activation.ts";
 import {
 	acknowledgeOpenRequest,
+	correctOpenRequest,
 	createOpenRequest,
 	failOpenRequest,
 	listOpenRequests,
 	resolveOpenRequest,
 } from "./open-requests.ts";
+import { PrIndex } from "./pr-index.ts";
 import { AttentionState } from "./pull-request-attention.ts";
 import { RpcErrorsPlugin } from "./rpc-errors.ts";
 import { RpcLifecyclePlugin } from "./rpc-lifecycle.ts";
@@ -96,6 +98,7 @@ import {
 	forkSessionCloseSideEffects,
 	reportChatCloseFailure,
 } from "./session-close.ts";
+import { emitSessionTransition as emitTransition } from "./session-transition.ts";
 import { SessionWatch } from "./session-watch.ts";
 import {
 	type OpenSessionOutcome,
@@ -322,19 +325,9 @@ export function attachRouter(
 	);
 
 	const emitSessionTransition = (outcome: OpenSessionOutcome) =>
-		Effect.gen(function* () {
-			if (outcome.kind === "opened") return;
-			if (outcome.kind === "retargeted") {
-				// The same row remains open under the same id, so subscribers need an
-				// update rather than a close event to refresh their session list.
-				emit({ type: "session-updated", session: outcome.session });
-				return;
-			}
-			// Store closed the source row after finding the PR's existing key;
-			// mirror `sessions.close`'s sidecar-wide teardown here.
-			yield* forkSessionCloseSideEffects(outcome.sourceSessionId, mainContext);
-			emit({ type: "session-closed", sessionId: outcome.sourceSessionId });
-		});
+		emitTransition(outcome, (id) =>
+			forkSessionCloseSideEffects(id, mainContext),
+		);
 
 	/**
 	 * Every `codeIndex.*` handler starts by resolving `sessionId` to a live
@@ -466,7 +459,11 @@ export function attachRouter(
 						},
 					);
 					const store = yield* Store;
-					const opening = store.openSession(input.cwd, input.target);
+					const opening = store.openSession(
+						input.cwd,
+						input.target,
+						input.repoRoot,
+					);
 					const outcome = yield* opening.pipe(
 						Effect.catchTag("InvalidCwd", (cause) =>
 							Effect.fail(
@@ -554,6 +551,16 @@ export function attachRouter(
 					const session = outcome.session;
 					yield* Effect.annotateCurrentSpan({ sessionId: session.id });
 					yield* emitSessionTransition(outcome);
+					yield* store.forkRevalidation(session, (corrected) =>
+						emitSessionTransition(corrected).pipe(
+							Effect.andThen(
+								Effect.sync(() =>
+									correctOpenRequest(request, corrected.session),
+								),
+							),
+							Effect.provide(mainContext),
+						),
+					);
 					yield* Effect.logInfo("session opened", {
 						sessionId: session.id,
 						repoRoot: session.repoRoot,
@@ -684,6 +691,10 @@ export function attachRouter(
 				const input = request.input;
 				const errors = request.errors;
 				const attention = yield* AttentionState;
+				if (input.watched) {
+					const index = yield* PrIndex;
+					yield* index.refreshKnown;
+				}
 				if (!input.watched) {
 					const store = yield* Store;
 					const session = (yield* store.listSessions()).find(
@@ -1293,6 +1304,13 @@ export function attachRouter(
 						number: input.number,
 					})
 					.pipe(
+						Effect.catchTag("WorktreeReadFailed", (cause) =>
+							Effect.fail(
+								errors.SERVICE_UNAVAILABLE({
+									message: formatWorktreeReadFailed(cause),
+								}),
+							),
+						),
 						// `openPullRequestWorktree`'s four tagged errors are each a
 						// distinct, user-actionable situation — kept as four distinct
 						// contract errors rather than collapsed into one, so the
@@ -1370,6 +1388,25 @@ export function attachRouter(
 					} else {
 						yield* emitSessionTransition(outcome.outcome);
 					}
+					yield* store.forkRevalidation(session, (corrected) =>
+						emitSessionTransition(corrected).pipe(
+							Effect.andThen(
+								Effect.sync(() => {
+									correctOpenRequest(
+										{
+											id: crypto.randomUUID(),
+											cwd: session.repoRoot,
+											target: { kind: "pr" },
+											traceId: input.traceId,
+											status: { kind: "opened", session },
+										},
+										corrected.session,
+									);
+								}),
+							),
+							Effect.provide(mainContext),
+						),
+					);
 					yield* Effect.logInfo("pull request session opened", {
 						sessionId: session.id,
 						repoRoot: session.repoRoot,

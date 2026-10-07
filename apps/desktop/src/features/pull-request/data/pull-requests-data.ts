@@ -9,10 +9,16 @@
  * open" effect that already lives there.
  */
 import { ORPCError } from "@orpc/client";
-import { keepPreviousData, useMutation, useQuery } from "@tanstack/react-query";
+import {
+	keepPreviousData,
+	useMutation,
+	useQuery,
+	useQueryClient,
+} from "@tanstack/react-query";
 import { invoke } from "@tauri-apps/api/core";
 import type { SidecarQueryUtils } from "#/infra/backend-context";
 import { launchMark, resolveTracedDeepLink } from "#/infra/launch-trace";
+import { seedResolvedSession } from "#/shell/open-request/resolved-session-cache";
 import type { Session } from "./pr-data";
 
 /** One row the palette renders — mirrors `PullRequestSearchResult` (`packages/sidecar-api/src/pull-requests.ts`). */
@@ -146,12 +152,12 @@ export function findOpenPullRequestSessionId(
 async function resolvePullRequestOpen(
 	orpc: SidecarQueryUtils,
 	params: OpenPullRequestParams,
-): Promise<{ status: "opened"; sessionId: string } | { status: "cancelled" }> {
+): Promise<{ status: "opened"; session: Session } | { status: "cancelled" }> {
 	const outcome = await orpc.pullRequests.open.call(params);
 	if (outcome.status === "opened") {
 		if (params.traceId !== undefined)
 			resolveTracedDeepLink(params.traceId, outcome.session.id);
-		return { status: "opened", sessionId: outcome.session.id };
+		return { status: "opened", session: outcome.session };
 	}
 	if (params.traceId !== undefined) {
 		launchMark("deeplink.needs-repo-path");
@@ -173,7 +179,7 @@ async function resolvePullRequestOpen(
 
 	const retried = await orpc.pullRequests.open.call(params);
 	if (retried.status === "opened") {
-		return { status: "opened", sessionId: retried.session.id };
+		return { status: "opened", session: retried.session };
 	}
 	// `recordRepoPath` only persists a mapping once it's verified the folder's
 	// `origin` actually matches — a fresh `open` right after should always
@@ -213,11 +219,21 @@ export function useOpenPullRequest(
 	error: unknown;
 	reset: () => void;
 } {
+	const queryClient = useQueryClient();
 	const mutation = useMutation({
 		mutationFn: (params: OpenPullRequestParams) =>
 			resolvePullRequestOpen(orpc, params),
 		onSuccess: (outcome) => {
-			if (outcome.status === "opened") onOpened(outcome.sessionId);
+			if (outcome.status !== "opened") return;
+			// Runs before the mutation flips out of `isPending`, so a pending-tab
+			// placeholder hands over to the real tab in one commit instead of
+			// waiting on the `session-opened` list refetch.
+			seedResolvedSession(
+				queryClient,
+				orpc.sessions.list.queryKey(),
+				outcome.session,
+			);
+			onOpened(outcome.session.id);
 		},
 	});
 

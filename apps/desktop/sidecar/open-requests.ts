@@ -89,6 +89,21 @@ export function acknowledgeOpenRequest(id: string): void {
 	requests.delete(id);
 }
 
+/** Corrections need a fresh acknowledgment id: the original request may already be acknowledged. */
+export function correctOpenRequest(
+	request: OpenRequest,
+	session: Session,
+): void {
+	const corrected: OpenRequest = {
+		...request,
+		id: crypto.randomUUID(),
+		status: { kind: "opened", session },
+	};
+	requests.set(corrected.id, { request: corrected, settledAt: Date.now() });
+	prune();
+	emit({ type: "open-resolved", request: corrected });
+}
+
 export function acknowledgeActivation(id: string): void {
 	pendingActivations.delete(id);
 }

@@ -1,7 +1,11 @@
 import { expect, test } from "bun:test";
 import { BunServices } from "@effect/platform-bun";
 import { Effect } from "effect";
-import { fetchBaseRef, resolveDiffBaseRef } from "../src/base.ts";
+import {
+	fetchBaseRef,
+	readLocalBaseCommit,
+	resolveDiffBaseRef,
+} from "../src/base.ts";
 import { getChangedFiles, getFileContents } from "../src/diff.ts";
 import { cleanupTestRepo, makeTestRepo } from "./fixtures.ts";
 
@@ -19,7 +23,9 @@ test("remote base excludes upstream additions while local main stays behind", as
 		await upstream.write("merged.txt", "already merged\n");
 		const newMain = await upstream.commit("merged changeset");
 		await repo.git(["remote", "add", "origin", upstream.root]);
+		expect(await run(readLocalBaseCommit(repo.root, "main"))).toBeNull();
 		await repo.git(["fetch", "origin"]);
+		expect(await run(readLocalBaseCommit(repo.root, "main"))).toBe(newMain);
 		await repo.git(["checkout", "-b", "feature", "origin/main"]);
 		await repo.write("pr.txt", "PR change\n");
 		const prHead = await repo.commit("unrelated PR");
@@ -53,6 +59,7 @@ test("remote base excludes upstream additions while local main stays behind", as
 			(await run(getChangedFiles(repo.root, "main"))).map((file) => file.path),
 		).toEqual(["pr.txt"]);
 		await repo.git(["update-ref", "-d", "refs/remotes/origin/main"]);
+		expect(await run(readLocalBaseCommit(repo.root, "main"))).toBeNull();
 		await expect(run(fetchBaseRef(repo.root, "main"))).rejects.toThrow();
 		await expect(run(getChangedFiles(repo.root, "main"))).rejects.toThrow();
 	} finally {
@@ -76,6 +83,9 @@ test("no remote keeps local base; non-origin remote and branch slashes are suppo
 			"refs/remotes/upstream/release/main",
 		);
 		expect(await run(resolveDiffBaseRef(repo.root, sha))).toBe(sha);
+		expect(await run(readLocalBaseCommit(repo.root, sha))).toBe(sha);
+		await repo.git(["tag", "baseline", sha]);
+		expect(await run(readLocalBaseCommit(repo.root, "baseline"))).toBe(sha);
 	} finally {
 		await cleanupTestRepo(repo);
 	}

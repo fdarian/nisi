@@ -25,7 +25,25 @@ export function CodeIndexLspControl(props: {
 		props.sessionId,
 		setEnabled,
 	);
-	const tooltip = control.status === "off" ? "Start LSP" : "Stop LSP";
+	return (
+		<CodeIndexLspControlView
+			status={control.status}
+			onToggle={control.toggle}
+		/>
+	);
+}
+
+/** The control's footprint before there is a session to start a server for. */
+export function CodeIndexLspControlPlaceholder(): React.ReactElement {
+	return <CodeIndexLspControlView status="off" />;
+}
+
+function CodeIndexLspControlView(props: {
+	status: keyof typeof STATUS_DOT_CLASS;
+	/** Absent renders the control disabled. */
+	onToggle?: () => void;
+}): React.ReactElement {
+	const tooltip = props.status === "off" ? "Start LSP" : "Stop LSP";
 
 	return (
 		<div className="flex items-center gap-0.5">
@@ -33,7 +51,7 @@ export function CodeIndexLspControl(props: {
 				aria-hidden="true"
 				className={cn(
 					"size-1 shrink-0 rounded-full",
-					STATUS_DOT_CLASS[control.status],
+					STATUS_DOT_CLASS[props.status],
 				)}
 			/>
 			<Tooltip>
@@ -41,11 +59,12 @@ export function CodeIndexLspControl(props: {
 					render={
 						<Button
 							aria-label={tooltip}
-							onClick={control.toggle}
+							disabled={props.onToggle === undefined}
+							onClick={props.onToggle}
 							size="icon-xs"
 							variant="ghost"
 							className="data-[status=off]:text-muted-foreground"
-							data-status={control.status}
+							data-status={props.status}
 						>
 							<Server />
 						</Button>

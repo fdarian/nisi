@@ -10,6 +10,7 @@
 		"nisi": "./src/index.ts"
 	},
 	"scripts": {
+		"build": "bun ../../apps/desktop/scripts/build-binary.ts src/index.ts dist/nisi --bytecode",
 		"check:type": "tsc --noEmit",
 		"check:lint": "biome lint .",
 		"test": "bun test"

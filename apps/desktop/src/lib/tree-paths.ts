@@ -3,6 +3,24 @@ import type {
 	FileChange,
 } from "#/features/pull-request/data/pr-data";
 
+/** Directories precede files at each level, matching the diff viewer's tree order. */
+export function comparePaths(a: string, b: string): number {
+	const left = a.split("/");
+	const right = b.split("/");
+	for (let index = 0; index < Math.min(left.length, right.length); index++) {
+		const leftSegment = left[index];
+		const rightSegment = right[index];
+		if (leftSegment === undefined || rightSegment === undefined)
+			throw new Error("path segment missing within bounds");
+		if (leftSegment === rightSegment) continue;
+		const leftDirectory = index < left.length - 1;
+		const rightDirectory = index < right.length - 1;
+		if (leftDirectory !== rightDirectory) return leftDirectory ? -1 : 1;
+		return leftSegment.localeCompare(rightSegment);
+	}
+	return left.length - right.length;
+}
+
 export const CATEGORY_ORDER: readonly FileCategory[] = [
 	"implementation",
 	"test",
@@ -14,33 +32,6 @@ export const CATEGORY_LABELS: Record<FileCategory, string> = {
 	test: "Tests",
 	generated: "Generated",
 };
-
-/**
- * Directories sort before files at every level, both alphabetically within
- * their own group — the convention every IDE file tree uses. Walks segment
- * by segment rather than trusting a caller-supplied `isDirectory` flag, so
- * it's safe to use both as `@pierre/trees`' sibling comparator and as the
- * flat-list order.
- */
-export function comparePaths(a: string, b: string): number {
-	const aSegments = a.split("/");
-	const bSegments = b.split("/");
-	const sharedLength = Math.min(aSegments.length, bSegments.length);
-
-	for (let index = 0; index < sharedLength; index += 1) {
-		const aSegment = aSegments[index];
-		const bSegment = bSegments[index];
-		if (aSegment === bSegment) continue;
-
-		const aIsDirectory = index < aSegments.length - 1;
-		const bIsDirectory = index < bSegments.length - 1;
-		if (aIsDirectory !== bIsDirectory) return aIsDirectory ? -1 : 1;
-
-		return aSegment.localeCompare(bSegment);
-	}
-
-	return aSegments.length - bSegments.length;
-}
 
 /**
  * Every ancestor directory of `paths`, trailing-slash-terminated to match

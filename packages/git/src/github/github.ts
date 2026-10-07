@@ -43,7 +43,30 @@ export type RepositoryIdentity = {
 	readonly defaultBranch: string | null;
 };
 
+export type OpenPullRequestIndex = {
+	readonly repository: RepositoryIdentity;
+	readonly highWaterMark?: string;
+	readonly removedNumbers?: readonly number[];
+	readonly prs: readonly (PullRequestRef & {
+		readonly headOwner: string | null;
+	})[];
+};
+
+export type OpenPullRequestIndexOptions = {
+	readonly updatedSince?: string;
+	readonly onPage?: (page: OpenPullRequestIndex) => Effect.Effect<void>;
+};
+
 export type GitHubShape = {
+	listOpenPullRequests: (
+		cwd: string,
+		owner: string,
+		repo: string,
+		options?: OpenPullRequestIndexOptions,
+	) => Effect.Effect<
+		OpenPullRequestIndex,
+		GitHubUnreachable | GhOutputDecodeError
+	>;
 	getActionsJob: (
 		input: ActionsJobInput,
 	) => Effect.Effect<ActionsJob, ActionsJobError>;
