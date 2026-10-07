@@ -1,16 +1,7 @@
 "use client";
 
-import { cn } from "cn";
-import { XIcon } from "lucide-react";
 import { useMemo } from "react";
-import {
-	Tabs,
-	TabsContent,
-	TabsList,
-	TabsPrimitive,
-	TabsTrigger,
-} from "#/components/ui/tabs";
-import { CodeIndexLspControl } from "#/features/code-index/lsp/code-index-lsp-control";
+import { Tabs, TabsContent } from "#/components/ui/tabs";
 import { useDevToolScope } from "#/features/devtools/dev-tool-context";
 import { useRefetchToasts } from "#/features/devtools/use-refetch-toasts";
 import type { Session } from "#/features/pull-request/data/pr-data";
@@ -26,7 +17,6 @@ import {
 import type { OpenPullRequestParams } from "#/features/pull-request/data/pull-requests-data";
 import {
 	fileTabId,
-	fileTabPath,
 	useSessionActiveTab,
 	useSessionOpenFiles,
 	useSessionWalkthroughSelection,
@@ -42,10 +32,12 @@ import { useWalkthroughEnabled } from "#/features/settings/settings-data";
 import type { SidecarQueryUtils } from "#/infra/backend-context";
 import { useLaunchMark } from "#/infra/launch-trace";
 import { useWindowFocused } from "#/infra/use-window-focused";
-import { splitPath } from "#/lib/tree-paths";
-import type { KeyBindings } from "#/lib/use-key-bindings";
-import { useKeyBindings } from "#/lib/use-key-bindings";
 import { CiLogProvider } from "./ci-log/ci-log-provider";
+import {
+	PR_VIEW_TABS_CLASS,
+	PrViewTabStrip,
+	prViewTabs,
+} from "./pr-view-tab-strip";
 
 type PrViewProps = {
 	session: Session;
@@ -159,20 +151,10 @@ export function PrView({
 
 	const stat = diffStat({ files, isLoading, error });
 
-	// Overview and Files Changed always exist regardless of the walkthrough
-	// setting; Walkthrough only joins the strip when it's enabled. A single
-	// array, not three separately-gated `TabsTrigger`s, is what lets
-	// `PrViewTabStrip` derive the `1`/`2`/`3` (or `1`/`2`, walkthrough off)
-	// shortcuts from each tab's own index instead of hardcoding which digit
-	// means what.
-	const tabs = useMemo<readonly PrViewTab[]>(() => {
-		const list: PrViewTab[] = [{ value: "overview", label: "Overview" }];
-		if (walkthroughEnabled) {
-			list.push({ value: "walkthrough", label: "Walkthrough" });
-		}
-		list.push({ value: "files", label: "Files Changed" });
-		return list;
-	}, [walkthroughEnabled]);
+	const tabs = useMemo(
+		() => prViewTabs(walkthroughEnabled),
+		[walkthroughEnabled],
+	);
 
 	return (
 		<CiLogProvider session={session} orpc={orpc} active={isSelectedTab}>
@@ -192,7 +174,7 @@ export function PrView({
 					onSessionOpened={onSessionOpened}
 				/>
 				<Tabs
-					className="flex min-h-0 flex-1 flex-col gap-0"
+					className={PR_VIEW_TABS_CLASS}
 					onValueChange={(value) => setActiveTab(value as string)}
 					value={tabsValue}
 				>
@@ -253,131 +235,5 @@ export function PrView({
 				</Tabs>
 			</div>
 		</CiLogProvider>
-	);
-}
-
-type PrViewTab = { value: string; label: string };
-
-/**
- * The Overview/Walkthrough/Files Changed tab strip, plus the digit
- * shortcuts that switch between them — co-located because they're the same
- * feature. Always rendered (unlike the old Walkthrough-only strip this
- * replaced): Overview and Files Changed exist regardless of the walkthrough
- * setting, so there's no longer a "hide the whole strip" case. The digit
- * bound to each tab is just its index in `tabs` (`PrView` builds that array
- * with Walkthrough already included-or-not), so collapsing from three tabs
- * to two never leaves a dead key bound to a tab that isn't showing — file
- * tabs (below) deliberately aren't part of this binding, so opening/closing
- * one never shifts what `1`/`2`/`3` mean.
- *
- * `openFiles` renders as a second block after a vertical divider, inside
- * the *same* `TabsList`/`Tabs.Root` as the static tabs — not a separate one
- * — so `TabsList`'s shared `Tabs.Indicator` (the underline, `variant="underline"`)
- * keeps tracking whichever tab is actually active for free: the moment a
- * file tab is selected, the indicator moves off the static tabs onto it,
- * which *is* "the static tabs lose their underline." Each file tab layers
- * its own rounded filled-pill active state on top via `data-active:` classes
- * instead of relying on that thin underline to read as "selected."
- */
-function PrViewTabStrip({
-	tabs,
-	openFiles,
-	activeTab,
-	setActiveTab,
-	onCloseFile,
-	isSelectedTab,
-	session,
-	orpc,
-}: {
-	session: Session;
-	orpc: SidecarQueryUtils;
-	activeTab: string;
-	tabs: readonly PrViewTab[];
-	openFiles: readonly string[];
-	setActiveTab: (tab: string) => void;
-	onCloseFile: (path: string) => void;
-	isSelectedTab: boolean;
-}): React.ReactElement {
-	const bindings: KeyBindings = {};
-	tabs.forEach((tab, index) => {
-		bindings[String(index + 1)] = () => setActiveTab(tab.value);
-	});
-	useKeyBindings(bindings, { enabled: isSelectedTab });
-
-	return (
-		<div className="border-b flex items-center justify-between pr-6.5">
-			<TabsList
-				className={cn(
-					"-translate-x-2.5 mx-4",
-					fileTabPath(activeTab) !== null &&
-						"[&_[data-slot=tab-indicator]]:hidden",
-				)}
-				variant="underline"
-			>
-				{tabs.map((tab) => (
-					<TabsTrigger key={tab.value} value={tab.value}>
-						{tab.label}
-					</TabsTrigger>
-				))}
-				{openFiles.length > 0 && (
-					<div aria-hidden className="mx-1 h-4 w-px shrink-0 bg-border" />
-				)}
-				{openFiles.map((path) => (
-					<FileViewerTab
-						key={path}
-						onClose={() => onCloseFile(path)}
-						path={path}
-					/>
-				))}
-			</TabsList>
-			<CodeIndexLspControl orpc={orpc} sessionId={session.id} />
-		</div>
-	);
-}
-
-/**
- * One open file's tab — deliberately not the shared `TabsTrigger`
- * (`#/components/ui/tabs`, styled for the underline variant's plain
- * text-color active state): the design calls for a rounded filled pill
- * instead, so this renders the underlying `TabsPrimitive.Tab` directly with
- * its own classes. Close affordance mirrors `chat-tab.tsx`'s `ChatTab`: a
- * sibling of the tab, absolutely positioned over its right edge rather than
- * nested inside, so it only ever reveals on hover/focus — never pinned open
- * just because the tab happens to be the active one.
- */
-function FileViewerTab({
-	path,
-	onClose,
-}: {
-	path: string;
-	onClose: () => void;
-}): React.ReactElement {
-	const { basename } = splitPath(path);
-	return (
-		<div className="group relative flex shrink-0">
-			<TabsPrimitive.Tab
-				className={cn(
-					"flex h-7 select-none items-center self-center rounded-md px-3 font-medium text-muted-foreground text-xs outline-none",
-					"cursor-pointer",
-					"hover:bg-accent hover:text-foreground",
-					"data-active:bg-accent data-active:text-foreground",
-					"focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
-					"transition-[color,background-color,box-shadow]",
-				)}
-				value={fileTabId(path)}
-			>
-				<span className="max-w-40 truncate group-focus-within:mask-r-from-[calc(100%-2.25rem)] group-focus-within:mask-r-to-[calc(100%-0.75rem)] group-hover:mask-r-from-[calc(100%-2.25rem)] group-hover:mask-r-to-[calc(100%-0.75rem)]">
-					{basename}
-				</span>
-			</TabsPrimitive.Tab>
-			<button
-				aria-label={`Close ${basename}`}
-				className="cursor-pointer -translate-y-1/2 absolute top-1/2 right-1.5 rounded-full p-0.5 opacity-0 hover:bg-background/60 group-focus-within:opacity-100 group-hover:opacity-100"
-				onClick={onClose}
-				type="button"
-			>
-				<XIcon className="size-3" />
-			</button>
-		</div>
 	);
 }

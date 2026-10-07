@@ -69,7 +69,20 @@ test("an in-flight deep link is labelled with the PR before it resolves", () => 
 		id: "risedle/mockingbird#157",
 		label: "#157 risedle/mockingbird",
 		status: "opening",
+		pullRequest: deepLink,
 	});
+});
+
+test("a CLI placeholder knows nothing about the PR, so the skeleton shows bars", () => {
+	expect(
+		derive({ request: request({ kind: "pending" }) })?.pullRequest,
+	).toBeUndefined();
+});
+
+test("a CLI request wins the placeholder without leaking the deep link's PR", () => {
+	expect(
+		derive({ request: request({ kind: "pending" }), deepLink })?.pullRequest,
+	).toBeUndefined();
 });
 
 test("a deep link for an already-open PR shows no placeholder", () => {

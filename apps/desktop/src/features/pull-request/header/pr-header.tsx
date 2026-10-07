@@ -1,13 +1,7 @@
 "use client";
 
 import { MoreHorizontalIcon } from "lucide-react";
-import {
-	Breadcrumb,
-	BreadcrumbItem,
-	BreadcrumbList,
-	BreadcrumbPage,
-	BreadcrumbSeparator,
-} from "#/components/ui/breadcrumb";
+import { BreadcrumbItem } from "#/components/ui/breadcrumb";
 import { Button } from "#/components/ui/button";
 import {
 	DropdownMenu,
@@ -36,6 +30,7 @@ import type { DiffStat } from "./diff-stat";
 import { PrBaseStaleNotice } from "./pr-base-stale-notice";
 import { PrCiStatus } from "./pr-ci-status";
 import { PrDiffStat } from "./pr-diff-stat";
+import { PrHeaderShell } from "./pr-header-shell";
 import { PrStackBadge } from "./pr-stack-badge";
 
 type PrHeaderProps = {
@@ -126,142 +121,131 @@ export function PrHeader({
 	const [overflowMenuOpen, setOverflowMenuOpen] = useDismissOnInactive(watched);
 
 	return (
-		<div className="flex items-center gap-3 border-b pl-4 pr-6 py-2.5">
-			<div className="flex min-w-0 flex-1 flex-col gap-0.5">
-				<Breadcrumb>
-					<BreadcrumbList className="text-xs h-6">
-						<BreadcrumbItem>
-							{target.kind === "pr"
-								? `${target.owner}/${target.repo}`
-								: repoName}
-						</BreadcrumbItem>
-						<BreadcrumbSeparator />
-						<BreadcrumbItem>
-							<BreadcrumbPage className="text-muted-foreground">
-								{target.kind === "pr" ? (
-									<div className="flex items-center gap-1.5">
-										<span>#{target.number}</span>
-										<PrStackBadge
-											isSelectedTab={isSelectedTab}
-											number={target.number}
-											orpc={orpc}
-											owner={target.owner}
-											repo={target.repo}
-											watched={watched}
-											findExistingSessionId={findExistingSessionId}
-											onSessionOpened={onSessionOpened}
-										/>
-									</div>
-								) : (
-									<>
-										vs <span className="font-mono">{target.baseRef}</span>
-									</>
-								)}
-							</BreadcrumbPage>
-						</BreadcrumbItem>
-						{baseMayBeStale && (
-							<BreadcrumbItem>
-								<PrBaseStaleNotice
-									baseRef={target.baseRef}
-									isRetrying={isRetryingBase}
-									onRetry={onRetryBase}
-								/>
-							</BreadcrumbItem>
-						)}
-					</BreadcrumbList>
-				</Breadcrumb>
-				<div className="flex min-w-0 items-baseline gap-2">
-					<h1 className="truncate font-heading font-semibold text-base">
-						{target.kind === "pr" ? target.title : target.headRef}
-					</h1>
-					<PrDiffStat stat={stat} />
-				</div>
-			</div>
-			{target.kind === "pr" && (
-				<div className="flex items-center gap-2">
-					<div className="flex items-center gap-1">
-						<PrCiStatus
+		<PrHeaderShell
+			repo={target.kind === "pr" ? `${target.owner}/${target.repo}` : repoName}
+			refLabel={
+				target.kind === "pr" ? (
+					<div className="flex items-center gap-1.5">
+						<span>#{target.number}</span>
+						<PrStackBadge
 							isSelectedTab={isSelectedTab}
 							number={target.number}
 							orpc={orpc}
 							owner={target.owner}
 							repo={target.repo}
-							repoRoot={repoRoot}
 							watched={watched}
-						/>
-						<PrAutoMergeIndicator
-							isSelectedTab={isSelectedTab}
-							number={target.number}
-							orpc={orpc}
-							owner={target.owner}
-							repo={target.repo}
-							repoRoot={repoRoot}
-							watched={watched}
+							findExistingSessionId={findExistingSessionId}
+							onSessionOpened={onSessionOpened}
 						/>
 					</div>
-					<PrMergeButton
-						isSelectedTab={isSelectedTab}
-						number={target.number}
-						orpc={orpc}
-						owner={target.owner}
-						repo={target.repo}
-						repoRoot={repoRoot}
-						watched={watched}
-					/>
-				</div>
-			)}
-			<DropdownMenu
-				onOpenChange={(open) => {
-					setOverflowMenuOpen(open);
-					if (open) loadEditors();
-				}}
-				open={overflowMenuOpen}
-			>
-				<DropdownMenuTrigger
-					aria-label="More actions"
-					render={(props) => (
-						<Button variant="ghost" size="icon-sm" {...props}>
-							<MoreHorizontalIcon />
-						</Button>
-					)}
-				/>
-
-				<DropdownMenuContent align="end">
-					{target.kind === "pr" && (
-						<MarkReadyMenuItem
+				) : (
+					<>
+						vs <span className="font-mono">{target.baseRef}</span>
+					</>
+				)
+			}
+			breadcrumbTrailing={
+				baseMayBeStale && (
+					<BreadcrumbItem>
+						<PrBaseStaleNotice
+							baseRef={target.baseRef}
+							isRetrying={isRetryingBase}
+							onRetry={onRetryBase}
+						/>
+					</BreadcrumbItem>
+				)
+			}
+			title={target.kind === "pr" ? target.title : target.headRef}
+			stat={<PrDiffStat stat={stat} />}
+			actions={
+				target.kind === "pr" ? (
+					<>
+						<div className="flex items-center gap-1">
+							<PrCiStatus
+								isSelectedTab={isSelectedTab}
+								number={target.number}
+								orpc={orpc}
+								owner={target.owner}
+								repo={target.repo}
+								repoRoot={repoRoot}
+								watched={watched}
+							/>
+							<PrAutoMergeIndicator
+								isSelectedTab={isSelectedTab}
+								number={target.number}
+								orpc={orpc}
+								owner={target.owner}
+								repo={target.repo}
+								repoRoot={repoRoot}
+								watched={watched}
+							/>
+						</div>
+						<PrMergeButton
 							isSelectedTab={isSelectedTab}
 							number={target.number}
 							orpc={orpc}
 							owner={target.owner}
 							repo={target.repo}
 							repoRoot={repoRoot}
+							watched={watched}
 						/>
-					)}
-					<DropdownMenuItem onClick={onCloseTab}>Close tab</DropdownMenuItem>
-					<DropdownMenuItem
-						onClick={() => navigator.clipboard.writeText(target.headRef)}
-					>
-						Copy branch name
-					</DropdownMenuItem>
-					{editors.length > 0 && (
-						<DropdownMenuSub>
-							<DropdownMenuSubTrigger>Open in...</DropdownMenuSubTrigger>
-							<DropdownMenuSubContent>
-								{editors.map((editor) => (
-									<DropdownMenuItem
-										key={editor.id}
-										onClick={() =>
-											openInEditor(editor.id, editor.name, repoRoot, repoRoot)
-										}
-									>
-										{editor.name}
-									</DropdownMenuItem>
-								))}
-							</DropdownMenuSubContent>
-						</DropdownMenuSub>
-					)}
-				</DropdownMenuContent>
-			</DropdownMenu>
-		</div>
+					</>
+				) : undefined
+			}
+			menu={
+				<DropdownMenu
+					onOpenChange={(open) => {
+						setOverflowMenuOpen(open);
+						if (open) loadEditors();
+					}}
+					open={overflowMenuOpen}
+				>
+					<DropdownMenuTrigger
+						aria-label="More actions"
+						render={(props) => (
+							<Button variant="ghost" size="icon-sm" {...props}>
+								<MoreHorizontalIcon />
+							</Button>
+						)}
+					/>
+
+					<DropdownMenuContent align="end">
+						{target.kind === "pr" && (
+							<MarkReadyMenuItem
+								isSelectedTab={isSelectedTab}
+								number={target.number}
+								orpc={orpc}
+								owner={target.owner}
+								repo={target.repo}
+								repoRoot={repoRoot}
+							/>
+						)}
+						<DropdownMenuItem onClick={onCloseTab}>Close tab</DropdownMenuItem>
+						<DropdownMenuItem
+							onClick={() => navigator.clipboard.writeText(target.headRef)}
+						>
+							Copy branch name
+						</DropdownMenuItem>
+						{editors.length > 0 && (
+							<DropdownMenuSub>
+								<DropdownMenuSubTrigger>Open in...</DropdownMenuSubTrigger>
+								<DropdownMenuSubContent>
+									{editors.map((editor) => (
+										<DropdownMenuItem
+											key={editor.id}
+											onClick={() =>
+												openInEditor(editor.id, editor.name, repoRoot, repoRoot)
+											}
+										>
+											{editor.name}
+										</DropdownMenuItem>
+									))}
+								</DropdownMenuSubContent>
+							</DropdownMenuSub>
+						)}
+					</DropdownMenuContent>
+				</DropdownMenu>
+			}
+		/>
 	);
 }

@@ -17,6 +17,7 @@ import {
 	DropdownMenuSeparator,
 	DropdownMenuTrigger,
 } from "#/components/ui/menu";
+import { Skeleton } from "#/components/ui/skeleton";
 import { toastManager } from "#/components/ui/toast";
 import type {
 	MergeMethod,
@@ -52,6 +53,9 @@ type PrMergeButtonProps = {
 	watched: boolean;
 	isSelectedTab: boolean;
 };
+
+/** Wide enough for "Checking mergeability…" and the longest method label, so the label changing never resizes the button. */
+const MERGE_BUTTON_MIN_WIDTH = "min-w-44";
 
 const METHOD_LABEL: Record<MergeMethod, string> = {
 	merge: "Merge pull request",
@@ -168,6 +172,32 @@ const resolveButtonState = (
 	}
 	return { label: METHOD_LABEL[method], disabled: false };
 };
+
+/** The merge group's footprint before anything is known about the PR — used while the PR itself is still opening. */
+export function PrMergeButtonSkeleton(): React.ReactElement {
+	return (
+		<Group>
+			<Button
+				className={MERGE_BUTTON_MIN_WIDTH}
+				disabled
+				size="sm"
+				variant="outline"
+			>
+				<Skeleton className="h-2 w-24" />
+			</Button>
+			<GroupSeparator />
+			<Button
+				aria-label="Select merge method"
+				className="w-6 px-0"
+				disabled
+				size="sm"
+				variant="outline"
+			>
+				<ChevronDownIcon />
+			</Button>
+		</Group>
+	);
+}
 
 /**
  * The PR header's Merge button — disabled until `mergeStatus` confirms the
@@ -357,9 +387,7 @@ export function PrMergeButton({
 		<>
 			<Group>
 				<Button
-					// Wide enough for "Checking mergeability…" and the longest method
-					// label, so the label changing never resizes the button.
-					className="min-w-44"
+					className={MERGE_BUTTON_MIN_WIDTH}
 					disabled={disabled || isCheckingUnpushed || autoMerge.isPending}
 					onClick={() => handleClick("merge")}
 					size="sm"

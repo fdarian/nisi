@@ -40,7 +40,7 @@ import {
 	useCycleFileTab,
 	useSetActiveTab,
 } from "#/features/pull-request/data/session-ui-store";
-import { FilesChangedSkeleton } from "#/features/pull-request/files/files-changed-skeleton";
+import { PendingPrView } from "#/features/pull-request/pending-pr-view";
 import { PrView } from "#/features/pull-request/pr-view";
 import type { SidecarQueryUtils } from "#/infra/backend-context";
 import { useBackendContext } from "#/infra/backend-context";
@@ -440,9 +440,10 @@ function AppShellReady({
 						value={pendingTabId}
 					>
 						{pendingOpenTab.status === "opening" ? (
-							<FilesChangedSkeleton
+							<PendingPrView
 								orpc={orpc}
-								when={appViewActive && selectedTabId === pendingTabId}
+								pullRequest={pendingOpenTab.pullRequest}
+								visible={appViewActive && selectedTabId === pendingTabId}
 							/>
 						) : pendingOpenTab.failure !== undefined ? (
 							<>

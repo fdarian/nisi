@@ -10,6 +10,8 @@ export type PendingOpenTab = {
 	id: string;
 	label: string;
 	status: "opening" | "failed";
+	/** Set when a deep link opened this: the PR is known before the sidecar resolves it. */
+	pullRequest?: OpenPullRequestParams;
 	failure?: { title: string; message: string; dismiss: () => void };
 };
 
@@ -73,6 +75,7 @@ export function derivePendingOpenTab(input: {
 			id: deepLinkOpenId(input.deepLink),
 			label: `#${input.deepLink.number} ${input.deepLink.owner}/${input.deepLink.repo}`,
 			status: "opening",
+			pullRequest: input.deepLink,
 		};
 	}
 	return fromCli;
