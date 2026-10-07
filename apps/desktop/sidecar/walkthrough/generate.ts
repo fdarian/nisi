@@ -1,6 +1,6 @@
 import { DevToolsTelemetry } from "@ai-sdk/devtools";
 import { HarnessAgent } from "@ai-sdk/harness/agent";
-import { createLocalSandbox } from "@repo/harness-local";
+import { type SandboxMode, SettingsStore } from "@repo/settings";
 import type {
 	GenerateEvent,
 	HarnessId,
@@ -21,7 +21,7 @@ import type { Context } from "effect";
 import { Cause, Effect, Result, Schema } from "effect";
 import { createHarnessAdapter } from "../harness/harnesses.ts";
 import { FILE_MUTATING_BUILTINS } from "../harness/inactive-tools.ts";
-import { resolveSandboxSettings } from "../harness/sandbox.ts";
+import { SANDBOX_BACKENDS } from "../harness/sandbox.ts";
 import { describeStreamError } from "../harness/stream-errors.ts";
 import type { AppServices } from "../services.ts";
 import { type GenerationContext, gatherGenerationContext } from "./context.ts";
@@ -163,14 +163,17 @@ const buildContinuationPrompt = (overviewText: string): string =>
 const startFreshSession = async (
 	input: GenerateInput,
 	repoRoot: string,
+	sandboxMode: SandboxMode,
 ): Promise<{
 	readonly agent: LiveWalkthroughSession["agent"];
 	readonly session: LiveWalkthroughSession["session"];
 	readonly buffer: LiveWalkthroughSession["buffer"];
 }> => {
 	const buffer = createBuffer();
-	const sandbox = createLocalSandbox(
-		resolveSandboxSettings(input.harness, repoRoot),
+	const sandbox = await SANDBOX_BACKENDS[sandboxMode].create(
+		input.harness,
+		repoRoot,
+		{ kind: "walkthrough", reviewSessionId: input.sessionId },
 	);
 	// The same pair feeds both the harness (which registers these keys) and the
 	// prompt (which tells the model what to call) — they must never diverge.
@@ -336,9 +339,17 @@ export async function* generateWalkthrough(
 			mainContext,
 		);
 		try {
+			const sandboxMode = await runEffect(
+				Effect.gen(function* () {
+					const settings = yield* SettingsStore;
+					return (yield* settings.get()).sandboxMode;
+				}),
+				mainContext,
+			);
 			({ agent, session, buffer } = await startFreshSession(
 				input,
 				context.repoRoot,
+				sandboxMode,
 			));
 		} catch (error) {
 			await runEffect(

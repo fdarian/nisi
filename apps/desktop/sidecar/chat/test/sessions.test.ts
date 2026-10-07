@@ -12,10 +12,12 @@ import { Effect } from "effect";
  * `closeChatThreadsForSession` walks — against a fake session whose `stop()`
  * is directly observable, instead of a real one.
  *
- * `@repo/harness-local`'s `createLocalSandbox` is left real: it only builds
- * plain config objects (`{ provider, workDir }`); the real I/O lives behind
+ * The local sandbox backend is left real: it only builds plain config
+ * objects (`{ provider, workDir }`); the real I/O lives behind
  * `provider.createSession()`, which the fake `HarnessAgent` below never
- * calls.
+ * calls. Backend `create` is async, so `createSession` is reached a few
+ * microtasks after `getOrCreateChatSession` — tests that need the pending
+ * resolver `await createSessionReached()` first.
  */
 let nextCreateSessionShouldFail = false;
 let nextCreateSessionShouldWait = false;
@@ -23,6 +25,12 @@ let resolvePendingCreateSession:
 	| ((session: FakeHarnessAgentSession) => void)
 	| undefined;
 let rejectPendingCreateSession: ((error: Error) => void) | undefined;
+
+const createSessionReached = async (): Promise<void> => {
+	while (rejectPendingCreateSession === undefined) {
+		await new Promise((resolve) => setTimeout(resolve, 0));
+	}
+};
 
 class FakeHarnessAgentSession {
 	readonly stop = mock(async () => ({}) as never);
@@ -65,6 +73,7 @@ const paramsFor = (sessionId: string, threadId: string) => ({
 	model: undefined,
 	repoRoot: "/tmp/does-not-need-to-exist",
 	instructions: "test instructions",
+	sandboxMode: "local" as const,
 });
 
 const reportFailure = (_failure: unknown): void => {};
@@ -108,6 +117,7 @@ describe("getOrCreateChatSession", () => {
 		const params = paramsFor(uniqueId("session"), uniqueId("thread"));
 		nextCreateSessionShouldWait = true;
 		const pending = chatSessions.getOrCreateChatSession(params);
+		await createSessionReached();
 		const reject = rejectPendingCreateSession;
 		if (reject === undefined)
 			throw new Error("fake session did not expose rejection");
@@ -223,6 +233,7 @@ describe("closeChatThreadsForSession", () => {
 		const pending = chatSessions.getOrCreateChatSession(
 			paramsFor(sessionId, threadId),
 		);
+		await createSessionReached();
 		const resolve = resolvePendingCreateSession;
 		if (resolve === undefined) {
 			throw new Error("fake createSession did not expose its resolver");

@@ -1,9 +1,9 @@
 import { HarnessAgent, type HarnessAgentSession } from "@ai-sdk/harness/agent";
-import { createLocalSandbox } from "@repo/harness-local";
+import { type SandboxMode, SettingsStore } from "@repo/settings";
 import type { HarnessId } from "@repo/sidecar-api";
 import { Context, Effect, Layer } from "effect";
 import { createHarnessAdapter } from "../harness/harnesses.ts";
-import { resolveSandboxSettings } from "../harness/sandbox.ts";
+import { SANDBOX_BACKENDS } from "../harness/sandbox.ts";
 import type { AppServices } from "../services.ts";
 
 /**
@@ -53,13 +53,16 @@ export type ChatSessionParams = {
 	readonly model: string | undefined;
 	readonly repoRoot: string;
 	readonly instructions: string;
+	readonly sandboxMode: SandboxMode;
 };
 
 const startChatSession = async (
 	params: ChatSessionParams,
 ): Promise<LiveChatSession> => {
-	const sandbox = createLocalSandbox(
-		resolveSandboxSettings(params.harness, params.repoRoot),
+	const sandbox = await SANDBOX_BACKENDS[params.sandboxMode].create(
+		params.harness,
+		params.repoRoot,
+		{ kind: "chat", threadId: params.threadId },
 	);
 	// No `inactiveTools` — chat gets every adapter builtin (write, edit, bash,
 	// all of it). Unlike `walkthrough/generate.ts`, which passes
@@ -217,8 +220,8 @@ export class ChatSessions extends Context.Service<ChatSessions>()(
 	static readonly layer = Layer.effect(this, this.make);
 }
 
-const runEffect = <A>(
-	effect: Effect.Effect<A, never, AppServices>,
+const runEffect = <A, E>(
+	effect: Effect.Effect<A, E, AppServices>,
 	mainContext: Context.Context<AppServices>,
 ): Promise<A> => Effect.runPromise(Effect.provide(effect, mainContext));
 
@@ -237,11 +240,21 @@ const runEffect = <A>(
  * service, with nothing Effect-specific in the way.
  */
 export const getOrCreateChatSession = (
-	params: ChatSessionParams,
+	params: Omit<ChatSessionParams, "sandboxMode">,
 	mainContext: Context.Context<AppServices>,
 ): Promise<LiveChatSession> =>
-	runEffect(ChatSessions, mainContext).then((chatSessions) =>
-		chatSessions.getOrCreateChatSession(params),
+	runEffect(
+		Effect.gen(function* () {
+			const chatSessions = yield* ChatSessions;
+			const settings = yield* SettingsStore;
+			return { chatSessions, sandboxMode: (yield* settings.get()).sandboxMode };
+		}),
+		mainContext,
+	).then((result) =>
+		result.chatSessions.getOrCreateChatSession({
+			...params,
+			sandboxMode: result.sandboxMode,
+		}),
 	);
 
 export const closeChatThread = (
