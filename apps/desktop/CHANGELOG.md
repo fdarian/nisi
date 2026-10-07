@@ -1,5 +1,11 @@
 # @repo/desktop
 
+## 0.6.1
+
+### Patch Changes
+
+- 33bd857: The PR header's merge button sizes to its label again instead of holding a fixed minimum width.
+
 ## 0.6.0
 
 ### Minor Changes
