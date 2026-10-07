@@ -24,7 +24,6 @@ import {
 	useSortable,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import type { OpenRequest } from "@repo/sidecar-api";
 import { cn } from "cn";
 import {
 	AlertTriangleIcon,
@@ -63,10 +62,14 @@ import {
 } from "#/features/pull-request/pr-status";
 import { PrStatusIcon } from "#/features/pull-request/pr-status-icon";
 import type { SidecarQueryUtils } from "#/infra/backend-context";
+import {
+	type PendingOpenTab,
+	pendingOpenTabValue,
+} from "#/shell/open-request/pending-open-tab";
 import { UpdatePill } from "#/shell/update/update-pill";
 
 type PrTabStripProps = {
-	pendingRequest?: OpenRequest | null;
+	pendingOpenTab?: PendingOpenTab | null;
 	sessions: readonly Session[];
 	/** The tab currently selected in the strip — `PrTab` reads this to keep
 	 * its context menu's Suspend item disabled for the active tab, matching
@@ -123,7 +126,7 @@ type PrTabStripProps = {
  * waits 8px so a click still selects the tab.
  */
 export function PrTabStrip({
-	pendingRequest,
+	pendingOpenTab,
 	sessions,
 	activeSessionId,
 	suspendedSessionIds,
@@ -226,21 +229,17 @@ export function PrTabStrip({
 										session={session}
 									/>
 								))}
-								{pendingRequest != null && (
+								{pendingOpenTab != null && (
 									<TabsPrimitive.Tab
 										className={PR_TAB_CLASS}
-										value={`open:${pendingRequest.id}`}
+										value={pendingOpenTabValue(pendingOpenTab)}
 									>
-										{pendingRequest.status.kind === "pending" ? (
+										{pendingOpenTab.status === "opening" ? (
 											<Spinner className="size-3.5" />
 										) : (
 											<AlertTriangleIcon className="size-3.5" />
 										)}
-										<span className="truncate">
-											{pendingRequest.status.kind === "pending"
-												? "Opening…"
-												: "Open failed"}
-										</span>
+										<span className="truncate">{pendingOpenTab.label}</span>
 									</TabsPrimitive.Tab>
 								)}
 							</TabsPrimitive.List>

@@ -49,6 +49,10 @@ import { useAppViewActive } from "./app-view-context";
 import { useDeepLinkOpener } from "./deep-link/deep-link-data";
 import { DevBranch } from "./dev-branch";
 import { useOpenRequest } from "./open-request/open-request-data";
+import {
+	pendingOpenTabValue,
+	usePendingOpenTab,
+} from "./open-request/pending-open-tab";
 import { PrTabStrip } from "./tabs/pr-tab-strip";
 import { useTabOrder } from "./tabs/use-tab-order";
 import { useTabShortcuts } from "./tabs/use-tab-shortcuts";
@@ -147,32 +151,45 @@ function AppShellReady({
 	const [requestedActiveSessionId, setRequestedActiveSessionId] = useState<
 		string | null
 	>(null);
+	// `openId` is the CLI request id or the deep-link PR key — whichever open
+	// the user chose to navigate away from.
 	const [userTabSelection, setUserTabSelection] = useState<{
-		requestId: string;
+		openId: string;
 		sessionId: string;
 	} | null>(null);
 	const listed = useSessions(orpc, setRequestedActiveSessionId);
 	const open = useOpenRequest();
 	const request = open.request;
-	const pendingRequest = request?.status.kind === "opened" ? null : request;
+	// Hooks run before the `sessions.length === 0` early return below, so a
+	// cold start into the empty state (nothing open yet) still opens a
+	// pending deep link instead of stalling on it.
+	const deepLink = useDeepLinkOpener(
+		orpc,
+		listed.sessions,
+		setRequestedActiveSessionId,
+	);
+	const pendingOpenTab = usePendingOpenTab({
+		deepLink: deepLink.opening,
+		sessions: listed.sessions,
+	});
 	const pendingTabId =
-		pendingRequest === null ? null : `open:${pendingRequest.id}`;
+		pendingOpenTab === null ? null : pendingOpenTabValue(pendingOpenTab);
+	const openId = pendingOpenTab?.id ?? request?.id ?? null;
 	useLaunchMark("pending-panel.painted", {
-		when: appViewActive && pendingRequest?.status.kind === "pending",
+		when:
+			appViewActive &&
+			request?.status.kind === "pending" &&
+			pendingOpenTab?.id === request.id,
 	});
 	const selectSession = useCallback(
 		(sessionId: string) => {
 			setRequestedActiveSessionId(sessionId);
-			if (request !== null) {
-				setUserTabSelection({ requestId: request.id, sessionId });
+			if (openId !== null) {
+				setUserTabSelection({ openId, sessionId });
 			}
 		},
-		[request],
+		[openId],
 	);
-	// Hooks run before the `sessions.length === 0` early return below, so a
-	// cold start into the empty state (nothing open yet) still opens a
-	// pending deep link instead of stalling on it.
-	useDeepLinkOpener(orpc, setRequestedActiveSessionId);
 	const tabOrder = useTabOrder(listed.sessions);
 	const sessions = tabOrder.orderedSessions;
 	const findExistingSessionId = useCallback(
@@ -201,8 +218,8 @@ function AppShellReady({
 	// which would blank the content pane for a frame first.
 	const activeSessionId = useMemo(() => {
 		if (
-			request !== null &&
-			userTabSelection?.requestId === request.id &&
+			openId !== null &&
+			userTabSelection?.openId === openId &&
 			sessions.some((session) => session.id === userTabSelection.sessionId)
 		) {
 			return userTabSelection.sessionId;
@@ -222,9 +239,9 @@ function AppShellReady({
 			return requestedActiveSessionId;
 		}
 		return sessions[0]?.id ?? null;
-	}, [requestedActiveSessionId, sessions, request, userTabSelection]);
+	}, [requestedActiveSessionId, sessions, request, openId, userTabSelection]);
 	const selectedTabId =
-		pendingRequest !== null && userTabSelection?.requestId === pendingRequest.id
+		pendingOpenTab !== null && userTabSelection?.openId === pendingOpenTab.id
 			? userTabSelection.sessionId
 			: (pendingTabId ?? activeSessionId);
 	const selectedSessionId =
@@ -233,7 +250,7 @@ function AppShellReady({
 		if (request?.status.kind !== "opened") return;
 		const openedId = request.status.session.id;
 		if (!sessions.some((session) => session.id === openedId)) return;
-		if (userTabSelection?.requestId !== request.id) {
+		if (userTabSelection?.openId !== request.id) {
 			setRequestedActiveSessionId(openedId);
 		}
 		open.acknowledge(request.id);
@@ -343,7 +360,7 @@ function AppShellReady({
 		tabIds: sessionIds,
 	});
 
-	if (sessions.length === 0 && pendingRequest === null) {
+	if (sessions.length === 0 && pendingOpenTab === null) {
 		return (
 			<ShellFrame>
 				<Empty className="flex-1">
@@ -396,7 +413,7 @@ function AppShellReady({
 			data-tauri-drag-region="deep"
 		>
 			<PrTabStrip
-				pendingRequest={pendingRequest}
+				pendingOpenTab={pendingOpenTab}
 				activeSessionId={selectedSessionId}
 				checkGenerationRunning={tabSuspension.isGenerationRunning}
 				onActivateSession={selectSession}
@@ -413,30 +430,27 @@ function AppShellReady({
 				className={cn(INSET_PANE_CLASS, "my-0")}
 				data-tauri-drag-region="false"
 			>
-				{pendingRequest !== null && pendingTabId !== null && (
+				{pendingOpenTab !== null && pendingTabId !== null && (
 					<TabsPrimitive.Panel
 						className={cn(
 							"flex min-h-0 flex-1 flex-col",
-							pendingRequest.status.kind === "failed" &&
+							pendingOpenTab.status === "failed" &&
 								"items-center justify-center gap-3 p-6",
 						)}
 						value={pendingTabId}
 					>
-						{pendingRequest.status.kind === "pending" ? (
+						{pendingOpenTab.status === "opening" ? (
 							<FilesChangedSkeleton
 								orpc={orpc}
 								when={appViewActive && selectedTabId === pendingTabId}
 							/>
-						) : pendingRequest.status.kind === "failed" ? (
+						) : pendingOpenTab.failure !== undefined ? (
 							<>
-								<p>Couldn’t open {pendingRequest.cwd}</p>
+								<p>{pendingOpenTab.failure.title}</p>
 								<p className="text-muted-foreground text-sm">
-									{pendingRequest.status.message}
+									{pendingOpenTab.failure.message}
 								</p>
-								<Button
-									onClick={() => open.acknowledge(pendingRequest.id)}
-									size="sm"
-								>
+								<Button onClick={pendingOpenTab.failure.dismiss} size="sm">
 									Dismiss
 								</Button>
 							</>

@@ -7,8 +7,11 @@
 import { useNavigate, useRouterState } from "@tanstack/react-router";
 import { useEffect, useSyncExternalStore } from "react";
 import { toastManager } from "#/components/ui/toast";
+import type { Session } from "#/features/pull-request/data/pr-data";
 import {
+	findOpenPullRequestSessionId,
 	friendlyOpenPullRequestError,
+	type OpenPullRequestParams,
 	useOpenPullRequest,
 } from "#/features/pull-request/data/pull-requests-data";
 import type { SidecarQueryUtils } from "#/infra/backend-context";
@@ -36,11 +39,18 @@ import {
  * check: the sidecar reuses an existing PR tab by identity or retargets a
  * matching branch session, and `useOpenPullRequest` selects the returned id.
  * Rust foregrounds the window when the deep link arrives.
+ *
+ * Returns the PR being opened (null when idle) so the shell can paint a
+ * placeholder tab right away — it is set by the same effect that dequeues the
+ * link, well before the sidecar has resolved a session. A link for a PR that
+ * already has a tab selects that tab immediately; the open still runs so the
+ * sidecar can refresh it.
  */
 export function useDeepLinkOpener(
 	orpc: SidecarQueryUtils,
+	sessions: readonly Session[],
 	onOpened: (sessionId: string) => void,
-): void {
+): { opening: OpenPullRequestParams | null } {
 	const appViewActive = useAppViewActive();
 	const pending = useSyncExternalStore(
 		subscribeToDeepLinks,
@@ -71,13 +81,25 @@ export function useDeepLinkOpener(
 			return;
 		}
 
+		const existingSessionId = findOpenPullRequestSessionId(
+			sessions,
+			parsed.pullRequest,
+		);
+		if (existingSessionId !== undefined) onOpened(existingSessionId);
 		openPr.open({ ...parsed.pullRequest, traceId: entry.traceId });
 		// `openPr.open` is a fresh closure every render (`useOpenPullRequest`
 		// doesn't wrap it in `useCallback`), so it's a real dependency here but
 		// not a meaningful trigger — the guards above (`isPending`,
 		// `pending.length`) are what actually gate the work, so an extra
 		// re-run from `open` alone just no-ops.
-	}, [pending, openPr.isPending, openPr.open, appViewActive]);
+	}, [
+		pending,
+		openPr.isPending,
+		openPr.open,
+		appViewActive,
+		sessions,
+		onOpened,
+	]);
 
 	useEffect(() => {
 		if (openPr.error === null || openPr.error === undefined) return;
@@ -88,6 +110,13 @@ export function useDeepLinkOpener(
 		});
 		openPr.reset();
 	}, [openPr.error, openPr.reset]);
+
+	return {
+		opening:
+			openPr.isPending && openPr.pendingParams !== undefined
+				? openPr.pendingParams
+				: null,
+	};
 }
 
 /**
