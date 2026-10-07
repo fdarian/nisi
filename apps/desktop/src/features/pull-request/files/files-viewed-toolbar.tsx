@@ -40,57 +40,11 @@ export function FilesViewedToolbar(props: {
 	const includeUncommitted = useIncludeUncommitted(props.orpc);
 	const wrapLines = useWrapLines(props.orpc);
 	const loading = props.counts === undefined;
-	const reducedMotion = useReducedMotion();
-	const transition = {
-		duration: reducedMotion ? 0 : 0.2,
-		ease: "easeOut" as const,
-	};
 	return (
 		<div className={filesToolbarClassName}>
 			<span className="flex items-center gap-2">
 				<ProgressCircle counts={props.counts} />
-				<span className="flex items-center gap-1">
-					<motion.span
-						layout="position"
-						transition={transition}
-						className="font-medium text-foreground tabular-nums"
-					>
-						{props.counts === undefined ? (
-							<Skeleton className="inline-block h-2 w-[2ch]" />
-						) : (
-							<motion.span
-								initial={{ opacity: 0 }}
-								animate={{ opacity: 1 }}
-								transition={transition}
-							>
-								{props.counts.viewed}
-							</motion.span>
-						)}
-					</motion.span>
-					<motion.span layout="position" transition={transition}>
-						of
-					</motion.span>
-					<motion.span
-						layout="position"
-						transition={transition}
-						className="font-medium text-foreground tabular-nums"
-					>
-						{props.counts === undefined ? (
-							<Skeleton className="inline-block h-2 w-[2ch]" />
-						) : (
-							<motion.span
-								initial={{ opacity: 0 }}
-								animate={{ opacity: 1 }}
-								transition={transition}
-							>
-								{props.counts.total}
-							</motion.span>
-						)}
-					</motion.span>
-					<motion.span layout="position" transition={transition}>
-						viewed
-					</motion.span>
-				</span>
+				<ViewedLabel counts={props.counts} />
 			</span>
 			<div className="flex items-center gap-2">
 				{props.hasPendingChanges && (
@@ -165,6 +119,49 @@ export function FilesViewedToolbar(props: {
 				</DropdownMenu>
 			</div>
 		</div>
+	);
+}
+
+/**
+ * Skeleton bar and text share one grid cell and crossfade. The text is always
+ * laid out (invisibly, with a typical "0 of 20 viewed" while loading) so the
+ * cell never resizes at the moment the skeleton hands over.
+ */
+function ViewedLabel(props: { counts?: Counts }): React.ReactElement {
+	const reducedMotion = useReducedMotion();
+	const transition = {
+		duration: reducedMotion ? 0 : 0.2,
+		ease: "easeOut" as const,
+	};
+	const loading = props.counts === undefined;
+	return (
+		<span className="inline-grid">
+			<motion.span
+				aria-hidden={loading}
+				className="col-start-1 row-start-1 whitespace-nowrap"
+				initial={false}
+				animate={{ opacity: loading ? 0 : 1 }}
+				transition={transition}
+			>
+				<span className="font-medium text-foreground tabular-nums">
+					{props.counts === undefined ? 0 : props.counts.viewed}
+				</span>{" "}
+				of{" "}
+				<span className="font-medium text-foreground tabular-nums">
+					{props.counts === undefined ? 20 : props.counts.total}
+				</span>{" "}
+				viewed
+			</motion.span>
+			<motion.span
+				aria-hidden
+				className="col-start-1 row-start-1 flex items-center"
+				initial={false}
+				animate={{ opacity: loading ? 1 : 0 }}
+				transition={transition}
+			>
+				<Skeleton className="h-2 w-full" />
+			</motion.span>
+		</span>
 	);
 }
 
