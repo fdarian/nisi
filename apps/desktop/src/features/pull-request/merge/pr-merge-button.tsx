@@ -54,9 +54,6 @@ type PrMergeButtonProps = {
 	isSelectedTab: boolean;
 };
 
-/** Wide enough for "Checking mergeability…" and the longest method label, so the label changing never resizes the button. */
-const MERGE_BUTTON_MIN_WIDTH = "min-w-44";
-
 const METHOD_LABEL: Record<MergeMethod, string> = {
 	merge: "Merge pull request",
 	squash: "Squash and merge",
@@ -178,7 +175,6 @@ export function PrMergeButtonSkeleton(): React.ReactElement {
 	return (
 		<Group>
 			<Button
-				className={MERGE_BUTTON_MIN_WIDTH}
 				disabled
 				size="sm"
 				variant="outline"
@@ -387,7 +383,6 @@ export function PrMergeButton({
 		<>
 			<Group>
 				<Button
-					className={MERGE_BUTTON_MIN_WIDTH}
 					disabled={disabled || isCheckingUnpushed || autoMerge.isPending}
 					onClick={() => handleClick("merge")}
 					size="sm"
