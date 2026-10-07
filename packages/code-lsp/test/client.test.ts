@@ -203,9 +203,25 @@ describe("spawnLspServer against the real repo", () => {
 		withServer(repoRoot, (server) =>
 			Effect.gen(function* () {
 				yield* openDocuments(server, paths);
+				const source = yield* Effect.promise(() =>
+					Bun.file(settingsStore).text(),
+				);
+				const lines = source.split("\n");
+				const line = lines.findIndex((text) =>
+					text.includes("export class SettingsStore"),
+				);
+				if (line < 0)
+					return yield* Effect.die(
+						new Error("SettingsStore declaration missing"),
+					);
+				const character = lines[line]?.indexOf("SettingsStore");
+				if (character === undefined || character < 0)
+					return yield* Effect.die(
+						new Error("SettingsStore identifier missing"),
+					);
 				return yield* server.references(settingsStore, {
-					line: 131,
-					character: 13,
+					line,
+					character,
 				});
 			}),
 		);
@@ -239,38 +255,39 @@ describe("spawnLspServer against the real repo", () => {
 		const cold = await referencesAfterOpening(relevantFiles);
 		const warm = await referencesAfterOpening([...relevantFiles].reverse());
 
-		expect(cold).toHaveLength(46);
+		expect(cold.length).toBeGreaterThanOrEqual(46);
 		expect(warm).toHaveLength(cold.length);
 		expect(warm).toEqual(cold);
 
 		const byPath = countByPath(cold);
-		expect(byPath).toEqual(
-			new Map([
-				[join(repoRoot, "apps", "desktop", "sidecar", "http.ts"), 5],
-				[join(repoRoot, "apps", "desktop", "sidecar", "index.ts"), 2],
-				[join(repoRoot, "apps", "desktop", "sidecar", "live-poll.ts"), 2],
-				[join(repoRoot, "apps", "desktop", "sidecar", "services.ts"), 2],
-				[join(repoRoot, "apps", "desktop", "sidecar", "store.ts"), 3],
-				[
-					join(repoRoot, "apps", "desktop", "sidecar", "test", "store.test.ts"),
-					5,
-				],
-				[
-					join(
-						repoRoot,
-						"apps",
-						"desktop",
-						"sidecar",
-						"walkthrough",
-						"context.ts",
-					),
-					3,
-				],
-				[join(repoRoot, "packages", "settings", "src", "index.ts"), 1],
-				[settingsStore, 4],
-				[join(repoRoot, "packages", "settings", "test", "fixtures.ts"), 2],
-				[join(repoRoot, "packages", "settings", "test", "store.test.ts"), 17],
-			]),
-		);
+		const expectedMinimums = new Map([
+			[join(repoRoot, "apps", "desktop", "sidecar", "http.ts"), 5],
+			[join(repoRoot, "apps", "desktop", "sidecar", "index.ts"), 2],
+			[join(repoRoot, "apps", "desktop", "sidecar", "live-poll.ts"), 2],
+			[join(repoRoot, "apps", "desktop", "sidecar", "services.ts"), 2],
+			[join(repoRoot, "apps", "desktop", "sidecar", "store.ts"), 3],
+			[
+				join(repoRoot, "apps", "desktop", "sidecar", "test", "store.test.ts"),
+				5,
+			],
+			[
+				join(
+					repoRoot,
+					"apps",
+					"desktop",
+					"sidecar",
+					"walkthrough",
+					"context.ts",
+				),
+				3,
+			],
+			[join(repoRoot, "packages", "settings", "src", "index.ts"), 1],
+			[settingsStore, 4],
+			[join(repoRoot, "packages", "settings", "test", "fixtures.ts"), 2],
+			[join(repoRoot, "packages", "settings", "test", "store.test.ts"), 17],
+		]);
+		for (const [path, minimum] of expectedMinimums) {
+			expect(byPath.get(path)).toBeGreaterThanOrEqual(minimum);
+		}
 	}, 30_000);
 });

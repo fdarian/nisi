@@ -37,6 +37,7 @@ with the detail — this is only the map.
 - `packages/cli` — the `nisi` command; detects the PR and hands off to the app.
 - `packages/logging` — `LOG_LEVEL` config and the rotating file logger.
 - `packages/bin-resolver` — resolves CLI binaries against the login shell's `PATH`, not the GUI's.
+- `packages/npm-tarball` — downloads, verifies, and caches a pinned npm platform tarball; no app paths or platform decisions.
 - `packages/code-lsp` — JSON-RPC-over-stdio client for TypeScript 7's native LSP server.
 
 There's no `packages/config`: each package extends `@total-typescript/tsconfig` directly. Add one
