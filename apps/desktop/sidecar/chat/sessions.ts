@@ -69,6 +69,7 @@ const startChatSession = async (
 	// do things, not just look.
 	const agent = new HarnessAgent({
 		harness: createHarnessAdapter(params.harness, params.model),
+		model: params.model,
 		sandbox: sandbox.provider,
 		sandboxConfig: { workDir: sandbox.workDir },
 		instructions: params.instructions,

@@ -178,6 +178,7 @@ const startFreshSession = async (
 	const walkthroughTools = createWalkthroughTools(buffer, toolNames);
 	const agent = new HarnessAgent({
 		harness: createHarnessAdapter(input.harness, input.model),
+		model: input.model,
 		sandbox: sandbox.provider,
 		sandboxConfig: { workDir: sandbox.workDir },
 		tools: {
