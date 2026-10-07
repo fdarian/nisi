@@ -116,6 +116,7 @@ function Pane(props: {
 			onOpenFile={() => {}}
 			onRefresh={() => {}}
 			shortcutsEnabled={false}
+			isVisible={false}
 		/>
 	);
 }
