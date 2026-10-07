@@ -53,7 +53,7 @@ const buildBinary = (entrypoint: string, outfile: string, bytecode: boolean) =>
 const entrypoint = process.argv[2];
 const outfile = process.argv[3];
 if (entrypoint === undefined || outfile === undefined) {
-	console.error("usage: build-binary.ts <entrypoint> <outfile>");
+	console.error("usage: build-binary.ts <entrypoint> <outfile> [--bytecode]");
 	process.exit(1);
 }
 
