@@ -80,6 +80,9 @@ const meta: Meta<typeof PrHeader> = {
 	args: {
 		repoRoot: "/tmp/storybook-repo",
 		stat: { additions: 12, deletions: 4 },
+		baseMayBeStale: false,
+		isRetryingBase: false,
+		onRetryBase: () => {},
 		onCloseTab: () => {},
 		findExistingSessionId: () => undefined,
 		onSessionOpened: () => {},
@@ -114,6 +117,15 @@ export const StackedPullRequest: Story = {
 	args: {
 		target: PR_TARGET,
 		orpc: createMockOrpc({ mergeStatus: BASE_STATUS, stack: STACK }),
+	},
+};
+
+/** A failed base fetch shows as a warning icon after the breadcrumb, not a banner. */
+export const BaseMayBeStale: Story = {
+	args: {
+		target: PR_TARGET,
+		baseMayBeStale: true,
+		orpc: createMockOrpc({ mergeStatus: BASE_STATUS }),
 	},
 };
 

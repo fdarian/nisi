@@ -32,6 +32,7 @@ import {
 	openInEditor,
 	useAvailableEditors,
 } from "#/infra/use-available-editors";
+import { PrBaseStaleNotice } from "./pr-base-stale-notice";
 import { PrCiStatus } from "./pr-ci-status";
 import { PrStackBadge } from "./pr-stack-badge";
 
@@ -40,6 +41,10 @@ type PrHeaderProps = {
 	target: SessionTarget;
 	repoRoot: string;
 	stat: { additions: number; deletions: number };
+	/** Only `true` once a completed base fetch has failed — never while one is still running. */
+	baseMayBeStale: boolean;
+	isRetryingBase: boolean;
+	onRetryBase: () => void;
 	onCloseTab: () => void;
 	/** This PR's tab is both selected and focused; controls menu visibility. */
 	watched: boolean;
@@ -104,6 +109,9 @@ export function PrHeader({
 	target,
 	repoRoot,
 	stat,
+	baseMayBeStale,
+	isRetryingBase,
+	onRetryBase,
 	onCloseTab,
 	watched,
 	isSelectedTab,
@@ -149,6 +157,15 @@ export function PrHeader({
 								)}
 							</BreadcrumbPage>
 						</BreadcrumbItem>
+						{baseMayBeStale && (
+							<BreadcrumbItem>
+								<PrBaseStaleNotice
+									baseRef={target.baseRef}
+									isRetrying={isRetryingBase}
+									onRetry={onRetryBase}
+								/>
+							</BreadcrumbItem>
+						)}
 					</BreadcrumbList>
 				</Breadcrumb>
 				<div className="flex min-w-0 items-baseline gap-2">

@@ -766,6 +766,7 @@ export function useSetRangeViewed(
 
 export type LiveFileChanges = {
 	hasPendingChanges: boolean;
+	isRefreshing: boolean;
 	refresh: () => void;
 };
 
@@ -825,7 +826,7 @@ export function useLiveFileChanges(
 		[refreshBase, sessionId],
 	);
 
-	return { hasPendingChanges, refresh };
+	return { hasPendingChanges, isRefreshing: baseRefresh.isPending, refresh };
 }
 
 /**

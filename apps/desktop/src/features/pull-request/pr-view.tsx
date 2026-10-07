@@ -78,10 +78,11 @@ export function PrView({
 	const error = fileChanges.error;
 	const reviewState = useReviewState(orpc, files);
 	const setViewed = useSetFileViewed(orpc, session.id);
-	const { hasPendingChanges, refresh: refreshFileChanges } = useLiveFileChanges(
-		orpc,
-		session.id,
-	);
+	const {
+		hasPendingChanges,
+		isRefreshing: isRefreshingBase,
+		refresh: refreshFileChanges,
+	} = useLiveFileChanges(orpc, session.id);
 
 	const [walkthroughEnabled] = useWalkthroughEnabled(orpc);
 	// Lifted into the per-session UI store (`session-ui-store.ts`), not local
@@ -191,6 +192,9 @@ export function PrView({
 					orpc={orpc}
 					repoRoot={session.repoRoot}
 					stat={stat}
+					baseMayBeStale={fileChanges.baseMayBeStale === true}
+					isRetryingBase={isRefreshingBase}
+					onRetryBase={refreshFileChanges}
 					target={session.target}
 					watched={isHeaderWatched}
 					findExistingSessionId={findExistingSessionId}
@@ -220,22 +224,6 @@ export function PrView({
 						/>
 					</TabsContent>
 					<TabsContent className="flex min-h-0 flex-1 flex-col" value="files">
-						{fileChanges.baseMayBeStale && (
-							<p
-								role="status"
-								className="border-b px-4 py-2 text-muted-foreground text-xs"
-							>
-								Base may be stale — could not fetch the base branch. Showing the
-								last fetched base.
-								<button
-									type="button"
-									className="ml-2 underline"
-									onClick={refreshFileChanges}
-								>
-									Retry
-								</button>
-							</p>
-						)}
 						<FilesChangedContent
 							isLoading={isLoading}
 							error={error}
