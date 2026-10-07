@@ -11,7 +11,9 @@ Git/review procedures sit alongside `health.check`.
   consumed only by the sidecar's implementation. `walkthrough.ts` redeclares `@repo/walkthrough`'s
   `Location`/`ReferenceBlock`/`Section`/`Walkthrough` rather than importing them, same as
   `diff.ts` mirrors `@repo/git`'s `FileChange` — this package stays dependency-free from every
-  domain package. `settings.ts` and `chat.ts` are the exception to "mirrors a domain package's
+  domain package, except `settings.ts`, which takes the sandbox-mode value list from
+  `@repo/settings/sandbox-mode` (a dependency-free file) so a new backend is one enum entry.
+  `settings.ts` and `chat.ts` are the exception to "mirrors a domain package's
   type": there's no `HarnessId` in any domain package to mirror (`@repo/settings` deliberately
   stores it as a loose `string[]`, per its own AGENTS.md), so `HarnessId` here is sidecar-api's own
   invention, defined once in `walkthrough.ts` and imported by both rather than redeclared.
