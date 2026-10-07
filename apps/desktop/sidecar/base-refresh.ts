@@ -51,34 +51,41 @@ export const makeBaseRefresh = <E, R>(options: {
 				) {
 					return previous.pending;
 				}
-				const pending = yield* Deferred.make<FetchResult, E>();
-				const entry: {
-					pending: Deferred.Deferred<FetchResult, E>;
-					completedAt?: number;
-					result?: FetchResult;
-				} = { pending };
-				state.set(before.key, entry);
-				yield* Effect.gen(function* () {
-					const result = yield* options.fetch(repoRoot, baseRef);
-					entry.result = result;
-					const after = yield* options.identity(repoRoot, baseRef);
-					if (before.commit !== null && before.commit !== after.commit) {
-						yield* options.moved(before.key);
-					}
-					return result;
-				}).pipe(
-					Effect.withSpan("session.base-ref.background", { root: true }),
-					Effect.onExit((exit) =>
-						Effect.gen(function* () {
-							entry.completedAt = options.now();
-							yield* Deferred.done(pending, exit);
-							if (Exit.isFailure(exit))
-								yield* Effect.logWarning("Base refresh failed", exit.cause);
-						}),
-					),
-					Effect.forkIn(scope),
+				// Registering the entry and forking its fetch must be atomic: an
+				// interruption in between would leave an in-flight entry nothing
+				// ever completes, and every later refresh would await it forever.
+				return yield* Effect.uninterruptible(
+					Effect.gen(function* () {
+						const pending = yield* Deferred.make<FetchResult, E>();
+						const entry: {
+							pending: Deferred.Deferred<FetchResult, E>;
+							completedAt?: number;
+							result?: FetchResult;
+						} = { pending };
+						state.set(before.key, entry);
+						yield* Effect.gen(function* () {
+							const result = yield* options.fetch(repoRoot, baseRef);
+							entry.result = result;
+							const after = yield* options.identity(repoRoot, baseRef);
+							if (before.commit !== null && before.commit !== after.commit) {
+								yield* options.moved(before.key);
+							}
+							return result;
+						}).pipe(
+							Effect.withSpan("session.base-ref.background", { root: true }),
+							Effect.onExit((exit) =>
+								Effect.gen(function* () {
+									entry.completedAt = options.now();
+									yield* Deferred.done(pending, exit);
+									if (Exit.isFailure(exit))
+										yield* Effect.logWarning("Base refresh failed", exit.cause);
+								}),
+							),
+							Effect.forkIn(scope),
+						);
+						return pending;
+					}),
 				);
-				return pending;
 			});
 		return {
 			key: (repoRoot: string, baseRef: string) =>

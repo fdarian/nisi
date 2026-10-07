@@ -7,13 +7,19 @@ import {
 	resolveHeadSha,
 	type WorktreeReadFailed,
 } from "@repo/git";
-import { Effect } from "effect";
-import type { FileSystem } from "effect/FileSystem";
-import type { ChildProcessSpawner } from "effect/unstable/process";
+import { Effect, Exit, Fiber, Scope } from "effect";
 import { readRefState } from "./ref-state.ts";
 
-export const makeDiffPreparation = () =>
+type SharedPreparation = Fiber.Fiber<
+	PreparedDiff,
+	GitError | WorktreeReadFailed
+>;
+
+export const makeDiffPreparation = (
+	prepare: typeof prepareDiff = prepareDiff,
+) =>
 	Effect.gen(function* () {
+		const scope = yield* Scope.Scope;
 		const bases = new Map<
 			string,
 			{ state: string; value: { baseRef: string; commit: string | null } }
@@ -51,27 +57,10 @@ export const makeDiffPreparation = () =>
 					yield* readRefState(repoRoot, baseRef),
 				);
 			});
-		const entries = new Map<
-			string,
-			{
-				at: number;
-				read: Effect.Effect<
-					PreparedDiff,
-					GitError | WorktreeReadFailed,
-					FileSystem | ChildProcessSpawner.ChildProcessSpawner
-				>;
-			}
-		>();
+		const entries = new Map<string, { at: number; fiber: SharedPreparation }>();
 		const validated = new Map<
 			string,
-			{
-				state: string;
-				read: Effect.Effect<
-					PreparedDiff,
-					GitError | WorktreeReadFailed,
-					FileSystem | ChildProcessSpawner.ChildProcessSpawner
-				>;
-			}
+			{ state: string; fiber: SharedPreparation }
 		>();
 		const read = (
 			repoRoot: string,
@@ -95,7 +84,7 @@ export const makeDiffPreparation = () =>
 				const previous = validated.get(validationKey);
 				if (state !== undefined && previous?.state === state) {
 					yield* Effect.annotateCurrentSpan("refsReused", true);
-					return yield* previous.read;
+					return yield* Fiber.join(previous.fiber);
 				}
 				const refs = yield* Effect.all(
 					[
@@ -107,7 +96,7 @@ export const makeDiffPreparation = () =>
 					{ concurrency: "unbounded" },
 				);
 				const baseCommit = refs[0].commit;
-				const effect = prepareDiff(repoRoot, baseRef, {
+				const effect = prepare(repoRoot, baseRef, {
 					...options,
 					...(baseCommit === null ? {} : { baseCommit }),
 					headCommit: refs[1],
@@ -117,39 +106,50 @@ export const makeDiffPreparation = () =>
 				const existing = entries.get(key);
 				if (existing !== undefined && Date.now() - existing.at < 30_000) {
 					yield* Effect.annotateCurrentSpan("reused", true);
-					return yield* existing.read;
+					return yield* Fiber.join(existing.fiber);
 				}
 				if (entries.size >= 8) {
 					const oldest = entries.keys().next();
 					if (!oldest.done) entries.delete(oldest.value);
 				}
-				const cached: Effect.Effect<
-					PreparedDiff,
-					GitError | WorktreeReadFailed,
-					FileSystem | ChildProcessSpawner.ChildProcessSpawner
-				> = yield* Effect.cached(
-					effect.pipe(
-						Effect.tap(() =>
-							Effect.gen(function* () {
-								if (state !== undefined && state === (yield* validationState)) {
-									if (validated.size >= 8) {
-										const oldest = validated.keys().next();
-										if (!oldest.done) validated.delete(oldest.value);
-									}
-									validated.set(validationKey, { state, read: cached });
-								} else if (worktree) entries.delete(key);
-							}),
-						),
-						Effect.tapError(() =>
-							Effect.sync(() => {
-								entries.delete(key);
-								validated.delete(validationKey);
-							}),
-						),
-					),
+				// Runs in the service scope, not the first caller's fiber: callers
+				// share this fiber's result, so one of them being interrupted (e.g. the
+				// client aborting its request) must never cancel it for the others.
+				const fiber = yield* Effect.fiber.pipe(
+					Effect.flatMap((current) => {
+						const shared = current as SharedPreparation;
+						return effect.pipe(
+							Effect.tap(() =>
+								Effect.gen(function* () {
+									if (
+										state !== undefined &&
+										state === (yield* validationState)
+									) {
+										if (validated.size >= 8) {
+											const oldest = validated.keys().next();
+											if (!oldest.done) validated.delete(oldest.value);
+										}
+										validated.set(validationKey, { state, fiber: shared });
+									} else if (worktree && entries.get(key)?.fiber === shared)
+										entries.delete(key);
+								}),
+							),
+							Effect.onExit((exit) =>
+								Exit.isSuccess(exit)
+									? Effect.void
+									: Effect.sync(() => {
+											if (entries.get(key)?.fiber === shared)
+												entries.delete(key);
+											if (validated.get(validationKey)?.fiber === shared)
+												validated.delete(validationKey);
+										}),
+							),
+						);
+					}),
+					Effect.forkIn(scope),
 				);
-				entries.set(key, { at: Date.now(), read: cached });
-				return yield* cached;
+				entries.set(key, { at: Date.now(), fiber });
+				return yield* Fiber.join(fiber);
 			}).pipe(Effect.withSpan("diff.preparation.read"));
 		return { read, localBase };
 	});

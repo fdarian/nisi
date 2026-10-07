@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { Deferred, Effect } from "effect";
+import { Deferred, Effect, Fiber } from "effect";
 import { makeBaseRefresh } from "../base-refresh.ts";
 
 test("local base opens without waiting; background fetch is shared and reports movement", async () => {
@@ -90,6 +90,41 @@ test("missing local base blocks until the initial fetch completes", async () => 
 				yield* refresh.prepare("repo", "main");
 				expect(state.commit).toBe("fetched");
 				yield* refresh.background("repo", "main");
+				expect(state.fetches).toBe(1);
+			}),
+		),
+	);
+});
+
+test("a waiter interrupted mid-fetch does not cancel the shared fetch for later callers", async () => {
+	await Effect.runPromise(
+		Effect.scoped(
+			Effect.gen(function* () {
+				const gate = yield* Deferred.make<void>();
+				const started = yield* Deferred.make<void>();
+				const state = { fetches: 0 };
+				const refresh = yield* makeBaseRefresh({
+					identity: () =>
+						Effect.succeed({ key: "repo\norigin/main", commit: "same" }),
+					fetch: () =>
+						Effect.gen(function* () {
+							state.fetches++;
+							yield* Deferred.succeed(started, undefined);
+							yield* Deferred.await(gate);
+							return { baseRef: "origin/main", baseMayBeStale: false };
+						}),
+					moved: () => Effect.void,
+					now: () => 0,
+				});
+				const first = yield* Effect.forkChild(refresh.refresh("repo", "main"));
+				yield* Deferred.await(started);
+				const second = yield* Effect.forkChild(refresh.refresh("repo", "main"));
+				yield* Fiber.interrupt(first);
+				yield* Deferred.succeed(gate, undefined);
+				expect((yield* Fiber.join(second)).baseMayBeStale).toBe(false);
+				expect((yield* refresh.refresh("repo", "main")).baseMayBeStale).toBe(
+					false,
+				);
 				expect(state.fetches).toBe(1);
 			}),
 		),

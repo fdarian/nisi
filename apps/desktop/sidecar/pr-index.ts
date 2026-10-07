@@ -43,6 +43,8 @@ export const makePrIndex = <E, R>(
 		};
 		const key = (owner: string, repo: string) =>
 			`${owner.toLowerCase()}/${repo.toLowerCase()}`;
+		// Uninterruptible so a caller can't be interrupted between marking the
+		// repository pending and forking the refresh that clears the mark.
 		const refresh = (path: string, owner: string, repo: string) =>
 			Effect.gen(function* () {
 				const id = key(owner, repo);
@@ -112,7 +114,7 @@ export const makePrIndex = <E, R>(
 					}),
 					Effect.forkIn(scope),
 				);
-			});
+			}).pipe(Effect.uninterruptible);
 		return {
 			refresh,
 			empty: () => entries.size === 0,
