@@ -12,6 +12,7 @@ import {
 	useOpenPullRequest,
 } from "#/features/pull-request/data/pull-requests-data";
 import type { SidecarQueryUtils } from "#/infra/backend-context";
+import { launchMark } from "#/infra/launch-trace";
 import { useAppViewActive } from "#/shell/app-view-context";
 import { parseNisiDeepLink } from "./deep-link";
 import {
@@ -52,8 +53,10 @@ export function useDeepLinkOpener(
 		if (openPr.isPending) return;
 		if (pending.length === 0) return;
 
-		const url = dequeueDeepLink();
-		if (url === undefined) return;
+		const entry = dequeueDeepLink();
+		if (entry === undefined) return;
+		const url = entry.url;
+		if (entry.traceId !== undefined) launchMark("deeplink.dequeued");
 
 		const parsed = parseNisiDeepLink(url);
 		if (parsed === null) {
@@ -68,7 +71,7 @@ export function useDeepLinkOpener(
 			return;
 		}
 
-		openPr.open(parsed.pullRequest);
+		openPr.open({ ...parsed.pullRequest, traceId: entry.traceId });
 		// `openPr.open` is a fresh closure every render (`useOpenPullRequest`
 		// doesn't wrap it in `useCallback`), so it's a real dependency here but
 		// not a meaningful trigger — the guards above (`isPending`,

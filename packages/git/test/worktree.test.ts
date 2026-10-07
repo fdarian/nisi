@@ -7,6 +7,7 @@ import { BunServices } from "@effect/platform-bun";
 import { ConfigProvider, Effect } from "effect";
 import {
 	openPullRequestWorktree,
+	openPullRequestWorktreeResult,
 	revalidateWorktreePath,
 } from "../src/worktree.ts";
 import { cleanupTestRepo, makeTestRepo, type TestRepo } from "./fixtures.ts";
@@ -70,6 +71,33 @@ const publishPullRequestRef = (
 	sha: string,
 ): Promise<string> =>
 	sh(bareDir, ["update-ref", `refs/pull/${number}/head`, sha]);
+
+test("worktree outcomes distinguish reuse and creation, including retained fetched refs", async () => {
+	const fixture = await makeOriginBackedRepo();
+	const dataDir = await mkdtemp(join(tmpdir(), "nisi-worktree-outcome-"));
+	try {
+		await publishPullRequestRef(fixture.bareDir, 999, fixture.baseSha);
+		const input = {
+			repoRoot: fixture.repo.root,
+			number: 999,
+			headRef: "outcome-test",
+		};
+		const first = await run(openPullRequestWorktreeResult(input), dataDir);
+		expect(first.worktree).toBe("created");
+		expect(first.localHeadRefPresent).toBe(false);
+		const reused = await run(openPullRequestWorktreeResult(input), dataDir);
+		expect(reused.worktree).toBe("reused");
+		expect(reused.path).toBe(first.path);
+		await fixture.repo.git(["worktree", "remove", first.path]);
+		const repeated = await run(openPullRequestWorktreeResult(input), dataDir);
+		expect(repeated.worktree).toBe("created");
+		expect(repeated.localHeadRefPresent).toBe(true);
+		await fixture.repo.git(["worktree", "remove", repeated.path]);
+	} finally {
+		await cleanupOriginBackedRepo(fixture);
+		await rm(dataDir, { recursive: true, force: true });
+	}
+});
 
 /** Points `NISI_DATA_DIR` at an isolated temp dir per test, mirroring `@repo/review`'s test fixtures — a shared default would let concurrent test files race on the same worktree paths. */
 const withDataDir = (dataDir: string) =>

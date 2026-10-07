@@ -1,6 +1,7 @@
 import { Skeleton } from "#/components/ui/skeleton";
 import { diffCodeViewLayout } from "#/features/diff/diff-view-theme";
 import type { SidecarQueryUtils } from "#/infra/backend-context";
+import { markFilesLoadingPainted } from "#/infra/launch-trace";
 import { DiffFileHeader } from "./diff-pane/diff-file-header";
 import {
 	filesMainClassName,
@@ -16,12 +17,30 @@ const treeRows = [0, 1, 2, 2, 2, 1, 2, 2, 1, 2].map((depth, index) => ({
 }));
 const lineWidths = [48, 72, 58, 84, 36, 64, 76, 44];
 
-export function FilesChangedSkeleton(props: {
-	orpc: SidecarQueryUtils;
-	toolbarVisible?: boolean;
-}): React.ReactElement {
+type LoadingPaintProps = {
+	/** Whether this skeleton is the one the user is looking at; a hidden tab must not record a launch paint. */
+	when?: boolean;
+	sessionId?: string;
+};
+
+export function loadingPaintRef(
+	props: LoadingPaintProps,
+): (node: HTMLElement | null) => void {
+	return (node) => {
+		if (node !== null && props.when !== false)
+			markFilesLoadingPainted(node, props.sessionId);
+	};
+}
+
+export function FilesChangedSkeleton(
+	props: LoadingPaintProps & {
+		orpc: SidecarQueryUtils;
+		toolbarVisible?: boolean;
+	},
+): React.ReactElement {
 	return (
 		<div
+			ref={loadingPaintRef(props)}
 			className="flex min-h-0 flex-1 motion-reduce:[&_[data-slot=skeleton]]:animate-none"
 			role="status"
 			aria-label="Loading changed files"

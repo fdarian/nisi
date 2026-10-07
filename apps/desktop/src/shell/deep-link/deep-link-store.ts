@@ -12,15 +12,17 @@ import { getCurrent, onOpenUrl } from "@tauri-apps/plugin-deep-link";
 
 type Listener = () => void;
 
-let pendingLinks: readonly string[] = [];
+export type PendingDeepLink = { url: string; traceId?: string };
+let pendingLinks: readonly PendingDeepLink[] = [];
+const injected = new Set<string>();
 const listeners = new Set<Listener>();
 
 function notify(): void {
 	for (const listener of listeners) listener();
 }
 
-function enqueue(url: string): void {
-	pendingLinks = [...pendingLinks, url];
+function enqueue(url: string, traceId?: string): void {
+	pendingLinks = [...pendingLinks, { url, traceId }];
 	notify();
 }
 
@@ -31,17 +33,24 @@ export function subscribeToDeepLinks(listener: Listener): () => void {
 }
 
 /** `useSyncExternalStore`'s snapshot half — stable by reference until the queue actually changes. */
-export function getPendingDeepLinksSnapshot(): readonly string[] {
+export function getPendingDeepLinksSnapshot(): readonly PendingDeepLink[] {
 	return pendingLinks;
 }
 
 /** Pops the oldest pending link, if any — `useDeepLinkOpener` drains one at a time. */
-export function dequeueDeepLink(): string | undefined {
+export function dequeueDeepLink(): PendingDeepLink | undefined {
 	if (pendingLinks.length === 0) return undefined;
 	const next = pendingLinks[0];
 	pendingLinks = pendingLinks.slice(1);
 	notify();
 	return next;
+}
+
+export function enqueueInjectedDeepLink(url: string, traceId: string): boolean {
+	if (injected.has(traceId)) return false;
+	injected.add(traceId);
+	enqueue(url, traceId);
+	return true;
 }
 
 let started = false;

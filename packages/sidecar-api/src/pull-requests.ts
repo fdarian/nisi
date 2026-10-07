@@ -382,6 +382,7 @@ export const pullRequestsContract = {
 	open: oc
 		.input(
 			Schema.Struct({
+				traceId: Schema.optional(Schema.String),
 				owner: Schema.String,
 				repo: Schema.String,
 				number: Schema.Number,

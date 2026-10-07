@@ -64,6 +64,7 @@ import {
 import { useDragAutoscroll } from "#/features/pull-request/files/use-drag-autoscroll";
 import type { DiffStyleMode } from "#/features/settings/settings-data";
 import type { SidecarQueryUtils } from "#/infra/backend-context";
+import { markDiffPainted, useLaunchTrace } from "#/infra/launch-trace";
 import type { FileDiffIdentity } from "./build-file-diff";
 import {
 	buildFileDiff,
@@ -996,6 +997,15 @@ export function DiffPane({
 	// `pointerdown`/`pointerup` handling for a single real click.
 	const itemMetadataRef = useRef(itemMetadata);
 	itemMetadataRef.current = itemMetadata;
+	const launchTrace = useLaunchTrace();
+	useEffect(() => {
+		if (launchTrace === undefined) return;
+		for (const [node, path] of hoveredFileHostsRef.current) {
+			const meta = itemMetadata.get(path);
+			if (node instanceof HTMLElement && meta !== undefined && !meta.isLoading)
+				markDiffPainted(sessionId, node);
+		}
+	}, [launchTrace, itemMetadata, sessionId]);
 	const resolveSelectionItemPath = useCallback(
 		(itemId: string) =>
 			itemMetadataRef.current.has(itemId) ? itemId : undefined,
@@ -1149,6 +1159,8 @@ export function DiffPane({
 							phase === "unmount" ? undefined : (node.shadowRoot ?? undefined),
 						);
 						if (phase !== "unmount") {
+							if (meta !== undefined && !meta.isLoading)
+								markDiffPainted(sessionId, node);
 							codeIndex.notifyItemRendered(context.item.id);
 							// `update` counts too: a card painted as a loading placeholder
 							// becomes real content through an update, not a fresh mount.
@@ -1174,6 +1186,7 @@ export function DiffPane({
 				codeIndex.tokenCSS,
 				codeIndex.notifyItemRendered,
 				codeIndex.codeViewOptions,
+				sessionId,
 			],
 		);
 

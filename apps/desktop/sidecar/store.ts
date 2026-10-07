@@ -15,7 +15,7 @@ import {
 	inferRepoPath,
 	type NoDefaultBranch,
 	type NoOriginRemote,
-	openPullRequestWorktree,
+	openPullRequestWorktreeResult,
 	PullRequestNotFound,
 	type PullRequestRef,
 	type PullRequestRefNotFound,
@@ -476,9 +476,16 @@ export class Store extends Context.Service<Store>()("Store", {
 			Effect.gen(function* () {
 				const repoRoot = yield* resolveRepoRoot(cwd).pipe(
 					Effect.catchTag("NotAGitRepository", () => new InvalidCwd({ cwd })),
+					Effect.withSpan("session.repo-root.resolve"),
 				);
-				const resolved = yield* resolveSessionTarget(repoRoot, target);
-				yield* refreshBase(repoRoot, resolved.baseRef);
+				const resolved = yield* resolveSessionTarget(repoRoot, target).pipe(
+					Effect.withSpan("session.target.resolve", {
+						attributes: { repoRoot, target: target.kind },
+					}),
+				);
+				yield* refreshBase(repoRoot, resolved.baseRef).pipe(
+					Effect.withSpan("session.base-ref.refresh"),
+				);
 				const openFreshSession = reviewStore
 					.openSession({
 						repoRoot,
@@ -487,6 +494,7 @@ export class Store extends Context.Service<Store>()("Store", {
 						pr: resolved.pr,
 					})
 					.pipe(
+						Effect.withSpan("session.persist"),
 						Effect.map((session) => ({
 							kind: "opened" as const,
 							session: toWireSession(session),
@@ -671,7 +679,9 @@ export class Store extends Context.Service<Store>()("Store", {
 			ChildProcessSpawner.ChildProcessSpawner | FileSystem | GitHub
 		> =>
 			Effect.gen(function* () {
-				const repoRoot = yield* resolveRepoPath(input.owner, input.repo);
+				const repoRoot = yield* resolveRepoPath(input.owner, input.repo).pipe(
+					Effect.withSpan("pull-request.mapping.lookup"),
+				);
 				if (repoRoot === null) {
 					return {
 						status: "needs-repo-path" as const,
@@ -680,7 +690,9 @@ export class Store extends Context.Service<Store>()("Store", {
 					};
 				}
 
-				const sessions = yield* reviewStore.listOpenSessions();
+				const sessions = yield* reviewStore
+					.listOpenSessions()
+					.pipe(Effect.withSpan("pull-request.sessions.lookup"));
 				const existing = sessions.find(
 					(session) =>
 						session.pr !== null &&
@@ -689,6 +701,10 @@ export class Store extends Context.Service<Store>()("Store", {
 						session.pr.repo.toLowerCase() === input.repo.toLowerCase(),
 				);
 				if (existing !== undefined) {
+					yield* Effect.annotateCurrentSpan({
+						worktree: "reused",
+						worktreePath: existing.repoRoot,
+					});
 					return {
 						status: "opened" as const,
 						outcome: {
@@ -712,25 +728,39 @@ export class Store extends Context.Service<Store>()("Store", {
 					sessions,
 					pr,
 				).pipe(
+					Effect.withSpan("pull-request.session.retarget"),
 					Effect.catchTags({
 						RepoPathNotFound: () => Effect.succeed(null),
 						RepoPathNotAGitRepo: () => Effect.succeed(null),
 					}),
 				);
-				if (reused !== null)
+				if (reused !== null) {
+					yield* Effect.annotateCurrentSpan({
+						worktree: "retargeted",
+						worktreePath: reused.session.repoRoot,
+					});
 					return { status: "opened" as const, outcome: reused };
+				}
 
-				const worktreePath = yield* openPullRequestWorktree({
+				const worktree = yield* openPullRequestWorktreeResult({
 					repoRoot,
 					number: input.number,
 					headRef: pr.headRef,
+				}).pipe(Effect.withSpan("pull-request.worktree.open"));
+				yield* Effect.annotateCurrentSpan({
+					worktree: worktree.worktree,
+					worktreePath: worktree.path,
+					...(worktree.localHeadRefPresent === undefined
+						? {}
+						: { localHeadRefPresent: worktree.localHeadRefPresent }),
 				});
+				const worktreePath = worktree.path;
 				const outcome = yield* openSession(worktreePath, {
 					kind: "specificPullRequest",
 					number: input.number,
-				});
+				}).pipe(Effect.withSpan("pull-request.session.open"));
 				return { status: "opened" as const, outcome };
-			});
+			}).pipe(Effect.withSpan("pull-requests.open"));
 
 		/**
 		 * The other half of the `"needs-repo-path"` flow: persists the local

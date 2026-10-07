@@ -3,6 +3,11 @@ import type { Session } from "./store.ts";
 
 type EventPayload =
 	| {
+			readonly type: "deep-link-injected";
+			readonly url: string;
+			readonly traceId: string;
+	  }
+	| {
 			readonly type: "scheduledMergeSettled";
 			readonly owner: string;
 			readonly repo: string;

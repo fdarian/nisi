@@ -1,0 +1,221 @@
+---
+type: Measurement
+title: CLI-to-paint launch timing
+description: How to measure CLI-to-landing-tab paint, read the milestones, and compare with the native dev baseline.
+tags: [cli, desktop, performance]
+stale_after: 2027-04-04
+---
+
+The launch trace measures **CLI process start → visible landing-tab content**, across the CLI,
+sidecar, and frontend. It is opt-in via `NISI_LAUNCH_TRACE=<traceId>`; the measurement script sets
+a fresh ID automatically. It does not force a tab: Files Changed ends at the first diff, or the
+file list for an empty diff; Overview ends at its content.
+
+# Running a measurement
+
+Run from `apps/desktop` against a worktree with an open PR:
+
+```sh
+bun scripts/measure-launch --new-pr --warmup /path/to/other-pr-worktree --cwd /path/to/target-pr-worktree
+```
+
+The script runs this checkout's compiled CLI and only targets this checkout's
+instances. It never measures or stops `/Applications/nisi.app`; inherited `NISI_DATA_DIR` and
+`NISI_APP_PATH` do not select a target.
+
+## Primary: a new PR into a running app
+
+Use `--new-pr --warmup <other PR worktree>` for regression measurements of the common flow:
+the app is already running and the target PR has never been opened in it. Both worktrees must
+belong to the same repository and resolve to different PRs and branches; validation happens before
+stopping the app or resetting data. The script prepares the checkout release bundle, stops only
+its app/sidecar, and recreates `.data/measure-launch/new-pr/data/` on every run. It never wipes cold
+or dev-sandbox data. A separate CLI trace opens the warm-up and must reach `trace.done` before
+the measured CLI open starts. Warm-up timings are not reported. The app remains running afterward.
+
+## Secondary: a running-instance quick check
+
+Without mode flags, use the script for a quick check against whatever is running. It discovers authenticated, healthy sidecars in
+`.data/sessions/*/data/` (native `bun dev` sandboxes) and `.data/measure-launch/data/` (the built
+measurement app), plus `.data/measure-launch/new-pr/data/`. Zero live candidates is an error; start `bun dev` or use a managed mode. Multiple live
+candidates are listed as an ambiguity error; stop the unwanted checkout-local instances first.
+It probes instrumentation before handing off and disables CLI app-launch fallback.
+
+Warm mode does not close an existing tab or clear its query cache. The script snapshots the open
+session IDs before the traced CLI call and warns when the resulting session was already open:
+list/diff paint offsets may reflect cached data, not a fresh-render measurement. The warning appears
+in the text report, or on stderr with `--json`; the session snapshot is retained in the raw records.
+
+## App startup: cold processes
+
+Use `--cold` to measure startup of the app and sidecar, including CLI app launch:
+
+```sh
+bun scripts/measure-launch --cwd /absolute/path/to/pr-worktree --cold
+```
+
+`--cold` uses `src-tauri/target/release/bundle/macos/nisi.app`. It prepares the build, streams any
+build output, stops only that exact bundle's app and sidecar
+executables, and waits for them to exit. Its gitignored `.data/measure-launch/data/` self-initializes
+on the first run. The CLI launches a fresh app instance with that data dir, so `cli.app.launch.*`
+is included. The app stays running; repeat without `--cold` to measure it warm:
+
+```sh
+bun scripts/measure-launch --cwd /absolute/path/to/pr-worktree
+```
+
+To measure native dev instead, stop the built measurement instance, start `bun dev` in this
+checkout, then run the same default command from another terminal. No environment override is needed.
+Keep browser frontends disconnected for a native-only measurement: two frontends can both receive
+the request, making the terminal paint mark ambiguous.
+
+- `--rebuild` requires `--cold` or `--new-pr` and rebuilds even when the bundle exists. A stale bundle without
+  instrumentation fails with this hint; a dev instance without instrumentation needs a restart.
+- Cold means new app and sidecar processes, not cleared filesystem, GitHub, or review-session caches.
+- `--json` prints the collected records as a JSON array rather than the formatted report.
+- Raw records are JSONL at `<selected data dir>/logs/launch-traces/<traceId>.jsonl`.
+
+## Build reuse
+
+Managed modes compare HEAD and a SHA-256 content hash against `nisi.app.build-stamp.json` beside
+the bundle (never inside the signed bundle). The hash includes `git diff HEAD --binary` and
+untracked, non-ignored file paths and contents, excluding `knowledge/`, Markdown files, and
+`apps/desktop/scripts/measure-launch/`. Uncommitted documentation/script edits do not rebuild the
+app. A changed HEAD, changed hash, missing bundle/stamp, or `--rebuild` rebuilds with an explicit
+reason; matching inputs print a reuse message. The stamp records build time, and report headers
+identify the build commit and any uncommitted content hash. A source change during the build
+fails rather than stamping an inconsistent artifact.
+
+CLI measurements use the shipped compiled artifact, not `bun packages/cli/src/index.ts`:
+managed modes use `nisi.app/Contents/MacOS/nisi-cli`, produced by the app's `beforeBuildCommand`
+and covered by the app stamp. Unmanaged warm mode builds only the CLI with the same
+`build-binary.ts` compile/sign helper and reuses `.data/measure-launch/cli/nisi` with its own
+`nisi.build-stamp.json`. Its content scope covers CLI/transitive workspace packages, dependency
+lock/config/patches, and the binary builder, excluding Markdown and tests, not desktop UI or Rust.
+The report names the compiled binary and its commit/content hash. Deep-link reports say `CLI: n/a`.
+
+Managed instances opt into `NISI_MEASUREMENT_INSTANCE=1` (renamed from `NISI_MOCK_KEYCHAIN`),
+forwarded by the CLI through `open --env` and inherited by Rust's sidecar subprocess.
+The Rust runtime uses CEF's mock secret storage (`--use-mock-keychain`) to avoid macOS keychain
+prompts. The dedicated opt-in accepts no arbitrary CEF switches; unset production/dev behavior
+is unchanged. Mock storage uses a public encryption constant, so keep it confined to isolated
+measurement data, never production credentials. Confirm prompt absence on the actual Mac;
+trace completion alone is not visual verification of that.
+
+## Deep-link entrypoint
+
+```sh
+bun scripts/measure-launch --new-pr --deeplink https://github.com/fdarian/nisi/pull/87 \
+  --warmup https://github.com/fdarian/nisi/pull/134 --cwd /Users/farreldarian/code/fdarian/nisi
+bun scripts/measure-launch --cold --deeplink https://github.com/fdarian/nisi/pull/87 \
+  --cwd /Users/farreldarian/code/fdarian/nisi
+```
+
+Here `--cwd` is the repository's local clone, not the target PR checkout; `--warmup` is another
+PR URL in the same repository. Unmanaged deep-link measurements are rejected. The script seeds
+the existing `pullRequests.recordRepoPath` mapping before injection, matching a user who already
+mapped the repository. A traced `needs-repo-path` fails loudly before a folder picker can appear.
+
+No `nisi://` URL is ever handed to the OS. The managed instance's authenticated, environment-gated
+diagnostics RPC injects into the same frontend queue as plugin URLs; links retain their trace ID
+and replay on event-stream reconnect until acknowledged. Everything from queue dequeue through
+`pullRequests.open`, mapping, worktree/session resolution and real paint is the production path.
+`NISI_MEASUREMENT_INSTANCE=1` gates both injection and CEF mock keychain; the old variable no
+longer enables either. Production and ordinary dev instances reject injection.
+
+Warm/new-PR offsets start at **frontend deep-link receipt**, excluding OS-to-app URL delivery,
+the native plugin hop, and the injection RPC transport before receipt. Cold offsets start at
+the explicit bundle launch (without the CLI), including startup and mapping preparation. Cold
+injection is delivered after the events stream connects, slightly later than the native plugin's
+startup `getCurrent()` path. Reports state these boundaries; activation ack and pending-panel
+milestones are N/A because this flow has neither CLI open requests nor their pending panel.
+
+PR worktrees follow the normal app policy: reuse an existing PR-head/nisi checkout; otherwise
+create under the strict-majority parent of existing linked worktrees, or `<data dir>/worktrees/`
+when no convention exists. Cleanup snapshots registrations and removes only newly registered paths
+backed by successful `git worktree add` spans from this run. Existing/unrelated worktrees are never
+removed, removal never uses `--force`, and cleanup also runs on failure. If cleanup is needed, the
+managed app is stopped before removal. Git branches/fetched refs are not deleted.
+
+The `pull-requests.open` span and report header distinguish **reused**, **created**, and **retargeted**
+worktrees, with the actual path. Compare like outcomes: creation includes checkout and PR-head
+fetching, while reuse may skip both. Created worktrees are removed after the run, but Git objects
+remain in the repository. After the first created run, later created runs may fetch less; the
+report warns about retained objects and flags an already-present local head ref. This is not an
+object-cold benchmark—do not label repeated creation as a fresh clone/network transfer measurement.
+
+# Reading the report
+
+All offsets are milliseconds from `cli.process-start`. Negative boot offsets mean the component
+was already running; they are not launch latency. Timeline deltas compare adjacent marks and
+state-span start/end rows, not exclusive work durations. The Waterfall shows all spans, indented
+by parent depth; subprocess and RPC spans are omitted from the state timeline. Slowest first shows
+at most 15 leaf subprocess/RPC spans. Parallel spans overlap, so do not add their durations to
+estimate the critical path. Sidecar boot records are buffered only until the first traced open;
+later warm measurements of the same process do not contain boot milestones.
+
+| Milestone | Meaning |
+|-----------|---------|
+| `cli.app.launch.end` | The app-launch command returned; not proof of visible content. Absent on a warm handoff. |
+| `sidecar.router.ready` | The sidecar router is ready; a negative offset identifies a warm sidecar. |
+| `sidecar.activation.acked` | Native activation acknowledged show/unminimize/focus; proxy for window shown, not a compositor timestamp. |
+| `pending-panel.painted` | The frontend's pending-open panel reached its animation-frame mark. |
+| `files.loading.painted` / `overview.loading.painted` | The landing tab's loading state reached its animation-frame mark; cached opens may skip it. |
+| `files.list.painted` | The resolved Files Changed list reached its animation-frame mark; terminal only when no files changed. |
+| `files.first-diff.painted` | A rendered diff host is connected and has positive height on an animation frame. |
+| `overview.content.painted` | Overview content reached its animation-frame mark. |
+| `tab.content.painted { tab }` | The actual landing tab reached its terminal content mark. |
+| `trace.done` | Frontend trace collection finished after the terminal mark. |
+
+`Complete` requires both `tab.content.painted` and `trace.done`. Missing milestones are reported as
+`not observed`, not zero. The script waits up to 60 seconds; a timeout is an incomplete measurement.
+Managed instances disable Chromium's occluded-window backgrounding, renderer backgrounding, and
+background timer throttling through three fixed switches gated by `NISI_MEASUREMENT_INSTANCE`.
+At native setup, CEF's actual global command line is checked with `has_switch`; missing switches
+fail startup. Successful checks write `<data dir>/measurement-cef-switches.json` as evidence.
+Managed measurements continue through hidden intervals and report those intervals, including for
+deep links. A **minimized window may still stall**, as may screen locking; never treat such a
+timeout as render latency. Unmanaged instances remain unchanged and stop if visibility is lost.
+
+Managed launches use `open -n -g` with `NISI_MEASUREMENT_INSTANCE=1`. Native activation still
+unminimizes and reveals the window and acknowledges afterward, but does not focus or raise it.
+On macOS this uses AppKit `orderBack`, not Tauri `show()` (which makes the window key). The same
+activation policy applies to plugin deep links; injection itself never requests native focus.
+Managed startup also disables CEF event-loop activation with the vendored runtime's
+`Cef::activate_ignoring_other_apps(false)` builder option, alongside initial window `focus=false`.
+Production and ordinary dev activation remain unchanged.
+Verify by sampling `lsappinfo front` before, during and after, without driving the UI: the
+measurement instance must never become frontmost, including at startup and while real paint marks
+arrive for opens into the running instance. Hidden intervals remain part of the report.
+
+# Baseline — 2026-10-04
+
+Single native-only run on launch-trace branch revision `5614d52`, **dev sandbox, warm app, PR #87**
+(`fdarian/nisi`, Version Packages). The browser frontend was closed; Vite's connected frontend was
+the native `nisi Helper`. This is a reference measurement, not a repeated-trial budget.
+
+| Milestone | CLI offset |
+|-----------|------------|
+| Native activation acknowledged | 331.8ms |
+| Pending panel | 509.7ms |
+| Files Changed loading | 2995.4ms |
+| Files Changed list | 3705.6ms |
+| First diff / landing-tab content | 4173.7ms |
+| Trace done | 4193.2ms |
+
+About **4.2s to the first diff**. `sessions.open` took **2.6s**, dominated by parallel
+`gh pr view` (**1.5s**) and `gh repo view` (**1.1s**), followed by base-ref `git fetch` (**0.9s**).
+These are subprocess durations, not additive parallel work. After the Files Changed loading mark,
+the resolved list took another **0.7s**; from list to first diff took another **0.5s**.
+
+# Method and its limits
+
+- **Baseline scope.** The reference above measures a warm native dev app, not process startup or
+  an installed production build. `--cold` targets a checkout-local release bundle, not production.
+- **No Rust-side launch marks.** Activation acknowledgment stands in for window shown. Frontend
+  paint marks are animation-frame/DOM proxies, not compositor presentation measurements.
+- **One unreproduced native diff-worker timeout.** A native run logged
+  `WorkerPoolManager: worker initialization timed out after 10000ms`. Native comparisons on
+  `main` (`dbc7930`) and the launch-trace branch against PR #87 did not reproduce it. Main's
+  temporary probes confirmed populated diffs after reload; the branch produced the complete trace
+  above. Neither a regression nor a pre-existing worker bug is established; no worker fix is implied.

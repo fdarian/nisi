@@ -26,22 +26,19 @@ const logSpawnStart = (command: string, args: ReadonlyArray<string>) =>
 const logSpawnFailure = (
 	command: string,
 	args: ReadonlyArray<string>,
-	durationMs: number,
 	cause: unknown,
 ) =>
 	Effect.logWarning("process failed to spawn", {
 		command,
 		args,
-		durationMs,
 		cause,
 	});
 
 const logSpawnDone = (
 	command: string,
 	args: ReadonlyArray<string>,
-	durationMs: number,
 	exitCode: number,
-) => Effect.logDebug("process exited", { command, args, durationMs, exitCode });
+) => Effect.logDebug("process exited", { command, args, exitCode });
 
 const spawnFailure = (
 	command: string,
@@ -75,7 +72,6 @@ const runResult = (
 > =>
 	Effect.scoped(
 		Effect.gen(function* () {
-			const startedAt = Date.now();
 			yield* logSpawnStart(command, args);
 
 			const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
@@ -87,9 +83,7 @@ const runResult = (
 			});
 			const handle = yield* spawner.spawn(command_).pipe(
 				Effect.mapError((cause) => spawnFailure(command, args, cwd, cause)),
-				Effect.tapError((error) =>
-					logSpawnFailure(command, args, Date.now() - startedAt, error.cause),
-				),
+				Effect.tapError((error) => logSpawnFailure(command, args, error.cause)),
 			);
 
 			const [stdout, stderr, exitCode] = yield* Effect.all(
@@ -103,8 +97,18 @@ const runResult = (
 				Effect.mapError((cause) => spawnFailure(command, args, cwd, cause)),
 			);
 
-			yield* logSpawnDone(command, args, Date.now() - startedAt, exitCode);
+			yield* Effect.annotateCurrentSpan({ exitCode });
+			yield* logSpawnDone(command, args, exitCode);
 			return { stdout, stderr, exitCode };
+		}),
+	).pipe(
+		Effect.withSpan("subprocess", {
+			attributes: {
+				command,
+				args: args.map((arg) =>
+					arg.length > 256 ? `${arg.slice(0, 256)}…` : arg,
+				),
+			},
 		}),
 	);
 
@@ -151,7 +155,6 @@ export const runBytes = (
 > =>
 	Effect.scoped(
 		Effect.gen(function* () {
-			const startedAt = Date.now();
 			yield* logSpawnStart(command, args);
 
 			const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
@@ -163,9 +166,7 @@ export const runBytes = (
 			});
 			const handle = yield* spawner.spawn(command_).pipe(
 				Effect.mapError((cause) => spawnFailure(command, args, cwd, cause)),
-				Effect.tapError((error) =>
-					logSpawnFailure(command, args, Date.now() - startedAt, error.cause),
-				),
+				Effect.tapError((error) => logSpawnFailure(command, args, error.cause)),
 			);
 
 			const [chunks, stderr, exitCode] = yield* Effect.all(
@@ -179,7 +180,8 @@ export const runBytes = (
 				Effect.mapError((cause) => spawnFailure(command, args, cwd, cause)),
 			);
 
-			yield* logSpawnDone(command, args, Date.now() - startedAt, exitCode);
+			yield* Effect.annotateCurrentSpan({ exitCode });
+			yield* logSpawnDone(command, args, exitCode);
 
 			if (exitCode !== 0) {
 				return yield* new GitCommandError({
@@ -195,6 +197,15 @@ export const runBytes = (
 			}
 
 			return Buffer.concat(chunks);
+		}),
+	).pipe(
+		Effect.withSpan("subprocess", {
+			attributes: {
+				command,
+				args: args.map((arg) =>
+					arg.length > 256 ? `${arg.slice(0, 256)}…` : arg,
+				),
+			},
 		}),
 	);
 

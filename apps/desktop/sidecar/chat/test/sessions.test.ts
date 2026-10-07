@@ -22,6 +22,7 @@ let nextCreateSessionShouldWait = false;
 let resolvePendingCreateSession:
 	| ((session: FakeHarnessAgentSession) => void)
 	| undefined;
+let rejectPendingCreateSession: ((error: Error) => void) | undefined;
 
 class FakeHarnessAgentSession {
 	readonly stop = mock(async () => ({}) as never);
@@ -38,8 +39,9 @@ class FakeHarnessAgent {
 			throw new Error("simulated createSession failure");
 		}
 		if (nextCreateSessionShouldWait) {
-			return new Promise((resolve) => {
+			return new Promise((resolve, reject) => {
 				resolvePendingCreateSession = resolve;
+				rejectPendingCreateSession = reject;
 			});
 		}
 		return this.lastSession;
@@ -78,10 +80,58 @@ beforeEach(() => {
 	nextCreateSessionShouldFail = false;
 	nextCreateSessionShouldWait = false;
 	resolvePendingCreateSession = undefined;
+	rejectPendingCreateSession = undefined;
 	chatSessions = Effect.runSync(ChatSessions.make);
 });
 
 describe("getOrCreateChatSession", () => {
+	test("reconstructs after a rejected construction and retains concurrent single-flight", async () => {
+		const params = paramsFor(uniqueId("session"), uniqueId("thread"));
+		nextCreateSessionShouldFail = true;
+		const first = chatSessions.getOrCreateChatSession(params);
+		expect(chatSessions.getOrCreateChatSession(params)).toBe(first);
+		await expect(first).rejects.toThrow("simulated createSession failure");
+		nextCreateSessionShouldFail = false;
+		const retry = chatSessions.getOrCreateChatSession(params);
+		expect(retry).not.toBe(first);
+		const live = await retry;
+		await chatSessions.closeChatThreadsForSession(
+			params.sessionId,
+			reportFailure,
+		);
+		expect(
+			(live.session as unknown as FakeHarnessAgentSession).stop,
+		).toHaveBeenCalledTimes(1);
+	});
+
+	test("a late rejection does not evict a replacement thread entry", async () => {
+		const params = paramsFor(uniqueId("session"), uniqueId("thread"));
+		nextCreateSessionShouldWait = true;
+		const pending = chatSessions.getOrCreateChatSession(params);
+		const reject = rejectPendingCreateSession;
+		if (reject === undefined)
+			throw new Error("fake session did not expose rejection");
+		const closing = chatSessions.closeChatThread(
+			params.threadId,
+			reportFailure,
+		);
+		nextCreateSessionShouldWait = false;
+		const replacement = chatSessions.getOrCreateChatSession(params);
+		await replacement;
+		reject(new Error("late failure"));
+		await expect(pending).rejects.toThrow("late failure");
+		await closing;
+		expect(chatSessions.getOrCreateChatSession(params)).toBe(replacement);
+		const live = await replacement;
+		await chatSessions.closeChatThreadsForSession(
+			params.sessionId,
+			reportFailure,
+		);
+		expect(
+			(live.session as unknown as FakeHarnessAgentSession).stop,
+		).toHaveBeenCalledTimes(1);
+	});
+
 	test("constructs once per threadId and reuses it on later calls", async () => {
 		const sessionId = uniqueId("session");
 		const threadId = uniqueId("thread");
@@ -151,14 +201,11 @@ describe("closeChatThreadsForSession", () => {
 		).resolves.toBeUndefined();
 	});
 
-	test("reports a thread whose construction rejected", async () => {
+	test("closing a session after construction rejected is a no-op", async () => {
 		const sessionId = uniqueId("session");
 		const threadId = uniqueId("thread");
 
 		nextCreateSessionShouldFail = true;
-		// `getOrCreateChatSession` returns the in-flight (rejecting) promise —
-		// a real `chat.send` handler would let this reject up to its own
-		// try/catch; the thread is still tracked in the meantime.
 		await expect(
 			chatSessions.getOrCreateChatSession(paramsFor(sessionId, threadId)),
 		).rejects.toThrow();

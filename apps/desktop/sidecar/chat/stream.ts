@@ -1,6 +1,8 @@
 import type { HarnessAgent, HarnessAgentSession } from "@ai-sdk/harness/agent";
 import { type ToolSet, toUIMessageStream, type UIMessageChunk } from "ai";
+import { Cause, type Context, Effect } from "effect";
 import { filterMeaninglessStreamErrors } from "../harness/stream-errors.ts";
+import { errorMessage } from "../rpc-errors.ts";
 
 /** Drains a `ReadableStream` via its reader rather than `yield*`/`for await` directly on it — the standalone `toUIMessageStream` below returns a plain `ReadableStream`, not AI SDK's own `AsyncIterableStream` (which attaches `Symbol.asyncIterator` itself; see `@ai-sdk/harness`'s `asAsyncIterableStream`), so async iteration isn't guaranteed without going through the reader explicitly. */
 async function* drain<T>(stream: ReadableStream<T>): AsyncGenerator<T> {
@@ -52,6 +54,9 @@ async function* drain<T>(stream: ReadableStream<T>): AsyncGenerator<T> {
  * one is filtered out above.
  */
 export async function* streamChatTurn(options: {
+	readonly sessionId: string;
+	readonly threadId: string;
+	readonly mainContext: Context.Context<never>;
 	// biome-ignore lint/suspicious/noExplicitAny: the agent's tool-set/runtime-context type params aren't known statically here — only the untyped agent.stream() surface is ever called.
 	readonly agent: HarnessAgent<any, any>;
 	readonly session: HarnessAgentSession;
@@ -74,6 +79,18 @@ export async function* streamChatTurn(options: {
 	const chunkStream = toUIMessageStream({
 		stream: filterMeaninglessStreamErrors(result.stream),
 		tools,
+		onError: (error) => {
+			Effect.runFork(
+				Effect.logError("chat stream failed", Cause.die(error)).pipe(
+					Effect.annotateLogs({
+						sessionId: options.sessionId,
+						threadId: options.threadId,
+					}),
+					Effect.provide(options.mainContext),
+				),
+			);
+			return errorMessage(error);
+		},
 	});
 	yield* drain(chunkStream);
 }

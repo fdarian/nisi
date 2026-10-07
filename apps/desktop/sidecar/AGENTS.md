@@ -8,7 +8,7 @@ seam" for the port/token handshake this boots into.
 - `index.ts` — boot, in two layers with different lifetimes. `EarlyLayer` (`LoggingLive` + Bun
   platform services) wraps the *whole* program, so even the first "starting up" log line reaches
   the rotating file logger. `MainLayer` (`Store` + `WalkthroughStore` + `SettingsStore` +
-  `SqliteDb`) wraps only the program's *tail* — deliberately provided at that nested point instead
+  `SqliteDb`) is built only after the sidecar claim — deliberately at that nested point instead
   of around the whole program, so `SqliteDb`'s connection (and Drizzle's migrations) can't open
   until after the prefix has already run: bind the port (`http.ts`'s `bindHealthCheckServer`,
   health-check-only — no `AppServices` needed yet), then claim and publish `sidecar.json` in one
@@ -222,8 +222,9 @@ seam" for the port/token handshake this boots into.
   re-exposing the service for those per-call requirements. Same gotcha documented in
   `packages/review/AGENTS.md`, one layer up, now applied one more time for `ReviewStore` itself
   (`store.ts`'s `Store.layer`) and for `SqliteDb` (shared by both `Store` and `WalkthroughStore`).
-- **`mainContext` is captured once, inside `index.ts`'s `MainLayer`-provided tail**, via
-  `Effect.context<AppServices>()` — only once the lock is held and `AppServices` is built, not at
+- **`mainContext` is captured once in `index.ts`**, merging the ambient context with
+  `Layer.build(MainLayer)` and omitting the boot's `Tracer.ParentSpan` — only once the lock is held
+  and `AppServices` is built, not at
   the very start of boot — then passed into `attachRouter` and set as the `effect/context` for
   every oRPC request from that point on. Each request's handler effect isn't part of the boot
   program's fiber, so it can't `yield*` a service unless that service is in the context this way.

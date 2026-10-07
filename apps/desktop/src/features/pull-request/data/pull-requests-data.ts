@@ -12,6 +12,7 @@ import { ORPCError } from "@orpc/client";
 import { keepPreviousData, useMutation, useQuery } from "@tanstack/react-query";
 import { invoke } from "@tauri-apps/api/core";
 import type { SidecarQueryUtils } from "#/infra/backend-context";
+import { launchMark, resolveTracedDeepLink } from "#/infra/launch-trace";
 import type { Session } from "./pr-data";
 
 /** One row the palette renders — mirrors `PullRequestSearchResult` (`packages/sidecar-api/src/pull-requests.ts`). */
@@ -104,6 +105,7 @@ export function friendlySearchError(error: unknown): string | null {
 }
 
 export type OpenPullRequestParams = {
+	traceId?: string;
 	owner: string;
 	repo: string;
 	number: number;
@@ -147,7 +149,15 @@ async function resolvePullRequestOpen(
 ): Promise<{ status: "opened"; sessionId: string } | { status: "cancelled" }> {
 	const outcome = await orpc.pullRequests.open.call(params);
 	if (outcome.status === "opened") {
+		if (params.traceId !== undefined)
+			resolveTracedDeepLink(params.traceId, outcome.session.id);
 		return { status: "opened", sessionId: outcome.session.id };
+	}
+	if (params.traceId !== undefined) {
+		launchMark("deeplink.needs-repo-path");
+		throw new Error(
+			"Traced deep link needs a repo path; measurement must seed the mapping before injection (folder picker suppressed)",
+		);
 	}
 
 	const picked = await invoke<string | null>("pick_folder", {

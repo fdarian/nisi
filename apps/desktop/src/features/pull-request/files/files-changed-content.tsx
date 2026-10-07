@@ -20,6 +20,8 @@ type FilesChangedContentProps = Omit<
 > & {
 	isLoading: boolean;
 	error: unknown;
+	/** Whether the files tab is on screen, gating the launch-trace loading paint. */
+	isVisible: boolean;
 };
 
 export function FilesChangedContent(
@@ -121,7 +123,12 @@ function FilesChangedReveal(
 						if (revealed) setSkeletonGone(true);
 					}}
 				>
-					<FilesChangedSkeleton orpc={props.orpc} toolbarVisible={!settled} />
+					<FilesChangedSkeleton
+						orpc={props.orpc}
+						toolbarVisible={!settled}
+						when={props.isVisible && !settled}
+						sessionId={props.session.id}
+					/>
 				</motion.div>
 			)}
 		</>

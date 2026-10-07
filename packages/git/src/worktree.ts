@@ -432,10 +432,14 @@ const addWorktree = (
  * hash-suffixed one, so an unrelated branch sitting at the computed path is a hazard to refuse,
  * not a worktree to hand back.
  */
-export const openPullRequestWorktree = (
+export const openPullRequestWorktreeResult = (
 	input: OpenPullRequestWorktreeInput,
 ): Effect.Effect<
-	string,
+	{
+		path: string;
+		worktree: "reused" | "created";
+		localHeadRefPresent?: boolean;
+	},
 	PullRequestWorktreeError,
 	ChildProcessSpawner.ChildProcessSpawner
 > =>
@@ -452,13 +456,13 @@ export const openPullRequestWorktree = (
 			input.headRef,
 		);
 		if (ownBranchWorktree !== null) {
-			return ownBranchWorktree.path;
+			return { path: ownBranchWorktree.path, worktree: "reused" as const };
 		}
 
 		const branch = worktreeBranchFor(input.number, input.headRef);
 		const existingNisiWorktree = findActiveWorktreeForBranch(entries, branch);
 		if (existingNisiWorktree !== null) {
-			return existingNisiWorktree.path;
+			return { path: existingNisiWorktree.path, worktree: "reused" as const };
 		}
 
 		const targetParentDir = yield* resolveTargetParentDir(entries);
@@ -476,7 +480,7 @@ export const openPullRequestWorktree = (
 				registeredAtTarget.branch === input.headRef ||
 				registeredAtTarget.branch === branch
 			) {
-				return worktreePath;
+				return { path: worktreePath, worktree: "reused" as const };
 			}
 			// A bare `headRef` is less unique than the old hash-suffixed name: two
 			// PRs from different forks can share a head branch name, and
@@ -494,6 +498,8 @@ export const openPullRequestWorktree = (
 		}
 
 		const localSha = yield* localBranchSha(input.repoRoot, input.headRef);
+		const managedSha = yield* localBranchSha(input.repoRoot, branch);
+		const localHeadRefPresent = localSha !== null || managedSha !== null;
 		if (localSha !== null) {
 			const prHeadSha = yield* fetchPullRequestHeadSha(
 				input.repoRoot,
@@ -514,15 +520,28 @@ export const openPullRequestWorktree = (
 				if (localSha !== prHeadSha) {
 					yield* git(worktreePath, ["merge", "--ff-only", prHeadSha]);
 				}
-				return worktreePath;
+				return {
+					path: worktreePath,
+					worktree: "created" as const,
+					localHeadRefPresent,
+				};
 			}
 		}
 
 		yield* fetchPullRequestRef(input.repoRoot, input.number, branch);
 		yield* addWorktree(input.repoRoot, input.number, worktreePath, branch);
 
-		return worktreePath;
+		return {
+			path: worktreePath,
+			worktree: "created" as const,
+			localHeadRefPresent,
+		};
 	});
+
+export const openPullRequestWorktree = (input: OpenPullRequestWorktreeInput) =>
+	openPullRequestWorktreeResult(input).pipe(
+		Effect.map((result) => result.path),
+	);
 
 export type RevalidateWorktreePathInput<E, R> = {
 	/** A previously-resolved worktree path — reused as-is when it's still on disk. */

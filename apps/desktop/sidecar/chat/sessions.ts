@@ -141,11 +141,18 @@ export class ChatSessions extends Context.Service<ChatSessions>()(
 				const existing = liveThreads.get(params.threadId);
 				if (existing !== undefined) return existing.pending;
 
-				const pending = startChatSession(params);
-				liveThreads.set(params.threadId, {
+				const pending = startChatSession(params).catch((error: unknown) => {
+					if (liveThreads.get(params.threadId) === entry) {
+						liveThreads.delete(params.threadId);
+						untrackThread(params.sessionId, params.threadId);
+					}
+					throw error;
+				});
+				const entry: ThreadEntry = {
 					sessionId: params.sessionId,
 					pending,
-				});
+				};
+				liveThreads.set(params.threadId, entry);
 				trackThread(params.sessionId, params.threadId);
 				return pending;
 			};

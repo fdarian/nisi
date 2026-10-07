@@ -39,6 +39,7 @@ import { OverviewView } from "#/features/pull-request/overview/overview-view";
 import { WalkthroughView } from "#/features/pull-request/walkthrough/walkthrough-view";
 import { useWalkthroughEnabled } from "#/features/settings/settings-data";
 import type { SidecarQueryUtils } from "#/infra/backend-context";
+import { useLaunchMark } from "#/infra/launch-trace";
 import { useWindowFocused } from "#/infra/use-window-focused";
 import { splitPath } from "#/lib/tree-paths";
 import type { KeyBindings } from "#/lib/use-key-bindings";
@@ -123,6 +124,19 @@ export function PrView({
 	// other open PR's.
 	const windowFocused = useWindowFocused();
 	const isFilesChangedVisible = tabsValue === "files" && isSelectedTab;
+	useLaunchMark("pr-view.mounted", {
+		when: isSelectedTab,
+		sessionId: session.id,
+	});
+	useLaunchMark("diff.files.resolved", {
+		when: !isLoading && error == null,
+		sessionId: session.id,
+	});
+	useLaunchMark("files.list.painted", {
+		when: isFilesChangedVisible && !isLoading && error == null,
+		tab: files.length === 0 ? "files" : undefined,
+		sessionId: session.id,
+	});
 	const watched = isFilesChangedVisible && windowFocused;
 	useSessionWatch(orpc, session.id, watched);
 	// The same `watched` rising edge doubles as the refetch trigger for
@@ -234,6 +248,7 @@ export function PrView({
 							session={session}
 							setViewed={setViewed}
 							shortcutsEnabled={isSelectedTab}
+							isVisible={isFilesChangedVisible}
 						/>
 					</TabsContent>
 					{walkthroughEnabled && (
