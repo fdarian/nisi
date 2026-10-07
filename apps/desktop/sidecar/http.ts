@@ -1185,42 +1185,59 @@ export function attachRouter(
 					throw error;
 				});
 
-				const settingUp = !(await hasChatSession(input.threadId, mainContext));
-				if (settingUp) {
-					yield {
-						type: "data-sandbox-status",
-						data: { phase: "setting-up" },
-						transient: true,
-					};
-				}
-				const live = await getOrCreateChatSession(
-					{
+				try {
+					const settingUp = !(await hasChatSession(
+						input.threadId,
+						mainContext,
+					));
+					if (settingUp) {
+						yield {
+							type: "data-sandbox-status",
+							data: { phase: "setting-up" },
+							transient: true,
+						};
+					}
+					const live = await getOrCreateChatSession(
+						{
+							sessionId: input.sessionId,
+							threadId: input.threadId,
+							harness: input.harness,
+							model: input.model,
+							repoRoot: promptContext.repoRoot,
+							instructions: buildChatInstructions(promptContext),
+						},
+						mainContext,
+					);
+					if (settingUp) {
+						yield {
+							type: "data-sandbox-status",
+							data: { phase: "ready" },
+							transient: true,
+						};
+					}
+
+					yield* streamChatTurn({
 						sessionId: input.sessionId,
 						threadId: input.threadId,
-						harness: input.harness,
-						model: input.model,
-						repoRoot: promptContext.repoRoot,
-						instructions: buildChatInstructions(promptContext),
-					},
-					mainContext,
-				);
-				if (settingUp) {
-					yield {
-						type: "data-sandbox-status",
-						data: { phase: "ready" },
-						transient: true,
-					};
+						mainContext,
+						agent: live.agent,
+						session: live.session,
+						message: input.message,
+						abortSignal: signal,
+					});
+				} catch (error) {
+					if (!signal?.aborted) {
+						await Effect.runPromise(
+							Effect.logError("chat turn failed", {
+								sessionId: input.sessionId,
+								threadId: input.threadId,
+								harness: input.harness,
+								cause: error instanceof Error ? error.stack : String(error),
+							}).pipe(Effect.provide(mainContext)),
+						);
+					}
+					throw error;
 				}
-
-				yield* streamChatTurn({
-					sessionId: input.sessionId,
-					threadId: input.threadId,
-					mainContext,
-					agent: live.agent,
-					session: live.session,
-					message: input.message,
-					abortSignal: signal,
-				});
 			}),
 			closeThread: authed.chat.closeThread.effect(function* ({ input }) {
 				yield* Effect.promise(() =>
