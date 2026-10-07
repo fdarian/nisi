@@ -351,9 +351,12 @@ test("base refresh drops upstream-only files without changing head or remaining 
 						}),
 					);
 					const movedSessions: string[] = [];
+					const staleSessions: string[] = [];
 					const unsubscribe = subscribe((event) => {
 						if (event.type === "session-files-changed")
 							movedSessions.push(event.sessionId);
+						if (event.type === "session-base-staleness-changed")
+							staleSessions.push(event.sessionId);
 					});
 					yield* Effect.addFinalizer(() => Effect.sync(unsubscribe));
 					expect(
@@ -377,6 +380,7 @@ test("base refresh drops upstream-only files without changing head or remaining 
 					).toBe(false);
 					expect(movedSessions).toContain(session.id);
 					expect(movedSessions).toContain(other.id);
+					expect(staleSessions).toEqual([]);
 					const remaining = yield* store.listChangedFiles(session.id, false);
 					expect(remaining.map((file) => file.path)).toEqual(["a.ts"]);
 					expect(remaining[0]?.review?.viewed).toBe(true);
@@ -397,6 +401,9 @@ test("base refresh drops upstream-only files without changing head or remaining 
 						(yield* store.refreshSessionBase(session.id)).baseMayBeStale,
 					).toBe(true);
 					expect(yield* store.readBaseMayBeStale(session.id)).toBe(true);
+					expect(staleSessions).toContain(session.id);
+					expect(staleSessions).toContain(other.id);
+					staleSessions.length = 0;
 					expect(
 						(yield* store.listChangedFiles(session.id, false)).map(
 							(file) => file.path,
@@ -409,6 +416,7 @@ test("base refresh drops upstream-only files without changing head or remaining 
 						(yield* store.refreshSessionBase(session.id)).baseMayBeStale,
 					).toBe(false);
 					expect(yield* store.readBaseMayBeStale(session.id)).toBe(false);
+					expect(staleSessions).toContain(session.id);
 				}).pipe(Effect.scoped, Effect.provide(makeTestLayer(dataDir))),
 			);
 		} finally {

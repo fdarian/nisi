@@ -18,6 +18,10 @@ type EventPayload =
 	| { readonly type: "session-opened"; readonly session: Session }
 	| { readonly type: "session-closed"; readonly sessionId: string }
 	| { readonly type: "session-files-changed"; readonly sessionId: string }
+	| {
+			readonly type: "session-base-staleness-changed";
+			readonly sessionId: string;
+	  }
 	| { readonly type: "session-updated"; readonly session: Session }
 	| {
 			readonly type: "code-index-lsp-status-changed";

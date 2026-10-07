@@ -291,11 +291,22 @@ export function useFileChanges(
 	error: unknown;
 } {
 	const [includeUncommitted] = useIncludeUncommitted(orpc);
+	const queryClient = useQueryClient();
 	const query = useQuery(
 		orpc.diff.files.queryOptions({
 			input: { sessionId, includeUncommitted },
 		}),
 	);
+	// The background base fetch settled with the diff unchanged but
+	// `baseMayBeStale` flipped — refetch just this query so the header notice
+	// follows, without the Refresh button `session-files-changed` raises.
+	useSidecarEvent((event) => {
+		if (event.type !== "session-base-staleness-changed") return;
+		if (event.sessionId !== sessionId) return;
+		queryClient.invalidateQueries({
+			queryKey: orpc.diff.files.key({ input: { sessionId } }),
+		});
+	});
 	return {
 		files: query.data?.files ?? [],
 		baseMayBeStale: query.data?.baseMayBeStale,

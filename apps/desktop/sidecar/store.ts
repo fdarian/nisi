@@ -420,22 +420,34 @@ export class Store extends Context.Service<Store>()("Store", {
 					commit: identity[1].commit,
 				};
 			});
+		const emitForSessionsOnBase = (
+			key: string,
+			event: (sessionId: string) => Parameters<typeof emit>[0],
+		) =>
+			Effect.gen(function* () {
+				const sessions = yield* reviewStore.listOpenSessions();
+				for (const session of sessions) {
+					const identity = yield* baseIdentity(
+						session.repoRoot,
+						session.baseRef,
+					);
+					if (identity.key === key) emit(event(session.id));
+				}
+			});
 		const baseFetchState = yield* makeBaseRefresh({
 			identity: baseIdentity,
 			fetch: fetchBaseRef,
 			now: Date.now,
 			moved: (key) =>
-				Effect.gen(function* () {
-					const sessions = yield* reviewStore.listOpenSessions();
-					for (const session of sessions) {
-						const identity = yield* baseIdentity(
-							session.repoRoot,
-							session.baseRef,
-						);
-						if (identity.key === key)
-							emit({ type: "session-files-changed", sessionId: session.id });
-					}
-				}),
+				emitForSessionsOnBase(key, (sessionId) => ({
+					type: "session-files-changed",
+					sessionId,
+				})),
+			staleChanged: (key) =>
+				emitForSessionsOnBase(key, (sessionId) => ({
+					type: "session-base-staleness-changed",
+					sessionId,
+				})),
 		});
 		const refreshBase = baseFetchState.refresh;
 		const prepareBase = baseFetchState.prepare;
