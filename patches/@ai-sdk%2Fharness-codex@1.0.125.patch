@@ -1,0 +1,33 @@
+diff --git a/dist/index.js b/dist/index.js
+index f53645b..59e6651 100644
+--- a/dist/index.js
++++ b/dist/index.js
+@@ -31,12 +31,22 @@ import { WebSocket } from "ws";
+ import { z as z2 } from "zod/v4";
+ 
+ // src/codex-bootstrap.ts
+-import { createReadBridgeAsset } from "@ai-sdk/harness/utils";
+-var readBridgeAsset = createReadBridgeAsset({
+-  "package.json": new URL("./bridge/package.json", import.meta.url),
+-  "pnpm-lock.yaml": new URL("./bridge/pnpm-lock.yaml", import.meta.url),
+-  "index.mjs": new URL("./bridge/index.mjs", import.meta.url)
+-});
++import bridgePackageJsonText from "./bridge/package.json" with { type: "text" };
++import bridgePnpmLockYamlText from "./bridge/pnpm-lock.yaml" with { type: "text" };
++import bridgeIndexMjsText from "./bridge/index.mjs" with { type: "text" };
++// Bun only embeds bridge assets referenced by static imports in compiled binaries.
++var readBridgeAsset = async (name) => {
++  switch (name) {
++    case "package.json":
++      return bridgePackageJsonText;
++    case "pnpm-lock.yaml":
++      return bridgePnpmLockYamlText;
++    case "index.mjs":
++      return bridgeIndexMjsText;
++    default:
++      throw new Error(`bridge asset not found: ${name}`);
++  }
++};
+ var CODEX_BOOTSTRAP_DIR = ".harness-bootstrap/codex";
+ var cachedBootstrap;
+ async function getCodexBootstrap() {

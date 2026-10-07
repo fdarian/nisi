@@ -90,8 +90,8 @@ slow (roughly 13–28s) while nisi installs a pinned copy of it; every run after
   hand-building the patch file (`git diff --no-index` between a pristine `npm pack` extraction and
   a hand-edited copy) and registering it in `pnpm-workspace.yaml` directly instead of trusting
   `patch-commit`. Current patches:
-  - `@ai-sdk/harness*` (four, across the adapters and `@ai-sdk/harness` itself — `@ai-sdk/harness-pi`
-    carries no patch; upstream's own model resolver is provider-aware now) — see
+  - `@ai-sdk/harness-claude-code`, `@ai-sdk/harness-codex`, `@ai-sdk/harness-opencode` — statically
+    embed bridge assets for the compiled sidecar; see
     [knowledge/compiled-binary-differences.md](knowledge/compiled-binary-differences.md).
   - `@pierre/diffs` — `CodeView` teardown, pending-scroll-target, and sticky-header fixes; see
     [teardown](knowledge/codeview-teardown-leak-patch.md),
