@@ -174,11 +174,7 @@ const resolveButtonState = (
 export function PrMergeButtonSkeleton(): React.ReactElement {
 	return (
 		<Group>
-			<Button
-				disabled
-				size="sm"
-				variant="outline"
-			>
+			<Button disabled size="sm" variant="outline">
 				<Skeleton className="h-2 w-24" />
 			</Button>
 			<GroupSeparator />
