@@ -26,8 +26,6 @@ export const cliScope = [
 	":(glob,exclude)**/test/**",
 ];
 
-// Named in the stamp file so a binary built with different flags (e.g. before
-// --bytecode was added) has no matching stamp and gets rebuilt.
 const cliBuildFlags = ["--bytecode"];
 
 export type MeasurementCli = { path: string; stamp: BuildStamp };
@@ -50,10 +48,8 @@ export const prepareCli = (managed: boolean) =>
 		}
 		const dir = join(desktopDir, ".data/measure-launch/cli");
 		const path = join(dir, "nisi");
-		const stampPath = join(
-			dir,
-			`nisi${cliBuildFlags.join("")}.build-stamp.json`,
-		);
+		// Renamed from nisi.build-stamp.json so binaries built without --bytecode get rebuilt.
+		const stampPath = join(dir, "nisi-cli.build-stamp.json");
 		const root = resolve(desktopDir, "../..");
 		const current = yield* buildFingerprint(root, cliScope);
 		const stamp = yield* readStamp(stampPath);
