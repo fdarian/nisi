@@ -785,6 +785,77 @@ describe("Store — a PR session after the PR is merged", () => {
 		});
 	}
 
+	for (const kind of ["merge commit", "squash"] as const) {
+		test(`${kind}: a checkout that is past the merge still diffs only the PR, uncommitted files excluded`, async () => {
+			await withTestRepoAndDataDir(async (repoRoot, dataDir) => {
+				const root = await realpath(repoRoot);
+				await sh(root, ["checkout", "-q", "-b", "pr"]);
+				await Bun.write(join(root, "a.ts"), "pr change\n");
+				await Bun.write(join(root, "b.ts"), "pr file\n");
+				await sh(root, ["add", "-A"]);
+				await sh(root, ["commit", "-q", "-m", "pr"]);
+				const head = await shOut(root, ["rev-parse", "HEAD"]);
+
+				// `repoRoot` itself ends up on `main`, past the merge.
+				await sh(root, ["checkout", "-q", "main"]);
+				await Bun.write(join(root, "unrelated.ts"), "unrelated\n");
+				await sh(root, ["add", "-A"]);
+				await sh(root, ["commit", "-q", "-m", "unrelated"]);
+				const baseSha = await shOut(root, ["rev-parse", "HEAD"]);
+				if (kind === "merge commit")
+					await sh(root, ["merge", "-q", "--no-ff", "-m", "merge", "pr"]);
+				else {
+					await sh(root, [
+						"-c",
+						"merge.ff=true",
+						"merge",
+						"-q",
+						"--squash",
+						"pr",
+					]);
+					await sh(root, ["commit", "-q", "-m", "squash"]);
+				}
+				await Bun.write(join(root, "later.ts"), "later\n");
+				await sh(root, ["add", "-A"]);
+				await sh(root, ["commit", "-q", "-m", "later"]);
+				await Bun.write(join(root, "dirty.ts"), "uncommitted\n");
+
+				await Effect.runPromise(
+					Effect.gen(function* () {
+						const store = yield* Store;
+						const reviews = yield* ReviewStore;
+						const pr = { owner: "acme", repo: "widgets", number: 9 };
+						const session = yield* reviews.openSession({
+							repoRoot: root,
+							baseRef: "main",
+							headRef: "pr",
+							pr: { ...pr, title: "A PR" },
+						});
+						yield* store.recordPullRequestStatus(
+							pr,
+							prFacts(head, baseSha, "MERGED"),
+						);
+						// Include-uncommitted asked for, but the worktree isn't this PR's.
+						const files = yield* store.listChangedFiles(session.id, true);
+						expect(files.map((file) => file.path)).toEqual(["a.ts", "b.ts"]);
+						expect(
+							files.reduce((total, file) => total + file.additions, 0),
+						).toBe(2);
+						expect(
+							JSON.stringify(
+								yield* store.readFileContents(
+									session.id,
+									[{ path: "a.ts", force: false }],
+									true,
+								),
+							),
+						).toContain("pr change");
+					}).pipe(Effect.scoped, Effect.provide(makeTestLayer(dataDir))),
+				);
+			});
+		});
+	}
+
 	test("an open PR keeps the live base even after main moves", async () => {
 		await withTestRepoAndDataDir(async (repoRoot, dataDir) => {
 			const root = await realpath(repoRoot);

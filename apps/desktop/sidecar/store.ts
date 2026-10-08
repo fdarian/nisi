@@ -432,6 +432,7 @@ export class Store extends Context.Service<Store>()("Store", {
 		>;
 		const pullRequestKey = (pr: PullRequestIdentity) =>
 			`${pr.owner}/${pr.repo}#${pr.number}`.toLowerCase();
+		type SessionDiffSource = DiffHead & { readonly baseRef: string };
 		type PullRequestFacts = DiffBasePullRequest & {
 			readonly headSha: string;
 		};
@@ -1354,34 +1355,48 @@ export class Store extends Context.Service<Store>()("Store", {
 				: pullRequestFacts.get(pullRequestKey(session.pr));
 
 		/**
-		 * `session`'s {@link DiffHead} — see `diff-head.ts`'s `resolveDiffHead`
-		 * for the decision itself; this just adapts a `ReviewSession` to that
-		 * function's plain `(repoRoot, headRef, pullRequest)` signature, so
-		 * every call site below reads the same way.
+		 * What `session`'s diff is taken from: the {@link DiffHead} plus the
+		 * `baseRef` to hand `@repo/git`. Decided together, from one reading of the
+		 * PR's cached facts, because the two must agree: a merged PR is diffed as
+		 * its pinned base against its own head commit (`diff-head.ts`'s
+		 * `resolveDiffHead` never trusts the worktree once the PR is merged, and
+		 * `diff-base.ts`'s `resolveDiffBase` pins the base), while pairing the
+		 * pinned base with a worktree that has moved on would diff everything
+		 * main gained since. Every file-list, file-content, reconciliation and
+		 * snapshot path below goes through this, never `session.baseRef` directly.
 		 */
-		const resolveSessionDiffHead = (session: ReviewSession, repoRoot: string) =>
-			resolveDiffHead(
-				repoRoot,
-				session.headRef,
-				session.pr === null
-					? null
-					: {
-							number: session.pr.number,
-							headSha: sessionPullRequestFacts(session)?.headSha,
-						},
-			);
-
-		/**
-		 * The `baseRef` to hand `@repo/git` for `session` — see `diff-base.ts`'s
-		 * `resolveDiffBase`. Every file-list, file-content and reconciliation path
-		 * below goes through this, never `session.baseRef` directly.
-		 */
-		const resolveSessionDiffBase = (session: ReviewSession, repoRoot: string) =>
-			resolveDiffBase(
-				repoRoot,
-				session.baseRef,
-				sessionPullRequestFacts(session),
-			);
+		const resolveSessionDiffHead = (
+			session: ReviewSession,
+			repoRoot: string,
+		): Effect.Effect<
+			SessionDiffSource,
+			| GitCommandError
+			| PullRequestRefNotFound
+			| RepoPathNotFound
+			| RepoPathNotAGitRepo
+			| MergedPullRequestBaseUnavailable,
+			ChildProcessSpawner.ChildProcessSpawner
+		> =>
+			Effect.gen(function* () {
+				const facts = sessionPullRequestFacts(session);
+				const diffHead = yield* resolveDiffHead(
+					repoRoot,
+					session.headRef,
+					session.pr === null
+						? null
+						: {
+								number: session.pr.number,
+								headSha: facts?.headSha,
+								merged: facts?.state === "MERGED",
+							},
+				);
+				const baseRef = yield* resolveDiffBase(
+					repoRoot,
+					session.baseRef,
+					facts,
+				);
+				return { ...diffHead, baseRef };
+			});
 
 		/**
 		 * Feeds the PR's head, base and state into {@link pullRequestFacts} —
@@ -1419,13 +1434,14 @@ export class Store extends Context.Service<Store>()("Store", {
 				yield* Effect.forEach(sessions, (session) =>
 					Effect.gen(function* () {
 						const repoRoot = yield* resolveLiveRepoRoot(session);
-						const diffHeadFor = (sha: string | undefined) =>
+						const diffHeadFor = (known: PullRequestFacts | undefined) =>
 							resolveDiffHead(repoRoot, session.headRef, {
 								number: pr.number,
-								headSha: sha,
+								headSha: known?.headSha,
+								merged: known?.state === "MERGED",
 							});
-						const before = yield* diffHeadFor(previous?.headSha);
-						const after = yield* diffHeadFor(facts.headSha);
+						const before = yield* diffHeadFor(previous);
+						const after = yield* diffHeadFor(facts);
 						if (
 							baseChanged ||
 							before.worktreeEligible !== after.worktreeEligible ||
@@ -1475,7 +1491,7 @@ export class Store extends Context.Service<Store>()("Store", {
 				const diffHead = yield* resolveSessionDiffHead(session, repoRoot);
 				const effectiveIncludeUncommitted =
 					includeUncommitted && diffHead.worktreeEligible;
-				const baseRef = yield* resolveSessionDiffBase(session, repoRoot);
+				const baseRef = diffHead.baseRef;
 				const files = yield* getChangedFiles(repoRoot, baseRef, {
 					prepared: yield* preparation.read(repoRoot, baseRef, {
 						includeUncommitted: effectiveIncludeUncommitted,
@@ -1670,7 +1686,7 @@ export class Store extends Context.Service<Store>()("Store", {
 				const diffHead = yield* resolveSessionDiffHead(session, repoRoot);
 				const effectiveIncludeUncommitted =
 					includeUncommitted && diffHead.worktreeEligible;
-				const baseRef = yield* resolveSessionDiffBase(session, repoRoot);
+				const baseRef = diffHead.baseRef;
 				const contentByPath = yield* getFileContents(
 					repoRoot,
 					baseRef,
@@ -1906,10 +1922,9 @@ export class Store extends Context.Service<Store>()("Store", {
 		 */
 		const reconcilePathAgainstBase = (
 			sessionId: string,
-			session: ReviewSession,
 			repoRoot: string,
 			path: string,
-			diffHead: DiffHead,
+			diffHead: SessionDiffSource,
 			activeFileClaim: {
 				readonly snapshotHash: string | null;
 				readonly viewedAt: number;
@@ -1926,10 +1941,7 @@ export class Store extends Context.Service<Store>()("Store", {
 			Effect.gen(function* () {
 				const mergeBase = yield* resolveMergeBase(
 					repoRoot,
-					yield* resolveDiffBaseRef(
-						repoRoot,
-						yield* resolveSessionDiffBase(session, repoRoot),
-					),
+					yield* resolveDiffBaseRef(repoRoot, diffHead.baseRef),
 					diffHead.headRef,
 				);
 				const baseContentBytes = yield* readFileContentsAtRef(
@@ -2012,7 +2024,6 @@ export class Store extends Context.Service<Store>()("Store", {
 					);
 					const reconciliation = yield* reconcilePathAgainstBase(
 						sessionId,
-						session,
 						repoRoot,
 						path,
 						diffHead,
@@ -2061,7 +2072,6 @@ export class Store extends Context.Service<Store>()("Store", {
 
 				const reconciliation = yield* reconcilePathAgainstBase(
 					sessionId,
-					session,
 					repoRoot,
 					path,
 					diffHead,
@@ -2101,7 +2111,6 @@ export class Store extends Context.Service<Store>()("Store", {
 			listSessions,
 			closeSession,
 			resolveSessionRepoRoot,
-			resolveSessionDiffBase,
 			resolveSessionDiffHead,
 			recordPullRequestStatus,
 			resolveScheduledMergeRepoRoot,

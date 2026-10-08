@@ -51,6 +51,7 @@ describe("resolveDiffHead", () => {
 				resolveDiffHead(repoRoot, "feature-from-a-fork", {
 					number: 7,
 					headSha: undefined,
+					merged: false,
 				}),
 			);
 			expect(result).toEqual({ headRef: undefined, worktreeEligible: true });
@@ -155,7 +156,7 @@ describe("resolveDiffHead — PR head known", () => {
 		try {
 			await sh(repoRoot, ["checkout", "-q", "-b", "pr"]);
 			const prHead = await commitFile(repoRoot, "pr.ts");
-			const pullRequest = { number: 1, headSha: prHead };
+			const pullRequest = { number: 1, headSha: prHead, merged: false };
 			expect(await run(resolveDiffHead(repoRoot, "pr", pullRequest))).toEqual({
 				headRef: undefined,
 				worktreeEligible: true,
@@ -179,6 +180,29 @@ describe("resolveDiffHead — PR head known", () => {
 		}
 	});
 
+	test("a merged PR never uses the worktree, even when HEAD is past the PR head", async () => {
+		const repoRoot = await makeTestRepo();
+		try {
+			await sh(repoRoot, ["checkout", "-q", "-b", "pr"]);
+			const prHead = await commitFile(repoRoot, "pr.ts");
+			await commitFile(repoRoot, "later.ts");
+
+			const pullRequest = { number: 1, headSha: prHead };
+			expect(
+				await run(
+					resolveDiffHead(repoRoot, "pr", { ...pullRequest, merged: false }),
+				),
+			).toEqual({ headRef: undefined, worktreeEligible: true });
+			expect(
+				await run(
+					resolveDiffHead(repoRoot, "pr", { ...pullRequest, merged: true }),
+				),
+			).toEqual({ headRef: prHead, worktreeEligible: false });
+		} finally {
+			await rm(repoRoot, { recursive: true, force: true });
+		}
+	});
+
 	test("a worktree that moved on to another commit diffs the PR head sha instead", async () => {
 		const repoRoot = await makeTestRepo();
 		try {
@@ -190,7 +214,11 @@ describe("resolveDiffHead — PR head known", () => {
 
 			expect(
 				await run(
-					resolveDiffHead(repoRoot, "pr", { number: 1, headSha: prHead }),
+					resolveDiffHead(repoRoot, "pr", {
+						number: 1,
+						headSha: prHead,
+						merged: false,
+					}),
 				),
 			).toEqual({ headRef: prHead, worktreeEligible: false });
 			expect(await shOut(repoRoot, ["for-each-ref"])).toBe(refsBefore);
@@ -214,7 +242,11 @@ describe("resolveDiffHead — PR head known", () => {
 			const refsBefore = await shOut(clone, ["for-each-ref"]);
 
 			const result = await run(
-				resolveDiffHead(worktree, "pr", { number: 1, headSha: prHead }),
+				resolveDiffHead(worktree, "pr", {
+					number: 1,
+					headSha: prHead,
+					merged: false,
+				}),
 			);
 			expect(result).toEqual({ headRef: prHead, worktreeEligible: false });
 			expect(await shOut(worktree, ["cat-file", "-t", prHead])).toBe("commit");
@@ -224,7 +256,11 @@ describe("resolveDiffHead — PR head known", () => {
 			const stale = "0123456789abcdef0123456789abcdef01234567";
 			expect(
 				await run(
-					resolveDiffHead(worktree, "pr", { number: 1, headSha: stale }),
+					resolveDiffHead(worktree, "pr", {
+						number: 1,
+						headSha: stale,
+						merged: false,
+					}),
 				),
 			).toEqual({ headRef: prHead, worktreeEligible: false });
 		} finally {

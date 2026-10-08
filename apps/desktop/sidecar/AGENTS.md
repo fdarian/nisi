@@ -49,8 +49,10 @@ seam" for the port/token handshake this boots into.
   head sha, when known), decides `DiffHead` — `{headRef, worktreeEligible}` — the single place that
   answers "which ref is this session's head right now, and is `repoRoot`'s worktree safe to overlay
   on it." Unit-tested directly against real temp repos rather than through `Store`'s DB-backed layer.
-  A PR-backed session's worktree is eligible iff its `HEAD` is the PR head or descends from it,
-  whatever branch (or detached `HEAD`) it's on, since worktrees get reused for other work. Otherwise
+  A PR-backed session's worktree is eligible iff the PR isn't merged and its `HEAD` is the PR head or
+  descends from it, whatever branch (or detached `HEAD`) it's on, since worktrees get reused for other
+  work (a merged PR never uses the worktree: a checkout of `main` after the merge descends from the
+  head but its diff would cover everything main gained since). Otherwise
   the session diffs the PR head sha directly with uncommitted changes off, fetching
   `refs/pull/<n>/head` from the main clone only when that commit isn't local. The head sha comes from
   `Store`'s in-memory `pullRequestFacts` cache (head, base and state), fed by the `mergeStatus`
@@ -66,8 +68,9 @@ seam" for the port/token handshake this boots into.
   — `resolveSessionTarget`'s explicit-`headRef` validation, mirroring `store.ts`'s own
   `InvalidBaseRef`.
 - `diff-base.ts` — `resolveDiffBase`: the one place that picks the `baseRef` every diff computation
-  for a session passes to `@repo/git` (`Store.resolveSessionDiffBase`: file list, file contents,
-  reviewed-state reconciliation). The diff base is `merge-base(base tip, head)`, and a true merge
+  for a session passes to `@repo/git`. `Store.resolveSessionDiffHead` returns it together with the
+  `DiffHead` (`.baseRef`), decided from one reading of the PR facts, so head and base can't disagree
+  (file list, file contents, reviewed-state reconciliation). The diff base is `merge-base(base tip, head)`, and a true merge
   commit makes the head an ancestor of `origin/<base>`, which empties the diff. So once the cached
   PR state is MERGED, the base tip is pinned to the PR's `baseRefOid` (main before the merge; a raw
   sha, which `@repo/git` accepts as a base), fetching the base branch if that commit isn't local and

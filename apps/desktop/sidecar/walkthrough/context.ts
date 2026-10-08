@@ -8,6 +8,7 @@ import {
 	type RepoPathNotAGitRepo,
 	type RepoPathNotFound,
 	resolveCurrentBranch,
+	resolveHeadSha,
 	type WorktreeRelocationFailed,
 } from "@repo/git";
 import {
@@ -65,6 +66,18 @@ const countLines = (content: string): number => {
 	const trimmed = content.endsWith("\n") ? content.slice(0, -1) : content;
 	return trimmed.length === 0 ? 0 : trimmed.split("\n").length;
 };
+
+const diskIsDiffHead = (
+	session: { readonly pr: unknown },
+	repoRoot: string,
+	diffHead: { readonly headRef: string | undefined },
+) =>
+	session.pr === null || diffHead.headRef === undefined
+		? Effect.succeed(false)
+		: Effect.all([
+				resolveHeadSha(repoRoot),
+				resolveHeadSha(repoRoot, diffHead.headRef),
+			]).pipe(Effect.map((shas) => shas[0] === shas[1]));
 
 /**
  * Everything the sidecar needs to both brief the agent
@@ -129,9 +142,15 @@ export const gatherGenerationContext = (
 		// Same decision as the Files Changed list. The agent reads `repoRoot` on
 		// disk rather than the diff's own refs, so a worktree that isn't the one
 		// the diff is taken from (`!worktreeEligible`) is refused up front
-		// instead of letting the agent explore another commit's files.
+		// instead of letting the agent explore another commit's files. The one
+		// exception: a PR session whose diff head is a pinned commit (a merged PR)
+		// that is exactly what the worktree has checked out — the files on disk
+		// still are the diff's head.
 		const diffHead = yield* store.resolveSessionDiffHead(session, repoRoot);
-		if (!diffHead.worktreeEligible) {
+		if (
+			!diffHead.worktreeEligible &&
+			!(yield* diskIsDiffHead(session, repoRoot, diffHead))
+		) {
 			return yield* new HeadNotCheckedOut({
 				repoRoot,
 				headRef: session.headRef,
@@ -140,7 +159,7 @@ export const gatherGenerationContext = (
 			});
 		}
 
-		const baseRef = yield* store.resolveSessionDiffBase(session, repoRoot);
+		const baseRef = diffHead.baseRef;
 		const settings = yield* settingsStore.get();
 		const includeUncommitted = settings.includeUncommitted;
 		const files = yield* getChangedFiles(repoRoot, baseRef, {

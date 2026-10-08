@@ -75,6 +75,7 @@ export type DiffHead = {
 export type DiffHeadPullRequest = {
 	readonly number: number;
 	readonly headSha: string | undefined;
+	readonly merged: boolean;
 };
 
 /**
@@ -118,7 +119,10 @@ const ensurePullRequestHeadCommit = (
  * isn't eligible the session diffs the PR head commit directly (a raw sha, no
  * ref created — see {@link ensurePullRequestHeadCommit} for how it's made
  * available), with uncommitted changes off since they belong to whatever the
- * worktree is doing now. Until the PR's head is known (`headSha` undefined)
+ * worktree is doing now. A merged PR never uses the worktree, even when its
+ * `HEAD` descends from the PR head (a checkout of `main` after the merge
+ * does): the diff is the PR's own range, not whatever the worktree has gained
+ * since. Until the PR's head is known (`headSha` undefined)
  * the worktree is trusted, as it was before this check existed. The PR's
  * `headRef` branch name is never passed to git: in a nisi worktree it isn't
  * guaranteed to resolve at all (nisi checks the PR out onto its own
@@ -162,7 +166,7 @@ export const resolveDiffHead = (
 	if (headSha === undefined)
 		return Effect.succeed({ headRef: undefined, worktreeEligible: true });
 	return Effect.gen(function* () {
-		if (yield* headDescendsFrom(repoRoot, headSha))
+		if (!pullRequest.merged && (yield* headDescendsFrom(repoRoot, headSha)))
 			return { headRef: undefined, worktreeEligible: true };
 		return {
 			headRef: yield* ensurePullRequestHeadCommit(

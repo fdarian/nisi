@@ -18,8 +18,8 @@ discovery, sandbox mode, read-only tool gating) lives one level up in
   `parseContent`'s doc. Lives here rather than in `@repo/walkthrough` because that package is
   deliberately I/O-free — see its AGENTS.md.
 - `context.ts` — `gatherGenerationContext`: resolves a session's `repoRoot`/`baseRef`/`headRef`/PR
-  title (`ReviewStore` for the row, `Store.resolveSessionRepoRoot`/`resolveSessionDiffHead`/
-  `resolveSessionDiffBase` for the live worktree, head and base, so the file list is the one Files
+  title (`ReviewStore` for the row, `Store.resolveSessionRepoRoot`/`resolveSessionDiffHead`
+  for the live worktree, head and base, so the file list is the one Files
   Changed shows) and fetches every changed file's patch + head content via `@repo/git`, producing
   both what `@repo/walkthrough`'s `buildOverview` needs for the agent's brief (the refs, the
   per-file list, the PR title) and what `evaluateWalkthrough` needs to validate the agent's answer
@@ -28,7 +28,8 @@ discovery, sandbox mode, read-only tool gating) lives one level up in
   and threads it into both `@repo/git` calls, so the diff an agent explores matches what the user
   sees in Files Changed. Refuses outright (`HeadNotCheckedOut`) whenever the worktree isn't
   eligible to be the diff's head — a plain branch session whose `headRef` isn't checked out, or a
-  PR session whose worktree no longer holds the PR's head (`pullRequestNumber` is set) — because the
+  PR session whose worktree no longer holds the PR's head (`pullRequestNumber` is set; a merged PR is
+  fine only while `HEAD` is exactly the PR head) — because the
   harness runs a real coding agent directly against that worktree on disk
   (`@repo/harness-local`), so it would explore files that don't match the diff it was briefed on.
   `generate.ts`'s `resolveContext` turns this into a specific `failed` event rather than the
