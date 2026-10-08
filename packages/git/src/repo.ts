@@ -212,3 +212,19 @@ export type DiffTarget =
 /** The trailing revision args for a `git diff <mergeBase> ...` call — empty for `worktree`, git's own bare-diff form. */
 export const diffTargetArgs = (target: DiffTarget): ReadonlyArray<string> =>
 	target.kind === "committed" ? [target.sha] : [];
+
+/** Whether `sha` names a commit object present in `repoRoot`'s object store. */
+export const commitExists = (repoRoot: string, sha: string) =>
+	gitResult(repoRoot, ["cat-file", "-e", `${sha}^{commit}`]).pipe(
+		Effect.map((result) => result.exitCode === 0),
+	);
+
+/**
+ * Whether `repoRoot`'s checked-out `HEAD` is `sha` or a descendant of it.
+ * Any non-zero exit reads as "no" — including `sha` not being in the object
+ * store at all, where `HEAD` can't descend from it by definition.
+ */
+export const headDescendsFrom = (repoRoot: string, sha: string) =>
+	gitResult(repoRoot, ["merge-base", "--is-ancestor", sha, "HEAD"]).pipe(
+		Effect.map((result) => result.exitCode === 0),
+	);

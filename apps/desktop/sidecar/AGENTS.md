@@ -45,23 +45,26 @@ seam" for the port/token handshake this boots into.
   `GhGitHub.layer` consumes its `PullRequestAttention` stream to choose its polling cadence.
 - `stream-bridge.ts` — turns an Effect Stream into the async iterator required by four oRPC live
   handlers, interrupting the consuming fiber when the request aborts.
-- `diff-head.ts` — `resolveDiffHead`: for a session's `headRef` and whether it's a PR-backed
-  session, decides `DiffHead` — `{headRef, worktreeEligible}` — the single place that answers
-  "which ref is this session's head right now, and is `repoRoot`'s worktree safe to overlay on it."
-  Pure and session-shape-agnostic (no `ReviewStore`/blob dependency, just `@repo/git`'s
-  `resolveCurrentBranch`), so it's unit-tested directly against real temp repos rather than through
-  `Store`'s full DB-backed layer. A PR-backed session is always eligible without even checking:
-  it uses either a nisi PR worktree or a reused branch checkout. `openPullRequestSession` only
-  retargets a same-repository checkout currently on the PR head, and skips fork PRs. In a nisi
-  worktree the PR's own `headRef` need not resolve locally, since nisi checks it out onto its
-  own `nisi/pr-<n>/<headRef>` branch (see `@repo/git`'s `worktree.ts`). A plain
-  branch session compares `headRef` against `resolveCurrentBranch` fresh on every call rather than
-  once at open time, so it drifts in and out of eligibility as the caller checks different branches
-  out — this is what lets a session self-heal, but also what makes every read (`listChangedFiles`/
-  `readFileContents`) and write (`setFileViewed`/`setRangeViewed`) path in `store.ts` need to
-  consult it independently, on every call, rather than trusting a value resolved elsewhere. Also
-  owns `InvalidHeadRef`/`validateHeadRef` — `resolveSessionTarget`'s explicit-`headRef` validation,
-  mirroring `store.ts`'s own `InvalidBaseRef`.
+- `diff-head.ts` — `resolveDiffHead`: for a session's `headRef` and its PR (number plus the PR's
+  head sha, when known), decides `DiffHead` — `{headRef, worktreeEligible}` — the single place that
+  answers "which ref is this session's head right now, and is `repoRoot`'s worktree safe to overlay
+  on it." Unit-tested directly against real temp repos rather than through `Store`'s DB-backed layer.
+  A PR-backed session's worktree is eligible iff its `HEAD` is the PR head or descends from it,
+  whatever branch (or detached `HEAD`) it's on, since worktrees get reused for other work. Otherwise
+  the session diffs the PR head sha directly with uncommitted changes off, fetching
+  `refs/pull/<n>/head` from the main clone only when that commit isn't local. The head sha comes from
+  `Store`'s in-memory `pullRequestHeads` cache, fed by the `mergeStatus` watch in `http.ts` via
+  `Store.recordPullRequestHead` (which also emits `session-files-changed` when the cached head
+  changes what the session diffs); until it's populated the worktree is trusted. A nisi PR worktree's
+  `headRef` need not resolve locally (nisi checks the PR out onto its own `nisi/pr-<n>/<headRef>`
+  branch), so it's never passed to git for a PR session. A plain branch session compares `headRef`
+  against `resolveCurrentBranch` fresh on every call rather than once at open time, so it drifts in
+  and out of eligibility as the caller checks different branches out — this is what lets a session
+  self-heal, but also what makes every read (`listChangedFiles`/`readFileContents`) and write
+  (`setFileViewed`/`setRangeViewed`) path in `store.ts` need to consult it independently, on every
+  call, rather than trusting a value resolved elsewhere. Also owns `InvalidHeadRef`/`validateHeadRef`
+  — `resolveSessionTarget`'s explicit-`headRef` validation, mirroring `store.ts`'s own
+  `InvalidBaseRef`.
 - `store.ts` — `Store`, the service `http.ts`'s git/review handlers depend on. One method per contract
   procedure (`openSession`, `listChangedFiles`, `setFileViewed`, `setRangeViewed`, ...), each composing
   `@repo/review`'s `ReviewStore` with `@repo/git`'s functions. `Session` here is the wire shape — a

@@ -420,6 +420,20 @@ export class Store extends Context.Service<Store>()("Store", {
 					commit: identity[1].commit,
 				};
 			});
+		type PullRequestIdentity = Pick<
+			SessionPullRequest,
+			"owner" | "repo" | "number"
+		>;
+		const pullRequestKey = (pr: PullRequestIdentity) =>
+			`${pr.owner}/${pr.repo}#${pr.number}`.toLowerCase();
+		/**
+		 * Each PR's head commit as last reported by the merge-status watch, in
+		 * memory only. Empty until a watch has read it, in which case
+		 * `resolveDiffHead` keeps trusting the worktree. Lost on restart, which
+		 * just means the next watch reading repopulates it.
+		 */
+		const pullRequestHeads = new Map<string, string>();
+
 		/**
 		 * Open sessions whose `repoRoot` directory no longer exists, already
 		 * warned about — `listSessions` runs on every live-poll tick, so a
@@ -1334,7 +1348,68 @@ export class Store extends Context.Service<Store>()("Store", {
 		 * every call site below reads the same way.
 		 */
 		const resolveSessionDiffHead = (session: ReviewSession, repoRoot: string) =>
-			resolveDiffHead(repoRoot, session.headRef, session.pr !== null);
+			resolveDiffHead(
+				repoRoot,
+				session.headRef,
+				session.pr === null
+					? null
+					: {
+							number: session.pr.number,
+							headSha: pullRequestHeads.get(pullRequestKey(session.pr)),
+						},
+			);
+
+		/**
+		 * Feeds the PR head commit into {@link pullRequestHeads} — called by the
+		 * merge-status watch, the one stream that already polls the PR. When the
+		 * new head changes what a session of that PR diffs (the worktree stops or
+		 * starts being eligible, or the commit to diff changes) the session gets
+		 * `session-files-changed`, since nothing else notices a push that didn't
+		 * come from this worktree. Never fails: a status update must not break
+		 * the watch it rides on.
+		 */
+		const recordPullRequestHead = (
+			pr: PullRequestIdentity,
+			headSha: string,
+		): Effect.Effect<void, never, FileSystem | ChildProcessSpawner.ChildProcessSpawner> =>
+			Effect.gen(function* () {
+				const key = pullRequestKey(pr);
+				const previous = pullRequestHeads.get(key);
+				if (previous === headSha) return;
+				pullRequestHeads.set(key, headSha);
+				const sessions = (yield* reviewStore.listOpenSessions()).filter(
+					(session) =>
+						session.pr !== null && pullRequestKey(session.pr) === key,
+				);
+				yield* Effect.forEach(sessions, (session) =>
+					Effect.gen(function* () {
+						const repoRoot = yield* resolveLiveRepoRoot(session);
+						const diffHeadFor = (sha: string | undefined) =>
+							resolveDiffHead(repoRoot, session.headRef, {
+								number: pr.number,
+								headSha: sha,
+							});
+						const before = yield* diffHeadFor(previous);
+						const after = yield* diffHeadFor(headSha);
+						if (
+							before.worktreeEligible !== after.worktreeEligible ||
+							before.headRef !== after.headRef
+						)
+							emit({ type: "session-files-changed", sessionId: session.id });
+					}).pipe(
+						Effect.catchCause((cause) =>
+							Effect.logWarning(
+								"Could not apply the PR head update to a session",
+								{ sessionId: session.id, cause },
+							),
+						),
+					),
+				);
+			}).pipe(
+				Effect.catchCause((cause) =>
+					Effect.logWarning("Could not record the PR head", { cause }),
+				),
+			);
 
 		const refreshSessionBase = (sessionId: string) =>
 			Effect.gen(function* () {
@@ -1977,6 +2052,7 @@ export class Store extends Context.Service<Store>()("Store", {
 			listSessions,
 			closeSession,
 			resolveSessionRepoRoot,
+			recordPullRequestHead,
 			resolveScheduledMergeRepoRoot,
 			listChangedFiles,
 			refreshSessionBase,

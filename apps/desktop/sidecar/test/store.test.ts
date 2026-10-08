@@ -42,6 +42,21 @@ const sh = async (cwd: string, args: ReadonlyArray<string>): Promise<void> => {
 	}
 };
 
+const shOut = async (
+	cwd: string,
+	args: ReadonlyArray<string>,
+): Promise<string> => {
+	const proc = Bun.spawn(["git", ...args], {
+		cwd,
+		stdout: "pipe",
+		stderr: "pipe",
+	});
+	const out = await new Response(proc.stdout).text();
+	if ((await proc.exited) !== 0)
+		throw new Error(`git ${args.join(" ")} failed`);
+	return out.trim();
+};
+
 /** A throwaway repo with one commit on `main` — enough for `resolveMergeBase`/`resolveCurrentBranch` to have something real to resolve against. */
 const makeTestRepo = async (): Promise<string> => {
 	const root = await mkdtemp(join(tmpdir(), "nisi-sidecar-store-repo-"));
@@ -519,6 +534,121 @@ describe("base refresh — a session whose directory was deleted", () => {
 				await rm(upstream, { recursive: true, force: true });
 				await rm(deadRoot, { recursive: true, force: true });
 			}
+		});
+	});
+});
+
+describe("Store — a PR session's worktree that moved on to another commit", () => {
+	test("keeps uncommitted changes while the worktree holds the PR head, and diffs the PR head (reviewed files clean) once it doesn't", async () => {
+		await withTestRepoAndDataDir(async (repoRoot, dataDir) => {
+			const root = await realpath(repoRoot);
+			await sh(root, ["checkout", "-q", "-b", "pr"]);
+			await Bun.write(join(root, "a.ts"), "pr change\n");
+			await Bun.write(join(root, "b.ts"), "pr file\n");
+			await sh(root, ["add", "-A"]);
+			await sh(root, ["commit", "-q", "-m", "pr"]);
+			const prHead = await shOut(root, ["rev-parse", "HEAD"]);
+			// Uncommitted work: only meaningful while the worktree is still the PR's.
+			await Bun.write(join(root, "uncommitted.ts"), "dirty\n");
+
+			await Effect.runPromise(
+				Effect.gen(function* () {
+					const store = yield* Store;
+					const reviews = yield* ReviewStore;
+					const settings = yield* SettingsStore;
+					yield* settings.update({ includeUncommitted: true });
+					const pr = { owner: "acme", repo: "widgets", number: 5 };
+					const session = yield* reviews.openSession({
+						repoRoot: root,
+						baseRef: "main",
+						headRef: "pr",
+						pr: { ...pr, title: "A PR" },
+					});
+					const paths = (includeUncommitted: boolean) =>
+						store
+							.listChangedFiles(session.id, includeUncommitted)
+							.pipe(Effect.map((files) => files.map((file) => file.path)));
+
+					// Head not known yet: today's behavior, the worktree is trusted.
+					expect(yield* paths(true)).toEqual([
+						"a.ts",
+						"b.ts",
+						"uncommitted.ts",
+					]);
+
+					yield* store.recordPullRequestHead(pr, prHead);
+					expect(yield* paths(true)).toEqual([
+						"a.ts",
+						"b.ts",
+						"uncommitted.ts",
+					]);
+					expect(yield* paths(false)).toEqual(["a.ts", "b.ts"]);
+
+					// Snapshot taken from the worktree bytes (includeUncommitted on).
+					yield* store.setFileViewed(session.id, "a.ts", true);
+
+					const events: string[] = [];
+					const unsubscribe = subscribe((event) => {
+						if (event.type === "session-files-changed")
+							events.push(event.sessionId);
+					});
+					yield* Effect.addFinalizer(() => Effect.sync(unsubscribe));
+
+					// The worktree gets reused for an unrelated task.
+					yield* Effect.promise(async () => {
+						await sh(root, ["checkout", "-q", "-b", "other-task", "main"]);
+						await Bun.write(join(root, "other.ts"), "other task\n");
+						await sh(root, ["add", "other.ts"]);
+						await sh(root, ["commit", "-q", "-m", "other"]);
+						await Bun.write(join(root, "other-dirty.ts"), "dirty\n");
+					});
+					// Same PR head reported again: nothing changed, nothing to announce.
+					yield* store.recordPullRequestHead(pr, prHead);
+					expect(events).toEqual([]);
+
+					const files = yield* store.listChangedFiles(session.id, true);
+					expect(files.map((file) => file.path)).toEqual(["a.ts", "b.ts"]);
+					// Reviewed snapshot (worktree bytes) vs. the committed PR head.
+					expect(
+						files.find((file) => file.path === "a.ts")?.review,
+					).toMatchObject({ viewed: true, changedSinceReview: false });
+					const contents = yield* store.readFileContents(
+						session.id,
+						[{ path: "b.ts", force: false }],
+						true,
+					);
+					expect(JSON.stringify(contents)).toContain("pr file");
+
+					// A new push lands: the PR head moves, which a moved worktree
+					// can't have anticipated either way.
+					const pushed = yield* Effect.promise(async () => {
+						await sh(root, ["checkout", "-q", "pr"]);
+						await Bun.write(join(root, "b.ts"), "pr file, pushed\n");
+						await sh(root, ["commit", "-q", "-am", "push"]);
+						const sha = await shOut(root, ["rev-parse", "HEAD"]);
+						await sh(root, ["checkout", "-q", "other-task"]);
+						return sha;
+					});
+					yield* store.recordPullRequestHead(pr, pushed);
+					expect(events).toEqual([session.id]);
+
+					// Back on the PR (descendant of the recorded head): worktree again.
+					yield* Effect.promise(async () => {
+						await rm(join(root, "other-dirty.ts"));
+						await sh(root, ["checkout", "-q", "pr"]);
+					});
+					expect(yield* paths(true)).toEqual([
+						"a.ts",
+						"b.ts",
+						"uncommitted.ts",
+					]);
+					expect(
+						(yield* store.listChangedFiles(session.id, true)).find(
+							(file) => file.path === "a.ts",
+						)?.review,
+					).toMatchObject({ viewed: true, changedSinceReview: false });
+				}).pipe(Effect.scoped, Effect.provide(makeTestLayer(dataDir))),
+			);
 		});
 	});
 });

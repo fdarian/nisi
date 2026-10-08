@@ -1519,6 +1519,7 @@ export function attachRouter(
 						Effect.gen(function* () {
 							const github = yield* GitHub;
 							const preferences = yield* RepoMergeMethodStore;
+							const store = yield* Store;
 							return github.watchMergeStatus(input).pipe(
 								Stream.mapEffect((status) =>
 									Effect.gen(function* () {
@@ -1534,8 +1535,15 @@ export function attachRouter(
 											return yield* Effect.die(
 												new Error("GitHub returned no merge methods"),
 											);
+										yield* store.recordPullRequestHead(
+											input,
+											status.mergeability.headRefOid,
+										);
 										return {
-											...status.mergeability,
+											state: status.mergeability.state,
+											mergeable: status.mergeability.mergeable,
+											mergeStateStatus: status.mergeability.mergeStateStatus,
+											isDraft: status.mergeability.isDraft,
 											allowedMethods: status.allowedMethods,
 											defaultMethod:
 												remembered !== null &&

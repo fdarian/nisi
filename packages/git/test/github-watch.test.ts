@@ -49,6 +49,7 @@ describe("gh watch polling", () => {
 			mergeable: "UNKNOWN" as const,
 			mergeStateStatus: "UNKNOWN" as const,
 			isDraft: false,
+			headRefOid: "head",
 		};
 		expect(
 			milliseconds(

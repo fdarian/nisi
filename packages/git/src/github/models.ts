@@ -193,6 +193,7 @@ export const MergeabilityView = Schema.Struct({
 		"UNSTABLE",
 	]),
 	isDraft: Schema.Boolean,
+	headRefOid: Schema.String,
 });
 
 export type PullRequestMergeability = Schema.Schema.Type<

@@ -1,5 +1,17 @@
-import type { GitCommandError } from "@repo/git";
-import { resolveCurrentBranch, resolveHeadSha } from "@repo/git";
+import type {
+	GitCommandError,
+	PullRequestRefNotFound,
+	RepoPathNotAGitRepo,
+	RepoPathNotFound,
+} from "@repo/git";
+import {
+	commitExists,
+	fetchPullRequestHeadSha,
+	headDescendsFrom,
+	resolveCurrentBranch,
+	resolveHeadSha,
+	resolveMainCloneRoot,
+} from "@repo/git";
 import { Effect, Schema } from "effect";
 import type { ChildProcessSpawner } from "effect/unstable/process";
 
@@ -47,12 +59,44 @@ export const validateHeadRef = (
  * whether it's safe to overlay `repoRoot`'s worktree on top of it at all —
  * `headRef` is `undefined` exactly when `worktreeEligible` is `true` (the
  * `@repo/git` default of "current checkout" already means the same thing),
- * and the session's own `headRef` string otherwise.
+ * and otherwise what to diff instead: the session's own `headRef` string, or
+ * a PR head commit sha.
  */
 export type DiffHead = {
 	readonly headRef: string | undefined;
 	readonly worktreeEligible: boolean;
 };
+
+/**
+ * What {@link resolveDiffHead} needs to know about a session's PR. `headSha`
+ * is the PR's head commit as last seen from GitHub (`Store`'s in-memory
+ * cache, fed by the merge-status watch), `undefined` until the first reading.
+ */
+export type DiffHeadPullRequest = {
+	readonly number: number;
+	readonly headSha: string | undefined;
+};
+
+/**
+ * Makes `headSha` resolvable in `repoRoot` for diffing. A commit already in
+ * the (shared) object store is used as-is. Otherwise `refs/pull/<n>/head` is
+ * fetched from the main clone's `origin` — the one ref GitHub publishes for
+ * every PR including fork PRs, and it lands in `FETCH_HEAD` only, so no ref is
+ * created. That fetch can only return the PR's *current* tip: when `headSha`
+ * is a head the PR has since moved past (a force-push), the tip is the
+ * commit to diff.
+ */
+const ensurePullRequestHeadCommit = (
+	repoRoot: string,
+	number: number,
+	headSha: string,
+) =>
+	Effect.gen(function* () {
+		if (yield* commitExists(repoRoot, headSha)) return headSha;
+		const mainCloneRoot = yield* resolveMainCloneRoot(repoRoot);
+		const tip = yield* fetchPullRequestHeadSha(mainCloneRoot, number);
+		return (yield* commitExists(repoRoot, headSha)) ? headSha : tip;
+	});
 
 /**
  * Decides {@link DiffHead} for a session — the single place that answers
@@ -65,15 +109,20 @@ export type DiffHead = {
  * snapshot the wrong branch's content (see the git history for the fix this
  * accompanies).
  *
- * `hasPullRequest` sessions are always worktree-eligible without even
- * checking: they use a nisi PR worktree or a branch checkout reused by the
- * sidecar. `openPullRequestSession` verifies that a reused checkout is on
- * the same-repository PR's head before retargeting it. In a nisi worktree,
- * `headRef` is the PR author's own branch name, which isn't
- * guaranteed to resolve as a ref in that worktree at all (nisi checks the PR
- * out onto its own `nisi/pr-<n>/<headRef>` branch), so it must never be
- * passed to a git call as an explicit `headRef` either — literal `HEAD` is
- * already the right target.
+ * A PR-backed session's worktree is eligible only while its `HEAD` is the
+ * PR's head commit or a descendant of it — whatever branch, or detached
+ * `HEAD`, the worktree is on. Claude Code reuses worktrees, so a path that
+ * once held this PR can have moved on to an unrelated one; diffing "whatever
+ * `HEAD` is now" would then show another PR's changes. A descendant counts
+ * so unpushed local commits on top of the PR stay visible. When the worktree
+ * isn't eligible the session diffs the PR head commit directly (a raw sha, no
+ * ref created — see {@link ensurePullRequestHeadCommit} for how it's made
+ * available), with uncommitted changes off since they belong to whatever the
+ * worktree is doing now. Until the PR's head is known (`headSha` undefined)
+ * the worktree is trusted, as it was before this check existed. The PR's
+ * `headRef` branch name is never passed to git: in a nisi worktree it isn't
+ * guaranteed to resolve at all (nisi checks the PR out onto its own
+ * `nisi/pr-<n>/<headRef>` branch).
  *
  * Every other session compares `headRef` against what's actually checked
  * out right now (`resolveCurrentBranch`) — re-checked on every call, never
@@ -90,20 +139,38 @@ export type DiffHead = {
 export const resolveDiffHead = (
 	repoRoot: string,
 	headRef: string,
-	hasPullRequest: boolean,
+	pullRequest: DiffHeadPullRequest | null,
 ): Effect.Effect<
 	DiffHead,
-	GitCommandError,
+	| GitCommandError
+	| PullRequestRefNotFound
+	| RepoPathNotFound
+	| RepoPathNotAGitRepo,
 	ChildProcessSpawner.ChildProcessSpawner
-> =>
-	hasPullRequest
-		? Effect.succeed({ headRef: undefined, worktreeEligible: true })
-		: resolveCurrentBranch(repoRoot).pipe(
-				Effect.map((currentBranch) => {
-					const worktreeEligible = currentBranch === headRef;
-					return {
-						headRef: worktreeEligible ? undefined : headRef,
-						worktreeEligible,
-					};
-				}),
-			);
+> => {
+	if (pullRequest === null)
+		return resolveCurrentBranch(repoRoot).pipe(
+			Effect.map((currentBranch) => {
+				const worktreeEligible = currentBranch === headRef;
+				return {
+					headRef: worktreeEligible ? undefined : headRef,
+					worktreeEligible,
+				};
+			}),
+		);
+	const headSha = pullRequest.headSha;
+	if (headSha === undefined)
+		return Effect.succeed({ headRef: undefined, worktreeEligible: true });
+	return Effect.gen(function* () {
+		if (yield* headDescendsFrom(repoRoot, headSha))
+			return { headRef: undefined, worktreeEligible: true };
+		return {
+			headRef: yield* ensurePullRequestHeadCommit(
+				repoRoot,
+				pullRequest.number,
+				headSha,
+			),
+			worktreeEligible: false,
+		};
+	});
+};
