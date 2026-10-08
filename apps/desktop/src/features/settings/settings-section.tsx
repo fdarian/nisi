@@ -13,7 +13,7 @@ export function SettingsSection(props: {
 	children: React.ReactNode;
 }): React.ReactElement {
 	return (
-		<Card>
+		<Card className="-mx-6">
 			{(props.title !== undefined || props.action !== undefined) && (
 				<CardHeader>
 					{props.title !== undefined && <CardTitle>{props.title}</CardTitle>}

@@ -108,7 +108,7 @@ function NotificationsContent(props: {
 				aria-labelledby="general-notifications-title"
 			>
 				<h2
-					className="px-6 font-medium text-sm tracking-tight"
+					className="font-medium text-sm tracking-tight"
 					id="general-notifications-title"
 				>
 					General notifications
