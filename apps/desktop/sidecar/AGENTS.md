@@ -53,23 +53,41 @@ seam" for the port/token handshake this boots into.
   `@repo/git`'s `mergeStatusInterval` with the PR's current attention, not tracked separately.
 - `stream-bridge.ts` — turns an Effect Stream into the async iterator required by four oRPC live
   handlers, interrupting the consuming fiber when the request aborts.
-- `diff-head.ts` — `resolveDiffHead`: for a session's `headRef` and whether it's a PR-backed
-  session, decides `DiffHead` — `{headRef, worktreeEligible}` — the single place that answers
-  "which ref is this session's head right now, and is `repoRoot`'s worktree safe to overlay on it."
-  Pure and session-shape-agnostic (no `ReviewStore`/blob dependency, just `@repo/git`'s
-  `resolveCurrentBranch`), so it's unit-tested directly against real temp repos rather than through
-  `Store`'s full DB-backed layer. A PR-backed session is always eligible without even checking:
-  it uses either a nisi PR worktree or a reused branch checkout. `openPullRequestSession` only
-  retargets a same-repository checkout currently on the PR head, and skips fork PRs. In a nisi
-  worktree the PR's own `headRef` need not resolve locally, since nisi checks it out onto its
-  own `nisi/pr-<n>/<headRef>` branch (see `@repo/git`'s `worktree.ts`). A plain
-  branch session compares `headRef` against `resolveCurrentBranch` fresh on every call rather than
-  once at open time, so it drifts in and out of eligibility as the caller checks different branches
-  out — this is what lets a session self-heal, but also what makes every read (`listChangedFiles`/
-  `readFileContents`) and write (`setFileViewed`/`setRangeViewed`) path in `store.ts` need to
-  consult it independently, on every call, rather than trusting a value resolved elsewhere. Also
-  owns `InvalidHeadRef`/`validateHeadRef` — `resolveSessionTarget`'s explicit-`headRef` validation,
-  mirroring `store.ts`'s own `InvalidBaseRef`.
+- `diff-head.ts` — `resolveDiffHead`: for a session's `headRef` and its PR (number plus the PR's
+  head sha, when known), decides `DiffHead` — `{headRef, worktreeEligible}` — the single place that
+  answers "which ref is this session's head right now, and is `repoRoot`'s worktree safe to overlay
+  on it." Unit-tested directly against real temp repos rather than through `Store`'s DB-backed layer.
+  A PR-backed session's worktree is eligible iff the PR isn't merged and its `HEAD` is the PR head or
+  descends from it, whatever branch (or detached `HEAD`) it's on, since worktrees get reused for other
+  work (a merged PR never uses the worktree: a checkout of `main` after the merge descends from the
+  head but its diff would cover everything main gained since). Otherwise
+  the session diffs the PR head sha directly with uncommitted changes off, fetching
+  `refs/pull/<n>/head` from the main clone only when that commit isn't local. The head sha comes from
+  `Store`'s in-memory `pullRequestFacts` cache (head, base and state), fed by the `mergeStatus`
+  watch in `http.ts` via `Store.recordPullRequestStatus` (which also emits `session-files-changed`
+  when a new reading changes what the session diffs — `session-diff-source-changed`, which the
+  frontend refetches outright, for the first reading since it corrects a diff computed without it;
+  `session-files-changed`, which only offers Refresh, for later ones); until it's populated the
+  worktree is trusted. `http.ts` forks the call so a remote fetch never delays the status stream. A nisi PR worktree's
+  `headRef` need not resolve locally (nisi checks the PR out onto its own `nisi/pr-<n>/<headRef>`
+  branch), so it's never passed to git for a PR session. A plain branch session compares `headRef`
+  against `resolveCurrentBranch` fresh on every call rather than once at open time, so it drifts in
+  and out of eligibility as the caller checks different branches out — this is what lets a session
+  self-heal, but also what makes every read (`listChangedFiles`/`readFileContents`) and write
+  (`setFileViewed`/`setRangeViewed`) path in `store.ts` need to consult it independently, on every
+  call, rather than trusting a value resolved elsewhere. Also owns `InvalidHeadRef`/`validateHeadRef`
+  — `resolveSessionTarget`'s explicit-`headRef` validation, mirroring `store.ts`'s own
+  `InvalidBaseRef`.
+- `diff-base.ts` — `resolveDiffBase`: the one place that picks the `baseRef` every diff computation
+  for a session passes to `@repo/git`. `Store.resolveSessionDiffHead` returns it together with the
+  `DiffHead` (`.baseRef`), decided from one reading of the PR facts, so head and base can't disagree
+  (file list, file contents, reviewed-state reconciliation). The diff base is `merge-base(base tip, head)`, and a true merge
+  commit makes the head an ancestor of `origin/<base>`, which empties the diff. So once the cached
+  PR state is MERGED, the base tip is pinned to the PR's `baseRefOid` (main before the merge; a raw
+  sha, which `@repo/git` accepts as a base), fetching the base branch if that commit isn't local and
+  failing with `MergedPullRequestBaseUnavailable` if it still isn't (the live base would show the
+  empty diff again).
+  Open and closed PRs, and anything not yet cached, keep the session's `baseRef`.
 - `store.ts` — `Store`, the service `http.ts`'s git/review handlers depend on. One method per contract
   procedure (`openSession`, `listChangedFiles`, `setFileViewed`, `setRangeViewed`, ...), each composing
   `@repo/review`'s `ReviewStore` with `@repo/git`'s functions. `Session` here is the wire shape — a

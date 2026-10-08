@@ -74,10 +74,7 @@ const inspectSession = (session: Session) =>
 									mergeability: {
 										state: recorded.status.state,
 										mergeable: recorded.status.mergeable,
-										mergeStateStatus: recorded.status.mergeStateStatus,
-										isDraft: recorded.status.isDraft,
 									},
-									allowedMethods: recorded.status.allowedMethods,
 								},
 								yield* attention.forPullRequest(pr),
 							) !== null,

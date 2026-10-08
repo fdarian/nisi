@@ -49,6 +49,8 @@ describe("gh watch polling", () => {
 			mergeable: "UNKNOWN" as const,
 			mergeStateStatus: "UNKNOWN" as const,
 			isDraft: false,
+			headRefOid: "head",
+			baseRefOid: "base",
 		};
 		expect(
 			milliseconds(
@@ -70,14 +72,27 @@ describe("gh watch polling", () => {
 			),
 		).toBe(10_000);
 		expect(
-			mergeStatusInterval(
-				{
-					mergeability: { ...mergeability, state: "MERGED" },
-					allowedMethods: ["merge"],
-				},
-				watched,
+			milliseconds(
+				mergeStatusInterval(
+					{
+						mergeability: { ...mergeability, mergeable: "MERGEABLE" },
+						allowedMethods: ["merge"],
+					},
+					hidden,
+				),
 			),
-		).toBeNull();
+		).toBe(60_000);
+		for (const state of ["MERGED", "CLOSED"] as const)
+			for (const attention of [watched, hidden])
+				expect(
+					mergeStatusInterval(
+						{
+							mergeability: { ...mergeability, state },
+							allowedMethods: ["merge"],
+						},
+						attention,
+					),
+				).toBeNull();
 		expect(milliseconds(stackInterval(null, watched))).toBe(60_000);
 		expect(stackInterval(null, hidden)).toBeNull();
 		expect(

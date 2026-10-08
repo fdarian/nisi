@@ -69,8 +69,9 @@ const pullRequest = { owner: "acme", repo: "widgets", number: 7 };
 
 const mergeStatus = (
 	mergeable: PullRequestMergeStatus["mergeable"],
+	state: PullRequestMergeStatus["state"] = "OPEN",
 ): PullRequestMergeStatus => ({
-	state: "OPEN",
+	state,
 	mergeable,
 	mergeStateStatus: "CLEAN",
 	isDraft: false,
@@ -211,7 +212,8 @@ test("watched and pollScheduled follow attention, not just the last status", () 
 				expect(unwatched?.watched).toBe(false);
 				expect(unwatched?.mergeStatus).toMatchObject({
 					status: { mergeable: "MERGEABLE" },
-					pollScheduled: false,
+					// Unwatched open PRs are still re-read at the slow baseline.
+					pollScheduled: true,
 				});
 
 				yield* attention.set(wire, true);
@@ -223,6 +225,12 @@ test("watched and pollScheduled follow attention, not just the last status", () 
 				yield* attention.set(wire, false);
 				yield* ledger.record(pullRequest, mergeStatus("UNKNOWN"));
 				expect((yield* only())?.mergeStatus?.pollScheduled).toBe(true);
+
+				// A merged PR is settled: nothing is polled, watched or not.
+				yield* ledger.record(pullRequest, mergeStatus("MERGEABLE", "MERGED"));
+				expect((yield* only())?.mergeStatus?.pollScheduled).toBe(false);
+				yield* attention.set(wire, true);
+				expect((yield* only())?.mergeStatus?.pollScheduled).toBe(false);
 			}).pipe(Effect.provide(makeLayer(dataDir))),
 		);
 	}));

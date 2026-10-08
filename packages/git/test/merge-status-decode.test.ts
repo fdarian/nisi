@@ -12,6 +12,8 @@ describe("merge status decoding", () => {
 			mergeable: "MERGEABLE",
 			mergeStateStatus: "BLOCKED",
 			isDraft: false,
+			headRefOid: "0123456789abcdef0123456789abcdef01234567",
+			baseRefOid: "89abcdef0123456789abcdef0123456789abcdef",
 		} as const;
 		expect(
 			await Effect.runPromise(

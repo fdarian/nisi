@@ -27,6 +27,7 @@ import { subscribe } from "../events.ts";
 import { PrIndex } from "../pr-index.ts";
 import { PullRequestAttentionLive } from "../pull-request-attention.ts";
 import { type OpenSessionOutcome, Store } from "../store.ts";
+import { gatherGenerationContext } from "../walkthrough/context.ts";
 
 /** Runs real `git` for test setup — the code under test uses its own Effect-based runner. */
 const sh = async (cwd: string, args: ReadonlyArray<string>): Promise<void> => {
@@ -40,6 +41,21 @@ const sh = async (cwd: string, args: ReadonlyArray<string>): Promise<void> => {
 		const stderr = await new Response(proc.stderr).text();
 		throw new Error(`git ${args.join(" ")} failed: ${stderr}`);
 	}
+};
+
+const shOut = async (
+	cwd: string,
+	args: ReadonlyArray<string>,
+): Promise<string> => {
+	const proc = Bun.spawn(["git", ...args], {
+		cwd,
+		stdout: "pipe",
+		stderr: "pipe",
+	});
+	const out = await new Response(proc.stdout).text();
+	if ((await proc.exited) !== 0)
+		throw new Error(`git ${args.join(" ")} failed`);
+	return out.trim();
 };
 
 /** A throwaway repo with one commit on `main` — enough for `resolveMergeBase`/`resolveCurrentBranch` to have something real to resolve against. */
@@ -424,6 +440,672 @@ test("base refresh drops upstream-only files without changing head or remaining 
 		}
 	});
 }, 20_000);
+
+describe("Store.listSessions — a session whose directory was deleted", () => {
+	test("still lists every session instead of failing the whole call", async () => {
+		await withTestRepoAndDataDir(async (aliveRoot, dataDir) => {
+			const deadRoot = await makeTestRepo();
+			try {
+				await Effect.runPromise(
+					Effect.gen(function* () {
+						const store = yield* Store;
+						const reviews = yield* ReviewStore;
+						// Straight into the review store: `Store.openSession` prepares the
+						// base, and `listSessions` skips sessions prepared in the last 5s.
+						const open = (repoRoot: string) =>
+							reviews.openSession({
+								repoRoot,
+								baseRef: "main",
+								headRef: "main",
+								pr: null,
+							});
+						const alive = yield* open(aliveRoot);
+						const dead = yield* open(deadRoot);
+						yield* Effect.promise(() =>
+							rm(deadRoot, { recursive: true, force: true }),
+						);
+
+						// Twice: the second call exercises the already-warned path.
+						for (let attempt = 0; attempt < 2; attempt++) {
+							const sessions = yield* store.listSessions();
+							expect(sessions.map((session) => session.id).sort()).toEqual(
+								[alive.id, dead.id].sort(),
+							);
+						}
+					}).pipe(Effect.scoped, Effect.provide(makeTestLayer(dataDir))),
+				);
+			} finally {
+				await rm(deadRoot, { recursive: true, force: true });
+			}
+		});
+	});
+});
+
+describe("base refresh — a session whose directory was deleted", () => {
+	test("does not fail the refresh callbacks or mark live sessions stale", async () => {
+		await withTestRepoAndDataDir(async (repoRoot, dataDir) => {
+			const upstream = await makeTestRepo();
+			const deadRoot = await makeTestRepo();
+			try {
+				await sh(upstream, ["fetch", repoRoot, "main"]);
+				await sh(upstream, ["reset", "--hard", "FETCH_HEAD"]);
+				await sh(repoRoot, ["remote", "add", "origin", upstream]);
+				await sh(repoRoot, ["fetch", "origin"]);
+				await Effect.runPromise(
+					Effect.gen(function* () {
+						const store = yield* Store;
+						const reviews = yield* ReviewStore;
+						// Straight into the review store so neither session has a prepared
+						// base yet; the refresh below is the first to look at either.
+						const open = (root: string) =>
+							reviews.openSession({
+								repoRoot: root,
+								baseRef: "origin/main",
+								headRef: "main",
+								pr: null,
+							});
+						const alive = yield* open(repoRoot);
+						const dead = yield* open(deadRoot);
+						yield* Effect.promise(async () => {
+							await rm(deadRoot, { recursive: true, force: true });
+							await Bun.write(join(upstream, "new.ts"), "upstream\n");
+							await sh(upstream, ["add", "-A"]);
+							await sh(upstream, ["commit", "-q", "-m", "upstream moves"]);
+						});
+						const movedSessions: string[] = [];
+						const staleSessions: string[] = [];
+						const unsubscribe = subscribe((event) => {
+							if (event.type === "session-files-changed")
+								movedSessions.push(event.sessionId);
+							if (event.type === "session-base-staleness-changed")
+								staleSessions.push(event.sessionId);
+						});
+						yield* Effect.addFinalizer(() => Effect.sync(unsubscribe));
+
+						expect(
+							(yield* store.refreshSessionBase(alive.id)).baseMayBeStale,
+						).toBe(false);
+						expect(movedSessions).toContain(alive.id);
+						expect(movedSessions).not.toContain(dead.id);
+						expect(staleSessions).toEqual([]);
+						expect(yield* store.readBaseMayBeStale(alive.id)).toBe(false);
+					}).pipe(Effect.scoped, Effect.provide(makeTestLayer(dataDir))),
+				);
+			} finally {
+				await rm(upstream, { recursive: true, force: true });
+				await rm(deadRoot, { recursive: true, force: true });
+			}
+		});
+	});
+});
+
+describe("Store — a PR session's worktree that moved on to another commit", () => {
+	test("keeps uncommitted changes while the worktree holds the PR head, and diffs the PR head (reviewed files clean) once it doesn't", async () => {
+		await withTestRepoAndDataDir(async (repoRoot, dataDir) => {
+			const root = await realpath(repoRoot);
+			await sh(root, ["checkout", "-q", "-b", "pr"]);
+			await Bun.write(join(root, "a.ts"), "pr change\n");
+			await Bun.write(join(root, "b.ts"), "pr file\n");
+			await sh(root, ["add", "-A"]);
+			await sh(root, ["commit", "-q", "-m", "pr"]);
+			const prHead = await shOut(root, ["rev-parse", "HEAD"]);
+			// Uncommitted work: only meaningful while the worktree is still the PR's.
+			await Bun.write(join(root, "uncommitted.ts"), "dirty\n");
+
+			await Effect.runPromise(
+				Effect.gen(function* () {
+					const store = yield* Store;
+					const reviews = yield* ReviewStore;
+					const settings = yield* SettingsStore;
+					yield* settings.update({ includeUncommitted: true });
+					const pr = { owner: "acme", repo: "widgets", number: 5 };
+					const open = (headSha: string) => ({
+						headSha,
+						baseSha: "unused",
+						state: "OPEN" as const,
+					});
+					const session = yield* reviews.openSession({
+						repoRoot: root,
+						baseRef: "main",
+						headRef: "pr",
+						pr: { ...pr, title: "A PR" },
+					});
+					const paths = (includeUncommitted: boolean) =>
+						store
+							.listChangedFiles(session.id, includeUncommitted)
+							.pipe(Effect.map((files) => files.map((file) => file.path)));
+
+					// Head not known yet: today's behavior, the worktree is trusted.
+					expect(yield* paths(true)).toEqual([
+						"a.ts",
+						"b.ts",
+						"uncommitted.ts",
+					]);
+
+					yield* store.recordPullRequestStatus(pr, open(prHead));
+					expect(yield* paths(true)).toEqual([
+						"a.ts",
+						"b.ts",
+						"uncommitted.ts",
+					]);
+					expect(yield* paths(false)).toEqual(["a.ts", "b.ts"]);
+
+					// Snapshot taken from the worktree bytes (includeUncommitted on).
+					yield* store.setFileViewed(session.id, "a.ts", true);
+
+					const events: string[] = [];
+					const unsubscribe = subscribe((event) => {
+						if (event.type === "session-files-changed")
+							events.push(event.sessionId);
+					});
+					yield* Effect.addFinalizer(() => Effect.sync(unsubscribe));
+
+					// The worktree gets reused for an unrelated task.
+					yield* Effect.promise(async () => {
+						await sh(root, ["checkout", "-q", "-b", "other-task", "main"]);
+						await Bun.write(join(root, "other.ts"), "other task\n");
+						await sh(root, ["add", "other.ts"]);
+						await sh(root, ["commit", "-q", "-m", "other"]);
+						await Bun.write(join(root, "other-dirty.ts"), "dirty\n");
+					});
+					// Same PR head reported again: nothing changed, nothing to announce.
+					yield* store.recordPullRequestStatus(pr, open(prHead));
+					expect(events).toEqual([]);
+
+					const files = yield* store.listChangedFiles(session.id, true);
+					expect(files.map((file) => file.path)).toEqual(["a.ts", "b.ts"]);
+					// Reviewed snapshot (worktree bytes) vs. the committed PR head.
+					expect(
+						files.find((file) => file.path === "a.ts")?.review,
+					).toMatchObject({ viewed: true, changedSinceReview: false });
+					const contents = yield* store.readFileContents(
+						session.id,
+						[{ path: "b.ts", force: false }],
+						true,
+					);
+					expect(JSON.stringify(contents)).toContain("pr file");
+
+					// A new push lands: the PR head moves, which a moved worktree
+					// can't have anticipated either way.
+					const pushed = yield* Effect.promise(async () => {
+						await sh(root, ["checkout", "-q", "pr"]);
+						await Bun.write(join(root, "b.ts"), "pr file, pushed\n");
+						await sh(root, ["commit", "-q", "-am", "push"]);
+						const sha = await shOut(root, ["rev-parse", "HEAD"]);
+						await sh(root, ["checkout", "-q", "other-task"]);
+						return sha;
+					});
+					yield* store.recordPullRequestStatus(pr, open(pushed));
+					expect(events).toEqual([session.id]);
+
+					// Back on the PR (descendant of the recorded head): worktree again.
+					yield* Effect.promise(async () => {
+						await rm(join(root, "other-dirty.ts"));
+						await sh(root, ["checkout", "-q", "pr"]);
+					});
+					expect(yield* paths(true)).toEqual([
+						"a.ts",
+						"b.ts",
+						"uncommitted.ts",
+					]);
+					expect(
+						(yield* store.listChangedFiles(session.id, true)).find(
+							(file) => file.path === "a.ts",
+						)?.review,
+					).toMatchObject({ viewed: true, changedSinceReview: false });
+				}).pipe(Effect.scoped, Effect.provide(makeTestLayer(dataDir))),
+			);
+		});
+	});
+});
+
+describe("Store — a PR session after the PR is merged", () => {
+	type MergeKind = "merge commit" | "squash" | "rebase";
+
+	/**
+	 * `main` is advanced in a second worktree so `repoRoot` stays checked out on
+	 * the PR branch, the way a nisi PR worktree is after the merge.
+	 */
+	const mergeIntoMain = async (
+		root: string,
+		parent: string,
+		kind: MergeKind,
+		prCommits: ReadonlyArray<string>,
+	) => {
+		const mainWorktree = join(parent, "main-worktree");
+		await sh(root, ["worktree", "add", "-q", mainWorktree, "main"]);
+		await Bun.write(join(mainWorktree, "unrelated.ts"), "unrelated\n");
+		await sh(mainWorktree, ["add", "-A"]);
+		await sh(mainWorktree, ["commit", "-q", "-m", "unrelated"]);
+		const baseSha = await shOut(mainWorktree, ["rev-parse", "HEAD"]);
+		if (kind === "merge commit")
+			await sh(mainWorktree, ["merge", "-q", "--no-ff", "-m", "merge", "pr"]);
+		if (kind === "squash") {
+			await sh(mainWorktree, [
+				"-c",
+				"merge.ff=true",
+				"merge",
+				"-q",
+				"--squash",
+				"pr",
+			]);
+			await sh(mainWorktree, ["commit", "-q", "-m", "squash"]);
+		}
+		if (kind === "rebase")
+			await sh(mainWorktree, ["cherry-pick", ...prCommits]);
+		await Bun.write(join(mainWorktree, "later.ts"), "later\n");
+		await sh(mainWorktree, ["add", "-A"]);
+		await sh(mainWorktree, ["commit", "-q", "-m", "later"]);
+		return baseSha;
+	};
+
+	const prFacts = (
+		headSha: string,
+		baseSha: string,
+		state: "OPEN" | "MERGED",
+	) => ({ headSha, baseSha, state });
+
+	for (const kind of ["merge commit", "squash", "rebase"] as const) {
+		test(`${kind}: the diff is the PR's changes and a reviewed file stays clean`, async () => {
+			await withTestRepoAndDataDir(async (repoRoot, dataDir) => {
+				const root = await realpath(repoRoot);
+				const parent = await mkdtemp(join(tmpdir(), "nisi-merged-pr-"));
+				try {
+					await sh(root, ["checkout", "-q", "-b", "pr"]);
+					await Bun.write(join(root, "a.ts"), "pr change\n");
+					await sh(root, ["commit", "-q", "-am", "pr a"]);
+					const first = await shOut(root, ["rev-parse", "HEAD"]);
+					await Bun.write(join(root, "b.ts"), "pr file\n");
+					await sh(root, ["add", "-A"]);
+					await sh(root, ["commit", "-q", "-m", "pr b"]);
+					const head = await shOut(root, ["rev-parse", "HEAD"]);
+					const mainBefore = await shOut(root, ["rev-parse", "main"]);
+
+					await Effect.runPromise(
+						Effect.gen(function* () {
+							const store = yield* Store;
+							const reviews = yield* ReviewStore;
+							const pr = { owner: "acme", repo: "widgets", number: 9 };
+							const session = yield* reviews.openSession({
+								repoRoot: root,
+								baseRef: "main",
+								headRef: "pr",
+								pr: { ...pr, title: "A PR" },
+							});
+							const paths = store
+								.listChangedFiles(session.id, false)
+								.pipe(Effect.map((files) => files.map((file) => file.path)));
+
+							yield* store.recordPullRequestStatus(
+								pr,
+								prFacts(head, mainBefore, "OPEN"),
+							);
+							expect(yield* paths).toEqual(["a.ts", "b.ts"]);
+							yield* store.setFileViewed(session.id, "a.ts", true);
+
+							const baseSha = yield* Effect.promise(() =>
+								mergeIntoMain(root, parent, kind, [first, head]),
+							);
+							// Merge-status hasn't reported the merge yet: today's base.
+							// A merge commit makes the head an ancestor of main, so the
+							// diff against the live base is empty.
+							expect(yield* paths).toEqual(
+								kind === "merge commit" ? [] : ["a.ts", "b.ts"],
+							);
+
+							const events: string[] = [];
+							const unsubscribe = subscribe((event) => {
+								if (event.type === "session-files-changed")
+									events.push(event.sessionId);
+							});
+							yield* Effect.addFinalizer(() => Effect.sync(unsubscribe));
+							yield* store.recordPullRequestStatus(
+								pr,
+								prFacts(head, baseSha, "MERGED"),
+							);
+							expect(events).toEqual([session.id]);
+
+							expect(yield* paths).toEqual(["a.ts", "b.ts"]);
+							const files = yield* store.listChangedFiles(session.id, false);
+							expect(
+								files.find((file) => file.path === "a.ts")?.review,
+							).toMatchObject({ viewed: true, changedSinceReview: false });
+							const contents = yield* store.readFileContents(
+								session.id,
+								[{ path: "a.ts", force: false }],
+								false,
+							);
+							expect(JSON.stringify(contents)).toContain("pr change");
+						}).pipe(Effect.scoped, Effect.provide(makeTestLayer(dataDir))),
+					);
+				} finally {
+					await rm(parent, { recursive: true, force: true });
+				}
+			});
+		});
+	}
+
+	for (const kind of ["merge commit", "squash"] as const) {
+		test(`${kind}: a checkout that is past the merge still diffs only the PR, uncommitted files excluded`, async () => {
+			await withTestRepoAndDataDir(async (repoRoot, dataDir) => {
+				const root = await realpath(repoRoot);
+				await sh(root, ["checkout", "-q", "-b", "pr"]);
+				await Bun.write(join(root, "a.ts"), "pr change\n");
+				await Bun.write(join(root, "b.ts"), "pr file\n");
+				await sh(root, ["add", "-A"]);
+				await sh(root, ["commit", "-q", "-m", "pr"]);
+				const head = await shOut(root, ["rev-parse", "HEAD"]);
+
+				// `repoRoot` itself ends up on `main`, past the merge.
+				await sh(root, ["checkout", "-q", "main"]);
+				await Bun.write(join(root, "unrelated.ts"), "unrelated\n");
+				await sh(root, ["add", "-A"]);
+				await sh(root, ["commit", "-q", "-m", "unrelated"]);
+				const baseSha = await shOut(root, ["rev-parse", "HEAD"]);
+				if (kind === "merge commit")
+					await sh(root, ["merge", "-q", "--no-ff", "-m", "merge", "pr"]);
+				else {
+					await sh(root, [
+						"-c",
+						"merge.ff=true",
+						"merge",
+						"-q",
+						"--squash",
+						"pr",
+					]);
+					await sh(root, ["commit", "-q", "-m", "squash"]);
+				}
+				await Bun.write(join(root, "later.ts"), "later\n");
+				await sh(root, ["add", "-A"]);
+				await sh(root, ["commit", "-q", "-m", "later"]);
+				await Bun.write(join(root, "dirty.ts"), "uncommitted\n");
+
+				await Effect.runPromise(
+					Effect.gen(function* () {
+						const store = yield* Store;
+						const reviews = yield* ReviewStore;
+						const pr = { owner: "acme", repo: "widgets", number: 9 };
+						const session = yield* reviews.openSession({
+							repoRoot: root,
+							baseRef: "main",
+							headRef: "pr",
+							pr: { ...pr, title: "A PR" },
+						});
+						yield* store.recordPullRequestStatus(
+							pr,
+							prFacts(head, baseSha, "MERGED"),
+						);
+						// Include-uncommitted asked for, but the worktree isn't this PR's.
+						const files = yield* store.listChangedFiles(session.id, true);
+						expect(files.map((file) => file.path)).toEqual(["a.ts", "b.ts"]);
+						expect(
+							files.reduce((total, file) => total + file.additions, 0),
+						).toBe(2);
+						expect(
+							JSON.stringify(
+								yield* store.readFileContents(
+									session.id,
+									[{ path: "a.ts", force: false }],
+									true,
+								),
+							),
+						).toContain("pr change");
+					}).pipe(Effect.scoped, Effect.provide(makeTestLayer(dataDir))),
+				);
+			});
+		});
+	}
+
+	test("the first reading of a merged PR corrects the diff with session-diff-source-changed, not the Refresh event", async () => {
+		await withTestRepoAndDataDir(async (repoRoot, dataDir) => {
+			const root = await realpath(repoRoot);
+			const parent = await mkdtemp(join(tmpdir(), "nisi-first-reading-"));
+			try {
+				await sh(root, ["checkout", "-q", "-b", "pr"]);
+				await Bun.write(join(root, "a.ts"), "pr change\n");
+				await sh(root, ["commit", "-q", "-am", "pr a"]);
+				const head = await shOut(root, ["rev-parse", "HEAD"]);
+				const baseSha = await mergeIntoMain(root, parent, "merge commit", [
+					head,
+				]);
+
+				await Effect.runPromise(
+					Effect.gen(function* () {
+						const store = yield* Store;
+						const reviews = yield* ReviewStore;
+						const pr = { owner: "acme", repo: "widgets", number: 9 };
+						const session = yield* reviews.openSession({
+							repoRoot: root,
+							baseRef: "main",
+							headRef: "pr",
+							pr: { ...pr, title: "A PR" },
+						});
+						const paths = store
+							.listChangedFiles(session.id, false)
+							.pipe(Effect.map((files) => files.map((file) => file.path)));
+						// What the tab shows before any merge-status reading arrives.
+						expect(yield* paths).toEqual([]);
+
+						const events: string[] = [];
+						const unsubscribe = subscribe((event) => {
+							if (
+								event.type === "session-files-changed" ||
+								event.type === "session-diff-source-changed"
+							)
+								events.push(`${event.type}:${event.sessionId}`);
+						});
+						yield* Effect.addFinalizer(() => Effect.sync(unsubscribe));
+
+						yield* store.recordPullRequestStatus(
+							pr,
+							prFacts(head, baseSha, "MERGED"),
+						);
+						expect(events).toEqual([
+							`session-diff-source-changed:${session.id}`,
+						]);
+						expect(yield* paths).toEqual(["a.ts"]);
+					}).pipe(Effect.scoped, Effect.provide(makeTestLayer(dataDir))),
+				);
+			} finally {
+				await rm(parent, { recursive: true, force: true });
+			}
+		});
+	});
+
+	test("an open PR keeps the live base even after main moves", async () => {
+		await withTestRepoAndDataDir(async (repoRoot, dataDir) => {
+			const root = await realpath(repoRoot);
+			const parent = await mkdtemp(join(tmpdir(), "nisi-open-pr-"));
+			try {
+				await sh(root, ["checkout", "-q", "-b", "pr"]);
+				await Bun.write(join(root, "a.ts"), "pr change\n");
+				await sh(root, ["commit", "-q", "-am", "pr a"]);
+				const head = await shOut(root, ["rev-parse", "HEAD"]);
+				const mainBefore = await shOut(root, ["rev-parse", "main"]);
+				const baseSha = await mergeIntoMain(root, parent, "squash", []);
+
+				await Effect.runPromise(
+					Effect.gen(function* () {
+						const store = yield* Store;
+						const reviews = yield* ReviewStore;
+						const pr = { owner: "acme", repo: "widgets", number: 9 };
+						const session = yield* reviews.openSession({
+							repoRoot: root,
+							baseRef: "main",
+							headRef: "pr",
+							pr: { ...pr, title: "A PR" },
+						});
+						const events: string[] = [];
+						const unsubscribe = subscribe((event) => {
+							if (event.type === "session-files-changed")
+								events.push(event.sessionId);
+						});
+						yield* Effect.addFinalizer(() => Effect.sync(unsubscribe));
+						// Not MERGED: the base reading is ignored, whatever it says.
+						yield* store.recordPullRequestStatus(
+							pr,
+							prFacts(head, mainBefore, "OPEN"),
+						);
+						yield* store.recordPullRequestStatus(
+							pr,
+							prFacts(head, baseSha, "OPEN"),
+						);
+						expect(events).toEqual([]);
+						expect(
+							(yield* store.listChangedFiles(session.id, false)).map(
+								(file) => file.path,
+							),
+						).toEqual(["a.ts"]);
+					}).pipe(Effect.scoped, Effect.provide(makeTestLayer(dataDir))),
+				);
+			} finally {
+				await rm(parent, { recursive: true, force: true });
+			}
+		});
+	});
+});
+
+describe("gatherGenerationContext — the worktree the agent will read", () => {
+	const prSession = (root: string) => ({
+		repoRoot: root,
+		baseRef: "main",
+		headRef: "pr",
+		pr: { owner: "acme", repo: "widgets", number: 9, title: "A PR" },
+	});
+	const status = (
+		headSha: string,
+		baseSha: string,
+		state: "OPEN" | "MERGED",
+	) => ({ headSha, baseSha, state });
+
+	/** `pr` has two commits off `main`; `main` is then advanced by a true merge of `pr`, in another worktree. */
+	const setup = async (root: string, parent: string) => {
+		await sh(root, ["checkout", "-q", "-b", "pr"]);
+		await Bun.write(join(root, "a.ts"), "pr change\n");
+		await Bun.write(join(root, "b.ts"), "pr file\n");
+		await sh(root, ["add", "-A"]);
+		await sh(root, ["commit", "-q", "-m", "pr"]);
+		const head = await shOut(root, ["rev-parse", "HEAD"]);
+		const baseSha = await shOut(root, ["rev-parse", "main"]);
+		const mainWorktree = join(parent, "main-worktree");
+		await sh(root, ["worktree", "add", "-q", mainWorktree, "main"]);
+		await sh(mainWorktree, ["merge", "-q", "--no-ff", "-m", "merge", "pr"]);
+		return { head, baseSha };
+	};
+
+	test("a merged PR's context lists the PR's files against the pinned base", async () => {
+		await withTestRepoAndDataDir(async (repoRoot, dataDir) => {
+			const root = await realpath(repoRoot);
+			const parent = await mkdtemp(join(tmpdir(), "nisi-walkthrough-ctx-"));
+			try {
+				const { head, baseSha } = await setup(root, parent);
+				const context = await Effect.runPromise(
+					Effect.gen(function* () {
+						const store = yield* Store;
+						const reviews = yield* ReviewStore;
+						const session = yield* reviews.openSession(prSession(root));
+						yield* store.recordPullRequestStatus(
+							prSession(root).pr,
+							status(head, baseSha, "MERGED"),
+						);
+						return yield* gatherGenerationContext(session.id);
+					}).pipe(Effect.scoped, Effect.provide(makeTestLayer(dataDir))),
+				);
+				expect(context.files.map((file) => file.path)).toEqual([
+					"a.ts",
+					"b.ts",
+				]);
+				expect(context.baseRef).toBe(baseSha);
+				expect(context.repoRoot).toBe(root);
+			} finally {
+				await rm(parent, { recursive: true, force: true });
+			}
+		});
+	});
+
+	test("refuses a PR session whose worktree moved on to another commit", async () => {
+		await withTestRepoAndDataDir(async (repoRoot, dataDir) => {
+			const root = await realpath(repoRoot);
+			const parent = await mkdtemp(join(tmpdir(), "nisi-walkthrough-ctx-"));
+			try {
+				const { head, baseSha } = await setup(root, parent);
+				await sh(root, ["checkout", "-q", "-b", "other-task", baseSha]);
+				await Bun.write(join(root, "other.ts"), "other\n");
+				await sh(root, ["add", "-A"]);
+				await sh(root, ["commit", "-q", "-m", "other"]);
+				const result = await Effect.runPromise(
+					Effect.gen(function* () {
+						const store = yield* Store;
+						const reviews = yield* ReviewStore;
+						const session = yield* reviews.openSession(prSession(root));
+						yield* store.recordPullRequestStatus(
+							prSession(root).pr,
+							status(head, baseSha, "OPEN"),
+						);
+						return yield* gatherGenerationContext(session.id).pipe(
+							Effect.result,
+						);
+					}).pipe(Effect.scoped, Effect.provide(makeTestLayer(dataDir))),
+				);
+				expect(Result.isFailure(result)).toBe(true);
+				if (!Result.isFailure(result)) return;
+				expect(result.failure).toMatchObject({
+					_tag: "HeadNotCheckedOut",
+					currentBranch: "other-task",
+					pullRequestNumber: 9,
+				});
+			} finally {
+				await rm(parent, { recursive: true, force: true });
+			}
+		});
+	});
+
+	test("trusts the worktree until the PR's head is known", async () => {
+		await withTestRepoAndDataDir(async (repoRoot, dataDir) => {
+			const root = await realpath(repoRoot);
+			await sh(root, ["checkout", "-q", "-b", "pr"]);
+			await Bun.write(join(root, "a.ts"), "pr change\n");
+			await sh(root, ["commit", "-q", "-am", "pr"]);
+			await sh(root, ["checkout", "-q", "-b", "other-task", "main"]);
+			const context = await Effect.runPromise(
+				Effect.gen(function* () {
+					const reviews = yield* ReviewStore;
+					const session = yield* reviews.openSession(prSession(root));
+					return yield* gatherGenerationContext(session.id);
+				}).pipe(Effect.scoped, Effect.provide(makeTestLayer(dataDir))),
+			);
+			expect(context.headRef).toBe("pr");
+		});
+	});
+
+	test("still refuses a plain branch session whose head isn't checked out", async () => {
+		await withTestRepoAndDataDir(async (repoRoot, dataDir) => {
+			const root = await realpath(repoRoot);
+			await sh(root, ["branch", "feature"]);
+			const result = await Effect.runPromise(
+				Effect.gen(function* () {
+					const reviews = yield* ReviewStore;
+					const session = yield* reviews.openSession({
+						repoRoot: root,
+						baseRef: "main",
+						headRef: "feature",
+						pr: null,
+					});
+					return yield* gatherGenerationContext(session.id).pipe(Effect.result);
+				}).pipe(Effect.scoped, Effect.provide(makeTestLayer(dataDir))),
+			);
+			expect(Result.isFailure(result)).toBe(true);
+			if (!Result.isFailure(result)) return;
+			expect(result.failure).toMatchObject({
+				_tag: "HeadNotCheckedOut",
+				currentBranch: "main",
+			});
+			expect(
+				(result.failure as { pullRequestNumber?: number }).pullRequestNumber,
+			).toBeUndefined();
+		});
+	});
+});
 
 describe("Store.openSession — branch target with an explicit baseRef", () => {
 	test("rejects an unresolvable base with InvalidBaseRef, carrying git's own stderr", async () => {

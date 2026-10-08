@@ -318,11 +318,12 @@ const localBranchSha = (
 /**
  * The PR's current head sha, fetched with *no destination refspec* — it lands in `FETCH_HEAD`
  * only, so this can never move any local branch (the user's own `headRef` branch included). Used
- * only to decide, in {@link openPullRequestWorktree}, whether an existing same-named local branch
- * can be fast-forwarded onto the PR head; the fetch that actually moves a ref is
- * `fetchPullRequestRef`, and it only ever moves the nisi-managed branch.
+ * to decide, in {@link openPullRequestWorktree}, whether an existing same-named local branch
+ * can be fast-forwarded onto the PR head, and by the sidecar to make a PR head commit available
+ * locally for diffing; the fetch that actually moves a ref is `fetchPullRequestRef`, and it only
+ * ever moves the nisi-managed branch.
  */
-const fetchPullRequestHeadSha = (
+export const fetchPullRequestHeadSha = (
 	repoRoot: string,
 	number: number,
 ): Effect.Effect<

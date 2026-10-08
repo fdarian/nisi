@@ -1536,6 +1536,7 @@ export function attachRouter(
 						Effect.gen(function* () {
 							const github = yield* GitHub;
 							const preferences = yield* RepoMergeMethodStore;
+							const store = yield* Store;
 							const ledger = yield* MergeStatusLedger;
 							return github.watchMergeStatus(input).pipe(
 								Stream.mapEffect((status) =>
@@ -1552,8 +1553,20 @@ export function attachRouter(
 											return yield* Effect.die(
 												new Error("GitHub returned no merge methods"),
 											);
+										// Detached: it may fetch from the remote, and the merge
+										// button must not wait on that.
+										yield* Effect.forkDetach(
+											store.recordPullRequestStatus(input, {
+												headSha: status.mergeability.headRefOid,
+												baseSha: status.mergeability.baseRefOid,
+												state: status.mergeability.state,
+											}),
+										);
 										return {
-											...status.mergeability,
+											state: status.mergeability.state,
+											mergeable: status.mergeability.mergeable,
+											mergeStateStatus: status.mergeability.mergeStateStatus,
+											isDraft: status.mergeability.isDraft,
 											allowedMethods: status.allowedMethods,
 											defaultMethod:
 												remembered !== null &&

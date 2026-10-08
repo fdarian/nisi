@@ -112,6 +112,8 @@ export {
 } from "./pull-request.ts";
 export type { UnpushedCommits } from "./repo.ts";
 export {
+	commitExists,
+	headDescendsFrom,
 	resolveCurrentBranch,
 	resolveHeadSha,
 	resolveLocalDefaultBranch,
@@ -132,6 +134,7 @@ export type {
 	RevalidateWorktreePathInput,
 } from "./worktree.ts";
 export {
+	fetchPullRequestHeadSha,
 	openPullRequestWorktree,
 	openPullRequestWorktreeResult,
 	revalidateWorktreePath,
