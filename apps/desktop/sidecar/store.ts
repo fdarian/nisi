@@ -2101,6 +2101,8 @@ export class Store extends Context.Service<Store>()("Store", {
 			listSessions,
 			closeSession,
 			resolveSessionRepoRoot,
+			resolveSessionDiffBase,
+			resolveSessionDiffHead,
 			recordPullRequestStatus,
 			resolveScheduledMergeRepoRoot,
 			listChangedFiles,

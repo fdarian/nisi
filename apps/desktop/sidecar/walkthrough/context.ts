@@ -4,7 +4,11 @@ import {
 	type GitError,
 	getChangedFiles,
 	getFileContents,
+	type PullRequestRefNotFound,
+	type RepoPathNotAGitRepo,
+	type RepoPathNotFound,
 	resolveCurrentBranch,
+	type WorktreeRelocationFailed,
 } from "@repo/git";
 import {
 	ReviewStore,
@@ -16,19 +20,21 @@ import type { ChangedFileFacts } from "@repo/walkthrough";
 import { Effect, Schema } from "effect";
 import type { FileSystem } from "effect/FileSystem";
 import type { ChildProcessSpawner } from "effect/unstable/process";
+import type { MergedPullRequestBaseUnavailable } from "../diff-base.ts";
+import { Store } from "../store.ts";
 
 /**
- * `gatherGenerationContext`'s session has an explicit, not-checked-out
- * `headRef` (`nisi diff <base>..<head>` against a plain branch session — see
- * `apps/desktop/sidecar/store.ts`'s `resolveSessionTarget`/`resolveDiffHead`).
+ * `gatherGenerationContext`'s session isn't what `repoRoot`'s worktree
+ * actually has checked out: a plain branch session whose explicit, not
+ * checked-out `headRef` (`nisi diff <base>..<head>`, or the user switching
+ * branches mid-session), or a PR session whose worktree no longer holds the
+ * PR's head (`pullRequestNumber` is set — Claude Code reuses worktrees).
  * The walkthrough harness runs a real coding agent directly against
  * `repoRoot`'s worktree (`@repo/harness-local`), not against the diff
- * content this module gathers — so an agent exploring a checkout that's on
- * some third branch entirely would narrate files that don't match the diff
- * it was briefed on. Refused outright rather than silently generating a
- * walkthrough that describes one diff while the agent read another; a
- * PR-backed session never trips this, since its `repoRoot` is a worktree
- * nisi created and keeps checked out to exactly that PR's head.
+ * content this module gathers, so the agent would narrate files that don't
+ * match the diff it was briefed on. Refused outright rather than silently
+ * generating a walkthrough that describes one diff while the agent read
+ * another.
  */
 export class HeadNotCheckedOut extends Schema.TaggedError<HeadNotCheckedOut>()(
 	"HeadNotCheckedOut",
@@ -36,6 +42,7 @@ export class HeadNotCheckedOut extends Schema.TaggedError<HeadNotCheckedOut>()(
 		repoRoot: Schema.String,
 		headRef: Schema.String,
 		currentBranch: Schema.String,
+		pullRequestNumber: Schema.optional(Schema.Number),
 	},
 ) {}
 
@@ -100,45 +107,54 @@ export const gatherGenerationContext = (
 	| GitError
 	| FileNotChanged
 	| SettingsStoreError
-	| HeadNotCheckedOut,
+	| HeadNotCheckedOut
+	| WorktreeRelocationFailed
+	| PullRequestRefNotFound
+	| RepoPathNotFound
+	| RepoPathNotAGitRepo
+	| MergedPullRequestBaseUnavailable,
 	| ReviewStore
 	| SettingsStore
+	| Store
 	| FileSystem
 	| ChildProcessSpawner.ChildProcessSpawner
 > =>
 	Effect.gen(function* () {
 		const reviewStore = yield* ReviewStore;
 		const settingsStore = yield* SettingsStore;
+		const store = yield* Store;
 		const session = yield* reviewStore.getSession(sessionId);
+		const repoRoot = yield* store.resolveSessionRepoRoot(sessionId);
 
-		// A PR-backed session's `repoRoot` is a worktree nisi created and
-		// keeps checked out to exactly that PR's head — only a plain branch
-		// session can have drifted from `headRef` at all (an explicit,
-		// not-checked-out head, or the user switching branches mid-session).
-		if (session.pr === null) {
-			const currentBranch = yield* resolveCurrentBranch(session.repoRoot);
-			if (currentBranch !== session.headRef) {
-				return yield* new HeadNotCheckedOut({
-					repoRoot: session.repoRoot,
-					headRef: session.headRef,
-					currentBranch,
-				});
-			}
+		// Same decision as the Files Changed list. The agent reads `repoRoot` on
+		// disk rather than the diff's own refs, so a worktree that isn't the one
+		// the diff is taken from (`!worktreeEligible`) is refused up front
+		// instead of letting the agent explore another commit's files.
+		const diffHead = yield* store.resolveSessionDiffHead(session, repoRoot);
+		if (!diffHead.worktreeEligible) {
+			return yield* new HeadNotCheckedOut({
+				repoRoot,
+				headRef: session.headRef,
+				currentBranch: yield* resolveCurrentBranch(repoRoot),
+				pullRequestNumber: session.pr?.number,
+			});
 		}
 
+		const baseRef = yield* store.resolveSessionDiffBase(session, repoRoot);
 		const settings = yield* settingsStore.get();
 		const includeUncommitted = settings.includeUncommitted;
-		const files = yield* getChangedFiles(session.repoRoot, session.baseRef, {
+		const files = yield* getChangedFiles(repoRoot, baseRef, {
 			includeUncommitted,
+			headRef: diffHead.headRef,
 		});
 
 		const contentByPath = yield* getFileContents(
-			session.repoRoot,
-			session.baseRef,
+			repoRoot,
+			baseRef,
 			files
 				.filter((file) => !file.binary)
 				.map((file) => ({ path: file.path, force: true })),
-			{ includeUncommitted },
+			{ includeUncommitted, headRef: diffHead.headRef },
 		);
 
 		const withContent = yield* Effect.forEach(files, (file) =>
@@ -174,8 +190,8 @@ export const gatherGenerationContext = (
 		);
 
 		return {
-			repoRoot: session.repoRoot,
-			baseRef: session.baseRef,
+			repoRoot,
+			baseRef,
 			headRef: session.headRef,
 			includeUncommitted,
 			files,

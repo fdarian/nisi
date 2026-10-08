@@ -205,8 +205,8 @@ const runEffect = <A, E>(
  * sidesteps. `SessionNotFound` throws `GenerateSessionNotFound` (see above,
  * for `http.ts` to map to the contract's `NOT_FOUND`); every other failure
  * becomes an in-band `failed` event instead of tearing down the stream —
- * `HeadNotCheckedOut` (a plain branch session whose explicit `headRef` isn't
- * what `repoRoot` actually has checked out — see `context.ts`'s doc comment)
+ * `HeadNotCheckedOut` (a session whose worktree isn't what the diff is taken
+ * from — see `context.ts`'s doc comment)
  * gets its own message since it's an expected, actionable outcome rather
  * than an opaque git/IO failure; every other tag collapses into one generic
  * message, same as before.
@@ -225,6 +225,15 @@ const resolveContext = async (
 	if (Result.isSuccess(result)) return { ok: true, context: result.success };
 	if (result.failure._tag === "SessionNotFound") {
 		throw new GenerateSessionNotFound(sessionId);
+	}
+	if (
+		result.failure._tag === "HeadNotCheckedOut" &&
+		result.failure.pullRequestNumber !== undefined
+	) {
+		return {
+			ok: false,
+			message: `Can't walk through this session — ${result.failure.repoRoot} is no longer on pull request #${result.failure.pullRequestNumber}'s head (currently on ${result.failure.currentBranch}). A walkthrough narrates the files actually on disk, so switch that worktree back to the pull request first.`,
+		};
 	}
 	if (result.failure._tag === "HeadNotCheckedOut") {
 		return {

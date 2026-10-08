@@ -27,6 +27,7 @@ import { subscribe } from "../events.ts";
 import { PrIndex } from "../pr-index.ts";
 import { PullRequestAttentionLive } from "../pull-request-attention.ts";
 import { type OpenSessionOutcome, Store } from "../store.ts";
+import { gatherGenerationContext } from "../walkthrough/context.ts";
 
 /** Runs real `git` for test setup — the code under test uses its own Effect-based runner. */
 const sh = async (cwd: string, args: ReadonlyArray<string>): Promise<void> => {
@@ -833,6 +834,148 @@ describe("Store — a PR session after the PR is merged", () => {
 			} finally {
 				await rm(parent, { recursive: true, force: true });
 			}
+		});
+	});
+});
+
+describe("gatherGenerationContext — the worktree the agent will read", () => {
+	const prSession = (root: string) => ({
+		repoRoot: root,
+		baseRef: "main",
+		headRef: "pr",
+		pr: { owner: "acme", repo: "widgets", number: 9, title: "A PR" },
+	});
+	const status = (
+		headSha: string,
+		baseSha: string,
+		state: "OPEN" | "MERGED",
+	) => ({ headSha, baseSha, state });
+
+	/** `pr` has two commits off `main`; `main` is then advanced by a true merge of `pr`, in another worktree. */
+	const setup = async (root: string, parent: string) => {
+		await sh(root, ["checkout", "-q", "-b", "pr"]);
+		await Bun.write(join(root, "a.ts"), "pr change\n");
+		await Bun.write(join(root, "b.ts"), "pr file\n");
+		await sh(root, ["add", "-A"]);
+		await sh(root, ["commit", "-q", "-m", "pr"]);
+		const head = await shOut(root, ["rev-parse", "HEAD"]);
+		const baseSha = await shOut(root, ["rev-parse", "main"]);
+		const mainWorktree = join(parent, "main-worktree");
+		await sh(root, ["worktree", "add", "-q", mainWorktree, "main"]);
+		await sh(mainWorktree, ["merge", "-q", "--no-ff", "-m", "merge", "pr"]);
+		return { head, baseSha };
+	};
+
+	test("a merged PR's context lists the PR's files against the pinned base", async () => {
+		await withTestRepoAndDataDir(async (repoRoot, dataDir) => {
+			const root = await realpath(repoRoot);
+			const parent = await mkdtemp(join(tmpdir(), "nisi-walkthrough-ctx-"));
+			try {
+				const { head, baseSha } = await setup(root, parent);
+				const context = await Effect.runPromise(
+					Effect.gen(function* () {
+						const store = yield* Store;
+						const reviews = yield* ReviewStore;
+						const session = yield* reviews.openSession(prSession(root));
+						yield* store.recordPullRequestStatus(
+							prSession(root).pr,
+							status(head, baseSha, "MERGED"),
+						);
+						return yield* gatherGenerationContext(session.id);
+					}).pipe(Effect.scoped, Effect.provide(makeTestLayer(dataDir))),
+				);
+				expect(context.files.map((file) => file.path)).toEqual([
+					"a.ts",
+					"b.ts",
+				]);
+				expect(context.baseRef).toBe(baseSha);
+				expect(context.repoRoot).toBe(root);
+			} finally {
+				await rm(parent, { recursive: true, force: true });
+			}
+		});
+	});
+
+	test("refuses a PR session whose worktree moved on to another commit", async () => {
+		await withTestRepoAndDataDir(async (repoRoot, dataDir) => {
+			const root = await realpath(repoRoot);
+			const parent = await mkdtemp(join(tmpdir(), "nisi-walkthrough-ctx-"));
+			try {
+				const { head, baseSha } = await setup(root, parent);
+				await sh(root, ["checkout", "-q", "-b", "other-task", baseSha]);
+				await Bun.write(join(root, "other.ts"), "other\n");
+				await sh(root, ["add", "-A"]);
+				await sh(root, ["commit", "-q", "-m", "other"]);
+				const result = await Effect.runPromise(
+					Effect.gen(function* () {
+						const store = yield* Store;
+						const reviews = yield* ReviewStore;
+						const session = yield* reviews.openSession(prSession(root));
+						yield* store.recordPullRequestStatus(
+							prSession(root).pr,
+							status(head, baseSha, "OPEN"),
+						);
+						return yield* gatherGenerationContext(session.id).pipe(
+							Effect.result,
+						);
+					}).pipe(Effect.scoped, Effect.provide(makeTestLayer(dataDir))),
+				);
+				expect(Result.isFailure(result)).toBe(true);
+				if (!Result.isFailure(result)) return;
+				expect(result.failure).toMatchObject({
+					_tag: "HeadNotCheckedOut",
+					currentBranch: "other-task",
+					pullRequestNumber: 9,
+				});
+			} finally {
+				await rm(parent, { recursive: true, force: true });
+			}
+		});
+	});
+
+	test("trusts the worktree until the PR's head is known", async () => {
+		await withTestRepoAndDataDir(async (repoRoot, dataDir) => {
+			const root = await realpath(repoRoot);
+			await sh(root, ["checkout", "-q", "-b", "pr"]);
+			await Bun.write(join(root, "a.ts"), "pr change\n");
+			await sh(root, ["commit", "-q", "-am", "pr"]);
+			await sh(root, ["checkout", "-q", "-b", "other-task", "main"]);
+			const context = await Effect.runPromise(
+				Effect.gen(function* () {
+					const reviews = yield* ReviewStore;
+					const session = yield* reviews.openSession(prSession(root));
+					return yield* gatherGenerationContext(session.id);
+				}).pipe(Effect.scoped, Effect.provide(makeTestLayer(dataDir))),
+			);
+			expect(context.headRef).toBe("pr");
+		});
+	});
+
+	test("still refuses a plain branch session whose head isn't checked out", async () => {
+		await withTestRepoAndDataDir(async (repoRoot, dataDir) => {
+			const root = await realpath(repoRoot);
+			await sh(root, ["branch", "feature"]);
+			const result = await Effect.runPromise(
+				Effect.gen(function* () {
+					const reviews = yield* ReviewStore;
+					const session = yield* reviews.openSession({
+						repoRoot: root,
+						baseRef: "main",
+						headRef: "feature",
+						pr: null,
+					});
+					return yield* gatherGenerationContext(session.id).pipe(Effect.result);
+				}).pipe(Effect.scoped, Effect.provide(makeTestLayer(dataDir))),
+			);
+			expect(Result.isFailure(result)).toBe(true);
+			if (!Result.isFailure(result)) return;
+			expect(result.failure).toMatchObject({
+				_tag: "HeadNotCheckedOut",
+				currentBranch: "main",
+			});
+			expect(
+				(result.failure as { pullRequestNumber?: number }).pullRequestNumber,
+			).toBeUndefined();
 		});
 	});
 });

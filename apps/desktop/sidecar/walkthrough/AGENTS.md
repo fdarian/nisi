@@ -18,21 +18,21 @@ discovery, sandbox mode, read-only tool gating) lives one level up in
   `parseContent`'s doc. Lives here rather than in `@repo/walkthrough` because that package is
   deliberately I/O-free — see its AGENTS.md.
 - `context.ts` — `gatherGenerationContext`: resolves a session's `repoRoot`/`baseRef`/`headRef`/PR
-  title via `@repo/review`'s `ReviewStore` directly (not through `Store`, which has no raw "get one
-  session" method) and fetches every changed file's patch + head content via `@repo/git`, producing
+  title (`ReviewStore` for the row, `Store.resolveSessionRepoRoot`/`resolveSessionDiffHead`/
+  `resolveSessionDiffBase` for the live worktree, head and base, so the file list is the one Files
+  Changed shows) and fetches every changed file's patch + head content via `@repo/git`, producing
   both what `@repo/walkthrough`'s `buildOverview` needs for the agent's brief (the refs, the
   per-file list, the PR title) and what `evaluateWalkthrough` needs to validate the agent's answer
   turn by turn (`ChangedFileFacts` — each file's real patch and `lineCount`). Also reads
   `@repo/settings`'s `includeUncommitted` directly (there's no frontend request here to carry it)
   and threads it into both `@repo/git` calls, so the diff an agent explores matches what the user
-  sees in Files Changed. Refuses outright (`HeadNotCheckedOut`) for a plain branch session whose
-  `headRef` isn't what `repoRoot` actually has checked out — the harness runs a real coding agent
-  directly against that worktree (`@repo/harness-local`), so an explicit, not-checked-out head
-  would have the agent explore files that don't match the diff it was briefed on. A PR-backed
-  session never trips this, since its `repoRoot` is a worktree nisi created and keeps checked out
-  to exactly that PR's head. `generate.ts`'s `resolveContext` turns this into a specific `failed`
-  event rather than the generic "could not read this session's diff" every other context failure
-  collapses into.
+  sees in Files Changed. Refuses outright (`HeadNotCheckedOut`) whenever the worktree isn't
+  eligible to be the diff's head — a plain branch session whose `headRef` isn't checked out, or a
+  PR session whose worktree no longer holds the PR's head (`pullRequestNumber` is set) — because the
+  harness runs a real coding agent directly against that worktree on disk
+  (`@repo/harness-local`), so it would explore files that don't match the diff it was briefed on.
+  `generate.ts`'s `resolveContext` turns this into a specific `failed` event rather than the
+  generic "could not read this session's diff" every other context failure collapses into.
 - `live-sessions.ts` — the in-process `Map<sessionId, LiveWalkthroughSession>` a successful
   `generate` populates, so a regenerate can continue the same harness-agent conversation instead of
   starting cold. Gone on sidecar restart by design (`@repo/harness-local` omits `resumeSession` —
