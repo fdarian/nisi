@@ -1061,6 +1061,22 @@ export class Store extends Context.Service<Store>()("Store", {
 				);
 			});
 
+		/**
+		 * Open sessions whose `repoRoot` directory no longer exists, already
+		 * warned about — `listSessions` runs on every live-poll tick, so a
+		 * dead session would otherwise re-log every `POLL_INTERVAL` forever
+		 * (the same flood `live-poll.ts`'s `unresolvableSessions` exists to
+		 * stop). Pruned against the open set on each `listSessions`.
+		 */
+		const deadSessionIds = new Set<string>();
+
+		/**
+		 * A session whose directory was deleted can't be prepared, but it must
+		 * not take every other session down with it: `sessions.list`,
+		 * `setAttention` and `setWatching` all go through here. Deliberately
+		 * left open rather than auto-closed — the user may restore the
+		 * directory, and closing is theirs to decide.
+		 */
 		const listSessions = () =>
 			reviewStore.listOpenSessions().pipe(
 				Effect.tap((sessions) =>
@@ -1071,15 +1087,38 @@ export class Store extends Context.Service<Store>()("Store", {
 								Effect.andThen(
 									baseFetchState.background(session.repoRoot, session.baseRef),
 								),
-								Effect.catchTag("GitCommandError", (error) =>
-									Effect.logWarning("Could not refresh restored session base", {
-										error,
-									}),
+								Effect.tap(() =>
+									Effect.sync(() => deadSessionIds.delete(session.id)),
 								),
+								Effect.catchTags({
+									GitCommandError: (error) =>
+										Effect.logWarning(
+											"Could not refresh restored session base",
+											{ error },
+										),
+									RepoPathNotFound: (error) =>
+										deadSessionIds.has(session.id)
+											? Effect.void
+											: Effect.suspend(() => {
+													deadSessionIds.add(session.id);
+													return Effect.logWarning(
+														"session directory is gone — skipping base preparation for this session",
+														{ sessionId: session.id, path: error.path },
+													);
+												}),
+								}),
 							);
 						},
 						{ concurrency: 4 },
 					),
+				),
+				Effect.tap((sessions) =>
+					Effect.sync(() => {
+						const openIds = new Set(sessions.map((session) => session.id));
+						for (const id of deadSessionIds) {
+							if (!openIds.has(id)) deadSessionIds.delete(id);
+						}
+					}),
 				),
 				Effect.map((sessions) => sessions.map(toWireSession)),
 			);

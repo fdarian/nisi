@@ -425,6 +425,46 @@ test("base refresh drops upstream-only files without changing head or remaining 
 	});
 }, 20_000);
 
+describe("Store.listSessions — a session whose directory was deleted", () => {
+	test("still lists every session instead of failing the whole call", async () => {
+		await withTestRepoAndDataDir(async (aliveRoot, dataDir) => {
+			const deadRoot = await makeTestRepo();
+			try {
+				await Effect.runPromise(
+					Effect.gen(function* () {
+						const store = yield* Store;
+						const reviews = yield* ReviewStore;
+						// Straight into the review store: `Store.openSession` prepares the
+						// base, and `listSessions` skips sessions prepared in the last 5s.
+						const open = (repoRoot: string) =>
+							reviews.openSession({
+								repoRoot,
+								baseRef: "main",
+								headRef: "main",
+								pr: null,
+							});
+						const alive = yield* open(aliveRoot);
+						const dead = yield* open(deadRoot);
+						yield* Effect.promise(() =>
+							rm(deadRoot, { recursive: true, force: true }),
+						);
+
+						// Twice: the second call exercises the already-warned path.
+						for (let attempt = 0; attempt < 2; attempt++) {
+							const sessions = yield* store.listSessions();
+							expect(sessions.map((session) => session.id).sort()).toEqual(
+								[alive.id, dead.id].sort(),
+							);
+						}
+					}).pipe(Effect.scoped, Effect.provide(makeTestLayer(dataDir))),
+				);
+			} finally {
+				await rm(deadRoot, { recursive: true, force: true });
+			}
+		});
+	});
+});
+
 describe("Store.openSession — branch target with an explicit baseRef", () => {
 	test("rejects an unresolvable base with InvalidBaseRef, carrying git's own stderr", async () => {
 		await withTestRepoAndDataDir(async (repoRoot, dataDir) => {
