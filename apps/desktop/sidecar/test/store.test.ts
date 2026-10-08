@@ -465,6 +465,64 @@ describe("Store.listSessions — a session whose directory was deleted", () => {
 	});
 });
 
+describe("base refresh — a session whose directory was deleted", () => {
+	test("does not fail the refresh callbacks or mark live sessions stale", async () => {
+		await withTestRepoAndDataDir(async (repoRoot, dataDir) => {
+			const upstream = await makeTestRepo();
+			const deadRoot = await makeTestRepo();
+			try {
+				await sh(upstream, ["fetch", repoRoot, "main"]);
+				await sh(upstream, ["reset", "--hard", "FETCH_HEAD"]);
+				await sh(repoRoot, ["remote", "add", "origin", upstream]);
+				await sh(repoRoot, ["fetch", "origin"]);
+				await Effect.runPromise(
+					Effect.gen(function* () {
+						const store = yield* Store;
+						const reviews = yield* ReviewStore;
+						// Straight into the review store so neither session has a prepared
+						// base yet; the refresh below is the first to look at either.
+						const open = (root: string) =>
+							reviews.openSession({
+								repoRoot: root,
+								baseRef: "origin/main",
+								headRef: "main",
+								pr: null,
+							});
+						const alive = yield* open(repoRoot);
+						const dead = yield* open(deadRoot);
+						yield* Effect.promise(async () => {
+							await rm(deadRoot, { recursive: true, force: true });
+							await Bun.write(join(upstream, "new.ts"), "upstream\n");
+							await sh(upstream, ["add", "-A"]);
+							await sh(upstream, ["commit", "-q", "-m", "upstream moves"]);
+						});
+						const movedSessions: string[] = [];
+						const staleSessions: string[] = [];
+						const unsubscribe = subscribe((event) => {
+							if (event.type === "session-files-changed")
+								movedSessions.push(event.sessionId);
+							if (event.type === "session-base-staleness-changed")
+								staleSessions.push(event.sessionId);
+						});
+						yield* Effect.addFinalizer(() => Effect.sync(unsubscribe));
+
+						expect(
+							(yield* store.refreshSessionBase(alive.id)).baseMayBeStale,
+						).toBe(false);
+						expect(movedSessions).toContain(alive.id);
+						expect(movedSessions).not.toContain(dead.id);
+						expect(staleSessions).toEqual([]);
+						expect(yield* store.readBaseMayBeStale(alive.id)).toBe(false);
+					}).pipe(Effect.scoped, Effect.provide(makeTestLayer(dataDir))),
+				);
+			} finally {
+				await rm(upstream, { recursive: true, force: true });
+				await rm(deadRoot, { recursive: true, force: true });
+			}
+		});
+	});
+});
+
 describe("Store.openSession — branch target with an explicit baseRef", () => {
 	test("rejects an unresolvable base with InvalidBaseRef, carrying git's own stderr", async () => {
 		await withTestRepoAndDataDir(async (repoRoot, dataDir) => {

@@ -420,6 +420,48 @@ export class Store extends Context.Service<Store>()("Store", {
 					commit: identity[1].commit,
 				};
 			});
+		/**
+		 * Open sessions whose `repoRoot` directory no longer exists, already
+		 * warned about — `listSessions` runs on every live-poll tick, so a
+		 * dead session would otherwise re-log every `POLL_INTERVAL` forever
+		 * (the same flood `live-poll.ts`'s `unresolvableSessions` exists to
+		 * stop). Pruned against the open set on each `listSessions`.
+		 */
+		const deadSessionIds = new Set<string>();
+		const warnDeadSessionOnce = (sessionId: string, path: string) =>
+			Effect.suspend(() => {
+				if (deadSessionIds.has(sessionId)) return Effect.void;
+				deadSessionIds.add(sessionId);
+				return Effect.logWarning(
+					"session directory is gone — skipping base preparation for this session",
+					{ sessionId, path },
+				);
+			});
+
+		type BaseIdentityError = Effect.Error<ReturnType<typeof baseIdentity>>;
+		/**
+		 * `null` for a session whose directory is gone: it can't be on any base,
+		 * and letting its failure through would fail the whole base refresh for
+		 * the sessions that are alive. The declared error type keeps
+		 * `RepoPathNotFound` even though it's handled here — `makeBaseRefresh<E>`
+		 * infers one `E` across `identity` and the `moved`/`staleChanged`
+		 * callbacks, and narrowing it on one side breaks that inference.
+		 */
+		const sessionBaseKey = (
+			session: ReviewSession,
+		): Effect.Effect<
+			string | null,
+			BaseIdentityError,
+			Effect.Services<ReturnType<typeof baseIdentity>>
+		> =>
+			baseIdentity(session.repoRoot, session.baseRef).pipe(
+				Effect.map((identity) => identity.key),
+				Effect.catchTag("RepoPathNotFound", (error) =>
+					warnDeadSessionOnce(session.id, error.path).pipe(
+						Effect.as(null),
+					),
+				),
+			);
 		const emitForSessionsOnBase = (
 			key: string,
 			event: (sessionId: string) => Parameters<typeof emit>[0],
@@ -427,11 +469,8 @@ export class Store extends Context.Service<Store>()("Store", {
 			Effect.gen(function* () {
 				const sessions = yield* reviewStore.listOpenSessions();
 				for (const session of sessions) {
-					const identity = yield* baseIdentity(
-						session.repoRoot,
-						session.baseRef,
-					);
-					if (identity.key === key) emit(event(session.id));
+					if ((yield* sessionBaseKey(session)) === key)
+						emit(event(session.id));
 				}
 			});
 		const baseFetchState = yield* makeBaseRefresh({
@@ -1062,15 +1101,6 @@ export class Store extends Context.Service<Store>()("Store", {
 			});
 
 		/**
-		 * Open sessions whose `repoRoot` directory no longer exists, already
-		 * warned about — `listSessions` runs on every live-poll tick, so a
-		 * dead session would otherwise re-log every `POLL_INTERVAL` forever
-		 * (the same flood `live-poll.ts`'s `unresolvableSessions` exists to
-		 * stop). Pruned against the open set on each `listSessions`.
-		 */
-		const deadSessionIds = new Set<string>();
-
-		/**
 		 * A session whose directory was deleted can't be prepared, but it must
 		 * not take every other session down with it: `sessions.list`,
 		 * `setAttention` and `setWatching` all go through here. Deliberately
@@ -1097,15 +1127,7 @@ export class Store extends Context.Service<Store>()("Store", {
 											{ error },
 										),
 									RepoPathNotFound: (error) =>
-										deadSessionIds.has(session.id)
-											? Effect.void
-											: Effect.suspend(() => {
-													deadSessionIds.add(session.id);
-													return Effect.logWarning(
-														"session directory is gone — skipping base preparation for this session",
-														{ sessionId: session.id, path: error.path },
-													);
-												}),
+										warnDeadSessionOnce(session.id, error.path),
 								}),
 							);
 						},
