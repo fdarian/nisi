@@ -17,6 +17,7 @@ import {
 	InputGroupAddon,
 	InputGroupInput,
 } from "#/components/ui/input-group";
+import { Skeleton } from "#/components/ui/skeleton";
 import { Tabs, TabsList, TabsTab } from "#/components/ui/tabs";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "#/components/ui/tooltip";
 import type { SidecarQueryUtils } from "#/infra/backend-context";
@@ -29,7 +30,7 @@ import {
 	useHomeDir,
 	useRepository,
 } from "./repositories-data";
-import { EmptyState, ErrorState, LoadingState } from "./repositories-status";
+import { EmptyState, ErrorState } from "./repositories-status";
 import {
 	filterSessions,
 	formatRemote,
@@ -79,12 +80,12 @@ function RepositoryDetailContent(props: {
 						</Link>
 					)}
 				/>
-				<span aria-current="page" className="text-[15px]">
+				<span aria-current="page" className="font-semibold text-xl">
 					{props.owner}/{props.repo}
 				</span>
 			</nav>
 			{query.isPending ? (
-				<LoadingState />
+				<RepositoryDetailSkeleton />
 			) : query.isError ? (
 				<ErrorState
 					message={friendlyRepositoryError(query.error)}
@@ -101,6 +102,44 @@ function RepositoryDetailContent(props: {
 	);
 }
 
+/** Heading and card shared by the loaded Location section and its skeleton. */
+function LocationFrame(props: {
+	pathValue: React.ReactNode;
+	pathTitle?: string;
+	pathActions?: React.ReactNode;
+	remoteValue: React.ReactNode;
+	children?: React.ReactNode;
+}): React.ReactElement {
+	return (
+		<section className="flex flex-col gap-2">
+			<h2 className="font-medium text-muted-foreground text-sm">Location</h2>
+			<Card className="-mx-4 divide-y divide-border" radius="lg">
+				<div className="flex min-h-11 items-center gap-4 px-4 py-2">
+					<span className="w-30 shrink-0 text-sm">Path</span>
+					<div
+						className="min-w-0 flex-1 truncate text-right font-mono text-muted-foreground text-xs"
+						title={props.pathTitle}
+					>
+						{props.pathValue}
+					</div>
+					{props.pathActions !== undefined && (
+						<div className="flex shrink-0 items-center gap-1">
+							{props.pathActions}
+						</div>
+					)}
+				</div>
+				<div className="flex min-h-11 items-center gap-4 px-4 py-2">
+					<span className="w-30 shrink-0 text-sm">Remote</span>
+					<div className="min-w-0 flex-1 truncate text-right font-mono text-muted-foreground text-xs">
+						{props.remoteValue}
+					</div>
+				</div>
+			</Card>
+			{props.children}
+		</section>
+	);
+}
+
 function LocationSection(props: {
 	orpc: SidecarQueryUtils;
 	repository: RepositoryDetail;
@@ -109,57 +148,44 @@ function LocationSection(props: {
 	const change = useChangeRepositoryPath(props.orpc);
 	const repository = props.repository;
 	return (
-		<section className="flex flex-col gap-2">
-			<h2 className="font-medium text-muted-foreground text-sm">Location</h2>
-			<Card className="-mx-4 divide-y divide-border" radius="lg">
-				<div className="flex min-h-11 items-center gap-4 px-4 py-2">
-					<span className="w-30 shrink-0 text-sm">Path</span>
-					<span
-						className="min-w-0 flex-1 truncate text-right font-mono text-muted-foreground text-xs"
-						title={repository.path ?? undefined}
+		<LocationFrame
+			pathActions={
+				<>
+					{repository.path !== null &&
+						repository.problem !== "path-missing" && (
+							<Button
+								onClick={() => {
+									if (repository.path !== null) revealInFinder(repository.path);
+								}}
+								size="xs"
+								variant="ghost"
+							>
+								Reveal in Finder
+							</Button>
+						)}
+					<Button
+						disabled={change.isPending}
+						onClick={() =>
+							change.mutate({
+								owner: repository.owner,
+								repo: repository.repo,
+							})
+						}
+						size="xs"
+						variant="ghost"
 					>
-						{repository.path === null
-							? "Not set"
-							: tildePath(repository.path, home)}
-					</span>
-					<div className="flex shrink-0 items-center gap-1">
-						{repository.path !== null &&
-							repository.problem !== "path-missing" && (
-								<Button
-									onClick={() => {
-										if (repository.path !== null)
-											revealInFinder(repository.path);
-									}}
-									size="xs"
-									variant="ghost"
-								>
-									Reveal in Finder
-								</Button>
-							)}
-						<Button
-							disabled={change.isPending}
-							onClick={() =>
-								change.mutate({
-									owner: repository.owner,
-									repo: repository.repo,
-								})
-							}
-							size="xs"
-							variant="ghost"
-						>
-							{repository.path === null ? "Choose…" : "Change…"}
-						</Button>
-					</div>
-				</div>
-				<div className="flex min-h-11 items-center gap-4 px-4 py-2">
-					<span className="w-30 shrink-0 text-sm">Remote</span>
-					<span className="min-w-0 flex-1 truncate text-right font-mono text-muted-foreground text-xs">
-						{repository.remoteUrl === null
-							? "—"
-							: formatRemote(repository.remoteUrl)}
-					</span>
-				</div>
-			</Card>
+						{repository.path === null ? "Choose…" : "Change…"}
+					</Button>
+				</>
+			}
+			pathTitle={repository.path ?? undefined}
+			pathValue={
+				repository.path === null ? "Not set" : tildePath(repository.path, home)
+			}
+			remoteValue={
+				repository.remoteUrl === null ? "—" : formatRemote(repository.remoteUrl)
+			}
+		>
 			{repository.problem !== null && (
 				<p className="flex items-center gap-1.5 text-sm text-warning-foreground">
 					<TriangleAlertIcon className="size-3.5 shrink-0" />
@@ -171,7 +197,7 @@ function LocationSection(props: {
 					{friendlyRepositoryError(change.error)}
 				</p>
 			)}
-		</section>
+		</LocationFrame>
 	);
 }
 
@@ -194,37 +220,13 @@ function SessionsSection(props: {
 
 	return (
 		<section className="flex flex-col gap-2">
-			<div className="flex h-7 items-center justify-between gap-3">
-				<h2 className="flex items-baseline gap-1.5 font-medium text-muted-foreground text-sm">
-					Sessions
-					<span className="font-normal">{repository.sessions.length}</span>
-				</h2>
-				<div className="-mr-4 flex items-center gap-2">
-					<Tabs
-						onValueChange={(value) => setTab(value as SessionTab)}
-						value={tab}
-					>
-						<TabsList size="sm">
-							{SESSION_TABS.map((entry) => (
-								<TabsTab key={entry.value} value={entry.value}>
-									{entry.label}
-								</TabsTab>
-							))}
-						</TabsList>
-					</Tabs>
-					<InputGroup className="w-42">
-						<InputGroupAddon>
-							<SearchIcon />
-						</InputGroupAddon>
-						<InputGroupInput
-							aria-label="Filter sessions"
-							onChange={(event) => setSearch(event.target.value)}
-							placeholder="Filter by title or #"
-							value={search}
-						/>
-					</InputGroup>
-				</div>
-			</div>
+			<SessionsHeader
+				count={repository.sessions.length}
+				onSearchChange={setSearch}
+				onTabChange={setTab}
+				search={search}
+				tab={tab}
+			/>
 			{matching.length === 0 ? (
 				<EmptyState
 					description={
@@ -237,10 +239,7 @@ function SessionsSection(props: {
 					}
 				/>
 			) : (
-				<Card
-					className="-mx-4 divide-y divide-border overflow-hidden"
-					radius="lg"
-				>
+				<SessionsCard>
 					{visible.shown.map((session) => (
 						<SessionRow
 							key={session.id}
@@ -264,9 +263,147 @@ function SessionsSection(props: {
 							Show {visible.hiddenCount} more
 						</button>
 					)}
-				</Card>
+				</SessionsCard>
 			)}
 		</section>
+	);
+}
+
+/** Title, tabs and filter; `count` is absent and the controls inert while the sessions are still loading. */
+function SessionsHeader(props: {
+	count?: number;
+	tab: SessionTab;
+	onTabChange: (tab: SessionTab) => void;
+	search: string;
+	onSearchChange: (search: string) => void;
+	disabled?: boolean;
+}): React.ReactElement {
+	return (
+		<div className="flex h-7 items-center justify-between gap-3">
+			<h2 className="flex items-baseline gap-1.5 font-medium text-muted-foreground text-sm">
+				Sessions
+				{props.count !== undefined && (
+					<span className="font-normal">{props.count}</span>
+				)}
+			</h2>
+			<div className="-mr-4 flex items-center gap-2">
+				<Tabs
+					onValueChange={(value) => props.onTabChange(value as SessionTab)}
+					value={props.tab}
+				>
+					<TabsList size="sm">
+						{SESSION_TABS.map((entry) => (
+							<TabsTab
+								disabled={props.disabled}
+								key={entry.value}
+								value={entry.value}
+							>
+								{entry.label}
+							</TabsTab>
+						))}
+					</TabsList>
+				</Tabs>
+				<InputGroup className="w-42">
+					<InputGroupAddon>
+						<SearchIcon />
+					</InputGroupAddon>
+					<InputGroupInput
+						aria-label="Filter sessions"
+						disabled={props.disabled}
+						onChange={(event) => props.onSearchChange(event.target.value)}
+						placeholder="Filter by title or #"
+						value={props.search}
+					/>
+				</InputGroup>
+			</div>
+		</div>
+	);
+}
+
+function SessionsCard(props: {
+	children: React.ReactNode;
+	loading?: boolean;
+}): React.ReactElement {
+	return (
+		<Card
+			aria-label={props.loading ? "Loading sessions" : undefined}
+			className="-mx-4 divide-y divide-border overflow-hidden"
+			radius="lg"
+			role={props.loading ? "status" : undefined}
+		>
+			{props.children}
+		</Card>
+	);
+}
+
+const SESSION_ROW = "flex h-10 w-full items-center gap-2.5 px-4";
+
+/** The row's columns, shared by the loaded row and its skeleton so the two can't drift apart. */
+function SessionRowCells(props: {
+	icon: React.ReactNode;
+	number: React.ReactNode;
+	title: React.ReactNode;
+	time: React.ReactNode;
+}): React.ReactElement {
+	return (
+		<>
+			{props.icon}
+			<div className="w-10 shrink-0 text-muted-foreground text-sm">
+				{props.number}
+			</div>
+			<div className="min-w-0 flex-1 truncate text-sm">{props.title}</div>
+			<div className="flex w-10 shrink-0 justify-end text-right text-muted-foreground text-xs">
+				{props.time}
+			</div>
+		</>
+	);
+}
+
+const SKELETON_TITLE_WIDTHS = [
+	"w-3/4",
+	"w-1/2",
+	"w-2/3",
+	"w-5/6",
+	"w-2/5",
+	"w-3/5",
+	"w-1/2",
+] as const;
+
+function RepositoryDetailSkeleton(): React.ReactElement {
+	const noop = () => {};
+	return (
+		<>
+			<LocationFrame
+				pathValue={<Skeleton className="ml-auto h-3.5 w-36" />}
+				remoteValue={<Skeleton className="ml-auto h-3.5 w-44" />}
+			/>
+			<section className="flex flex-col gap-2">
+				<SessionsHeader
+					disabled
+					onSearchChange={noop}
+					onTabChange={noop}
+					search=""
+					tab="all"
+				/>
+				<SessionsCard loading>
+					{SKELETON_TITLE_WIDTHS.map((width, index) => (
+						<div
+							aria-hidden="true"
+							className={SESSION_ROW}
+							// biome-ignore lint/suspicious/noArrayIndexKey: static placeholder rows
+							key={index}
+						>
+							<SessionRowCells
+								icon={<Skeleton className="size-3.5 shrink-0 rounded-full" />}
+								number={<Skeleton className="h-3.5 w-8" />}
+								time={<Skeleton className="h-3 w-6" />}
+								title={<Skeleton className={cn("h-3.5", width)} />}
+							/>
+						</div>
+					))}
+				</SessionsCard>
+			</section>
+		</>
 	);
 }
 
@@ -278,18 +415,19 @@ function SessionRow(props: {
 	const session = props.session;
 	return (
 		<button
-			className="flex h-10 w-full cursor-pointer items-center gap-2.5 px-4 text-left transition-colors hover:bg-accent/50"
+			className={cn(
+				SESSION_ROW,
+				"cursor-pointer text-left transition-colors hover:bg-accent/50",
+			)}
 			onClick={props.onOpen}
 			type="button"
 		>
-			<StateIcon state={session.state} />
-			<span className="w-10 shrink-0 text-muted-foreground text-sm">
-				#{session.prNumber}
-			</span>
-			<span className="min-w-0 flex-1 truncate text-sm">{session.prTitle}</span>
-			<span className="w-10 shrink-0 text-right text-muted-foreground text-xs">
-				{relativeTime(session.updatedAt, props.now)}
-			</span>
+			<SessionRowCells
+				icon={<StateIcon state={session.state} />}
+				number={`#${session.prNumber}`}
+				time={relativeTime(session.updatedAt, props.now)}
+				title={session.prTitle}
+			/>
 		</button>
 	);
 }

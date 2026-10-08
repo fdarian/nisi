@@ -6,15 +6,6 @@ import {
 	EmptyMedia,
 	EmptyTitle,
 } from "#/components/ui/empty";
-import { Spinner } from "#/components/ui/spinner";
-
-export function LoadingState(): React.ReactElement {
-	return (
-		<div className="flex justify-center py-16">
-			<Spinner className="size-5" />
-		</div>
-	);
-}
 
 export function ErrorState(props: {
 	title: string;
