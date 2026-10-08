@@ -127,8 +127,10 @@ export {
 	inferRepoPath,
 	parseOwnerRepoFromRemoteUrl,
 	resolveMainCloneRoot,
+	rewriteRemoteUrlOwnerRepo,
 	verifyRepoPathMatchesOrigin,
 } from "./repo-path-mapping.ts";
+export { repointOriginToMovedRepo } from "./repoint-origin.ts";
 export type {
 	OpenPullRequestWorktreeInput,
 	RevalidateWorktreePathInput,
