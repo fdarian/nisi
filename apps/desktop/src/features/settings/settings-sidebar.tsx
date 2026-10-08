@@ -1,5 +1,10 @@
 import { Link, useLocation } from "@tanstack/react-router";
-import { BellIcon, ChevronLeftIcon, SettingsIcon } from "lucide-react";
+import {
+	BellIcon,
+	ChevronLeftIcon,
+	GitForkIcon,
+	SettingsIcon,
+} from "lucide-react";
 import {
 	Sidebar,
 	SidebarContent,
@@ -53,6 +58,15 @@ export function SettingsSidebar(): React.ReactElement {
 								>
 									<BellIcon />
 									Notifications
+								</SidebarMenuButton>
+							</SidebarMenuItem>
+							<SidebarMenuItem>
+								<SidebarMenuButton
+									isActive={pathname.startsWith("/settings/repositories")}
+									render={<Link to="/settings/repositories" />}
+								>
+									<GitForkIcon />
+									Repositories
 								</SidebarMenuButton>
 							</SidebarMenuItem>
 						</SidebarMenu>
