@@ -66,19 +66,20 @@ function RepositoryDetailContent(props: {
 		<div className="mx-auto flex w-full max-w-2xl flex-col gap-5 overflow-y-auto px-8 py-12">
 			<nav
 				aria-label="breadcrumb"
-				className="flex items-center gap-1.5 text-[15px]"
+				className="flex flex-col items-start gap-1.5"
 			>
-				<Link
-					className="inline-flex items-center gap-1 text-muted-foreground transition-colors hover:text-foreground"
-					to="/settings/repositories"
-				>
-					<ChevronLeftIcon className="size-4" />
-					Repositories
-				</Link>
-				<span aria-hidden="true" className="text-muted-foreground/60">
-					/
-				</span>
-				<span aria-current="page">
+				<Button
+					size="xs"
+					variant="ghost"
+					className="-ml-6 text-muted-foreground hover:text-foreground"
+					render={(props) => (
+						<Link {...props} to="/settings/repositories">
+							<ChevronLeftIcon className="size-4" />
+							Repositories
+						</Link>
+					)}
+				/>
+				<span aria-current="page" className="text-[15px]">
 					{props.owner}/{props.repo}
 				</span>
 			</nav>
@@ -110,7 +111,7 @@ function LocationSection(props: {
 	return (
 		<section className="flex flex-col gap-2">
 			<h2 className="font-medium text-muted-foreground text-sm">Location</h2>
-			<Card className="-mx-6 divide-y divide-border">
+			<Card className="-mx-4 divide-y divide-border" radius="lg">
 				<div className="flex min-h-11 items-center gap-4 px-4 py-2">
 					<span className="w-30 shrink-0 text-sm">Path</span>
 					<span
@@ -203,7 +204,7 @@ function SessionsSection(props: {
 						onValueChange={(value) => setTab(value as SessionTab)}
 						value={tab}
 					>
-						<TabsList>
+						<TabsList size="sm">
 							{SESSION_TABS.map((entry) => (
 								<TabsTab key={entry.value} value={entry.value}>
 									{entry.label}
@@ -236,7 +237,10 @@ function SessionsSection(props: {
 					}
 				/>
 			) : (
-				<Card className="-mx-6 divide-y divide-border overflow-hidden">
+				<Card
+					className="-mx-4 divide-y divide-border overflow-hidden"
+					radius="lg"
+				>
 					{visible.shown.map((session) => (
 						<SessionRow
 							key={session.id}

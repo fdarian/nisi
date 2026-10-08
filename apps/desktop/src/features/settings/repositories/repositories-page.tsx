@@ -47,17 +47,19 @@ function RepositoriesContent(props: {
 					Local clones nisi uses to open pull requests.
 				</p>
 			</header>
-			<InputGroup>
-				<InputGroupAddon>
-					<SearchIcon />
-				</InputGroupAddon>
-				<InputGroupInput
-					aria-label="Search repositories"
-					onChange={(event) => setSearch(event.target.value)}
-					placeholder="Search repositories"
-					value={search}
-				/>
-			</InputGroup>
+			<div className="-mx-4">
+				<InputGroup>
+					<InputGroupAddon>
+						<SearchIcon />
+					</InputGroupAddon>
+					<InputGroupInput
+						aria-label="Search repositories"
+						onChange={(event) => setSearch(event.target.value)}
+						placeholder="Search repositories"
+						value={search}
+					/>
+				</InputGroup>
+			</div>
 			{query.isPending ? (
 				<LoadingState />
 			) : query.isError ? (
@@ -76,7 +78,7 @@ function RepositoriesContent(props: {
 					title={search.trim() === "" ? "No repositories yet" : "No matches"}
 				/>
 			) : (
-				<Card className="-mx-6 divide-y divide-border overflow-hidden">
+				<Card className="-mx-4 divide-y divide-border overflow-hidden" radius='lg'>
 					{repositories.map((repository) => (
 						<Link
 							className="flex h-13 items-center gap-3 px-4 transition-colors hover:bg-accent/50"
