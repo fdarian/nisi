@@ -6,11 +6,10 @@
  * bordered card holding the rendered markdown body. The PR title itself
  * isn't repeated here — `pr-header.tsx` already shows it.
  */
-import { useMemo } from "react";
-import ReactMarkdown, { type Components } from "react-markdown";
 import { Avatar, AvatarFallback, AvatarImage } from "#/components/ui/avatar";
 import type { OverviewDescription } from "#/features/pull-request/data/pr-data";
 import { githubAvatarUrl } from "#/features/pull-request/data/pull-requests-data";
+import { ProseMarkdown } from "#/features/pull-request/prose-markdown";
 
 /** Mirrors `open-pull-request-palette.tsx`'s helper of the same name — too small (one line) to be worth sharing across the two files. */
 function authorInitials(login: string): string {
@@ -24,7 +23,6 @@ type DescriptionPaneProps = {
 export function DescriptionPane({
 	description,
 }: DescriptionPaneProps): React.ReactElement {
-	const components = useMarkdownComponents();
 	const body = description.body;
 
 	return (
@@ -43,50 +41,11 @@ export function DescriptionPane({
 						</p>
 					) : (
 						<div className="flex flex-col gap-3">
-							<ReactMarkdown components={components}>{body}</ReactMarkdown>
+							<ProseMarkdown>{body}</ProseMarkdown>
 						</div>
 					)}
 				</div>
 			</div>
 		</div>
-	);
-}
-
-/**
- * Same styled-component-override pattern as `narrative-pane.tsx`'s
- * `useMarkdownComponents`, minus its `ref:`-link interception — a PR
- * description is arbitrary GitHub-authored markdown, not the sidecar's own
- * `ref:`-scheme output, so a plain link stays a plain link (and
- * react-markdown's default `urlTransform` sanitization is left in place
- * rather than overridden the way `NarrativePane` overrides it for its own
- * scheme).
- */
-function useMarkdownComponents(): Components {
-	return useMemo<Components>(
-		() => ({
-			p: (props) => <p className="text-foreground" {...props} />,
-			ul: (props) => <ul className="list-disc space-y-1 pl-5" {...props} />,
-			ol: (props) => <ol className="list-decimal space-y-1 pl-5" {...props} />,
-			strong: (props) => (
-				<strong className="font-semibold text-foreground" {...props} />
-			),
-			code: (props) => (
-				<code
-					className="rounded bg-muted px-1 py-0.5 font-mono text-[0.8125em]"
-					{...props}
-				/>
-			),
-			a: ({ href, children }) => (
-				<a
-					className="underline underline-offset-2"
-					href={href}
-					rel="noreferrer"
-					target="_blank"
-				>
-					{children}
-				</a>
-			),
-		}),
-		[],
 	);
 }
