@@ -1,6 +1,5 @@
 "use client";
 
-import { openUrl } from "@tauri-apps/plugin-opener";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toastManager } from "#/components/ui/toast";
 import {
@@ -16,7 +15,6 @@ import type {
 	Session,
 } from "#/features/pull-request/data/pr-data";
 import {
-	pullRequestUrl,
 	useFileContents,
 	useOptimisticRangeBaselines,
 	useSetRangeViewed,
@@ -601,14 +599,6 @@ export function FilesChangedView({
 		[selectedPath, setPreferredEditor, session.repoRoot],
 	);
 
-	// "o g" leader shortcut — same URL, same behavior as the ⌘K palette's
-	// "Open Pull Request in GitHub" action (`command-palette.tsx`); a no-op
-	// for a branch-only session, which has no PR to open.
-	const handleOpenPrInGitHub = useCallback(() => {
-		if (session.target.kind !== "pr") return;
-		void openUrl(pullRequestUrl(session.target));
-	}, [session.target]);
-
 	useKeyBindings(
 		{
 			j: () => selectRelative(1),
@@ -619,7 +609,6 @@ export function FilesChangedView({
 			R: () => handleToggleReviewed(-1),
 			u: handleUndo,
 			"o e": handleOpenInPreferredEditor,
-			"o g": handleOpenPrInGitHub,
 			// Suppressed while the filter input has focus (bare-key guard in
 			// `useKeyBindings`), so typing "n" into a query never fires this —
 			// only meaningful once the input's been blurred (Enter, or a click
