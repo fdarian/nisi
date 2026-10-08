@@ -58,12 +58,15 @@ _nisi() {
 		pr)
 			(( CURRENT == 3 )) && _files -/
 			;;
+		debug)
+			(( CURRENT >= 3 )) && compadd -- --session --json
+			;;
 		completion)
 			(( CURRENT == 3 )) && compadd -- zsh
 			;;
 		*)
 			if (( CURRENT == 2 )); then
-				compadd -- pr diff completion
+				compadd -- pr diff debug completion
 				_files -/
 			fi
 			;;
