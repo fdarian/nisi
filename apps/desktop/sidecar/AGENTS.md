@@ -46,7 +46,8 @@ seam" for the port/token handshake this boots into.
 - `repositories.ts` — behind `repositories.list`/`get` (Settings › Repositories). Reads `ReviewStore` and
   `SettingsStore` directly, never `Store.listSessions`. `list` makes no GitHub calls (open counts come from
   `PrIndex`); `get` resolves a session's state as index → persisted `merged`/`closed` → live
-  `GitHub.pullRequestState`, persisting what it fetches. `Store.recordPullRequestStatus` keeps
+  `GitHub.pullRequestState`, persisting what it fetches; a failed lookup leaves just that session
+  `unresolved` (reason on the wire) and persists nothing. `Store.recordPullRequestStatus` keeps
   `sessions.prState` fresh from the merge-status watch.
 - `diagnostics-snapshot.ts`, `merge-status-ledger.ts`, `rpc-failure-ledger.ts` — behind `diagnostics.snapshot`
   (what `nisi debug` prints). The snapshot is strictly read-only: it lists open sessions straight from

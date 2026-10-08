@@ -15,6 +15,7 @@ import { SettingsStore, type SettingsStoreError } from "@repo/settings";
 import type {
 	RepositoryDetail,
 	RepositoryProblem,
+	RepositorySession,
 	RepositorySummary,
 } from "@repo/sidecar-api";
 import { Effect } from "effect";
@@ -163,55 +164,97 @@ export const listRepositories: Effect.Effect<
 const fromGitHub = (state: "OPEN" | "CLOSED" | "MERGED"): PrState =>
 	state === "OPEN" ? "open" : state === "MERGED" ? "merged" : "closed";
 
+const describeStateFailure = (
+	error: PullRequestStateError | GitCommandError,
+): string => {
+	switch (error._tag) {
+		case "GhNotAuthenticated":
+			return `gh is not authenticated: ${error.reason}`;
+		case "GhRateLimited":
+			return `GitHub is rate-limiting this account: ${error.reason}`;
+		case "GhOutputDecodeError":
+			return `gh returned output nisi couldn't parse (${error.command})`;
+		case "PullRequestNotFound":
+			return error.reason === ""
+				? "GitHub could not return this pull request"
+				: error.reason;
+		case "GitCommandError":
+			return `${error.command} could not be run: ${error.stderr || String(error.cause)}`;
+	}
+};
+
+type Resolution = RepositorySession["state"];
+
 /**
  * Open per the PR index, else a persisted terminal state, else asked of
  * GitHub (once per PR number, 4 at a time) and persisted. A failed lookup
- * fails the whole call: a state nobody observed is worse than none.
+ * leaves only its own sessions unresolved and persists nothing for them.
  */
 const resolveSessionStates = (
 	owner: string,
 	repo: string,
 	sessions: ReadonlyArray<PullRequestSessionRecord>,
 ): Effect.Effect<
-	ReadonlyArray<{ session: PullRequestSessionRecord; state: PrState }>,
-	PullRequestStateError | GitCommandError | ReviewStoreError | SessionNotFound,
+	ReadonlyArray<{ session: PullRequestSessionRecord; state: Resolution }>,
+	ReviewStoreError | SessionNotFound,
 	GitHub | PrIndex | ReviewStore | ChildProcessSpawner.ChildProcessSpawner
 > =>
 	Effect.gen(function* () {
 		const github = yield* GitHub;
 		const index = yield* PrIndex;
 		const reviews = yield* ReviewStore;
-		const known = new Map<string, PrState>();
+		const known = new Map<string, Resolution>();
 		for (const session of sessions) {
 			const inIndex = yield* index.lookupPullRequest(
 				owner,
 				repo,
 				session.number,
 			);
-			if (inIndex !== undefined) known.set(session.id, "open");
+			if (inIndex !== undefined)
+				known.set(session.id, { kind: "resolved", state: "open" });
 			else if (session.prState === "merged" || session.prState === "closed")
-				known.set(session.id, session.prState);
+				known.set(session.id, { kind: "resolved", state: session.prState });
 		}
 		const unresolved = sessions.filter((session) => !known.has(session.id));
 		const fetched = new Map(
 			yield* Effect.forEach(
 				[...new Set(unresolved.map((session) => session.number))],
 				(number) =>
-					github
-						.pullRequestState(process.cwd(), owner, repo, number)
-						.pipe(Effect.map((state) => [number, fromGitHub(state)] as const)),
+					github.pullRequestState(process.cwd(), owner, repo, number).pipe(
+						Effect.tapError((error) =>
+							Effect.logWarning("Could not read a pull request's state", {
+								owner,
+								repo,
+								number,
+								error,
+							}),
+						),
+						Effect.match({
+							onFailure: (error): [number, Resolution] => [
+								number,
+								{ kind: "unresolved", reason: describeStateFailure(error) },
+							],
+							onSuccess: (state): [number, Resolution] => [
+								number,
+								{ kind: "resolved", state: fromGitHub(state) },
+							],
+						}),
+					),
 				{ concurrency: 4 },
 			),
 		);
 		for (const session of unresolved) {
-			const state = fetched.get(session.number);
-			if (state === undefined)
+			const resolution = fetched.get(session.number);
+			if (resolution === undefined)
 				return yield* Effect.die(
 					new Error(`no state fetched for PR #${session.number}`),
 				);
-			known.set(session.id, state);
-			if (session.prState !== state)
-				yield* reviews.setPrState(session.id, state);
+			known.set(session.id, resolution);
+			if (
+				resolution.kind === "resolved" &&
+				session.prState !== resolution.state
+			)
+				yield* reviews.setPrState(session.id, resolution.state);
 		}
 		return yield* Effect.forEach(sessions, (session) => {
 			const state = known.get(session.id);
@@ -226,11 +269,7 @@ export const getRepository = (
 	repo: string,
 ): Effect.Effect<
 	RepositoryDetail,
-	| SettingsStoreError
-	| ReviewStoreError
-	| SessionNotFound
-	| GitCommandError
-	| PullRequestStateError,
+	SettingsStoreError | ReviewStoreError | SessionNotFound | GitCommandError,
 	| SettingsStore
 	| ReviewStore
 	| PrIndex

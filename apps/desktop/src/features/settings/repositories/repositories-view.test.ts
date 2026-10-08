@@ -25,13 +25,16 @@ const summary = (
 
 const session = (
 	prNumber: number,
-	state: RepositorySession["state"],
+	state: "open" | "merged" | "closed" | "unresolved",
 	prTitle = `PR ${prNumber}`,
 ): RepositorySession => ({
 	id: `s${prNumber}`,
 	prNumber,
 	prTitle,
-	state,
+	state:
+		state === "unresolved"
+			? { kind: "unresolved", reason: "rate limited" }
+			: { kind: "resolved", state },
 	updatedAt: 0,
 });
 
@@ -105,13 +108,24 @@ describe("filterSessions", () => {
 		session(151, "open", "Walkthrough claims link to line ranges"),
 		session(148, "merged", "Keep merge status fresh"),
 		session(12, "closed", "Try something"),
+		session(7, "unresolved", "Lookup failed"),
 	];
 
 	test("narrows by tab", () => {
 		expect(
 			filterSessions(sessions, "merged", "").map((entry) => entry.prNumber),
 		).toEqual([148]);
-		expect(filterSessions(sessions, "all", "")).toHaveLength(3);
+		expect(filterSessions(sessions, "all", "")).toHaveLength(4);
+	});
+
+	test("shows sessions whose state couldn't be resolved only under all", () => {
+		expect(
+			filterSessions(sessions, "all", "").map((entry) => entry.prNumber),
+		).toContain(7);
+		for (const tab of ["open", "merged", "closed"] as const)
+			expect(
+				filterSessions(sessions, tab, "").map((entry) => entry.prNumber),
+			).not.toContain(7);
 	});
 
 	test("matches a title substring or a PR number, with or without #", () => {

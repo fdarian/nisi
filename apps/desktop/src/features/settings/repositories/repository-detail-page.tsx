@@ -18,6 +18,7 @@ import {
 	InputGroupInput,
 } from "#/components/ui/input-group";
 import { Tabs, TabsList, TabsTab } from "#/components/ui/tabs";
+import { Tooltip, TooltipPopup, TooltipTrigger } from "#/components/ui/tooltip";
 import type { SidecarQueryUtils } from "#/infra/backend-context";
 import { useBackendContext } from "#/infra/backend-context";
 import { enqueuePullRequestOpen } from "#/shell/deep-link/deep-link-store";
@@ -293,7 +294,23 @@ function StateIcon(props: {
 	state: RepositorySession["state"];
 }): React.ReactElement {
 	const className = "size-3.5 shrink-0";
-	switch (props.state) {
+	if (props.state.kind === "unresolved")
+		return (
+			<Tooltip>
+				<TooltipTrigger
+					render={
+						<span className="flex shrink-0">
+							<TriangleAlertIcon
+								aria-label="State unavailable"
+								className={cn(className, "text-muted-foreground")}
+							/>
+						</span>
+					}
+				/>
+				<TooltipPopup>{props.state.reason}</TooltipPopup>
+			</Tooltip>
+		);
+	switch (props.state.state) {
 		case "open":
 			return (
 				<GitPullRequestArrowIcon className={cn(className, "text-success")} />

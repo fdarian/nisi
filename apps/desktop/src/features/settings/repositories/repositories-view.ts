@@ -4,7 +4,7 @@ import type {
 	RepositorySummary,
 } from "@repo/sidecar-api";
 
-export type SessionTab = "all" | RepositorySession["state"];
+export type SessionTab = "all" | "open" | "merged" | "closed";
 
 export const SESSION_TABS: readonly { value: SessionTab; label: string }[] = [
 	{ value: "all", label: "All" },
@@ -81,7 +81,8 @@ export function filterSessions(
 	const needle = query.trim().toLowerCase().replace(/^#/, "");
 	return sessions.filter(
 		(session) =>
-			(tab === "all" || session.state === tab) &&
+			(tab === "all" ||
+				(session.state.kind === "resolved" && session.state.state === tab)) &&
 			(needle === "" ||
 				session.prTitle.toLowerCase().includes(needle) ||
 				String(session.prNumber).includes(needle)),

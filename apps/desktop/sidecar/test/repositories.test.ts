@@ -126,6 +126,11 @@ const withDataDir = async <T>(fn: (dataDir: string) => Promise<T>) => {
 	}
 };
 
+const resolved = (state: "open" | "merged" | "closed") => ({
+	kind: "resolved" as const,
+	state,
+});
+
 const session = (
 	owner: string,
 	repo: string,
@@ -293,10 +298,10 @@ describe("getRepository", () => {
 				expect(
 					detail.first.sessions.map((entry) => [entry.prNumber, entry.state]),
 				).toEqual([
-					[4, "merged"],
-					[3, "merged"],
-					[2, "closed"],
-					[1, "open"],
+					[4, resolved("merged")],
+					[3, resolved("merged")],
+					[2, resolved("closed")],
+					[1, resolved("open")],
 				]);
 				expect(detail.second.sessions.map((entry) => entry.state)).toEqual(
 					detail.first.sessions.map((entry) => entry.state),
@@ -326,25 +331,57 @@ describe("getRepository", () => {
 				}).pipe(Effect.provide(makeLayer(dataDir, github, indexWithOpen([])))),
 			);
 
-			expect(states).toEqual(["merged", "merged", "merged", "merged"]);
+			expect(states).toEqual([
+				resolved("merged"),
+				resolved("merged"),
+				resolved("merged"),
+				resolved("merged"),
+			]);
 		});
 	});
 
-	test("a failed GitHub lookup fails the call instead of inventing a state", async () => {
+	test("one failed lookup leaves only that session unresolved and persists nothing for it", async () => {
 		await withDataDir(async (dataDir) => {
 			const github = githubWith((_cwd, _owner, _repo, number) =>
-				Effect.fail(
-					new PullRequestNotFound({ repoRoot: "/", number, reason: "boom" }),
-				),
+				number === 3
+					? Effect.fail(
+							new PullRequestNotFound({
+								repoRoot: "/",
+								number,
+								reason: "boom",
+							}),
+						)
+					: Effect.succeed("MERGED" as const),
 			);
-			const exit = await Effect.runPromiseExit(
+			const result = await Effect.runPromise(
 				Effect.gen(function* () {
+					const reviews = yield* ReviewStore;
 					yield* seed;
-					return yield* getRepository("acme", "widgets");
+					const detail = yield* getRepository("acme", "widgets");
+					const stored = yield* reviews.listPullRequestSessions({
+						owner: "acme",
+						repo: "widgets",
+					});
+					return { detail, stored };
 				}).pipe(Effect.provide(makeLayer(dataDir, github, indexWithOpen([])))),
 			);
 
-			expect(exit._tag).toBe("Failure");
+			expect(
+				result.detail.sessions.map((entry) => [entry.prNumber, entry.state]),
+			).toEqual([
+				[4, resolved("merged")],
+				[3, { kind: "unresolved", reason: "boom" }],
+				[2, resolved("merged")],
+				[1, resolved("merged")],
+			]);
+			expect(
+				result.stored.map((record) => [record.number, record.prState]),
+			).toEqual([
+				[4, "merged"],
+				[3, null],
+				[2, "merged"],
+				[1, "merged"],
+			]);
 		});
 	});
 

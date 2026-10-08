@@ -1295,30 +1295,6 @@ export function attachRouter(
 									message: `${cause.command} could not be run: ${cause.stderr || String(cause.cause)}`,
 								}),
 							),
-						GhNotAuthenticated: (cause) =>
-							Effect.fail(
-								errors.GH_NOT_AUTHENTICATED({
-									message: `gh is not authenticated: ${cause.reason}`,
-								}),
-							),
-						GhRateLimited: (cause) =>
-							Effect.fail(
-								errors.TOO_MANY_REQUESTS({
-									message: `GitHub is rate-limiting this account right now: ${cause.reason}`,
-								}),
-							),
-						GhOutputDecodeError: (cause) =>
-							Effect.fail(
-								errors.SERVICE_UNAVAILABLE({
-									message: `gh returned output nisi couldn't parse (${cause.command})`,
-								}),
-							),
-						PullRequestNotFound: (cause) =>
-							Effect.fail(
-								errors.SERVICE_UNAVAILABLE({
-									message: `could not read the state of #${cause.number}: ${cause.reason}`,
-								}),
-							),
 					}),
 				);
 			}),

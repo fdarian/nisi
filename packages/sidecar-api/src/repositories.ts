@@ -41,12 +41,27 @@ export type RepositorySessionState = Schema.Schema.Type<
 	typeof RepositorySessionState
 >;
 
+/**
+ * A session's PR state is either known or, when the lookup failed, carries
+ * why — no state is ever reported that the sidecar didn't observe.
+ */
+export const RepositorySessionResolution = Schema.Union([
+	Schema.Struct({
+		kind: Schema.Literal("resolved"),
+		state: RepositorySessionState,
+	}),
+	Schema.Struct({ kind: Schema.Literal("unresolved"), reason: Schema.String }),
+]);
+export type RepositorySessionResolution = Schema.Schema.Type<
+	typeof RepositorySessionResolution
+>;
+
 /** `id` is the wire session id (`sessions.publicId`). */
 export const RepositorySession = Schema.Struct({
 	id: Schema.String,
 	prNumber: Schema.Number,
 	prTitle: Schema.String,
-	state: RepositorySessionState,
+	state: RepositorySessionResolution,
 	updatedAt: Schema.Number,
 });
 export type RepositorySession = Schema.Schema.Type<typeof RepositorySession>;
@@ -65,10 +80,9 @@ export type RepositoryDetail = Schema.Schema.Type<typeof RepositoryDetail>;
 /**
  * `list` does no GitHub calls. `get` resolves each session's PR state: open
  * per the PR index, else a persisted `merged`/`closed`, else a live `gh`
- * lookup that is then persisted — and a failed lookup fails the call rather
- * than reporting a state nobody observed (`GH_NOT_AUTHENTICATED`,
- * `TOO_MANY_REQUESTS`, `SERVICE_UNAVAILABLE`). Changing a repository's path
- * goes through `pullRequests.recordRepoPath`.
+ * lookup that is then persisted. A failed lookup leaves just that session
+ * `unresolved` (with the reason) and persists nothing for it. Changing a
+ * repository's path goes through `pullRequests.recordRepoPath`.
  */
 export const repositoriesContract = {
 	list: oc
@@ -77,9 +91,5 @@ export const repositoriesContract = {
 	get: oc
 		.input(Schema.Struct({ owner: Schema.String, repo: Schema.String }))
 		.output(RepositoryDetail)
-		.errors({
-			GH_NOT_AUTHENTICATED: {},
-			TOO_MANY_REQUESTS: {},
-			SERVICE_UNAVAILABLE: {},
-		}),
+		.errors({ SERVICE_UNAVAILABLE: {} }),
 };
