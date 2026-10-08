@@ -10,7 +10,9 @@ default as `apps/desktop/sidecar`). Feeds `packages/sidecar-api`'s `review`/`dif
   `resolveLiveRepoRoot` has confirmed, via `@repo/git`'s `revalidateWorktreePath`, that it moved
   rather than vanished; deliberately doesn't touch `sessionKey`, see that function's own doc comment),
   whole-file review state (mark viewed/unviewed, read one or all), range claims (mark/unmark one
-  block's claim on a file, list a file's active claims), and reading a snapshot's content back out of
+  block's claim on a file, list a file's active claims), `listPullRequestSessions`/`setPrState` (every
+  PR session, closed tabs included, plus the last-seen `sessions.prState`, for the Repositories settings
+  page — `setPrState` doesn't bump `updatedAt`), and reading a snapshot's content back out of
   the blob store.
 - `src/blob-store.ts` — sha256-addressed content storage on disk (`<dataDir>/blobs/<hash>`).
 - `src/reconcile.ts` — `reconcile()`: reconciles `base`/`head` against every currently-active
@@ -65,7 +67,7 @@ for why review's tables and the walkthrough store's tables share one `app.db` fi
   `gh` can't resolve) still opens a session and reviews against its default branch, so there's no
   GitHub identity to record — `Session.pr` carries `owner`/`repo` and is `null` as a unit rather
   than leaving blank strings at the top level.
-- **`drizzle/0002_*.sql` is hand-written, and any future migration touching `sessions` must be too.**
+- **`drizzle/0002_*.sql` (and the `prState` `ADD COLUMN` after it) is hand-written, and any future migration touching `sessions` must be too.**
   drizzle-kit's SQLite recreate drops and rebuilds the table under `PRAGMA foreign_keys=OFF` — a
   no-op inside the transaction `applyEmbeddedMigrations` runs in, so `DROP TABLE sessions` cascades
   through `reviewed_files`/`review_range_claims` and empties both. Reach the same shape with

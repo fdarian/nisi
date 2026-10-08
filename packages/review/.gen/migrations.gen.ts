@@ -10,11 +10,15 @@ import m0001 from "../drizzle/20260729032016_square_nova/migration.sql" with {
 import m0002 from "../drizzle/20260729140203_sloppy_warbound/migration.sql" with {
 	type: "text",
 };
+import m0003 from "../drizzle/20261008104331_daily_blade/migration.sql" with {
+	type: "text",
+};
 
 export default {
 	migrations: [
 		{ name: "20260728061900_strange_thor_girl", sql: m0000 },
 		{ name: "20260729032016_square_nova", sql: m0001 },
 		{ name: "20260729140203_sloppy_warbound", sql: m0002 },
+		{ name: "20261008104331_daily_blade", sql: m0003 },
 	],
 };
