@@ -65,7 +65,12 @@ export const checksInterval = (
 			: null;
 
 export const mergeStatusInterval = (
-	value: PullRequestMergeStatus,
+	value: {
+		readonly mergeability: Pick<
+			PullRequestMergeStatus["mergeability"],
+			"state" | "mergeable"
+		>;
+	} & Partial<Pick<PullRequestMergeStatus, "allowedMethods">>,
 	current: Attention,
 ) =>
 	value.mergeability.state !== "OPEN"
