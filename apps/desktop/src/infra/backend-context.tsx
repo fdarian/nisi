@@ -57,4 +57,5 @@ function useBackendContext(): BackendContextValue {
 }
 
 export type { SidecarQueryUtils };
-export { BackendProvider, useBackendContext };
+/** Exported so Storybook can mount real pages against a mocked sidecar. */
+export { BackendContext, BackendProvider, useBackendContext };

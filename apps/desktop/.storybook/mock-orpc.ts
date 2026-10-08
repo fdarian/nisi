@@ -18,7 +18,11 @@
  */
 import { AsyncIteratorClass } from "@orpc/shared";
 import { createTanstackQueryUtils } from "@orpc/tanstack-query";
-import type { RepositorySummary, SidecarClient } from "@repo/sidecar-api";
+import type {
+	RepositoryDetail,
+	RepositorySummary,
+	SidecarClient,
+} from "@repo/sidecar-api";
 import type {
 	FileChange,
 	FileContent,
@@ -108,13 +112,27 @@ const DEFAULT_MODELS: Record<HarnessId, HarnessModels> = {
 	pi: { models: [], status: "unavailable" },
 };
 
+/** A fixture, or the query staying pending forever, or rejecting with this message. */
+export type MockResult<T> = T | { pending: true } | { error: string };
+
+function settleMockResult<T>(result: MockResult<T> | undefined): Promise<T> {
+	if (result === undefined) return neverSettles();
+	if (typeof result === "object" && result !== null) {
+		if ("pending" in result) return neverSettles();
+		if ("error" in result) return Promise.reject(new Error(result.error));
+	}
+	return Promise.resolve(result);
+}
+
 export type MockOrpcData = {
 	files?: readonly FileChange[];
 	filesDelayMs?: number;
 	pullRequestSearchResults?: readonly PullRequestSearchResult[];
 	pullRequestRepositories?: readonly PullRequestRepository[];
-	/** `repositories.list`'s result — `repositories.get` stays pending forever. */
-	repositories?: readonly RepositorySummary[];
+	/** `repositories.list`'s result. */
+	repositories?: MockResult<readonly RepositorySummary[]>;
+	/** `repositories.get`'s result, whichever `owner/repo` is asked for — omit to leave it pending forever. */
+	repositoryDetail?: MockResult<RepositoryDetail>;
 	/** `walkthrough.get`'s result — omit for "nothing generated yet", pass a fixture for the loaded reader. */
 	storedWalkthrough?: StoredWalkthrough | null;
 	/** Overrides `DEFAULT_HARNESSES` wholesale — pass a full four-entry list, not a patch. */
@@ -319,8 +337,8 @@ export function createMockSidecarClient(
 			restart: async () => undefined,
 		},
 		repositories: {
-			list: async () => data.repositories ?? [],
-			get: neverSettles,
+			list: () => settleMockResult(data.repositories ?? []),
+			get: () => settleMockResult(data.repositoryDetail),
 		},
 		pullRequests: {
 			ciJob: neverSettles,
@@ -334,7 +352,7 @@ export function createMockSidecarClient(
 						pr.title.toLowerCase().includes(input.query.toLowerCase()),
 				),
 			open: neverSettles,
-			recordRepoPath: neverSettles,
+			recordRepoPath: async (input) => input,
 			mergeStatus:
 				mergeStatusError !== undefined
 					? async () => {
