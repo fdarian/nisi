@@ -74,7 +74,9 @@ export const mergeStatusInterval = (
 			? Duration.seconds(2)
 			: current.watched
 				? Duration.seconds(10)
-				: null;
+				: // A merge landing on GitHub doesn't reach an unwatched PR any other
+					// way; without this baseline it keeps offering a merge that already happened.
+					Duration.seconds(60);
 
 export const stackInterval = (_value: unknown, current: Attention) =>
 	current.watched ? Duration.seconds(60) : null;
