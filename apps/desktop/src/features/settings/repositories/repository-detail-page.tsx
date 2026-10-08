@@ -65,25 +65,24 @@ function RepositoryDetailContent(props: {
 	const query = useRepository(props.orpc, props.owner, props.repo);
 	return (
 		<div className="mx-auto flex w-full max-w-2xl flex-col gap-5 overflow-y-auto px-8 py-12">
-			<nav
-				aria-label="breadcrumb"
-				className="flex flex-col items-start gap-1.5"
-			>
-				<Button
-					size="xs"
-					variant="ghost"
-					className="-ml-6 text-muted-foreground hover:text-foreground"
-					render={(props) => (
-						<Link {...props} to="/settings/repositories">
-							<ChevronLeftIcon className="size-4" />
-							Repositories
-						</Link>
-					)}
-				/>
-				<span aria-current="page" className="font-semibold text-xl">
+			<header className="flex flex-col items-start gap-1.5">
+				<nav aria-label="Back">
+					<Button
+						className="-ml-6 text-muted-foreground hover:text-foreground"
+						render={(props) => (
+							<Link {...props} to="/settings/repositories">
+								<ChevronLeftIcon className="size-4" />
+								Repositories
+							</Link>
+						)}
+						size="xs"
+						variant="ghost"
+					/>
+				</nav>
+				<h1 className="font-semibold text-xl tracking-tight">
 					{props.owner}/{props.repo}
-				</span>
-			</nav>
+				</h1>
+			</header>
 			{query.isPending ? (
 				<RepositoryDetailSkeleton />
 			) : query.isError ? (
