@@ -90,6 +90,7 @@ const mockGitHub: GitHubShape = {
 			headRef: "main",
 			isCrossRepository: false,
 		}),
+	pullRequestState: () => Effect.die(new Error("unused mock GitHub method")),
 	headRef: () => Effect.succeed("main"),
 	search: () => Effect.die(new Error("unused mock GitHub method")),
 	checks: () => Effect.die(new Error("unused mock GitHub method")),
@@ -2442,5 +2443,35 @@ describe("Store.openPullRequestSession — repo path resolution", () => {
 		} finally {
 			await rm(dataDir, { recursive: true, force: true });
 		}
+	});
+});
+
+describe("Store — persisting the PR state it learns", () => {
+	test("a merge-status reading is saved on every session of that PR, closed tabs included", async () => {
+		await withTestRepoAndDataDir(async (repoRoot, dataDir) => {
+			const root = await realpath(repoRoot);
+			await Effect.runPromise(
+				Effect.gen(function* () {
+					const store = yield* Store;
+					const reviews = yield* ReviewStore;
+					const pr = { owner: "Acme", repo: "Widgets", number: 5 };
+					const session = yield* reviews.openSession({
+						repoRoot: root,
+						baseRef: "main",
+						headRef: "main",
+						pr: { ...pr, title: "A PR" },
+					});
+					yield* reviews.closeSession(session.id);
+
+					yield* store.recordPullRequestStatus(
+						{ ...pr, owner: "acme" },
+						{ headSha: "head", baseSha: "base", state: "MERGED" },
+					);
+
+					const [record] = yield* reviews.listPullRequestSessions(pr);
+					expect(record?.prState).toBe("merged");
+				}).pipe(Effect.scoped, Effect.provide(makeTestLayer(dataDir))),
+			);
+		});
 	});
 });

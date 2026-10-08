@@ -43,6 +43,11 @@ seam" for the port/token handshake this boots into.
   combined across sessions of the same PR. `http.ts` receives header-level focus/selection via
   `sessions.setAttention`; `live-poll.ts` marks local changes; `session-close.ts` removes entries.
   `GhGitHub.layer` consumes its `PullRequestAttention` stream to choose its polling cadence.
+- `repositories.ts` — behind `repositories.list`/`get` (Settings › Repositories). Reads `ReviewStore` and
+  `SettingsStore` directly, never `Store.listSessions`. `list` makes no GitHub calls (open counts come from
+  `PrIndex`); `get` resolves a session's state as index → persisted `merged`/`closed` → live
+  `GitHub.pullRequestState`, persisting what it fetches. `Store.recordPullRequestStatus` keeps
+  `sessions.prState` fresh from the merge-status watch.
 - `diagnostics-snapshot.ts`, `merge-status-ledger.ts`, `rpc-failure-ledger.ts` — behind `diagnostics.snapshot`
   (what `nisi debug` prints). The snapshot is strictly read-only: it lists open sessions straight from
   `ReviewStore` (never `Store.listSessions`, which prepares each base and can start a `git fetch`) and

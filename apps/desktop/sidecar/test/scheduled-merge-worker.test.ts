@@ -55,6 +55,7 @@ const mockGitHub = (overrides: Partial<GitHubShape>): GitHubShape => ({
 	listOpenPullRequests: unused,
 	repository: unused,
 	pullRequest: unused,
+	pullRequestState: unused,
 	headRef: unused,
 	search: unused,
 	checks: () => Effect.succeed([{ name: "Tests", status: "passing" }]),

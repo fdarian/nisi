@@ -18,7 +18,7 @@
  */
 import { AsyncIteratorClass } from "@orpc/shared";
 import { createTanstackQueryUtils } from "@orpc/tanstack-query";
-import type { SidecarClient } from "@repo/sidecar-api";
+import type { RepositorySummary, SidecarClient } from "@repo/sidecar-api";
 import type {
 	FileChange,
 	FileContent,
@@ -113,6 +113,8 @@ export type MockOrpcData = {
 	filesDelayMs?: number;
 	pullRequestSearchResults?: readonly PullRequestSearchResult[];
 	pullRequestRepositories?: readonly PullRequestRepository[];
+	/** `repositories.list`'s result — `repositories.get` stays pending forever. */
+	repositories?: readonly RepositorySummary[];
 	/** `walkthrough.get`'s result — omit for "nothing generated yet", pass a fixture for the loaded reader. */
 	storedWalkthrough?: StoredWalkthrough | null;
 	/** Overrides `DEFAULT_HARNESSES` wholesale — pass a full four-entry list, not a patch. */
@@ -315,6 +317,10 @@ export function createMockSidecarClient(
 			status: async () => ({ type: "unsupported" }) as const,
 			download: async () => undefined,
 			restart: async () => undefined,
+		},
+		repositories: {
+			list: async () => data.repositories ?? [],
+			get: neverSettles,
 		},
 		pullRequests: {
 			ciJob: neverSettles,
