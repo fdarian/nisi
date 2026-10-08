@@ -57,7 +57,10 @@ seam" for the port/token handshake this boots into.
   `refs/pull/<n>/head` from the main clone only when that commit isn't local. The head sha comes from
   `Store`'s in-memory `pullRequestFacts` cache (head, base and state), fed by the `mergeStatus`
   watch in `http.ts` via `Store.recordPullRequestStatus` (which also emits `session-files-changed`
-  when a new reading changes what the session diffs); until it's populated the worktree is trusted. A nisi PR worktree's
+  when a new reading changes what the session diffs — `session-diff-source-changed`, which the
+  frontend refetches outright, for the first reading since it corrects a diff computed without it;
+  `session-files-changed`, which only offers Refresh, for later ones); until it's populated the
+  worktree is trusted. `http.ts` forks the call so a remote fetch never delays the status stream. A nisi PR worktree's
   `headRef` need not resolve locally (nisi checks the PR out onto its own `nisi/pr-<n>/<headRef>`
   branch), so it's never passed to git for a PR session. A plain branch session compares `headRef`
   against `resolveCurrentBranch` fresh on every call rather than once at open time, so it drifts in

@@ -856,6 +856,62 @@ describe("Store — a PR session after the PR is merged", () => {
 		});
 	}
 
+	test("the first reading of a merged PR corrects the diff with session-diff-source-changed, not the Refresh event", async () => {
+		await withTestRepoAndDataDir(async (repoRoot, dataDir) => {
+			const root = await realpath(repoRoot);
+			const parent = await mkdtemp(join(tmpdir(), "nisi-first-reading-"));
+			try {
+				await sh(root, ["checkout", "-q", "-b", "pr"]);
+				await Bun.write(join(root, "a.ts"), "pr change\n");
+				await sh(root, ["commit", "-q", "-am", "pr a"]);
+				const head = await shOut(root, ["rev-parse", "HEAD"]);
+				const baseSha = await mergeIntoMain(root, parent, "merge commit", [
+					head,
+				]);
+
+				await Effect.runPromise(
+					Effect.gen(function* () {
+						const store = yield* Store;
+						const reviews = yield* ReviewStore;
+						const pr = { owner: "acme", repo: "widgets", number: 9 };
+						const session = yield* reviews.openSession({
+							repoRoot: root,
+							baseRef: "main",
+							headRef: "pr",
+							pr: { ...pr, title: "A PR" },
+						});
+						const paths = store
+							.listChangedFiles(session.id, false)
+							.pipe(Effect.map((files) => files.map((file) => file.path)));
+						// What the tab shows before any merge-status reading arrives.
+						expect(yield* paths).toEqual([]);
+
+						const events: string[] = [];
+						const unsubscribe = subscribe((event) => {
+							if (
+								event.type === "session-files-changed" ||
+								event.type === "session-diff-source-changed"
+							)
+								events.push(`${event.type}:${event.sessionId}`);
+						});
+						yield* Effect.addFinalizer(() => Effect.sync(unsubscribe));
+
+						yield* store.recordPullRequestStatus(
+							pr,
+							prFacts(head, baseSha, "MERGED"),
+						);
+						expect(events).toEqual([
+							`session-diff-source-changed:${session.id}`,
+						]);
+						expect(yield* paths).toEqual(["a.ts"]);
+					}).pipe(Effect.scoped, Effect.provide(makeTestLayer(dataDir))),
+				);
+			} finally {
+				await rm(parent, { recursive: true, force: true });
+			}
+		});
+	});
+
 	test("an open PR keeps the live base even after main moves", async () => {
 		await withTestRepoAndDataDir(async (repoRoot, dataDir) => {
 			const root = await realpath(repoRoot);

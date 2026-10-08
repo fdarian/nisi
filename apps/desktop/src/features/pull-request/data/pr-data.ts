@@ -307,6 +307,19 @@ export function useFileChanges(
 			queryKey: orpc.diff.files.key({ input: { sessionId } }),
 		});
 	});
+	// The sidecar learned the PR's head/base after this diff was fetched and
+	// the diff source changed (a merged PR's pinned base): the fetched diff is
+	// wrong rather than merely stale, so replace it instead of offering Refresh.
+	useSidecarEvent((event) => {
+		if (event.type !== "session-diff-source-changed") return;
+		if (event.sessionId !== sessionId) return;
+		queryClient.invalidateQueries({
+			queryKey: orpc.diff.files.key({ input: { sessionId } }),
+		});
+		queryClient.invalidateQueries({
+			queryKey: orpc.diff.fileContents.key({ input: { sessionId } }),
+		});
+	});
 	return {
 		files: query.data?.files ?? [],
 		baseMayBeStale: query.data?.baseMayBeStale,

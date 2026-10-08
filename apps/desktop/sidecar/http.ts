@@ -1535,11 +1535,15 @@ export function attachRouter(
 											return yield* Effect.die(
 												new Error("GitHub returned no merge methods"),
 											);
-										yield* store.recordPullRequestStatus(input, {
-											headSha: status.mergeability.headRefOid,
-											baseSha: status.mergeability.baseRefOid,
-											state: status.mergeability.state,
-										});
+										// Detached: it may fetch from the remote, and the merge
+										// button must not wait on that.
+										yield* Effect.forkDetach(
+											store.recordPullRequestStatus(input, {
+												headSha: status.mergeability.headRefOid,
+												baseSha: status.mergeability.baseRefOid,
+												state: status.mergeability.state,
+											}),
+										);
 										return {
 											state: status.mergeability.state,
 											mergeable: status.mergeability.mergeable,

@@ -20,6 +20,13 @@ import { OpenSessionTarget, Session } from "./sessions.ts";
  * `session-files-changed` it must not raise the Refresh button — the
  * frontend just refetches `diff.files` for that session.
  *
+ * `session-diff-source-changed` is the first reading of a PR's head/base from
+ * GitHub changing what the session diffs (e.g. a merged PR switching to its
+ * pinned base). The diff the frontend already fetched was computed without
+ * that reading, so unlike `session-files-changed` it's a correction rather
+ * than a new change: the frontend refetches `diff.files`/`diff.fileContents`
+ * outright, no Refresh button.
+ *
  * `session-updated` covers a session whose *own* data changed under an
  * unchanged `id` — today, only `sessions.switchToPr` retargeting a branch
  * session onto a PR in place. Distinct from `session-opened`: no new tab
@@ -42,6 +49,10 @@ export const SessionEvent = Schema.Union([
 	}),
 	Schema.Struct({
 		type: Schema.Literal("session-base-staleness-changed"),
+		sessionId: Schema.String,
+	}),
+	Schema.Struct({
+		type: Schema.Literal("session-diff-source-changed"),
 		sessionId: Schema.String,
 	}),
 	Schema.Struct({
@@ -94,6 +105,11 @@ export const SidecarEvent = Schema.Union([
 	Schema.Struct({
 		seq: Schema.Number,
 		type: Schema.Literal("session-base-staleness-changed"),
+		sessionId: Schema.String,
+	}),
+	Schema.Struct({
+		seq: Schema.Number,
+		type: Schema.Literal("session-diff-source-changed"),
 		sessionId: Schema.String,
 	}),
 	Schema.Struct({

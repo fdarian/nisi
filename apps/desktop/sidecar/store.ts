@@ -1443,11 +1443,21 @@ export class Store extends Context.Service<Store>()("Store", {
 						const before = yield* diffHeadFor(previous);
 						const after = yield* diffHeadFor(facts);
 						if (
-							baseChanged ||
-							before.worktreeEligible !== after.worktreeEligible ||
-							before.headRef !== after.headRef
+							!baseChanged &&
+							before.worktreeEligible === after.worktreeEligible &&
+							before.headRef === after.headRef
 						)
-							emit({ type: "session-files-changed", sessionId: session.id });
+							return;
+						// The very first reading corrects a diff computed without it
+						// (e.g. an empty one for a merged PR); a later one is a new
+						// change the user may be mid-read of, so it only offers Refresh.
+						emit({
+							type:
+								previous === undefined
+									? "session-diff-source-changed"
+									: "session-files-changed",
+							sessionId: session.id,
+						});
 					}).pipe(
 						Effect.catchCause((cause) =>
 							Effect.logWarning(
