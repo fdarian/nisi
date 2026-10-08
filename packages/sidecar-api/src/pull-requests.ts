@@ -186,6 +186,16 @@ export const PullRequestCheck = Schema.Struct({
 });
 export type PullRequestCheck = Schema.Schema.Type<typeof PullRequestCheck>;
 
+const OriginMoved = Schema.toStandardSchemaV1(
+	Schema.Struct({
+		path: Schema.String,
+		expectedOwner: Schema.String,
+		expectedRepo: Schema.String,
+		actualOwner: Schema.String,
+		actualRepo: Schema.String,
+	}),
+);
+
 const MergeFailure = Schema.toStandardSchemaV1(
 	Schema.Struct({
 		reason: Schema.String,
@@ -304,6 +314,12 @@ const RerunCiJobInput = Schema.Struct({
  * `owner/repo` — the message names which) and `SERVICE_UNAVAILABLE` covering
  * `git` failing to run at all. Persists nothing on failure; on success, the
  * frontend calls `open` again, which now resolves without a fresh prompt.
+ * The origin-mismatch case is `ORIGIN_MOVED` instead of `BAD_REQUEST` when
+ * GitHub says the repository was renamed or transferred (the folder is the
+ * right clone, its `origin` URL is just stale); `repointOrigin` is that
+ * case's one-click fix. It takes the same input, rewrites `origin` only after
+ * the sidecar re-confirms with GitHub that it moved, then records the path
+ * exactly like `recordRepoPath`.
  *
  * `mergeStatus` streams mergeability and allowed methods from `GitHub.watchMergeStatus`;
  * the sidecar adds the saved default method on each emission. `MERGE_STATUS_UNAVAILABLE` is the one error code that isn't
@@ -397,6 +413,20 @@ export const pullRequestsContract = {
 			SERVICE_UNAVAILABLE: {},
 		}),
 	recordRepoPath: oc
+		.input(
+			Schema.Struct({
+				owner: Schema.String,
+				repo: Schema.String,
+				path: Schema.String,
+			}),
+		)
+		.output(RepoPathMapping)
+		.errors({
+			BAD_REQUEST: {},
+			SERVICE_UNAVAILABLE: {},
+			ORIGIN_MOVED: { data: OriginMoved },
+		}),
+	repointOrigin: oc
 		.input(
 			Schema.Struct({
 				owner: Schema.String,

@@ -194,6 +194,30 @@ test("recording a repository path starts a non-blocking index refresh for deep l
 	});
 });
 
+test("repointing an origin that GitHub can't confirm moved leaves it untouched and records nothing", async () => {
+	await withTestRepoAndDataDir(async (repoRoot, dataDir) => {
+		// An unparseable URL keeps the moved-on-GitHub lookup (a real `gh` call) out of the test.
+		await sh(repoRoot, ["remote", "add", "origin", "not-a-url"]);
+		await Effect.runPromise(
+			Effect.gen(function* () {
+				const store = yield* Store;
+				const settings = yield* SettingsStore;
+				const error = yield* store
+					.repointOrigin("acme", "widgets", repoRoot)
+					.pipe(Effect.flip);
+				expect(error).toMatchObject({
+					_tag: "RepoPathOriginMismatch",
+					movedOnGitHub: false,
+				});
+				expect(yield* settings.getRepoPath("acme", "widgets")).toBeNull();
+			}).pipe(Effect.provide(makeTestLayer(dataDir, mockGitHub))),
+		);
+		expect(
+			(await Bun.$`git -C ${repoRoot} remote get-url origin`.text()).trim(),
+		).toBe("not-a-url");
+	});
+});
+
 test("index disagreement upserts the correct PR's existing row without transferring snapshots; no-PR correction uses a branch key", async () => {
 	await withTestRepoAndDataDir(async (repoRoot, dataDir) => {
 		await sh(repoRoot, ["remote", "add", "origin", repoRoot]);

@@ -16,6 +16,7 @@ import {
 	type PullRequestMergeError,
 	type PullRequestStackMergeError,
 	parseActionsLog,
+	type RepoPathVerificationError,
 	resolveUnpushedCommitCount,
 	type WorktreeReadFailed,
 	type WorktreeRelocationFailed,
@@ -223,6 +224,44 @@ const formatGitCommandError = (cause: GitCommandError): string => {
 			? "process never started"
 			: `exit code ${cause.exitCode}`;
 	return `git command failed (${exitDescription}) in ${cause.cwd}: ${invocation}\n${cause.stderr.trim()}`;
+};
+
+const REPO_PATH_FAILURE_TAGS = [
+	"RepoPathNotFound",
+	"RepoPathNotAGitRepo",
+	"RepoPathNoOriginRemote",
+	"RepoPathOriginMismatch",
+	"GitCommandError",
+] as const;
+
+/** What `recordRepoPath`/`repointOrigin` tell the user for every way a picked folder can be rejected, the message naming which. */
+const repoPathFailure = <Bad, Unavailable>(
+	errors: {
+		BAD_REQUEST: (input: { message: string }) => Bad;
+		SERVICE_UNAVAILABLE: (input: { message: string }) => Unavailable;
+	},
+	cause: RepoPathVerificationError | GitCommandError,
+): Bad | Unavailable => {
+	switch (cause._tag) {
+		case "RepoPathNotFound":
+			return errors.BAD_REQUEST({ message: `${cause.path} doesn't exist` });
+		case "RepoPathNotAGitRepo":
+			return errors.BAD_REQUEST({
+				message: `${cause.path} isn't a git repository`,
+			});
+		case "RepoPathNoOriginRemote":
+			return errors.BAD_REQUEST({
+				message: `${cause.path} has no origin remote to verify against`,
+			});
+		case "RepoPathOriginMismatch":
+			return errors.BAD_REQUEST({
+				message: `${cause.path}'s origin remote is ${cause.actualOwner ?? "?"}/${cause.actualRepo ?? "?"}, not ${cause.expectedOwner}/${cause.expectedRepo}`,
+			});
+		case "GitCommandError":
+			return errors.SERVICE_UNAVAILABLE({
+				message: `${cause.command} could not be run: ${cause.stderr || String(cause.cause)}`,
+			});
+	}
 };
 
 /**
@@ -1457,40 +1496,39 @@ export function attachRouter(
 				return yield* store
 					.recordRepoPath(input.owner, input.repo, input.path)
 					.pipe(
-						Effect.catchTag("RepoPathNotFound", (cause) =>
+						Effect.catchTag(REPO_PATH_FAILURE_TAGS, (cause) =>
 							Effect.fail(
-								errors.BAD_REQUEST({
-									message: `${cause.path} doesn't exist`,
-								}),
+								cause._tag === "RepoPathOriginMismatch" &&
+									cause.movedOnGitHub &&
+									cause.actualOwner !== null &&
+									cause.actualRepo !== null
+									? errors.ORIGIN_MOVED({
+											data: {
+												path: cause.path,
+												expectedOwner: cause.expectedOwner,
+												expectedRepo: cause.expectedRepo,
+												actualOwner: cause.actualOwner,
+												actualRepo: cause.actualRepo,
+											},
+										})
+									: repoPathFailure(errors, cause),
 							),
 						),
-						Effect.catchTag("RepoPathNotAGitRepo", (cause) =>
-							Effect.fail(
-								errors.BAD_REQUEST({
-									message: `${cause.path} isn't a git repository`,
-								}),
-							),
-						),
-						Effect.catchTag("RepoPathNoOriginRemote", (cause) =>
-							Effect.fail(
-								errors.BAD_REQUEST({
-									message: `${cause.path} has no origin remote to verify against`,
-								}),
-							),
-						),
-						Effect.catchTag("RepoPathOriginMismatch", (cause) =>
-							Effect.fail(
-								errors.BAD_REQUEST({
-									message: `${cause.path}'s origin remote is ${cause.actualOwner ?? "?"}/${cause.actualRepo ?? "?"}, not ${cause.expectedOwner}/${cause.expectedRepo}`,
-								}),
-							),
-						),
-						Effect.catchTag("GitCommandError", (cause) =>
-							Effect.fail(
-								errors.SERVICE_UNAVAILABLE({
-									message: `${cause.command} could not be run: ${cause.stderr || String(cause.cause)}`,
-								}),
-							),
+					);
+			}),
+			// Fixes the stale `origin` behind `recordRepoPath`'s `ORIGIN_MOVED`,
+			// then records the path. A mismatch the sidecar can't confirm as
+			// "moved on GitHub" stays a plain `BAD_REQUEST`; nothing is rewritten.
+			repointOrigin: authed.pullRequests.repointOrigin.effect(function* ({
+				input,
+				errors,
+			}) {
+				const store = yield* Store;
+				return yield* store
+					.repointOrigin(input.owner, input.repo, input.path)
+					.pipe(
+						Effect.catchTag(REPO_PATH_FAILURE_TAGS, (cause) =>
+							Effect.fail(repoPathFailure(errors, cause)),
 						),
 					);
 			}),
