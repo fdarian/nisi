@@ -27,6 +27,7 @@ import { walkthroughContract } from "./walkthrough.ts";
 
 export * from "./chat.ts";
 export * from "./code-index.ts";
+export { DiagnosticsSnapshot } from "./diagnostics.ts";
 export * from "./diff.ts";
 export * from "./events.ts";
 export * from "./file.ts";

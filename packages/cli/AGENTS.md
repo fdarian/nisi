@@ -6,8 +6,9 @@ requires a PR and errors clearly when there is none, `nisi diff [<base>]` diffs 
 range — `<base>..<head>` or `<base>...<head>` — to diff two arbitrary refs, neither of which has to
 be the current checkout; see `src/base-argument.ts`. All three take the same optional `[<path>]`
 positional `nisi` always has (`diff` reads it second, after `<base>`). `nisi completion zsh` prints a
-zsh completion script for the whole tree. See `apps/desktop/AGENTS.md`'s "The seam" section for the
-handoff design this implements, and `packages/sidecar-api/src/sessions.ts`'s `OpenSessionTarget` for
+zsh completion script for the whole tree. `nisi debug [--session <id>] [--json]` prints the running
+sidecar's `diagnostics.snapshot` (never launches the app, exits non-zero when no sidecar answers). See `apps/desktop/AGENTS.md`'s "The seam" section for
+the handoff design this implements, and `packages/sidecar-api/src/sessions.ts`'s `OpenSessionTarget` for
 the wire shape this grammar maps to.
 
 - `src/index.ts` — the `Command` tree (Effect CLI, `effect/unstable/cli`): `nisi` with `pr`/`diff`/
@@ -40,6 +41,10 @@ the wire shape this grammar maps to.
   app that received the POST focuses its native window via the sidecar's replayable activation
   stream (`apps/desktop/src-tauri/src/activation.rs`), before GitHub resolution finishes.
   This identifies the dev sandbox or production instance that actually answered.
+- `src/debug.ts` / `src/debug-report.ts` — `nisi debug`: fetch via the same `sidecar.json` discovery
+  and `dataDirConfig` (`NISI_DATA_DIR`) as `handoff.ts`, then render. `debug-report.ts` is pure; its
+  `sessionAnomalies` is where "worth a second look" is defined. This is how an agent inspects the
+  sidecar without ever holding the bearer token.
 - `src/app-launch.ts` — resolves "the app" to launch cold (env override, `/Applications`, or a
   locally-built release bundle — nisi has no install channel yet) and `open -a`s it, which hands off
   to LaunchServices. Used only for a genuine cold start (`handoff.ts`'s `unreachable` case, no

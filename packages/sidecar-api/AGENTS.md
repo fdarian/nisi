@@ -19,6 +19,8 @@ Git/review procedures sit alongside `health.check`.
   (`apps/desktop/sidecar/code-index/state.ts`'s `encodeSymbolKey`/`decodeSymbolKey`), not a type this
   package or `@repo/code-lsp` names anywhere — meaningful only as `codeIndex.references`' input,
   never parsed client-side.
+- `diagnostics.ts` — `diagnostics.snapshot`, the read-only in-memory-state view behind `nisi debug`; its
+  `sessionId` is the wire id (`sessions.publicId` in SQLite), not the integer row id.
 - `contract.ts` — composes domain contracts into the router; owns the two
   `@orpc/experimental-effect/extensions/*` side-effect imports. These **must** run before any domain
   module calls `oc.input()`/`oc.output()` — every domain module is imported only from here, never

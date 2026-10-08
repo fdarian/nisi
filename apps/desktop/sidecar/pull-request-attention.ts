@@ -103,7 +103,26 @@ export class AttentionState extends Context.Service<AttentionState>()(
 							current.awaitingNewCi === previous.awaitingNewCi,
 					),
 				);
-			return { changes, set, remove, markChanged };
+			const isSessionWatched = (sessionId: string) =>
+				SubscriptionRef.get(entries).pipe(
+					Effect.map((current) => current.get(sessionId)?.watched === true),
+				);
+			const forPullRequest = (pr: {
+				readonly owner: string;
+				readonly repo: string;
+				readonly number: number;
+			}) =>
+				SubscriptionRef.get(entries).pipe(
+					Effect.map((all) => attentionFor(all, pr.owner, pr.repo, pr.number)),
+				);
+			return {
+				changes,
+				set,
+				remove,
+				markChanged,
+				isSessionWatched,
+				forPullRequest,
+			};
 		}),
 	},
 ) {
