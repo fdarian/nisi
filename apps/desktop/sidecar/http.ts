@@ -63,6 +63,7 @@ import {
 	startCodeLspServer,
 	stopCodeLspServer,
 } from "./code-index/state.ts";
+import { buildDiagnosticsSnapshot } from "./diagnostics-snapshot.ts";
 import {
 	emit,
 	type SidecarEvent,
@@ -79,6 +80,7 @@ import {
 	measurementInstance,
 } from "./measurement-deep-links.ts";
 import { translateMergeFailure } from "./merge-failure.ts";
+import { MergeStatusLedger } from "./merge-status-ledger.ts";
 import { createNativeActivationHandler } from "./native-activation.ts";
 import {
 	acknowledgeOpenRequest,
@@ -91,6 +93,7 @@ import {
 import { PrIndex } from "./pr-index.ts";
 import { AttentionState } from "./pull-request-attention.ts";
 import { RpcErrorsPlugin } from "./rpc-errors.ts";
+import { RpcFailureLedger } from "./rpc-failure-ledger.ts";
 import { RpcLifecyclePlugin } from "./rpc-lifecycle.ts";
 import { ScheduledMerges } from "./scheduled-merge.ts";
 import type { AppServices } from "./services.ts";
@@ -430,6 +433,20 @@ export function attachRouter(
 						}),
 					);
 				yield* Effect.sync(() => injectedDeepLinks.ack(call.input.traceId));
+			}),
+			snapshot: authed.diagnostics.snapshot.effect(function* ({
+				input,
+				errors,
+			}) {
+				return yield* buildDiagnosticsSnapshot(input).pipe(
+					Effect.catchTag("SessionNotFound", () =>
+						Effect.fail(
+							errors.NOT_FOUND({
+								message: `session not found: ${input.sessionId}`,
+							}),
+						),
+					),
+				);
 			}),
 		},
 		health: {
@@ -1519,6 +1536,7 @@ export function attachRouter(
 						Effect.gen(function* () {
 							const github = yield* GitHub;
 							const preferences = yield* RepoMergeMethodStore;
+							const ledger = yield* MergeStatusLedger;
 							return github.watchMergeStatus(input).pipe(
 								Stream.mapEffect((status) =>
 									Effect.gen(function* () {
@@ -1545,6 +1563,7 @@ export function attachRouter(
 										};
 									}),
 								),
+								Stream.tap((status) => ledger.record(input, status)),
 							);
 						}),
 					).pipe(
@@ -2219,9 +2238,13 @@ export function attachRouter(
 	);
 	const rpcErrors = new RpcErrorsPlugin((error, path) =>
 		runWithMainContext(
-			Effect.logError("rpc call failed", Cause.die(error)).pipe(
-				Effect.annotateLogs({ path: path.join(".") }),
-			),
+			Effect.gen(function* () {
+				const ledger = yield* RpcFailureLedger;
+				yield* ledger.record(path, error);
+				yield* Effect.logError("rpc call failed", Cause.die(error)).pipe(
+					Effect.annotateLogs({ path: path.join(".") }),
+				);
+			}),
 		),
 	);
 	const handler = new FetchRPCHandler(router, {

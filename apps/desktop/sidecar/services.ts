@@ -10,8 +10,10 @@ import type { ChatSessions } from "./chat/sessions.ts";
 import type { CodeLspPool } from "./code-index/state.ts";
 import type { HarnessModelCache } from "./harness/model-store.ts";
 import type { LaunchTrace } from "./launch-trace/service.ts";
+import type { MergeStatusLedger } from "./merge-status-ledger.ts";
 import type { PrIndex } from "./pr-index.ts";
 import type { AttentionState } from "./pull-request-attention.ts";
+import type { RpcFailureLedger } from "./rpc-failure-ledger.ts";
 import type { ScheduledMerges } from "./scheduled-merge.ts";
 import type { SessionWatch } from "./session-watch.ts";
 import type { Store } from "./store.ts";
@@ -42,4 +44,6 @@ export type AppServices =
 	| CodeLspPool
 	| GitHub
 	| AttentionState
+	| MergeStatusLedger
+	| RpcFailureLedger
 	| BunServices.BunServices;

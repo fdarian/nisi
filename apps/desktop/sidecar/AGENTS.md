@@ -43,6 +43,14 @@ seam" for the port/token handshake this boots into.
   combined across sessions of the same PR. `http.ts` receives header-level focus/selection via
   `sessions.setAttention`; `live-poll.ts` marks local changes; `session-close.ts` removes entries.
   `GhGitHub.layer` consumes its `PullRequestAttention` stream to choose its polling cadence.
+- `diagnostics-snapshot.ts`, `merge-status-ledger.ts`, `rpc-failure-ledger.ts` — behind `diagnostics.snapshot`
+  (what `nisi debug` prints). The snapshot is strictly read-only: it lists open sessions straight from
+  `ReviewStore` (never `Store.listSessions`, which prepares each base and can start a `git fetch`) and
+  probes with `stat` / `git rev-parse` only. The two ledgers are in-memory, bounded, and read by nothing
+  but the snapshot: `MergeStatusLedger` is tapped by `pullRequests.mergeStatus` (its `changedAt` moves
+  only when the value changes, since the watch stream dedupes and replays), `RpcFailureLedger` is fed
+  from the same spot in `http.ts` that logs "rpc call failed". `pollScheduled` is derived by calling
+  `@repo/git`'s `mergeStatusInterval` with the PR's current attention, not tracked separately.
 - `stream-bridge.ts` — turns an Effect Stream into the async iterator required by four oRPC live
   handlers, interrupting the consuming fiber when the request aborts.
 - `diff-head.ts` — `resolveDiffHead`: for a session's `headRef` and whether it's a PR-backed

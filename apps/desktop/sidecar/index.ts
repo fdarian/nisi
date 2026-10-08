@@ -24,7 +24,9 @@ import { attachRouter, bindHealthCheckServer } from "./http.ts";
 import { LaunchTrace } from "./launch-trace/service.ts";
 import { startLivePolling } from "./live-poll.ts";
 import { LoggingLive } from "./logging.ts";
+import { MergeStatusLedger } from "./merge-status-ledger.ts";
 import { PrIndex } from "./pr-index.ts";
+import { RpcFailureLedger } from "./rpc-failure-ledger.ts";
 import { ScheduledMerges } from "./scheduled-merge.ts";
 import { SessionWatch } from "./session-watch.ts";
 import { Store } from "./store.ts";
@@ -250,6 +252,8 @@ const MainLayer = Layer.mergeAll(
 		),
 	),
 	SessionWatch.layer,
+	MergeStatusLedger.layer,
+	RpcFailureLedger.layer,
 	Updater.layer,
 	ChatSessions.layer,
 	HarnessModelCache.layer,
