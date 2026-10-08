@@ -1535,10 +1535,11 @@ export function attachRouter(
 											return yield* Effect.die(
 												new Error("GitHub returned no merge methods"),
 											);
-										yield* store.recordPullRequestHead(
-											input,
-											status.mergeability.headRefOid,
-										);
+										yield* store.recordPullRequestStatus(input, {
+											headSha: status.mergeability.headRefOid,
+											baseSha: status.mergeability.baseRefOid,
+											state: status.mergeability.state,
+										});
 										return {
 											state: status.mergeability.state,
 											mergeable: status.mergeability.mergeable,

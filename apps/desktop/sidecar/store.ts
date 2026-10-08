@@ -59,6 +59,11 @@ import { FileSystem } from "effect/FileSystem";
 import type { ChildProcessSpawner } from "effect/unstable/process";
 import { makeBaseRefresh } from "./base-refresh.ts";
 import {
+	type DiffBasePullRequest,
+	pinnedBaseTip,
+	resolveDiffBase,
+} from "./diff-base.ts";
+import {
 	type DiffHead,
 	type InvalidHeadRef,
 	resolveDiffHead,
@@ -426,13 +431,17 @@ export class Store extends Context.Service<Store>()("Store", {
 		>;
 		const pullRequestKey = (pr: PullRequestIdentity) =>
 			`${pr.owner}/${pr.repo}#${pr.number}`.toLowerCase();
+		type PullRequestFacts = DiffBasePullRequest & {
+			readonly headSha: string;
+		};
 		/**
-		 * Each PR's head commit as last reported by the merge-status watch, in
-		 * memory only. Empty until a watch has read it, in which case
-		 * `resolveDiffHead` keeps trusting the worktree. Lost on restart, which
-		 * just means the next watch reading repopulates it.
+		 * Each PR's head commit, base commit and state as last reported by the
+		 * merge-status watch, in memory only. Empty until a watch has read it, in
+		 * which case `resolveDiffHead` keeps trusting the worktree and
+		 * `resolveDiffBase` keeps the live base. Lost on restart, which just
+		 * means the next watch reading repopulates it.
 		 */
-		const pullRequestHeads = new Map<string, string>();
+		const pullRequestFacts = new Map<string, PullRequestFacts>();
 
 		/**
 		 * Open sessions whose `repoRoot` directory no longer exists, already
@@ -471,9 +480,7 @@ export class Store extends Context.Service<Store>()("Store", {
 			baseIdentity(session.repoRoot, session.baseRef).pipe(
 				Effect.map((identity) => identity.key),
 				Effect.catchTag("RepoPathNotFound", (error) =>
-					warnDeadSessionOnce(session.id, error.path).pipe(
-						Effect.as(null),
-					),
+					warnDeadSessionOnce(session.id, error.path).pipe(Effect.as(null)),
 				),
 			);
 		const emitForSessionsOnBase = (
@@ -483,8 +490,7 @@ export class Store extends Context.Service<Store>()("Store", {
 			Effect.gen(function* () {
 				const sessions = yield* reviewStore.listOpenSessions();
 				for (const session of sessions) {
-					if ((yield* sessionBaseKey(session)) === key)
-						emit(event(session.id));
+					if ((yield* sessionBaseKey(session)) === key) emit(event(session.id));
 				}
 			});
 		const baseFetchState = yield* makeBaseRefresh({
@@ -1341,10 +1347,15 @@ export class Store extends Context.Service<Store>()("Store", {
 				});
 			}).pipe(Effect.withSpan("diff.review-state.attach"));
 
+		const sessionPullRequestFacts = (session: ReviewSession) =>
+			session.pr === null
+				? undefined
+				: pullRequestFacts.get(pullRequestKey(session.pr));
+
 		/**
 		 * `session`'s {@link DiffHead} — see `diff-head.ts`'s `resolveDiffHead`
 		 * for the decision itself; this just adapts a `ReviewSession` to that
-		 * function's plain `(repoRoot, headRef, hasPullRequest)` signature, so
+		 * function's plain `(repoRoot, headRef, pullRequest)` signature, so
 		 * every call site below reads the same way.
 		 */
 		const resolveSessionDiffHead = (session: ReviewSession, repoRoot: string) =>
@@ -1355,32 +1366,55 @@ export class Store extends Context.Service<Store>()("Store", {
 					? null
 					: {
 							number: session.pr.number,
-							headSha: pullRequestHeads.get(pullRequestKey(session.pr)),
+							headSha: sessionPullRequestFacts(session)?.headSha,
 						},
 			);
 
 		/**
-		 * Feeds the PR head commit into {@link pullRequestHeads} — called by the
-		 * merge-status watch, the one stream that already polls the PR. When the
-		 * new head changes what a session of that PR diffs (the worktree stops or
-		 * starts being eligible, or the commit to diff changes) the session gets
-		 * `session-files-changed`, since nothing else notices a push that didn't
-		 * come from this worktree. Never fails: a status update must not break
-		 * the watch it rides on.
+		 * The `baseRef` to hand `@repo/git` for `session` — see `diff-base.ts`'s
+		 * `resolveDiffBase`. Every file-list, file-content and reconciliation path
+		 * below goes through this, never `session.baseRef` directly.
 		 */
-		const recordPullRequestHead = (
+		const resolveSessionDiffBase = (session: ReviewSession, repoRoot: string) =>
+			resolveDiffBase(
+				repoRoot,
+				session.baseRef,
+				sessionPullRequestFacts(session),
+			);
+
+		/**
+		 * Feeds the PR's head, base and state into {@link pullRequestFacts} —
+		 * called by the merge-status watch, the one stream that already polls the
+		 * PR. When the new reading changes what a session of that PR diffs (the
+		 * worktree stops or starts being eligible, the commit to diff changes, or
+		 * the base tip switches to or from the pinned merged base) the session
+		 * gets `session-files-changed`, since nothing else notices a push or a
+		 * merge that didn't come from this worktree. Never fails: a status update
+		 * must not break the watch it rides on.
+		 */
+		const recordPullRequestStatus = (
 			pr: PullRequestIdentity,
-			headSha: string,
-		): Effect.Effect<void, never, FileSystem | ChildProcessSpawner.ChildProcessSpawner> =>
+			facts: PullRequestFacts,
+		): Effect.Effect<
+			void,
+			never,
+			FileSystem | ChildProcessSpawner.ChildProcessSpawner
+		> =>
 			Effect.gen(function* () {
 				const key = pullRequestKey(pr);
-				const previous = pullRequestHeads.get(key);
-				if (previous === headSha) return;
-				pullRequestHeads.set(key, headSha);
+				const previous = pullRequestFacts.get(key);
+				if (
+					previous?.headSha === facts.headSha &&
+					previous.baseSha === facts.baseSha &&
+					previous.state === facts.state
+				)
+					return;
+				pullRequestFacts.set(key, facts);
 				const sessions = (yield* reviewStore.listOpenSessions()).filter(
 					(session) =>
 						session.pr !== null && pullRequestKey(session.pr) === key,
 				);
+				const baseChanged = pinnedBaseTip(previous) !== pinnedBaseTip(facts);
 				yield* Effect.forEach(sessions, (session) =>
 					Effect.gen(function* () {
 						const repoRoot = yield* resolveLiveRepoRoot(session);
@@ -1389,9 +1423,10 @@ export class Store extends Context.Service<Store>()("Store", {
 								number: pr.number,
 								headSha: sha,
 							});
-						const before = yield* diffHeadFor(previous);
-						const after = yield* diffHeadFor(headSha);
+						const before = yield* diffHeadFor(previous?.headSha);
+						const after = yield* diffHeadFor(facts.headSha);
 						if (
+							baseChanged ||
 							before.worktreeEligible !== after.worktreeEligible ||
 							before.headRef !== after.headRef
 						)
@@ -1399,7 +1434,7 @@ export class Store extends Context.Service<Store>()("Store", {
 					}).pipe(
 						Effect.catchCause((cause) =>
 							Effect.logWarning(
-								"Could not apply the PR head update to a session",
+								"Could not apply the PR status update to a session",
 								{ sessionId: session.id, cause },
 							),
 						),
@@ -1407,7 +1442,7 @@ export class Store extends Context.Service<Store>()("Store", {
 				);
 			}).pipe(
 				Effect.catchCause((cause) =>
-					Effect.logWarning("Could not record the PR head", { cause }),
+					Effect.logWarning("Could not record the PR status", { cause }),
 				),
 			);
 
@@ -1421,6 +1456,8 @@ export class Store extends Context.Service<Store>()("Store", {
 		const readBaseMayBeStale = (sessionId: string) =>
 			Effect.gen(function* () {
 				const session = yield* reviewStore.getSession(sessionId);
+				if (pinnedBaseTip(sessionPullRequestFacts(session)) !== undefined)
+					return false;
 				const repoRoot = yield* resolveLiveRepoRoot(session);
 				const preparedKey = baseFetchState.key(repoRoot, session.baseRef);
 				if (preparedKey !== undefined) return baseFetchState.stale(preparedKey);
@@ -1437,8 +1474,9 @@ export class Store extends Context.Service<Store>()("Store", {
 				const diffHead = yield* resolveSessionDiffHead(session, repoRoot);
 				const effectiveIncludeUncommitted =
 					includeUncommitted && diffHead.worktreeEligible;
-				const files = yield* getChangedFiles(repoRoot, session.baseRef, {
-					prepared: yield* preparation.read(repoRoot, session.baseRef, {
+				const baseRef = yield* resolveSessionDiffBase(session, repoRoot);
+				const files = yield* getChangedFiles(repoRoot, baseRef, {
+					prepared: yield* preparation.read(repoRoot, baseRef, {
 						includeUncommitted: effectiveIncludeUncommitted,
 						headRef: diffHead.headRef,
 					}),
@@ -1628,12 +1666,13 @@ export class Store extends Context.Service<Store>()("Store", {
 				const diffHead = yield* resolveSessionDiffHead(session, repoRoot);
 				const effectiveIncludeUncommitted =
 					includeUncommitted && diffHead.worktreeEligible;
+				const baseRef = yield* resolveSessionDiffBase(session, repoRoot);
 				const contentByPath = yield* getFileContents(
 					repoRoot,
-					session.baseRef,
+					baseRef,
 					requests satisfies ReadonlyArray<FileContentRequest>,
 					{
-						prepared: yield* preparation.read(repoRoot, session.baseRef, {
+						prepared: yield* preparation.read(repoRoot, baseRef, {
 							includeUncommitted: effectiveIncludeUncommitted,
 							headRef: diffHead.headRef,
 						}),
@@ -1880,7 +1919,10 @@ export class Store extends Context.Service<Store>()("Store", {
 			Effect.gen(function* () {
 				const mergeBase = yield* resolveMergeBase(
 					repoRoot,
-					yield* resolveDiffBaseRef(repoRoot, session.baseRef),
+					yield* resolveDiffBaseRef(
+						repoRoot,
+						yield* resolveSessionDiffBase(session, repoRoot),
+					),
 					diffHead.headRef,
 				);
 				const baseContentBytes = yield* readFileContentsAtRef(
@@ -2052,7 +2094,7 @@ export class Store extends Context.Service<Store>()("Store", {
 			listSessions,
 			closeSession,
 			resolveSessionRepoRoot,
-			recordPullRequestHead,
+			recordPullRequestStatus,
 			resolveScheduledMergeRepoRoot,
 			listChangedFiles,
 			refreshSessionBase,

@@ -47,6 +47,7 @@ const clean: PullRequestMergeability = {
 	mergeStateStatus: "CLEAN",
 	isDraft: false,
 	headRefOid: "head",
+	baseRefOid: "base",
 };
 const unused = () => Effect.die(new Error("unused mock GitHub method"));
 const unusedStream = () => Stream.die(new Error("unused mock GitHub method"));
