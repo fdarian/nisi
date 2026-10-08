@@ -26,6 +26,7 @@ import { FilesChangedContent } from "#/features/pull-request/files/files-changed
 import { diffStat } from "#/features/pull-request/header/diff-stat";
 import { PrHeader } from "#/features/pull-request/header/pr-header";
 import { useNavigationShortcuts } from "#/features/pull-request/navigation/use-navigation-shortcuts";
+import { useOpenInGitHubShortcut } from "#/features/pull-request/navigation/use-open-in-github-shortcut";
 import { OverviewView } from "#/features/pull-request/overview/overview-view";
 import { WalkthroughView } from "#/features/pull-request/walkthrough/walkthrough-view";
 import { useWalkthroughEnabled } from "#/features/settings/settings-data";
@@ -110,6 +111,7 @@ export function PrView({
 		openFiles,
 		sessionId: session.id,
 	});
+	useOpenInGitHubShortcut({ enabled: isSelectedTab, session });
 
 	// Gates the sidecar's 2s worktree poller (`live-poll.ts`) to exactly the
 	// sessions someone could actually see a result from — window focused,

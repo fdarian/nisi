@@ -229,6 +229,7 @@ export function createMockSidecarClient(
 			ackDeepLink: async () => {
 				throw new Error("Deep-link measurement is unavailable in Storybook");
 			},
+			snapshot: async () => ({ sessions: [], rpcFailures: [] }),
 		},
 		health: {
 			check: async () => ({ status: "ok" }),

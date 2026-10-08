@@ -1,8 +1,9 @@
 import type { OpenSessionTarget } from "@repo/sidecar-api";
 import { Console, Effect, Option } from "effect";
-import { Argument, Command } from "effect/unstable/cli";
+import { Argument, Command, Flag } from "effect/unstable/cli";
 import { parseBaseArgument } from "./base-argument.ts";
 import { zshCompletionScript } from "./completion.ts";
+import { runDebug } from "./debug.ts";
 
 export const runCommand = <E, R>(
 	run: (
@@ -55,13 +56,31 @@ export const runCommand = <E, R>(
 		Command.withDescription("Print a shell completion script."),
 		Command.withSubcommands([zsh]),
 	);
+	const debug = Command.make(
+		"debug",
+		{
+			session: Flag.string("session").pipe(
+				Flag.withDescription("Only this session id (sessions.publicId)."),
+				Flag.optional,
+			),
+			json: Flag.boolean("json").pipe(
+				Flag.withDescription("Print the raw snapshot as JSON."),
+				Flag.withDefault(false),
+			),
+		},
+		(options) => runDebug(options, fail),
+	).pipe(
+		Command.withDescription(
+			"Read-only snapshot of the running sidecar's in-memory state (open sessions, worktree heads, PR attention and merge-status polling, recent RPC failures). Flags anomalies. Honors NISI_DATA_DIR.",
+		),
+	);
 	const nisi = Command.make("nisi", { path: pathArgument }, (options) =>
 		run(options.path, { kind: "auto" }),
 	).pipe(
 		Command.withDescription(
 			"Open the PR for the current directory in Nisi, or diff against the default branch when there is none. Set LOG_LEVEL=debug for a trace of every step (which sidecar.json was read, each POST attempt, app resolution); the sidecar itself keeps its own rotating log under NISI_DATA_DIR/logs/.",
 		),
-		Command.withSubcommands([pr, diff, completion]),
+		Command.withSubcommands([pr, diff, debug, completion]),
 	);
 	return Command.run(nisi, { version: "0.1.0" });
 };

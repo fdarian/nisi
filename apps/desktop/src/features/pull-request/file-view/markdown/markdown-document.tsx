@@ -6,63 +6,16 @@ import type * as React from "react";
 import { useMemo, useState } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import rehypeRaw from "rehype-raw";
-import rehypeSanitize, {
-	defaultSchema,
-	type Options as RehypeSanitizeOptions,
-} from "rehype-sanitize";
+import rehypeSanitize from "rehype-sanitize";
 import rehypeSlug from "rehype-slug";
 import remarkFrontmatter from "remark-frontmatter";
 import remarkGfm from "remark-gfm";
 import { MarkdownCodeBlock } from "./markdown-code-block";
+import { markdownSanitizeSchema } from "./markdown-sanitize-schema";
 
 type MarkdownDocumentProps = {
 	source: string;
 	theme: ThemesType;
-};
-
-const markdownSanitizeSchema: RehypeSanitizeOptions = {
-	...defaultSchema,
-	tagNames: Array.from(
-		new Set([
-			...(defaultSchema.tagNames ?? []),
-			"details",
-			"picture",
-			"source",
-			"summary",
-		]),
-	),
-	attributes: {
-		...defaultSchema.attributes,
-		"*": [
-			...(defaultSchema.attributes?.["*"] ?? []),
-			"align",
-			"height",
-			"width",
-		],
-		details: [...(defaultSchema.attributes?.details ?? []), "open"],
-		div: [...(defaultSchema.attributes?.div ?? []), "align", "height", "width"],
-		img: [
-			...(defaultSchema.attributes?.img ?? []),
-			"align",
-			"height",
-			"sizes",
-			"srcSet",
-			"width",
-		],
-		p: [...(defaultSchema.attributes?.p ?? []), "align", "height", "width"],
-		picture: [...(defaultSchema.attributes?.picture ?? []), "align"],
-		source: [
-			...(defaultSchema.attributes?.source ?? []),
-			"height",
-			"media",
-			"sizes",
-			"src",
-			"srcSet",
-			"type",
-			"width",
-		],
-		summary: [...(defaultSchema.attributes?.summary ?? []), "align"],
-	},
 };
 
 const externalUrlPattern = /^(?:https?:|mailto:|tel:)/i;

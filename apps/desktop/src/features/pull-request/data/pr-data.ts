@@ -60,7 +60,7 @@ export type SessionTarget =
  * hardcodes `github.com` — wrong for Enterprise hosts (see
  * `packages/git/src/repo-path-mapping.ts:26`). Shared by the command
  * palette's "Open in GitHub" action and the "o g" leader shortcut
- * (`files-changed-view.tsx`) so the URL is built in exactly one place.
+ * (`use-open-in-github-shortcut.ts`) so the URL is built in exactly one place.
  */
 export function pullRequestUrl(
 	target: Extract<SessionTarget, { kind: "pr" }>,

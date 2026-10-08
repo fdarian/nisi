@@ -14,7 +14,11 @@ import { cn } from "cn";
  * than a UI control.
  */
 import { useMemo } from "react";
-import ReactMarkdown, { type Components } from "react-markdown";
+import type { Components } from "react-markdown";
+import {
+	ProseLink,
+	ProseMarkdown,
+} from "#/features/pull-request/prose-markdown";
 import { RegenerateControl } from "#/features/pull-request/walkthrough/generate/regenerate-control";
 import type { SidecarQueryUtils } from "#/infra/backend-context";
 import { UncoveredFiles } from "./uncovered-files";
@@ -26,6 +30,7 @@ import type {
 } from "./walkthrough-data";
 
 const REF_PREFIX = "ref:";
+const REF_PROTOCOLS = ["ref"];
 
 type NarrativePaneProps = {
 	sections: readonly WalkthroughSection[];
@@ -69,20 +74,12 @@ export function NarrativePane({
 							{section.title}
 						</h2>
 						<div className="flex flex-col gap-3 text-foreground text-sm leading-relaxed">
-							<ReactMarkdown
+							<ProseMarkdown
 								components={components}
-								// react-markdown's default `urlTransform` sanitizes any URI
-								// scheme outside its http(s)/mailto/etc. allowlist down to an
-								// empty string — `ref:<id>` isn't a real scheme, so without
-								// this override every reference link would render as
-								// `href=""` (a self-link, no less: clicking it navigates and
-								// reloads the whole app). This content is our own sidecar's
-								// output, not arbitrary user HTML, so passing URLs through
-								// unchanged is safe here.
-								urlTransform={(url) => url}
+								extraHrefProtocols={REF_PROTOCOLS}
 							>
 								{section.body}
-							</ReactMarkdown>
+							</ProseMarkdown>
 						</div>
 					</section>
 				))}
@@ -123,34 +120,13 @@ function useMarkdownComponents(
 ): Components {
 	return useMemo<Components>(
 		() => ({
-			p: (props) => <p className="text-foreground" {...props} />,
-			ul: (props) => <ul className="list-disc space-y-1 pl-5" {...props} />,
-			ol: (props) => <ol className="list-decimal space-y-1 pl-5" {...props} />,
-			strong: (props) => (
-				<strong className="font-semibold text-foreground" {...props} />
-			),
-			code: (props) => (
-				<code
-					className="rounded bg-muted px-1 py-0.5 font-mono text-[0.8125em]"
-					{...props}
-				/>
-			),
-			a: ({ href, children }) => {
-				const blockId = href?.startsWith(REF_PREFIX)
-					? href.slice(REF_PREFIX.length)
+			a: (props) => {
+				const blockId = props.href?.startsWith(REF_PREFIX)
+					? props.href.slice(REF_PREFIX.length)
 					: null;
 
 				if (blockId === null) {
-					return (
-						<a
-							className="underline underline-offset-2"
-							href={href}
-							rel="noreferrer"
-							target="_blank"
-						>
-							{children}
-						</a>
-					);
+					return <ProseLink {...props} />;
 				}
 
 				const isKnown = knownBlockIds.has(blockId);
@@ -171,7 +147,7 @@ function useMarkdownComponents(
 						title={isKnown ? undefined : "This reference no longer exists"}
 						type="button"
 					>
-						{children}
+						{props.children}
 						{isOutdated && (
 							<span
 								aria-label="Outdated"

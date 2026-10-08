@@ -36,7 +36,7 @@ const pollTimeoutConfig = Config.number("NISI_LAUNCH_TIMEOUT_MS").pipe(
 );
 
 /** Same default as the sidecar's own handshake file — see `apps/desktop/sidecar/index.ts`. */
-const dataDirConfig = Config.string("NISI_DATA_DIR").pipe(
+export const dataDirConfig = Config.string("NISI_DATA_DIR").pipe(
 	Config.withDefault(
 		join(homedir(), "Library", "Application Support", "com.nisi.desktop"),
 	),
