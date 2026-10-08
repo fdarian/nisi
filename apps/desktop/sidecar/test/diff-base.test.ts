@@ -3,8 +3,12 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { BunServices } from "@effect/platform-bun";
-import { Effect } from "effect";
-import { pinnedBaseTip, resolveDiffBase } from "../diff-base.ts";
+import { Effect, Result } from "effect";
+import {
+	MergedPullRequestBaseUnavailable,
+	pinnedBaseTip,
+	resolveDiffBase,
+} from "../diff-base.ts";
 
 const sh = async (cwd: string, args: ReadonlyArray<string>) => {
 	const proc = Bun.spawn(["git", ...args], {
@@ -52,7 +56,7 @@ describe("resolveDiffBase", () => {
 		).toBe("main");
 	});
 
-	test("fetches the base branch when the pinned commit isn't local, and falls back to the live base when it still isn't", async () => {
+	test("fetches the base branch when the pinned commit isn't local, and fails when it still isn't", async () => {
 		const origin = await mkdtemp(join(tmpdir(), "nisi-diff-base-origin-"));
 		const parent = await mkdtemp(join(tmpdir(), "nisi-diff-base-clone-"));
 		const clone = join(parent, "clone");
@@ -72,14 +76,15 @@ describe("resolveDiffBase", () => {
 			expect(await sh(clone, ["cat-file", "-t", pinned])).toBe("commit");
 
 			const unreachable = "0123456789abcdef0123456789abcdef01234567";
-			expect(
-				await run(
-					resolveDiffBase(clone, "main", {
-						state: "MERGED",
-						baseSha: unreachable,
-					}),
-				),
-			).toBe("main");
+			const result = await Effect.runPromise(
+				resolveDiffBase(clone, "main", {
+					state: "MERGED",
+					baseSha: unreachable,
+				}).pipe(Effect.result, Effect.provide(BunServices.layer)),
+			);
+			expect(Result.isFailure(result)).toBe(true);
+			if (Result.isFailure(result))
+				expect(result.failure).toBeInstanceOf(MergedPullRequestBaseUnavailable);
 		} finally {
 			await rm(origin, { recursive: true, force: true });
 			await rm(parent, { recursive: true, force: true });

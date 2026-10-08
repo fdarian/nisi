@@ -1,5 +1,19 @@
 import { commitExists, fetchBaseRef } from "@repo/git";
-import { Effect } from "effect";
+import { Effect, Schema } from "effect";
+
+/**
+ * A merged PR's `baseRefOid` isn't in `repoRoot` even after fetching its base
+ * branch. Failing is deliberate: falling back to the live `origin/<base>` would
+ * quietly show the empty diff a true merge commit produces.
+ */
+export class MergedPullRequestBaseUnavailable extends Schema.TaggedError<MergedPullRequestBaseUnavailable>()(
+	"MergedPullRequestBaseUnavailable",
+	{
+		repoRoot: Schema.String,
+		baseRef: Schema.String,
+		baseSha: Schema.String,
+	},
+) {}
 
 /** What GitHub last reported about a session's PR that decides its diff base. */
 export type DiffBasePullRequest = {
@@ -31,8 +45,8 @@ export const pinnedBaseTip = (
  * Every other case keeps the session's own `baseRef`.
  *
  * A pinned commit that isn't local is fetched via the base branch (it's on
- * that branch's history). If it still isn't there, the session's `baseRef` is
- * used rather than failing the whole diff.
+ * that branch's history); if it's still missing the diff fails with
+ * `MergedPullRequestBaseUnavailable`.
  */
 export const resolveDiffBase = (
 	repoRoot: string,
@@ -43,19 +57,11 @@ export const resolveDiffBase = (
 		const tip = pinnedBaseTip(pullRequest);
 		if (tip === undefined) return baseRef;
 		if (yield* commitExists(repoRoot, tip)) return tip;
-		yield* fetchBaseRef(repoRoot, baseRef).pipe(
-			Effect.catchTag("GitCommandError", (error) =>
-				Effect.logWarning("Could not fetch the base of a merged PR", {
-					repoRoot,
-					baseRef,
-					error,
-				}),
-			),
-		);
+		yield* fetchBaseRef(repoRoot, baseRef);
 		if (yield* commitExists(repoRoot, tip)) return tip;
-		yield* Effect.logWarning(
-			"Merged PR's base commit is not available; using the live base",
-			{ repoRoot, baseRef, tip },
-		);
-		return baseRef;
+		return yield* new MergedPullRequestBaseUnavailable({
+			repoRoot,
+			baseRef,
+			baseSha: tip,
+		});
 	});

@@ -60,6 +60,7 @@ import type { ChildProcessSpawner } from "effect/unstable/process";
 import { makeBaseRefresh } from "./base-refresh.ts";
 import {
 	type DiffBasePullRequest,
+	type MergedPullRequestBaseUnavailable,
 	pinnedBaseTip,
 	resolveDiffBase,
 } from "./diff-base.ts";
@@ -1603,7 +1604,10 @@ export class Store extends Context.Service<Store>()("Store", {
 			headContent: string,
 		): Effect.Effect<
 			Reconciliation | null,
-			SessionNotFound | ReviewStoreError | GitCommandError,
+			| SessionNotFound
+			| ReviewStoreError
+			| GitCommandError
+			| MergedPullRequestBaseUnavailable,
 			FileSystem | ChildProcessSpawner.ChildProcessSpawner
 		> =>
 			Effect.gen(function* () {
@@ -1913,7 +1917,10 @@ export class Store extends Context.Service<Store>()("Store", {
 			headContentBytes: Uint8Array,
 		): Effect.Effect<
 			Reconciliation | null,
-			SessionNotFound | ReviewStoreError | GitCommandError,
+			| SessionNotFound
+			| ReviewStoreError
+			| GitCommandError
+			| MergedPullRequestBaseUnavailable,
 			FileSystem | ChildProcessSpawner.ChildProcessSpawner
 		> =>
 			Effect.gen(function* () {

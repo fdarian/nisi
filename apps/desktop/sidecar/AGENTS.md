@@ -70,7 +70,9 @@ seam" for the port/token handshake this boots into.
   reviewed-state reconciliation). The diff base is `merge-base(base tip, head)`, and a true merge
   commit makes the head an ancestor of `origin/<base>`, which empties the diff. So once the cached
   PR state is MERGED, the base tip is pinned to the PR's `baseRefOid` (main before the merge; a raw
-  sha, which `@repo/git` accepts as a base), fetching the base branch if that commit isn't local.
+  sha, which `@repo/git` accepts as a base), fetching the base branch if that commit isn't local and
+  failing with `MergedPullRequestBaseUnavailable` if it still isn't (the live base would show the
+  empty diff again).
   Open and closed PRs, and anything not yet cached, keep the session's `baseRef`.
 - `store.ts` — `Store`, the service `http.ts`'s git/review handlers depend on. One method per contract
   procedure (`openSession`, `listChangedFiles`, `setFileViewed`, `setRangeViewed`, ...), each composing
