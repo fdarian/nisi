@@ -40,6 +40,7 @@ import {
 	useCycleFileTab,
 	useSetActiveTab,
 } from "#/features/pull-request/data/session-ui-store";
+import { OriginMovedDialog } from "#/features/pull-request/open/origin-moved-dialog";
 import { PendingPrView } from "#/features/pull-request/pending-pr-view";
 import { PrView } from "#/features/pull-request/pr-view";
 import type { SidecarQueryUtils } from "#/infra/backend-context";
@@ -378,6 +379,7 @@ function AppShellReady({
 						</Button>
 					</EmptyContent>
 				</Empty>
+				<OriginMovedDialog prompt={deepLink.originMoved} />
 				<OpenPullRequestPalette
 					repositories={paletteRepositories}
 					onRepositoriesChange={setPaletteRepositories}
@@ -501,6 +503,7 @@ function AppShellReady({
 				)}
 			</div>
 
+			<OriginMovedDialog prompt={deepLink.originMoved} />
 			<OpenPullRequestPalette
 				repositories={paletteRepositories}
 				onRepositoriesChange={setPaletteRepositories}

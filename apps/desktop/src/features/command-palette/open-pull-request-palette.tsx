@@ -29,6 +29,7 @@ import {
 	usePullRequestRepositories,
 	useSearchPullRequests,
 } from "#/features/pull-request/data/pull-requests-data";
+import { OriginMovedDialog } from "#/features/pull-request/open/origin-moved-dialog";
 import { derivePrStatus } from "#/features/pull-request/pr-status";
 import { PrStatusIcon } from "#/features/pull-request/pr-status-icon";
 import type { SidecarQueryUtils } from "#/infra/backend-context";
@@ -164,175 +165,191 @@ export function OpenPullRequestPalette(
 				? searchErrorMessage
 				: null;
 
+	// The moved-repository dialog stands in for the palette rather than
+	// stacking on top of it; confirming re-opens the PR, whose `onOpened` above
+	// then selects it.
+	const hasOriginMoved = openPr.originMoved !== null;
+	// biome-ignore lint/correctness/useExhaustiveDependencies: only the appearance of the prompt should close the palette
+	useEffect(() => {
+		if (hasOriginMoved) props.onOpenChange(false);
+	}, [hasOriginMoved]);
+
 	return (
-		<CommandDialog onOpenChange={props.onOpenChange} open={props.open}>
-			<CommandDialogPopup
-				onKeyDownCapture={(event) => {
-					if (event.metaKey && event.key.toLowerCase() === "p") {
-						event.preventDefault();
-						event.stopPropagation();
-						setRepositoryQuery("");
-						setPickingRepository(true);
-						inputRef.current?.focus();
-					} else if (pickingRepository && event.key === "Escape") {
-						// Capture before the dialog handles Escape, so cancelling the picker never closes it.
-						event.preventDefault();
-						event.stopPropagation();
-						setPickingRepository(false);
-					}
-				}}
-			>
-				<CommandPanel>
-					{pickingRepository ? (
-						<Command
-							key="repositories"
-							filter={null}
-							items={repositories}
-							onValueChange={setRepositoryQuery}
-							value={repositoryQuery}
-						>
-							<div className="flex items-center">
-								<div className="min-w-0 flex-1">
-									<CommandInput
-										ref={inputRef}
-										placeholder="Filter repository..."
-									/>
-								</div>
-								<span className="mr-4 flex shrink-0 items-center gap-1.5 text-muted-foreground text-xs">
-									Apply <Kbd>↵</Kbd>
-								</span>
-							</div>
-							<Separator />
-							<CommandEmpty>
-								{repositoryErrorMessage !== null
-									? repositoryErrorMessage
-									: saved.isPending || recent.isSearching
-										? "Loading repositories…"
-										: "No repositories found."}
-							</CommandEmpty>
-							<CommandList>
-								{(repository: PullRequestRepository) => (
-									<CommandItem
-										key={repositoryKey(repository)}
-										value={repository}
-										onClick={() => {
-											props.onRepositoriesChange([
-												...props.repositories,
-												repository,
-											]);
-											setPickingRepository(false);
-										}}
-									>
-										<span className="text-muted-foreground">
-											{repository.owner}
-										</span>
-										<span className="ml-2">{repository.repo}</span>
-									</CommandItem>
-								)}
-							</CommandList>
-							{repositoryErrorMessage !== null && repositories.length > 0 && (
-								<p className="px-4 pb-2 text-destructive-foreground text-xs">
-									{repositoryErrorMessage}
-								</p>
-							)}
-						</Command>
-					) : (
-						<Command
-							key="pull-requests"
-							filter={null}
-							items={results}
-							onValueChange={setQuery}
-							value={query}
-						>
-							<CommandInput
-								ref={inputRef}
-								placeholder="Open pull requests…"
-								startContent={
-									props.repositories.length > 0 ? (
-										<div className="flex shrink-0 items-center gap-1">
-											{/* ComboboxChip requires a Combobox root; mirror its styling inside this Autocomplete instead. */}
-											{props.repositories.map((repository) => (
-												<span
-													key={repositoryKey(repository)}
-													className="group flex items-center rounded-[calc(var(--radius-md)-1px)] bg-accent px-2 py-1 font-medium text-accent-foreground text-xs"
-												>
-													<span className="text-muted-foreground">
-														{repository.owner}
-													</span>
-													<span className="ms-1">{repository.repo}</span>
-													<button
-														type="button"
-														aria-label={`Remove ${repositoryKey(repository)} filter`}
-														className="w-0 shrink-0 cursor-pointer overflow-hidden opacity-0 outline-none group-hover:ms-1 group-hover:w-3.5 group-hover:opacity-80 group-focus-within:ms-1 group-focus-within:w-3.5 group-focus-within:opacity-80 hover:opacity-100 focus-visible:opacity-100"
-														onClick={() => {
-															props.onRepositoriesChange(
-																props.repositories.filter(
-																	(candidate) =>
-																		repositoryKey(candidate) !==
-																		repositoryKey(repository),
-																),
-															);
-															inputRef.current?.focus();
-														}}
-													>
-														<XIcon className="size-3.5" />
-													</button>
-												</span>
-											))}
-										</div>
-									) : undefined
-								}
-								onKeyDown={(event) => {
-									if (
-										event.key === "Backspace" &&
-										query === "" &&
-										props.repositories.length > 0
-									) {
-										event.preventDefault();
-										props.onRepositoriesChange(props.repositories.slice(0, -1));
-									}
-								}}
-							/>
-							<Separator />
-							<CommandEmpty>
-								{searchErrorMessage ?? "No pull requests found."}
-							</CommandEmpty>
-							<CommandList>
-								{(pr: PullRequestSearchResult) => (
-									<CommandItem
-										key={`${pr.owner}/${pr.repo}#${pr.number}`}
-										onClick={() => handleSelect(pr)}
-										value={pr}
-									>
-										<PullRequestRow
-											isOpening={
-												openPr.isPending &&
-												openPr.pendingParams?.owner === pr.owner &&
-												openPr.pendingParams?.repo === pr.repo &&
-												openPr.pendingParams?.number === pr.number
-											}
-											pr={pr}
+		<>
+			<CommandDialog onOpenChange={props.onOpenChange} open={props.open}>
+				<CommandDialogPopup
+					onKeyDownCapture={(event) => {
+						if (event.metaKey && event.key.toLowerCase() === "p") {
+							event.preventDefault();
+							event.stopPropagation();
+							setRepositoryQuery("");
+							setPickingRepository(true);
+							inputRef.current?.focus();
+						} else if (pickingRepository && event.key === "Escape") {
+							// Capture before the dialog handles Escape, so cancelling the picker never closes it.
+							event.preventDefault();
+							event.stopPropagation();
+							setPickingRepository(false);
+						}
+					}}
+				>
+					<CommandPanel>
+						{pickingRepository ? (
+							<Command
+								key="repositories"
+								filter={null}
+								items={repositories}
+								onValueChange={setRepositoryQuery}
+								value={repositoryQuery}
+							>
+								<div className="flex items-center">
+									<div className="min-w-0 flex-1">
+										<CommandInput
+											ref={inputRef}
+											placeholder="Filter repository..."
 										/>
-									</CommandItem>
+									</div>
+									<span className="mr-4 flex shrink-0 items-center gap-1.5 text-muted-foreground text-xs">
+										Apply <Kbd>↵</Kbd>
+									</span>
+								</div>
+								<Separator />
+								<CommandEmpty>
+									{repositoryErrorMessage !== null
+										? repositoryErrorMessage
+										: saved.isPending || recent.isSearching
+											? "Loading repositories…"
+											: "No repositories found."}
+								</CommandEmpty>
+								<CommandList>
+									{(repository: PullRequestRepository) => (
+										<CommandItem
+											key={repositoryKey(repository)}
+											value={repository}
+											onClick={() => {
+												props.onRepositoriesChange([
+													...props.repositories,
+													repository,
+												]);
+												setPickingRepository(false);
+											}}
+										>
+											<span className="text-muted-foreground">
+												{repository.owner}
+											</span>
+											<span className="ml-2">{repository.repo}</span>
+										</CommandItem>
+									)}
+								</CommandList>
+								{repositoryErrorMessage !== null && repositories.length > 0 && (
+									<p className="px-4 pb-2 text-destructive-foreground text-xs">
+										{repositoryErrorMessage}
+									</p>
 								)}
-							</CommandList>
-						</Command>
-					)}
-				</CommandPanel>
-				<CommandFooter>
-					<span className="flex items-center gap-1.5">
-						<Kbd>{pickingRepository ? "Esc" : "↵"}</Kbd>{" "}
-						{pickingRepository ? "Cancel" : "Open"}
-					</span>
-					{!pickingRepository && footerMessage !== null && (
-						<span className="text-destructive-foreground">{footerMessage}</span>
-					)}
-					<span className="ml-auto flex items-center gap-1.5">
-						<Kbd>⌘P</Kbd> Filter Project
-					</span>
-				</CommandFooter>
-			</CommandDialogPopup>
-		</CommandDialog>
+							</Command>
+						) : (
+							<Command
+								key="pull-requests"
+								filter={null}
+								items={results}
+								onValueChange={setQuery}
+								value={query}
+							>
+								<CommandInput
+									ref={inputRef}
+									placeholder="Open pull requests…"
+									startContent={
+										props.repositories.length > 0 ? (
+											<div className="flex shrink-0 items-center gap-1">
+												{/* ComboboxChip requires a Combobox root; mirror its styling inside this Autocomplete instead. */}
+												{props.repositories.map((repository) => (
+													<span
+														key={repositoryKey(repository)}
+														className="group flex items-center rounded-[calc(var(--radius-md)-1px)] bg-accent px-2 py-1 font-medium text-accent-foreground text-xs"
+													>
+														<span className="text-muted-foreground">
+															{repository.owner}
+														</span>
+														<span className="ms-1">{repository.repo}</span>
+														<button
+															type="button"
+															aria-label={`Remove ${repositoryKey(repository)} filter`}
+															className="w-0 shrink-0 cursor-pointer overflow-hidden opacity-0 outline-none group-hover:ms-1 group-hover:w-3.5 group-hover:opacity-80 group-focus-within:ms-1 group-focus-within:w-3.5 group-focus-within:opacity-80 hover:opacity-100 focus-visible:opacity-100"
+															onClick={() => {
+																props.onRepositoriesChange(
+																	props.repositories.filter(
+																		(candidate) =>
+																			repositoryKey(candidate) !==
+																			repositoryKey(repository),
+																	),
+																);
+																inputRef.current?.focus();
+															}}
+														>
+															<XIcon className="size-3.5" />
+														</button>
+													</span>
+												))}
+											</div>
+										) : undefined
+									}
+									onKeyDown={(event) => {
+										if (
+											event.key === "Backspace" &&
+											query === "" &&
+											props.repositories.length > 0
+										) {
+											event.preventDefault();
+											props.onRepositoriesChange(
+												props.repositories.slice(0, -1),
+											);
+										}
+									}}
+								/>
+								<Separator />
+								<CommandEmpty>
+									{searchErrorMessage ?? "No pull requests found."}
+								</CommandEmpty>
+								<CommandList>
+									{(pr: PullRequestSearchResult) => (
+										<CommandItem
+											key={`${pr.owner}/${pr.repo}#${pr.number}`}
+											onClick={() => handleSelect(pr)}
+											value={pr}
+										>
+											<PullRequestRow
+												isOpening={
+													openPr.isPending &&
+													openPr.pendingParams?.owner === pr.owner &&
+													openPr.pendingParams?.repo === pr.repo &&
+													openPr.pendingParams?.number === pr.number
+												}
+												pr={pr}
+											/>
+										</CommandItem>
+									)}
+								</CommandList>
+							</Command>
+						)}
+					</CommandPanel>
+					<CommandFooter>
+						<span className="flex items-center gap-1.5">
+							<Kbd>{pickingRepository ? "Esc" : "↵"}</Kbd>{" "}
+							{pickingRepository ? "Cancel" : "Open"}
+						</span>
+						{!pickingRepository && footerMessage !== null && (
+							<span className="text-destructive-foreground">
+								{footerMessage}
+							</span>
+						)}
+						<span className="ml-auto flex items-center gap-1.5">
+							<Kbd>⌘P</Kbd> Filter Project
+						</span>
+					</CommandFooter>
+				</CommandDialogPopup>
+			</CommandDialog>
+			<OriginMovedDialog prompt={openPr.originMoved} />
+		</>
 	);
 
 	function handleSelect(pr: PullRequestSearchResult) {
