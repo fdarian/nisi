@@ -1,4 +1,7 @@
-import type { RepositoryDetail, RepositorySession } from "@repo/sidecar-api";
+import type {
+	RepositoryDetail,
+	RepositorySessionStateBatch,
+} from "@repo/sidecar-api";
 import { Link } from "@tanstack/react-router";
 import { cn } from "cn";
 import {
@@ -29,14 +32,18 @@ import {
 	useChangeRepositoryPath,
 	useHomeDir,
 	useRepository,
+	useRepositorySessionStates,
 } from "./repositories-data";
 import { EmptyState, ErrorState } from "./repositories-status";
 import {
+	countPending,
 	filterSessions,
 	formatRemote,
+	mergeSessionStates,
 	problemLabel,
 	relativeTime,
 	SESSION_TABS,
+	type SessionRow,
 	type SessionTab,
 	splitVisibleSessions,
 	tildePath,
@@ -63,6 +70,13 @@ function RepositoryDetailContent(props: {
 	repo: string;
 }): React.ReactElement {
 	const query = useRepository(props.orpc, props.owner, props.repo);
+	const states = useRepositorySessionStates(
+		props.orpc,
+		props.owner,
+		props.repo,
+		query.isSuccess &&
+			query.data.sessions.some((session) => session.state.kind === "pending"),
+	);
 	return (
 		<div className="mx-auto flex w-full max-w-2xl flex-col gap-5 overflow-y-auto px-8 py-12">
 			<header className="flex flex-col items-start gap-1.5">
@@ -94,7 +108,13 @@ function RepositoryDetailContent(props: {
 			) : (
 				<>
 					<LocationSection orpc={props.orpc} repository={query.data} />
-					<SessionsSection repository={query.data} />
+					<SessionsSection
+						batches={states.data ?? []}
+						repository={query.data}
+						streamFailure={
+							states.isError ? friendlyRepositoryError(states.error) : null
+						}
+					/>
 				</>
 			)}
 		</div>
@@ -202,6 +222,8 @@ function LocationSection(props: {
 
 function SessionsSection(props: {
 	repository: RepositoryDetail;
+	batches: readonly RepositorySessionStateBatch[];
+	streamFailure: string | null;
 }): React.ReactElement {
 	const tabState = useState<SessionTab>("all");
 	const tab = tabState[0];
@@ -213,7 +235,13 @@ function SessionsSection(props: {
 	const expanded = expandedState[0];
 	const setExpanded = expandedState[1];
 	const repository = props.repository;
-	const matching = filterSessions(repository.sessions, tab, search);
+	const rows = mergeSessionStates(
+		repository.sessions,
+		props.batches,
+		props.streamFailure,
+	);
+	const matching = filterSessions(rows, tab, search);
+	const pendingCount = countPending(rows);
 	const visible = splitVisibleSessions(matching, expanded);
 	const now = Date.now();
 
@@ -231,16 +259,22 @@ function SessionsSection(props: {
 					description={
 						repository.sessions.length === 0
 							? "Pull requests you open from this repository show up here."
-							: "No sessions match this filter."
+							: pendingCount > 0 && tab !== "all"
+								? `Still checking the state of ${pendingCount} pull ${pendingCount === 1 ? "request" : "requests"}.`
+								: "No sessions match this filter."
 					}
 					title={
-						repository.sessions.length === 0 ? "No sessions yet" : "No matches"
+						repository.sessions.length === 0
+							? "No sessions yet"
+							: pendingCount > 0 && tab !== "all"
+								? "No matches yet"
+								: "No matches"
 					}
 				/>
 			) : (
 				<SessionsCard>
 					{visible.shown.map((session) => (
-						<SessionRow
+						<SessionRowButton
 							key={session.id}
 							now={now}
 							onOpen={() =>
@@ -393,7 +427,7 @@ function RepositoryDetailSkeleton(): React.ReactElement {
 							key={index}
 						>
 							<SessionRowCells
-								icon={<Skeleton className="size-3.5 shrink-0 rounded-full" />}
+								icon={<StateIconPlaceholder />}
 								number={<Skeleton className="h-3.5 w-8" />}
 								time={<Skeleton className="h-3 w-6" />}
 								title={<Skeleton className={cn("h-3.5", width)} />}
@@ -406,8 +440,8 @@ function RepositoryDetailSkeleton(): React.ReactElement {
 	);
 }
 
-function SessionRow(props: {
-	session: RepositorySession;
+function SessionRowButton(props: {
+	session: SessionRow;
 	now: number;
 	onOpen: () => void;
 }): React.ReactElement {
@@ -431,10 +465,16 @@ function SessionRow(props: {
 	);
 }
 
-function StateIcon(props: {
-	state: RepositorySession["state"];
-}): React.ReactElement {
-	const className = "size-3.5 shrink-0";
+/** The state icon's box, shared with its placeholder so a row doesn't shift when the state arrives. */
+const STATE_ICON = "size-3.5 shrink-0";
+
+function StateIconPlaceholder(): React.ReactElement {
+	return <Skeleton className={cn(STATE_ICON, "rounded-full")} />;
+}
+
+function StateIcon(props: { state: SessionRow["state"] }): React.ReactElement {
+	const className = STATE_ICON;
+	if (props.state.kind === "pending") return <StateIconPlaceholder />;
 	if (props.state.kind === "unresolved")
 		return (
 			<Tooltip>

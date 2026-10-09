@@ -1,6 +1,9 @@
 import type {
 	RepositoryProblem,
 	RepositorySession,
+	RepositorySessionListedState,
+	RepositorySessionResolution,
+	RepositorySessionStateBatch,
 	RepositorySummary,
 } from "@repo/sidecar-api";
 
@@ -73,11 +76,51 @@ export function filterRepositories(
 	);
 }
 
-export function filterSessions(
+/** A listed session's state once the stream has had its say: what `get` knew, what `sessionStates` found, or why it couldn't. */
+export type SessionRowState =
+	| RepositorySessionListedState
+	| Extract<RepositorySessionResolution, { kind: "unresolved" }>;
+
+export type SessionRow = Omit<RepositorySession, "state"> & {
+	readonly state: SessionRowState;
+};
+
+/**
+ * Fills each `pending` session in from the `sessionStates` events received so
+ * far; a later event for the same PR wins, and every session of that PR gets
+ * it. A session `get` already resolved is never overridden. `streamFailure`
+ * is why the stream stopped early, if it did: whatever is still pending then
+ * will never resolve, so it is reported as unresolved rather than left
+ * looking like it is loading.
+ */
+export function mergeSessionStates(
 	sessions: readonly RepositorySession[],
+	batches: readonly RepositorySessionStateBatch[],
+	streamFailure: string | null,
+): readonly SessionRow[] {
+	const streamed = new Map<number, RepositorySessionResolution>();
+	for (const batch of batches)
+		for (const update of batch) streamed.set(update.prNumber, update.state);
+	return sessions.map((session): SessionRow => {
+		if (session.state.kind !== "pending")
+			return { ...session, state: session.state };
+		const found = streamed.get(session.prNumber);
+		if (found !== undefined) return { ...session, state: found };
+		return streamFailure === null
+			? { ...session, state: session.state }
+			: { ...session, state: { kind: "unresolved", reason: streamFailure } };
+	});
+}
+
+export function countPending(sessions: readonly SessionRow[]): number {
+	return sessions.filter((session) => session.state.kind === "pending").length;
+}
+
+export function filterSessions(
+	sessions: readonly SessionRow[],
 	tab: SessionTab,
 	query: string,
-): readonly RepositorySession[] {
+): readonly SessionRow[] {
 	const needle = query.trim().toLowerCase().replace(/^#/, "");
 	return sessions.filter(
 		(session) =>
@@ -90,9 +133,9 @@ export function filterSessions(
 }
 
 export function splitVisibleSessions(
-	sessions: readonly RepositorySession[],
+	sessions: readonly SessionRow[],
 	expanded: boolean,
-): { shown: readonly RepositorySession[]; hiddenCount: number } {
+): { shown: readonly SessionRow[]; hiddenCount: number } {
 	if (expanded || sessions.length <= INITIAL_SESSION_COUNT)
 		return { shown: sessions, hiddenCount: 0 };
 	return {

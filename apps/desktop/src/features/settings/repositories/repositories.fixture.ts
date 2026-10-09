@@ -1,6 +1,7 @@
 import type {
 	RepositoryDetail,
 	RepositorySession,
+	RepositorySessionStateBatch,
 	RepositorySummary,
 } from "@repo/sidecar-api";
 import { STORY_HOME_DIR } from "./repositories-story-harness";
@@ -155,4 +156,27 @@ export function nisiDetail(
 		sessions: makeSessions(50, Date.now()),
 		...overrides,
 	};
+}
+
+/**
+ * `get`'s answer when every `every`-th session (from `offset`) is still
+ * pending, plus what `sessionStates` will later report for exactly those —
+ * each PR's real state from `sessions`, one resolution per PR number.
+ */
+export function withPendingStates(
+	sessions: readonly RepositorySession[],
+	every: number,
+	offset = 1,
+): {
+	sessions: readonly RepositorySession[];
+	resolutions: RepositorySessionStateBatch;
+} {
+	const resolutions: RepositorySessionStateBatch[number][] = [];
+	const listed = sessions.map((session, index) => {
+		if (index % every !== offset || session.state.kind !== "resolved")
+			return session;
+		resolutions.push({ prNumber: session.prNumber, state: session.state });
+		return { ...session, state: { kind: "pending" as const } };
+	});
+	return { sessions: listed, resolutions };
 }
