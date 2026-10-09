@@ -50,7 +50,10 @@ the wire shape this grammar maps to.
   to LaunchServices. Used only for a genuine cold start (`handoff.ts`'s `unreachable` case, no
   sidecar answered at all) — it always prefers a real `/Applications` install over a local build, so
   it's not a reliable way to focus one specific already-running instance among several (see
-  `handoff.ts`).
+  `handoff.ts`). With `NISI_DATA_DIR` set it refuses to launch (`dataDirLaunchRefusal`) unless the
+  caller also set `NISI_APP_PATH` or `NISI_MEASUREMENT_INSTANCE=1`: nothing answering at an explicit
+  data dir means a dev sandbox is down, and `open -n --env` on the installed bundle would boot a
+  second production-identity instance onto its data.
 
 ## Gotchas
 

@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { appLaunchArguments } from "./app-launch.ts";
+import { appLaunchArguments, dataDirLaunchRefusal } from "./app-launch.ts";
 
 test("production activation is unchanged without a data-dir override", () => {
 	expect(appLaunchArguments("/Applications/nisi.app")).toEqual([
@@ -37,4 +37,15 @@ test("measurement launch forwards only the dedicated mock-keychain opt-in", () =
 		"-a",
 		"/checkout/nisi.app",
 	]);
+});
+
+test("an unanswered explicit data dir refuses to launch the installed app", () => {
+	const reason = dataDirLaunchRefusal("/work tree/data", false);
+	expect(reason).toContain("/work tree/data");
+	expect(reason).toContain("bun dev");
+});
+
+test("no data-dir override, or an explicit launch request, never refuses", () => {
+	expect(dataDirLaunchRefusal(undefined, false)).toBeUndefined();
+	expect(dataDirLaunchRefusal("/data", true)).toBeUndefined();
 });

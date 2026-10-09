@@ -24,9 +24,30 @@ const repoRoot = () =>
  * an eventual real install always wins. `NISI_APP_PATH` overrides both, for
  * tests and ad-hoc use.
  */
-const candidateAppPaths = (): ReadonlyArray<string> => {
+const appPathOverride = (): string | undefined => {
 	const override = process.env.NISI_APP_PATH;
-	if (override !== undefined && override.length > 0) {
+	return override !== undefined && override.length > 0 ? override : undefined;
+};
+
+/**
+ * An explicit `NISI_DATA_DIR` with nothing answering there means "the sandbox
+ * I pointed at isn't up", not "start an app" — `open -n --env NISI_DATA_DIR`
+ * on the installed production bundle would boot a second production-identity
+ * instance onto a dev sandbox's data. Callers that really mean to cold-start
+ * against a custom data dir (the launch-measurement script) already say so
+ * with `NISI_APP_PATH` or `NISI_MEASUREMENT_INSTANCE`.
+ */
+export const dataDirLaunchRefusal = (
+	dataDir: string | undefined,
+	launchRequested: boolean,
+): string | undefined =>
+	dataDir === undefined || launchRequested
+		? undefined
+		: `NISI_DATA_DIR is set to ${dataDir} but no sidecar answers there, so not launching /Applications/nisi.app against it. If this is a dev sandbox, "bun dev" is down or its sidecar.json went missing (restart it); to cold-start an app against this dir anyway, set NISI_APP_PATH.`;
+
+const candidateAppPaths = (): ReadonlyArray<string> => {
+	const override = appPathOverride();
+	if (override !== undefined) {
 		return [override];
 	}
 	return [
@@ -67,13 +88,21 @@ const resolveAppPath = Effect.gen(function* () {
  * than activating another bundle with the same production identifier.
  */
 export const launchApp = Effect.gen(function* () {
-	const appPath = yield* resolveAppPath;
 	const dataDir = Option.getOrUndefined(
 		yield* Config.string("NISI_DATA_DIR").pipe(Config.option, Effect.orDie),
 	);
 	const measurementInstance = yield* Config.string(
 		"NISI_MEASUREMENT_INSTANCE",
 	).pipe(Config.option, Effect.orDie);
+	const refusal = dataDirLaunchRefusal(
+		dataDir,
+		appPathOverride() !== undefined ||
+			Option.getOrUndefined(measurementInstance) === "1",
+	);
+	if (refusal !== undefined) {
+		return yield* new AppLaunchError({ reason: refusal });
+	}
+	const appPath = yield* resolveAppPath;
 	const args = appLaunchArguments(
 		appPath,
 		dataDir,

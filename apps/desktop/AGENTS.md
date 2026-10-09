@@ -133,6 +133,12 @@ you set it yourself: devsess sets `NISI_DATA_DIR` only for the subprocesses `dev
 you happen to have open. There's no direnv-style magic where opening a terminal "inside" a session
 picks it up automatically.
 
+If nothing answers at that `NISI_DATA_DIR` (the dev sandbox is down, or its `sidecar.json` is gone),
+`nisi` fails with an error naming the dir instead of cold-starting `/Applications/nisi.app` against
+it; setting `NISI_APP_PATH` (or `NISI_MEASUREMENT_INSTANCE=1`) opts back into that launch. A running
+sidecar also re-publishes its own `sidecar.json` within ~5s if something deletes it
+(`sidecar/index.ts`'s `keepHandshakePublished`).
+
 Going the other way — a dev sidecar against the *real* app-data dir instead of a session's —
 is `bun dev --prod-data-dir`. Safe to run even while the packaged app is open: it resolves the
 same `NISI_DATA_DIR` default prod does, and `deskkit/sidecar`'s `acquireSidecar` health-checks
