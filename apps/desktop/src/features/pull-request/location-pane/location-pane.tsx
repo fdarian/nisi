@@ -32,6 +32,10 @@ import {
 	useDiffTheme,
 } from "#/features/diff/diff-view-theme";
 import {
+	type RangeReviewStatus,
+	rangeReviewStatus,
+} from "#/features/diff/review-coverage";
+import {
 	buildLocationFileDiff,
 	type LineRange,
 } from "#/features/diff/viewer/build-location-diff";
@@ -40,10 +44,7 @@ import {
 	DiffCodeView,
 } from "#/features/diff/viewer/diff-code-view";
 import { hashItemVersion } from "#/features/diff/viewer/item-version";
-import type {
-	FileChange,
-	FileContentReview,
-} from "#/features/pull-request/data/pr-data";
+import type { FileChange } from "#/features/pull-request/data/pr-data";
 import {
 	useFileContents,
 	useSetRangeViewed,
@@ -68,40 +69,6 @@ type ReferenceAnnotationMetadata = {
 	message: string;
 	action?: { label: string; onClick: () => void };
 };
-
-/** How much of one path's target ranges (within the selected block) are currently reviewed — drives the per-file checkbox's checked/indeterminate state. */
-type GroupReviewStatus = "reviewed" | "partial" | "unreviewed";
-
-/**
- * How much of `targetRanges` is reviewed, counted over the lines the diff
- * actually has: `review.ranges` partitions the changed lines of `base → head`
- * into disjoint `"reviewed"`/`"new"` runs, so a target's unchanged lines (the
- * context a Ref's range tends to include) belong to no run and count toward
- * neither side. Counting them as unreviewed would leave a fully ticked range
- * "partial" for good. Interval overlap, not a line-by-line walk, since a
- * location can span hundreds of lines.
- */
-function computeGroupReviewStatus(
-	targetRanges: readonly LineRange[],
-	review: FileContentReview | null | undefined,
-): GroupReviewStatus {
-	if (review == null) return "unreviewed";
-	let changedLines = 0;
-	let reviewedLines = 0;
-	for (const target of targetRanges) {
-		for (const range of review.ranges) {
-			const overlapStart = Math.max(target.startLine, range.startLine);
-			const overlapEnd = Math.min(target.endLine, range.endLine);
-			if (overlapStart > overlapEnd) continue;
-			const lines = overlapEnd - overlapStart + 1;
-			changedLines += lines;
-			if (range.status === "reviewed") reviewedLines += lines;
-		}
-	}
-	if (reviewedLines <= 0) return "unreviewed";
-	if (reviewedLines >= changedLines) return "reviewed";
-	return "partial";
-}
 
 /** One `CodeViewItem` per path in the selected block, keyed by the id it renders under — `renderCustomHeader`/`renderAnnotation` only get the item back, not the group it came from, so this is the one lookup table both need. */
 type LocationGroup = { path: string; ranges: LineRange[] };
@@ -195,7 +162,7 @@ export function LocationPane({
 
 	const { items, statusByItemId } = useMemo(() => {
 		const nextItems: Array<CodeViewItem<ReferenceAnnotationMetadata>> = [];
-		const nextStatus = new Map<string, GroupReviewStatus>();
+		const nextStatus = new Map<string, RangeReviewStatus>();
 
 		for (const [itemId, group] of itemGroups) {
 			const file = filesByPath.get(group.path);
@@ -222,7 +189,7 @@ export function LocationPane({
 			const content = entry?.content;
 			if (content === undefined) continue; // still loading — appears once resolved
 
-			const status = computeGroupReviewStatus(group.ranges, content.review);
+			const status = rangeReviewStatus(group.ranges, content.review);
 			nextStatus.set(itemId, status);
 			const collapsed = collapseOverrides.get(itemId) ?? status === "reviewed";
 
@@ -447,7 +414,7 @@ function ReferenceLocationHeader({
 	path: string;
 	ranges: readonly LineRange[];
 	outdated: boolean;
-	status: GroupReviewStatus | undefined;
+	status: RangeReviewStatus | undefined;
 	onToggleCollapse: () => void;
 	onToggleReviewed: (() => void) | undefined;
 }): React.ReactElement {

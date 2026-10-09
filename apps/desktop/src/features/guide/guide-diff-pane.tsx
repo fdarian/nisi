@@ -73,7 +73,7 @@ export function GuideDiffPane(props: {
 
 	const ignoreFirstCardPainted = useCallback(() => {}, []);
 	return (
-		<div className={cn(filesMainClassName, "h-full")}>
+		<div className={cn(filesMainClassName, "h-full border-l")}>
 			<FilesViewedToolbar
 				counts={{ total: paneFiles.length, viewed: data.viewedCount }}
 				onClose={props.onClose}
