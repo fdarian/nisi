@@ -33,6 +33,8 @@ Three parts, one seam:
   `/settings/repositories` (`src/features/settings/repositories/`) lists known repositories and, per repo, its
   sessions; a session row doesn't open a tab itself but enqueues a `nisi://open` deep link
   (`enqueuePullRequestOpen`), which `useRedirectHomeOnPendingDeepLink` turns into a trip back to `/`.
+  The detail page renders from `repositories.get` at once; each row's state icon is a same-size skeleton until
+  `repositories.sessionStates` reports it (`mergeSessionStates` in `repositories-view.ts`).
   The diff pane (`src/features/pull-request/files/diff-pane/diff-pane.tsx`) renders with `@pierre/diffs`, same shadow-DOM/Worker-pool
   shape as the `@pierre/trees` sidebar — it renders `diff.fileContents`' `patch`/`oldContent` directly,
   no client-side slicing; a reviewed file's already-seen spans arrive pre-collapsed into ordinary
