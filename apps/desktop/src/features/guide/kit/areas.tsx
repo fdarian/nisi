@@ -9,14 +9,14 @@ import {
 	useLayoutEffect,
 	useState,
 } from "react";
+import { splitPath } from "#/lib/tree-paths";
 import {
 	type ClaimedFile,
 	filesInArea,
 	hunkRange,
 	shortestUniqueSuffixes,
 } from "../areas";
-import { splitPath } from "#/lib/tree-paths";
-import { useGuideContext } from "../guide-context";
+import { AreaScopeProvider, useGuideContext } from "../guide-context";
 import { colorForArea } from "./area-colors";
 import { DiffStat } from "./diff-stat";
 import { FileRow } from "./file-row";
@@ -97,6 +97,7 @@ export function Area(props: AreaProps): React.ReactElement {
 	const visibleCount =
 		showAll || guide.expanded === true ? rows.length : FILE_LIST_LIMIT;
 	const hiddenCount = Math.max(0, rows.length - visibleCount);
+	const scope = stats.claimed.map((claim) => claim.file.path);
 	return (
 		// biome-ignore lint/a11y/noStaticElementInteractions: hover only dims other areas' Sequence steps; the card has no action of its own
 		<section
@@ -134,29 +135,31 @@ export function Area(props: AreaProps): React.ReactElement {
 					/>
 				</button>
 			</div>
-			<div className="mt-2 flex flex-col gap-1.5 text-foreground/80">
-				{props.children}
-			</div>
-			{open && (
-				<ul className="m-0 mt-2.5 flex list-none flex-col gap-px border-t p-0 pt-2">
-					{rows.slice(0, visibleCount).map((row) => (
-						<li key={`${row.path}:${row.lines ?? ""}`}>
-							<FileRow {...row} />
-						</li>
-					))}
-					{hiddenCount > 0 && (
-						<li>
-							<button
-								className="cursor-pointer rounded px-1.5 py-0.5 text-muted-foreground text-xs hover:bg-accent"
-								onClick={() => setShowAll(true)}
-								type="button"
-							>
-								+{hiddenCount} more
-							</button>
-						</li>
-					)}
-				</ul>
-			)}
+			<AreaScopeProvider value={scope}>
+				<div className="mt-2 flex flex-col gap-1.5 text-foreground/80">
+					{props.children}
+				</div>
+				{open && (
+					<ul className="m-0 mt-2.5 flex list-none flex-col gap-px border-t p-0 pt-2">
+						{rows.slice(0, visibleCount).map((row) => (
+							<li key={`${row.path}:${row.lines ?? ""}`}>
+								<FileRow {...row} />
+							</li>
+						))}
+						{hiddenCount > 0 && (
+							<li>
+								<button
+									className="cursor-pointer rounded px-1.5 py-0.5 text-muted-foreground text-xs hover:bg-accent"
+									onClick={() => setShowAll(true)}
+									type="button"
+								>
+									+{hiddenCount} more
+								</button>
+							</li>
+						)}
+					</ul>
+				)}
+			</AreaScopeProvider>
 		</section>
 	);
 }

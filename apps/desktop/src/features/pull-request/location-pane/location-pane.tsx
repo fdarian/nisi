@@ -1,11 +1,9 @@
 "use client";
 
 /**
- * A block's locations rendered as code ranges — not files. Shared by the
- * walkthrough's reference pane (`../walkthrough/reference-pane.tsx`) and the
- * Guide tab's side pane (`#/features/guide/reference-side-pane.tsx`); neither
- * knows about the other, so this takes the minimal `LocationBlock` shape and
- * nothing walkthrough-specific.
+ * A block's locations rendered as code ranges — not files. The walkthrough's
+ * reference pane (`../walkthrough/reference-pane.tsx`) renders through this,
+ * taking the minimal `LocationBlock` shape.
  *
  * A block can claim ranges across several files, so this
  * groups `block.locations` by path and, per path, synthesizes a unified diff
@@ -48,7 +46,6 @@ import type {
 } from "#/features/pull-request/data/pr-data";
 import {
 	useFileContents,
-	useSetFileViewed,
 	useSetRangeViewed,
 } from "#/features/pull-request/data/pr-data";
 import { useSessionOpenFiles } from "#/features/pull-request/data/session-ui-store";
@@ -65,17 +62,7 @@ export type LocationBlock = {
 	}>;
 };
 
-/** A location that wants the whole file's diff rather than a slice of it (a `Ref` with no `lines`). */
-export const WHOLE_FILE: LineRange = {
-	startLine: 1,
-	endLine: Number.POSITIVE_INFINITY,
-};
-
-function isWholeFile(range: LineRange): boolean {
-	return range.endLine === WHOLE_FILE.endLine;
-}
-
-/** `action`, when present, renders as a button below the message — the out-of-diff case's "Open file" affordance (see `ReferencePane`'s `itemGroups` loop) is the only caller that supplies one today. */
+/** `action`, when present, renders as a button below the message — the out-of-diff case's "Open file" affordance is the only caller that supplies one. */
 type ReferenceAnnotationMetadata = {
 	type: "error" | "reviewed-empty";
 	message: string;
@@ -134,15 +121,6 @@ type LocationPaneProps = {
 	outdatedPaths: ReadonlySet<string>;
 	/** Shown while `block` is null. */
 	empty: React.ReactNode;
-	/** Start fully-reviewed locations collapsed (the walkthrough's reading flow); a pane the user opened by clicking a link should show its code. */
-	collapseReviewed: boolean;
-	/**
-	 * What to say when none of a path's ranges touch the diff. Omitted: the
-	 * walkthrough's wording, which blames a stale generation. Supplied: that
-	 * message plus an "Open file" button — the ranges point at real code that
-	 * simply wasn't changed.
-	 */
-	rangesOutsideDiff?: string;
 };
 
 export function LocationPane({
@@ -152,8 +130,6 @@ export function LocationPane({
 	block,
 	outdatedPaths,
 	empty,
-	collapseReviewed,
-	rangesOutsideDiff,
 }: LocationPaneProps): React.ReactElement {
 	const diffTheme = useDiffTheme(orpc);
 	// Like the diff pane's file overrides, either direction is sticky until the checkbox flips.
@@ -210,7 +186,6 @@ export function LocationPane({
 		"all",
 	);
 	const setRangeViewed = useSetRangeViewed(orpc, sessionId);
-	const setFileViewed = useSetFileViewed(orpc, sessionId);
 	// A reference block can point at a path outside the current diff entirely
 	// (renamed since generation, or just never touched by this PR) — `openFile`
 	// is that case's escape hatch: the file-viewer tab (`file-view.tsx`) reads
@@ -249,9 +224,7 @@ export function LocationPane({
 
 			const status = computeGroupReviewStatus(group.ranges, content.review);
 			nextStatus.set(itemId, status);
-			const collapsed =
-				collapseOverrides.get(itemId) ??
-				(collapseReviewed && status === "reviewed");
+			const collapsed = collapseOverrides.get(itemId) ?? status === "reviewed";
 
 			const synthesizedPatch = buildLocationFileDiff(
 				content.patch,
@@ -264,11 +237,8 @@ export function LocationPane({
 						: errorItem(
 								itemId,
 								group.path,
-								rangesOutsideDiff ??
-									"None of this block's line ranges are in the current diff — the file has likely changed since generation.",
-								rangesOutsideDiff === undefined
-									? undefined
-									: { label: "Open file", onClick: () => openFile(group.path) },
+								"None of this block's line ranges are in the current diff — the file has likely changed since generation.",
+								undefined,
 								collapsed,
 							),
 				);
@@ -292,15 +262,7 @@ export function LocationPane({
 		}
 
 		return { items: nextItems, statusByItemId: nextStatus };
-	}, [
-		itemGroups,
-		filesByPath,
-		fileContents,
-		openFile,
-		collapseOverrides,
-		collapseReviewed,
-		rangesOutsideDiff,
-	]);
+	}, [itemGroups, filesByPath, fileContents, openFile, collapseOverrides]);
 
 	const renderCustomHeader = useCallback(
 		(item: CodeViewItem<ReferenceAnnotationMetadata>) => {
@@ -317,22 +279,16 @@ export function LocationPane({
 					onToggleReviewed={
 						status === undefined
 							? undefined
-							: group.ranges.some(isWholeFile)
-								? // No finite range to record a claim for: the whole file's own Reviewed.
-									() => {
-										clearCollapseOverride(item.id);
-										setFileViewed(group.path, status !== "reviewed");
-									}
-								: () => {
-										clearCollapseOverride(item.id);
-										setRangeViewed({
-											path: group.path,
-											blockId: block.id,
-											blockLabel: block.label,
-											ranges: group.ranges,
-											viewed: status !== "reviewed",
-										});
-									}
+							: () => {
+									clearCollapseOverride(item.id);
+									setRangeViewed({
+										path: group.path,
+										blockId: block.id,
+										blockLabel: block.label,
+										ranges: group.ranges,
+										viewed: status !== "reviewed",
+									});
+								}
 					}
 					path={group.path}
 					ranges={group.ranges}
@@ -346,7 +302,6 @@ export function LocationPane({
 			statusByItemId,
 			block,
 			setRangeViewed,
-			setFileViewed,
 			setCollapseOverride,
 			clearCollapseOverride,
 		],
@@ -529,7 +484,6 @@ function ReferenceLocationHeader({
 			</span>
 			<span className="shrink-0 font-mono text-[0.6875rem] text-muted-foreground tabular-nums">
 				{ranges
-					.filter((range) => !isWholeFile(range))
 					.map((range) =>
 						range.startLine === range.endLine
 							? `L${range.startLine}`

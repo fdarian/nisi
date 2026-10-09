@@ -203,6 +203,8 @@ export type DiffPaneHandle = {
 	scrollToPath: (path: string) => void;
 	/** Scrolls to one keyword-search match's own rendered row (`match.side`/`match.rowLine`, not `match.headLine` — see `DiffMatch`'s doc comment for why those can differ). Purely a viewport concern; the *highlight* on this match is driven declaratively by the `currentMatch` prop instead, so navigating and highlighting stay decoupled. */
 	scrollToMatch: (match: DiffMatch) => void;
+	/** Scrolls to a head-file (additions side) line of `path`, centered. For callers that cite a line rather than a search hit. */
+	scrollToLine: (path: string, line: number) => void;
 };
 
 type DiffPaneProps = {
@@ -1275,10 +1277,30 @@ export function DiffPane({
 		[scrollWhenReady],
 	);
 
-	useImperativeHandle(ref, () => ({ scrollToPath, scrollToMatch }), [
-		scrollToPath,
-		scrollToMatch,
-	]);
+	const pendingLineScrollFrame = useRef<number | null>(null);
+	const scrollToLine = useCallback(
+		(path: string, line: number) => {
+			scrollWhenReady(
+				path,
+				{
+					type: "line",
+					id: path,
+					lineNumber: line,
+					side: "additions",
+					align: "center",
+					behavior: "smooth",
+				},
+				pendingLineScrollFrame,
+			);
+		},
+		[scrollWhenReady],
+	);
+
+	useImperativeHandle(
+		ref,
+		() => ({ scrollToPath, scrollToMatch, scrollToLine }),
+		[scrollToPath, scrollToMatch, scrollToLine],
+	);
 
 	useEffect(
 		() => () => {
@@ -1287,6 +1309,9 @@ export function DiffPane({
 			}
 			if (pendingMatchScrollFrame.current !== null) {
 				cancelAnimationFrame(pendingMatchScrollFrame.current);
+			}
+			if (pendingLineScrollFrame.current !== null) {
+				cancelAnimationFrame(pendingLineScrollFrame.current);
 			}
 			if (settleTimeoutRef.current !== null) {
 				clearTimeout(settleTimeoutRef.current);

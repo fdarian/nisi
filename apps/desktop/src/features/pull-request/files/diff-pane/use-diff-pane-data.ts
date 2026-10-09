@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import type { HeadRange } from "#/features/diff/selection/selection-head-range";
 import { demandedFileContentChunks } from "#/features/pull-request/data/file-content-demand";
 import type {
 	FileChange,
+	FileContent,
 	FileContentsMap,
 	ReviewStateEntry,
 } from "#/features/pull-request/data/pr-data";
@@ -42,7 +44,9 @@ export function useDiffPaneData(params: {
 	const files = params.files;
 	const reviewState = params.reviewState;
 	const hideReviewed = useHideReviewed(orpc)[0];
-	const optimisticBaselines = useOptimisticRangeBaselines(orpc, sessionId);
+
+	const rangeReview = useRangeReview(orpc, sessionId, files);
+	const optimisticBaselines = rangeReview.optimisticBaselines;
 
 	const viewedCount = useMemo(
 		() =>
@@ -124,14 +128,47 @@ export function useDiffPaneData(params: {
 		return [...filtered].sort((a, b) => comparePaths(a.path, b.path));
 	}, [files, reviewState, hideReviewed, optimisticBaselines, fileContents]);
 
+	const markRangeReviewed = rangeReview.markRangeReviewed;
+	const markSelectionReviewed = useCallback(
+		(path: string, range: HeadRange) =>
+			markRangeReviewed(path, range, fileContents.get(path)?.content),
+		[markRangeReviewed, fileContents],
+	);
+
+	return {
+		fileContents,
+		forcedPaths,
+		addForcedPath,
+		optimisticBaselines: rangeReview.optimisticBaselines,
+		visibleFiles,
+		viewedCount,
+		handleRenderedPathsChange,
+		markSelectionReviewed,
+		setRangeViewed: rangeReview.setRangeViewed,
+		undoStack: rangeReview.undoStack,
+	};
+}
+
+/**
+ * Ticking a line range Reviewed, as a selection claim: the one path both
+ * Files Changed's selection popover and the Guide's hunk rows go through, so
+ * the optimistic baseline and the undo record are built the same way. `content`
+ * is the file's loaded contents; without them the tick still lands, just
+ * without the optimistic baseline.
+ */
+export function useRangeReview(
+	orpc: SidecarQueryUtils,
+	sessionId: string,
+	files: readonly FileChange[],
+) {
+	const optimisticBaselines = useOptimisticRangeBaselines(orpc, sessionId);
 	// Lives in the per-session store, not here: it's not reactive (nothing
 	// renders off it), just addressable by session id so it survives the
-	// owning component unmounting on tab suspend, and both panes feed one stack.
+	// owning component unmounting on tab suspend, and every pane feeds one stack.
 	const undoStack = useSessionUndoStack(sessionId);
 	const setRangeViewed = useSetRangeViewed(orpc, sessionId);
-	const markSelectionReviewed = useCallback(
-		(path: string, range: { startLine: number; endLine: number }) => {
-			const content = fileContents.get(path)?.content;
+	const markRangeReviewed = useCallback(
+		(path: string, range: HeadRange, content: FileContent | undefined) => {
 			const baselineBefore =
 				optimisticBaselines.get(path) ??
 				content?.oldContent ??
@@ -165,19 +202,7 @@ export function useDiffPaneData(params: {
 				baseline,
 			);
 		},
-		[setRangeViewed, undoStack, fileContents, optimisticBaselines, files],
+		[setRangeViewed, undoStack, optimisticBaselines, files],
 	);
-
-	return {
-		fileContents,
-		forcedPaths,
-		addForcedPath,
-		optimisticBaselines,
-		visibleFiles,
-		viewedCount,
-		handleRenderedPathsChange,
-		markSelectionReviewed,
-		setRangeViewed,
-		undoStack,
-	};
+	return { optimisticBaselines, setRangeViewed, undoStack, markRangeReviewed };
 }

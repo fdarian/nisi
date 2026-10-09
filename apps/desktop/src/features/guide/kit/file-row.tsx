@@ -2,7 +2,7 @@
 
 import { cn } from "cn";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "#/components/ui/tooltip";
-import { useGuideContext } from "../guide-context";
+import { useAreaScope, useGuideContext } from "../guide-context";
 import { sameRef } from "../refs";
 import { DiffStat } from "./diff-stat";
 
@@ -19,6 +19,7 @@ export function FileRow(props: {
 	deletions: number;
 }): React.ReactElement {
 	const guide = useGuideContext();
+	const scope = useAreaScope();
 	const selected = sameRef(guide.selectedRef, {
 		path: props.path,
 		lines: props.lines,
@@ -33,7 +34,7 @@ export function FileRow(props: {
 							selected && "bg-sky-500/10",
 						)}
 						onClick={() =>
-							guide.selectRef({ path: props.path, lines: props.lines })
+							guide.selectRef({ path: props.path, lines: props.lines }, scope)
 						}
 						type="button"
 					>

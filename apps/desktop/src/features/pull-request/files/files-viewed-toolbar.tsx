@@ -3,6 +3,7 @@ import {
 	RefreshCwIcon,
 	RowsIcon,
 	SlidersHorizontalIcon,
+	XIcon,
 } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
 import { Button, buttonVariants } from "#/components/ui/button";
@@ -33,6 +34,10 @@ export function FilesViewedToolbar(props: {
 	counts?: Counts;
 	hasPendingChanges?: boolean;
 	onRefresh?: () => void;
+	/** Adds a close button at the right end — set where the bar sits over a dismissible pane (the Guide's) rather than the Files Changed tab. */
+	onClose?: () => void;
+	/** The Tree/Flat radio configures the files sidebar, which a pane without one has no use for. Defaults on. */
+	showSidebarOptions?: boolean;
 }): React.ReactElement {
 	const diffStyle = useDiffStyleMode(props.orpc);
 	const viewMode = useSidebarViewMode(props.orpc);
@@ -83,20 +88,25 @@ export function FilesViewedToolbar(props: {
 						<SlidersHorizontalIcon />
 					</DropdownMenuTrigger>
 					<DropdownMenuContent align="end">
-						<DropdownMenuRadioGroup
-							value={viewMode[0]}
-							onValueChange={(value) => {
-								if (value === "tree" || value === "flat") viewMode[1](value);
-							}}
-						>
-							<DropdownMenuRadioItem closeOnClick value="tree">
-								Tree
-							</DropdownMenuRadioItem>
-							<DropdownMenuRadioItem closeOnClick value="flat">
-								Flat
-							</DropdownMenuRadioItem>
-						</DropdownMenuRadioGroup>
-						<DropdownMenuSeparator />
+						{props.showSidebarOptions !== false && (
+							<>
+								<DropdownMenuRadioGroup
+									value={viewMode[0]}
+									onValueChange={(value) => {
+										if (value === "tree" || value === "flat")
+											viewMode[1](value);
+									}}
+								>
+									<DropdownMenuRadioItem closeOnClick value="tree">
+										Tree
+									</DropdownMenuRadioItem>
+									<DropdownMenuRadioItem closeOnClick value="flat">
+										Flat
+									</DropdownMenuRadioItem>
+								</DropdownMenuRadioGroup>
+								<DropdownMenuSeparator />
+							</>
+						)}
 						<DropdownMenuCheckboxItem
 							checked={hideReviewed[0]}
 							onCheckedChange={hideReviewed[1]}
@@ -117,6 +127,16 @@ export function FilesViewedToolbar(props: {
 						</DropdownMenuCheckboxItem>
 					</DropdownMenuContent>
 				</DropdownMenu>
+				{props.onClose !== undefined && (
+					<Button
+						aria-label="Close diff pane"
+						onClick={props.onClose}
+						size="icon-sm"
+						variant="ghost"
+					>
+						<XIcon />
+					</Button>
+				)}
 			</div>
 		</div>
 	);

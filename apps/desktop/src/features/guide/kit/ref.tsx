@@ -5,7 +5,7 @@ import { TriangleAlertIcon } from "lucide-react";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "#/components/ui/tooltip";
 import { ProseCode } from "#/features/pull-request/prose-markdown";
 import { splitPath } from "#/lib/tree-paths";
-import { useGuideContext } from "../guide-context";
+import { useAreaScope, useGuideContext } from "../guide-context";
 import { parseLines, refFromCode, sameRef } from "../refs";
 
 /** Opens `path` (at `lines`, e.g. "12-30") in the Guide's side pane, next to the text that cites it. */
@@ -18,6 +18,7 @@ export function Ref(props: {
 	autolinked?: boolean;
 }): React.ReactElement {
 	const guide = useGuideContext();
+	const scope = useAreaScope();
 	if (props.lines !== undefined) parseLines(props.lines);
 	guide.collector?.refs.push({ path: props.path, lines: props.lines });
 	const inDiff = guide.changedPaths.has(props.path);
@@ -38,7 +39,7 @@ export function Ref(props: {
 							selected ? "bg-sky-500/25" : "bg-sky-500/10 hover:bg-sky-500/20",
 						)}
 						onClick={() =>
-							guide.selectRef({ path: props.path, lines: props.lines })
+							guide.selectRef({ path: props.path, lines: props.lines }, scope)
 						}
 						type="button"
 					>

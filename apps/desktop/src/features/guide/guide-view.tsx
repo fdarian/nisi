@@ -10,24 +10,38 @@ import {
 	useRef,
 	useState,
 } from "react";
+import { useDefaultLayout } from "react-resizable-panels";
 import {
 	Empty,
 	EmptyDescription,
 	EmptyHeader,
 	EmptyTitle,
 } from "#/components/ui/empty";
+import { ResizablePanel, ResizablePanelGroup } from "#/components/ui/resizable";
 import { Spinner } from "#/components/ui/spinner";
-import type { Session } from "#/features/pull-request/data/pr-data";
-import { useFileChanges } from "#/features/pull-request/data/pr-data";
+import type {
+	FileChange,
+	ReviewStateEntry,
+	Session,
+} from "#/features/pull-request/data/pr-data";
 import type { SidecarQueryUtils } from "#/infra/backend-context";
 import type { GuideFile } from "./areas";
 import { evaluateGuide } from "./evaluate";
 import { GUIDE_COMPONENTS } from "./guide-components";
 import { GuideProvider } from "./guide-context";
+import { GuideDiffPane } from "./guide-diff-pane";
+import { GuideResizeHandle } from "./guide-resize-handle";
+import type { GuideTarget } from "./guide-target";
 import { GuideToc } from "./guide-toc";
-import { ReferenceSidePane } from "./reference-side-pane";
 import type { GuideRef } from "./refs";
 import { useGuide } from "./use-guide";
+
+const SPLIT_STORAGE_ID = "nisi:guide-split";
+const CONTENT_PANEL = "content";
+const DIFF_PANEL = "diff";
+const CONTENT_MIN_WIDTH = "360px";
+const DIFF_MIN_WIDTH = "380px";
+const DIFF_DEFAULT_SIZE = "46%";
 
 /**
  * The Guide tab: `<repoRoot>/.nisi/guide/guide.mdx`, bundled by the sidecar and
@@ -38,8 +52,12 @@ export function GuideView(props: {
 	orpc: SidecarQueryUtils;
 	session: Session;
 	enabled: boolean;
+	files: readonly FileChange[];
+	reviewState: ReadonlyMap<string, ReviewStateEntry>;
+	setViewed: (path: string, viewed: boolean) => void;
+	onOpenFile: (path: string) => void;
 }): React.ReactElement {
-	const [selectedRef, setSelectedRef] = useState<GuideRef | null>(null);
+	const [target, setTarget] = useState<GuideTarget | null>(null);
 	const guide = useGuide(props.orpc, props.session.id, props.enabled);
 
 	if (guide.error != null) {
@@ -81,11 +99,15 @@ export function GuideView(props: {
 		<GuideBody
 			checks={result.checks}
 			code={result.code}
+			files={props.files}
 			headSha={result.headSha}
-			onSelectRef={setSelectedRef}
+			onOpenFile={props.onOpenFile}
+			onSelectTarget={setTarget}
 			orpc={props.orpc}
-			selectedRef={selectedRef}
+			reviewState={props.reviewState}
 			session={props.session}
+			setViewed={props.setViewed}
+			target={target}
 			version={result.version}
 		/>
 	);
@@ -98,10 +120,14 @@ function GuideBody(props: {
 	code: string;
 	checks: readonly GuideCheck[];
 	headSha: string;
-	selectedRef: GuideRef | null;
-	onSelectRef: (ref: GuideRef | null) => void;
+	files: readonly FileChange[];
+	reviewState: ReadonlyMap<string, ReviewStateEntry>;
+	setViewed: (path: string, viewed: boolean) => void;
+	onOpenFile: (path: string) => void;
+	target: GuideTarget | null;
+	onSelectTarget: (target: GuideTarget | null) => void;
 }): React.ReactElement {
-	const files = useFileChanges(props.orpc, props.session.id).files;
+	const files = props.files;
 	const changedPaths = useMemo(
 		() => new Set(files.map((file) => file.path)),
 		[files],
@@ -119,12 +145,14 @@ function GuideBody(props: {
 			),
 		[files],
 	);
-	const onSelectRef = props.onSelectRef;
+	const onSelectTarget = props.onSelectTarget;
 	const selectRef = useCallback(
-		(ref: GuideRef) => onSelectRef(ref),
-		[onSelectRef],
+		(ref: GuideRef, scope?: readonly string[]) =>
+			onSelectTarget({ ref, scope: scope ?? null }),
+		[onSelectTarget],
 	);
-	const closeRef = useCallback(() => onSelectRef(null), [onSelectRef]);
+	const closePane = useCallback(() => onSelectTarget(null), [onSelectTarget]);
+	const selectedRef = props.target === null ? null : props.target.ref;
 	const [areaOrder, setAreaOrder] = useState<readonly string[]>([]);
 	const [hoveredArea, setHoveredArea] = useState<string | null>(null);
 	const context = useMemo(
@@ -134,7 +162,7 @@ function GuideBody(props: {
 			changedPaths,
 			checks: props.checks,
 			headSha: props.headSha,
-			selectedRef: props.selectedRef,
+			selectedRef,
 			selectRef,
 			areaOrder,
 			setAreaOrder,
@@ -147,7 +175,7 @@ function GuideBody(props: {
 			changedPaths,
 			props.checks,
 			props.headSha,
-			props.selectedRef,
+			selectedRef,
 			selectRef,
 			areaOrder,
 			hoveredArea,
@@ -156,46 +184,72 @@ function GuideBody(props: {
 	const scroller = useRef<HTMLDivElement>(null);
 	const content = useRef<HTMLDivElement>(null);
 
+	const layout = useDefaultLayout({
+		id: SPLIT_STORAGE_ID,
+		panelIds:
+			props.target === null ? [CONTENT_PANEL] : [CONTENT_PANEL, DIFF_PANEL],
+		storage: localStorage,
+	});
+
 	return (
-		<div className="flex min-h-0 flex-1">
-			<div
-				className="@container min-h-0 min-w-0 flex-1 overflow-auto px-6 py-5"
-				ref={scroller}
-			>
-				<div className="relative mx-auto max-w-3xl">
-					<div
-						className="flex flex-col gap-3 pb-12 text-foreground text-sm leading-relaxed"
-						ref={content}
-					>
-						<GuideProvider value={context}>
-							<GuideErrorBoundary resetKey={props.version}>
-								<EvaluatedGuide code={props.code} version={props.version} />
-							</GuideErrorBoundary>
-						</GuideProvider>
+		<ResizablePanelGroup
+			className="min-h-0 flex-1"
+			defaultLayout={layout.defaultLayout}
+			onLayoutChanged={layout.onLayoutChanged}
+			orientation="horizontal"
+		>
+			<ResizablePanel id={CONTENT_PANEL} minSize={CONTENT_MIN_WIDTH}>
+				<div
+					className="@container h-full min-h-0 min-w-0 overflow-auto px-6 py-5"
+					ref={scroller}
+				>
+					<div className="relative mx-auto max-w-3xl">
+						<div
+							className="flex flex-col gap-3 pb-12 text-foreground text-sm leading-relaxed"
+							ref={content}
+						>
+							<GuideProvider value={context}>
+								<GuideErrorBoundary resetKey={props.version}>
+									<EvaluatedGuide code={props.code} version={props.version} />
+								</GuideErrorBoundary>
+							</GuideProvider>
+						</div>
+						{props.target === null && (
+							<aside className="absolute top-0 left-full ml-8 hidden h-full w-44 @5xl:block">
+								<div className="sticky top-0">
+									<GuideToc
+										content={content}
+										scroller={scroller}
+										version={props.version}
+									/>
+								</div>
+							</aside>
+						)}
 					</div>
-					{props.selectedRef === null && (
-						<aside className="absolute top-0 left-full ml-8 hidden h-full w-44 @5xl:block">
-							<div className="sticky top-0">
-								<GuideToc
-									content={content}
-									scroller={scroller}
-									version={props.version}
-								/>
-							</div>
-						</aside>
-					)}
 				</div>
-			</div>
-			{props.selectedRef !== null && (
-				<ReferenceSidePane
-					files={files}
-					onClose={closeRef}
-					orpc={props.orpc}
-					reference={props.selectedRef}
-					sessionId={props.session.id}
-				/>
+			</ResizablePanel>
+			{props.target !== null && (
+				<>
+					<GuideResizeHandle onCollapse={closePane} />
+					<ResizablePanel
+						defaultSize={DIFF_DEFAULT_SIZE}
+						id={DIFF_PANEL}
+						minSize={DIFF_MIN_WIDTH}
+					>
+						<GuideDiffPane
+							files={files}
+							onClose={closePane}
+							onOpenFile={props.onOpenFile}
+							orpc={props.orpc}
+							reviewState={props.reviewState}
+							session={props.session}
+							setViewed={props.setViewed}
+							target={props.target}
+						/>
+					</ResizablePanel>
+				</>
 			)}
-		</div>
+		</ResizablePanelGroup>
 	);
 }
 

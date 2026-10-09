@@ -4,6 +4,8 @@ import { useMemo } from "react";
 import { Tabs, TabsContent } from "#/components/ui/tabs";
 import { useDevToolScope } from "#/features/devtools/dev-tool-context";
 import { useRefetchToasts } from "#/features/devtools/use-refetch-toasts";
+import { GuideView } from "#/features/guide/guide-view";
+import { guideExists, useGuide } from "#/features/guide/use-guide";
 import type { Session } from "#/features/pull-request/data/pr-data";
 import {
 	useFileChanges,
@@ -21,8 +23,6 @@ import {
 	useSessionOpenFiles,
 	useSessionWalkthroughSelection,
 } from "#/features/pull-request/data/session-ui-store";
-import { GuideView } from "#/features/guide/guide-view";
-import { guideExists, useGuide } from "#/features/guide/use-guide";
 import { FileView } from "#/features/pull-request/file-view/file-view";
 import { FilesChangedContent } from "#/features/pull-request/files/files-changed-content";
 import { diffStat } from "#/features/pull-request/header/diff-stat";
@@ -239,8 +239,12 @@ export function PrView({
 						<TabsContent className="flex min-h-0 flex-1" value="guide">
 							<GuideView
 								enabled={isSelectedTab && tabsValue === "guide"}
+								files={files}
+								onOpenFile={openFile}
 								orpc={orpc}
+								reviewState={reviewState}
 								session={session}
+								setViewed={setViewed}
 							/>
 						</TabsContent>
 					)}

@@ -32,7 +32,8 @@ type GuideContextValue = {
 	headSha: string;
 	/** The reference shown in the side pane, if any. */
 	selectedRef: GuideRef | null;
-	selectRef: (ref: GuideRef) => void;
+	/** `scope` is the paths of the Area the click came from (`useAreaScope`): the pane lists all of them, scrolled to `ref`. Without it the pane shows just `ref`'s file. */
+	selectRef: (ref: GuideRef, scope?: readonly string[]) => void;
 	/** Area ids in document order; an Area's color is its index here. Set by `Areas`, read by anything that colors by area (a Sequence step comes before the Areas it names). */
 	areaOrder: readonly string[];
 	setAreaOrder: (ids: readonly string[]) => void;
@@ -47,6 +48,17 @@ type GuideContextValue = {
 const GuideContext = createContext<GuideContextValue | null>(null);
 
 export const GuideProvider = GuideContext.Provider;
+
+const AreaScopeContext = createContext<readonly string[] | undefined>(
+	undefined,
+);
+
+/** Set by `Area` around its bullets and file list, so a `Ref` or row inside one can open the pane on the whole Area. */
+export const AreaScopeProvider = AreaScopeContext.Provider;
+
+export function useAreaScope(): readonly string[] | undefined {
+	return useContext(AreaScopeContext);
+}
 
 export function useGuideContext(): GuideContextValue {
 	const value = useContext(GuideContext);
