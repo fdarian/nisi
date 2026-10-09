@@ -31,6 +31,10 @@ seam" for the port/token handshake this boots into.
   on. That takeover's common trigger in dev is a fresh `bun dev` of the same devsess session
   finding a previous one's dead sidecar, since `scripts/dev.ts` pins the sidecar port to a sticky
   port for the whole session rather than a fresh one per run — see that file's own comment.
+  `keepHandshakePublished` then polls (5s) for `sidecar.json` going missing while this process is
+  still serving — `releaseSidecar` removes it without an ownership check, so another process's
+  shutdown against the same dir deletes a live sidecar's handshake — and re-claims it through
+  `acquireSidecar`, stopping if a different live owner has taken the dir.
 - `logging.ts` — `LoggingLive`: console (`Logger.consolePretty`, stderr) plus a
   `@repo/logging`-backed rotating file logger at `<dataDir>/logs/sidecar.log`, both gated by the
   same `LOG_LEVEL`-derived minimum level. This is the only place stdout-in-production's "goes

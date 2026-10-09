@@ -11,10 +11,20 @@ import {
 import { makeSidecarClient } from "@repo/sidecar-api";
 import {
 	acquireSidecar,
+	readSidecarJson,
 	releaseSidecar,
+	type SidecarHandshake,
 	type SidecarLivenessCheck,
 } from "deskkit/sidecar";
-import { Config, Context, Effect, Layer, Option, Tracer } from "effect";
+import {
+	Config,
+	Context,
+	Effect,
+	Layer,
+	Option,
+	Schedule,
+	Tracer,
+} from "effect";
 import { FileSystem } from "effect/FileSystem";
 import { ChatSessions } from "./chat/sessions.ts";
 import { CodeLspPool } from "./code-index/state.ts";
@@ -55,6 +65,47 @@ const isSidecarAlive: SidecarLivenessCheck = (owner) =>
 			}),
 		),
 	).pipe(Effect.map((result) => result.isSuccess));
+
+const HANDSHAKE_CHECK_INTERVAL = "5 seconds";
+
+/**
+ * Re-publishes `sidecar.json` if it disappears while this process is still
+ * serving. `deskkit/sidecar`'s `releaseSidecar` removes the file without
+ * checking who owns it, so any other process that once held and released the
+ * same data dir wipes a live sidecar's handshake — and the CLI, seeing no
+ * handshake, takes that to mean no app is running. Goes through
+ * `acquireSidecar` (atomic `wx` create) rather than writing the file here, so
+ * a different live owner that has since claimed the dir is respected: the
+ * loop stops instead of fighting it.
+ */
+const keepHandshakePublished = (dataDir: string, owner: SidecarHandshake) =>
+	Effect.gen(function* () {
+		if ((yield* readSidecarJson(dataDir)) !== undefined) {
+			return false;
+		}
+		yield* Effect.logWarning(
+			"sidecar.json went missing while this sidecar is still running — re-publishing it",
+			{ dataDir, port: owner.port },
+		);
+		yield* acquireSidecar(dataDir, owner, isSidecarAlive);
+		return false;
+	}).pipe(
+		Effect.catchTag("SidecarAlreadyRunning", (error) =>
+			Effect.logWarning(
+				"another live sidecar now owns sidecar.json — no longer re-publishing it",
+				{ otherPort: error.port },
+			).pipe(Effect.as(true)),
+		),
+		Effect.catchCause((cause) =>
+			Effect.logError("could not re-publish sidecar.json", cause).pipe(
+				Effect.as(false),
+			),
+		),
+		Effect.repeat({
+			schedule: Schedule.spaced(HANDSHAKE_CHECK_INTERVAL),
+			until: (stop) => stop,
+		}),
+	);
 
 const program = Effect.scoped(
 	Effect.gen(function* () {
@@ -162,6 +213,9 @@ const program = Effect.scoped(
 					Effect.logInfo("releasing sidecar lock").pipe(
 						Effect.andThen(releaseSidecar(dataDir)),
 					),
+			);
+			yield* keepHandshakePublished(dataDir, { port, token }).pipe(
+				Effect.forkScoped,
 			);
 
 			// Only now — sidecar.json claimed and published in the one act above
