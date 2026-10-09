@@ -43,6 +43,8 @@ Three parts, one seam:
   Tauri CSP is `null`, so eval is allowed) against the app's own React and `kit/` (the `@nisi/guide` module).
   Agents author it via `.claude/skills/nisi-guide/SKILL.md`; `sample/` is a working guide that
   `guide-pipeline.test.ts` builds and renders. Copy it to `<repo>/.nisi/guide/` to see it in the app.
+  The app owns the page chrome (the `h1` title, the "On this page" list, the side pane a `Ref` opens);
+  the pane is `pull-request/location-pane/location-pane.tsx`, shared with the walkthrough's `ReferencePane`.
   `src/features/code-index/` holds LSP-powered code navigation (⌘-hover underline, ⌘-click peek
   references), backed server-side by a live TypeScript 7 language server (`@repo/code-lsp`) rather
   than a prebuilt SCIP index — one `useCodeIndexInteractions` hook shared by the diff pane's
