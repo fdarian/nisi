@@ -15,6 +15,7 @@ export function Ref(props: {
 }): React.ReactElement {
 	const guide = useGuideContext();
 	if (props.lines !== undefined) parseLines(props.lines);
+	guide.collector?.refs.push({ path: props.path, lines: props.lines });
 	const inDiff = guide.changedPaths.has(props.path);
 	const basename = splitPath(props.path).basename;
 	const label =

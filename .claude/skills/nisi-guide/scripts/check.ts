@@ -2,7 +2,7 @@
 /**
  * Runs a command and records the result for the guide's `<Checks />`:
  *
- *   bun .claude/skills/nisi-guide/check.ts "Type check and lint" -- pnpm turbo run check:type check:lint
+ *   bun .claude/skills/nisi-guide/scripts/check.ts "Type check and lint" -- pnpm turbo run check:type check:lint
  *
  * Runs in the repo root, streams the command's output through, and exits with
  * its exit code. The record lands in `.nisi/guide/checks/<slug>.json`; its shape

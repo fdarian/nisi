@@ -14,7 +14,7 @@ import { Schema } from "effect";
  */
 
 /**
- * One recorded command run, written by `.claude/skills/nisi-guide/check.ts` to
+ * One recorded command run, written by `.claude/skills/nisi-guide/scripts/check.ts` to
  * `.nisi/guide/checks/<slug>.json` — change both together. Facts, not prose:
  * the guide's `<Checks />` renders these, and a run whose `sha` isn't
  * `headSha` is stale.

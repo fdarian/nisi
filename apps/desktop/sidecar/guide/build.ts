@@ -7,7 +7,7 @@ import { Schema } from "effect";
 
 export const GUIDE_DIR = ".nisi/guide";
 export const GUIDE_ENTRY = "guide.mdx";
-/** Recorded command runs (`.claude/skills/nisi-guide/check.ts`). Not bundle input, so kept out of `version`. */
+/** Recorded command runs (`.claude/skills/nisi-guide/scripts/check.ts`). Not bundle input, so kept out of `version`. */
 const CHECKS_DIR = "checks";
 
 /**

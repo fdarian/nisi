@@ -118,22 +118,32 @@ function GuideBody(props: {
 		[onSelectRef],
 	);
 	const closeRef = useCallback(() => onSelectRef(null), [onSelectRef]);
+	const [areaOrder, setAreaOrder] = useState<readonly string[]>([]);
+	const [hoveredArea, setHoveredArea] = useState<string | null>(null);
 	const context = useMemo(
 		() => ({
 			sessionId: props.session.id,
+			files,
 			changedPaths,
 			checks: props.checks,
 			headSha: props.headSha,
 			selectedRef: props.selectedRef,
 			selectRef,
+			areaOrder,
+			setAreaOrder,
+			hoveredArea,
+			setHoveredArea,
 		}),
 		[
 			props.session.id,
+			files,
 			changedPaths,
 			props.checks,
 			props.headSha,
 			props.selectedRef,
 			selectRef,
+			areaOrder,
+			hoveredArea,
 		],
 	);
 	const scroller = useRef<HTMLDivElement>(null);

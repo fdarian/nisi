@@ -8,6 +8,7 @@ import { buildGuide } from "../../../sidecar/guide/build";
 import { evaluateGuide } from "./evaluate";
 import { GUIDE_COMPONENTS } from "./guide-components";
 import { GuideProvider } from "./guide-context";
+import { type DiffFile, validateGuide } from "./validate";
 
 const SAMPLE = join(import.meta.dir, "sample");
 let repoRoot: string;
@@ -38,6 +39,37 @@ function checkRecord(overrides: Record<string, unknown>) {
 		...overrides,
 	};
 }
+
+function file(
+	path: string,
+	additions: number,
+	deletions: number,
+	...changed: [number, number][]
+): DiffFile {
+	return {
+		path,
+		additions,
+		deletions,
+		changed: changed.map(([start, end]) => ({ start, end })),
+	};
+}
+
+/** The diff the sample guide describes: every source file falls in one of its three Areas, and its Refs land on changed lines. */
+const SAMPLE_DIFF: DiffFile[] = [
+	file(".claude/skills/nisi-guide/scripts/check.ts", 113, 0, [1, 113]),
+	file(".claude/skills/nisi-guide/scripts/validate.ts", 100, 0, [1, 100]),
+	file("apps/desktop/sidecar/guide/build.ts", 98, 30, [60, 100]),
+	file("packages/sidecar-api/src/guide.ts", 27, 0, [1, 27]),
+	file("apps/desktop/src/features/guide/evaluate.ts", 10, 2, [30, 65]),
+	// Exempt from Areas: counted nowhere and needing no cover.
+	file(
+		"apps/desktop/src/features/guide/guide-pipeline.test.ts",
+		50,
+		0,
+		[1, 50],
+	),
+	file("pnpm-lock.yaml", 300, 0, [1, 300]),
+];
 
 async function writeCheck(slug: string, record: unknown) {
 	const dir = join(repoRoot, ".nisi/guide/checks");
@@ -120,26 +152,43 @@ test("the sample guide builds, evaluates against the kit, and renders every comp
 			{
 				value: {
 					sessionId: "s1",
-					changedPaths: new Set([
-						"apps/desktop/sidecar/guide/build.ts",
-						"apps/desktop/src/features/guide/evaluate.ts",
-					]),
+					files: SAMPLE_DIFF,
+					changedPaths: new Set(SAMPLE_DIFF.map((entry) => entry.path)),
 					checks: result.checks,
 					headSha: result.headSha,
 					selectedRef: null,
 					selectRef: () => {},
+					areaOrder: ["authoring", "bundle", "app"],
+					setAreaOrder: () => {},
+					hoveredArea: null,
+					setHoveredArea: () => {},
 				},
 			},
 			createElement(Guide, { components: GUIDE_COMPONENTS as never }),
 		),
-	).replaceAll("<!-- -->", "");
+	).replace(/<!-- -->/g, "");
 
-	// The page title is the markdown h1, drawn by the app; there is no Outcome.
-	expect(html).toMatch(/<h1[^>]*>Guides: write one in \.nisi\/guide/);
-	expect(html).not.toContain("Outcome");
+	// The guide starts at its Overview: no title, the app shows the PR's.
+	expect(html).not.toContain("<h1");
+	expect(html).toMatch(/<h2[^>]*>Overview<\/h2>/);
+
+	// Areas: the agent writes the bullets, nisi computes each card's stat from
+	// the diff, leaving tests and lockfiles out.
+	expect(html).toContain("Authoring");
+	const text = html.replace(/<[^>]*>/g, "");
+	expect(text).toContain("2 files +213 −0");
+	expect(text).toContain("2 files +125 −30");
+	expect(text).toContain("1 file +10 −2");
+
+	// Sequence: After is shown by default, with its caption and a Before toggle.
+	expect(html).toContain("Getting a check result into the guide");
+	expect(html).toMatch(/aria-pressed="true"[^>]*>after</);
+	expect(html).toMatch(/aria-pressed="false"[^>]*>before</);
+	expect(html).toContain("check.ts runs it");
+	expect(html).not.toContain("runs tests, types the result");
+	expect(html).toContain("so the tab can say when it&#x27;s stale");
 	expect(html).toContain("Settings, after");
 	expect(html).toContain("The new row highlights the active repository");
-	expect(html).toContain("before");
 	expect(html).toContain("1 / 3");
 	expect(html).toContain("A custom local component");
 	expect(html).toContain("value 1 of 5");
@@ -147,14 +196,13 @@ test("the sample guide builds, evaluates against the kit, and renders every comp
 	expect(html).toContain('aria-label="Pin 1"');
 	expect(html).toContain('aria-label="Highlight pin 1"');
 
-	// A Ref shows its basename (and lines), flags a path outside the diff, and
-	// the full path lives in the tooltip rather than the label.
+	// A Ref shows its basename (and lines); the full path lives in the tooltip.
 	expect(html).toContain(">build.ts:70-95<");
 	expect(html).not.toContain(">apps/desktop/sidecar/guide/build.ts:70-95<");
-	expect(html).toContain("not in diff");
+	expect(html).not.toContain("not in diff");
 
-	// Three explicit Refs plus two backticked changed paths that autolink; a
-	// backticked path outside the diff stays code.
+	// Refs: one in an Area, two in a Note, and two backticked changed paths
+	// that autolink. A backticked path outside the diff stays code.
 	const refButtons = html.match(
 		/<button[^>]*class="[^"]*font-mono text-\[10\.5px\][^"]*"/g,
 	);
@@ -216,4 +264,135 @@ test("a guide importing an unprovided module fails at evaluation with a readable
 	expect(() => evaluateGuide("test-bad-import", 'require("left-pad")')).toThrow(
 		'"left-pad"',
 	);
+});
+
+async function buildInline(mdx: string) {
+	const dir = await mkdtemp(join(tmpdir(), "nisi-guide-inline-"));
+	try {
+		await mkdir(join(dir, ".nisi/guide"), { recursive: true });
+		await writeFile(join(dir, ".nisi/guide/guide.mdx"), mdx);
+		await git(dir, "init", "-q");
+		await git(
+			dir,
+			"-c",
+			"user.name=t",
+			"-c",
+			"user.email=t@t",
+			"commit",
+			"-q",
+			"--allow-empty",
+			"-m",
+			"init",
+		);
+		return await buildGuide(dir);
+	} finally {
+		await rm(dir, { recursive: true, force: true });
+	}
+}
+
+test("validate: the sample guide is clean against its own diff, except for the stale check", async () => {
+	const result = await buildGuide(repoRoot);
+	// "Unit tests" was recorded at another commit on purpose (see beforeAll).
+	expect(validateGuide(result, SAMPLE_DIFF)).toEqual([
+		expect.stringContaining('Check "Unit tests" was recorded at 0123456'),
+	]);
+});
+
+test("validate: reports a changed source file no Area covers, never a test or lockfile", async () => {
+	const result = await buildGuide(repoRoot);
+	const problems = validateGuide(result, [
+		...SAMPLE_DIFF,
+		file("packages/git/src/new-thing.ts", 5, 0, [1, 5]),
+		file("packages/git/src/new-thing.test.ts", 5, 0, [1, 5]),
+	]);
+	const uncovered = problems.filter((problem) =>
+		problem.includes("no Area covers"),
+	);
+	expect(uncovered).toHaveLength(1);
+	expect(uncovered[0]).toContain("packages/git/src/new-thing.ts");
+	expect(uncovered[0]).not.toContain("new-thing.test.ts");
+	expect(uncovered[0]).not.toContain("pnpm-lock.yaml");
+});
+
+test("validate: a Ref whose lines miss every hunk, or whose path isn't in the diff, is reported", async () => {
+	const result = await buildGuide(repoRoot);
+	const problems = validateGuide(
+		result,
+		SAMPLE_DIFF.filter(
+			(entry) => entry.path !== "apps/desktop/src/features/guide/evaluate.ts",
+		)
+			.map((entry) =>
+				entry.path === "apps/desktop/sidecar/guide/build.ts"
+					? file(entry.path, 98, 30, [1, 10])
+					: entry,
+			)
+			.concat(
+				file("apps/desktop/src/features/guide/evaluate.ts", 1, 0, [1, 5]),
+			),
+	);
+	expect(problems.join("\n")).toContain(
+		"Ref apps/desktop/sidecar/guide/build.ts:70-95: those lines aren't in any diff hunk",
+	);
+	expect(problems.join("\n")).toContain(
+		"Ref apps/desktop/src/features/guide/evaluate.ts:36-60: those lines aren't in any diff hunk",
+	);
+
+	const outside = validateGuide(result, []);
+	expect(outside.join("\n")).toContain(
+		"Ref apps/desktop/sidecar/guide/build.ts:70-95 is not in the diff",
+	);
+});
+
+test("validate: an h1, a missing Overview, and a missing Areas are each reported", async () => {
+	const result = await buildInline("# A title\n\nSome words.\n");
+	const problems = validateGuide(result, []);
+	expect(problems.join("\n")).toContain("has an h1");
+	expect(problems.join("\n")).toContain("no `## Overview`");
+	expect(problems.join("\n")).toContain("no `<Areas>`");
+});
+
+test("validate: a Sequence step naming an unknown area, or an Item without a title, is reported", async () => {
+	const unknownArea = await buildInline(`## Overview
+
+<Sequence title="Flow" lanes={["A"]}>
+	<After>
+		<Step lane="A" area="nope" span={1}>go</Step>
+	</After>
+</Sequence>
+
+<Areas>
+	<Area id="real" title="Real" paths={["src/**"]}>
+		- thing
+	</Area>
+</Areas>
+`);
+	expect(validateGuide(unknownArea, []).join("\n")).toContain(
+		'names area "nope"',
+	);
+
+	const untitled = await buildInline(`## Overview
+
+<Areas>
+	<Area id="real" title="Real" paths={["src/**"]}>
+		- thing
+	</Area>
+</Areas>
+
+<NeedsYou>
+	<Item id="x">Do it</Item>
+</NeedsYou>
+`);
+	expect(validateGuide(untitled, []).join("\n")).toContain(
+		'<Item id="x"> needs a title',
+	);
+});
+
+test("a Sequence step in a lane it didn't declare fails the render with the lane named", async () => {
+	const result = await buildInline(`<Sequence title="Flow" lanes={["A"]}>
+	<After>
+		<Step lane="B" span={1}>go</Step>
+	</After>
+</Sequence>
+`);
+	expect(validateGuide(result, []).join("\n")).toContain('no lane "B"');
 });

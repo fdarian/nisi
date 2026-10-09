@@ -1,25 +1,64 @@
 import {
+	After,
+	Area,
+	Areas,
+	Before,
 	BeforeAfter,
 	Checks,
+	Event,
 	Frame,
 	Item,
 	NeedsYou,
 	Note,
 	Pin,
 	Ref,
+	Sequence,
 	Shot,
 	Skipped,
+	Step,
 	Tour,
+	Wait,
 } from "@nisi/guide";
 import before from "./settings-before.png";
 import after from "./settings-after.png";
 import StatRow from "./stat-row";
 
-# Guides: write one in .nisi/guide, read it in the Guide tab
+## Overview
 
-- The sidecar bundles `guide.mdx`; the app evaluates it against its own React and the kit.
-- Clicking a file reference opens that file's diff beside the guide.
-- Test and lint results are recorded by a script, not typed in.
+Guides are now written to `.nisi/guide` and read in the Guide tab, with test results recorded by a script instead of typed in.
+
+<Sequence title="Getting a check result into the guide" lanes={["Agent", "Sidecar", "Guide tab"]}>
+	<Before>
+		<Step lane="Agent" area="authoring" span={4}>runs tests, types the result</Step>
+		<Wait lane="Sidecar" span={4} />
+		<Step lane="Sidecar" area="bundle" span={2}>bundles guide.mdx</Step>
+		<Wait lane="Guide tab" span={6} />
+		<Step lane="Guide tab" area="app" span={2}>prose, unverifiable</Step>
+		<Event lane="Agent" at={4} />
+	</Before>
+	<After caption="The result is a record with the commit it ran at, so the tab can say when it's stale.">
+		<Step lane="Agent" area="authoring" span={3}>check.ts runs it</Step>
+		<Wait lane="Sidecar" span={3} />
+		<Step lane="Sidecar" area="bundle" span={2}>reads the record</Step>
+		<Wait lane="Guide tab" span={5} />
+		<Step lane="Guide tab" area="app" span={3}>Checks row, stale or current</Step>
+		<Event lane="Agent" at={3} area="authoring" />
+	</After>
+</Sequence>
+
+<Areas>
+	<Area id="authoring" title="Authoring" subtitle="skill · scripts" paths={[".claude/skills/**"]}>
+		- `check.ts` runs a command and records it.
+		- `validate.ts` reports what the author must fix.
+	</Area>
+	<Area id="bundle" title="Bundling" subtitle="sidecar" paths={["apps/desktop/sidecar/**", "packages/sidecar-api/src/**"]}>
+		- `guide.get` returns the bundle, the recorded runs and the head SHA. <Ref path="apps/desktop/sidecar/guide/build.ts" lines="70-95" />
+	</Area>
+	<Area id="app" title="Guide tab" subtitle="kit · side pane" paths={["apps/desktop/src/features/guide/**"]}>
+		- The kit draws Areas, Sequences, Checks and Needs you.
+		- Clicking a file opens its diff beside the guide.
+	</Area>
+</Areas>
 
 ## See it
 
@@ -49,7 +88,6 @@ import StatRow from "./stat-row";
 	The bundle externalises React and the kit, so a guide never ships a second
 	copy of either. See <Ref path="apps/desktop/sidecar/guide/build.ts" lines="70-95" />
 	and <Ref path="apps/desktop/src/features/guide/evaluate.ts" lines="36-60" />.
-	This one points outside the diff: <Ref path="README.md" />.
 </Note>
 
 <Note label="Plain backticked paths link too">
