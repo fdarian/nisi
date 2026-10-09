@@ -1,7 +1,6 @@
 "use client";
 
 import type { GuideCheck } from "@repo/sidecar-api";
-import { useQuery } from "@tanstack/react-query";
 import {
 	Component,
 	type ErrorInfo,
@@ -28,13 +27,12 @@ import { GuideProvider } from "./guide-context";
 import { GuideToc } from "./guide-toc";
 import { ReferenceSidePane } from "./reference-side-pane";
 import type { GuideRef } from "./refs";
-
-const POLL_MS = 2000;
+import { useGuide } from "./use-guide";
 
 /**
  * The Guide tab: `<repoRoot>/.nisi/guide/guide.mdx`, bundled by the sidecar and
- * evaluated here against the app's own React and kit. Polls while mounted so
- * an agent's edits show up within a couple of seconds.
+ * evaluated here against the app's own React and kit. Polls faster while
+ * visible so an agent's edits show up within a couple of seconds.
  */
 export function GuideView(props: {
 	orpc: SidecarQueryUtils;
@@ -42,12 +40,7 @@ export function GuideView(props: {
 	enabled: boolean;
 }): React.ReactElement {
 	const [selectedRef, setSelectedRef] = useState<GuideRef | null>(null);
-	const guide = useQuery({
-		...props.orpc.guide.get.queryOptions({
-			input: { sessionId: props.session.id },
-		}),
-		refetchInterval: props.enabled ? POLL_MS : false,
-	});
+	const guide = useGuide(props.orpc, props.session.id, props.enabled);
 
 	if (guide.error != null) {
 		return (

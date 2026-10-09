@@ -28,7 +28,9 @@ export function PendingPrView(props: {
 		<div className="flex min-h-0 flex-1 flex-col">
 			<PrHeaderSkeleton pullRequest={props.pullRequest} />
 			<Tabs className={PR_VIEW_TABS_CLASS} value="files">
-				<PrViewTabStripSkeleton tabs={prViewTabs(walkthroughEnabled)} />
+				<PrViewTabStripSkeleton
+					tabs={prViewTabs({ walkthroughEnabled, guideExists: false })}
+				/>
 				<FilesChangedSkeleton orpc={props.orpc} when={props.visible} />
 			</Tabs>
 		</div>
