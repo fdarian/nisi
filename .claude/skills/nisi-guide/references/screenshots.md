@@ -1,11 +1,15 @@
 # Screenshots
 
-Show what a reviewer would see, not what the code looks like. Aim for 2 to 6 images in total.
+Show what a reviewer would see, not what the code looks like. Screenshots are optional and decided case by case:
+
+- **The change is visible and you can run it locally**: capture it. Use an existing story, a throwaway story, or a dev server you start for the capture and stop afterwards. Aim for 2 to 6 images in total.
+- **The change isn't visible** (logic, config, a CLI): skip them.
+- **The repo can't run locally** (environment problems, missing services, credentials): skip them and say so in one line in the guide, for example under `Checks` as a `Skipped` item. Don't force a capture, fake a fixture, or build a mock server to get one.
 
 ## Components
 
 - `Shot { src, alt, caption? }` with `Pin { x, y }` children: one image with numbered markers. `x` and `y` are percentages of the image from its top left. A pin's children are its legend entry. Pins must be direct children of the `Shot`. Clicking a marker scrolls to its legend entry; clicking a number highlights the marker.
-- `Pin { x, y, ring?, side? }`: add `ring` when the target is small (an icon, a dot, one character). It draws a ring around the exact point and puts the numbered badge beside it on a short leader line, so the badge doesn't cover what it points at. By default the badge goes on the side with the most room in the image; set `side="left|right|top|bottom"` when that side would cover text. Clicking and hovering link to the legend the same as for any pin. Use plain pins for large targets (a row, a panel).
+- `Pin { x, y, ring?, side? }`: use `ring` and `side` by default for any line- or text-level target (an icon, a dot, a word, a line of text, a button label). A ring draws around the exact point and puts the numbered badge beside it on a short leader line, so the badge doesn't cover what it points at. Set `side="left|right|top|bottom"` to the side with empty space, away from the text you point at; without it the badge goes on the side with the most room, which can still cover neighbouring text. Clicking and hovering link to the legend the same as for any pin. A plain pin is only for a target that is itself large (a whole panel or card), where a badge on its edge covers nothing.
 - `Tour` with `Frame { title, src? }` children: a flow, one frame at a time, with a filmstrip and arrow keys. Frames take `Pin`s the same way. A frame without `src` renders its children as the stage.
 - `BeforeAfter { before, after }`: two images side by side, for a change to something that already existed.
 
@@ -28,11 +32,11 @@ Pin percentages are relative to the image you import, the final cropped file, no
 2. Get the cropped file's size: `sips -g pixelWidth -g pixelHeight .nisi/guide/shot.png` (macOS), or `file shot.png`.
 3. Find the pixel of the thing you are pointing at (your browser tool's element bounding box, minus the crop offset).
 4. `x = px / width * 100`, `y = py / height * 100`, rounded to a whole number.
-5. Run `nisi guide render --expand` (see `preview.md`) and look at the section image: a pin sits on the edge or corner of its target, not over its text.
+5. Run `nisi guide render --expand` (see `preview.md`) and look at the section image: a pin sits on the edge or corner of its target, not over its text. This is your own check of the pins; it isn't required for a guide to be valid.
 
 ## Capturing
 
-Capture the way you'd verify the change yourself. Whatever renders the real component with real-looking data will do: a component-gallery story, the dev app, a browser tool on a scratch instance.
+Capture the way you'd verify the change yourself. Whatever renders the real component with real-looking data will do: a component-gallery story, the repo's dev app, a browser tool on a scratch instance. Start any server yourself, on a free port, and stop it when you have the image.
 
 - **A state with no story.** Write a throwaway story (or page) that renders just that state, capture it, then delete the story. A story you only needed for one image is clutter for the next person; a story worth keeping belongs in its own change.
 - **A before shot.** Check out the base in a temporary worktree (`git worktree add /tmp/base <base-ref>`), run the same story or page there with the same fixture data, capture, then remove the worktree. Same data on both sides, or the comparison shows the data and not the change.

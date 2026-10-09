@@ -24,7 +24,7 @@ write no `# h1`. Use these sections in this order, and drop one that doesn't app
 
 1. `## Overview`: one lead sentence saying what changed and why it matters, then `<Areas>`: the change
    grouped into parts. Add a `<Sequence>` before it only when the change is about ordering or timing.
-2. `## See it`: screenshots of what a reviewer would see.
+2. `## See it`: screenshots of what a reviewer would see, when the change is visible and you can run it locally. If it isn't visible or the repo can't run locally, drop the section (and say so in one line); see `references/screenshots.md`.
 3. `## How it works`: one `Note` per decision or caveat, each with a short label.
 4. `## Checks`: `<Checks />`.
 5. `## Needs you`: `NeedsYou`, the actions only the reviewer can take.
@@ -33,7 +33,8 @@ write no `# h1`. Use these sections in this order, and drop one that doesn't app
 
 - Bullets over prose; a paragraph is 2 sentences or fewer (`nisi guide validate` rejects a longer `Note` paragraph).
 - Every file you mention is a `<Ref path lines? />` or a backticked repo path, which links itself when
-  the path is in the diff. Clicking opens that file's diff beside the guide.
+  the path is in the diff. Clicking opens that file's diff beside the guide. Cite a path once: either
+  the Ref or the backticked path, never both in the same paragraph (it renders twice).
 - Each `Area` takes `paths` globs; nisi computes its file count and +/- from the diff, so don't write
   numbers. Every changed hunk of source must fall in some Area (tests, stories, docs, images and
   generated files are exempt).
@@ -46,21 +47,24 @@ write no `# h1`. Use these sections in this order, and drop one that doesn't app
 ## Before you finish
 
 ```sh
-nisi guide check "Type check and lint" -- pnpm turbo run check:type check:lint
+nisi guide check "Type check and lint" -- <the repo's check command>
 nisi guide validate
 ```
 
-`nisi guide check` runs a command and records the result for `<Checks />`; run it after your last commit,
-or the run shows as stale. `nisi guide validate` builds and renders the guide as the tab does and lists
+`nisi guide check` runs a command and records the result for `<Checks />`. Record the repo's standard
+check commands (from its package scripts, CI, or AGENTS.md), plus an explicit command for any tests you
+touched that the default script doesn't cover. Run them after your last code change; committing first
+isn't required (a run on uncommitted work is marked as such, and a commit made after the run makes it
+stale). `nisi guide validate` builds and renders the guide as the tab does and lists
 what to fix (an h1, changed hunks no Area covers, a `Ref` to lines outside the diff, stale checks). Fix
-everything it prints, then run it again. When it is clean, preview what a reader will see and look at the
-images:
+everything it prints, then run it again. When it is clean, preview what a reader will see to check your
+own work (recommended, not required):
 
 ```sh
 nisi guide render --expand
 ```
 
-`--text` is the cheap check: it prints the guide as plain text with the computed numbers, no browser needed.
+`--text` is the cheap check: it prints the guide as plain text with the computed numbers, no browser needed. Open the images when you placed pins.
 
 `nisi` is the app's command line, so it works from any repo. `validate` and `render` ask the app's sidecar
 to do the work, and `nisi` launches the app when it isn't running (`check` never needs it). The first call
@@ -98,6 +102,6 @@ Open these only when you need them; they are not repeated here.
 
 - `references/components.md`: every kit component with its props, and the rules for custom components. Open when you use anything beyond `Areas`, `Ref`, `Note`, `Checks` and `NeedsYou`.
 - `references/sequence.md`: when a `Sequence` earns its place (ordering, timing, request flow), when to skip it, and a worked example. Open when the change is about *when* things happen.
-- `references/screenshots.md`: `Shot`, `Tour`, `Pin`, `BeforeAfter`, plus capturing from Storybook, catching delayed states, and placing pins. Open before taking any screenshot.
+- `references/screenshots.md`: when to take screenshots and when to skip them, `Shot`, `Tour`, `Pin`, `BeforeAfter`, capturing, catching delayed states, and placing pins. Open before taking any screenshot.
 - `references/preview.md`: the `nisi guide render` flags (`--expand`, `--text`, `--theme`), what to look for in the images, and its limits. Open the first time you preview, or when an image looks wrong.
-- `references/checks.md`: `nisi guide check` usage, `Skipped`, and what counts as a check. Open when a check is long-running, needs a `cd`, or you aren't sure what to record.
+- `references/checks.md`: which commands to record, `nisi guide check` usage, uncommitted work, `Skipped`. Open when a check is long-running, needs a `cd`, or you aren't sure what to record.
