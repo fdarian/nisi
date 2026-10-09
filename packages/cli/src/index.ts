@@ -95,7 +95,9 @@ const simple =
 	(args.length === 1 &&
 		args[0] !== undefined &&
 		!args[0].startsWith("-") &&
-		!["pr", "diff", "debug", "guide", "completion"].includes(args[0]));
+		!["pr", "diff", "debug", "guide", "skills", "completion"].includes(
+			args[0],
+		));
 const program = simple
 	? run(Option.fromUndefinedOr(args[0]), { kind: "auto" })
 	: Effect.gen(function* () {

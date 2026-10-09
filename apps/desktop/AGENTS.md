@@ -41,7 +41,7 @@ Three parts, one seam:
   context by the sidecar (`FileContentReview.baselineKind`, see `@repo/review`'s `reconcile`).
   `src/features/guide/` renders the Guide tab: `evaluate.ts` runs the sidecar's bundled guide (`new Function`; the
   Tauri CSP is `null`, so eval is allowed) against the app's own React and `kit/` (the `@nisi/guide` module).
-  Agents author it via `.claude/skills/nisi-guide/SKILL.md`; `sample/` is a working guide that
+  Agents author it via `packages/cli/skills/guide/SKILL.md` (`nisi skills get guide`); `sample/` is a working guide that
   `guide-pipeline.test.ts` builds and renders. Copy it to `<repo>/.nisi/guide/` to see it in the app.
   The app owns the page chrome (the "On this page" list, the side pane a `Ref` opens); a guide has no
   title and starts at `## Overview`. The Overview's `Area` cards compute their stats from the session

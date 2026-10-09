@@ -72,12 +72,22 @@ _nisi() {
 					;;
 			esac
 			;;
+		skills)
+			case $CURRENT in
+				3) compadd -- list get path stub ;;
+				4) compadd -- guide ;;
+				*)
+					[[ \${words[3]} == get ]] && compadd -- --ref --full
+					[[ \${words[3]} == list ]] && compadd -- --json
+					;;
+			esac
+			;;
 		completion)
 			(( CURRENT == 3 )) && compadd -- zsh
 			;;
 		*)
 			if (( CURRENT == 2 )); then
-				compadd -- pr diff debug guide completion
+				compadd -- pr diff debug guide skills completion
 				_files -/
 			fi
 			;;
