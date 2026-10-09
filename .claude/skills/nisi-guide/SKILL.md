@@ -12,8 +12,10 @@ each save, so write it early and keep editing.
 
 ## Where
 
-`<repo root>/.nisi/guide/guide.mdx`, in the worktree you changed (`.nisi/` is git-ignored; never commit it).
-Screenshots and any custom `.tsx` component live next to it. Import the kit from `@nisi/guide`.
+`<repo root>/.nisi/guide/guide.mdx`, in the worktree you changed. Screenshots and any custom `.tsx`
+component live next to it. Import the kit from `@nisi/guide`. `.nisi/` isn't ignored by git unless the
+repo says so: add it to `.git/info/exclude` (`echo .nisi/ >> "$(git rev-parse --git-path info/exclude)"`)
+so it stays out of your commits, and never commit it.
 
 ## Shape
 
@@ -33,7 +35,10 @@ write no `# h1`. Use these sections in this order, and drop one that doesn't app
 - Every file you mention is a `<Ref path lines? />` or a backticked repo path, which links itself when
   the path is in the diff. Clicking opens that file's diff beside the guide.
 - Each `Area` takes `paths` globs; nisi computes its file count and +/- from the diff, so don't write
-  numbers. Every changed source file must fall in some Area (tests, stories, docs and lockfiles are exempt).
+  numbers. Every changed hunk of source must fall in some Area (tests, stories, docs, images and
+  generated files are exempt).
+- A file shared by two areas: claim its hunks with `path:lines`.
+- Group dependency and tooling bumps (lockfile churn, config, CI) into one Area instead of one each.
 - Never write test results as prose: record them with `check.ts`.
 - A `Needs you` item is an action for the reviewer ("Compare both pages with the Paper designs"), with
   a one-line how or why. Never write "I haven't…"; that is a `Skipped` check or an action.
@@ -47,7 +52,7 @@ bun .claude/skills/nisi-guide/scripts/validate.ts
 
 `check.ts` runs a command and records the result for `<Checks />`; run it after your last commit, or the
 run shows as stale. `validate.ts` builds and renders the guide as the tab does and lists what to fix
-(an h1, changed files no Area covers, a `Ref` to lines outside the diff, stale checks). Fix everything it
+(an h1, changed hunks no Area covers, a `Ref` to lines outside the diff, stale checks). Fix everything it
 prints, then run it again. When it is clean, preview what a reader will see and look at the images:
 
 ```sh

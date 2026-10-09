@@ -14,7 +14,7 @@ One PNG per `##` section plus `full.png`, in `.nisi/guide/.preview/` (git-ignore
 
 - `--expand` stacks every Tour frame, shows Before and After of each Sequence, and opens each Area's file list, so every pin and state is on the page at once. The tab shows one at a time, so use `--expand` whenever you want to check everything, and the default to see what a reader lands on.
 - `--theme dark` for dark mode. Check pin legibility and step colors in both if the change touches visuals.
-- `--width` (default 900) is the viewport; the guide's own column is at most 768px. `--scale 2` gives sharper images when a pin is hard to place.
+- `--width` (default 900) is the viewport; the guide's own column is at most 768px. `--scale` (default 2) is the device pixel ratio; the images come out at twice the width, which is what makes a small pin placeable. A launch or teardown failure in Chrome is retried once. The command prints the base it measured against, so check that line when the Area numbers look off; pass `--base <ref>` to change it (default: `origin/main` unless it is behind local `main`, then `main`, then `master`).
 
 What to look for:
 

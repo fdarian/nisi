@@ -16,12 +16,21 @@ export function Pin(_props: {
 	x: number;
 	y: number;
 	ring?: boolean;
+	/** With `ring`: which side of the target the badge goes. Default is the side with the most room in the image. */
+	side?: "left" | "right" | "top" | "bottom";
 	children?: ReactNode;
 }): null {
 	return null;
 }
 
-type PinProps = { x: number; y: number; ring?: boolean; children?: ReactNode };
+type PinSide = "left" | "right" | "top" | "bottom";
+type PinProps = {
+	x: number;
+	y: number;
+	ring?: boolean;
+	side?: PinSide;
+	children?: ReactNode;
+};
 
 /** How far a ringed pin's badge sits from its target, in px. */
 const RING_OFFSET = 22;
@@ -45,12 +54,28 @@ export function splitPins(children: ReactNode): {
 
 const FLASH_MS = 1400;
 
-/** Which side of its target a ringed pin's badge goes: away from the image's top and right edges, so it never clips. */
+/** The side of the image with the most room around (x, y), so a ringed pin's badge stays inside it. */
+function roomiestSide(pin: PinProps): PinSide {
+	const room: Array<[PinSide, number]> = [
+		["right", 100 - pin.x],
+		["left", pin.x],
+		["bottom", 100 - pin.y],
+		["top", pin.y],
+	];
+	return room.reduce((best, entry) => (entry[1] > best[1] ? entry : best))[0];
+}
+
 function ringBadgeOffset(pin: PinProps): { dx: number; dy: number } {
-	return {
-		dx: pin.x > 85 ? -RING_OFFSET : RING_OFFSET,
-		dy: pin.y < 15 ? RING_OFFSET : -RING_OFFSET,
-	};
+	switch (pin.side ?? roomiestSide(pin)) {
+		case "left":
+			return { dx: -RING_OFFSET, dy: 0 };
+		case "right":
+			return { dx: RING_OFFSET, dy: 0 };
+		case "top":
+			return { dx: 0, dy: -RING_OFFSET };
+		case "bottom":
+			return { dx: 0, dy: RING_OFFSET };
+	}
 }
 
 /**

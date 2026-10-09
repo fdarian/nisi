@@ -3,6 +3,11 @@
  * Runs a command and records the result for the guide's `<Checks />`:
  *
  *   bun .claude/skills/nisi-guide/scripts/check.ts "Type check and lint" -- pnpm turbo run check:type check:lint
+ *   bun .claude/skills/nisi-guide/scripts/check.ts Desktop tests -- "cd apps/desktop && bun test"
+ *
+ * The command is either an argv (`-- cmd arg arg`, run directly) or one quoted
+ * shell line (run with `sh -c`, for `cd` and `&&`). The title is everything
+ * before `--`.
  *
  * Runs in the repo root, streams the command's output through, and exits with
  * its exit code. The record lands in `.nisi/guide/checks/<slug>.json`; its shape
@@ -66,8 +71,9 @@ async function pump(
 }
 
 const separator = process.argv.indexOf("--");
-const title = process.argv[2];
-if (title === undefined || separator !== 3) usage();
+// Everything before `--` is the title, so it doesn't need quoting.
+if (separator < 3) usage();
+const title = process.argv.slice(2, separator).join(" ");
 const argv = process.argv.slice(separator + 1);
 if (argv.length === 0) usage();
 
@@ -76,6 +82,14 @@ const repoRoot = await git(process.cwd(), "rev-parse", "--show-toplevel");
 const display =
 	argv.length === 1 ? (argv[0] as string) : argv.map(shellQuote).join(" ");
 const spawned = argv.length === 1 ? ["sh", "-c", argv[0] as string] : argv;
+
+// Heuristic, and only a warning: a check that rewrites files records a pass for code it just changed.
+const MUTATING = /(?:^|\s)(?:--write|--fix|-w)(?:\s|$)|\bformat\b/;
+if (MUTATING.test(display)) {
+	console.error(
+		`check.ts: "${display}" looks like it modifies files. A recorded check should only read the code it vouches for; use the read-only form (\`biome check\`, \`--check\`) unless this is on purpose.`,
+	);
+}
 
 const startedAt = performance.now();
 const proc = Bun.spawn(spawned, {

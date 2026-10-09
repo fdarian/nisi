@@ -4,9 +4,9 @@ Import any of these from `@nisi/guide`. Kit components also resolve without an i
 
 | Component | Use |
 | --- | --- |
-| `Areas` + `Area { id, title, subtitle?, paths }` | The Overview's cards. `paths` are globs over repo-relative paths (`apps/desktop/sidecar/**`; `*` stays in a folder, `**` crosses them, `{a,b}` alternates). Children are markdown bullets. nisi computes the card's "N files +A −D" from the diff, and clicking it lists the files. Colors are assigned in order; you don't pick them. `id`s must be unique. |
+| `Areas` + `Area { id, title, subtitle?, paths }` | The Overview's cards, stacked one per row. `paths` entries are globs over repo-relative paths (`apps/desktop/sidecar/**`; `*` stays in a folder, `**` crosses them, `{a,b}` alternates) or plain paths, each claiming every hunk of the files it matches, or `path:lines` (`"src/middleware.ts:10-40"`) claiming only that file's hunks that overlap the range. Use `path:lines` when two Areas share a file, so each lists only its own hunks. Children are markdown bullets. nisi computes the card's "N files +A −D" from the claimed hunks, and clicking it lists them: a file the Area claims whole is one row, a file it claims in part is one row per hunk (`middleware.ts:12-38`), each a button that opens the diff beside the guide. Tests, stories, docs, images and generated files (lockfiles, snapshots, `@generated`) are left out. Colors are assigned in order; you don't pick them. `id`s must be unique. |
 | `Sequence { title, lanes }` + `Before` / `After` + `Step` / `Wait` / `Event` | A swimlane of what ran when. See `sequence.md`. |
-| `Shot { src, alt, caption? }` + `Pin { x, y, ring? }` | One screenshot with numbered pins. See `screenshots.md`. |
+| `Shot { src, alt, caption? }` + `Pin { x, y, ring?, side? }` | One screenshot with numbered pins. See `screenshots.md`. |
 | `Tour` + `Frame { title, src? }` | A flow, one frame at a time with a filmstrip and arrow keys. Frames take `Pin`s; a frame without `src` renders its children instead. |
 | `BeforeAfter { before, after }` | Side by side. Each side is an image src or any node. |
 | `Note { label }` | A decision or caveat. The label is its heading; the body is muted. Put `Ref`s in the body. |

@@ -3,7 +3,7 @@
  * Previews the guide as the reader sees it, from the command line:
  *
  *   bun .claude/skills/nisi-guide/scripts/render.ts [--expand] [--text] [--theme light|dark]
- *                                                    [--width <px>] [--scale <n>] [--base <ref>]
+ *                                                    [--width <px>] [--scale <n, default 2>] [--base <ref>]
  *
  * Default is PNGs: one per `##` section plus `full.png`, written to
  * `.nisi/guide/.preview/` (git-ignored with `.nisi/`, and outside the guide's
@@ -65,7 +65,7 @@ if (theme !== "light" && theme !== "dark") {
 	process.exit(2);
 }
 const width = numberFlag("--width", 900);
-const scale = numberFlag("--scale", 1);
+const scale = numberFlag("--scale", 2);
 
 const repoRoot = (
 	await git(process.cwd(), "rev-parse", "--show-toplevel")
@@ -93,6 +93,7 @@ try {
 }
 
 if (text) {
+	console.error(describeBase(diff));
 	process.stdout.write(htmlToText(html));
 	process.exit(0);
 }
@@ -170,7 +171,7 @@ function chromePath(): string {
 	);
 }
 
-async function chrome(profile: string, args: string[]): Promise<string> {
+async function chromeOnce(profile: string, args: string[]): Promise<string> {
 	const proc = Bun.spawn(
 		[
 			chromePath(),
@@ -194,6 +195,15 @@ async function chrome(profile: string, args: string[]): Promise<string> {
 	if (code !== 0)
 		throw new Error(`Chrome exited ${code}: ${err.trim().slice(-400)}`);
 	return out;
+}
+
+/** Headless Chrome occasionally dies on launch or teardown; one retry covers it, a second failure is real. */
+async function chrome(profile: string, args: string[]): Promise<string> {
+	try {
+		return await chromeOnce(profile, args);
+	} catch {
+		return await chromeOnce(profile, args);
+	}
 }
 
 function slug(title: string): string {
