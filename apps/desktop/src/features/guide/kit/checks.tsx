@@ -51,6 +51,9 @@ function CheckRow(props: {
 						<span className="shrink-0">
 							at {props.check.sha.slice(0, SHORT_SHA)}
 						</span>
+						{props.check.dirty === true && (
+							<span className="shrink-0">with uncommitted changes</span>
+						)}
 						{props.stale && (
 							<span className="shrink-0 rounded bg-amber-500/12 px-1.5 text-[10px] text-amber-500 uppercase tracking-wide">
 								stale

@@ -25,6 +25,8 @@ export const GuideCheck = Schema.Struct({
 	exitCode: Schema.Number,
 	durationMs: Schema.Number,
 	sha: Schema.String,
+	/** The worktree had uncommitted changes outside `.nisi/` when the run started. Absent on records written before this field existed. */
+	dirty: Schema.optional(Schema.Boolean),
 	at: Schema.String,
 	output: Schema.String,
 });

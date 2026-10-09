@@ -2,7 +2,7 @@ import { join } from "node:path";
 import type { GuideIssue } from "@repo/sidecar-api";
 import { htmlToText } from "../../src/features/guide/guide-text";
 import { renderGuideHtml } from "../../src/features/guide/static-render";
-import { validateGuide } from "../../src/features/guide/validate";
+import { checkGuide } from "../../src/features/guide/validate";
 import { buildGuide, GUIDE_DIR } from "./build";
 import { readGuideDiff } from "./diff";
 import { appStylesheet } from "./preview-css";
@@ -32,12 +32,18 @@ export async function validateRepoGuide(
 ): Promise<DiffSummary & { issues: GuideIssue[] }> {
 	const diff = await readGuideDiff(repoRoot, base);
 	const built = await buildGuide(repoRoot);
-	const problems = withLocalStorage(() => validateGuide(built, diff.files));
+	const report = withLocalStorage(() => checkGuide(built, diff.files));
 	return {
 		base: diff.base,
 		mergeBase: diff.mergeBase,
 		changedFiles: diff.files.length,
-		issues: problems.map((message) => ({ level: "error", message })),
+		issues: [
+			...report.errors.map((message) => ({ level: "error" as const, message })),
+			...report.warnings.map((message) => ({
+				level: "warning" as const,
+				message,
+			})),
+		],
 	};
 }
 

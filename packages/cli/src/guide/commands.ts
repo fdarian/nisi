@@ -90,7 +90,9 @@ export const guideCommand = <E>(fail: Effect.Effect<never, E>) => {
 				`${report.issues.length} problem${report.issues.length === 1 ? "" : "s"} in the guide (${describeBase(report)}):\n`,
 			);
 			for (const issue of report.issues) {
-				yield* Console.error(`- ${issue.message}`);
+				yield* Console.error(
+					`- ${issue.level === "warning" ? "warning: " : ""}${issue.message}`,
+				);
 			}
 			if (errors.length > 0) return yield* fail;
 		}),

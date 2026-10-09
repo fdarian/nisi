@@ -103,6 +103,8 @@ export function htmlToText(html: string): string {
 			line === "" ||
 			/\s$/.test(line) ||
 			/^[\s.,;:)\]!?]/.test(first) ||
+			// A possessive hugs the element before it: "`a.ts`'s".
+			/^['\u2019]s(?![\w])/.test(text) ||
 			/[([⟨]$/.test(line);
 		line += boundary && !glued ? ` ${text}` : text;
 		boundary = false;

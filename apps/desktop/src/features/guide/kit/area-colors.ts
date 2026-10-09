@@ -30,6 +30,14 @@ const PALETTE: readonly AreaColor[] = [
 		dot: "bg-indigo-500",
 		step: "border-indigo-500/30 bg-indigo-500/10 text-indigo-700 dark:text-indigo-300",
 	},
+	{
+		dot: "bg-lime-500",
+		step: "border-lime-500/30 bg-lime-500/10 text-lime-700 dark:text-lime-300",
+	},
+	{
+		dot: "bg-fuchsia-500",
+		step: "border-fuchsia-500/30 bg-fuchsia-500/10 text-fuchsia-700 dark:text-fuchsia-300",
+	},
 ];
 
 const NEUTRAL: AreaColor = {
@@ -37,7 +45,7 @@ const NEUTRAL: AreaColor = {
 	step: "border-border bg-muted text-muted-foreground",
 };
 
-/** Colors cycle after six areas; an id that isn't an Area (yet) is neutral. */
+/** Colors cycle after eight areas; an id that isn't an Area (yet) is neutral. */
 export function colorForArea(
 	areaOrder: readonly string[],
 	id: string | undefined,

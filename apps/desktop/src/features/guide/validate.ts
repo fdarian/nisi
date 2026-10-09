@@ -115,20 +115,51 @@ function problemsFromHtml(html: string): string[] {
 	return problems;
 }
 
+const TEXT_BLOCK = /<(p|li)[\s>][\s\S]*?<\/\1>/g;
+const REF_BUTTON = /<button\b[^>]*\bdata-ref-path="([^"]*)"[^>]*>/g;
+
+/** A path cited by both a `Ref` and a backticked path in one paragraph or bullet renders as two chips for one file. */
+function warningsFromHtml(html: string): string[] {
+	const warnings: string[] = [];
+	for (const block of html.matchAll(TEXT_BLOCK)) {
+		const cited = { ref: new Set<string>(), code: new Set<string>() };
+		for (const button of block[0].matchAll(REF_BUTTON)) {
+			const autolinked = (button[0] as string).includes("data-ref-autolinked");
+			cited[autolinked ? "code" : "ref"].add(button[1] as string);
+		}
+		for (const path of cited.ref) {
+			if (cited.code.has(path)) {
+				warnings.push(
+					`${path} is cited twice in one paragraph, as a <Ref> and as a backticked path. Cite a path once: keep the Ref or the backticked path.`,
+				);
+			}
+		}
+	}
+	return [...new Set(warnings)];
+}
+
+export type GuideReport = { errors: string[]; warnings: string[] };
+
 /**
  * Everything the app would complain about, plus what only the author can fix:
  * the guide is built and rendered exactly as the Guide tab does, with a
- * collector in the context so components report themselves. Returns a list of
- * problems for the agent; empty means the guide is good to hand over.
+ * collector in the context so components report themselves. Errors mean the
+ * guide isn't ready to hand over; warnings are advice.
  */
-export function validateGuide(
+export function checkGuide(
 	result: GuideResult,
 	files: readonly DiffFile[],
-): string[] {
+): GuideReport {
 	if (result.kind === "missing")
-		return [`There is no guide at ${result.path}.`];
+		return {
+			errors: [`There is no guide at ${result.path}.`],
+			warnings: [],
+		};
 	if (result.kind === "error")
-		return [`The guide doesn't build:\n${result.message}`];
+		return {
+			errors: [`The guide doesn't build:\n${result.message}`],
+			warnings: [],
+		};
 
 	const collector: GuideCollector = {
 		areas: [],
@@ -141,9 +172,12 @@ export function validateGuide(
 	try {
 		html = renderGuideHtml(result, files, { expanded: true, collector });
 	} catch (cause) {
-		return [
-			`The guide fails to render: ${cause instanceof Error ? cause.message : String(cause)}`,
-		];
+		return {
+			errors: [
+				`The guide fails to render: ${cause instanceof Error ? cause.message : String(cause)}`,
+			],
+			warnings: [],
+		};
 	}
 
 	const problems = problemsFromHtml(html);
@@ -179,5 +213,13 @@ export function validateGuide(
 			);
 		}
 	}
-	return problems;
+	return { errors: problems, warnings: warningsFromHtml(html) };
+}
+
+/** The problems that fail the guide; see `checkGuide` for the warnings too. */
+export function validateGuide(
+	result: GuideResult,
+	files: readonly DiffFile[],
+): string[] {
+	return checkGuide(result, files).errors;
 }

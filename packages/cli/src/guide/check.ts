@@ -33,6 +33,19 @@ async function git(cwd: string, ...args: string[]): Promise<string> {
 	return out.trim();
 }
 
+/** Whether anything outside `.nisi/` is modified, staged or untracked: the recorded sha alone then doesn't describe the code the check ran against. */
+async function hasUncommittedChanges(repoRoot: string): Promise<boolean> {
+	const status = await git(
+		repoRoot,
+		"status",
+		"--porcelain",
+		"--",
+		".",
+		":!.nisi",
+	);
+	return status !== "";
+}
+
 /** Forwards a stream to the terminal as it arrives and keeps the last lines for the record. */
 async function pump(
 	stream: ReadableStream<Uint8Array>,
@@ -83,6 +96,7 @@ export async function recordCheck(
 		);
 	}
 
+	const dirty = await hasUncommittedChanges(repoRoot);
 	const startedAt = performance.now();
 	const proc = Bun.spawn(spawned, {
 		cwd: repoRoot,
@@ -104,6 +118,7 @@ export async function recordCheck(
 		exitCode,
 		durationMs,
 		sha: await git(repoRoot, "rev-parse", "HEAD"),
+		dirty,
 		at: new Date().toISOString(),
 		output: merged
 			.slice(-TAIL_LINES)

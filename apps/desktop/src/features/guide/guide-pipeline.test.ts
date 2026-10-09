@@ -10,7 +10,7 @@ import { GUIDE_COMPONENTS } from "./guide-components";
 import { GuideProvider } from "./guide-context";
 import { htmlToText } from "./guide-text";
 import { renderGuideHtml } from "./static-render";
-import { type DiffFile, validateGuide } from "./validate";
+import { checkGuide, type DiffFile, validateGuide } from "./validate";
 
 const SAMPLE = join(import.meta.dir, "sample");
 let repoRoot: string;
@@ -118,6 +118,7 @@ beforeAll(async () => {
 		checkRecord({
 			title: "Unit tests",
 			exitCode: 1,
+			dirty: true,
 			sha: "0123456789abcdef0123456789abcdef01234567",
 			at: "2026-10-09T03:05:00.000Z",
 			output: "1 test failed",
@@ -444,7 +445,7 @@ test("the text linearisation carries the computed values", async () => {
 	expect(out).toContain(
 		"[Passed] Type check and lint `pnpm turbo run check:type` at",
 	);
-	expect(out).toMatch(/\[Failed, exit 1\] Unit tests .* at 0123456 stale/);
+	expect(out).toMatch(/\[Failed, exit 1\] Unit tests .* at 0123456 with uncommitted changes stale/);
 	expect(out).toContain("Not run");
 	expect(out).toContain("Agent: [runs tests, types the result]");
 	expect(out).toContain("Sidecar: [wait]");
@@ -504,4 +505,40 @@ test("a ringed Pin draws a ring and a leader line beside its badge; a plain Pin 
 	expect(html.match(/<title>leader line<\/title>/g)).toHaveLength(1);
 	expect(html).toContain('aria-label="Pin 1"');
 	expect(html).toContain('aria-label="Pin 2"');
+});
+
+test("text: a possessive hugs the backticked path before it", async () => {
+	const result = await buildInline(`## Overview
+
+<Areas>
+	<Area id="real" title="Real" paths={["src/**"]}>
+		- \`src/a.ts\`'s parser and <Ref path="src/a.ts" />'s tests, but 'quoted' stays apart.
+	</Area>
+</Areas>
+`);
+	if (result.kind !== "ok") throw new Error("build failed");
+	const out = htmlToText(
+		renderGuideHtml(result, [file("src/a.ts", 1, 0, [1, 1])], {
+			expanded: true,
+		}),
+	);
+	expect(out).toContain("⟨a.ts⟩'s parser and ⟨a.ts⟩'s tests, but 'quoted'");
+});
+
+test("validate: a path cited as both a Ref and a backticked path in one paragraph is a warning, not an error", async () => {
+	const result = await buildInline(`## Overview
+
+<Areas>
+	<Area id="real" title="Real" paths={["src/**"]}>
+		- Parsing lives in \`src/a.ts\`. <Ref path="src/a.ts" />
+		- Two cites of one file with different lines are fine. <Ref path="src/a.ts" lines="1" /> <Ref path="src/a.ts" lines="2" />
+		- Another bullet cites \`src/a.ts\` alone.
+	</Area>
+</Areas>
+`);
+	const report = checkGuide(result, [file("src/a.ts", 2, 0, [1, 2])]);
+	expect(report.errors).toEqual([]);
+	expect(report.warnings).toEqual([
+		expect.stringContaining("src/a.ts is cited twice in one paragraph"),
+	]);
 });

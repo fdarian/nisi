@@ -1,5 +1,5 @@
 import { afterEach, expect, test } from "bun:test";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { recordCheck } from "./check.ts";
@@ -77,4 +77,18 @@ test("a title with nothing to name a file by is rejected before running anything
 	await expect(recordCheck(repo, "!!!", ["true"])).rejects.toThrow(
 		"nothing to name a file by",
 	);
+});
+
+test("dirty records uncommitted changes outside .nisi, and ignores .nisi itself", async () => {
+	const repo = await tempRepo();
+	await recordCheck(repo, "Clean", ["true"]);
+	expect((await readRecord(repo, "clean")).dirty).toBe(false);
+
+	// The first run already wrote .nisi/guide/checks, which must not count.
+	await recordCheck(repo, "Still clean", ["true"]);
+	expect((await readRecord(repo, "still-clean")).dirty).toBe(false);
+
+	await writeFile(join(repo, "untracked.ts"), "export {};\n");
+	await recordCheck(repo, "Dirty", ["true"]);
+	expect((await readRecord(repo, "dirty")).dirty).toBe(true);
 });

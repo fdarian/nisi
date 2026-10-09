@@ -14,6 +14,8 @@ export function Ref(props: {
 	lines?: string;
 	/** Replaces the basename as the visible text; `Areas` passes a longer suffix when two listed files share a name. */
 	label?: string;
+	/** Set by `GuideCode` for a backticked path; lets the validator spot a path cited both ways in one paragraph. Authors never pass it. */
+	autolinked?: boolean;
 }): React.ReactElement {
 	const guide = useGuideContext();
 	if (props.lines !== undefined) parseLines(props.lines);
@@ -29,6 +31,8 @@ export function Ref(props: {
 				render={
 					<button
 						data-text="ref"
+						data-ref-path={props.path}
+						data-ref-autolinked={props.autolinked === true ? "" : undefined}
 						className={cn(
 							"inline-flex max-w-full cursor-pointer items-center gap-1 rounded px-1.5 py-px align-baseline font-mono text-[10.5px] text-sky-500",
 							selected ? "bg-sky-500/25" : "bg-sky-500/10 hover:bg-sky-500/20",
@@ -66,7 +70,7 @@ export function GuideCode(
 	const guide = useGuideContext();
 	if (props.className === undefined && typeof props.children === "string") {
 		const ref = refFromCode(props.children, guide.changedPaths);
-		if (ref !== null) return <Ref {...ref} />;
+		if (ref !== null) return <Ref {...ref} autolinked />;
 	}
 	return <ProseCode {...props} />;
 }
