@@ -1,4 +1,4 @@
-import { oc } from "@orpc/contract";
+import { eventIterator, oc } from "@orpc/contract";
 import { Schema } from "effect";
 
 /**
@@ -41,15 +41,30 @@ export type RepositorySessionState = Schema.Schema.Type<
 	typeof RepositorySessionState
 >;
 
+const ResolvedSessionState = Schema.Struct({
+	kind: Schema.Literal("resolved"),
+	state: RepositorySessionState,
+});
+
 /**
- * A session's PR state is either known or, when the lookup failed, carries
- * why — no state is ever reported that the sidecar didn't observe.
+ * What `repositories.get` knows without asking GitHub: the state, or that
+ * `sessionStates` still has to find it.
+ */
+export const RepositorySessionListedState = Schema.Union([
+	ResolvedSessionState,
+	Schema.Struct({ kind: Schema.Literal("pending") }),
+]);
+export type RepositorySessionListedState = Schema.Schema.Type<
+	typeof RepositorySessionListedState
+>;
+
+/**
+ * What `sessionStates` reports for a pending PR: its state or, when the
+ * lookup failed, why — no state is ever reported that the sidecar didn't
+ * observe.
  */
 export const RepositorySessionResolution = Schema.Union([
-	Schema.Struct({
-		kind: Schema.Literal("resolved"),
-		state: RepositorySessionState,
-	}),
+	ResolvedSessionState,
 	Schema.Struct({ kind: Schema.Literal("unresolved"), reason: Schema.String }),
 ]);
 export type RepositorySessionResolution = Schema.Schema.Type<
@@ -61,7 +76,7 @@ export const RepositorySession = Schema.Struct({
 	id: Schema.String,
 	prNumber: Schema.Number,
 	prTitle: Schema.String,
-	state: RepositorySessionResolution,
+	state: RepositorySessionListedState,
 	updatedAt: Schema.Number,
 });
 export type RepositorySession = Schema.Schema.Type<typeof RepositorySession>;
@@ -77,19 +92,43 @@ export const RepositoryDetail = Schema.Struct({
 });
 export type RepositoryDetail = Schema.Schema.Type<typeof RepositoryDetail>;
 
+/** One event of `sessionStates`: PR numbers resolved together, every session of that PR sharing the state. */
+export const RepositorySessionStateBatch = Schema.Array(
+	Schema.Struct({
+		prNumber: Schema.Number,
+		state: RepositorySessionResolution,
+	}),
+);
+export type RepositorySessionStateBatch = Schema.Schema.Type<
+	typeof RepositorySessionStateBatch
+>;
+
+const RepositoryInput = Schema.Struct({
+	owner: Schema.String,
+	repo: Schema.String,
+});
+
 /**
- * `list` does no GitHub calls. `get` resolves each session's PR state: open
- * per the PR index, else a persisted `merged`/`closed`, else a live `gh`
- * lookup that is then persisted. A failed lookup leaves just that session
- * `unresolved` (with the reason) and persists nothing for it. Changing a
- * repository's path goes through `pullRequests.recordRepoPath`.
+ * `list` and `get` do no GitHub calls: a session's state is `resolved` when
+ * the PR index says it is open or a terminal `merged`/`closed` was persisted,
+ * else `pending`. `sessionStates` resolves the pending ones — one batched
+ * `gh pr list` first, then a `gh pr view` per PR that listing didn't return —
+ * persisting each answer before yielding it, so a client that goes away keeps
+ * the work done so far. A failed lookup is yielded `unresolved` with the
+ * reason and persists nothing. The stream ends when every pending PR has been
+ * reported. Changing a repository's path goes through
+ * `pullRequests.recordRepoPath`.
  */
 export const repositoriesContract = {
 	list: oc
 		.output(Schema.Array(RepositorySummary))
 		.errors({ SERVICE_UNAVAILABLE: {} }),
 	get: oc
-		.input(Schema.Struct({ owner: Schema.String, repo: Schema.String }))
+		.input(RepositoryInput)
 		.output(RepositoryDetail)
+		.errors({ SERVICE_UNAVAILABLE: {} }),
+	sessionStates: oc
+		.input(RepositoryInput)
+		.output(eventIterator(Schema.toStandardSchemaV1(RepositorySessionStateBatch)))
 		.errors({ SERVICE_UNAVAILABLE: {} }),
 };

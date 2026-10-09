@@ -92,7 +92,11 @@ import {
 } from "./open-requests.ts";
 import { PrIndex } from "./pr-index.ts";
 import { AttentionState } from "./pull-request-attention.ts";
-import { getRepository, listRepositories } from "./repositories.ts";
+import {
+	getRepository,
+	listRepositories,
+	streamSessionStates,
+} from "./repositories.ts";
 import { RpcErrorsPlugin } from "./rpc-errors.ts";
 import { RpcFailureLedger } from "./rpc-failure-ledger.ts";
 import { RpcLifecyclePlugin } from "./rpc-lifecycle.ts";
@@ -1283,12 +1287,6 @@ export function attachRouter(
 							Effect.fail(
 								errors.SERVICE_UNAVAILABLE({ message: cause.message }),
 							),
-						SessionNotFound: (cause) =>
-							Effect.fail(
-								errors.SERVICE_UNAVAILABLE({
-									message: `session not found: ${cause.sessionId}`,
-								}),
-							),
 						GitCommandError: (cause) =>
 							Effect.fail(
 								errors.SERVICE_UNAVAILABLE({
@@ -1298,6 +1296,24 @@ export function attachRouter(
 					}),
 				);
 			}),
+			sessionStates: authed.repositories.sessionStates.handler(
+				async function* (request) {
+					const stream = streamSessionStates(
+						request.input.owner,
+						request.input.repo,
+					).pipe(
+						Stream.mapError((cause) =>
+							request.errors.SERVICE_UNAVAILABLE({
+								message:
+									cause._tag === "SessionNotFound"
+										? `session not found: ${cause.sessionId}`
+										: cause.message,
+							}),
+						),
+					);
+					yield* streamToIterator(stream, mainContext, request.signal);
+				},
+			),
 		},
 		pullRequests: {
 			repositories: authed.pullRequests.repositories.effect(
