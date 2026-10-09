@@ -215,9 +215,7 @@ const program = Effect.scoped(
 						Effect.andThen(releaseSidecar(dataDir, owner)),
 					),
 			);
-			yield* keepHandshakePublished(dataDir, owner).pipe(
-				Effect.forkScoped,
-			);
+			yield* keepHandshakePublished(dataDir, owner).pipe(Effect.forkScoped);
 
 			// Only now — sidecar.json claimed and published in the one act above
 			// — does AppServices get built, which is what actually opens
