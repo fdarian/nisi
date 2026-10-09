@@ -5,18 +5,23 @@ import { Checkbox } from "#/components/ui/checkbox";
 import { useGuideContext } from "../guide-context";
 import { useTick, useTickedCount } from "../guide-ticks";
 
-type ItemProps = { id: string; children?: ReactNode };
+type ItemProps = { id: string; title: string; children?: ReactNode };
 
-/** One thing the reviewer has to do or decide; the tick is remembered per session by `id`, so keep ids stable when rewriting the guide. */
+/** One thing for the reviewer to do or decide. `title` is the action, phrased for them; the children are the one-line how or why. The tick is remembered per session by `id`, so keep ids stable when rewriting the guide. */
 export function Item(props: ItemProps): React.ReactElement {
 	const guide = useGuideContext();
+	if (typeof props.title !== "string") {
+		throw new Error(
+			`<Item id="${props.id}"> needs a title: the action for the reviewer, with the detail as children`,
+		);
+	}
 	const [ticked, setTicked] = useTick(guide.sessionId, props.id);
 	const inputId = `guide-tick-${guide.sessionId}-${props.id}`;
 	return (
 		<li>
 			<label
 				htmlFor={inputId}
-				className="flex cursor-pointer items-start gap-2.5 rounded-md px-2 py-1.5 hover:bg-accent"
+				className="flex cursor-pointer items-start gap-2.5 rounded-md px-3 py-2 hover:bg-accent"
 			>
 				<Checkbox
 					checked={ticked}
@@ -24,10 +29,19 @@ export function Item(props: ItemProps): React.ReactElement {
 					id={inputId}
 					onCheckedChange={(next) => setTicked(next === true)}
 				/>
-				<span
-					className={ticked ? "text-muted-foreground line-through" : undefined}
-				>
-					{props.children}
+				<span className="flex min-w-0 flex-col">
+					<span
+						className={
+							ticked ? "text-muted-foreground line-through" : undefined
+						}
+					>
+						{props.title}
+					</span>
+					{props.children !== undefined && (
+						<span className="text-muted-foreground text-xs">
+							{props.children}
+						</span>
+					)}
 				</span>
 			</label>
 		</li>
@@ -44,13 +58,10 @@ export function NeedsYou(props: { children: ReactNode }): React.ReactElement {
 	const done = useTickedCount(guide.sessionId, ids);
 	return (
 		<section className="overflow-hidden rounded-lg border bg-card">
-			<div className="flex items-center justify-between border-b px-3 py-1.5">
-				<span className="font-medium text-sm">Needs you</span>
-				<span className="text-muted-foreground text-xs tabular-nums">
-					{done} / {ids.length}
-				</span>
+			<div className="border-b px-3 py-1.5 text-muted-foreground text-xs tabular-nums">
+				{done} / {ids.length} done
 			</div>
-			<ul className="flex flex-col p-1">{props.children}</ul>
+			<ul className="m-0 flex list-none flex-col p-1">{props.children}</ul>
 		</section>
 	);
 }

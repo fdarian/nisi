@@ -47,6 +47,7 @@ export function ReferencePane(props: ReferencePaneProps): React.ReactElement {
 	return (
 		<LocationPane
 			block={props.block}
+			collapseReviewed
 			empty={EMPTY}
 			files={props.files}
 			orpc={props.orpc}

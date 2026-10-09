@@ -1,7 +1,16 @@
 "use client";
 
+import type { GuideCheck } from "@repo/sidecar-api";
 import { useQuery } from "@tanstack/react-query";
-import { Component, type ErrorInfo, type ReactNode, useMemo } from "react";
+import {
+	Component,
+	type ErrorInfo,
+	type ReactNode,
+	useCallback,
+	useMemo,
+	useRef,
+	useState,
+} from "react";
 import {
 	Empty,
 	EmptyDescription,
@@ -11,12 +20,13 @@ import {
 import { Spinner } from "#/components/ui/spinner";
 import type { Session } from "#/features/pull-request/data/pr-data";
 import { useFileChanges } from "#/features/pull-request/data/pr-data";
-import { useSessionOpenFiles } from "#/features/pull-request/data/session-ui-store";
-import { proseComponents } from "#/features/pull-request/prose-markdown";
 import type { SidecarQueryUtils } from "#/infra/backend-context";
 import { evaluateGuide } from "./evaluate";
+import { GUIDE_COMPONENTS } from "./guide-components";
 import { GuideProvider } from "./guide-context";
-import * as kit from "./kit";
+import { GuideToc } from "./guide-toc";
+import { ReferenceSidePane } from "./reference-side-pane";
+import type { GuideRef } from "./refs";
 
 const POLL_MS = 2000;
 
@@ -30,6 +40,7 @@ export function GuideView(props: {
 	session: Session;
 	enabled: boolean;
 }): React.ReactElement {
+	const [selectedRef, setSelectedRef] = useState<GuideRef | null>(null);
 	const guide = useQuery({
 		...props.orpc.guide.get.queryOptions({
 			input: { sessionId: props.session.id },
@@ -74,8 +85,12 @@ export function GuideView(props: {
 	}
 	return (
 		<GuideBody
+			checks={result.checks}
 			code={result.code}
+			headSha={result.headSha}
+			onSelectRef={setSelectedRef}
 			orpc={props.orpc}
+			selectedRef={selectedRef}
 			session={props.session}
 			version={result.version}
 		/>
@@ -87,41 +102,92 @@ function GuideBody(props: {
 	session: Session;
 	version: string;
 	code: string;
+	checks: readonly GuideCheck[];
+	headSha: string;
+	selectedRef: GuideRef | null;
+	onSelectRef: (ref: GuideRef | null) => void;
 }): React.ReactElement {
 	const files = useFileChanges(props.orpc, props.session.id).files;
 	const changedPaths = useMemo(
 		() => new Set(files.map((file) => file.path)),
 		[files],
 	);
-	const sessionOpenFiles = useSessionOpenFiles(props.session.id);
-	const openFile = sessionOpenFiles.openFile;
-	const context = useMemo(
-		() => ({ sessionId: props.session.id, changedPaths, openFile }),
-		[props.session.id, changedPaths, openFile],
+	const onSelectRef = props.onSelectRef;
+	const selectRef = useCallback(
+		(ref: GuideRef) => onSelectRef(ref),
+		[onSelectRef],
 	);
+	const closeRef = useCallback(() => onSelectRef(null), [onSelectRef]);
+	const context = useMemo(
+		() => ({
+			sessionId: props.session.id,
+			changedPaths,
+			checks: props.checks,
+			headSha: props.headSha,
+			selectedRef: props.selectedRef,
+			selectRef,
+		}),
+		[
+			props.session.id,
+			changedPaths,
+			props.checks,
+			props.headSha,
+			props.selectedRef,
+			selectRef,
+		],
+	);
+	const scroller = useRef<HTMLDivElement>(null);
+	const content = useRef<HTMLDivElement>(null);
 
 	return (
-		<div className="min-h-0 min-w-0 flex-1 overflow-auto px-6 py-5">
-			<div className="mx-auto flex max-w-3xl flex-col gap-3 pb-12 text-foreground text-sm leading-relaxed">
-				<GuideProvider value={context}>
-					<GuideErrorBoundary resetKey={props.version}>
-						<EvaluatedGuide code={props.code} version={props.version} />
-					</GuideErrorBoundary>
-				</GuideProvider>
+		<div className="flex min-h-0 flex-1">
+			<div
+				className="@container min-h-0 min-w-0 flex-1 overflow-auto px-6 py-5"
+				ref={scroller}
+			>
+				<div className="relative mx-auto max-w-3xl">
+					<div
+						className="flex flex-col gap-3 pb-12 text-foreground text-sm leading-relaxed"
+						ref={content}
+					>
+						<GuideProvider value={context}>
+							<GuideErrorBoundary resetKey={props.version}>
+								<EvaluatedGuide code={props.code} version={props.version} />
+							</GuideErrorBoundary>
+						</GuideProvider>
+					</div>
+					{props.selectedRef === null && (
+						<aside className="absolute top-0 left-full ml-8 hidden h-full w-44 @5xl:block">
+							<div className="sticky top-0">
+								<GuideToc
+									content={content}
+									scroller={scroller}
+									version={props.version}
+								/>
+							</div>
+						</aside>
+					)}
+				</div>
 			</div>
+			{props.selectedRef !== null && (
+				<ReferenceSidePane
+					files={files}
+					onClose={closeRef}
+					orpc={props.orpc}
+					reference={props.selectedRef}
+					sessionId={props.session.id}
+				/>
+			)}
 		</div>
 	);
 }
-
-// Kit components resolve without an import too, so a guide that forgets `import { Outcome } from "@nisi/guide"` still renders.
-const MDX_COMPONENTS = { ...proseComponents, ...kit };
 
 function EvaluatedGuide(props: {
 	version: string;
 	code: string;
 }): React.ReactElement {
 	const Guide = evaluateGuide(props.version, props.code);
-	return <Guide components={MDX_COMPONENTS as never} />;
+	return <Guide components={GUIDE_COMPONENTS as never} />;
 }
 
 type BoundaryProps = { resetKey: string; children: ReactNode };

@@ -2,10 +2,13 @@ import { createHash } from "node:crypto";
 import { readdir, stat } from "node:fs/promises";
 import { join, relative } from "node:path";
 import { compile } from "@mdx-js/mdx";
-import type { GuideResult } from "@repo/sidecar-api";
+import { GuideCheck, type GuideResult } from "@repo/sidecar-api";
+import { Schema } from "effect";
 
 export const GUIDE_DIR = ".nisi/guide";
 export const GUIDE_ENTRY = "guide.mdx";
+/** Recorded command runs (`.claude/skills/nisi-guide/check.ts`). Not bundle input, so kept out of `version`. */
+const CHECKS_DIR = "checks";
 
 /**
  * Specifiers the frontend evaluator (`src/features/guide/evaluate.ts`)
@@ -61,25 +64,27 @@ const imagePlugin: Bun.BunPlugin = {
 	},
 };
 
-type CachedBuild = { version: string; result: GuideResult };
-const cache = new Map<string, CachedBuild>();
+type CachedBundle = { version: string; code: string };
+const cache = new Map<string, CachedBundle>();
 
-async function listFiles(dir: string): Promise<string[]> {
+async function listFiles(dir: string, skip?: string): Promise<string[]> {
 	const entries = await readdir(dir, { withFileTypes: true });
 	const nested = await Promise.all(
-		entries.map((entry) =>
-			entry.isDirectory()
-				? listFiles(join(dir, entry.name))
-				: [join(dir, entry.name)],
-		),
+		entries
+			.filter((entry) => entry.name !== skip)
+			.map((entry) =>
+				entry.isDirectory()
+					? listFiles(join(dir, entry.name))
+					: [join(dir, entry.name)],
+			),
 	);
 	return nested.flat().sort();
 }
 
-/** Hash of path + mtime + size over every file in the guide directory, so an edit to an imported component or image rebuilds too. */
+/** Hash of path + mtime + size over every bundle input in the guide directory, so an edit to an imported component or image rebuilds too. */
 async function guideVersion(guideDir: string): Promise<string> {
 	const hash = createHash("sha256");
-	for (const file of await listFiles(guideDir)) {
+	for (const file of await listFiles(guideDir, CHECKS_DIR)) {
 		const info = await stat(file);
 		hash.update(`${relative(guideDir, file)}\0${info.mtimeMs}\0${info.size}\0`);
 	}
@@ -104,10 +109,56 @@ async function bundle(entry: string): Promise<string> {
 	return await first.text();
 }
 
+const decodeCheck = Schema.decodeUnknownSync(GuideCheck);
+
+async function readChecks(guideDir: string): Promise<GuideCheck[]> {
+	const dir = join(guideDir, CHECKS_DIR);
+	let names: string[];
+	try {
+		names = await readdir(dir);
+	} catch (cause) {
+		if ((cause as NodeJS.ErrnoException).code === "ENOENT") return [];
+		throw cause;
+	}
+	const checks = await Promise.all(
+		names
+			.filter((name) => name.endsWith(".json"))
+			.map(async (name) => {
+				const file = join(dir, name);
+				try {
+					return decodeCheck(await Bun.file(file).json());
+				} catch (cause) {
+					throw new Error(
+						`${file} isn't a valid check record (re-run it through check.ts): ${cause instanceof Error ? cause.message : String(cause)}`,
+					);
+				}
+			}),
+	);
+	return checks.sort((a, b) => a.at.localeCompare(b.at));
+}
+
+async function headSha(repoRoot: string): Promise<string> {
+	const proc = Bun.spawn(["git", "rev-parse", "HEAD"], {
+		cwd: repoRoot,
+		stdout: "pipe",
+		stderr: "pipe",
+	});
+	const [out, err, code] = await Promise.all([
+		proc.stdout.text(),
+		proc.stderr.text(),
+		proc.exited,
+	]);
+	if (code !== 0) throw new Error(`git rev-parse HEAD failed: ${err.trim()}`);
+	return out.trim();
+}
+
 /**
- * Bundles `<repoRoot>/.nisi/guide/guide.mdx`. A failed build is an `error`
- * result rather than a throw: the author is mid-edit while the Guide tab
- * polls, and that state is exactly what the tab exists to display.
+ * Bundles `<repoRoot>/.nisi/guide/guide.mdx` and attaches the recorded check
+ * runs and the worktree's head. A failed build is an `error` result rather
+ * than a throw: the author is mid-edit while the Guide tab polls, and that
+ * state is exactly what the tab exists to display. The bundle is cached on its
+ * inputs; checks and head are re-read every call because they change without
+ * the bundle changing.
  */
 export async function buildGuide(repoRoot: string): Promise<GuideResult> {
 	const guideDir = join(repoRoot, GUIDE_DIR);
@@ -116,14 +167,19 @@ export async function buildGuide(repoRoot: string): Promise<GuideResult> {
 
 	try {
 		const version = await guideVersion(guideDir);
-		const cached = cache.get(repoRoot);
-		if (cached !== undefined && cached.version === version) {
-			return cached.result;
+		let bundled = cache.get(repoRoot);
+		if (bundled === undefined || bundled.version !== version) {
+			bundled = { version, code: await bundle(path) };
+			cache.set(repoRoot, bundled);
 		}
-		const code = await bundle(path);
-		const result: GuideResult = { kind: "ok", path, version, code };
-		cache.set(repoRoot, { version, result });
-		return result;
+		return {
+			kind: "ok",
+			path,
+			version,
+			code: bundled.code,
+			checks: await readChecks(guideDir),
+			headSha: await headSha(repoRoot),
+		};
 	} catch (cause) {
 		return {
 			kind: "error",

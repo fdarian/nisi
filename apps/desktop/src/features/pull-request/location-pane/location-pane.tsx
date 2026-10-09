@@ -137,6 +137,8 @@ type LocationPaneProps = {
 	outdatedPaths: ReadonlySet<string>;
 	/** Shown while `block` is null. */
 	empty: React.ReactNode;
+	/** Start fully-reviewed locations collapsed (the walkthrough's reading flow); a pane the user opened by clicking a link should show its code. */
+	collapseReviewed: boolean;
 };
 
 export function LocationPane({
@@ -146,6 +148,7 @@ export function LocationPane({
 	block,
 	outdatedPaths,
 	empty,
+	collapseReviewed,
 }: LocationPaneProps): React.ReactElement {
 	const diffTheme = useDiffTheme(orpc);
 	// Like the diff pane's file overrides, either direction is sticky until the checkbox flips.
@@ -240,7 +243,9 @@ export function LocationPane({
 
 			const status = computeGroupReviewStatus(group.ranges, content.review);
 			nextStatus.set(itemId, status);
-			const collapsed = collapseOverrides.get(itemId) ?? status === "reviewed";
+			const collapsed =
+				collapseOverrides.get(itemId) ??
+				(collapseReviewed && status === "reviewed");
 
 			const synthesizedPatch = buildLocationFileDiff(
 				content.patch,
@@ -278,7 +283,14 @@ export function LocationPane({
 		}
 
 		return { items: nextItems, statusByItemId: nextStatus };
-	}, [itemGroups, filesByPath, fileContents, openFile, collapseOverrides]);
+	}, [
+		itemGroups,
+		filesByPath,
+		fileContents,
+		openFile,
+		collapseOverrides,
+		collapseReviewed,
+	]);
 
 	const renderCustomHeader = useCallback(
 		(item: CodeViewItem<ReferenceAnnotationMetadata>) => {
@@ -293,7 +305,8 @@ export function LocationPane({
 					itemId={item.id}
 					onToggleCollapse={() => setCollapseOverride(item.id, !collapsed)}
 					onToggleReviewed={
-						status === undefined
+						// A whole-file location has no finite range to record a claim for.
+						status === undefined || group.ranges.some(isWholeFile)
 							? undefined
 							: () => {
 									clearCollapseOverride(item.id);

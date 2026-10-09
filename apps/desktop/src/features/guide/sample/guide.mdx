@@ -1,26 +1,27 @@
 import {
 	BeforeAfter,
+	Checks,
 	Frame,
 	Item,
 	NeedsYou,
 	Note,
-	Outcome,
 	Pin,
 	Ref,
 	Shot,
+	Skipped,
 	Tour,
 } from "@nisi/guide";
 import before from "./settings-before.png";
 import after from "./settings-after.png";
 import StatRow from "./stat-row";
 
-<Outcome title="Guides: write one in .nisi/guide, read it in the Guide tab">
-	The sidecar bundles `guide.mdx`, the app evaluates it against its own React
-	and the kit, and the result renders here. Edit the file and this tab updates
-	within a couple of seconds.
-</Outcome>
+# Guides: write one in .nisi/guide, read it in the Guide tab
 
-## What it looks like
+- The sidecar bundles `guide.mdx`; the app evaluates it against its own React and the kit.
+- Clicking a file reference opens that file's diff beside the guide.
+- Test and lint results are recorded by a script, not typed in.
+
+## See it
 
 <Shot src={after} alt="Settings page after the change" caption="Settings, after">
 	<Pin x={5} y={40}>The new row highlights the active repository</Pin>
@@ -28,8 +29,6 @@ import StatRow from "./stat-row";
 </Shot>
 
 <BeforeAfter before={before} after={after} />
-
-## Walk through it
 
 <Tour>
 	<Frame title="Open settings" src={before}>
@@ -44,7 +43,7 @@ import StatRow from "./stat-row";
 	</Frame>
 </Tour>
 
-## Decisions
+## How it works
 
 <Note label="Bundled in the sidecar, evaluated in the app">
 	The bundle externalises React and the kit, so a guide never ships a second
@@ -53,9 +52,22 @@ import StatRow from "./stat-row";
 	This one points outside the diff: <Ref path="README.md" />.
 </Note>
 
+<Note label="Plain backticked paths link too">
+	`apps/desktop/sidecar/guide/build.ts:70-95` and `apps/desktop/src/features/guide/evaluate.ts`
+	are in the diff, so they open the pane. `README.md` isn't, so it stays code.
+</Note>
+
 <StatRow label="A custom local component" values={[3, 1, 4, 1, 5]} />
 
+## Checks
+
+<Checks>
+	<Skipped title="Run against the production compiled binary">Needs a signed build.</Skipped>
+</Checks>
+
+## Needs you
+
 <NeedsYou>
-	<Item id="csp">Confirm eval is acceptable under the production CSP</Item>
-	<Item id="storage">Decide where tick state should live long-term</Item>
+	<Item id="csp" title="Confirm eval is acceptable under the production CSP">The Guide tab runs the bundle with `new Function`.</Item>
+	<Item id="storage" title="Decide where tick state should live">It is `localStorage` for now.</Item>
 </NeedsYou>
