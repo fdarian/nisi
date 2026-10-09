@@ -70,7 +70,10 @@ models and disappears from the model picker. Fixed with
 alone was sufficient; no need for the broader `com.apple.security.cs.allow-unsigned-executable-memory`
 — referenced via `bundle.macOS.entitlements` in both `tauri.build.conf.json` and
 `tauri.build.dev.conf.json` (both drive `tauri build` and sign the sidecar through the same
- codepath; `tauri dev` signs a CEF app bundle but does not bundle the compiled sidecar, so the base
+ codepath — but only when `bundle.macOS.signingIdentity` resolves, so both set `"-"`; without it
+ the bundler skips signing entirely and the `.app` keeps only the linker's ad-hoc signature,
+ which `usernotificationsd` rejects with `UNErrorDomain` error 1; `tauri dev` signs a CEF app
+ bundle but does not bundle the compiled sidecar, so the base
  `tauri.conf.json` does not need the sidecar entitlement).[^entitlements] Confirmed on a real
  `tauri build`: `codesign -d --entitlements -` on the
 rebuilt sidecar shows the JIT key, and a `walkthrough.refreshHarnesses` call against that sidecar
