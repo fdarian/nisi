@@ -1,16 +1,16 @@
 # Previewing the guide
 
-`render.ts` shows the guide as the reader sees it, without opening the app. Use it to check that pins sit on what they point at, that the Overview says what you meant, and (when something looks wrong in the tab) to tell a guide problem from an app one.
+`nisi guide render` shows the guide as the reader sees it, without opening the app. Use it to check that pins sit on what they point at, that the Overview says what you meant, and (when something looks wrong in the tab) to tell a guide problem from an app one.
 
 ```sh
-bun .claude/skills/nisi-guide/scripts/render.ts [--expand] [--text] [--theme light|dark] [--width <px>] [--scale <n>] [--base <ref>]
+nisi guide render [--expand] [--text] [--theme light|dark] [--width <px>] [--scale <n>] [--base <ref>]
 ```
 
-It builds the guide exactly as the tab does and renders the real kit with real data: each Area's file count and +/- from the diff against the merge-base, the recorded checks (stale marks included), and the head commit. The app's own stylesheet is compiled for the page, so what you see is the app's styling in light or dark.
+It builds the guide exactly as the tab does and renders the real kit with real data: each Area's file count and +/- from the diff against the merge-base, the recorded checks (stale marks included), and the head commit. The app's own stylesheet comes from the sidecar, so what you see is the app's styling in light or dark.
 
 ## PNGs (the default)
 
-One PNG per `##` section plus `full.png`, in `.nisi/guide/.preview/` (git-ignored, and not part of what the tab rebuilds on). The script prints the paths; open the images and look at them. A fresh headless Chrome with a throwaway profile takes the screenshots, so it never touches a browser you have open; set `CHROME_PATH` if it can't find one. A run takes about 8 seconds.
+One PNG per `##` section plus `full.png`, in `.nisi/guide/.preview/` (git-ignored, and not part of what the tab rebuilds on). The command prints the paths; open the images and look at them. A fresh headless Chrome with a throwaway profile takes the screenshots, so it never touches a browser you have open; set `CHROME_PATH` if it can't find one. A run takes about 8 seconds.
 
 - `--expand` stacks every Tour frame, shows Before and After of each Sequence, and opens each Area's file list, so every pin and state is on the page at once. The tab shows one at a time, so use `--expand` whenever you want to check everything, and the default to see what a reader lands on.
 - `--theme dark` for dark mode. Check pin legibility and step colors in both if the change touches visuals.
@@ -29,7 +29,7 @@ What to look for:
 ```
 ### Authoring
 skill · scripts 4 files +523 −0
-- `check.ts` runs a command and records it.
+- `nisi guide check` runs a command and records it.
 - ⟨check.ts⟩ +113 −0
 ...
 ## Checks

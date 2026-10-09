@@ -10,8 +10,8 @@ Import any of these from `@nisi/guide`. Kit components also resolve without an i
 | `Tour` + `Frame { title, src? }` | A flow, one frame at a time with a filmstrip and arrow keys. Frames take `Pin`s; a frame without `src` renders its children instead. |
 | `BeforeAfter { before, after }` | Side by side. Each side is an image src or any node. |
 | `Note { label }` | A decision or caveat. The label is its heading; the body is muted. Put `Ref`s in the body. |
-| `Ref { path, lines? }` | Shows the file's basename (`lines` like `"12-30"`); the full path is on hover. Clicking opens the file's diff beside the guide, scrolled to `lines`. `validate.ts` rejects a path outside the diff, or lines that touch no changed hunk. |
-| `Checks` + `Skipped { title }` | Every run recorded by `check.ts`; see `checks.md`. |
+| `Ref { path, lines? }` | Shows the file's basename (`lines` like `"12-30"`); the full path is on hover. Clicking opens the file's diff beside the guide, scrolled to `lines`. `nisi guide validate` rejects a path outside the diff, or lines that touch no changed hunk. |
+| `Checks` + `Skipped { title }` | Every run recorded by `nisi guide check`; see `checks.md`. |
 | `NeedsYou` + `Item { id, title }` | A tickable list. `title` is an action for the reviewer; the children are a one-line how or why. Ticks are remembered per `id`, so keep ids stable when you rewrite the guide. |
 
 ## Writing the children

@@ -74,7 +74,7 @@ function CheckRow(props: {
 	);
 }
 
-/** Every command run recorded through `check.ts`, then any `Skipped` children. Results are never authored in prose: a run at an older commit than the session's head is marked stale. */
+/** Every command run recorded through `nisi guide check`, then any `Skipped` children. Results are never authored in prose: a run at an older commit than the session's head is marked stale. */
 export function Checks(props: { children?: ReactNode }): React.ReactElement {
 	const guide = useGuideContext();
 	const skipped = Children.toArray(props.children).flatMap((child) =>
@@ -86,7 +86,7 @@ export function Checks(props: { children?: ReactNode }): React.ReactElement {
 		return (
 			<div className="rounded-lg border bg-card px-3 py-2.5 text-muted-foreground text-xs">
 				No checks recorded yet. Run them through{" "}
-				<code className="font-mono">check.ts</code> to list them here.
+				<code className="font-mono">nisi guide check</code> to list them here.
 			</div>
 		);
 	}

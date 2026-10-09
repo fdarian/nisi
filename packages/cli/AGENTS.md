@@ -6,7 +6,7 @@ requires a PR and errors clearly when there is none, `nisi diff [<base>]` diffs 
 range — `<base>..<head>` or `<base>...<head>` — to diff two arbitrary refs, neither of which has to
 be the current checkout; see `src/base-argument.ts`. All three take the same optional `[<path>]`
 positional `nisi` always has (`diff` reads it second, after `<base>`). `nisi completion zsh` prints a
-zsh completion script for the whole tree. `nisi debug [--session <id>] [--json]` prints the running
+zsh completion script for the whole tree. `nisi guide check|validate|render` author `.nisi/guide` (see `src/guide/` below). `nisi debug [--session <id>] [--json]` prints the running
 sidecar's `diagnostics.snapshot` (never launches the app, exits non-zero when no sidecar answers). See `apps/desktop/AGENTS.md`'s "The seam" section for
 the handoff design this implements, and `packages/sidecar-api/src/sessions.ts`'s `OpenSessionTarget` for
 the wire shape this grammar maps to.
@@ -41,6 +41,14 @@ the wire shape this grammar maps to.
   app that received the POST focuses its native window via the sidecar's replayable activation
   stream (`apps/desktop/src-tauri/src/activation.rs`), before GitHub resolution finishes.
   This identifies the dev sandbox or production instance that actually answered.
+- `src/guide/` — `nisi guide check|validate|render`, the authoring commands for `.nisi/guide` (see
+  `.claude/skills/nisi-guide/SKILL.md`); each resolves the git toplevel of the cwd. `check.ts` runs in the CLI alone and
+  writes the `GuideCheck` record (`packages/sidecar-api/src/guide.ts`), no sidecar needed. `validate` and `render` call
+  the sidecar's `guide.validate`/`guide.preview` through `sidecar.ts`, which finds `sidecar.json` and launches the app
+  when nothing answers (the `handoff.ts` seam, for any procedure). `preview.ts` owns the page shell and a fresh
+  headless Chrome for the PNGs, on purpose never the sidecar. `check`'s title must be one argument: Effect CLI folds
+  everything after `--` into the positionals, so `commands.ts` reads the separator from `process.argv`. The CLI
+  doesn't bundle the kit, React or Vite; that's why the work lives in the sidecar.
 - `src/debug.ts` / `src/debug-report.ts` — `nisi debug`: fetch via the same `sidecar.json` discovery
   and `dataDirConfig` (`getDataDirConfig` from `@repo/db/paths`: `NISI_DATA_DIR`, else config.toml's `data_dir`) as `handoff.ts`, then render. `debug-report.ts` is pure; its
   `sessionAnomalies` is where "worth a second look" is defined. This is how an agent inspects the

@@ -175,7 +175,7 @@ export function validateGuide(
 	for (const check of result.checks) {
 		if (check.sha !== result.headSha) {
 			problems.push(
-				`Check "${check.title}" was recorded at ${check.sha.slice(0, SHORT_SHA)}, but HEAD is ${result.headSha.slice(0, SHORT_SHA)}. Re-run it with check.ts.`,
+				`Check "${check.title}" was recorded at ${check.sha.slice(0, SHORT_SHA)}, but HEAD is ${result.headSha.slice(0, SHORT_SHA)}. Re-run it with nisi guide check.`,
 			);
 		}
 	}

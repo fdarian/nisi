@@ -8,7 +8,7 @@ import { type GuideCollector, GuideProvider } from "./guide-context";
 
 /**
  * The guide as the Guide tab's first render would draw it, with no DOM: what
- * `validate.ts` inspects and `render.ts` previews. Throws what the tab's error
+ * `nisi guide validate` inspects and `nisi guide render` previews. Throws what the tab's error
  * boundary would show. `NeedsYou` reads tick state from `localStorage`, so the
  * caller has to provide one.
  */

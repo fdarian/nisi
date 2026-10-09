@@ -29,6 +29,6 @@ Skip it when the change is about structure or behaviour with no interesting orde
 - `Step { lane, span, area? }`: work in a lane. Steps and waits in a lane lay out left to right in the order written, so the position of a step is the sum of the spans before it in that lane. `span` is a relative width; **nothing is to scale**, so pick small whole numbers that show the proportions you mean.
 - `Wait { lane, span }`: the lane is idle (striped). Use it to hold a lane back until another lane's step is done, as the "Page" lane above waits for `get`.
 - `Event { lane, at, area? }`: a tick mark, `at` measured from the left edge in the same units as `span`.
-- `area`: the `id` of an `Area`. It sets the step's color to that card's, and hovering the card dims every other area's steps. `validate.ts` reports an `area` that no `Area` has.
+- `area`: the `id` of an `Area`. It sets the step's color to that card's, and hovering the card dims every other area's steps. `nisi guide validate` reports an `area` that no `Area` has.
 - `Before` / `After`: each takes an optional `caption`, the one line under the lanes. With both present the reader gets a Before/After toggle that opens on After; with one, there is no toggle.
 - Keep labels short; a step's text is cut off to fit its width.

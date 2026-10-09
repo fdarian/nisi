@@ -134,7 +134,7 @@ async function readChecks(guideDir: string): Promise<GuideCheck[]> {
 					return decodeCheck(await Bun.file(file).json());
 				} catch (cause) {
 					throw new Error(
-						`${file} isn't a valid check record (re-run it through check.ts): ${cause instanceof Error ? cause.message : String(cause)}`,
+						`${file} isn't a valid check record (re-run it through nisi guide check): ${cause instanceof Error ? cause.message : String(cause)}`,
 					);
 				}
 			}),

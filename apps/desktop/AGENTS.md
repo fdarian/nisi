@@ -46,7 +46,7 @@ Three parts, one seam:
   The app owns the page chrome (the "On this page" list, the side pane a `Ref` opens); a guide has no
   title and starts at `## Overview`. The Overview's `Area` cards compute their stats from the session
   diff (`FileChange.hunks`, the base-to-head changed runs), matching globs and `path:lines` hunk claims with `areas.ts`, which `validate.ts` shares to find changed hunks no Area covers
-  (`.claude/skills/nisi-guide/scripts/validate.ts` runs it; `guide-overview.stories.tsx` is the visual check).
+  (`nisi guide validate` runs it through the sidecar's `guide.validate`; `guide-overview.stories.tsx` is the visual check).
   The pane is `pull-request/location-pane/location-pane.tsx`, shared with the walkthrough's `ReferencePane`.
   `src/features/code-index/` holds LSP-powered code navigation (⌘-hover underline, ⌘-click peek
   references), backed server-side by a live TypeScript 7 language server (`@repo/code-lsp`) rather

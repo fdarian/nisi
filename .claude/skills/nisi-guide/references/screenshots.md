@@ -28,7 +28,7 @@ Pin percentages are relative to the image you import, the final cropped file, no
 2. Get the cropped file's size: `sips -g pixelWidth -g pixelHeight .nisi/guide/shot.png` (macOS), or `file shot.png`.
 3. Find the pixel of the thing you are pointing at (your browser tool's element bounding box, minus the crop offset).
 4. `x = px / width * 100`, `y = py / height * 100`, rounded to a whole number.
-5. Run `render.ts --expand` (see `preview.md`) and look at the section image: a pin sits on the edge or corner of its target, not over its text.
+5. Run `nisi guide render --expand` (see `preview.md`) and look at the section image: a pin sits on the edge or corner of its target, not over its text.
 
 ## Capturing
 

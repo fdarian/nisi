@@ -52,7 +52,19 @@ seam" for the port/token handshake this boots into.
   evaluates. Cached per repo on a hash of every file's path/mtime/size under `.nisi/guide/` except `checks/`,
   because the Guide tab polls. A missing guide or failed build is a result variant, not an RPC error. `EXTERNALS`
   must match `src/features/guide/evaluate.ts`'s module map. The same call returns the runs recorded in
-  `.nisi/guide/checks/` (written by `.claude/skills/nisi-guide/scripts/check.ts`) and the worktree's head SHA, read fresh each time.
+  `.nisi/guide/checks/` (written by `nisi guide check`) and the worktree's head SHA, read fresh each time.
+- `guide/tools.ts` — behind `guide.validate` and `guide.preview`, which the `nisi guide validate|render` CLI
+  commands call. They key on `repoRoot`, not a session: the author may have none open. `validateRepoGuide` and
+  `previewRepoGuide` read the diff (`guide/diff.ts`: base resolution, `git diff -U0` hunks, untracked files, the
+  classifier's `generated` flag), build the guide, and run `src/features/guide/{validate,static-render,guide-text}.ts`
+  — shared modules that live in the frontend tree, so `tsconfig.sidecar.json` carries the DOM lib, `jsx` and the `#/*`
+  alias for them. `localStorage` is stubbed only for the one synchronous render, never left on the globals.
+  `preview` returns the guide's body HTML plus the app stylesheet (`guide/preview-css.ts`); the page shell and Chrome
+  stay in the CLI, never the sidecar. The stylesheet comes from Vite and Tailwind when the sidecar runs from source
+  (once per process, scanning the guide dir too), and from `guide/app-stylesheet.gen.txt` when compiled:
+  `build:sidecar` writes it first (`scripts/build-guide-css.ts`) and a static text import embeds it, since a compiled
+  sidecar has neither Vite nor a source tree. So a compiled sidecar's preview misses Tailwind classes that only a
+  guide's own custom component uses. `preview-css.ts` tells the two apart with `Bun.main.startsWith("/$bunfs/")`.
 - `repositories.ts` — behind `repositories.list`/`get`/`sessionStates` (Settings › Repositories). Reads
   `ReviewStore` and `SettingsStore` directly, never `Store.listSessions`. `list` and `get` make no GitHub calls:
   open counts and `get`'s `resolved`/`pending` states come from `PrIndex` and persisted `merged`/`closed`.

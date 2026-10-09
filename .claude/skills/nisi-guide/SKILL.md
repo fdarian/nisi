@@ -31,7 +31,7 @@ write no `# h1`. Use these sections in this order, and drop one that doesn't app
 
 ## Writing
 
-- Bullets over prose; a paragraph is 2 sentences or fewer (`validate.ts` rejects a longer `Note` paragraph).
+- Bullets over prose; a paragraph is 2 sentences or fewer (`nisi guide validate` rejects a longer `Note` paragraph).
 - Every file you mention is a `<Ref path lines? />` or a backticked repo path, which links itself when
   the path is in the diff. Clicking opens that file's diff beside the guide.
 - Each `Area` takes `paths` globs; nisi computes its file count and +/- from the diff, so don't write
@@ -39,27 +39,34 @@ write no `# h1`. Use these sections in this order, and drop one that doesn't app
   generated files are exempt).
 - A file shared by two areas: claim its hunks with `path:lines`.
 - Group dependency and tooling bumps (lockfile churn, config, CI) into one Area instead of one each.
-- Never write test results as prose: record them with `check.ts`.
+- Never write test results as prose: record them with `nisi guide check`.
 - A `Needs you` item is an action for the reviewer ("Compare both pages with the Paper designs"), with
   a one-line how or why. Never write "I haven't…"; that is a `Skipped` check or an action.
 
 ## Before you finish
 
 ```sh
-bun .claude/skills/nisi-guide/scripts/check.ts "Type check and lint" -- pnpm turbo run check:type check:lint
-bun .claude/skills/nisi-guide/scripts/validate.ts
+nisi guide check "Type check and lint" -- pnpm turbo run check:type check:lint
+nisi guide validate
 ```
 
-`check.ts` runs a command and records the result for `<Checks />`; run it after your last commit, or the
-run shows as stale. `validate.ts` builds and renders the guide as the tab does and lists what to fix
-(an h1, changed hunks no Area covers, a `Ref` to lines outside the diff, stale checks). Fix everything it
-prints, then run it again. When it is clean, preview what a reader will see and look at the images:
+`nisi guide check` runs a command and records the result for `<Checks />`; run it after your last commit,
+or the run shows as stale. `nisi guide validate` builds and renders the guide as the tab does and lists
+what to fix (an h1, changed hunks no Area covers, a `Ref` to lines outside the diff, stale checks). Fix
+everything it prints, then run it again. When it is clean, preview what a reader will see and look at the
+images:
 
 ```sh
-bun .claude/skills/nisi-guide/scripts/render.ts --expand
+nisi guide render --expand
 ```
 
 `--text` is the cheap check: it prints the guide as plain text with the computed numbers, no browser needed.
+
+`nisi` is the app's command line, so it works from any repo. `validate` and `render` ask the app's sidecar
+to do the work, and `nisi` launches the app when it isn't running (`check` never needs it). The first call
+can take a few seconds while it starts. If you work on nisi itself with a dev build, set `NISI_DATA_DIR`
+to the dev sandbox's data dir (the line `bun dev` prints), or run the CLI from source
+(`bun packages/cli/src/index.ts guide …`), so you reach the dev sidecar and not the installed app.
 
 ## Example
 
@@ -92,5 +99,5 @@ Open these only when you need them; they are not repeated here.
 - `references/components.md`: every kit component with its props, and the rules for custom components. Open when you use anything beyond `Areas`, `Ref`, `Note`, `Checks` and `NeedsYou`.
 - `references/sequence.md`: when a `Sequence` earns its place (ordering, timing, request flow), when to skip it, and a worked example. Open when the change is about *when* things happen.
 - `references/screenshots.md`: `Shot`, `Tour`, `Pin`, `BeforeAfter`, plus capturing from Storybook, catching delayed states, and placing pins. Open before taking any screenshot.
-- `references/preview.md`: the `render.ts` flags (`--expand`, `--text`, `--theme`), what to look for in the images, and its limits. Open the first time you preview, or when an image looks wrong.
-- `references/checks.md`: `check.ts` usage, `Skipped`, and what counts as a check. Open when a check is long-running, needs a `cd`, or you aren't sure what to record.
+- `references/preview.md`: the `nisi guide render` flags (`--expand`, `--text`, `--theme`), what to look for in the images, and its limits. Open the first time you preview, or when an image looks wrong.
+- `references/checks.md`: `nisi guide check` usage, `Skipped`, and what counts as a check. Open when a check is long-running, needs a `cd`, or you aren't sure what to record.

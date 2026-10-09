@@ -61,12 +61,23 @@ _nisi() {
 		debug)
 			(( CURRENT >= 3 )) && compadd -- --session --json
 			;;
+		guide)
+			case $CURRENT in
+				3) compadd -- check validate render ;;
+				*)
+					case \${words[3]} in
+						validate) compadd -- --base ;;
+						render) compadd -- --expand --text --theme --width --scale --base ;;
+					esac
+					;;
+			esac
+			;;
 		completion)
 			(( CURRENT == 3 )) && compadd -- zsh
 			;;
 		*)
 			if (( CURRENT == 2 )); then
-				compadd -- pr diff debug completion
+				compadd -- pr diff debug guide completion
 				_files -/
 			fi
 			;;
