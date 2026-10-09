@@ -21,7 +21,7 @@ import { useKeyBindings } from "#/lib/use-key-bindings";
 export const PR_VIEW_TABS_CLASS = "flex min-h-0 flex-1 flex-col gap-0";
 
 /**
- * Overview and Files Changed always exist regardless of the walkthrough
+ * Overview, Guide and Files Changed always exist regardless of the walkthrough
  * setting; Walkthrough only joins the strip when it's enabled. A single
  * array, not three separately-gated `TabsTrigger`s, is what lets
  * `PrViewTabStrip` derive the `1`/`2`/`3` (or `1`/`2`, walkthrough off)
@@ -33,6 +33,7 @@ export function prViewTabs(walkthroughEnabled: boolean): readonly PrViewTab[] {
 	if (walkthroughEnabled) {
 		list.push({ value: "walkthrough", label: "Walkthrough" });
 	}
+	list.push({ value: "guide", label: "Guide" });
 	list.push({ value: "files", label: "Files Changed" });
 	return list;
 }

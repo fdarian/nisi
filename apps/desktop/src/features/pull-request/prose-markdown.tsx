@@ -37,7 +37,7 @@ export function ProseLink(
 }
 
 /** Headings are told apart by weight, size and spacing only — the cards are `text-sm`, so there's no room for a document-scale type ramp. */
-const proseComponents: Components = {
+export const proseComponents: Components = {
 	a: ProseLink,
 	blockquote: (props) => (
 		<blockquote

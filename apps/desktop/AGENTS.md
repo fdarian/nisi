@@ -39,6 +39,10 @@ Three parts, one seam:
   shape as the `@pierre/trees` sidebar — it renders `diff.fileContents`' `patch`/`oldContent` directly,
   no client-side slicing; a reviewed file's already-seen spans arrive pre-collapsed into ordinary
   context by the sidecar (`FileContentReview.baselineKind`, see `@repo/review`'s `reconcile`).
+  `src/features/guide/` renders the Guide tab: `evaluate.ts` runs the sidecar's bundled guide (`new Function`; the
+  Tauri CSP is `null`, so eval is allowed) against the app's own React and `kit/` (the `@nisi/guide` module).
+  Agents author it via `.claude/skills/nisi-guide/SKILL.md`; `sample/` is a working guide that
+  `guide-pipeline.test.ts` builds and renders. Copy it to `<repo>/.nisi/guide/` to see it in the app.
   `src/features/code-index/` holds LSP-powered code navigation (⌘-hover underline, ⌘-click peek
   references), backed server-side by a live TypeScript 7 language server (`@repo/code-lsp`) rather
   than a prebuilt SCIP index — one `useCodeIndexInteractions` hook shared by the diff pane's

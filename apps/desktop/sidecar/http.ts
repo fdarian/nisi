@@ -65,6 +65,7 @@ import {
 	stopCodeLspServer,
 } from "./code-index/state.ts";
 import { buildDiagnosticsSnapshot } from "./diagnostics-snapshot.ts";
+import { buildGuide } from "./guide/build.ts";
 import {
 	emit,
 	type SidecarEvent,
@@ -2238,6 +2239,17 @@ export function attachRouter(
 					Stream.mapError(mapFailure),
 				);
 				yield* streamToIterator(stream, mainContext, signal);
+			}),
+		},
+		guide: {
+			get: authed.guide.get.effect(function* ({ input, errors }) {
+				const store = yield* Store;
+				const repoRoot = yield* resolveCodeIndexRepoRoot(
+					store.resolveSessionRepoRoot(input.sessionId),
+					input.sessionId,
+					errors,
+				);
+				return yield* Effect.promise(() => buildGuide(repoRoot));
 			}),
 		},
 		codeIndex: {

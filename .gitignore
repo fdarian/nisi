@@ -22,3 +22,4 @@ apps/desktop/.storybook-shots/
 !.claude/launch.json
 # Shared: this repo's changeset + PR conventions, loaded as a project skill.
 !.claude/skills
+/.nisi/

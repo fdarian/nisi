@@ -16,6 +16,7 @@ import { diagnosticsContract } from "./diagnostics.ts";
 import { diffContract } from "./diff.ts";
 import { eventsContract } from "./events.ts";
 import { fileContract } from "./file.ts";
+import { guideContract } from "./guide.ts";
 import { healthContract } from "./health.ts";
 import { overviewContract } from "./overview.ts";
 import { pullRequestsContract } from "./pull-requests.ts";
@@ -32,6 +33,7 @@ export { DiagnosticsSnapshot } from "./diagnostics.ts";
 export * from "./diff.ts";
 export * from "./events.ts";
 export * from "./file.ts";
+export * from "./guide.ts";
 export * from "./health.ts";
 export * from "./overview.ts";
 export * from "./pull-requests.ts";
@@ -51,6 +53,7 @@ export const contract = oc.errors({ UNAUTHORIZED: {} }).router({
 	sessions: sessionsContract,
 	diff: diffContract,
 	file: fileContract,
+	guide: guideContract,
 	review: reviewContract,
 	events: eventsContract,
 	walkthrough: walkthroughContract,

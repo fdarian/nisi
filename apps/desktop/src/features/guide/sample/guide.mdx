@@ -1,0 +1,61 @@
+import {
+	BeforeAfter,
+	Frame,
+	Item,
+	NeedsYou,
+	Note,
+	Outcome,
+	Pin,
+	Ref,
+	Shot,
+	Tour,
+} from "@nisi/guide";
+import before from "./settings-before.png";
+import after from "./settings-after.png";
+import StatRow from "./stat-row";
+
+<Outcome title="Guides: write one in .nisi/guide, read it in the Guide tab">
+	The sidecar bundles `guide.mdx`, the app evaluates it against its own React
+	and the kit, and the result renders here. Edit the file and this tab updates
+	within a couple of seconds.
+</Outcome>
+
+## What it looks like
+
+<Shot src={after} alt="Settings page after the change" caption="Settings, after">
+	<Pin x={5} y={40}>The new row highlights the active repository</Pin>
+	<Pin x={60} y={18}>Search stays pinned to the top</Pin>
+</Shot>
+
+<BeforeAfter before={before} after={after} />
+
+## Walk through it
+
+<Tour>
+	<Frame title="Open settings" src={before}>
+		<Pin x={10} y={25}>Start from the repositories list</Pin>
+	</Frame>
+	<Frame title="Pick a repository" src={after}>
+		<Pin x={5} y={40}>Selected row</Pin>
+		<Pin x={50} y={62}>Its sessions load below</Pin>
+	</Frame>
+	<Frame title="Custom stage, no image">
+		Frames without a `src` render their children instead.
+	</Frame>
+</Tour>
+
+## Decisions
+
+<Note label="Bundled in the sidecar, evaluated in the app">
+	The bundle externalises React and the kit, so a guide never ships a second
+	copy of either. See <Ref path="apps/desktop/sidecar/guide/build.ts" lines="70-95" />
+	and <Ref path="apps/desktop/src/features/guide/evaluate.ts" lines="36-60" />.
+	This one points outside the diff: <Ref path="README.md" />.
+</Note>
+
+<StatRow label="A custom local component" values={[3, 1, 4, 1, 5]} />
+
+<NeedsYou>
+	<Item id="csp">Confirm eval is acceptable under the production CSP</Item>
+	<Item id="storage">Decide where tick state should live long-term</Item>
+</NeedsYou>

@@ -18,7 +18,9 @@
 		"noUnusedParameters": true,
 		"noFallthroughCasesInSwitch": true,
 		"paths": {
-			"#/*": ["./src/*"]
+			"#/*": ["./src/*"],
+			// Lets a guide's local `.tsx` (`features/guide/sample/`) type-check against the kit it imports at runtime.
+			"@nisi/guide": ["./src/features/guide/kit/index.ts"]
 		}
 	},
 	"include": ["src", ".storybook"],

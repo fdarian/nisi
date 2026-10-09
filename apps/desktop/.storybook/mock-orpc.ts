@@ -341,6 +341,12 @@ export function createMockSidecarClient(
 				throw new Error("file.get has no story fixture yet");
 			},
 		},
+		guide: {
+			get: async () => ({
+				kind: "missing" as const,
+				path: "/repo/.nisi/guide/guide.mdx",
+			}),
+		},
 		review: {
 			setViewed: async () => undefined,
 			setRangeViewed: async () => undefined,

@@ -47,6 +47,11 @@ seam" for the port/token handshake this boots into.
   combined across sessions of the same PR. `http.ts` receives header-level focus/selection via
   `sessions.setAttention`; `live-poll.ts` marks local changes; `session-close.ts` removes entries.
   `GhGitHub.layer` consumes its `PullRequestAttention` stream to choose its polling cadence.
+- `guide/build.ts` — behind `guide.get`: bundles `<repoRoot>/.nisi/guide/guide.mdx` with `Bun.build` (MDX and
+  image plugins; React, the jsx runtimes and `@nisi/guide` stay external) into one CJS string the frontend
+  evaluates. Cached per repo on a hash of every file's path/mtime/size under `.nisi/guide/`, because the Guide tab
+  polls. A missing guide or failed build is a result variant, not an RPC error. `EXTERNALS` must match
+  `src/features/guide/evaluate.ts`'s module map.
 - `repositories.ts` — behind `repositories.list`/`get`/`sessionStates` (Settings › Repositories). Reads
   `ReviewStore` and `SettingsStore` directly, never `Store.listSessions`. `list` and `get` make no GitHub calls:
   open counts and `get`'s `resolved`/`pending` states come from `PrIndex` and persisted `merged`/`closed`.

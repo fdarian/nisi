@@ -21,6 +21,7 @@ import {
 	useSessionOpenFiles,
 	useSessionWalkthroughSelection,
 } from "#/features/pull-request/data/session-ui-store";
+import { GuideView } from "#/features/guide/guide-view";
 import { FileView } from "#/features/pull-request/file-view/file-view";
 import { FilesChangedContent } from "#/features/pull-request/files/files-changed-content";
 import { diffStat } from "#/features/pull-request/header/diff-stat";
@@ -225,6 +226,13 @@ export function PrView({
 							/>
 						</TabsContent>
 					)}
+					<TabsContent className="flex min-h-0 flex-1" value="guide">
+						<GuideView
+							enabled={isSelectedTab && tabsValue === "guide"}
+							orpc={orpc}
+							session={session}
+						/>
+					</TabsContent>
 					{openFiles.map((path) => (
 						<TabsContent
 							className="flex min-h-0 flex-1 flex-col"
