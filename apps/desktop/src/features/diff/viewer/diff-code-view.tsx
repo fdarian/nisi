@@ -4,7 +4,7 @@
  * The worker-pool-provisioned `CodeView` instance itself — the one piece
  * that's genuinely identical between the Files Changed diff pane
  * (`diff-pane.tsx`) and the walkthrough reference-block pane
- * (`#/features/pull-request/walkthrough/reference-pane.tsx`): both feed `@pierre/diffs`
+ * (`#/features/pull-request/location-pane/location-pane.tsx`): both feed `@pierre/diffs`
  * items through the same worker pool sizing, the same highlighter, and the
  * same theme/layout constants (`diff-view-theme.ts`). What genuinely differs
  * per pane — `items`, annotations, custom headers, `diffStyle`,
@@ -235,7 +235,7 @@ export function buildDiffCodeViewOptions<Metadata>(overrides: {
 	extraCSS?: string;
 	/**
 	 * Turns on `@pierre/diffs`' own line-lane (gutter) drag-to-select — off by
-	 * default so a pane opts in explicitly. `ReferencePane` doesn't set this:
+	 * default so a pane opts in explicitly. `LocationPane` doesn't set this:
 	 * enabling selection with no `selectedLines`/`onSelectedLinesChange` (and
 	 * no floating "Copy reference" button reacting to it) would let a user
 	 * paint a highlight that never does anything.
@@ -289,7 +289,7 @@ type DiffCodeViewProps<Metadata> = {
 	 * both forwarded straight to `CodeView`. Passing either turns `CodeView`
 	 * into controlled-selection mode, so a caller that wants
 	 * `enableLineSelection` (`buildDiffCodeViewOptions`) must supply both;
-	 * `ReferencePane` supplies neither and stays uncontrolled/off.
+	 * `LocationPane` supplies neither and stays uncontrolled/off.
 	 */
 	selectedLines?: CodeViewLineSelection | null;
 	onSelectedLinesChange?: (selection: CodeViewLineSelection | null) => void;
