@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { readdir, stat } from "node:fs/promises";
 import { join, relative } from "node:path";
 import { compile } from "@mdx-js/mdx";
-import { GuideCheck, type GuideResult } from "@repo/sidecar-api";
+import { type BuiltGuide, GuideCheck } from "@repo/sidecar-api";
 import { Schema } from "effect";
 import { git } from "./diff";
 
@@ -150,7 +150,7 @@ async function readChecks(guideDir: string): Promise<GuideCheck[]> {
  * inputs; checks and head are re-read every call because they change without
  * the bundle changing.
  */
-export async function buildGuide(repoRoot: string): Promise<GuideResult> {
+export async function buildGuide(repoRoot: string): Promise<BuiltGuide> {
 	const guideDir = join(repoRoot, GUIDE_DIR);
 	const path = join(guideDir, GUIDE_ENTRY);
 	if (!(await Bun.file(path).exists())) return { kind: "missing", path };

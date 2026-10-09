@@ -1933,6 +1933,36 @@ export class Store extends Context.Service<Store>()("Store", {
 			});
 
 		/**
+		 * Head-side text of several changed paths at once, read the way
+		 * `readFileViewerContent` reads one (`readCurrentContent`, gated by this
+		 * session's own `includeUncommitted`). For the Guide's symbol index, which
+		 * wants every changed source file, so a path that is missing or over
+		 * `FILE_VIEWER_MAX_BYTES` is left out of the result rather than failing
+		 * the batch.
+		 */
+		const readHeadTexts = (sessionId: string, paths: ReadonlyArray<string>) =>
+			Effect.gen(function* () {
+				const session = yield* reviewStore.getSession(sessionId);
+				const repoRoot = yield* resolveLiveRepoRoot(session);
+				const diffHead = yield* resolveSessionDiffHead(session, repoRoot);
+				const settings = yield* settingsStore.get();
+				const currentContent = yield* readCurrentContent(
+					repoRoot,
+					diffHead,
+					settings.includeUncommitted,
+					paths,
+				);
+				const decoder = new TextDecoder();
+				const texts = new Map<string, string>();
+				for (const [path, bytes] of currentContent) {
+					if (bytes.byteLength <= FILE_VIEWER_MAX_BYTES) {
+						texts.set(path, decoder.decode(bytes));
+					}
+				}
+				return texts as ReadonlyMap<string, string>;
+			});
+
+		/**
 		 * Un-ticking Reviewed just clears the snapshot. Ticking it reads the
 		 * file's *current* content directly via `readCurrentContent` — a plain
 		 * read, not `@repo/git`'s size-gated `getFileContents`, since a review
@@ -2200,6 +2230,7 @@ export class Store extends Context.Service<Store>()("Store", {
 			readBaseMayBeStale,
 			readFileContents,
 			readFileViewerContent,
+			readHeadTexts,
 			setFileViewed,
 			setRangeViewed,
 		};

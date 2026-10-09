@@ -13,6 +13,8 @@ import {
 	Step,
 	Wait,
 } from "./kit";
+import { GuideCode } from "./kit/ref";
+import { symbolMap } from "./symbol-links";
 
 /** The diffstat from fdarian/nisi#149, the Overview the guide design was drawn from. */
 const FILES: GuideFile[] = [
@@ -81,6 +83,13 @@ function Overview(props: { width: number }): React.ReactElement {
 				headSha: "0".repeat(40),
 				selectedRef: null,
 				selectRef: () => {},
+				symbols: symbolMap([
+					{
+						name: "repositories",
+						path: "apps/desktop/sidecar/repositories.ts",
+						line: 14,
+					},
+				]),
 				areaOrder,
 				setAreaOrder,
 				hoveredArea,
@@ -144,8 +153,9 @@ function Overview(props: { width: number }): React.ReactElement {
 						>
 							<ul className="list-disc space-y-1 pl-5">
 								<li>
-									<code>repositories.get</code> answers from local data only:
-									each session is <code>resolved</code> or <code>pending</code>.{" "}
+									<GuideCode>repositories.get</GuideCode> answers from local
+									data only: each session is <code>resolved</code> or{" "}
+									<code>pending</code>.{" "}
 									<Ref path="apps/desktop/sidecar/repositories.ts" />
 								</li>
 								<li>

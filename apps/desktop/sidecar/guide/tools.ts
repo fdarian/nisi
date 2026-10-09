@@ -6,6 +6,7 @@ import { checkGuide } from "../../src/features/guide/validate";
 import { buildGuide, GUIDE_DIR } from "./build";
 import { readGuideDiff } from "./diff";
 import { appStylesheet } from "./preview-css";
+import { isScannable, scanDeclarations } from "./symbols";
 
 type DiffSummary = { base: string; mergeBase: string; changedFiles: number };
 
@@ -23,6 +24,25 @@ function withLocalStorage<T>(render: () => T): T {
 		if (previous === undefined) Reflect.deleteProperty(globalThis, key);
 		else Object.defineProperty(globalThis, key, previous);
 	}
+}
+
+/** The preview has no session, so it scans the working tree's copy of each changed source file. */
+async function declaredSymbols(
+	repoRoot: string,
+	files: readonly { path: string }[],
+) {
+	const present = await Promise.all(
+		files
+			.filter((file) => isScannable(file.path))
+			.map(async (file) => {
+				const source = Bun.file(join(repoRoot, file.path));
+				// A deleted file is in the diff but has no declarations left to link.
+				return (await source.exists())
+					? { path: file.path, content: await source.text() }
+					: undefined;
+			}),
+	);
+	return scanDeclarations(present.filter((source) => source !== undefined));
 }
 
 /** What `nisi guide validate` reports: the Guide tab's own checks plus what only the author can fix. */
@@ -65,10 +85,14 @@ export async function previewRepoGuide(
 	if (built.kind === "error") {
 		throw new Error(`The guide doesn't build:\n${built.message}`);
 	}
+	const symbols = await declaredSymbols(repoRoot, diff.files);
 	let html: string;
 	try {
 		html = withLocalStorage(() =>
-			renderGuideHtml(built, diff.files, { expanded: options.expand }),
+			renderGuideHtml(built, diff.files, {
+				expanded: options.expand,
+				symbols,
+			}),
 		);
 	} catch (cause) {
 		throw new Error(

@@ -166,6 +166,7 @@ test("the sample guide builds, evaluates against the kit, and renders every comp
 					headSha: result.headSha,
 					selectedRef: null,
 					selectRef: () => {},
+					symbols: new Map(),
 					areaOrder: ["authoring", "bundle", "app"],
 					setAreaOrder: () => {},
 					hoveredArea: null,
@@ -445,7 +446,9 @@ test("the text linearisation carries the computed values", async () => {
 	expect(out).toContain(
 		"[Passed] Type check and lint `pnpm turbo run check:type` at",
 	);
-	expect(out).toMatch(/\[Failed, exit 1\] Unit tests .* at 0123456 with uncommitted changes stale/);
+	expect(out).toMatch(
+		/\[Failed, exit 1\] Unit tests .* at 0123456 with uncommitted changes stale/,
+	);
 	expect(out).toContain("Not run");
 	expect(out).toContain("Agent: [runs tests, types the result]");
 	expect(out).toContain("Sidecar: [wait]");
@@ -541,4 +544,28 @@ test("validate: a path cited as both a Ref and a backticked path in one paragrap
 	expect(report.warnings).toEqual([
 		expect.stringContaining("src/a.ts is cited twice in one paragraph"),
 	]);
+});
+
+test("text: a name declared once in a changed file reads `name` [path:line]; other code stays plain", async () => {
+	const result = await buildInline(`## Overview
+
+<Areas>
+	<Area id="real" title="Real" paths={["src/**"]}>
+		- \`parseConfig()\` and \`Store.get\` are linked, \`a + b\` and \`unknown\` are not.
+	</Area>
+</Areas>
+`);
+	if (result.kind !== "ok") throw new Error("build failed");
+	const out = htmlToText(
+		renderGuideHtml(result, [file("src/a.ts", 1, 0, [1, 1])], {
+			expanded: true,
+			symbols: [
+				{ name: "parseConfig", path: "src/a.ts", line: 12 },
+				{ name: "Store", path: "src/store.ts", line: 3 },
+			],
+		}),
+	);
+	expect(out).toContain(
+		"`parseConfig()` [src/a.ts:12] and `Store.get` [src/store.ts:3] are linked, `a + b` and `unknown` are not.",
+	);
 });

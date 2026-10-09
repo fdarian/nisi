@@ -198,7 +198,11 @@ export function htmlToText(html: string): string {
 			suffix = "⟩";
 		} else if (tag === "code" && inPre === 0) {
 			emit("`");
-			suffix = "`";
+			// A linked symbol reads `name` [path:line].
+			suffix =
+				attrs["data-symbol"] === undefined
+					? "`"
+					: `\` [${attrs["data-symbol"]}]`;
 			boundary = false;
 		} else if (hint === "lane") {
 			flush();
@@ -236,7 +240,9 @@ export function htmlToText(html: string): string {
 			list,
 			pre: tag === "pre",
 		});
-		if (suffix === "`" || suffix === "⟩" || suffix === "]") boundary = false;
+		if (suffix.startsWith("`") || suffix === "⟩" || suffix === "]") {
+			boundary = false;
+		}
 	}
 	flush();
 	return `${lines

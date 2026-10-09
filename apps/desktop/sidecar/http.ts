@@ -72,6 +72,13 @@ import {
 	subscribe as subscribeToSidecarEvents,
 } from "./events.ts";
 import { buildGuide } from "./guide/build.ts";
+import {
+	cachedSymbols,
+	cacheSymbols,
+	diffKey,
+	scanDeclarations,
+	scannablePaths,
+} from "./guide/symbols.ts";
 import { previewRepoGuide, validateRepoGuide } from "./guide/tools.ts";
 import { listHarnesses } from "./harness/harnesses.ts";
 import { getHarnessModels } from "./harness/models.ts";
@@ -2250,7 +2257,77 @@ export function attachRouter(
 					input.sessionId,
 					errors,
 				);
-				return yield* Effect.promise(() => buildGuide(repoRoot));
+				const built = yield* Effect.promise(() => buildGuide(repoRoot));
+				if (built.kind !== "ok") return built;
+				const settings = yield* (yield* SettingsStore).get();
+				const files = yield* store
+					.listChangedFiles(input.sessionId, settings.includeUncommitted)
+					.pipe(
+						Effect.catchTags({
+							SessionNotFound: () =>
+								Effect.fail(
+									errors.NOT_FOUND({
+										message: `session not found: ${input.sessionId}`,
+									}),
+								),
+							GitCommandError: (cause) =>
+								Effect.fail(
+									errors.INTERNAL_SERVER_ERROR({
+										message: formatGitCommandError(cause),
+									}),
+								),
+							WorktreeReadFailed: (cause) =>
+								Effect.fail(
+									errors.INTERNAL_SERVER_ERROR({
+										message: formatWorktreeReadFailed(cause),
+									}),
+								),
+							WorktreeRelocationFailed: (cause) =>
+								Effect.fail(
+									errors.INTERNAL_SERVER_ERROR({
+										message: formatWorktreeRelocationFailed(cause),
+									}),
+								),
+						}),
+					);
+				const key = diffKey(files);
+				const cached = cachedSymbols(input.sessionId, key);
+				if (cached !== undefined) return { ...built, symbols: cached };
+				const texts = yield* store
+					.readHeadTexts(input.sessionId, scannablePaths(files))
+					.pipe(
+						Effect.catchTags({
+							SessionNotFound: () =>
+								Effect.fail(
+									errors.NOT_FOUND({
+										message: `session not found: ${input.sessionId}`,
+									}),
+								),
+							GitCommandError: (cause) =>
+								Effect.fail(
+									errors.INTERNAL_SERVER_ERROR({
+										message: formatGitCommandError(cause),
+									}),
+								),
+							WorktreeReadFailed: (cause) =>
+								Effect.fail(
+									errors.INTERNAL_SERVER_ERROR({
+										message: formatWorktreeReadFailed(cause),
+									}),
+								),
+							WorktreeRelocationFailed: (cause) =>
+								Effect.fail(
+									errors.INTERNAL_SERVER_ERROR({
+										message: formatWorktreeRelocationFailed(cause),
+									}),
+								),
+						}),
+					);
+				const symbols = scanDeclarations(
+					[...texts].map(([path, content]) => ({ path, content })),
+				);
+				cacheSymbols(input.sessionId, key, symbols);
+				return { ...built, symbols };
 			}),
 			validate: authed.guide.validate.effect(function* ({ input, errors }) {
 				return yield* Effect.tryPromise({

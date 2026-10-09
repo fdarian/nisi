@@ -1,4 +1,4 @@
-import type { GuideResult } from "@repo/sidecar-api";
+import type { BuiltGuide } from "@repo/sidecar-api";
 import { Children, isValidElement, type ReactNode } from "react";
 import { type GuideFile, hunkRange, uncoveredHunks } from "./areas";
 import { GUIDE_COMPONENTS } from "./guide-components";
@@ -147,7 +147,7 @@ export type GuideReport = { errors: string[]; warnings: string[] };
  * guide isn't ready to hand over; warnings are advice.
  */
 export function checkGuide(
-	result: GuideResult,
+	result: BuiltGuide,
 	files: readonly DiffFile[],
 ): GuideReport {
 	if (result.kind === "missing")
@@ -218,7 +218,7 @@ export function checkGuide(
 
 /** The problems that fail the guide; see `checkGuide` for the warnings too. */
 export function validateGuide(
-	result: GuideResult,
+	result: BuiltGuide,
 	files: readonly DiffFile[],
 ): string[] {
 	return checkGuide(result, files).errors;

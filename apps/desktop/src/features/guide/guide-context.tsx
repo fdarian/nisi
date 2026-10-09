@@ -1,8 +1,9 @@
 "use client";
 
-import type { GuideCheck } from "@repo/sidecar-api";
+import type { GuideCheck, GuideSymbol } from "@repo/sidecar-api";
 import { createContext, type ReactNode, useContext } from "react";
 import type { GuideFile } from "./areas";
+import type { GuideReviews } from "./guide-reviews";
 import type { GuideRef } from "./refs";
 
 /**
@@ -40,6 +41,10 @@ type GuideContextValue = {
 	/** The Area card under the pointer, so a Sequence can dim the steps of every other area. */
 	hoveredArea: string | null;
 	setHoveredArea: (id: string | null) => void;
+	/** Names declared exactly once in a changed file; inline code that is just such a name links to its declaration. */
+	symbols: ReadonlyMap<string, GuideSymbol>;
+	/** The review state Area rows tick. Absent in the static preview, which shows no checkboxes. */
+	reviews?: GuideReviews;
 	/** The static preview: every Tour frame stacked, both Sequence states shown, Area file lists open. Set by `nisi guide render`, never by the app. */
 	expanded?: boolean;
 	collector?: GuideCollector;

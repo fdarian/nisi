@@ -32,6 +32,18 @@ export const GuideCheck = Schema.Struct({
 });
 export type GuideCheck = Schema.Schema.Type<typeof GuideCheck>;
 
+/**
+ * A name declared exactly once in a changed file, found by a plain-text scan
+ * of the files' head content (`apps/desktop/sidecar/guide/symbols.ts`), not by
+ * a language server. Inline code that is just such a name becomes a link to `line`.
+ */
+export const GuideSymbol = Schema.Struct({
+	name: Schema.String,
+	path: Schema.String,
+	line: Schema.Number,
+});
+export type GuideSymbol = Schema.Schema.Type<typeof GuideSymbol>;
+
 export const GuideResult = Schema.Union([
 	Schema.Struct({ kind: Schema.Literal("missing"), path: Schema.String }),
 	Schema.Struct({
@@ -48,9 +60,16 @@ export const GuideResult = Schema.Union([
 		checks: Schema.Array(GuideCheck),
 		/** `git rev-parse HEAD` of the session's worktree, to tell stale checks from current ones. */
 		headSha: Schema.String,
+		/** Computed per diff, not part of `version`: a code change must not rebuild the bundle. */
+		symbols: Schema.Array(GuideSymbol),
 	}),
 ]);
 export type GuideResult = Schema.Schema.Type<typeof GuideResult>;
+
+/** What the bundler yields, before the diff-dependent `symbols` are attached. */
+export type BuiltGuide =
+	| Exclude<GuideResult, { kind: "ok" }>
+	| Omit<Extract<GuideResult, { kind: "ok" }>, "symbols">;
 
 export const GuideIssue = Schema.Struct({
 	level: Schema.Literals(["error", "warning"]),

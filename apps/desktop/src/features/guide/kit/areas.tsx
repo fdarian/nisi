@@ -9,6 +9,8 @@ import {
 	useLayoutEffect,
 	useState,
 } from "react";
+import { rangeReviewStatus } from "#/features/diff/review-coverage";
+import type { FileContent } from "#/features/pull-request/data/pr-data";
 import { splitPath } from "#/lib/tree-paths";
 import {
 	type ClaimedFile,
@@ -17,9 +19,11 @@ import {
 	shortestUniqueSuffixes,
 } from "../areas";
 import { AreaScopeProvider, useGuideContext } from "../guide-context";
+import type { GuideReviews } from "../guide-reviews";
+import { parseLines } from "../refs";
 import { colorForArea } from "./area-colors";
 import { DiffStat } from "./diff-stat";
-import { FileRow } from "./file-row";
+import { FileRow, type FileRowReview } from "./file-row";
 
 type AreaProps = {
 	id: string;
@@ -72,6 +76,61 @@ function fileRows(claimed: readonly ClaimedFile[]): Row[] {
 			deletions: hunk.deletions,
 		}));
 	});
+}
+
+/** The listed rows, each with its Reviewed checkbox where the app has review state to show. A separate component so the contents a hunk row's state needs are fetched only for rows an open Area lists. */
+function AreaRows(props: { rows: readonly Row[] }): React.ReactElement {
+	const reviews = useGuideContext().reviews;
+	const hunkPaths = [
+		...new Set(
+			props.rows.flatMap((row) => (row.lines === undefined ? [] : [row.path])),
+		),
+	];
+	// `reviews` is fixed for the life of a render tree (the app has it, the
+	// static preview doesn't), so this hook is called on every render or on none.
+	const contents =
+		reviews === undefined
+			? undefined
+			: // biome-ignore lint/correctness/useHookAtTopLevel: see above
+				reviews.useFileReviews(hunkPaths);
+	return (
+		<>
+			{props.rows.map((row) => (
+				<li key={`${row.path}:${row.lines ?? ""}`}>
+					<FileRow
+						{...row}
+						review={
+							reviews === undefined
+								? undefined
+								: rowReview(row, reviews, contents?.get(row.path)?.content)
+						}
+					/>
+				</li>
+			))}
+		</>
+	);
+}
+
+function rowReview(
+	row: Row,
+	reviews: GuideReviews,
+	content: FileContent | undefined,
+): FileRowReview {
+	if (row.lines === undefined) {
+		return {
+			status: reviews.fileViewed(row.path) ? "reviewed" : "unreviewed",
+			onToggle: (viewed) => reviews.setFileViewed(row.path, viewed),
+		};
+	}
+	const range = parseLines(row.lines);
+	return {
+		status:
+			content === undefined
+				? undefined
+				: rangeReviewStatus([range], content.review),
+		onToggle: (viewed) =>
+			reviews.setHunkViewed(row.path, range, content, viewed),
+	};
 }
 
 /** One part of the change: bullets written by the agent, and a file count and +/− computed by nisi from the diff. Only meaningful inside `Areas`. */
@@ -141,11 +200,7 @@ export function Area(props: AreaProps): React.ReactElement {
 				</div>
 				{open && (
 					<ul className="m-0 mt-2.5 flex list-none flex-col gap-px border-t p-0 pt-2">
-						{rows.slice(0, visibleCount).map((row) => (
-							<li key={`${row.path}:${row.lines ?? ""}`}>
-								<FileRow {...row} />
-							</li>
-						))}
+						<AreaRows rows={rows.slice(0, visibleCount)} />
 						{hiddenCount > 0 && (
 							<li>
 								<button

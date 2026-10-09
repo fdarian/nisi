@@ -1,10 +1,11 @@
-import type { GuideResult } from "@repo/sidecar-api";
+import type { BuiltGuide, GuideSymbol } from "@repo/sidecar-api";
 import { createElement } from "react";
 import { renderToString } from "react-dom/server";
 import type { GuideFile } from "./areas";
 import { evaluateGuide } from "./evaluate";
 import { GUIDE_COMPONENTS } from "./guide-components";
 import { type GuideCollector, GuideProvider } from "./guide-context";
+import { symbolMap } from "./symbol-links";
 
 /**
  * The guide as the Guide tab's first render would draw it, with no DOM: what
@@ -13,9 +14,13 @@ import { type GuideCollector, GuideProvider } from "./guide-context";
  * caller has to provide one.
  */
 export function renderGuideHtml(
-	result: Extract<GuideResult, { kind: "ok" }>,
+	result: Extract<BuiltGuide, { kind: "ok" }>,
 	files: readonly GuideFile[],
-	options: { expanded: boolean; collector?: GuideCollector },
+	options: {
+		expanded: boolean;
+		collector?: GuideCollector;
+		symbols?: readonly GuideSymbol[];
+	},
 ): string {
 	const Guide = evaluateGuide(result.version, result.code);
 	const render = (areaOrder: readonly string[], collector?: GuideCollector) =>
@@ -31,6 +36,7 @@ export function renderGuideHtml(
 						headSha: result.headSha,
 						selectedRef: null,
 						selectRef: () => {},
+						symbols: symbolMap(options.symbols ?? []),
 						areaOrder,
 						setAreaOrder: () => {},
 						hoveredArea: null,

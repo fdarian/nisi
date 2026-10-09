@@ -1,6 +1,6 @@
 "use client";
 
-import type { GuideCheck } from "@repo/sidecar-api";
+import type { GuideCheck, GuideSymbol } from "@repo/sidecar-api";
 import {
 	Component,
 	type ErrorInfo,
@@ -31,9 +31,11 @@ import { GUIDE_COMPONENTS } from "./guide-components";
 import { GuideProvider } from "./guide-context";
 import { GuideDiffPane } from "./guide-diff-pane";
 import { GuideResizeHandle } from "./guide-resize-handle";
+import { useGuideReviews } from "./guide-reviews";
 import type { GuideTarget } from "./guide-target";
 import { GuideToc } from "./guide-toc";
 import type { GuideRef } from "./refs";
+import { symbolMap } from "./symbol-links";
 import { useGuide } from "./use-guide";
 
 const SPLIT_STORAGE_ID = "nisi:guide-split";
@@ -100,6 +102,7 @@ export function GuideView(props: {
 			checks={result.checks}
 			code={result.code}
 			files={props.files}
+			symbols={result.symbols}
 			headSha={result.headSha}
 			onOpenFile={props.onOpenFile}
 			onSelectTarget={setTarget}
@@ -119,6 +122,7 @@ function GuideBody(props: {
 	version: string;
 	code: string;
 	checks: readonly GuideCheck[];
+	symbols: readonly GuideSymbol[];
 	headSha: string;
 	files: readonly FileChange[];
 	reviewState: ReadonlyMap<string, ReviewStateEntry>;
@@ -153,6 +157,14 @@ function GuideBody(props: {
 	);
 	const closePane = useCallback(() => onSelectTarget(null), [onSelectTarget]);
 	const selectedRef = props.target === null ? null : props.target.ref;
+	const symbols = useMemo(() => symbolMap(props.symbols), [props.symbols]);
+	const reviews = useGuideReviews({
+		orpc: props.orpc,
+		sessionId: props.session.id,
+		files,
+		reviewState: props.reviewState,
+		setViewed: props.setViewed,
+	});
 	const [areaOrder, setAreaOrder] = useState<readonly string[]>([]);
 	const [hoveredArea, setHoveredArea] = useState<string | null>(null);
 	const context = useMemo(
@@ -164,6 +176,8 @@ function GuideBody(props: {
 			headSha: props.headSha,
 			selectedRef,
 			selectRef,
+			symbols,
+			reviews,
 			areaOrder,
 			setAreaOrder,
 			hoveredArea,
@@ -177,6 +191,8 @@ function GuideBody(props: {
 			props.headSha,
 			selectedRef,
 			selectRef,
+			symbols,
+			reviews,
 			areaOrder,
 			hoveredArea,
 		],
