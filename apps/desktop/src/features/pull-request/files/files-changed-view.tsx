@@ -1,43 +1,32 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { toastManager } from "#/components/ui/toast";
 import {
 	type DiffMatch,
 	diffContentMatchesQuery,
 	findDiffMatches,
 } from "#/features/diff/diff-search";
-import { demandedFileContentChunks } from "#/features/pull-request/data/file-content-demand";
 import type {
 	FileChange,
-	FileContentsMap,
 	ReviewStateEntry,
 	Session,
 } from "#/features/pull-request/data/pr-data";
 import {
-	useFileContents,
-	useOptimisticRangeBaselines,
-	useSetRangeViewed,
-} from "#/features/pull-request/data/pr-data";
-import {
 	useSessionCurrentMatchIndex,
-	useSessionDemandedFileContentChunks,
 	useSessionFilterQuery,
-	useSessionForcedPaths,
 	useSessionNavigationHistory,
 	useSessionSearchMode,
 	useSessionSelectedPath,
-	useSessionUndoStack,
 } from "#/features/pull-request/data/session-ui-store";
 import type { DiffPaneHandle } from "#/features/pull-request/files/diff-pane/diff-pane";
 import { DiffPane } from "#/features/pull-request/files/diff-pane/diff-pane";
-import { optimisticRangeBaseline } from "#/features/pull-request/files/diff-pane/optimistic-range-baseline";
+import { useDiffPaneData } from "#/features/pull-request/files/diff-pane/use-diff-pane-data";
 import { EditorPickerPalette } from "#/features/pull-request/files/editor-picker/editor-picker-palette";
 import type { SearchMode } from "#/features/pull-request/files/sidebar/files-sidebar";
 import { FilesSidebar } from "#/features/pull-request/files/sidebar/files-sidebar";
 import {
 	useDiffStyleMode,
-	useHideReviewed,
 	usePreferredEditor,
 	useSidebarViewMode,
 	useWrapLines,
@@ -48,7 +37,6 @@ import {
 	openInEditor,
 	useAvailableEditors,
 } from "#/infra/use-available-editors";
-import { comparePaths } from "#/lib/tree-paths";
 import { useKeyBindings } from "#/lib/use-key-bindings";
 import { filesMainClassName } from "./files-changed-layout";
 import { FilesViewedToolbar } from "./files-viewed-toolbar";
@@ -158,94 +146,22 @@ export function FilesChangedView({
 
 	const viewMode = useSidebarViewMode(orpc)[0];
 	const diffStyle = useDiffStyleMode(orpc)[0];
-	const hideReviewed = useHideReviewed(orpc)[0];
 	const wrapLines = useWrapLines(orpc)[0];
 	const [preferredEditor, setPreferredEditor] = usePreferredEditor(orpc);
 	const { editors, loadEditors } = useAvailableEditors();
 	const [editorPickerOpen, setEditorPickerOpen] = useState(false);
-	const optimisticBaselines = useOptimisticRangeBaselines(orpc, session.id);
-
-	const viewedCount = useMemo(
-		() =>
-			files.filter((file) => reviewState.get(file.path)?.status === "viewed")
-				.length,
-		[files, reviewState],
-	);
-
-	// Lifted from `DiffPane` (rather than duplicated) — its keyword-search
-	// predicate below and the diff pane's own rendering need to read the
-	// exact same `useFileContents` call so TanStack Query dedupes both to one
-	// cached entry per chunk instead of mounting two independently-chunked
-	// fetches. `contentPaths` deliberately comes from `files` (the unfiltered
-	// prop), not `visibleFiles`/`queryFilteredFiles` below, for the same
-	// reason `DiffPane` used to key its chunks off `allFiles`: a file
-	// dropping out of the filtered/hide-reviewed view must never reshuffle
-	// another chunk's boundary. DiffPane sorts by comparePaths, so use that
-	// same display order even when the incoming files aren't sorted.
-	const contentPaths = useMemo(
-		() =>
-			files
-				.filter((file) => !file.binary)
-				.map((file) => file.path)
-				.sort(comparePaths),
-		[files],
-	);
-	const [renderedPaths, setRenderedPaths] = useState<readonly string[] | null>(
-		null,
-	);
-	// Unlike the virtualizer's current window, enabled chunks survive tab suspension.
-	const [stickyChunks, addDemandedChunks] = useSessionDemandedFileContentChunks(
-		session.id,
-	);
-	const demandedChunks = useMemo(() => {
-		const wanted = demandedFileContentChunks(
-			contentPaths,
-			renderedPaths,
-			selectedPath,
-			searchMode === "keyword" && filterQuery.trim() !== "",
-		);
-		return new Set([...stickyChunks, ...wanted]);
-	}, [
-		contentPaths,
-		renderedPaths,
-		selectedPath,
-		searchMode,
-		filterQuery,
-		stickyChunks,
-	]);
-	useEffect(() => {
-		if (stickyChunks.size !== demandedChunks.size)
-			addDemandedChunks(demandedChunks);
-	}, [stickyChunks, demandedChunks, addDemandedChunks]);
-	const handleRenderedPathsChange = useCallback((paths: readonly string[]) => {
-		setRenderedPaths((current) =>
-			current !== null &&
-			current.length === paths.length &&
-			current.every((path, index) => path === paths[index])
-				? current
-				: paths,
-		);
-	}, []);
-	const [forcedPaths, addForcedPath] = useSessionForcedPaths(session.id);
-	const fileContents: FileContentsMap = useFileContents(
+	const isKeywordFilterActive =
+		searchMode === "keyword" && filterQuery.trim() !== "";
+	const data = useDiffPaneData({
 		orpc,
-		session.id,
-		contentPaths,
-		forcedPaths,
-		demandedChunks,
-	);
-	const visibleFiles = useMemo(() => {
-		const filtered = hideReviewed
-			? files.filter(
-					(file) =>
-						reviewState.get(file.path)?.status !== "viewed" ||
-						(optimisticBaselines.has(file.path) &&
-							optimisticBaselines.get(file.path) !==
-								fileContents.get(file.path)?.content?.newContent),
-				)
-			: files;
-		return [...filtered].sort((a, b) => comparePaths(a.path, b.path));
-	}, [files, reviewState, hideReviewed, optimisticBaselines, fileContents]);
+		sessionId: session.id,
+		files,
+		reviewState,
+		selectedPath,
+		demandAllContent: isKeywordFilterActive,
+	});
+	const fileContents = data.fileContents;
+	const visibleFiles = data.visibleFiles;
 
 	// What the sidebar actually renders — `visibleFiles` narrowed by the text
 	// filter. `j`/`k` walk this list; `DiffPane` below keeps receiving the
@@ -274,8 +190,6 @@ export function FilesChangedView({
 	// Files mode never reaches here — `keywordMatchesByPath` stays the shared
 	// empty map, and `diffPaneFiles` stays `visibleFiles`, exactly today's
 	// behavior.
-	const isKeywordFilterActive =
-		searchMode === "keyword" && filterQuery.trim() !== "";
 	const diffPaneFiles = isKeywordFilterActive
 		? queryFilteredFiles
 		: visibleFiles;
@@ -375,50 +289,8 @@ export function FilesChangedView({
 		jumpToMatch(0);
 	}, [jumpToMatch]);
 
-	// Lives in the per-session store too (see the doc comment above
-	// `selectedPath`) — same non-reactive-ref semantics as before (nothing
-	// renders off it), just addressable by session id so it survives this
-	// component unmounting on suspend.
-	const undoStack = useSessionUndoStack(session.id);
-	const setRangeViewed = useSetRangeViewed(orpc, session.id);
-	const markSelectionReviewed = useCallback(
-		(path: string, range: { startLine: number; endLine: number }) => {
-			const content = fileContents.get(path)?.content;
-			const baselineBefore =
-				optimisticBaselines.get(path) ??
-				content?.oldContent ??
-				(files.some((file) => file.path === path && file.status === "added")
-					? ""
-					: undefined);
-			const baseline =
-				content !== undefined &&
-				!content.truncated &&
-				content.newContent !== undefined &&
-				baselineBefore !== undefined
-					? optimisticRangeBaseline(baselineBefore, content.newContent, range)
-					: undefined;
-			const blockId = `selection:${crypto.randomUUID()}`;
-			const blockLabel =
-				range.startLine === range.endLine
-					? `Selection L${range.startLine}`
-					: `Selection L${range.startLine}–L${range.endLine}`;
-			setRangeViewed(
-				{ path, blockId, blockLabel, ranges: [range], viewed: true },
-				() => {
-					undoStack.push({
-						kind: "range",
-						path,
-						blockId,
-						blockLabel,
-						range,
-						baselineBefore,
-					});
-				},
-				baseline,
-			);
-		},
-		[setRangeViewed, undoStack, fileContents, optimisticBaselines, files],
-	);
+	const undoStack = data.undoStack;
+	const setRangeViewed = data.setRangeViewed;
 
 	// Mirrors exactly how `DiffPane` derives the `viewed` boolean it passes to
 	// `handleToggleViewed` — the one other place a file's reviewed flag gets
@@ -654,25 +526,25 @@ export function FilesChangedView({
 						orpc={orpc}
 						counts={
 							countsRevealed
-								? { total: files.length, viewed: viewedCount }
+								? { total: files.length, viewed: data.viewedCount }
 								: undefined
 						}
 						hasPendingChanges={hasPendingChanges}
 						onRefresh={onRefresh}
 					/>
 					<DiffPane
-						optimisticBaselines={optimisticBaselines}
+						optimisticBaselines={data.optimisticBaselines}
 						currentMatch={currentMatch}
 						diffStyle={diffStyle}
 						fileContents={fileContents}
 						files={diffPaneFiles}
-						forcedPaths={forcedPaths}
+						forcedPaths={data.forcedPaths}
 						keywordMatchesByPath={keywordMatchesByPath}
-						onMarkSelectionReviewed={markSelectionReviewed}
-						onForceLoad={addForcedPath}
+						onMarkSelectionReviewed={data.markSelectionReviewed}
+						onForceLoad={data.addForcedPath}
 						onFirstCardPainted={onFirstCardPainted}
 						onOpenFile={onOpenFile}
-						onRenderedPathsChange={handleRenderedPathsChange}
+						onRenderedPathsChange={data.handleRenderedPathsChange}
 						onVisiblePathChange={handleVisiblePathChange}
 						orpc={orpc}
 						ref={diffPaneRef}
