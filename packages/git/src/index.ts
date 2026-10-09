@@ -15,6 +15,7 @@ export {
 	repoChangeSignatureEquals,
 } from "./change-signal.ts";
 export type { FileCategory } from "./classify.ts";
+export { classifyFile } from "./classify.ts";
 export { fetchBranchCommits } from "./commit-log.ts";
 export { diffContents, diffContentsPatch } from "./content-diff.ts";
 export type {
@@ -101,6 +102,8 @@ export type {
 } from "./github/models.ts";
 export type { Hunk } from "./hunk.ts";
 export { parseHunks } from "./hunk.ts";
+export type { ChangedRun } from "./hunks.ts";
+export { parseChangedRuns } from "./hunks.ts";
 export { readIndexHead } from "./index-head.ts";
 export type {
 	GitHubTarget,

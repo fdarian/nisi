@@ -4,10 +4,11 @@ import { join, relative } from "node:path";
 import { compile } from "@mdx-js/mdx";
 import { GuideCheck, type GuideResult } from "@repo/sidecar-api";
 import { Schema } from "effect";
+import { git } from "./diff";
 
 export const GUIDE_DIR = ".nisi/guide";
 export const GUIDE_ENTRY = "guide.mdx";
-/** Recorded command runs (`.claude/skills/nisi-guide/scripts/check.ts`) and the previews `render.ts` writes. Neither is bundle input, so both stay out of `version`. */
+/** Recorded command runs (`nisi guide check`) and the previews `nisi guide render` writes. Neither is bundle input, so both stay out of `version`. */
 const CHECKS_DIR = "checks";
 const NOT_BUNDLE_INPUT = new Set([CHECKS_DIR, ".preview"]);
 
@@ -141,21 +142,6 @@ async function readChecks(guideDir: string): Promise<GuideCheck[]> {
 	return checks.sort((a, b) => a.at.localeCompare(b.at));
 }
 
-async function headSha(repoRoot: string): Promise<string> {
-	const proc = Bun.spawn(["git", "rev-parse", "HEAD"], {
-		cwd: repoRoot,
-		stdout: "pipe",
-		stderr: "pipe",
-	});
-	const [out, err, code] = await Promise.all([
-		proc.stdout.text(),
-		proc.stderr.text(),
-		proc.exited,
-	]);
-	if (code !== 0) throw new Error(`git rev-parse HEAD failed: ${err.trim()}`);
-	return out.trim();
-}
-
 /**
  * Bundles `<repoRoot>/.nisi/guide/guide.mdx` and attaches the recorded check
  * runs and the worktree's head. A failed build is an `error` result rather
@@ -182,7 +168,7 @@ export async function buildGuide(repoRoot: string): Promise<GuideResult> {
 			version,
 			code: bundled.code,
 			checks: await readChecks(guideDir),
-			headSha: await headSha(repoRoot),
+			headSha: (await git(repoRoot, "rev-parse", "HEAD")).trim(),
 		};
 	} catch (cause) {
 		return {

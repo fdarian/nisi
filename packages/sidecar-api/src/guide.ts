@@ -14,7 +14,7 @@ import { Schema } from "effect";
  */
 
 /**
- * One recorded command run, written by `.claude/skills/nisi-guide/scripts/check.ts` to
+ * One recorded command run, written by `nisi guide check` (`packages/cli/src/guide/check.ts`) to
  * `.nisi/guide/checks/<slug>.json` — change both together. Facts, not prose:
  * the guide's `<Checks />` renders these, and a run whose `sha` isn't
  * `headSha` is stale.
@@ -50,9 +50,59 @@ export const GuideResult = Schema.Union([
 ]);
 export type GuideResult = Schema.Schema.Type<typeof GuideResult>;
 
+export const GuideIssue = Schema.Struct({
+	level: Schema.Literals(["error", "warning"]),
+	message: Schema.String,
+});
+export type GuideIssue = Schema.Schema.Type<typeof GuideIssue>;
+
+/**
+ * `validate` and `preview` take a `repoRoot` rather than a session: the author
+ * runs `nisi guide …` from a worktree that may have no session open. `base`
+ * is `--base <ref>`; the sidecar resolves it (see `sidecar/guide/diff.ts`) and
+ * echoes the ref it settled on, so the CLI can say what the diff was measured against.
+ */
+export const GuideDiffInput = Schema.Struct({
+	repoRoot: Schema.String,
+	base: Schema.optional(Schema.String),
+});
+
 export const guideContract = {
 	get: oc
 		.input(Schema.Struct({ sessionId: Schema.String }))
 		.output(GuideResult)
 		.errors({ NOT_FOUND: {}, INTERNAL_SERVER_ERROR: {} }),
+	validate: oc
+		.input(GuideDiffInput)
+		.output(
+			Schema.Struct({
+				base: Schema.String,
+				mergeBase: Schema.String,
+				changedFiles: Schema.Number,
+				issues: Schema.Array(GuideIssue),
+			}),
+		)
+		.errors({ INTERNAL_SERVER_ERROR: {} }),
+	/** A missing guide, a failed build and a failed render are `INTERNAL_SERVER_ERROR`s here (unlike `get`): a CLI asked for a preview and has nothing to show instead. */
+	preview: oc
+		.input(
+			Schema.Struct({
+				...GuideDiffInput.fields,
+				expand: Schema.Boolean,
+				/** The stylesheet is megabytes (fonts inline) and slow to compile from source; a text-only caller skips it. */
+				withCss: Schema.Boolean,
+			}),
+		)
+		.output(
+			Schema.Struct({
+				base: Schema.String,
+				mergeBase: Schema.String,
+				changedFiles: Schema.Number,
+				/** The guide's body markup only; `css` is the app stylesheet to put it under. */
+				html: Schema.String,
+				css: Schema.optional(Schema.String),
+				text: Schema.String,
+			}),
+		)
+		.errors({ INTERNAL_SERVER_ERROR: {} }),
 };

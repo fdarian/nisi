@@ -3,6 +3,8 @@
 *.local*
 dist
 routeTree.gen.ts
+# Embedded by the compiled sidecar for `guide.preview`; made by `build:sidecar`.
+apps/desktop/sidecar/guide/app-stylesheet.gen.txt
 apps/desktop/.storybook-shots/
 
 # Rust

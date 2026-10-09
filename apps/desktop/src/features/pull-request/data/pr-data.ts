@@ -98,7 +98,11 @@ export function parsePullRequestUrl(url: string): PullRequestUrlParts | null {
 	);
 	if (match === null) return null;
 
-	return { owner: match[1], repo: match[2], number: Number(match[3]) };
+	return {
+		owner: match[1] as string,
+		repo: match[2] as string,
+		number: Number(match[3]),
+	};
 }
 
 export type Session = {

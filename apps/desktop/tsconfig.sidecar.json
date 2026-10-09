@@ -4,7 +4,12 @@
 		"allowImportingTsExtensions": true,
 		"noErrorTruncation": true,
 		"types": ["bun"],
-		"skipLibCheck": true
+		"skipLibCheck": true,
+		// `sidecar/guide/tools.ts` server-renders the Guide tab's React kit
+		// (`src/features/guide/`), which uses JSX, the DOM lib and the app's `#/` alias.
+		"jsx": "react-jsx",
+		"lib": ["ES2023", "DOM", "DOM.Iterable"],
+		"paths": { "#/*": ["./src/*"] }
 	},
 	"include": ["sidecar"]
 }

@@ -65,13 +65,14 @@ import {
 	stopCodeLspServer,
 } from "./code-index/state.ts";
 import { buildDiagnosticsSnapshot } from "./diagnostics-snapshot.ts";
-import { buildGuide } from "./guide/build.ts";
 import {
 	emit,
 	type SidecarEvent,
 	streamReady,
 	subscribe as subscribeToSidecarEvents,
 } from "./events.ts";
+import { buildGuide } from "./guide/build.ts";
+import { previewRepoGuide, validateRepoGuide } from "./guide/tools.ts";
 import { listHarnesses } from "./harness/harnesses.ts";
 import { getHarnessModels } from "./harness/models.ts";
 import { receiveFrontendMarks } from "./launch-trace/handler.ts";
@@ -2250,6 +2251,28 @@ export function attachRouter(
 					errors,
 				);
 				return yield* Effect.promise(() => buildGuide(repoRoot));
+			}),
+			validate: authed.guide.validate.effect(function* ({ input, errors }) {
+				return yield* Effect.tryPromise({
+					try: () => validateRepoGuide(input.repoRoot, input.base),
+					catch: (cause) =>
+						errors.INTERNAL_SERVER_ERROR({
+							message: cause instanceof Error ? cause.message : String(cause),
+						}),
+				});
+			}),
+			preview: authed.guide.preview.effect(function* ({ input, errors }) {
+				return yield* Effect.tryPromise({
+					try: () =>
+						previewRepoGuide(input.repoRoot, input.base, {
+							expand: input.expand,
+							withCss: input.withCss,
+						}),
+					catch: (cause) =>
+						errors.INTERNAL_SERVER_ERROR({
+							message: cause instanceof Error ? cause.message : String(cause),
+						}),
+				});
 			}),
 		},
 		codeIndex: {
