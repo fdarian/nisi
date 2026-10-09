@@ -6,6 +6,7 @@
 	"bundle": {
 		"externalBin": ["binaries/sidecar"],
 		"macOS": {
+			"signingIdentity": "-",
 			"entitlements": "./entitlements.plist"
 		}
 	}
