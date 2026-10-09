@@ -139,6 +139,13 @@ type LocationPaneProps = {
 	empty: React.ReactNode;
 	/** Start fully-reviewed locations collapsed (the walkthrough's reading flow); a pane the user opened by clicking a link should show its code. */
 	collapseReviewed: boolean;
+	/**
+	 * What to say when none of a path's ranges touch the diff. Omitted: the
+	 * walkthrough's wording, which blames a stale generation. Supplied: that
+	 * message plus an "Open file" button — the ranges point at real code that
+	 * simply wasn't changed.
+	 */
+	rangesOutsideDiff?: string;
 };
 
 export function LocationPane({
@@ -149,6 +156,7 @@ export function LocationPane({
 	outdatedPaths,
 	empty,
 	collapseReviewed,
+	rangesOutsideDiff,
 }: LocationPaneProps): React.ReactElement {
 	const diffTheme = useDiffTheme(orpc);
 	// Like the diff pane's file overrides, either direction is sticky until the checkbox flips.
@@ -258,8 +266,11 @@ export function LocationPane({
 						: errorItem(
 								itemId,
 								group.path,
-								"None of this block's line ranges are in the current diff — the file has likely changed since generation.",
-								undefined,
+								rangesOutsideDiff ??
+									"None of this block's line ranges are in the current diff — the file has likely changed since generation.",
+								rangesOutsideDiff === undefined
+									? undefined
+									: { label: "Open file", onClick: () => openFile(group.path) },
 								collapsed,
 							),
 				);
@@ -290,6 +301,7 @@ export function LocationPane({
 		openFile,
 		collapseOverrides,
 		collapseReviewed,
+		rangesOutsideDiff,
 	]);
 
 	const renderCustomHeader = useCallback(

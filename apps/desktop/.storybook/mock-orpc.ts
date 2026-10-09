@@ -19,6 +19,7 @@
 import { AsyncIteratorClass } from "@orpc/shared";
 import { createTanstackQueryUtils } from "@orpc/tanstack-query";
 import type {
+	GuideResult,
 	RepositoryDetail,
 	RepositorySessionStateBatch,
 	RepositorySummary,
@@ -145,6 +146,8 @@ export type MockOrpcData = {
 	};
 	/** `walkthrough.get`'s result — omit for "nothing generated yet", pass a fixture for the loaded reader. */
 	storedWalkthrough?: StoredWalkthrough | null;
+	/** `guide.get`'s result — omit for "no guide written yet". */
+	guide?: GuideResult;
 	/** Overrides `DEFAULT_HARNESSES` wholesale — pass a full four-entry list, not a patch. */
 	harnesses?: readonly HarnessInfo[];
 	models?: Partial<Record<HarnessId, HarnessModels>>;
@@ -342,10 +345,11 @@ export function createMockSidecarClient(
 			},
 		},
 		guide: {
-			get: async () => ({
-				kind: "missing" as const,
-				path: "/repo/.nisi/guide/guide.mdx",
-			}),
+			get: async (): Promise<GuideResult> =>
+				data.guide ?? {
+					kind: "missing",
+					path: "/repo/.nisi/guide/guide.mdx",
+				},
 		},
 		review: {
 			setViewed: async () => undefined,

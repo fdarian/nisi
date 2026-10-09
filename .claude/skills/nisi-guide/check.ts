@@ -73,7 +73,8 @@ if (argv.length === 0) usage();
 
 const repoRoot = await git(process.cwd(), "rev-parse", "--show-toplevel");
 // A single argument is a shell line (`"cd x && bun test"`); several are an argv.
-const display = argv.map(shellQuote).join(" ");
+const display =
+	argv.length === 1 ? (argv[0] as string) : argv.map(shellQuote).join(" ");
 const spawned = argv.length === 1 ? ["sh", "-c", argv[0] as string] : argv;
 
 const startedAt = performance.now();

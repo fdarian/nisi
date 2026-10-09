@@ -70,6 +70,7 @@ export function ReferenceSidePane(props: {
 				files={props.files}
 				orpc={props.orpc}
 				outdatedPaths={NO_OUTDATED_PATHS}
+				rangesOutsideDiff="These lines aren't part of the PR's changes."
 				sessionId={props.sessionId}
 			/>
 		</div>
