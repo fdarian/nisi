@@ -137,7 +137,7 @@ function Track(props: { lane: string; segment: Segment }): React.ReactElement {
 					return (
 						<span
 							className={cn(
-								"absolute top-1.5 h-[18px] w-2 rounded-[3px] transition-opacity",
+								"absolute top-1.5 h-[18px] w-2 -translate-x-1/2 rounded-[3px] transition-opacity",
 								colorForArea(guide.areaOrder, item.props.area).dot,
 								dimmed(item.props.area) && "opacity-25",
 							)}

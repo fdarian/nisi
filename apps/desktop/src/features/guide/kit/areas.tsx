@@ -91,7 +91,7 @@ export function Area(props: AreaProps): React.ReactElement {
 					/>
 				</button>
 			</div>
-			<div className="mt-2 flex flex-col gap-1.5 text-foreground/80 [&_ul]:m-0">
+			<div className="mt-2 flex flex-col gap-1.5 text-foreground/80">
 				{props.children}
 			</div>
 			{open && (
