@@ -4,6 +4,7 @@ import { Argument, Command, Flag } from "effect/unstable/cli";
 import { parseBaseArgument } from "./base-argument.ts";
 import { zshCompletionScript } from "./completion.ts";
 import { runDebug } from "./debug.ts";
+import { guideCommand } from "./guide/commands.ts";
 
 export const runCommand = <E, R>(
 	run: (
@@ -80,7 +81,7 @@ export const runCommand = <E, R>(
 		Command.withDescription(
 			"Open the PR for the current directory in Nisi, or diff against the default branch when there is none. Set LOG_LEVEL=debug for a trace of every step (which sidecar.json was read, each POST attempt, app resolution); the sidecar itself keeps its own rotating log under NISI_DATA_DIR/logs/.",
 		),
-		Command.withSubcommands([pr, diff, debug, completion]),
+		Command.withSubcommands([pr, diff, debug, guideCommand(fail), completion]),
 	);
 	return Command.run(nisi, { version: "0.1.0" });
 };

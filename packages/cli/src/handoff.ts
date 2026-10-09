@@ -22,7 +22,7 @@ import type { ChildProcessSpawner } from "effect/unstable/process";
  * iteration waits before trying again.
  */
 const POST_TIMEOUT_MS = 8_000;
-const POLL_INTERVAL_MS = 300;
+export const POLL_INTERVAL_MS = 300;
 
 /**
  * How long to wait for a freshly-launched app to boot its sidecar before
@@ -31,7 +31,7 @@ const POLL_INTERVAL_MS = 300;
  * cold boot, which is far slower than the compiled release app this is tuned
  * for).
  */
-const pollTimeoutConfig = Config.number("NISI_LAUNCH_TIMEOUT_MS").pipe(
+export const pollTimeoutConfig = Config.number("NISI_LAUNCH_TIMEOUT_MS").pipe(
 	Config.withDefault(15_000),
 );
 
@@ -62,7 +62,7 @@ export type HandoffOutcome =
  * listening": the former means a socket accepted the connection and the sidecar just hasn't
  * answered yet, the latter means there's no sidecar to answer at all.
  */
-const isOwnTimeout = (error: unknown): boolean =>
+export const isOwnTimeout = (error: unknown): boolean =>
 	error instanceof DOMException && error.name === "TimeoutError";
 
 /**
@@ -75,7 +75,7 @@ const isOwnTimeout = (error: unknown): boolean =>
  * parse, even after its own short retry against the create-then-write
  * window"), so this only adds the debug logging `attempt` below relies on.
  */
-const readHandshake = (dataDir: string) =>
+export const readHandshake = (dataDir: string) =>
 	readSidecarJson(dataDir).pipe(
 		Effect.tap((handshake) =>
 			Effect.logDebug(
