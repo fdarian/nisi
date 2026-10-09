@@ -9,6 +9,7 @@ import {
 	type ReactNode,
 	useState,
 } from "react";
+import { useGuideContext } from "../guide-context";
 import { PinnedImage, splitPins } from "./pinned-image";
 
 type FrameProps = {
@@ -22,8 +23,27 @@ export function Frame(_props: FrameProps): null {
 	return null;
 }
 
+function FrameStage(props: { frame: FrameProps }): React.ReactElement {
+	const content = splitPins(props.frame.children);
+	return (
+		<>
+			{props.frame.src !== undefined ? (
+				<PinnedImage
+					alt={props.frame.title}
+					pins={content.pins}
+					src={props.frame.src}
+				/>
+			) : null}
+			{content.rest.length > 0 && (
+				<div className="flex flex-col gap-2 p-3">{content.rest}</div>
+			)}
+		</>
+	);
+}
+
 /** Walks the reader through a flow one frame at a time: a single stage, a filmstrip to jump around, and ← → to step. */
 export function Tour(props: { children: ReactNode }): React.ReactElement {
+	const guide = useGuideContext();
 	const frames = Children.toArray(props.children).flatMap((child) =>
 		isValidElement<FrameProps>(child) && child.type === Frame
 			? [child.props]
@@ -45,7 +65,27 @@ export function Tour(props: { children: ReactNode }): React.ReactElement {
 		event.preventDefault();
 	};
 
-	const content = splitPins(current.children);
+	if (guide.expanded === true) {
+		return (
+			<section
+				aria-label="Tour"
+				className="divide-y overflow-hidden rounded-lg border bg-card"
+			>
+				{frames.map((frame, frameIndex) => (
+					<div key={frame.title}>
+						<div className="flex items-center justify-between border-b px-3 py-1.5">
+							<span className="font-medium text-sm">{frame.title}</span>
+							<span className="text-muted-foreground text-xs tabular-nums">
+								{`${frameIndex + 1} / ${frames.length}`}
+							</span>
+						</div>
+						<FrameStage frame={frame} />
+					</div>
+				))}
+			</section>
+		);
+	}
+
 	return (
 		<section
 			aria-label="Tour"
@@ -78,16 +118,7 @@ export function Tour(props: { children: ReactNode }): React.ReactElement {
 					</button>
 				</span>
 			</div>
-			{current.src !== undefined ? (
-				<PinnedImage
-					alt={current.title}
-					pins={content.pins}
-					src={current.src}
-				/>
-			) : null}
-			{content.rest.length > 0 && (
-				<div className="flex flex-col gap-2 p-3">{content.rest}</div>
-			)}
+			<FrameStage frame={current} />
 			<div className="flex gap-2 overflow-x-auto border-t bg-background p-2">
 				{frames.map((frame, frameIndex) => (
 					<button

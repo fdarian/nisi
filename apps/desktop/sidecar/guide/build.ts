@@ -7,8 +7,9 @@ import { Schema } from "effect";
 
 export const GUIDE_DIR = ".nisi/guide";
 export const GUIDE_ENTRY = "guide.mdx";
-/** Recorded command runs (`.claude/skills/nisi-guide/scripts/check.ts`). Not bundle input, so kept out of `version`. */
+/** Recorded command runs (`.claude/skills/nisi-guide/scripts/check.ts`) and the previews `render.ts` writes. Neither is bundle input, so both stay out of `version`. */
 const CHECKS_DIR = "checks";
+const NOT_BUNDLE_INPUT = new Set([CHECKS_DIR, ".preview"]);
 
 /**
  * Specifiers the frontend evaluator (`src/features/guide/evaluate.ts`)
@@ -67,11 +68,14 @@ const imagePlugin: Bun.BunPlugin = {
 type CachedBundle = { version: string; code: string };
 const cache = new Map<string, CachedBundle>();
 
-async function listFiles(dir: string, skip?: string): Promise<string[]> {
+async function listFiles(
+	dir: string,
+	skip: ReadonlySet<string> = new Set(),
+): Promise<string[]> {
 	const entries = await readdir(dir, { withFileTypes: true });
 	const nested = await Promise.all(
 		entries
-			.filter((entry) => entry.name !== skip)
+			.filter((entry) => !skip.has(entry.name))
 			.map((entry) =>
 				entry.isDirectory()
 					? listFiles(join(dir, entry.name))
@@ -84,7 +88,7 @@ async function listFiles(dir: string, skip?: string): Promise<string[]> {
 /** Hash of path + mtime + size over every bundle input in the guide directory, so an edit to an imported component or image rebuilds too. */
 async function guideVersion(guideDir: string): Promise<string> {
 	const hash = createHash("sha256");
-	for (const file of await listFiles(guideDir, CHECKS_DIR)) {
+	for (const file of await listFiles(guideDir, NOT_BUNDLE_INPUT)) {
 		const info = await stat(file);
 		hash.update(`${relative(guideDir, file)}\0${info.mtimeMs}\0${info.size}\0`);
 	}

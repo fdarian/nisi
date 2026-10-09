@@ -108,3 +108,24 @@ export function uncoveredFiles(
 			!matchers.some((matcher) => matcher.test(file.path)),
 	);
 }
+
+/**
+ * Each path's shortest trailing run of segments that no other path in the
+ * list shares: `sidecar/repositories.ts` against
+ * `sidecar-api/src/repositories.ts`, but plain `http.ts` when nothing else is
+ * named that.
+ */
+export function shortestUniqueSuffixes(paths: readonly string[]): string[] {
+	const split = paths.map((path) => path.split("/"));
+	return split.map((segments, index) => {
+		for (let take = 1; take < segments.length; take++) {
+			const suffix = segments.slice(-take).join("/");
+			const clash = split.some(
+				(other, otherIndex) =>
+					otherIndex !== index && other.slice(-take).join("/") === suffix,
+			);
+			if (!clash) return suffix;
+		}
+		return paths[index] as string;
+	});
+}

@@ -8,6 +8,8 @@ import { buildGuide } from "../../../sidecar/guide/build";
 import { evaluateGuide } from "./evaluate";
 import { GUIDE_COMPONENTS } from "./guide-components";
 import { GuideProvider } from "./guide-context";
+import { htmlToText } from "./guide-text";
+import { renderGuideHtml } from "./static-render";
 import { type DiffFile, validateGuide } from "./validate";
 
 const SAMPLE = join(import.meta.dir, "sample");
@@ -239,6 +241,13 @@ test("rebuilding an unchanged guide is a cache hit; an edit bumps the version", 
 	expect(withCheck.version).toBe(first.version);
 	expect(withCheck.checks).toHaveLength(3);
 
+	// Neither is a preview from `render.ts`.
+	await mkdir(join(repoRoot, ".nisi/guide/.preview"), { recursive: true });
+	await writeFile(join(repoRoot, ".nisi/guide/.preview/full.png"), "x");
+	const withPreview = await buildGuide(repoRoot);
+	if (withPreview.kind !== "ok") throw new Error("build failed");
+	expect(withPreview.version).toBe(first.version);
+
 	await writeFile(join(repoRoot, ".nisi/guide/extra.txt"), "changed");
 	const edited = await buildGuide(repoRoot);
 	if (edited.kind !== "ok") throw new Error("build failed");
@@ -395,4 +404,53 @@ test("a Sequence step in a lane it didn't declare fails the render with the lane
 </Sequence>
 `);
 	expect(validateGuide(result, []).join("\n")).toContain('no lane "B"');
+});
+
+test("the static render colors Areas, and expanded shows every Tour frame and both Sequence states", async () => {
+	const result = await buildGuide(repoRoot);
+	if (result.kind !== "ok") throw new Error("build failed");
+
+	const collapsed = renderGuideHtml(result, SAMPLE_DIFF, { expanded: false });
+	expect(collapsed).not.toContain("runs tests, types the result");
+	expect(collapsed).not.toContain("Its sessions load below");
+	// The first Area's dot is a palette color, not the neutral one.
+	expect(collapsed).toContain("bg-violet-500");
+
+	const expanded = renderGuideHtml(result, SAMPLE_DIFF, { expanded: true });
+	expect(expanded).toContain("runs tests, types the result");
+	expect(expanded).toContain("check.ts runs it");
+	expect(expanded).toContain("Start from the repositories list");
+	expect(expanded).toContain("Its sessions load below");
+	expect(expanded).toContain("Frames without a");
+	// Area file lists are open.
+	expect(expanded).toContain('aria-expanded="true"');
+});
+
+test("the text linearisation carries the computed values", async () => {
+	const result = await buildGuide(repoRoot);
+	if (result.kind !== "ok") throw new Error("build failed");
+	const out = htmlToText(
+		renderGuideHtml(result, SAMPLE_DIFF, { expanded: true }),
+	);
+
+	expect(out).toContain("## Overview");
+	expect(out).toContain("2 files +213 −0");
+	expect(out).toContain("- ⟨check.ts⟩ +113 −0");
+	expect(out).toContain(
+		"[Passed] Type check and lint `pnpm turbo run check:type` at",
+	);
+	expect(out).toMatch(/\[Failed, exit 1\] Unit tests .* at 0123456 stale/);
+	expect(out).toContain("Not run");
+	expect(out).toContain("Agent: [runs tests, types the result]");
+	expect(out).toContain("Sidecar: [wait]");
+	// Pin captions restart at 1 in each Tour frame.
+	expect(out).toContain("1. Start from the repositories list");
+	expect(out).toContain("1. Selected row\n2. Its sessions load below");
+	expect(out).toContain(
+		"[ ] Confirm eval is acceptable under the production CSP",
+	);
+	// Nothing of the page's chrome leaks in.
+	expect(out).not.toContain("Highlight pin");
+	expect(out).not.toContain("time →");
+	expect(out).not.toContain("<");
 });

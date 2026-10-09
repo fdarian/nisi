@@ -1,11 +1,8 @@
 import type { GuideResult } from "@repo/sidecar-api";
-import { createElement } from "react";
-import { renderToString } from "react-dom/server";
 import { type GuideFile, uncoveredFiles } from "./areas";
-import { evaluateGuide } from "./evaluate";
-import { GUIDE_COMPONENTS } from "./guide-components";
-import { type GuideCollector, GuideProvider } from "./guide-context";
+import type { GuideCollector } from "./guide-context";
 import { parseLines } from "./refs";
+import { renderGuideHtml } from "./static-render";
 
 /** A changed line range in the head file (1-based, inclusive); a pure deletion is the single line it sits before. */
 export type ChangedRange = { start: number; end: number };
@@ -91,29 +88,7 @@ export function validateGuide(
 	};
 	let html: string;
 	try {
-		const Guide = evaluateGuide(result.version, result.code);
-		html = renderToString(
-			createElement(
-				GuideProvider,
-				{
-					value: {
-						sessionId: "validate",
-						files,
-						changedPaths: new Set(files.map((file) => file.path)),
-						checks: result.checks,
-						headSha: result.headSha,
-						selectedRef: null,
-						selectRef: () => {},
-						areaOrder: [],
-						setAreaOrder: () => {},
-						hoveredArea: null,
-						setHoveredArea: () => {},
-						collector,
-					},
-				},
-				createElement(Guide, { components: GUIDE_COMPONENTS as never }),
-			),
-		).replace(/<!-- -->/g, "");
+		html = renderGuideHtml(result, files, { expanded: true, collector });
 	} catch (cause) {
 		return [
 			`The guide fails to render: ${cause instanceof Error ? cause.message : String(cause)}`,

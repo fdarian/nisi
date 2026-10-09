@@ -129,13 +129,17 @@ function Track(props: { lane: string; segment: Segment }): React.ReactElement {
 	const dimmed = (area: string | undefined) =>
 		guide.hoveredArea !== null && area !== guide.hoveredArea;
 	return (
-		<div className="relative h-[30px] rounded-md bg-[repeating-linear-gradient(90deg,transparent_0,transparent_calc(10%-1px),var(--border)_calc(10%-1px),var(--border)_10%)]">
+		<div
+			className="relative h-[30px] rounded-md bg-[repeating-linear-gradient(90deg,transparent_0,transparent_calc(10%-1px),var(--border)_calc(10%-1px),var(--border)_10%)]"
+			data-text="inline"
+		>
 			{props.segment.items.map((item, index) => {
 				if (item.lane !== props.lane) return null;
 				const key = `${item.kind}-${index}`;
 				if (item.kind === "event") {
 					return (
 						<span
+							data-text="event"
 							className={cn(
 								"absolute top-1.5 h-[18px] w-2 -translate-x-1/2 rounded-[3px] transition-opacity",
 								colorForArea(guide.areaOrder, item.props.area).dot,
@@ -150,6 +154,7 @@ function Track(props: { lane: string; segment: Segment }): React.ReactElement {
 				const label = item.props.children;
 				return (
 					<span
+						data-text={item.kind}
 						className={cn(
 							"absolute top-[3px] h-6 overflow-hidden text-ellipsis whitespace-nowrap rounded-[5px] border px-2 text-[11.5px] leading-[22px] transition-opacity [&_p]:m-0 [&_p]:inline",
 							item.kind === "wait"
@@ -204,15 +209,18 @@ export function Sequence(props: SequenceProps): React.ReactElement {
 			`<Sequence title="${props.title}"> needs <Before> or <After>`,
 		);
 	}
+	const expanded = guide.expanded === true;
 	const shown = segments.has(chosen) ? chosen : segments.keys().next().value;
-	const segment = segments.get(shown as "before" | "after") as Segment;
+	const visible = (["before", "after"] as const).filter((which) =>
+		expanded ? segments.has(which) : which === shown,
+	);
 	return (
 		<figure className="m-0 flex flex-col gap-2.5 rounded-xl border bg-card px-4 pt-3.5 pb-3">
 			<div className="flex items-center gap-2.5">
 				<figcaption className="font-medium text-foreground text-sm">
 					{props.title}
 				</figcaption>
-				{segments.size === 2 && (
+				{segments.size === 2 && !expanded && (
 					<div className="ml-auto inline-flex rounded-md bg-muted p-0.5">
 						{(["before", "after"] as const).map((which) => (
 							<button
@@ -233,17 +241,34 @@ export function Sequence(props: SequenceProps): React.ReactElement {
 					</div>
 				)}
 			</div>
-			<div className="grid grid-cols-[4.5rem_1fr] items-center gap-y-2 gap-x-2">
-				{props.lanes.map((lane) => (
-					<LaneRow key={lane} lane={lane} segment={segment} />
-				))}
-				<span className="col-start-2 text-right text-[11px] text-muted-foreground">
-					time →
-				</span>
-			</div>
-			{segment.caption !== undefined && (
-				<p className="m-0 text-muted-foreground text-xs">{segment.caption}</p>
-			)}
+			{visible.map((which) => {
+				const segment = segments.get(which) as Segment;
+				return (
+					<div className="flex flex-col gap-2.5" key={which}>
+						{expanded && segments.size === 2 && (
+							<span className="font-medium text-muted-foreground text-xs capitalize">
+								{which}
+							</span>
+						)}
+						<div className="grid grid-cols-[4.5rem_1fr] items-center gap-x-2 gap-y-2">
+							{props.lanes.map((lane) => (
+								<LaneRow key={lane} lane={lane} segment={segment} />
+							))}
+							<span
+								className="col-start-2 text-right text-[11px] text-muted-foreground"
+								data-text="skip"
+							>
+								time →
+							</span>
+						</div>
+						{segment.caption !== undefined && (
+							<p className="m-0 text-muted-foreground text-xs">
+								{segment.caption}
+							</p>
+						)}
+					</div>
+				);
+			})}
 		</figure>
 	);
 }
@@ -254,7 +279,7 @@ function LaneRow(props: {
 }): React.ReactElement {
 	return (
 		<>
-			<span className="truncate text-muted-foreground text-xs">
+			<span className="truncate text-muted-foreground text-xs" data-text="lane">
 				{props.lane}
 			</span>
 			<Track lane={props.lane} segment={props.segment} />

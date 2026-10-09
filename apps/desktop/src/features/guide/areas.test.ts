@@ -1,5 +1,10 @@
 import { expect, test } from "bun:test";
-import { filesInArea, isExemptFromAreas, matchesGlob } from "./areas";
+import {
+	filesInArea,
+	isExemptFromAreas,
+	matchesGlob,
+	shortestUniqueSuffixes,
+} from "./areas";
 
 test("globs: * stays in a segment, ** crosses them (and matches none), braces alternate", () => {
 	expect(
@@ -44,4 +49,22 @@ test("an area's stats sum the matching, non-exempt files", () => {
 	);
 	expect(stats.files.map((file) => file.path)).toEqual(["src/a.ts"]);
 	expect([stats.additions, stats.deletions]).toEqual([3, 1]);
+});
+
+test("same-named files get the shortest suffix that tells them apart; the rest keep their basename", () => {
+	expect(
+		shortestUniqueSuffixes([
+			"apps/desktop/sidecar/repositories.ts",
+			"packages/sidecar-api/src/repositories.ts",
+			"apps/desktop/sidecar/http.ts",
+			"packages/git/src/github/gh/github.ts",
+			"packages/git/src/github/github.ts",
+		]),
+	).toEqual([
+		"sidecar/repositories.ts",
+		"src/repositories.ts",
+		"http.ts",
+		"gh/github.ts",
+		"github/github.ts",
+	]);
 });

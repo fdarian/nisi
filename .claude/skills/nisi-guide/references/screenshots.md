@@ -43,6 +43,6 @@ Pin percentages are measured against the image you import, so measure the croppe
 1. Get the image size: `sips -g pixelWidth -g pixelHeight .nisi/guide/shot.png`.
 2. Find the pixel of the thing you are pointing at (from your browser tool's element bounding box, minus the crop offset).
 3. `x = px / width * 100`, `y = py / height * 100`, rounded to a whole number.
-4. Open the Guide tab, or render the guide, and look: a pin should sit on the edge or corner of its target, not cover it.
+4. Run `render.ts --expand` (see `preview.md`) and look at the section image: a pin should sit on the edge or corner of its target, not cover it.
 
 Crop tight; a pin on a 400px-wide crop is far easier to place than one on a full window.

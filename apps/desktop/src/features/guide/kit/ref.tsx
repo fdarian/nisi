@@ -12,12 +12,14 @@ import { parseLines, refFromCode, sameRef } from "../refs";
 export function Ref(props: {
 	path: string;
 	lines?: string;
+	/** Replaces the basename as the visible text; `Areas` passes a longer suffix when two listed files share a name. */
+	label?: string;
 }): React.ReactElement {
 	const guide = useGuideContext();
 	if (props.lines !== undefined) parseLines(props.lines);
 	guide.collector?.refs.push({ path: props.path, lines: props.lines });
 	const inDiff = guide.changedPaths.has(props.path);
-	const basename = splitPath(props.path).basename;
+	const basename = props.label ?? splitPath(props.path).basename;
 	const label =
 		props.lines === undefined ? basename : `${basename}:${props.lines}`;
 	const selected = sameRef(guide.selectedRef, props);
@@ -26,6 +28,7 @@ export function Ref(props: {
 			<TooltipTrigger
 				render={
 					<button
+						data-text="ref"
 						className={cn(
 							"inline-flex max-w-full cursor-pointer items-center gap-1 rounded px-1.5 py-px align-baseline font-mono text-[10.5px] text-sky-500",
 							selected ? "bg-sky-500/25" : "bg-sky-500/10 hover:bg-sky-500/20",

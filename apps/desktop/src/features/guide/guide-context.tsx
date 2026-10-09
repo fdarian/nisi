@@ -37,6 +37,8 @@ type GuideContextValue = {
 	/** The Area card under the pointer, so a Sequence can dim the steps of every other area. */
 	hoveredArea: string | null;
 	setHoveredArea: (id: string | null) => void;
+	/** The static preview: every Tour frame stacked, both Sequence states shown, Area file lists open. Set by `render.ts`, never by the app. */
+	expanded?: boolean;
 	collector?: GuideCollector;
 };
 

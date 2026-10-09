@@ -9,7 +9,7 @@ import {
 	useLayoutEffect,
 	useState,
 } from "react";
-import { filesInArea } from "../areas";
+import { filesInArea, shortestUniqueSuffixes } from "../areas";
 import { useGuideContext } from "../guide-context";
 import { colorForArea } from "./area-colors";
 import { Ref } from "./ref";
@@ -40,7 +40,7 @@ function Stat(props: {
 /** One part of the change: bullets written by the agent, and a file count and +/− computed by nisi from the diff. Only meaningful inside `Areas`. */
 export function Area(props: AreaProps): React.ReactElement {
 	const guide = useGuideContext();
-	const [open, setOpen] = useState(false);
+	const [open, setOpen] = useState(guide.expanded === true);
 	if (typeof props.title !== "string" || !Array.isArray(props.paths)) {
 		throw new Error(
 			`<Area id="${props.id}"> needs a title and paths={["glob", …]}`,
@@ -54,6 +54,7 @@ export function Area(props: AreaProps): React.ReactElement {
 	const stats = filesInArea(guide.files, props.paths);
 	const color = colorForArea(guide.areaOrder, props.id);
 	const hovered = guide.hoveredArea === props.id;
+	const labels = shortestUniqueSuffixes(stats.files.map((file) => file.path));
 	return (
 		// biome-ignore lint/a11y/noStaticElementInteractions: hover only dims other areas' Sequence steps; the card has no action of its own
 		<section
@@ -96,12 +97,12 @@ export function Area(props: AreaProps): React.ReactElement {
 			</div>
 			{open && (
 				<ul className="m-0 mt-2.5 flex list-none flex-col gap-0.5 border-t p-0 pt-2">
-					{stats.files.map((file) => (
+					{stats.files.map((file, index) => (
 						<li
 							className="flex items-center justify-between gap-3"
 							key={file.path}
 						>
-							<Ref path={file.path} />
+							<Ref label={labels[index]} path={file.path} />
 							<span className="shrink-0 font-mono text-xs tabular-nums">
 								<span className="text-success-foreground">
 									+{file.additions}

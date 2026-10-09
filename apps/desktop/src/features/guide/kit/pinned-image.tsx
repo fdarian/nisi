@@ -75,6 +75,7 @@ export function PinnedImage(props: {
 					{props.pins.map((pin, index) => (
 						<button
 							aria-label={`Pin ${index + 1}`}
+							data-text="skip"
 							className={cn(
 								"-translate-x-1/2 -translate-y-1/2 absolute flex size-[18px] cursor-pointer items-center justify-center rounded-full bg-sky-500 font-semibold text-[10.5px] text-white shadow-[0_0_0_3px_rgb(14_165_233/0.25)] transition-transform",
 								isActive(index) &&
@@ -115,6 +116,7 @@ export function PinnedImage(props: {
 						>
 							<button
 								aria-label={`Highlight pin ${index + 1}`}
+								data-text="skip"
 								className="mt-0.5 flex size-[18px] shrink-0 cursor-pointer items-center justify-center rounded-full bg-sky-500 font-semibold text-[10.5px] text-white"
 								onClick={() => flash(index)}
 								type="button"

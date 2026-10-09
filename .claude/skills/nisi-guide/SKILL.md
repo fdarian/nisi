@@ -48,7 +48,13 @@ bun .claude/skills/nisi-guide/scripts/validate.ts
 `check.ts` runs a command and records the result for `<Checks />`; run it after your last commit, or the
 run shows as stale. `validate.ts` builds and renders the guide as the tab does and lists what to fix
 (an h1, changed files no Area covers, a `Ref` to lines outside the diff, stale checks). Fix everything it
-prints, then run it again.
+prints, then run it again. When it is clean, preview what a reader will see and look at the images:
+
+```sh
+bun .claude/skills/nisi-guide/scripts/render.ts --expand
+```
+
+`--text` is the cheap check: it prints the guide as plain text with the computed numbers, no browser needed.
 
 ## Example
 
@@ -81,4 +87,5 @@ Open these only when you need them; they are not repeated here.
 - `references/components.md`: every kit component with its props, and the rules for custom components. Open when you use anything beyond `Areas`, `Ref`, `Note`, `Checks` and `NeedsYou`.
 - `references/sequence.md`: when a `Sequence` earns its place (ordering, timing, request flow), when to skip it, and a worked example. Open when the change is about *when* things happen.
 - `references/screenshots.md`: `Shot`, `Tour`, `Pin`, `BeforeAfter`, plus capturing from Storybook, catching delayed states, and placing pins. Open before taking any screenshot.
+- `references/preview.md`: the `render.ts` flags (`--expand`, `--text`, `--theme`), what to look for in the images, and its limits. Open the first time you preview, or when an image looks wrong.
 - `references/checks.md`: `check.ts` usage, `Skipped`, and what counts as a check. Open when a check is long-running, needs a `cd`, or you aren't sure what to record.
