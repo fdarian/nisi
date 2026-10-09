@@ -38,7 +38,7 @@ export function ReferenceSidePane(props: {
 				: parseLines(props.reference.lines);
 		return {
 			id: `guide-ref:${props.reference.path}:${props.reference.lines ?? ""}`,
-			label: props.reference.path,
+			label: `Guide: ${props.reference.path}${props.reference.lines === undefined ? "" : `:${props.reference.lines}`}`,
 			locations: [{ path: props.reference.path, ...range }],
 		};
 	}, [props.reference.path, props.reference.lines]);

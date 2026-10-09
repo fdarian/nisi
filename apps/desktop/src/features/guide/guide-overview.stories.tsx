@@ -37,6 +37,16 @@ const FILES: GuideFile[] = [
 	{ path: "packages/git/src/github/gh/github.ts", additions: 3, deletions: 0 },
 	{ path: "packages/git/src/index.ts", additions: 1, deletions: 0 },
 	{
+		path: "packages/git/src/github/gh/watch.ts",
+		additions: 2,
+		deletions: 0,
+	},
+	{
+		path: "packages/git/src/github/gh/graphql.ts",
+		additions: 4,
+		deletions: 1,
+	},
+	{
 		path: "apps/desktop/src/features/settings/repositories/repository-detail-page.tsx",
 		additions: 53,
 		deletions: 13,

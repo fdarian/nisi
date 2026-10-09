@@ -1,7 +1,7 @@
 "use client";
 
 import type { GuideCheck } from "@repo/sidecar-api";
-import { createContext, useContext } from "react";
+import { createContext, type ReactNode, useContext } from "react";
 import type { GuideFile } from "./areas";
 import type { GuideRef } from "./refs";
 
@@ -17,6 +17,8 @@ export type GuideCollector = {
 	refs: GuideRef[];
 	/** The `area` of every Sequence step, to check it names a real Area. */
 	stepAreas: string[];
+	/** Each `Note`'s label and body, to check its paragraphs stay short. */
+	notes: { label: string; children: ReactNode }[];
 };
 
 type GuideContextValue = {

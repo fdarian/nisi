@@ -29,7 +29,7 @@ write no `# h1`. Use these sections in this order, and drop one that doesn't app
 
 ## Writing
 
-- Bullets over prose; a paragraph is 2 sentences or fewer.
+- Bullets over prose; a paragraph is 2 sentences or fewer (`validate.ts` rejects a longer `Note` paragraph).
 - Every file you mention is a `<Ref path lines? />` or a backticked repo path, which links itself when
   the path is in the diff. Clicking opens that file's diff beside the guide.
 - Each `Area` takes `paths` globs; nisi computes its file count and +/- from the diff, so don't write

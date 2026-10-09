@@ -103,7 +103,7 @@ export function htmlToText(html: string): string {
 			line === "" ||
 			/\s$/.test(line) ||
 			/^[\s.,;:)\]!?]/.test(first) ||
-			/[(\[⟨]$/.test(line);
+			/[([⟨]$/.test(line);
 		line += boundary && !glued ? ` ${text}` : text;
 		boundary = false;
 	};

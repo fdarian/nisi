@@ -3,6 +3,7 @@
 import { cn } from "cn";
 import {
 	Children,
+	Fragment,
 	isValidElement,
 	type ReactNode,
 	useEffect,
@@ -10,16 +11,21 @@ import {
 	useState,
 } from "react";
 
-/** Declarative marker: `Shot` and `Frame` read its props and render it; on its own it draws nothing. `x` and `y` are percentages of the image. */
+/** Declarative marker: `Shot` and `Frame` read its props and render it; on its own it draws nothing. `x` and `y` are percentages of the image. `ring` circles the point and moves the numbered badge beside it on a short leader line, so a small target (an icon, a dot) stays visible. */
 export function Pin(_props: {
 	x: number;
 	y: number;
+	ring?: boolean;
 	children?: ReactNode;
 }): null {
 	return null;
 }
 
-type PinProps = { x: number; y: number; children?: ReactNode };
+type PinProps = { x: number; y: number; ring?: boolean; children?: ReactNode };
+
+/** How far a ringed pin's badge sits from its target, in px. */
+const RING_OFFSET = 22;
+const RING_SIZE = 22;
 
 export function splitPins(children: ReactNode): {
 	pins: PinProps[];
@@ -38,6 +44,14 @@ export function splitPins(children: ReactNode): {
 }
 
 const FLASH_MS = 1400;
+
+/** Which side of its target a ringed pin's badge goes: away from the image's top and right edges, so it never clips. */
+function ringBadgeOffset(pin: PinProps): { dx: number; dy: number } {
+	return {
+		dx: pin.x > 85 ? -RING_OFFSET : RING_OFFSET,
+		dy: pin.y < 15 ? RING_OFFSET : -RING_OFFSET,
+	};
+}
 
 /**
  * A screenshot with numbered markers over it and a matching numbered list
@@ -72,31 +86,77 @@ export function PinnedImage(props: {
 						className="block w-full rounded-md border"
 						src={props.src}
 					/>
-					{props.pins.map((pin, index) => (
-						<button
-							aria-label={`Pin ${index + 1}`}
-							data-text="skip"
-							className={cn(
-								"-translate-x-1/2 -translate-y-1/2 absolute flex size-[18px] cursor-pointer items-center justify-center rounded-full bg-sky-500 font-semibold text-[10.5px] text-white shadow-[0_0_0_3px_rgb(14_165_233/0.25)] transition-transform",
-								isActive(index) &&
-									"scale-125 shadow-[0_0_0_4px_rgb(14_165_233/0.45)]",
-							)}
-							key={`${pin.x}:${pin.y}`}
-							onClick={() => {
-								captions.current[index]?.scrollIntoView({
-									block: "nearest",
-									behavior: "smooth",
-								});
-								flash(index);
-							}}
-							onMouseEnter={() => setHovered(index)}
-							onMouseLeave={() => setHovered(null)}
-							style={{ left: `${pin.x}%`, top: `${pin.y}%` }}
-							type="button"
-						>
-							{index + 1}
-						</button>
-					))}
+					{props.pins.map((pin, index) => {
+						const badge = (
+							<button
+								aria-label={`Pin ${index + 1}`}
+								className={cn(
+									"-translate-x-1/2 -translate-y-1/2 absolute flex size-[18px] cursor-pointer items-center justify-center rounded-full bg-sky-500 font-semibold text-[10.5px] text-white shadow-[0_0_0_3px_rgb(14_165_233/0.25)] transition-transform",
+									isActive(index) &&
+										"scale-125 shadow-[0_0_0_4px_rgb(14_165_233/0.45)]",
+								)}
+								data-text="skip"
+								onClick={() => {
+									captions.current[index]?.scrollIntoView({
+										block: "nearest",
+										behavior: "smooth",
+									});
+									flash(index);
+								}}
+								onMouseEnter={() => setHovered(index)}
+								onMouseLeave={() => setHovered(null)}
+								style={
+									pin.ring === true
+										? {
+												left: ringBadgeOffset(pin).dx,
+												top: ringBadgeOffset(pin).dy,
+											}
+										: { left: `${pin.x}%`, top: `${pin.y}%` }
+								}
+								type="button"
+							>
+								{index + 1}
+							</button>
+						);
+						if (pin.ring !== true) {
+							return <Fragment key={`${pin.x}:${pin.y}`}>{badge}</Fragment>;
+						}
+						const offset = ringBadgeOffset(pin);
+						return (
+							<span
+								className="absolute size-0"
+								data-text="skip"
+								key={`${pin.x}:${pin.y}`}
+								style={{ left: `${pin.x}%`, top: `${pin.y}%` }}
+							>
+								<span
+									aria-hidden
+									className={cn(
+										"-translate-x-1/2 -translate-y-1/2 pointer-events-none absolute rounded-full border-2 border-sky-500 shadow-[0_0_0_1px_rgb(255_255_255/0.7)] transition-transform",
+										isActive(index) && "scale-125",
+									)}
+									style={{ width: RING_SIZE, height: RING_SIZE }}
+								/>
+								<svg
+									aria-hidden
+									className="pointer-events-none absolute top-0 left-0 overflow-visible"
+									height="1"
+									width="1"
+								>
+									<title>leader line</title>
+									<line
+										className="stroke-sky-500"
+										strokeWidth="1.5"
+										x1={Math.sign(offset.dx) * (RING_SIZE / 2)}
+										x2={offset.dx}
+										y1={Math.sign(offset.dy) * (RING_SIZE / 2)}
+										y2={offset.dy}
+									/>
+								</svg>
+								{badge}
+							</span>
+						);
+					})}
 				</div>
 			</div>
 			{props.pins.length > 0 && (

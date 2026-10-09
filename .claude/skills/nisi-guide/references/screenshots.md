@@ -5,6 +5,7 @@ Show what a reviewer would see, not what the code looks like. Aim for 2 to 6 ima
 ## Components
 
 - `Shot { src, alt, caption? }` with `Pin { x, y }` children: one image with numbered markers. `x` and `y` are percentages of the image from its top left. A pin's children are its legend entry. Pins must be direct children of the `Shot`. Clicking a marker scrolls to its legend entry; clicking a number highlights the marker.
+- `Pin { x, y, ring? }`: add `ring` when the target is small (an icon, a dot, one character). It draws a ring around the exact point and puts the numbered badge beside it on a short leader line, so the badge doesn't cover what it points at. Clicking and hovering link to the legend the same as for any pin. Use plain pins for large targets (a row, a panel).
 - `Tour` with `Frame { title, src? }` children: a flow, one frame at a time, with a filmstrip and arrow keys. Frames take `Pin`s the same way. A frame without `src` renders its children as the stage.
 - `BeforeAfter { before, after }`: two images side by side, for a change to something that already existed.
 
@@ -13,6 +14,7 @@ import settings from "./settings.png";
 
 <Shot src={settings} alt="Settings > Repositories" caption="Settings, after">
   <Pin x={12} y={30}>Open counts come from the index</Pin>
+  <Pin x={88} y={8} ring>The new sync icon</Pin>
 </Shot>
 ```
 

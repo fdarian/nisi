@@ -178,7 +178,7 @@ test("the sample guide builds, evaluates against the kit, and renders every comp
 	// the diff, leaving tests and lockfiles out.
 	expect(html).toContain("Authoring");
 	const text = html.replace(/<[^>]*>/g, "");
-	expect(text).toContain("2 files +213 −0");
+	expect(text).toContain("2 files +213");
 	expect(text).toContain("2 files +125 −30");
 	expect(text).toContain("1 file +10 −2");
 
@@ -434,8 +434,8 @@ test("the text linearisation carries the computed values", async () => {
 	);
 
 	expect(out).toContain("## Overview");
-	expect(out).toContain("2 files +213 −0");
-	expect(out).toContain("- ⟨check.ts⟩ +113 −0");
+	expect(out).toContain("2 files +213");
+	expect(out).toContain("- ⟨check.ts⟩ +113");
 	expect(out).toContain(
 		"[Passed] Type check and lint `pnpm turbo run check:type` at",
 	);
@@ -453,4 +453,46 @@ test("the text linearisation carries the computed values", async () => {
 	expect(out).not.toContain("Highlight pin");
 	expect(out).not.toContain("time →");
 	expect(out).not.toContain("<");
+});
+
+test("validate: a Note paragraph over two sentences is reported with a fix; bullets and two sentences are fine", async () => {
+	const longNote = await buildInline(`## Overview
+
+<Areas>
+	<Area id="real" title="Real" paths={["src/**"]}>
+		- thing
+	</Area>
+</Areas>
+
+<Note label="Too dense">
+	It fetches the list. Then it merges with <Ref path="src/a.ts" /> and retries. Finally it saves e.g. the cache. Done.
+</Note>
+
+<Note label="Fine">
+	Two short sentences. Nothing more.
+
+	- a bullet. Another sentence. And a third in a bullet is not a paragraph.
+</Note>
+`);
+	const problems = validateGuide(longNote, [
+		file("src/a.ts", 1, 0, [1, 1]),
+	]).filter((problem) => problem.startsWith("Note "));
+	expect(problems).toHaveLength(1);
+	expect(problems[0]).toContain('"Too dense"');
+	expect(problems[0]).toContain("4 sentences");
+	expect(problems[0]).toContain("Split it into bullets");
+});
+
+test("a ringed Pin draws a ring and a leader line beside its badge; a plain Pin does not", async () => {
+	const result =
+		await buildInline(`<Shot src="data:image/png;base64,AAAA" alt="x">
+	<Pin x={50} y={50} ring>Small icon</Pin>
+	<Pin x={10} y={10}>Big target</Pin>
+</Shot>
+`);
+	if (result.kind !== "ok") throw new Error("build failed");
+	const html = renderGuideHtml(result, [], { expanded: false });
+	expect(html.match(/<title>leader line<\/title>/g)).toHaveLength(1);
+	expect(html).toContain('aria-label="Pin 1"');
+	expect(html).toContain('aria-label="Pin 2"');
 });

@@ -6,7 +6,7 @@ Import any of these from `@nisi/guide`. Kit components also resolve without an i
 | --- | --- |
 | `Areas` + `Area { id, title, subtitle?, paths }` | The Overview's cards. `paths` are globs over repo-relative paths (`apps/desktop/sidecar/**`; `*` stays in a folder, `**` crosses them, `{a,b}` alternates). Children are markdown bullets. nisi computes the card's "N files +A −D" from the diff, and clicking it lists the files. Colors are assigned in order; you don't pick them. `id`s must be unique. |
 | `Sequence { title, lanes }` + `Before` / `After` + `Step` / `Wait` / `Event` | A swimlane of what ran when. See `sequence.md`. |
-| `Shot { src, alt, caption? }` + `Pin { x, y }` | One screenshot with numbered pins. See `screenshots.md`. |
+| `Shot { src, alt, caption? }` + `Pin { x, y, ring? }` | One screenshot with numbered pins. See `screenshots.md`. |
 | `Tour` + `Frame { title, src? }` | A flow, one frame at a time with a filmstrip and arrow keys. Frames take `Pin`s; a frame without `src` renders its children instead. |
 | `BeforeAfter { before, after }` | Side by side. Each side is an image src or any node. |
 | `Note { label }` | A decision or caveat. The label is its heading; the body is muted. Put `Ref`s in the body. |

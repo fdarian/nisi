@@ -23,24 +23,32 @@ type AreaProps = {
 	children?: ReactNode;
 };
 
-function Stat(props: {
-	files: number;
+/** Only the sides that changed: a file with no deletions reads `+12`, not `+12 −0`. */
+function DiffStat(props: {
 	additions: number;
 	deletions: number;
 }): React.ReactElement {
 	return (
-		<span className="whitespace-nowrap">
-			{props.files} {props.files === 1 ? "file" : "files"}{" "}
-			<span className="text-success-foreground">+{props.additions}</span>{" "}
-			<span className="text-destructive-foreground">−{props.deletions}</span>
-		</span>
+		<>
+			{props.additions > 0 && (
+				<span className="text-success-foreground">+{props.additions}</span>
+			)}
+			{props.additions > 0 && props.deletions > 0 && " "}
+			{props.deletions > 0 && (
+				<span className="text-destructive-foreground">−{props.deletions}</span>
+			)}
+		</>
 	);
 }
+
+/** How many files an opened card lists before folding the rest behind "+N more". */
+const FILE_LIST_LIMIT = 8;
 
 /** One part of the change: bullets written by the agent, and a file count and +/− computed by nisi from the diff. Only meaningful inside `Areas`. */
 export function Area(props: AreaProps): React.ReactElement {
 	const guide = useGuideContext();
 	const [open, setOpen] = useState(guide.expanded === true);
+	const [showAll, setShowAll] = useState(false);
 	if (typeof props.title !== "string" || !Array.isArray(props.paths)) {
 		throw new Error(
 			`<Area id="${props.id}"> needs a title and paths={["glob", …]}`,
@@ -54,6 +62,10 @@ export function Area(props: AreaProps): React.ReactElement {
 	const stats = filesInArea(guide.files, props.paths);
 	const color = colorForArea(guide.areaOrder, props.id);
 	const hovered = guide.hoveredArea === props.id;
+	// The static preview shows every file, so a reader of the PNG sees the whole list.
+	const visibleCount =
+		showAll || guide.expanded === true ? stats.files.length : FILE_LIST_LIMIT;
+	const hiddenCount = Math.max(0, stats.files.length - visibleCount);
 	const labels = shortestUniqueSuffixes(stats.files.map((file) => file.path));
 	return (
 		// biome-ignore lint/a11y/noStaticElementInteractions: hover only dims other areas' Sequence steps; the card has no action of its own
@@ -82,11 +94,10 @@ export function Area(props: AreaProps): React.ReactElement {
 					title="Computed from the diff"
 					type="button"
 				>
-					<Stat
-						additions={stats.additions}
-						deletions={stats.deletions}
-						files={stats.files.length}
-					/>
+					<span className="whitespace-nowrap">
+						{stats.files.length} {stats.files.length === 1 ? "file" : "files"}{" "}
+						<DiffStat additions={stats.additions} deletions={stats.deletions} />
+					</span>
 					<ChevronRightIcon
 						className={cn("size-3 transition-transform", open && "rotate-90")}
 					/>
@@ -97,22 +108,31 @@ export function Area(props: AreaProps): React.ReactElement {
 			</div>
 			{open && (
 				<ul className="m-0 mt-2.5 flex list-none flex-col gap-0.5 border-t p-0 pt-2">
-					{stats.files.map((file, index) => (
+					{stats.files.slice(0, visibleCount).map((file, index) => (
 						<li
 							className="flex items-center justify-between gap-3"
 							key={file.path}
 						>
 							<Ref label={labels[index]} path={file.path} />
 							<span className="shrink-0 font-mono text-xs tabular-nums">
-								<span className="text-success-foreground">
-									+{file.additions}
-								</span>{" "}
-								<span className="text-destructive-foreground">
-									−{file.deletions}
-								</span>
+								<DiffStat
+									additions={file.additions}
+									deletions={file.deletions}
+								/>
 							</span>
 						</li>
 					))}
+					{hiddenCount > 0 && (
+						<li>
+							<button
+								className="cursor-pointer rounded px-1.5 py-0.5 text-muted-foreground text-xs hover:bg-accent"
+								onClick={() => setShowAll(true)}
+								type="button"
+							>
+								+{hiddenCount} more
+							</button>
+						</li>
+					)}
 				</ul>
 			)}
 		</section>
@@ -139,9 +159,5 @@ export function Areas(props: { children: ReactNode }): React.ReactElement {
 	useLayoutEffect(() => {
 		setAreaOrder(ids);
 	}, [key, setAreaOrder]);
-	return (
-		<div className="grid grid-cols-1 gap-3 @2xl:grid-cols-2">
-			{props.children}
-		</div>
-	);
+	return <div className="flex flex-col gap-3">{props.children}</div>;
 }

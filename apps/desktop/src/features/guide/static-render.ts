@@ -49,6 +49,7 @@ export function renderGuideHtml(
 		areasBlocks: 0,
 		refs: [],
 		stepAreas: [],
+		notes: [],
 	};
 	render([], first);
 	return render(

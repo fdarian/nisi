@@ -1,6 +1,9 @@
 import type { GuideResult } from "@repo/sidecar-api";
+import { Children, isValidElement, type ReactNode } from "react";
 import { type GuideFile, uncoveredFiles } from "./areas";
+import { GUIDE_COMPONENTS } from "./guide-components";
 import type { GuideCollector } from "./guide-context";
+import { Ref } from "./kit/ref";
 import { parseLines } from "./refs";
 import { renderGuideHtml } from "./static-render";
 
@@ -52,6 +55,45 @@ function problemsFromRefs(
 	return problems;
 }
 
+const MAX_NOTE_SENTENCES = 2;
+
+/** A node tree's plain text without rendering it; a `Ref` counts as one word. */
+function textOf(node: ReactNode): string {
+	if (typeof node === "string" || typeof node === "number") return String(node);
+	if (Array.isArray(node)) return node.map(textOf).join("");
+	if (isValidElement<{ children?: ReactNode }>(node)) {
+		return node.type === Ref ? "ref" : textOf(node.props.children);
+	}
+	return "";
+}
+
+function sentenceCount(text: string): number {
+	return text
+		.replace(/\b(e\.g|i\.e|vs|etc)\./gi, "$1")
+		.trim()
+		.split(/(?<=[.!?])\s+/)
+		.filter((sentence) => sentence !== "").length;
+}
+
+function problemsFromNotes(collector: GuideCollector): string[] {
+	const problems: string[] = [];
+	for (const note of collector.notes) {
+		for (const block of Children.toArray(note.children)) {
+			const isParagraph =
+				typeof block === "string" ||
+				(isValidElement(block) && block.type === GUIDE_COMPONENTS.p);
+			if (!isParagraph) continue;
+			const count = sentenceCount(textOf(block));
+			if (count > MAX_NOTE_SENTENCES) {
+				problems.push(
+					`Note "${note.label}": a paragraph has ${count} sentences (the limit is ${MAX_NOTE_SENTENCES}). Split it into bullets, one point each.`,
+				);
+			}
+		}
+	}
+	return problems;
+}
+
 function problemsFromHtml(html: string): string[] {
 	const problems: string[] = [];
 	if (/<h1[\s>]/.test(html)) {
@@ -85,6 +127,7 @@ export function validateGuide(
 		areasBlocks: 0,
 		refs: [],
 		stepAreas: [],
+		notes: [],
 	};
 	let html: string;
 	try {
@@ -119,6 +162,7 @@ export function validateGuide(
 			);
 		}
 	}
+	problems.push(...problemsFromNotes(collector));
 	problems.push(...problemsFromRefs(collector, files));
 	for (const check of result.checks) {
 		if (check.sha !== result.headSha) {
