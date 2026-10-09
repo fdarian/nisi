@@ -47,7 +47,14 @@ Three parts, one seam:
   title and starts at `## Overview`. The Overview's `Area` cards compute their stats from the session
   diff (`FileChange.hunks`, the base-to-head changed runs), matching globs and `path:lines` hunk claims with `areas.ts`, which `validate.ts` shares to find changed hunks no Area covers
   (`nisi guide validate` runs it through the sidecar's `guide.validate`; `guide-overview.stories.tsx` is the visual check).
-  The pane is `pull-request/location-pane/location-pane.tsx`, shared with the walkthrough's `ReferencePane`.
+  A click on a file row, hunk row, `Ref` or linked symbol opens `guide-diff-pane.tsx` beside the guide: Files Changed's own
+  `DiffPane` and `FilesViewedToolbar` over the clicked Area's files (or the one file a bare `Ref` cites), with the same
+  data assembly as Files Changed (`useDiffPaneData`). It shares the session UI store with Files Changed, so collapse
+  overrides and Reviewed ticks are the same state. Area rows tick Reviewed through `guide-reviews.ts`, the same
+  `reviewState`/`setViewed` and selection-claim path (`useRangeReview`) Files Changed uses. Inline code naming a symbol
+  declared once in a changed file links to it: `guide.get` returns the scan (`sidecar/guide/symbols.ts`), and the pane
+  highlights the exact token the way the file viewer does for a code-index jump. The walkthrough's `ReferencePane` is
+  what `pull-request/location-pane/location-pane.tsx` serves.
   `src/features/code-index/` holds LSP-powered code navigation (⌘-hover underline, ⌘-click peek
   references), backed server-side by a live TypeScript 7 language server (`@repo/code-lsp`) rather
   than a prebuilt SCIP index — one `useCodeIndexInteractions` hook shared by the diff pane's

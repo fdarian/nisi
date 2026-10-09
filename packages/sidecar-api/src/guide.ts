@@ -40,7 +40,11 @@ export type GuideCheck = Schema.Schema.Type<typeof GuideCheck>;
 export const GuideSymbol = Schema.Struct({
 	name: Schema.String,
 	path: Schema.String,
+	/** 1-based, as a diff's gutter shows it. */
 	line: Schema.Number,
+	/** The name's character span within that line, 0-based, end exclusive. */
+	charStart: Schema.Number,
+	charEnd: Schema.Number,
 });
 export type GuideSymbol = Schema.Schema.Type<typeof GuideSymbol>;
 

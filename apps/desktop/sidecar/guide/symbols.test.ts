@@ -105,3 +105,15 @@ test("files in other languages are ignored", () => {
 	expect(isScannable("src/a.tsx")).toBe(true);
 	expect(byName([{ path: "x.md", content: "const a = 1" }])).toEqual({});
 });
+
+test("each declaration carries the name's exact character span in its line", () => {
+	const [symbol] = scanDeclarations([
+		{ path: "a.ts", content: "\nexport async function loadTodos() {}" },
+	]);
+	expect(symbol).toMatchObject({
+		name: "loadTodos",
+		line: 2,
+		charStart: 22,
+		charEnd: 31,
+	});
+});

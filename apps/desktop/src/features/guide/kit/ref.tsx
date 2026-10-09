@@ -82,6 +82,11 @@ export function GuideCode(
 		return <ProseCode {...props} className={CODE_ACCENT} />;
 	}
 	const place = `${symbol.path}:${symbol.line}`;
+	const openDeclaration = () =>
+		guide.selectRef({ path: symbol.path, lines: String(symbol.line) }, scope, {
+			charStart: symbol.charStart,
+			charEnd: symbol.charEnd,
+		});
 	return (
 		<Tooltip>
 			<TooltipTrigger
@@ -93,19 +98,11 @@ export function GuideCode(
 							"cursor-pointer underline decoration-dotted underline-offset-4 hover:bg-accent",
 						)}
 						data-symbol={place}
-						onClick={() =>
-							guide.selectRef(
-								{ path: symbol.path, lines: String(symbol.line) },
-								scope,
-							)
-						}
+						onClick={openDeclaration}
 						onKeyDown={(event) => {
 							if (event.key !== "Enter" && event.key !== " ") return;
 							event.preventDefault();
-							guide.selectRef(
-								{ path: symbol.path, lines: String(symbol.line) },
-								scope,
-							);
+							openDeclaration();
 						}}
 						role="button"
 						tabIndex={0}

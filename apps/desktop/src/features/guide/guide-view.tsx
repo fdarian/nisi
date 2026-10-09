@@ -151,8 +151,8 @@ function GuideBody(props: {
 	);
 	const onSelectTarget = props.onSelectTarget;
 	const selectRef = useCallback(
-		(ref: GuideRef, scope?: readonly string[]) =>
-			onSelectTarget({ ref, scope: scope ?? null }),
+		(ref: GuideRef, scope?: readonly string[], span?: GuideTarget["span"]) =>
+			onSelectTarget({ ref, scope: scope ?? null, span }),
 		[onSelectTarget],
 	);
 	const closePane = useCallback(() => onSelectTarget(null), [onSelectTarget]);

@@ -30,6 +30,9 @@ function languageOf(path: string): Language | undefined {
 
 const IDENT = "([A-Za-z_$][\\w$]*)";
 
+/** `d` so a match reports where the name sits in the line, for the exact-token highlight. */
+const declaration = (source: string) => new RegExp(source, "d");
+
 /**
  * Column-0 declarations only: an indented `const result` inside a function
  * body is a local nobody names in prose, and linking it would be wrong as often
@@ -38,37 +41,42 @@ const IDENT = "([A-Za-z_$][\\w$]*)";
  */
 const DECLARATIONS: Record<Language, RegExp[]> = {
 	ts: [
-		new RegExp(
+		declaration(
 			`^(?:export\\s+)?(?:default\\s+)?(?:declare\\s+)?(?:abstract\\s+)?(?:async\\s+)?(?:function\\s*\\*?|class|const\\s+enum|enum|interface|type|namespace|const|let|var)\\s+${IDENT}`,
 		),
 	],
 	rust: [
-		new RegExp(
+		declaration(
 			`^(?:pub(?:\\([^)]*\\))?\\s+)?(?:async\\s+)?(?:unsafe\\s+)?(?:const\\s+)?(?:fn|struct|enum|trait|type|static|mod|union)\\s+${IDENT}`,
 		),
 	],
 	go: [
-		new RegExp(`^func\\s+(?:\\([^)]*\\)\\s*)?${IDENT}`),
-		new RegExp(`^(?:type|const|var)\\s+${IDENT}`),
+		declaration(`^func\\s+(?:\\([^)]*\\)\\s*)?${IDENT}`),
+		declaration(`^(?:type|const|var)\\s+${IDENT}`),
 	],
 	python: [
-		new RegExp(`^(?:async\\s+)?def\\s+${IDENT}`),
-		new RegExp(`^class\\s+${IDENT}`),
-		new RegExp(`^${IDENT}\\s*(?::[^=]+)?=(?!=)`),
+		declaration(`^(?:async\\s+)?def\\s+${IDENT}`),
+		declaration(`^class\\s+${IDENT}`),
+		declaration(`^${IDENT}\\s*(?::[^=]+)?=(?!=)`),
 	],
 };
 
 function declarationsIn(
 	file: SourceFile,
 	language: Language,
-): { name: string; line: number }[] {
-	const found: { name: string; line: number }[] = [];
+): Omit<GuideSymbol, "path">[] {
+	const found: Omit<GuideSymbol, "path">[] = [];
 	const patterns = DECLARATIONS[language];
 	file.content.split("\n").forEach((text, index) => {
 		for (const pattern of patterns) {
-			const name = pattern.exec(text)?.[1];
-			if (name !== undefined) {
-				found.push({ name, line: index + 1 });
+			const span = pattern.exec(text)?.indices?.[1];
+			if (span !== undefined) {
+				found.push({
+					name: text.slice(span[0], span[1]),
+					line: index + 1,
+					charStart: span[0],
+					charEnd: span[1],
+				});
 				return;
 			}
 		}
@@ -89,13 +97,7 @@ export function scanDeclarations(files: readonly SourceFile[]): GuideSymbol[] {
 		for (const declaration of declarationsIn(file, language)) {
 			seen.set(
 				declaration.name,
-				seen.has(declaration.name)
-					? null
-					: {
-							name: declaration.name,
-							path: file.path,
-							line: declaration.line,
-						},
+				seen.has(declaration.name) ? null : { ...declaration, path: file.path },
 			);
 		}
 	}

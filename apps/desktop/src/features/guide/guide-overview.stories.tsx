@@ -88,6 +88,8 @@ function Overview(props: { width: number }): React.ReactElement {
 						name: "repositories",
 						path: "apps/desktop/sidecar/repositories.ts",
 						line: 14,
+						charStart: 13,
+						charEnd: 25,
 					},
 				]),
 				areaOrder,

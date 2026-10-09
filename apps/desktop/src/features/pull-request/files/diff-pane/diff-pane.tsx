@@ -29,6 +29,7 @@ import {
 	EmptyTitle,
 } from "#/components/ui/empty";
 import { Skeleton } from "#/components/ui/skeleton";
+import type { CodeIndexReferenceTarget } from "#/features/code-index/navigation/code-index-navigation";
 import { CodeIndexPeekDialog } from "#/features/code-index/peek/code-index-peek-panel";
 import { useCodeIndexInteractions } from "#/features/code-index/use-code-index-interactions";
 import type { DiffMatch } from "#/features/diff/diff-search";
@@ -47,7 +48,10 @@ import {
 	buildDiffCodeViewOptions,
 	DiffCodeView,
 } from "#/features/diff/viewer/diff-code-view";
-import { pollUntilReady } from "#/features/diff/viewer/diff-match-dom";
+import {
+	findMatchRowElement,
+	pollUntilReady,
+} from "#/features/diff/viewer/diff-match-dom";
 import { hashItemVersion } from "#/features/diff/viewer/item-version";
 import type {
 	FileChange,
@@ -61,6 +65,7 @@ import {
 	useSessionExpandedHiddenPaths,
 	useSessionFileCollapseOverrides,
 } from "#/features/pull-request/data/session-ui-store";
+import { useCodeIndexReferenceHighlighting } from "#/features/pull-request/file-view/reference-reveal/use-code-index-reference-highlighting";
 import { useDragAutoscroll } from "#/features/pull-request/files/use-drag-autoscroll";
 import type { DiffStyleMode } from "#/features/settings/settings-data";
 import type { SidecarQueryUtils } from "#/infra/backend-context";
@@ -76,6 +81,14 @@ import { type DiffHoverPoint, findHoveredFileId } from "./diff-hovered-file";
 import { findTopVisibleItemId } from "./diff-visible-file";
 import { resolvePlaceholderFile } from "./placeholder-file-cache";
 import { useDiffMatchHighlighting } from "./use-diff-match-highlighting";
+
+/** A head-side line's row: the added or context line, never a removed line that happens to share its number. */
+function findHeadRowElement(
+	root: ParentNode,
+	displayedLine: number,
+): HTMLElement | undefined {
+	return findMatchRowElement(root, "additions", displayedLine);
+}
 
 /** Why a file's whole body is hidden behind a "Show diff" placeholder by default — see `resolveHiddenFileReason`. */
 type HiddenFileReason = "generated" | "large";
@@ -261,6 +274,8 @@ type DiffPaneProps = {
 	diffStyle: DiffStyleMode;
 	/** Wraps long diff lines instead of letting them scroll horizontally — see `@repo/settings`'s `wrapLines`. */
 	wrapLines: boolean;
+	/** A token to highlight like a code-index jump does in the file viewer (purple background, underline); `line` is 0-based, on the head side. The caller clears it, as `FileView` does, when the user next interacts with the code. */
+	referenceTarget?: CodeIndexReferenceTarget;
 	ref?: React.Ref<DiffPaneHandle>;
 };
 
@@ -428,6 +443,7 @@ export function DiffPane({
 	reviewState,
 	setViewed,
 	onMarkSelectionReviewed,
+	referenceTarget,
 	optimisticBaselines,
 	onOpenFile,
 	diffStyle,
@@ -627,6 +643,11 @@ export function DiffPane({
 		codeViewRef,
 		keywordMatchesByPath,
 		currentMatch,
+	});
+	const referenceHighlight = useCodeIndexReferenceHighlighting({
+		codeViewRef,
+		target: referenceTarget,
+		findRow: findHeadRowElement,
 	});
 
 	// Files the user clicked "Show diff" on to reveal a body hidden by default
@@ -1136,7 +1157,11 @@ export function DiffPane({
 				...buildDiffCodeViewOptions({
 					diffStyle,
 					enableLineSelection: true,
-					extraCSS: diffCardChromeCSS + highlightCSS + codeIndex.tokenCSS,
+					extraCSS:
+						diffCardChromeCSS +
+						highlightCSS +
+						referenceHighlight.highlightCSS +
+						codeIndex.tokenCSS,
 					overflow: wrapLines ? "wrap" : "scroll",
 					theme: diffTheme.theme,
 					onPostRender: (node, _instance, phase, context) => {
@@ -1157,6 +1182,10 @@ export function DiffPane({
 							hoveredFileHostsRef.current.set(node, context.item.id);
 						}
 						onItemPostRender(
+							context.item.id,
+							phase === "unmount" ? undefined : (node.shadowRoot ?? undefined),
+						);
+						referenceHighlight.onItemPostRender(
 							context.item.id,
 							phase === "unmount" ? undefined : (node.shadowRoot ?? undefined),
 						);
@@ -1184,6 +1213,8 @@ export function DiffPane({
 				itemMetadata,
 				highlightCSS,
 				onItemPostRender,
+				referenceHighlight.highlightCSS,
+				referenceHighlight.onItemPostRender,
 				reportFirstCardPainted,
 				codeIndex.tokenCSS,
 				codeIndex.notifyItemRendered,

@@ -1,7 +1,7 @@
 "use client";
 
 import { cn } from "cn";
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
 	FileChange,
 	ReviewStateEntry,
@@ -69,11 +69,30 @@ export function GuideDiffPane(props: {
 		pane.scrollToLine(target.ref.path, parseLines(target.ref.lines).startLine);
 	}, [target]);
 
+	// The highlight stays until the user next touches the code, as in the file viewer.
+	const [dismissed, setDismissed] = useState<GuideTarget | null>(null);
+	const referenceTarget = useMemo(() => {
+		if (target.span === undefined || target.ref.lines === undefined) {
+			return undefined;
+		}
+		if (dismissed === target) return undefined;
+		return {
+			path: target.ref.path,
+			line: parseLines(target.ref.lines).startLine - 1,
+			charStart: target.span.charStart,
+			charEnd: target.span.charEnd,
+		};
+	}, [target, dismissed]);
+
 	useKeyBindings({ Escape: props.onClose });
 
 	const ignoreFirstCardPainted = useCallback(() => {}, []);
 	return (
-		<div className={cn(filesMainClassName, "h-full border-l")}>
+		<div
+			className={cn(filesMainClassName, "h-full border-l")}
+			onKeyDownCapture={() => setDismissed(target)}
+			onPointerDownCapture={() => setDismissed(target)}
+		>
 			<FilesViewedToolbar
 				counts={{ total: paneFiles.length, viewed: data.viewedCount }}
 				onClose={props.onClose}
@@ -94,6 +113,7 @@ export function GuideDiffPane(props: {
 				onRenderedPathsChange={data.handleRenderedPathsChange}
 				optimisticBaselines={data.optimisticBaselines}
 				orpc={props.orpc}
+				referenceTarget={referenceTarget}
 				ref={paneRef}
 				repoRoot={props.session.repoRoot}
 				reviewState={props.reviewState}

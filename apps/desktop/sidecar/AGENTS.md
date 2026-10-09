@@ -52,7 +52,10 @@ seam" for the port/token handshake this boots into.
   evaluates. Cached per repo on a hash of every file's path/mtime/size under `.nisi/guide/` except `checks/`,
   because the Guide tab polls. A missing guide or failed build is a result variant, not an RPC error. `EXTERNALS`
   must match `src/features/guide/evaluate.ts`'s module map. The same call returns the runs recorded in
-  `.nisi/guide/checks/` (written by `nisi guide check`) and the worktree's head SHA, read fresh each time.
+  `.nisi/guide/checks/` (written by `nisi guide check`) and the worktree's head SHA, read fresh each time. It also returns
+  `symbols` (`guide/symbols.ts`): names declared exactly once, at column 0, in a changed TS/JS/Rust/Go/Python file,
+  with line and character span, found by a text scan of the session's head content and cached per session on the
+  diff's file fingerprints. No language server is involved.
 - `guide/tools.ts` — behind `guide.validate` and `guide.preview`, which the `nisi guide validate|render` CLI
   commands call. They key on `repoRoot`, not a session: the author may have none open. `validateRepoGuide` and
   `previewRepoGuide` read the diff (`guide/diff.ts`: base resolution, `git diff -U0` hunks, untracked files, the

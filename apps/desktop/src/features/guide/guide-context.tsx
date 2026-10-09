@@ -4,6 +4,7 @@ import type { GuideCheck, GuideSymbol } from "@repo/sidecar-api";
 import { createContext, type ReactNode, useContext } from "react";
 import type { GuideFile } from "./areas";
 import type { GuideReviews } from "./guide-reviews";
+import type { GuideTarget } from "./guide-target";
 import type { GuideRef } from "./refs";
 
 /**
@@ -34,7 +35,11 @@ type GuideContextValue = {
 	/** The reference shown in the side pane, if any. */
 	selectedRef: GuideRef | null;
 	/** `scope` is the paths of the Area the click came from (`useAreaScope`): the pane lists all of them, scrolled to `ref`. Without it the pane shows just `ref`'s file. */
-	selectRef: (ref: GuideRef, scope?: readonly string[]) => void;
+	selectRef: (
+		ref: GuideRef,
+		scope?: readonly string[],
+		span?: GuideTarget["span"],
+	) => void;
 	/** Area ids in document order; an Area's color is its index here. Set by `Areas`, read by anything that colors by area (a Sequence step comes before the Areas it names). */
 	areaOrder: readonly string[];
 	setAreaOrder: (ids: readonly string[]) => void;
