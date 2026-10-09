@@ -12,6 +12,8 @@ export type {
 	FileReviewState,
 	LineRange,
 	OpenSessionInput,
+	PullRequestSessionRecord,
+	PullRequestState,
 	RangeReviewClaim,
 	RetargetToPullRequestResult,
 	Session,

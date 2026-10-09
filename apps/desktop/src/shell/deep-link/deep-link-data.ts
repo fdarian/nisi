@@ -136,7 +136,7 @@ export function useRedirectHomeOnPendingDeepLink(): void {
 
 	useEffect(() => {
 		if (!hasPending) return;
-		if (pathname !== "/settings") return;
+		if (!pathname.startsWith("/settings")) return;
 		navigate({ to: "/" });
 	}, [hasPending, pathname, navigate]);
 }

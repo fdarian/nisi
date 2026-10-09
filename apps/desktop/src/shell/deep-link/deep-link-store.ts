@@ -94,3 +94,18 @@ export async function startDeepLinkListener(): Promise<void> {
 		enqueue(url);
 	}
 }
+
+/**
+ * Hands a PR to the same path an external `nisi://` link takes, so the
+ * shell opens (or selects) its tab, creating the worktree and prompting for
+ * a checkout folder when needed. For callers outside the shell, such as
+ * Settings, that can't open a tab themselves.
+ */
+export function enqueuePullRequestOpen(
+	owner: string,
+	repo: string,
+	number: number,
+): void {
+	const pullRequestUrl = `https://github.com/${owner}/${repo}/pull/${number}`;
+	enqueue(`nisi://open?url=${encodeURIComponent(pullRequestUrl)}`);
+}

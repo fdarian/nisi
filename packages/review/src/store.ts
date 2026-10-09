@@ -1,5 +1,5 @@
 import { SqliteDb } from "@repo/db";
-import { and, desc, eq, isNull } from "drizzle-orm";
+import { and, desc, eq, isNotNull, isNull, sql } from "drizzle-orm";
 import { Context, Effect, Layer, Option } from "effect";
 import { FileSystem } from "effect/FileSystem";
 import { v7 as uuidv7 } from "uuid";
@@ -33,6 +33,19 @@ export type Session = {
 	readonly baseRef: string;
 	readonly headRef: string;
 	readonly pr: SessionPullRequest | null;
+};
+
+export type PullRequestState = "open" | "merged" | "closed";
+
+/** A PR session as the Repositories settings page lists it — open tab or closed, since closing a tab never deletes the row. */
+export type PullRequestSessionRecord = {
+	readonly id: string;
+	readonly owner: string;
+	readonly repo: string;
+	readonly number: number;
+	readonly title: string;
+	readonly prState: PullRequestState | null;
+	readonly updatedAt: number;
 };
 
 export type OpenSessionInput = {
@@ -119,6 +132,23 @@ const toPullRequest = (row: SessionRow): SessionPullRequest | null =>
 				owner: row.owner,
 				repo: row.repo,
 			};
+
+const toPullRequestSessionRecord = (
+	row: SessionRow,
+): PullRequestSessionRecord | null => {
+	const pr = toPullRequest(row);
+	return pr === null
+		? null
+		: {
+				id: row.publicId,
+				owner: pr.owner,
+				repo: pr.repo,
+				number: pr.number,
+				title: pr.title,
+				prState: row.prState,
+				updatedAt: row.updatedAt.getTime(),
+			};
+};
 
 const toSession = (row: SessionRow): Session => ({
 	id: row.publicId,
@@ -296,6 +326,8 @@ export class ReviewStore extends Context.Service<ReviewStore>()("ReviewStore", {
 									repo: pr.repo,
 									prNumber: pr.number,
 									prTitle: pr.title,
+									// The old row's state described a different PR.
+									prState: null,
 									baseRef,
 									headRef,
 									updatedAt: now,
@@ -323,6 +355,53 @@ export class ReviewStore extends Context.Service<ReviewStore>()("ReviewStore", {
 					.where(isNull(sessions.closedAt))
 					.orderBy(desc(sessions.updatedAt)),
 			).pipe(Effect.map((rows) => rows.map(toSession)));
+
+		/**
+		 * Every PR session, open tab or closed, optionally narrowed to one
+		 * repository (case-insensitive, since GitHub ignores case in
+		 * `owner/repo`). Branch-only sessions have no repository identity and
+		 * never appear.
+		 */
+		const listPullRequestSessions = (repository?: {
+			readonly owner: string;
+			readonly repo: string;
+		}): Effect.Effect<
+			ReadonlyArray<PullRequestSessionRecord>,
+			ReviewStoreError
+		> =>
+			query(
+				db
+					.select()
+					.from(sessions)
+					.where(
+						repository === undefined
+							? and(isNotNull(sessions.owner), isNotNull(sessions.repo))
+							: and(
+									sql`lower(${sessions.owner}) = ${repository.owner.toLowerCase()}`,
+									sql`lower(${sessions.repo}) = ${repository.repo.toLowerCase()}`,
+								),
+					)
+					.orderBy(desc(sessions.updatedAt), desc(sessions.id)),
+			).pipe(
+				Effect.map((rows) =>
+					rows.flatMap((row) => {
+						const record = toPullRequestSessionRecord(row);
+						return record === null ? [] : [record];
+					}),
+				),
+			);
+
+		/** Deliberately leaves `updatedAt` alone: it orders sessions by user activity, and learning a PR's state isn't any. */
+		const setPrState = (
+			sessionId: string,
+			prState: PullRequestState,
+		): Effect.Effect<void, SessionNotFound | ReviewStoreError> =>
+			Effect.gen(function* () {
+				const row = yield* readSessionRow(sessionId);
+				yield* query(
+					db.update(sessions).set({ prState }).where(eq(sessions.id, row.id)),
+				);
+			});
 
 		const listOpenBranchSessions = (
 			repoRoot: string,
@@ -628,6 +707,8 @@ export class ReviewStore extends Context.Service<ReviewStore>()("ReviewStore", {
 			retargetToPullRequest,
 			listOpenSessions,
 			listOpenBranchSessions,
+			listPullRequestSessions,
+			setPrState,
 			closeSession,
 			getSession,
 			updateRepoRoot,

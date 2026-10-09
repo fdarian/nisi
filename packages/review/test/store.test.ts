@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { Effect, Option } from "effect";
 import type { FileSystem } from "effect/FileSystem";
-import { ReviewStore } from "../src/store.ts";
+import { type OpenSessionInput, ReviewStore } from "../src/store.ts";
 import { makeTestLayer, withTempDataDir } from "./fixtures.ts";
 
 const run = <A, E>(
@@ -596,6 +596,107 @@ describe("ReviewStore range claims", () => {
 				}).pipe(Effect.provide(makeTestLayer(dataDir))),
 			);
 			expect(exit._tag).toBe("Failure");
+		});
+	});
+});
+
+describe("ReviewStore PR session listing", () => {
+	const open = (
+		number: number,
+		overrides: { pr?: OpenSessionInput["pr"] } = {},
+	) =>
+		Effect.gen(function* () {
+			const store = yield* ReviewStore;
+			return yield* store.openSession({
+				...prInput,
+				repoRoot: `/repo/${number}`,
+				headRef: `feature-${number}`,
+				pr: { ...prInput.pr, number, title: `PR ${number}` },
+				...overrides,
+			});
+		});
+
+	test("lists closed sessions too, excludes branch-only ones, newest first", async () => {
+		await withTempDataDir(async (dataDir) => {
+			const listed = await run(
+				dataDir,
+				Effect.gen(function* () {
+					const store = yield* ReviewStore;
+					const first = yield* open(1);
+					yield* open(2);
+					yield* open(3, { pr: null });
+					yield* store.closeSession(first.id);
+					return yield* store.listPullRequestSessions();
+				}),
+			);
+
+			expect(listed.map((record) => record.number)).toEqual([2, 1]);
+			expect(listed.every((record) => record.prState === null)).toBe(true);
+		});
+	});
+
+	test("narrows to one repository, ignoring case", async () => {
+		await withTempDataDir(async (dataDir) => {
+			const listed = await run(
+				dataDir,
+				Effect.gen(function* () {
+					const store = yield* ReviewStore;
+					yield* open(1);
+					yield* open(2, {
+						pr: { number: 2, title: "Other", owner: "acme", repo: "gadgets" },
+					});
+					return yield* store.listPullRequestSessions({
+						owner: "ACME",
+						repo: "Widgets",
+					});
+				}),
+			);
+
+			expect(listed.map((record) => record.number)).toEqual([1]);
+		});
+	});
+
+	test("setPrState persists without reordering the list", async () => {
+		await withTempDataDir(async (dataDir) => {
+			const listed = await run(
+				dataDir,
+				Effect.gen(function* () {
+					const store = yield* ReviewStore;
+					const older = yield* open(1);
+					yield* open(2);
+					yield* store.setPrState(older.id, "merged");
+					return yield* store.listPullRequestSessions();
+				}),
+			);
+
+			expect(listed.map((record) => [record.number, record.prState])).toEqual([
+				[2, null],
+				[1, "merged"],
+			]);
+		});
+	});
+
+	test("retargeting a session onto another PR forgets the old PR's state", async () => {
+		await withTempDataDir(async (dataDir) => {
+			const listed = await run(
+				dataDir,
+				Effect.gen(function* () {
+					const store = yield* ReviewStore;
+					const session = yield* open(1);
+					yield* store.setPrState(session.id, "closed");
+					yield* store.retargetToPullRequest(
+						session.id,
+						{ number: 9, title: "Next", owner: "acme", repo: "widgets" },
+						"main",
+						"feature-9",
+					);
+					return yield* store.listPullRequestSessions();
+				}),
+			);
+
+			expect(listed.map((record) => [record.number, record.prState])).toEqual([
+				[9, null],
+			]);
 		});
 	});
 });

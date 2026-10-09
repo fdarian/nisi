@@ -30,6 +30,9 @@ Three parts, one seam:
   `preferredEditor`, `hideReviewed`, `includeUncommitted`, `enabledHarnesses` for the settings page's
   checkboxes) — theme is the one exception, staying in
   `localStorage` via `next-themes` (wired in `routes/__root.tsx`) since nothing server-side reads it.
+  `/settings/repositories` (`src/features/settings/repositories/`) lists known repositories and, per repo, its
+  sessions; a session row doesn't open a tab itself but enqueues a `nisi://open` deep link
+  (`enqueuePullRequestOpen`), which `useRedirectHomeOnPendingDeepLink` turns into a trip back to `/`.
   The diff pane (`src/features/pull-request/files/diff-pane/diff-pane.tsx`) renders with `@pierre/diffs`, same shadow-DOM/Worker-pool
   shape as the `@pierre/trees` sidebar — it renders `diff.fileContents`' `patch`/`oldContent` directly,
   no client-side slicing; a reviewed file's already-seen spans arrive pre-collapsed into ordinary

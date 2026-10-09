@@ -9,6 +9,7 @@ import {
 	GitHubUnreachable,
 	PullRequestNotFound,
 	type PullRequestSearchError,
+	type PullRequestStateError,
 } from "../../errors.ts";
 import { type GhResult, ghResult } from "../../exec.ts";
 import type {
@@ -549,4 +550,65 @@ export const headRef = (repoRoot: string, number: number) =>
 			});
 		return (yield* decodePrHeadRefView("gh pr view", result.stdout))
 			.headRefName;
+	});
+
+const PrStateView = Schema.Struct({
+	state: Schema.Literals(["OPEN", "CLOSED", "MERGED"]),
+});
+
+/**
+ * One PR's state by number, addressed with `--repo` so it works for a
+ * repository with no local checkout. Unlike `fetchPullRequestMergeability`
+ * it never asks for `mergeStateStatus`, so it also works on repositories the
+ * account can't push to. `cwd` only picks which `gh` host config applies.
+ */
+export const fetchPullRequestState = (
+	cwd: string,
+	owner: string,
+	repo: string,
+	number: number,
+): Effect.Effect<
+	"OPEN" | "CLOSED" | "MERGED",
+	PullRequestStateError | GitCommandError,
+	ChildProcessSpawner.ChildProcessSpawner
+> =>
+	Effect.gen(function* () {
+		const command = [
+			"pr",
+			"view",
+			String(number),
+			"--repo",
+			`${owner}/${repo}`,
+			"--json",
+			"state",
+		];
+		const result = yield* ghResult(cwd, command);
+		if (result.exitCode !== 0) {
+			if (isAuthFailure(result)) {
+				return yield* new GhNotAuthenticated({
+					reason: result.stderr.trim() || "gh is not authenticated",
+				});
+			}
+			if (isRateLimited(result.stderr)) {
+				return yield* new GhRateLimited({ reason: result.stderr.trim() });
+			}
+			return yield* new PullRequestNotFound({
+				repoRoot: cwd,
+				number,
+				reason: result.stderr.trim(),
+			});
+		}
+		const view = yield* Schema.decodeUnknownEffect(
+			Schema.fromJsonString(PrStateView),
+		)(result.stdout).pipe(
+			Effect.mapError(
+				(cause) =>
+					new GhOutputDecodeError({
+						command: `gh ${command.join(" ")}`,
+						raw: result.stdout,
+						cause,
+					}),
+			),
+		);
+		return view.state;
 	});
