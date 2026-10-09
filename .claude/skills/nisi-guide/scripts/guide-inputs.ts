@@ -1,8 +1,7 @@
 import { join } from "node:path";
-import type {
-	ChangedRange,
-	DiffFile,
-} from "../../../../apps/desktop/src/features/guide/validate";
+import { classifyFile } from "../../../../packages/git/src/classify.ts";
+import { parseChangedRuns } from "../../../../packages/git/src/hunks.ts";
+import type { DiffFile } from "../../../../apps/desktop/src/features/guide/validate";
 
 export async function git(cwd: string, ...args: string[]): Promise<string> {
 	const proc = Bun.spawn(["git", ...args], {
@@ -20,6 +19,15 @@ export async function git(cwd: string, ...args: string[]): Promise<string> {
 	return out;
 }
 
+async function gitOk(cwd: string, ...args: string[]): Promise<boolean> {
+	const proc = Bun.spawn(["git", ...args], {
+		cwd,
+		stdout: "ignore",
+		stderr: "ignore",
+	});
+	return (await proc.exited) === 0;
+}
+
 /** `--base <ref>` from the command line, if given. */
 export function parseBase(usage: string): string | undefined {
 	const flag = process.argv.indexOf("--base");
@@ -32,85 +40,169 @@ export function parseBase(usage: string): string | undefined {
 	return value;
 }
 
-const HUNK = /^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@/;
-
-/** `git diff -U0`: the head-side line ranges of each file's hunks. */
-function parseChangedRanges(diff: string): Map<string, ChangedRange[]> {
-	const byPath = new Map<string, ChangedRange[]>();
-	let current: ChangedRange[] | undefined;
-	for (const line of diff.split("\n")) {
-		if (line.startsWith("+++ ")) {
-			// `+++ /dev/null` is a deletion: nothing of it exists at head.
-			const path = line.startsWith("+++ b/")
-				? line.slice("+++ b/".length)
-				: undefined;
-			current = path === undefined ? undefined : [];
-			if (path !== undefined && current !== undefined)
-				byPath.set(path, current);
-			continue;
-		}
-		const hunk = HUNK.exec(line);
-		if (hunk === null || current === undefined) continue;
-		const start = Number.parseInt(hunk[1] as string, 10);
-		const count = hunk[2] === undefined ? 1 : Number.parseInt(hunk[2], 10);
-		current.push({ start, end: start + Math.max(count, 1) - 1 });
+/**
+ * The branch a change is measured against: `origin/main` when it exists and
+ * isn't behind the local `main` (a stale remote ref would make the diff
+ * include everything merged since), else local `main`, else `master`. An
+ * explicit `--base` wins.
+ */
+async function resolveBaseRef(
+	repoRoot: string,
+	explicit: string | undefined,
+): Promise<string> {
+	if (explicit !== undefined) return explicit;
+	const has = (ref: string) =>
+		gitOk(repoRoot, "rev-parse", "--verify", "--quiet", `${ref}^{commit}`);
+	const [remoteMain, localMain] = await Promise.all([
+		has("origin/main"),
+		has("main"),
+	]);
+	if (
+		remoteMain &&
+		(!localMain ||
+			(await gitOk(
+				repoRoot,
+				"merge-base",
+				"--is-ancestor",
+				"main",
+				"origin/main",
+			)))
+	) {
+		return "origin/main";
 	}
-	return byPath;
+	if (localMain) return "main";
+	if (await has("master")) return "master";
+	if (remoteMain) return "origin/main";
+	throw new Error(
+		"couldn't find a base branch (origin/main, main, master); pass --base <ref>",
+	);
+}
+
+/** Per-file `git diff -U0` sections, keyed by head path. */
+function splitSections(diff: string): Map<string, string> {
+	const sections = new Map<string, string>();
+	for (const section of diff.split(/^(?=diff --git )/m)) {
+		const header = /^\+\+\+ b\/(.+)$/m.exec(section);
+		if (header !== null) sections.set(header[1] as string, section);
+	}
+	return sections;
+}
+
+const CONTENT_PREFIX_BYTES = 32 * 1024;
+
+/** `git check-attr linguist-generated` for many paths in one call. */
+async function linguistGenerated(
+	repoRoot: string,
+	paths: readonly string[],
+): Promise<Set<string>> {
+	if (paths.length === 0) return new Set();
+	const proc = Bun.spawn(
+		["git", "check-attr", "--stdin", "-z", "linguist-generated"],
+		{
+			cwd: repoRoot,
+			stdin: new Blob([paths.map((path) => `${path}\0`).join("")]),
+			stdout: "pipe",
+			stderr: "pipe",
+		},
+	);
+	const out = await proc.stdout.text();
+	await proc.exited;
+	const tokens = out.split("\0");
+	const generated = new Set<string>();
+	for (let index = 0; index + 2 < tokens.length; index += 3) {
+		const value = tokens[index + 2];
+		if (value === "set" || value === "true") {
+			generated.add(tokens[index] as string);
+		}
+	}
+	return generated;
 }
 
 /**
- * The session's diff as the guide sees it: the merge-base of `origin/main`
- * and HEAD (or `base`) against the working tree, plus untracked files, with
- * per-file stats and the head-side changed line ranges.
+ * The session's diff as the guide sees it: the base (see `resolveBaseRef`)
+ * merge-based against HEAD, compared with the working tree, plus untracked
+ * files that git doesn't ignore (`.gitignore`, `.git/info/exclude`). The
+ * guide's own `.nisi/` is never part of it. Each file carries its stats, its
+ * changed runs, and whether the sidecar's classifier would call it generated
+ * (lockfiles, `*.snap`, drizzle snapshots, `@generated`, `linguist-generated`).
  */
 export async function readDiff(
 	repoRoot: string,
 	base: string | undefined,
-): Promise<{ base: string; files: DiffFile[] }> {
-	const resolved =
-		base ?? (await git(repoRoot, "merge-base", "origin/main", "HEAD")).trim();
+): Promise<{ base: string; mergeBase: string; files: DiffFile[] }> {
+	const baseRef = await resolveBaseRef(repoRoot, base);
+	const mergeBase = (await git(repoRoot, "merge-base", baseRef, "HEAD")).trim();
 	const numstat = await git(
 		repoRoot,
 		"diff",
 		"--numstat",
 		"--no-renames",
-		resolved,
+		mergeBase,
 	);
-	const ranges = parseChangedRanges(
-		await git(repoRoot, "diff", "-U0", "--no-color", "--no-renames", resolved),
+	const sections = splitSections(
+		await git(repoRoot, "diff", "-U0", "--no-color", "--no-renames", mergeBase),
 	);
+	const isGuideFile = (path: string) => path.startsWith(".nisi/");
 	const files: DiffFile[] = [];
 	for (const line of numstat.split("\n")) {
 		if (line === "") continue;
 		const [added, deleted, path] = line.split("\t");
-		if (path === undefined) continue;
+		if (path === undefined || isGuideFile(path)) continue;
 		files.push({
 			path,
 			// Binary files report "-".
 			additions: added === "-" ? 0 : Number.parseInt(added as string, 10),
 			deletions: deleted === "-" ? 0 : Number.parseInt(deleted as string, 10),
-			changed: ranges.get(path) ?? [],
+			hunks: parseChangedRuns(sections.get(path) ?? ""),
 		});
 	}
-	const untracked = await git(
-		repoRoot,
-		"ls-files",
-		"--others",
-		"--exclude-standard",
-	);
-	for (const path of untracked.split("\n")) {
-		if (path === "") continue;
-		const lines = (await Bun.file(join(repoRoot, path)).text()).split(
-			"\n",
-		).length;
+	const untracked = (
+		await git(repoRoot, "ls-files", "--others", "--exclude-standard")
+	)
+		.split("\n")
+		.filter((path) => path !== "" && !isGuideFile(path));
+	for (const path of untracked) {
+		const bytes = await Bun.file(join(repoRoot, path)).bytes();
+		const binary = bytes.includes(0);
+		const lines = binary
+			? 0
+			: new TextDecoder().decode(bytes).split("\n").length;
 		files.push({
 			path,
 			additions: lines,
 			deletions: 0,
-			changed: [{ start: 1, end: lines }],
+			hunks:
+				lines === 0
+					? []
+					: [{ startLine: 1, endLine: lines, additions: lines, deletions: 0 }],
 		});
 	}
-	return { base: resolved, files };
+	const flagged = await linguistGenerated(
+		repoRoot,
+		files.map((file) => file.path),
+	);
+	for (const file of files) {
+		const prefix = await Bun.file(join(repoRoot, file.path))
+			.slice(0, CONTENT_PREFIX_BYTES)
+			.text()
+			.catch(() => undefined);
+		file.generated =
+			classifyFile({
+				path: file.path,
+				linguistGenerated: flagged.has(file.path),
+				contentPrefix: prefix,
+			}) === "generated";
+	}
+	return { base: baseRef, mergeBase, files };
+}
+
+/** One line saying what the diff was measured against, for every command that reads it. */
+export function describeBase(diff: {
+	base: string;
+	mergeBase: string;
+	files: readonly DiffFile[];
+}): string {
+	return `base ${diff.base} (merge-base ${diff.mergeBase.slice(0, 7)}), ${diff.files.length} changed files`;
 }
 
 /** `NeedsYou` reads tick state from localStorage, which a server render lacks. */

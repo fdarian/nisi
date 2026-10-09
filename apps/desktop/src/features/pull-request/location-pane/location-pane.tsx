@@ -48,6 +48,7 @@ import type {
 } from "#/features/pull-request/data/pr-data";
 import {
 	useFileContents,
+	useSetFileViewed,
 	useSetRangeViewed,
 } from "#/features/pull-request/data/pr-data";
 import { useSessionOpenFiles } from "#/features/pull-request/data/session-ui-store";
@@ -85,37 +86,33 @@ type ReferenceAnnotationMetadata = {
 type GroupReviewStatus = "reviewed" | "partial" | "unreviewed";
 
 /**
- * Sums how many of `targetRanges`' lines fall inside a `"reviewed"`
- * `ReviewRange` — interval overlap, not a line-by-line walk, since a walkthrough
- * location can span hundreds of lines. `reviewRanges` is `FileContentReview.ranges`,
- * which partitions the whole `base → head` diff into disjoint runs, so summing
- * overlaps against every "reviewed" run never double-counts.
+ * How much of `targetRanges` is reviewed, counted over the lines the diff
+ * actually has: `review.ranges` partitions the changed lines of `base → head`
+ * into disjoint `"reviewed"`/`"new"` runs, so a target's unchanged lines (the
+ * context a Ref's range tends to include) belong to no run and count toward
+ * neither side. Counting them as unreviewed would leave a fully ticked range
+ * "partial" for good. Interval overlap, not a line-by-line walk, since a
+ * location can span hundreds of lines.
  */
 function computeGroupReviewStatus(
 	targetRanges: readonly LineRange[],
 	review: FileContentReview | null | undefined,
 ): GroupReviewStatus {
 	if (review == null) return "unreviewed";
-	const lastReviewedLine = review.ranges.reduce(
-		(last, range) => Math.max(last, range.endLine),
-		0,
-	);
-	let totalLines = 0;
+	let changedLines = 0;
 	let reviewedLines = 0;
 	for (const target of targetRanges) {
-		const endLine = isWholeFile(target) ? lastReviewedLine : target.endLine;
-		totalLines += endLine - target.startLine + 1;
 		for (const range of review.ranges) {
-			if (range.status !== "reviewed") continue;
 			const overlapStart = Math.max(target.startLine, range.startLine);
-			const overlapEnd = Math.min(endLine, range.endLine);
-			if (overlapStart <= overlapEnd) {
-				reviewedLines += overlapEnd - overlapStart + 1;
-			}
+			const overlapEnd = Math.min(target.endLine, range.endLine);
+			if (overlapStart > overlapEnd) continue;
+			const lines = overlapEnd - overlapStart + 1;
+			changedLines += lines;
+			if (range.status === "reviewed") reviewedLines += lines;
 		}
 	}
 	if (reviewedLines <= 0) return "unreviewed";
-	if (reviewedLines >= totalLines) return "reviewed";
+	if (reviewedLines >= changedLines) return "reviewed";
 	return "partial";
 }
 
@@ -213,6 +210,7 @@ export function LocationPane({
 		"all",
 	);
 	const setRangeViewed = useSetRangeViewed(orpc, sessionId);
+	const setFileViewed = useSetFileViewed(orpc, sessionId);
 	// A reference block can point at a path outside the current diff entirely
 	// (renamed since generation, or just never touched by this PR) — `openFile`
 	// is that case's escape hatch: the file-viewer tab (`file-view.tsx`) reads
@@ -317,19 +315,24 @@ export function LocationPane({
 					itemId={item.id}
 					onToggleCollapse={() => setCollapseOverride(item.id, !collapsed)}
 					onToggleReviewed={
-						// A whole-file location has no finite range to record a claim for.
-						status === undefined || group.ranges.some(isWholeFile)
+						status === undefined
 							? undefined
-							: () => {
-									clearCollapseOverride(item.id);
-									setRangeViewed({
-										path: group.path,
-										blockId: block.id,
-										blockLabel: block.label,
-										ranges: group.ranges,
-										viewed: status !== "reviewed",
-									});
-								}
+							: group.ranges.some(isWholeFile)
+								? // No finite range to record a claim for: the whole file's own Reviewed.
+									() => {
+										clearCollapseOverride(item.id);
+										setFileViewed(group.path, status !== "reviewed");
+									}
+								: () => {
+										clearCollapseOverride(item.id);
+										setRangeViewed({
+											path: group.path,
+											blockId: block.id,
+											blockLabel: block.label,
+											ranges: group.ranges,
+											viewed: status !== "reviewed",
+										});
+									}
 					}
 					path={group.path}
 					ranges={group.ranges}
@@ -343,6 +346,7 @@ export function LocationPane({
 			statusByItemId,
 			block,
 			setRangeViewed,
+			setFileViewed,
 			setCollapseOverride,
 			clearCollapseOverride,
 		],

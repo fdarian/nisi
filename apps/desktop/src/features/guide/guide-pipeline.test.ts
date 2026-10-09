@@ -52,7 +52,12 @@ function file(
 		path,
 		additions,
 		deletions,
-		changed: changed.map(([start, end]) => ({ start, end })),
+		hunks: changed.map(([startLine, endLine], index) => ({
+			startLine,
+			endLine,
+			additions: endLine - startLine + 1,
+			deletions: index === 0 ? deletions : 0,
+		})),
 	};
 }
 
@@ -466,6 +471,10 @@ test("validate: a Note paragraph over two sentences is reported with a fix; bull
 
 <Note label="Too dense">
 	It fetches the list. Then it merges with <Ref path="src/a.ts" /> and retries. Finally it saves e.g. the cache. Done.
+</Note>
+
+<Note label="Trailing links">
+	It fetches the list. It merges the results. <Ref path="src/a.ts" /> \`src/a.ts\`
 </Note>
 
 <Note label="Fine">

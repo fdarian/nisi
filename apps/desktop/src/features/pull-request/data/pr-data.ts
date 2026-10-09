@@ -126,7 +126,16 @@ export type FileChange = {
 	deletions: number;
 	fingerprint: string;
 	binary: boolean;
+	/** The base-to-head changed runs, independent of review state. Absent in fixtures. */
+	hunks?: readonly FileHunk[];
 	review: FileReview | null;
+};
+
+export type FileHunk = {
+	startLine: number;
+	endLine: number;
+	additions: number;
+	deletions: number;
 };
 
 /**

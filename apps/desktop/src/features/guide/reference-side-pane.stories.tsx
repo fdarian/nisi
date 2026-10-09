@@ -6,6 +6,10 @@ import {
 	FIXTURE_FILES,
 	TODOS_PATH,
 } from "../pull-request/walkthrough/walkthrough.fixture";
+import {
+	SESSIONS_142_PATCH,
+	SESSIONS_142_PATH,
+} from "./reference-side-pane.fixture";
 import { ReferenceSidePane } from "./reference-side-pane";
 import type { GuideRef } from "./refs";
 
@@ -99,5 +103,34 @@ export const PureAddition: Story = {
 			},
 		],
 		reference: { path: ERRORS_PATH, lines: "371-377" },
+	},
+};
+
+/** Real data from PR #142: the `sessions.ts` patch the sidecar returned, referenced at lines 59-67. */
+export const RealSessions142: Story = {
+	args: {
+		...base,
+		orpc: createMockOrpc({
+			fileContents: {
+				[SESSIONS_142_PATH]: {
+					patch: SESSIONS_142_PATCH,
+					truncated: false,
+					review: null,
+				},
+			},
+		}),
+		files: [
+			{
+				path: SESSIONS_142_PATH,
+				status: "modified",
+				category: "implementation",
+				additions: 34,
+				deletions: 9,
+				fingerprint: "f4ebc3b0",
+				binary: false,
+				review: null,
+			},
+		],
+		reference: { path: SESSIONS_142_PATH, lines: "59-67" },
 	},
 };

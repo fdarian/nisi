@@ -24,7 +24,13 @@ import { compileAppCss } from "../../../../apps/desktop/scripts/guide-preview-cs
 import { buildGuide } from "../../../../apps/desktop/sidecar/guide/build";
 import { htmlToText } from "../../../../apps/desktop/src/features/guide/guide-text";
 import { renderGuideHtml } from "../../../../apps/desktop/src/features/guide/static-render";
-import { git, parseBase, readDiff, stubLocalStorage } from "./guide-inputs";
+import {
+	describeBase,
+	git,
+	parseBase,
+	readDiff,
+	stubLocalStorage,
+} from "./guide-inputs";
 
 const USAGE =
 	"usage: render.ts [--expand] [--text] [--theme light|dark] [--width <px>] [--scale <n>] [--base <ref>]";
@@ -243,7 +249,7 @@ const written = (await readdir(previewDir))
 	.filter((name) => name.endsWith(".png"))
 	.sort();
 console.log(
-	`${theme}${expand ? ", expanded" : ""}, ${width}px wide, against ${diff.base.slice(0, 7)}:`,
+	`${theme}${expand ? ", expanded" : ""}, ${width}px wide. ${describeBase(diff)}:`,
 );
 for (const name of written) console.log(join(previewDir, name));
 console.log(`(page: ${pagePath})`);

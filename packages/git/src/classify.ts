@@ -20,9 +20,13 @@ const TEST_GLOBS = [
 	"**/spec.{js,jsx,ts,tsx,mjs,cjs,mts,cts}",
 ].map((pattern) => new Bun.Glob(pattern));
 
-const GENERATED_GLOBS = ["**/*.min.*", "**/*.map"].map(
-	(pattern) => new Bun.Glob(pattern),
-);
+const GENERATED_GLOBS = [
+	"**/*.min.*",
+	"**/*.map",
+	"**/*.snap",
+	// drizzle-kit's per-migration schema snapshot.
+	"**/meta/*_snapshot.json",
+].map((pattern) => new Bun.Glob(pattern));
 
 /** Filenames whose entire purpose is being machine-written; never hand-authored. */
 const LOCKFILE_NAMES = new Set([

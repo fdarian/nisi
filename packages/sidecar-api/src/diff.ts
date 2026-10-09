@@ -37,6 +37,15 @@ export const FileReview = Schema.Struct({
 });
 export type FileReview = Schema.Schema.Type<typeof FileReview>;
 
+/** One run of changed lines in the file's head (see `@repo/git`'s `ChangedRun`). */
+export const FileHunk = Schema.Struct({
+	startLine: Schema.Number,
+	endLine: Schema.Number,
+	additions: Schema.Number,
+	deletions: Schema.Number,
+});
+export type FileHunk = Schema.Schema.Type<typeof FileHunk>;
+
 export const FileChange = Schema.Struct({
 	path: Schema.String,
 	oldPath: Schema.optional(Schema.String),
@@ -46,6 +55,8 @@ export const FileChange = Schema.Struct({
 	deletions: Schema.Number,
 	fingerprint: Schema.String,
 	binary: Schema.Boolean,
+	/** The base-to-head changed runs, independent of review state. The sidecar always sends them; optional so fixtures needn't. */
+	hunks: Schema.optional(Schema.Array(FileHunk)),
 	review: Schema.NullOr(FileReview),
 });
 export type FileChange = Schema.Schema.Type<typeof FileChange>;

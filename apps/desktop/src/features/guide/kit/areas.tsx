@@ -9,10 +9,17 @@ import {
 	useLayoutEffect,
 	useState,
 } from "react";
-import { filesInArea, shortestUniqueSuffixes } from "../areas";
+import {
+	type ClaimedFile,
+	filesInArea,
+	hunkRange,
+	shortestUniqueSuffixes,
+} from "../areas";
+import { splitPath } from "#/lib/tree-paths";
 import { useGuideContext } from "../guide-context";
 import { colorForArea } from "./area-colors";
-import { Ref } from "./ref";
+import { DiffStat } from "./diff-stat";
+import { FileRow } from "./file-row";
 
 type AreaProps = {
 	id: string;
@@ -23,26 +30,49 @@ type AreaProps = {
 	children?: ReactNode;
 };
 
-/** Only the sides that changed: a file with no deletions reads `+12`, not `+12 −0`. */
-function DiffStat(props: {
-	additions: number;
-	deletions: number;
-}): React.ReactElement {
-	return (
-		<>
-			{props.additions > 0 && (
-				<span className="text-success-foreground">+{props.additions}</span>
-			)}
-			{props.additions > 0 && props.deletions > 0 && " "}
-			{props.deletions > 0 && (
-				<span className="text-destructive-foreground">−{props.deletions}</span>
-			)}
-		</>
-	);
-}
-
 /** How many files an opened card lists before folding the rest behind "+N more". */
 const FILE_LIST_LIMIT = 8;
+
+type Row = {
+	path: string;
+	lines?: string;
+	label: string;
+	additions: number;
+	deletions: number;
+};
+
+/** A file the Area claims whole is one row; one it claims in part is a row per claimed hunk, named by its new-side range. */
+function fileRows(claimed: readonly ClaimedFile[]): Row[] {
+	const wholePaths = claimed
+		.filter((claim) => claim.hunks === null)
+		.map((claim) => claim.file.path);
+	const suffixes = new Map(
+		wholePaths.map((path, index) => [
+			path,
+			shortestUniqueSuffixes(wholePaths)[index] as string,
+		]),
+	);
+	return claimed.flatMap((claim): Row[] => {
+		if (claim.hunks === null) {
+			return [
+				{
+					path: claim.file.path,
+					label: suffixes.get(claim.file.path) as string,
+					additions: claim.file.additions,
+					deletions: claim.file.deletions,
+				},
+			];
+		}
+		const basename = splitPath(claim.file.path).basename;
+		return claim.hunks.map((hunk) => ({
+			path: claim.file.path,
+			lines: hunkRange(hunk),
+			label: `${basename}:${hunkRange(hunk)}`,
+			additions: hunk.additions,
+			deletions: hunk.deletions,
+		}));
+	});
+}
 
 /** One part of the change: bullets written by the agent, and a file count and +/− computed by nisi from the diff. Only meaningful inside `Areas`. */
 export function Area(props: AreaProps): React.ReactElement {
@@ -63,10 +93,10 @@ export function Area(props: AreaProps): React.ReactElement {
 	const color = colorForArea(guide.areaOrder, props.id);
 	const hovered = guide.hoveredArea === props.id;
 	// The static preview shows every file, so a reader of the PNG sees the whole list.
+	const rows = fileRows(stats.claimed);
 	const visibleCount =
-		showAll || guide.expanded === true ? stats.files.length : FILE_LIST_LIMIT;
-	const hiddenCount = Math.max(0, stats.files.length - visibleCount);
-	const labels = shortestUniqueSuffixes(stats.files.map((file) => file.path));
+		showAll || guide.expanded === true ? rows.length : FILE_LIST_LIMIT;
+	const hiddenCount = Math.max(0, rows.length - visibleCount);
 	return (
 		// biome-ignore lint/a11y/noStaticElementInteractions: hover only dims other areas' Sequence steps; the card has no action of its own
 		<section
@@ -95,7 +125,8 @@ export function Area(props: AreaProps): React.ReactElement {
 					type="button"
 				>
 					<span className="whitespace-nowrap">
-						{stats.files.length} {stats.files.length === 1 ? "file" : "files"}{" "}
+						{stats.claimed.length}{" "}
+						{stats.claimed.length === 1 ? "file" : "files"}{" "}
 						<DiffStat additions={stats.additions} deletions={stats.deletions} />
 					</span>
 					<ChevronRightIcon
@@ -107,19 +138,10 @@ export function Area(props: AreaProps): React.ReactElement {
 				{props.children}
 			</div>
 			{open && (
-				<ul className="m-0 mt-2.5 flex list-none flex-col gap-0.5 border-t p-0 pt-2">
-					{stats.files.slice(0, visibleCount).map((file, index) => (
-						<li
-							className="flex items-center justify-between gap-3"
-							key={file.path}
-						>
-							<Ref label={labels[index]} path={file.path} />
-							<span className="shrink-0 font-mono text-xs tabular-nums">
-								<DiffStat
-									additions={file.additions}
-									deletions={file.deletions}
-								/>
-							</span>
+				<ul className="m-0 mt-2.5 flex list-none flex-col gap-px border-t p-0 pt-2">
+					{rows.slice(0, visibleCount).map((row) => (
+						<li key={`${row.path}:${row.lines ?? ""}`}>
+							<FileRow {...row} />
 						</li>
 					))}
 					{hiddenCount > 0 && (

@@ -14,7 +14,13 @@
 import { buildGuide } from "../../../../apps/desktop/sidecar/guide/build";
 import { validateGuide } from "../../../../apps/desktop/src/features/guide/validate";
 
-import { git, parseBase, readDiff, stubLocalStorage } from "./guide-inputs";
+import {
+	describeBase,
+	git,
+	parseBase,
+	readDiff,
+	stubLocalStorage,
+} from "./guide-inputs";
 const repoRoot = (
 	await git(process.cwd(), "rev-parse", "--show-toplevel")
 ).trim();
@@ -26,13 +32,11 @@ stubLocalStorage();
 
 const problems = validateGuide(await buildGuide(repoRoot), diff.files);
 if (problems.length === 0) {
-	console.log(
-		`Guide is valid against ${diff.base.slice(0, 7)} (${diff.files.length} changed files).`,
-	);
+	console.log(`Guide is valid. ${describeBase(diff)}.`);
 	process.exit(0);
 }
 console.error(
-	`${problems.length} problem${problems.length === 1 ? "" : "s"} in the guide:\n`,
+	`${problems.length} problem${problems.length === 1 ? "" : "s"} in the guide (${describeBase(diff)}):\n`,
 );
 for (const problem of problems) console.error(`- ${problem}`);
 process.exit(1);

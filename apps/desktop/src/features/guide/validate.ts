@@ -1,22 +1,18 @@
 import type { GuideResult } from "@repo/sidecar-api";
 import { Children, isValidElement, type ReactNode } from "react";
-import { type GuideFile, uncoveredFiles } from "./areas";
+import { type GuideFile, hunkRange, uncoveredHunks } from "./areas";
 import { GUIDE_COMPONENTS } from "./guide-components";
 import type { GuideCollector } from "./guide-context";
 import { Ref } from "./kit/ref";
 import { parseLines } from "./refs";
 import { renderGuideHtml } from "./static-render";
 
-/** A changed line range in the head file (1-based, inclusive); a pure deletion is the single line it sits before. */
-export type ChangedRange = { start: number; end: number };
-
-export type DiffFile = GuideFile & { changed: readonly ChangedRange[] };
+/** A changed file with the hunks `git diff` found; unlike the app's, they are always known here. */
+export type DiffFile = GuideFile & {
+	hunks: NonNullable<GuideFile["hunks"]>;
+};
 
 const SHORT_SHA = 7;
-
-function overlaps(range: ChangedRange, start: number, end: number): boolean {
-	return range.start <= end && start <= range.end;
-}
 
 function problemsFromRefs(
 	collector: GuideCollector,
@@ -40,13 +36,12 @@ function problemsFromRefs(
 		if (ref.lines === undefined) continue;
 		const lines = parseLines(ref.lines);
 		if (
-			!file.changed.some((range) =>
-				overlaps(range, lines.startLine, lines.endLine),
+			!file.hunks.some(
+				(hunk) =>
+					hunk.startLine <= lines.endLine && lines.startLine <= hunk.endLine,
 			)
 		) {
-			const changed = file.changed
-				.map((range) => `${range.start}-${range.end}`)
-				.join(", ");
+			const changed = file.hunks.map(hunkRange).join(", ");
 			problems.push(
 				`Ref ${label}: those lines aren't in any diff hunk of the file (changed: ${changed === "" ? "none" : changed}). Cite changed lines, or drop \`lines\`.`,
 			);
@@ -57,17 +52,30 @@ function problemsFromRefs(
 
 const MAX_NOTE_SENTENCES = 2;
 
-/** A node tree's plain text without rendering it; a `Ref` counts as one word. */
+/** Stands in for a `Ref`, or a backticked path that autolinks into one. */
+const LINK = "\u0001";
+const PATH_LIKE =
+	/^(?:[\w@.-]+\/)+[\w@.-]+(?::\d+(?:-\d+)?)?$|^[\w-]+\.[a-z]{1,5}(?::\d+(?:-\d+)?)?$/i;
+
+/** A node tree's plain text without rendering it; links to code are `LINK`. */
 function textOf(node: ReactNode): string {
 	if (typeof node === "string" || typeof node === "number") return String(node);
 	if (Array.isArray(node)) return node.map(textOf).join("");
 	if (isValidElement<{ children?: ReactNode }>(node)) {
-		return node.type === Ref ? "ref" : textOf(node.props.children);
+		if (node.type === Ref) return LINK;
+		const inner = textOf(node.props.children);
+		return node.type === GUIDE_COMPONENTS.code && PATH_LIKE.test(inner)
+			? LINK
+			: inner;
 	}
 	return "";
 }
 
-function sentenceCount(text: string): number {
+function sentenceCount(raw: string): number {
+	// A link after a full stop ("… the pane. <Ref/>") points back at that sentence.
+	const text = raw
+		.replace(new RegExp(`(?<=[.!?])(?:\\s*${LINK})+(?=\\s|$)`, "g"), "")
+		.replace(new RegExp(LINK, "g"), "ref");
 	return text
 		.replace(/\b(e\.g|i\.e|vs|etc)\./gi, "$1")
 		.trim()
@@ -152,13 +160,13 @@ export function validateGuide(
 				);
 			}
 		}
-		const uncovered = uncoveredFiles(
+		const uncovered = uncoveredHunks(
 			files,
 			collector.areas.map((area) => area.paths),
 		);
 		if (uncovered.length > 0) {
 			problems.push(
-				`Changed files no Area covers (add their paths to an Area, or add an Area):\n${uncovered.map((file) => `  ${file.path}`).join("\n")}`,
+				`Changed code no Area covers (add the path to an Area's paths, claim the hunk with "path:lines", or add an Area):\n${uncovered.map((entry) => `  ${entry}`).join("\n")}`,
 			);
 		}
 	}

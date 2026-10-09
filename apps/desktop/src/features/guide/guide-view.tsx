@@ -21,6 +21,7 @@ import { Spinner } from "#/components/ui/spinner";
 import type { Session } from "#/features/pull-request/data/pr-data";
 import { useFileChanges } from "#/features/pull-request/data/pr-data";
 import type { SidecarQueryUtils } from "#/infra/backend-context";
+import type { GuideFile } from "./areas";
 import { evaluateGuide } from "./evaluate";
 import { GUIDE_COMPONENTS } from "./guide-components";
 import { GuideProvider } from "./guide-context";
@@ -112,6 +113,19 @@ function GuideBody(props: {
 		() => new Set(files.map((file) => file.path)),
 		[files],
 	);
+	const guideFiles = useMemo(
+		() =>
+			files.map(
+				(file): GuideFile => ({
+					path: file.path,
+					additions: file.additions,
+					deletions: file.deletions,
+					hunks: file.hunks,
+					generated: file.category === "generated",
+				}),
+			),
+		[files],
+	);
 	const onSelectRef = props.onSelectRef;
 	const selectRef = useCallback(
 		(ref: GuideRef) => onSelectRef(ref),
@@ -123,7 +137,7 @@ function GuideBody(props: {
 	const context = useMemo(
 		() => ({
 			sessionId: props.session.id,
-			files,
+			files: guideFiles,
 			changedPaths,
 			checks: props.checks,
 			headSha: props.headSha,
@@ -136,7 +150,7 @@ function GuideBody(props: {
 		}),
 		[
 			props.session.id,
-			files,
+			guideFiles,
 			changedPaths,
 			props.checks,
 			props.headSha,
