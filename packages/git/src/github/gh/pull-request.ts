@@ -10,6 +10,7 @@ import {
 	PullRequestNotFound,
 	type PullRequestSearchError,
 	type PullRequestStateError,
+	type PullRequestStatesError,
 } from "../../errors.ts";
 import { type GhResult, ghResult } from "../../exec.ts";
 import type {
@@ -611,4 +612,78 @@ export const fetchPullRequestState = (
 			),
 		);
 		return view.state;
+	});
+
+const PrStatesListView = Schema.Array(
+	Schema.Struct({
+		number: Schema.Number,
+		state: Schema.Literals(["OPEN", "CLOSED", "MERGED"]),
+	}),
+);
+
+/**
+ * `gh pr list` pages 100 at a time, so this bounds how long the listing can
+ * take on a huge repository; a session's PR older than the newest of these
+ * falls back to the per-PR lookup.
+ */
+const PULL_REQUEST_STATES_LIMIT = 500;
+
+/**
+ * The state of the repository's newest PRs in one `gh` call, instead of one
+ * `gh pr view` each — about 1.6s for 174 PRs against ~170ms apiece.
+ * `--repo` keeps it working for a repository with no local checkout, and
+ * `cwd` only picks which `gh` host config applies.
+ */
+export const fetchPullRequestStates = (
+	cwd: string,
+	owner: string,
+	repo: string,
+): Effect.Effect<
+	ReadonlyArray<{
+		readonly number: number;
+		readonly state: "OPEN" | "CLOSED" | "MERGED";
+	}>,
+	PullRequestStatesError | GitCommandError,
+	ChildProcessSpawner.ChildProcessSpawner
+> =>
+	Effect.gen(function* () {
+		const command = [
+			"pr",
+			"list",
+			"--repo",
+			`${owner}/${repo}`,
+			"--state",
+			"all",
+			"--limit",
+			String(PULL_REQUEST_STATES_LIMIT),
+			"--json",
+			"number,state",
+		];
+		const result = yield* ghResult(cwd, command);
+		if (result.exitCode !== 0) {
+			if (isAuthFailure(result)) {
+				return yield* new GhNotAuthenticated({
+					reason: result.stderr.trim() || "gh is not authenticated",
+				});
+			}
+			if (isRateLimited(result.stderr)) {
+				return yield* new GhRateLimited({ reason: result.stderr.trim() });
+			}
+			return yield* new GitHubUnreachable({
+				repoRoot: cwd,
+				reason: result.stderr.trim() || `gh pr list exited ${result.exitCode}`,
+			});
+		}
+		return yield* Schema.decodeUnknownEffect(
+			Schema.fromJsonString(PrStatesListView),
+		)(result.stdout).pipe(
+			Effect.mapError(
+				(cause) =>
+					new GhOutputDecodeError({
+						command: `gh ${command.join(" ")}`,
+						raw: result.stdout,
+						cause,
+					}),
+			),
+		);
 	});

@@ -368,6 +368,13 @@ export type PullRequestStateError =
 	| GhRateLimited
 	| PullRequestNotFound;
 
+/** Every way `fetchPullRequestStates` can fail — a whole-repository listing has no single PR to be "not found", so a refused or broken `gh` call is `GitHubUnreachable`. */
+export type PullRequestStatesError =
+	| GhOutputDecodeError
+	| GhNotAuthenticated
+	| GhRateLimited
+	| GitHubUnreachable;
+
 export type PullRequestMergeabilityError =
 	| GhOutputDecodeError
 	| GhNotAuthenticated
