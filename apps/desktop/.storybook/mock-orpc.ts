@@ -219,7 +219,8 @@ async function* replayRepositorySessionStates(
 		yield event.batch;
 	}
 	if (stream.afterEvents === "hang") await neverSettles();
-	if (typeof stream.afterEvents === "object") throw new Error(stream.afterEvents.error);
+	if (typeof stream.afterEvents === "object")
+		throw new Error(stream.afterEvents.error);
 }
 
 function liveValue<T>(value: T): AsyncIteratorClass<T, void> {

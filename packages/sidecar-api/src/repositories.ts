@@ -129,6 +129,8 @@ export const repositoriesContract = {
 		.errors({ SERVICE_UNAVAILABLE: {} }),
 	sessionStates: oc
 		.input(RepositoryInput)
-		.output(eventIterator(Schema.toStandardSchemaV1(RepositorySessionStateBatch)))
+		.output(
+			eventIterator(Schema.toStandardSchemaV1(RepositorySessionStateBatch)),
+		)
 		.errors({ SERVICE_UNAVAILABLE: {} }),
 };
