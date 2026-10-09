@@ -19,8 +19,9 @@ Git/review procedures sit alongside `health.check`.
   (`apps/desktop/sidecar/code-index/state.ts`'s `encodeSymbolKey`/`decodeSymbolKey`), not a type this
   package or `@repo/code-lsp` names anywhere — meaningful only as `codeIndex.references`' input,
   never parsed client-side.
-- `repositories.ts` — `repositories.list`/`get`, the Settings › Repositories page's data; changing a repository's
-  path reuses `pullRequests.recordRepoPath`.
+- `repositories.ts` — `repositories.list`/`get`/`sessionStates`, the Settings › Repositories page's data;
+  changing a repository's path reuses `pullRequests.recordRepoPath`. `get` makes no GitHub calls and reports
+  unknown PR states as `pending`; `sessionStates` streams them in.
 - `diagnostics.ts` — `diagnostics.snapshot`, the read-only in-memory-state view behind `nisi debug`; its
   `sessionId` is the wire id (`sessions.publicId` in SQLite), not the integer row id.
 - `contract.ts` — composes domain contracts into the router; owns the two
@@ -33,6 +34,8 @@ Git/review procedures sit alongside `health.check`.
   `.liveOptions()` in the frontend. `sessions.setAttention` supplies header-level PR visibility;
   `sessions.setWatching` remains the narrower Files Changed worktree-poll signal. Branch overview
   includes a `sessionId` so the sidecar can re-emit on that session's change event.
+  `repositories.sessionStates` is an event iterator of batches consumed via `.streamedOptions()`, which
+  appends each event to `data` (`.liveOptions()` would replace it).
 
 ## Gotchas
 - `effect` here is the `beta` dist-tag (`4.0.0-beta.x`) — `latest` on npm is still v3. Pinned exact,
