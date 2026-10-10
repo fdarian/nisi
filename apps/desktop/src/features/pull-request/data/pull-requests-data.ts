@@ -20,6 +20,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { useState } from "react";
 import type { SidecarQueryUtils } from "#/infra/backend-context";
 import { launchMark, resolveTracedDeepLink } from "#/infra/launch-trace";
+import { useSidecarEvent } from "#/infra/sidecar-events";
 import { seedResolvedSession } from "#/shell/open-request/resolved-session-cache";
 import type { Session } from "./pr-data";
 
@@ -308,6 +309,7 @@ export function useOpenPullRequest(
 				? null
 				: {
 						details: moved.details,
+						opensPullRequest: true,
 						isPending: repoint.isPending,
 						error: repoint.error,
 						confirm: () => repoint.mutate(moved.details),
@@ -322,11 +324,51 @@ export function useOpenPullRequest(
 /** What the "repository moved" dialog renders and drives; see `OriginMovedDialog`. */
 export type OriginMovedPrompt = {
 	details: OriginMovedDetails;
+	/** Whether confirming goes on to open a pull request, or the PR is already open and only `origin` changes. */
+	opensPullRequest: boolean;
 	isPending: boolean;
 	error: unknown;
 	confirm: () => void;
 	cancel: () => void;
 };
+
+/**
+ * The `repo-origin-moved` flavor of {@link OriginMovedPrompt}: a PR the CLI
+ * opened is already showing, and the sidecar only noticed afterwards that its
+ * clone's `origin` is stale. Confirming just repoints `origin`. One prompt at
+ * a time — the sidecar re-sends the event on every CLI open of that repo, so
+ * an event arriving while the dialog is up is dropped rather than stacked.
+ */
+export function useRepoOriginMovedPrompt(
+	orpc: SidecarQueryUtils,
+): OriginMovedPrompt | null {
+	const [details, setDetails] = useState<OriginMovedDetails | null>(null);
+	useSidecarEvent((event) => {
+		if (event.type !== "repo-origin-moved") return;
+		setDetails((current) => current ?? event);
+	});
+	const repoint = useMutation({
+		mutationFn: (target: OriginMovedDetails) =>
+			orpc.pullRequests.repointOrigin.call({
+				owner: target.expectedOwner,
+				repo: target.expectedRepo,
+				path: target.path,
+			}),
+		onSuccess: () => setDetails(null),
+	});
+	if (details === null) return null;
+	return {
+		details,
+		opensPullRequest: false,
+		isPending: repoint.isPending,
+		error: repoint.error,
+		confirm: () => repoint.mutate(details),
+		cancel: () => {
+			setDetails(null);
+			repoint.reset();
+		},
+	};
+}
 
 /**
  * GitHub serves an account's avatar straight off its login, no API call or

@@ -15,10 +15,11 @@ import {
 } from "#/features/pull-request/data/pull-requests-data";
 
 /**
- * Offered when the folder picked for a PR's repository is the right clone but
- * its `origin` still names the repo's old GitHub location. Confirming
- * repoints `origin` and re-opens the PR (`useOpenPullRequest`'s
- * `originMoved`); `prompt === null` keeps it closed so callers can mount it
+ * Offered when a PR's local clone is the right one but its `origin` still names
+ * the repo's old GitHub location. Confirming repoints `origin`, and for the
+ * open flow (`useOpenPullRequest`'s `originMoved`) re-opens the PR; the
+ * CLI-open flow (`useRepoOriginMovedPrompt`) only repoints, the PR already
+ * being open. `prompt === null` keeps it closed so callers can mount it
  * unconditionally.
  */
 export function OriginMovedDialog(props: {
@@ -49,8 +50,8 @@ export function OriginMovedDialog(props: {
 								<code>
 									{prompt.details.expectedOwner}/{prompt.details.expectedRepo}
 								</code>
-								. Update <code>origin</code> to the new location and open the
-								pull request?
+								. Update <code>origin</code> to the new location
+								{prompt.opensPullRequest ? " and open the pull request" : ""}?
 							</>
 						)}
 					</DialogDescription>
@@ -74,7 +75,9 @@ export function OriginMovedDialog(props: {
 						loading={prompt?.isPending === true}
 						onClick={() => prompt?.confirm()}
 					>
-						Update origin and open
+						{prompt?.opensPullRequest === false
+							? "Update origin"
+							: "Update origin and open"}
 					</Button>
 				</DialogFooter>
 			</DialogPopup>
