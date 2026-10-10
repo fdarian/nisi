@@ -33,13 +33,17 @@ import type {
 	OpenPullRequestParams,
 	PullRequestRepository,
 } from "#/features/pull-request/data/pull-requests-data";
-import { findOpenPullRequestSessionId } from "#/features/pull-request/data/pull-requests-data";
+import {
+	findOpenPullRequestSessionId,
+	useRepoOriginMovedPrompt,
+} from "#/features/pull-request/data/pull-requests-data";
 import {
 	SessionUiProvider,
 	useClearSessionUiState,
 	useCycleFileTab,
 	useSetActiveTab,
 } from "#/features/pull-request/data/session-ui-store";
+import { OriginMovedDialog } from "#/features/pull-request/open/origin-moved-dialog";
 import { PendingPrView } from "#/features/pull-request/pending-pr-view";
 import { PrView } from "#/features/pull-request/pr-view";
 import type { SidecarQueryUtils } from "#/infra/backend-context";
@@ -168,6 +172,8 @@ function AppShellReady({
 		listed.sessions,
 		setRequestedActiveSessionId,
 	);
+	const repoOriginMoved = useRepoOriginMovedPrompt(orpc);
+	const originMovedPrompt = deepLink.originMoved ?? repoOriginMoved;
 	const pendingOpenTab = usePendingOpenTab({
 		deepLink: deepLink.opening,
 		sessions: listed.sessions,
@@ -378,6 +384,7 @@ function AppShellReady({
 						</Button>
 					</EmptyContent>
 				</Empty>
+				<OriginMovedDialog prompt={originMovedPrompt} />
 				<OpenPullRequestPalette
 					repositories={paletteRepositories}
 					onRepositoriesChange={setPaletteRepositories}
@@ -501,6 +508,7 @@ function AppShellReady({
 				)}
 			</div>
 
+			<OriginMovedDialog prompt={originMovedPrompt} />
 			<OpenPullRequestPalette
 				repositories={paletteRepositories}
 				onRepositoriesChange={setPaletteRepositories}

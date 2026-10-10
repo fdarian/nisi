@@ -33,6 +33,12 @@ import { OpenSessionTarget, Session } from "./sessions.ts";
  * should appear, and `sessions.list` needs to observe the same session's new
  * `target` rather than a second row.
  *
+ * `repo-origin-moved` is the sidecar learning, while opening a PR it was
+ * handed by the CLI, that the clone's `origin` URL names a repository GitHub
+ * has since renamed or transferred to the PR's repo. It carries the fields of
+ * `pullRequests.recordRepoPath`'s `ORIGIN_MOVED` error so the app can offer the
+ * same `pullRequests.repointOrigin` fix without a picked folder.
+ *
  * `code-index-lsp-status-changed` is rooted by worktree rather than session:
  * one pooled language server can serve multiple sessions, so every window
  * sharing that root must observe the same transition.
@@ -137,6 +143,15 @@ export const SidecarEvent = Schema.Union([
 		seq: Schema.Number,
 		type: Schema.Literal("open-failed"),
 		request: OpenRequest,
+	}),
+	Schema.Struct({
+		seq: Schema.Number,
+		type: Schema.Literal("repo-origin-moved"),
+		path: Schema.String,
+		expectedOwner: Schema.String,
+		expectedRepo: Schema.String,
+		actualOwner: Schema.String,
+		actualRepo: Schema.String,
 	}),
 	Schema.Struct({ seq: Schema.Number, type: Schema.Literal("stream-ready") }),
 	Schema.Struct({

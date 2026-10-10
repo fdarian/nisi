@@ -21,6 +21,7 @@ import {
 	type OpenPullRequestParams,
 	useOpenPullRequest,
 } from "#/features/pull-request/data/pull-requests-data";
+import { OriginMovedDialog } from "#/features/pull-request/open/origin-moved-dialog";
 import { useDismissOnInactive } from "#/features/pull-request/use-dismiss-on-inactive";
 import type { SidecarQueryUtils } from "#/infra/backend-context";
 
@@ -135,6 +136,7 @@ export function PrStackBadge(
 
 	return (
 		<>
+			<OriginMovedDialog prompt={openPullRequest.originMoved} />
 			<span aria-hidden="true">&middot;</span>
 			<Popover onOpenChange={setOpen} open={open}>
 				<PopoverTrigger

@@ -25,6 +25,7 @@ import {
 	type RepoPathVerificationError,
 	readFileContentsAtRef,
 	readWorktreeBlobContent,
+	repointOriginToMovedRepo,
 	resolveCurrentBranch,
 	resolveDiffBaseRef,
 	resolveMainCloneRoot,
@@ -699,7 +700,35 @@ export class Store extends Context.Service<Store>()("Store", {
 						const known = yield* settingsStore.getRepoPath(pr.owner, pr.repo);
 						if (known !== null) return;
 						const root = yield* resolveMainCloneRoot(repoRoot);
-						yield* verifyRepoPathMatchesOrigin(root, pr.owner, pr.repo);
+						const mismatch = yield* verifyRepoPathMatchesOrigin(
+							root,
+							pr.owner,
+							pr.repo,
+							{ detectMovedRepo: true },
+						).pipe(
+							Effect.as(null),
+							Effect.catchTag("RepoPathOriginMismatch", Effect.succeed),
+						);
+						if (mismatch !== null) {
+							// The user is never told otherwise: this runs after a CLI open has
+							// already succeeded, so a logged warning is invisible to them.
+							if (
+								mismatch.movedOnGitHub &&
+								mismatch.actualOwner !== null &&
+								mismatch.actualRepo !== null
+							) {
+								emit({
+									type: "repo-origin-moved",
+									path: mismatch.path,
+									expectedOwner: mismatch.expectedOwner,
+									expectedRepo: mismatch.expectedRepo,
+									actualOwner: mismatch.actualOwner,
+									actualRepo: mismatch.actualRepo,
+								});
+								return;
+							}
+							return yield* mismatch;
+						}
 						yield* settingsStore.setRepoPath(pr.owner, pr.repo, root);
 						yield* prIndex.refresh(root, pr.owner, pr.repo);
 					}).pipe(
@@ -1092,11 +1121,32 @@ export class Store extends Context.Service<Store>()("Store", {
 			ChildProcessSpawner.ChildProcessSpawner
 		> =>
 			Effect.gen(function* () {
-				const repoRoot = yield* verifyRepoPathMatchesOrigin(path, owner, repo);
+				const repoRoot = yield* verifyRepoPathMatchesOrigin(path, owner, repo, {
+					detectMovedRepo: true,
+				});
 				yield* settingsStore.setRepoPath(owner, repo, repoRoot);
 				yield* prIndex.refresh(repoRoot, owner, repo);
 				return { owner, repo, path: repoRoot };
 			});
+
+		/**
+		 * `recordRepoPath` for a clone whose `origin` URL is stale because the
+		 * repository moved on GitHub: fixes `origin` first (which only happens
+		 * when GitHub confirms the move), then records the path through the
+		 * same verification as any other picked folder.
+		 */
+		const repointOrigin = (
+			owner: string,
+			repo: string,
+			path: string,
+		): Effect.Effect<
+			{ readonly owner: string; readonly repo: string; readonly path: string },
+			RepoPathVerificationError | GitCommandError | SettingsStoreError,
+			ChildProcessSpawner.ChildProcessSpawner
+		> =>
+			repointOriginToMovedRepo({ path, owner, repo }).pipe(
+				Effect.flatMap((repoRoot) => recordRepoPath(owner, repo, repoRoot)),
+			);
 
 		const resolveScheduledMergeRepoRoot = (input: {
 			repoRoot: string;
@@ -2138,6 +2188,7 @@ export class Store extends Context.Service<Store>()("Store", {
 			switchToPr,
 			openPullRequestSession,
 			recordRepoPath,
+			repointOrigin,
 			listSessions,
 			closeSession,
 			resolveSessionRepoRoot,

@@ -15,6 +15,14 @@ type EventPayload =
 			readonly outcome: "merged" | "failed" | "cancelled";
 			readonly reason?: string;
 	  }
+	| {
+			readonly type: "repo-origin-moved";
+			readonly path: string;
+			readonly expectedOwner: string;
+			readonly expectedRepo: string;
+			readonly actualOwner: string;
+			readonly actualRepo: string;
+	  }
 	| { readonly type: "session-opened"; readonly session: Session }
 	| { readonly type: "session-closed"; readonly sessionId: string }
 	| { readonly type: "session-files-changed"; readonly sessionId: string }

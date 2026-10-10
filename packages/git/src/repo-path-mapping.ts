@@ -1,6 +1,6 @@
 import { realpath } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { Effect } from "effect";
+import { Effect, Schema } from "effect";
 import type { ChildProcessSpawner } from "effect/unstable/process";
 import {
 	type GitCommandError,
@@ -10,7 +10,7 @@ import {
 	RepoPathOriginMismatch,
 	type RepoPathVerificationError,
 } from "./errors.ts";
-import { gitResult } from "./exec.ts";
+import { ghResult, gitResult } from "./exec.ts";
 import { originUrlOrNull, pathExistsOnDisk } from "./repo.ts";
 
 /** One learned `owner/repo` → local checkout mapping, as persisted by `@repo/settings`. */
@@ -47,6 +47,81 @@ export const parseOwnerRepoFromRemoteUrl = (
 
 const sameOwnerRepo = (a: string, b: string) =>
 	a.toLowerCase() === b.toLowerCase();
+
+/**
+ * `url` with its `owner/repo` replaced, everything else — scheme, host,
+ * user, `.git` suffix, trailing slash — kept as it was, so repointing an
+ * SSH remote never silently flips it to HTTPS (or the reverse). `null` when
+ * `url` has no recognizable `owner/repo` (see {@link parseOwnerRepoFromRemoteUrl}).
+ */
+export const rewriteRemoteUrlOwnerRepo = (
+	url: string,
+	owner: string,
+	repo: string,
+): string | null => {
+	const trimmed = url.trim();
+	const match = OWNER_REPO_PATTERN.exec(trimmed);
+	if (match === null) return null;
+	const matched = match[0];
+	const currentOwner = match[1];
+	const currentRepo = match[2];
+	if (currentOwner === undefined || currentRepo === undefined) return null;
+	// `matched` is `<separator><owner>/<repo><suffix>`; the separator is empty
+	// only when the URL starts with the owner, and never contains `currentOwner`.
+	const separator = matched.slice(0, matched.indexOf(currentOwner));
+	const suffix = matched.slice(
+		separator.length + currentOwner.length + 1 + currentRepo.length,
+	);
+	return `${trimmed.slice(0, match.index)}${separator}${owner}/${repo}${suffix}`;
+};
+
+const RepoNameWithOwner = Schema.Struct({ nameWithOwner: Schema.String });
+
+/**
+ * Whether GitHub serves `actualOwner/actualRepo` as `expectedOwner/expectedRepo`
+ * — a rename or transfer GitHub redirects, which is why git against the stale
+ * `origin` URL still works. Only an enrichment of an already-true mismatch,
+ * so a failed lookup (offline, unauthenticated, no such repo) is logged and
+ * reported as "not moved" rather than failing the verification.
+ */
+const repoMovedOnGitHub = (
+	cwd: string,
+	actualOwner: string,
+	actualRepo: string,
+	expectedOwner: string,
+	expectedRepo: string,
+) =>
+	Effect.gen(function* () {
+		const result = yield* ghResult(cwd, [
+			"repo",
+			"view",
+			`${actualOwner}/${actualRepo}`,
+			"--json",
+			"nameWithOwner",
+		]);
+		if (result.exitCode !== 0) {
+			return yield* Effect.fail(
+				new Error(`gh repo view exited ${result.exitCode}: ${result.stderr}`),
+			);
+		}
+		const view = yield* Schema.decodeUnknownEffect(
+			Schema.fromJsonString(RepoNameWithOwner),
+		)(result.stdout);
+		const resolved = parseOwnerRepoFromRemoteUrl(view.nameWithOwner);
+		return (
+			resolved !== null &&
+			sameOwnerRepo(resolved.owner, expectedOwner) &&
+			sameOwnerRepo(resolved.repo, expectedRepo)
+		);
+	}).pipe(
+		Effect.catch((cause) =>
+			Effect.logWarning("could not check whether the repository moved", {
+				actualOwner,
+				actualRepo,
+				cause,
+			}).pipe(Effect.as(false)),
+		),
+	);
 
 /**
  * `path`'s main clone root — the parent of the shared git dir
@@ -102,11 +177,16 @@ export const resolveMainCloneRoot = (path: string) =>
  * root to store, whether `path` was the root itself, a subdirectory, or a
  * worktree. Uses plain `git`, not `gh` — no network round trip, no auth
  * required, so a guess can be ruled out (or a folder rejected) even offline.
+ *
+ * `detectMovedRepo` opts a mismatch into one `gh repo view` round trip to fill
+ * `RepoPathOriginMismatch.movedOnGitHub`. Off by default so silent inference
+ * guesses never touch the network.
  */
 export const verifyRepoPathMatchesOrigin = (
 	path: string,
 	owner: string,
 	repo: string,
+	options?: { readonly detectMovedRepo?: boolean },
 ): Effect.Effect<
 	string,
 	RepoPathVerificationError | GitCommandError,
@@ -130,6 +210,16 @@ export const verifyRepoPathMatchesOrigin = (
 			sameOwnerRepo(parsed.owner, owner) &&
 			sameOwnerRepo(parsed.repo, repo);
 		if (!matches) {
+			const movedOnGitHub =
+				options?.detectMovedRepo === true && parsed !== null
+					? yield* repoMovedOnGitHub(
+							repoRoot,
+							parsed.owner,
+							parsed.repo,
+							owner,
+							repo,
+						)
+					: false;
 			return yield* new RepoPathOriginMismatch({
 				path,
 				expectedOwner: owner,
@@ -137,6 +227,7 @@ export const verifyRepoPathMatchesOrigin = (
 				actualOwner: parsed?.owner ?? null,
 				actualRepo: parsed?.repo ?? null,
 				remoteUrl,
+				movedOnGitHub,
 			});
 		}
 

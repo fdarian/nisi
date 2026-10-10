@@ -273,6 +273,12 @@ export class RepoPathNoOriginRemote extends Schema.TaggedError<RepoPathNoOriginR
  * `owner/repo` — either it points somewhere else entirely, or its URL
  * couldn't be parsed as an `owner/repo` at all (`actualOwner`/`actualRepo`
  * are `null` in that case).
+ *
+ * `movedOnGitHub` is `true` only when GitHub itself resolves the actual
+ * `owner/repo` to the expected one (the repository was renamed or
+ * transferred and the local `origin` URL is stale) — and only when the
+ * caller asked for that lookup; it is `false` otherwise, including whenever
+ * the lookup itself failed.
  */
 export class RepoPathOriginMismatch extends Schema.TaggedError<RepoPathOriginMismatch>()(
 	"RepoPathOriginMismatch",
@@ -283,6 +289,7 @@ export class RepoPathOriginMismatch extends Schema.TaggedError<RepoPathOriginMis
 		actualOwner: Schema.NullOr(Schema.String),
 		actualRepo: Schema.NullOr(Schema.String),
 		remoteUrl: Schema.String,
+		movedOnGitHub: Schema.Boolean,
 	},
 ) {}
 

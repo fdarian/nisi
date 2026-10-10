@@ -232,6 +232,7 @@ export function useSessions(
 	// open-request selection are handled independently of this list cache.
 	useSidecarEvent((event) => {
 		if (event.type === "stream-ready" || event.type.startsWith("open-")) return;
+		if (event.type === "repo-origin-moved") return;
 		if (event.type === "code-index-lsp-status-changed") {
 			const sessions = queryClient.getQueryData<readonly Session[]>(
 				orpc.sessions.list.queryKey(),

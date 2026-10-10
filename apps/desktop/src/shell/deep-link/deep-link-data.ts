@@ -12,6 +12,7 @@ import {
 	findOpenPullRequestSessionId,
 	friendlyOpenPullRequestError,
 	type OpenPullRequestParams,
+	type OriginMovedPrompt,
 	useOpenPullRequest,
 } from "#/features/pull-request/data/pull-requests-data";
 import type { SidecarQueryUtils } from "#/infra/backend-context";
@@ -50,7 +51,10 @@ export function useDeepLinkOpener(
 	orpc: SidecarQueryUtils,
 	sessions: readonly Session[],
 	onOpened: (sessionId: string) => void,
-): { opening: OpenPullRequestParams | null } {
+): {
+	opening: OpenPullRequestParams | null;
+	originMoved: OriginMovedPrompt | null;
+} {
 	const appViewActive = useAppViewActive();
 	const pending = useSyncExternalStore(
 		subscribeToDeepLinks,
@@ -116,6 +120,7 @@ export function useDeepLinkOpener(
 			openPr.isPending && openPr.pendingParams !== undefined
 				? openPr.pendingParams
 				: null,
+		originMoved: openPr.originMoved,
 	};
 }
 

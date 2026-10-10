@@ -353,6 +353,7 @@ export function createMockSidecarClient(
 				),
 			open: neverSettles,
 			recordRepoPath: async (input) => input,
+			repointOrigin: neverSettles,
 			mergeStatus:
 				mergeStatusError !== undefined
 					? async () => {

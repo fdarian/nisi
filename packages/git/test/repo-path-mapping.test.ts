@@ -10,6 +10,7 @@ import {
 	type KnownRepoPath,
 	parseOwnerRepoFromRemoteUrl,
 	resolveMainCloneRoot,
+	rewriteRemoteUrlOwnerRepo,
 	verifyRepoPathMatchesOrigin,
 } from "../src/repo-path-mapping.ts";
 
@@ -112,6 +113,36 @@ describe("parseOwnerRepoFromRemoteUrl", () => {
 
 	test("not a recognizable owner/repo URL", () => {
 		expect(parseOwnerRepoFromRemoteUrl("not-a-url")).toBeNull();
+	});
+});
+
+describe("rewriteRemoteUrlOwnerRepo", () => {
+	test.each([
+		["https://github.com/old/name.git", "https://github.com/new/repo.git"],
+		["https://github.com/old/name", "https://github.com/new/repo"],
+		["https://github.com/old/name/", "https://github.com/new/repo/"],
+		["git@github.com:old/name.git", "git@github.com:new/repo.git"],
+		["git@github.com:old/name", "git@github.com:new/repo"],
+		[
+			"ssh://git@github.enterprise.corp/old/name.git",
+			"ssh://git@github.enterprise.corp/new/repo.git",
+		],
+	])("%s -> %s", (url, expected) => {
+		expect(rewriteRemoteUrlOwnerRepo(url, "new", "repo")).toBe(expected);
+	});
+
+	test("an owner that also appears in the host is rewritten only in the path", () => {
+		expect(
+			rewriteRemoteUrlOwnerRepo(
+				"https://old.example.com/old/name.git",
+				"new",
+				"repo",
+			),
+		).toBe("https://old.example.com/new/repo.git");
+	});
+
+	test("null when the url has no owner/repo", () => {
+		expect(rewriteRemoteUrlOwnerRepo("not-a-url", "new", "repo")).toBeNull();
 	});
 });
 

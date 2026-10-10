@@ -8,7 +8,8 @@
  * not here, since it has to coordinate with the "reset to a blank query on
  * open" effect that already lives there.
  */
-import { ORPCError } from "@orpc/client";
+import { type InferClientError, isDefinedError, ORPCError } from "@orpc/client";
+import type { SidecarClient } from "@repo/sidecar-api";
 import {
 	keepPreviousData,
 	useMutation,
@@ -16,8 +17,10 @@ import {
 	useQueryClient,
 } from "@tanstack/react-query";
 import { invoke } from "@tauri-apps/api/core";
+import { useState } from "react";
 import type { SidecarQueryUtils } from "#/infra/backend-context";
 import { launchMark, resolveTracedDeepLink } from "#/infra/launch-trace";
+import { useSidecarEvent } from "#/infra/sidecar-events";
 import { seedResolvedSession } from "#/shell/open-request/resolved-session-cache";
 import type { Session } from "./pr-data";
 
@@ -133,6 +136,30 @@ export function findOpenPullRequestSessionId(
 	return session?.id;
 }
 
+/** What `recordRepoPath` reports in `ORIGIN_MOVED`: the picked clone's `origin` still names the repo's old location. */
+export type OriginMovedDetails = {
+	path: string;
+	expectedOwner: string;
+	expectedRepo: string;
+	actualOwner: string;
+	actualRepo: string;
+};
+
+/** Thrown by `resolvePullRequestOpen` instead of the raw oRPC error so `useOpenPullRequest` can offer the fix rather than toast a failure. */
+class OriginMovedError extends Error {
+	readonly details: OriginMovedDetails;
+	constructor(details: OriginMovedDetails) {
+		super(
+			`${details.path}'s origin points at ${details.actualOwner}/${details.actualRepo}, which GitHub now serves as ${details.expectedOwner}/${details.expectedRepo}`,
+		);
+		this.details = details;
+	}
+}
+
+type RecordRepoPathError =
+	| InferClientError<SidecarClient["pullRequests"]["recordRepoPath"]>
+	| Error;
+
 /**
  * `pullRequests.open`'s `"needs-repo-path"` outcome resolved end-to-end: the
  * native folder picker (`pick_folder` in `src-tauri/src/folder_picker.rs`),
@@ -147,7 +174,9 @@ export function findOpenPullRequestSessionId(
  * `owner/repo`) *is* a real error and is left to propagate as the `ORPCError`
  * it already is — the sidecar's message already names which repo mismatched
  * (see `apps/desktop/sidecar/http.ts`'s `recordRepoPath` handler), so there's
- * nothing to add here.
+ * nothing to add here. The exception is `ORIGIN_MOVED` (the repo was renamed
+ * or transferred on GitHub, the folder is right but its `origin` is stale),
+ * which becomes an `OriginMovedError` for the caller to offer the fix for.
  */
 async function resolvePullRequestOpen(
 	orpc: SidecarQueryUtils,
@@ -171,11 +200,19 @@ async function resolvePullRequestOpen(
 	});
 	if (picked === null) return { status: "cancelled" };
 
-	await orpc.pullRequests.recordRepoPath.call({
-		owner: outcome.owner,
-		repo: outcome.repo,
-		path: picked,
-	});
+	try {
+		await orpc.pullRequests.recordRepoPath.call({
+			owner: outcome.owner,
+			repo: outcome.repo,
+			path: picked,
+		});
+	} catch (error) {
+		const failure = error as RecordRepoPathError;
+		if (isDefinedError(failure) && failure.code === "ORIGIN_MOVED") {
+			throw new OriginMovedError(failure.data);
+		}
+		throw error;
+	}
 
 	const retried = await orpc.pullRequests.open.call(params);
 	if (retried.status === "opened") {
@@ -218,8 +255,13 @@ export function useOpenPullRequest(
 	pendingParams: OpenPullRequestParams | undefined;
 	error: unknown;
 	reset: () => void;
+	originMoved: OriginMovedPrompt | null;
 } {
 	const queryClient = useQueryClient();
+	const [moved, setMoved] = useState<{
+		details: OriginMovedDetails;
+		params: OpenPullRequestParams;
+	} | null>(null);
 	const mutation = useMutation({
 		mutationFn: (params: OpenPullRequestParams) =>
 			resolvePullRequestOpen(orpc, params),
@@ -235,14 +277,96 @@ export function useOpenPullRequest(
 			);
 			onOpened(outcome.session.id);
 		},
+		onError: (error, params) => {
+			if (error instanceof OriginMovedError) {
+				setMoved({ details: error.details, params });
+			}
+		},
+	});
+	const repoint = useMutation({
+		mutationFn: (target: OriginMovedDetails) =>
+			orpc.pullRequests.repointOrigin.call({
+				owner: target.expectedOwner,
+				repo: target.expectedRepo,
+				path: target.path,
+			}),
+		onSuccess: () => {
+			if (moved === null) return;
+			setMoved(null);
+			mutation.mutate(moved.params);
+		},
 	});
 
 	return {
 		open: (params) => mutation.mutate(params),
-		isPending: mutation.isPending,
+		isPending: mutation.isPending || repoint.isPending,
 		pendingParams: mutation.variables,
-		error: mutation.error,
+		// The moved-origin case has its own dialog; a toast on top would say the same thing as a failure.
+		error: mutation.error instanceof OriginMovedError ? null : mutation.error,
 		reset: mutation.reset,
+		originMoved:
+			moved === null
+				? null
+				: {
+						details: moved.details,
+						opensPullRequest: true,
+						isPending: repoint.isPending,
+						error: repoint.error,
+						confirm: () => repoint.mutate(moved.details),
+						cancel: () => {
+							setMoved(null);
+							repoint.reset();
+						},
+					},
+	};
+}
+
+/** What the "repository moved" dialog renders and drives; see `OriginMovedDialog`. */
+export type OriginMovedPrompt = {
+	details: OriginMovedDetails;
+	/** Whether confirming goes on to open a pull request, or the PR is already open and only `origin` changes. */
+	opensPullRequest: boolean;
+	isPending: boolean;
+	error: unknown;
+	confirm: () => void;
+	cancel: () => void;
+};
+
+/**
+ * The `repo-origin-moved` flavor of {@link OriginMovedPrompt}: a PR the CLI
+ * opened is already showing, and the sidecar only noticed afterwards that its
+ * clone's `origin` is stale. Confirming just repoints `origin`. One prompt at
+ * a time — the sidecar re-sends the event on every CLI open of that repo, so
+ * an event arriving while the dialog is up is dropped rather than stacked.
+ */
+export function useRepoOriginMovedPrompt(
+	orpc: SidecarQueryUtils,
+): OriginMovedPrompt | null {
+	const [details, setDetails] = useState<OriginMovedDetails | null>(null);
+	useSidecarEvent((event) => {
+		if (event.type !== "repo-origin-moved") return;
+		setDetails((current) => current ?? event);
+	});
+	const repoint = useMutation({
+		mutationFn: (target: OriginMovedDetails) =>
+			orpc.pullRequests.repointOrigin.call({
+				owner: target.expectedOwner,
+				repo: target.expectedRepo,
+				path: target.path,
+			}),
+		onSuccess: () => setDetails(null),
+	});
+	if (details === null) return null;
+	return {
+		details,
+		opensPullRequest: false,
+		isPending: repoint.isPending,
+		error: repoint.error,
+		confirm: () => repoint.mutate(details),
+		cancel: () => {
+			setDetails(null);
+			repoint.reset();
+		},
 	};
 }
 
