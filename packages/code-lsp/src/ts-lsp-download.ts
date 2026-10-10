@@ -1,13 +1,13 @@
-import { createHash, randomUUID } from "node:crypto";
 import { join } from "node:path";
-import { Effect, Option, Schema, Semaphore, Stream } from "effect";
-import { FileSystem } from "effect/FileSystem";
 import {
-	FetchHttpClient,
-	HttpClient,
-	HttpClientResponse,
-} from "effect/unstable/http";
-import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
+	type Downloader,
+	ensureNpmTarball,
+	NpmTarballInstallError,
+	type Release,
+} from "@repo/npm-tarball";
+import { Effect, Schema } from "effect";
+import { FileSystem } from "effect/FileSystem";
+import type { ChildProcessSpawner } from "effect/unstable/process";
 
 export const TS_LSP_VERSION = "7.0.2";
 
@@ -122,11 +122,7 @@ export const TS_LSP_RELEASES: Readonly<Record<string, TsLspRelease>> = {
 
 export type TsLspBinaryInstallReason =
 	| "unsupported-platform"
-	| "download"
-	| "integrity-mismatch"
-	| "extract"
-	| "cache";
-
+	| NpmTarballInstallError["reason"];
 export class TsLspBinaryInstallError extends Schema.TaggedError<TsLspBinaryInstallError>()(
 	"TsLspBinaryInstallError",
 	{
@@ -140,265 +136,74 @@ export class TsLspBinaryInstallError extends Schema.TaggedError<TsLspBinaryInsta
 		cause: Schema.Defect(),
 	},
 ) {}
-
-type Requirements =
-	| import("effect/FileSystem").FileSystem
-	| ChildProcessSpawner.ChildProcessSpawner;
-
-export type TsLspTarballDownloader = (
-	url: string,
-) => Effect.Effect<Uint8Array, TsLspBinaryInstallError>;
-
+export type TsLspTarballDownloader = Downloader;
 export type TsLspBinaryInstallOptions = {
 	readonly downloadTarball?: TsLspTarballDownloader;
 };
 
-const makeInstallError = (
-	reason: TsLspBinaryInstallReason,
-	cause: unknown,
-): TsLspBinaryInstallError => new TsLspBinaryInstallError({ reason, cause });
-
-const currentRelease = (): TsLspRelease | undefined =>
-	TS_LSP_RELEASES[`${process.platform}/${process.arch}`];
-
-const executableName = (): string =>
-	process.platform === "win32" ? "tsc.exe" : "tsc";
-
-const tarballUrl = (release: TsLspRelease): string => {
-	const packageNameStart = release.packageName.indexOf("/") + 1;
-	const archiveName = release.packageName.slice(packageNameStart);
-	return `https://registry.npmjs.org/${encodeURIComponent(release.packageName)}/-/${archiveName}-${TS_LSP_VERSION}.tgz`;
-};
-
-const defaultDownloadTarball = (
-	url: string,
-): Effect.Effect<Uint8Array, TsLspBinaryInstallError> =>
-	Effect.gen(function* () {
-		const client = yield* HttpClient.HttpClient;
-		const response = yield* client
-			.get(url)
-			.pipe(Effect.flatMap(HttpClientResponse.filterStatusOk));
-		const bytes = yield* response.arrayBuffer;
-		return new Uint8Array(bytes);
-	}).pipe(
-		Effect.mapError((cause) => makeInstallError("download", cause)),
-		Effect.provide(FetchHttpClient.layer),
-	);
-
-export const verifyTsLspTarballIntegrity = (
-	bytes: Uint8Array,
-	expectedIntegrity: string,
-	packageName: string,
-): Effect.Effect<Uint8Array, TsLspBinaryInstallError> => {
-	const actualIntegrity = `sha512-${createHash("sha512")
-		.update(bytes)
-		.digest("base64")}`;
-	if (actualIntegrity === expectedIntegrity) return Effect.succeed(bytes);
-	return makeInstallError(
-		"integrity-mismatch",
-		new Error(
-			`SHA-512 mismatch for ${packageName}@${TS_LSP_VERSION}: expected ${expectedIntegrity}, got ${actualIntegrity}`,
-		),
-	);
-};
-
-const cachedBinary = (
-	targetDir: string,
-): Effect.Effect<
-	Option.Option<string>,
-	TsLspBinaryInstallError,
-	import("effect/FileSystem").FileSystem
-> =>
+const executableName = () => (process.platform === "win32" ? "tsc.exe" : "tsc");
+const validate = (directory: string) =>
 	Effect.gen(function* () {
 		const fs = yield* FileSystem;
-		const targetExists = yield* fs
-			.exists(targetDir)
-			.pipe(Effect.mapError((cause) => makeInstallError("cache", cause)));
-		if (!targetExists) return Option.none<string>();
-
+		if (
+			!(yield* fs
+				.exists(directory)
+				.pipe(
+					Effect.mapError(
+						(cause) => new NpmTarballInstallError({ reason: "cache", cause }),
+					),
+				))
+		)
+			return false;
 		const names = yield* fs
-			.readDirectory(targetDir)
-			.pipe(Effect.mapError((cause) => makeInstallError("cache", cause)));
-		const binary = executableName();
-		const hasBinary = names.includes(binary);
-		const hasDeclarations = names.some((name) => name.endsWith(".d.ts"));
-		return hasBinary && hasDeclarations
-			? Option.some(join(targetDir, binary))
-			: Option.none<string>();
-	});
-
-const extractTarball = (
-	archivePath: string,
-	extractDir: string,
-): Effect.Effect<
-	void,
-	TsLspBinaryInstallError,
-	ChildProcessSpawner.ChildProcessSpawner
-> =>
-	Effect.scoped(
-		Effect.gen(function* () {
-			const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-			const handle = yield* spawner.spawn(
-				ChildProcess.make("tar", ["-xzf", archivePath, "-C", extractDir], {
-					stdout: "ignore",
-					stderr: "pipe",
-				}),
+			.readDirectory(directory)
+			.pipe(
+				Effect.mapError(
+					(cause) => new NpmTarballInstallError({ reason: "cache", cause }),
+				),
 			);
-			const processResult = yield* Effect.all([
-				Stream.decodeText(handle.stderr).pipe(Stream.mkString),
-				handle.exitCode,
-			]);
-			if (processResult[1] !== 0) {
-				return yield* makeInstallError(
-					"extract",
-					new Error(
-						`tar exited with code ${processResult[1]}: ${processResult[0]}`,
-					),
-				);
-			}
-		}),
-	).pipe(
-		Effect.mapError((cause) =>
-			cause instanceof TsLspBinaryInstallError
-				? cause
-				: makeInstallError("extract", cause),
-		),
-	);
-
-const installFresh = (
-	cacheDir: string,
-	targetDir: string,
-	release: TsLspRelease,
-	downloader: TsLspTarballDownloader,
-): Effect.Effect<string, TsLspBinaryInstallError, Requirements> =>
-	Effect.gen(function* () {
-		const fs = yield* FileSystem;
-		const existing = yield* cachedBinary(targetDir);
-		if (Option.isSome(existing)) return existing.value;
-
-		const targetExists = yield* fs
-			.exists(targetDir)
-			.pipe(Effect.mapError((cause) => makeInstallError("cache", cause)));
-		if (targetExists) {
-			yield* fs
-				.remove(targetDir, { recursive: true, force: true })
-				.pipe(Effect.mapError((cause) => makeInstallError("cache", cause)));
-		}
-
-		const tempDir = join(
-			cacheDir,
-			`.tmp-${TS_LSP_VERSION}-${process.pid}-${randomUUID()}`,
+		return (
+			names.includes(executableName()) &&
+			names.some((name) => name.endsWith(".d.ts"))
 		);
-		const archivePath = join(tempDir, "typescript.tgz");
-		const extractDir = join(tempDir, "extracted");
-		const cleanup = fs
-			.remove(tempDir, { recursive: true, force: true })
-			.pipe(Effect.mapError((cause) => makeInstallError("cache", cause)));
-
-		return yield* Effect.gen(function* () {
-			yield* fs
-				.makeDirectory(cacheDir, { recursive: true })
-				.pipe(Effect.mapError((cause) => makeInstallError("cache", cause)));
-			yield* fs
-				.makeDirectory(tempDir, { recursive: true })
-				.pipe(Effect.mapError((cause) => makeInstallError("cache", cause)));
-
-			const downloaded = yield* downloader(tarballUrl(release));
-			const verified = yield* verifyTsLspTarballIntegrity(
-				downloaded,
-				release.integrity,
-				release.packageName,
-			);
-			yield* fs
-				.writeFile(archivePath, verified)
-				.pipe(Effect.mapError((cause) => makeInstallError("cache", cause)));
-			yield* fs
-				.makeDirectory(extractDir, { recursive: true })
-				.pipe(Effect.mapError((cause) => makeInstallError("extract", cause)));
-			yield* extractTarball(archivePath, extractDir);
-
-			const extractedLibDir = join(extractDir, "package", "lib");
-			const names = yield* fs
-				.readDirectory(extractedLibDir)
-				.pipe(Effect.mapError((cause) => makeInstallError("extract", cause)));
-			const binary = executableName();
-			if (!names.includes(binary)) {
-				return yield* makeInstallError(
-					"extract",
-					new Error(`archive has no ${binary} beside its declaration files`),
-				);
-			}
-			if (!names.some((name) => name.endsWith(".d.ts"))) {
-				return yield* makeInstallError(
-					"extract",
-					new Error("archive has no lib .d.ts files beside its executable"),
-				);
-			}
-			yield* fs
-				.chmod(join(extractedLibDir, binary), 0o755)
-				.pipe(Effect.mapError((cause) => makeInstallError("extract", cause)));
-			yield* fs
-				.rename(extractedLibDir, targetDir)
-				.pipe(Effect.mapError((cause) => makeInstallError("cache", cause)));
-			return join(targetDir, binary);
-		}).pipe(
-			// A cleanup failure must not hide the integrity or extraction failure that caused it.
-			Effect.ensuring(cleanup.pipe(Effect.catch(() => Effect.void))),
-		);
-	});
-
-const installFlights = new Map<
-	string,
-	Effect.Effect<string, TsLspBinaryInstallError, Requirements>
->();
-const installFlightsLock = Semaphore.makeUnsafe(1);
-
-const sharedInstall = (
-	cacheDir: string,
-	targetDir: string,
-	release: TsLspRelease,
-	downloader: TsLspTarballDownloader,
-): Effect.Effect<string, TsLspBinaryInstallError, Requirements> =>
-	Effect.gen(function* () {
-		const key = `${targetDir}/${release.packageName}`;
-		const install = yield* installFlightsLock.withPermit(
-			Effect.gen(function* () {
-				const existing = installFlights.get(key);
-				if (existing !== undefined) return existing;
-				const cached = yield* Effect.cached(
-					Effect.uninterruptible(
-						installFresh(cacheDir, targetDir, release, downloader),
-					),
-				);
-				installFlights.set(key, cached);
-				return cached;
-			}),
-		);
-		return yield* install;
 	});
 
 export const ensureTsLspBinary = (
 	cacheDir: string,
 	options?: TsLspBinaryInstallOptions,
-): Effect.Effect<string, TsLspBinaryInstallError, Requirements> =>
+): Effect.Effect<
+	string,
+	TsLspBinaryInstallError,
+	| import("effect/FileSystem").FileSystem
+	| ChildProcessSpawner.ChildProcessSpawner
+> =>
 	Effect.gen(function* () {
-		const release = currentRelease();
-		if (release === undefined) {
-			return yield* makeInstallError(
-				"unsupported-platform",
-				new Error(
+		const release = TS_LSP_RELEASES[`${process.platform}/${process.arch}`];
+		if (release === undefined)
+			return yield* new TsLspBinaryInstallError({
+				reason: "unsupported-platform",
+				cause: new Error(
 					`no TypeScript ${TS_LSP_VERSION} integrity pin for ${process.platform}/${process.arch}`,
 				),
-			);
-		}
-
-		const targetDir = join(cacheDir, TS_LSP_VERSION);
-		const existing = yield* cachedBinary(targetDir);
-		if (Option.isSome(existing)) return existing.value;
-
-		const downloader =
-			options === undefined || options.downloadTarball === undefined
-				? defaultDownloadTarball
-				: options.downloadTarball;
-		return yield* sharedInstall(cacheDir, targetDir, release, downloader);
+			});
+		const pinned: Release = { ...release, version: TS_LSP_VERSION };
+		const directory = yield* ensureNpmTarball(
+			join(cacheDir, TS_LSP_VERSION),
+			pinned,
+			{
+				sourceDirectory: "package/lib",
+				executable: executableName(),
+				validate,
+				downloadTarball: options?.downloadTarball,
+			},
+		).pipe(
+			Effect.mapError(
+				(error) =>
+					new TsLspBinaryInstallError({
+						reason: error.reason,
+						cause: error.cause,
+					}),
+			),
+		);
+		return join(directory, executableName());
 	});

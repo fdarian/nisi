@@ -9,6 +9,7 @@ import {
 	settings as settingsTable,
 } from "./db/schema.ts";
 import { SettingsStoreError } from "./errors.ts";
+import type { SandboxMode } from "./sandbox-mode.ts";
 
 export type SidebarViewMode = "tree" | "flat";
 export type DiffStyleMode = "unified" | "split";
@@ -27,6 +28,7 @@ export type Settings = {
 	 * yet.
 	 */
 	readonly enabledHarnesses: ReadonlyArray<string> | null;
+	readonly sandboxMode: SandboxMode;
 	readonly sidebarViewMode: SidebarViewMode;
 	readonly diffStyleMode: DiffStyleMode;
 	/**
@@ -86,6 +88,7 @@ export type RepoPathMapping = {
  */
 export const DEFAULT_SETTINGS: Settings = {
 	enabledHarnesses: null,
+	sandboxMode: "local",
 	sidebarViewMode: "tree",
 	diffStyleMode: "unified",
 	preferredEditor: null,
@@ -106,6 +109,7 @@ const toSettings = (row: SettingsRow): Settings => ({
 		row.enabledHarnesses === null
 			? null
 			: (JSON.parse(row.enabledHarnesses) as ReadonlyArray<string>),
+	sandboxMode: row.sandboxMode,
 	sidebarViewMode: row.sidebarViewMode as SidebarViewMode,
 	diffStyleMode: row.diffStyleMode as DiffStyleMode,
 	preferredEditor: row.preferredEditor,
@@ -171,6 +175,7 @@ export class SettingsStore extends Context.Service<SettingsStore>()(
 							next.enabledHarnesses === null
 								? null
 								: JSON.stringify(next.enabledHarnesses),
+						sandboxMode: next.sandboxMode,
 						sidebarViewMode: next.sidebarViewMode,
 						diffStyleMode: next.diffStyleMode,
 						preferredEditor: next.preferredEditor,

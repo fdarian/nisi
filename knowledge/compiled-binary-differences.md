@@ -35,8 +35,10 @@ from a `drizzle/` folder that won't exist.[^migrations]
 **Only *static* asset specifiers get embedded.** `new URL(`./bridge/${name}`, import.meta.url)` is
 invisible to the compiler, yet `import.meta.url` is still rewritten to a virtual `/$bunfs/...` path
 — so the computed path resolves to nothing and fails as `ENOENT: /$bunfs/bridge/package.json`.
-`import x from "./f" with { type: "text" }` is inlined as a string literal and survives. This is what
-three of the five `@ai-sdk/harness*` patches do.
+`import x from "./f" with { type: "text" }` is inlined as a string literal and survives. The Claude
+Code, Codex, and OpenCode adapters read their bridge assets at runtime through
+`createReadBridgeAsset`; their three patches replace those reads with static text imports. The shared
+`@ai-sdk/harness` package only implements the reader and has no bridge assets of its own.
 
 Same class, different library: `@earendil-works/pi-ai` loads its OAuth flows through a computed
 `import()` (`dist/auth/oauth/load.js`), so the compiled sidecar has no source tree to resolve them
@@ -90,7 +92,7 @@ hand-roll the oRPC wire format over raw `curl`.
 
 # The patches are load-bearing and silent
 
-All five `@ai-sdk/harness*` patches are pinned to exact versions and registered in
+All three `@ai-sdk/harness*` patches are pinned to exact versions and registered in
 `pnpm-workspace.yaml` (not `package.json` — pnpm 10+ ignores that key there without warning). A
 version bump drops them with no error: the build succeeds and the failure shows up at runtime, in
 the packaged app. **Re-verify a compiled build whenever a harness package is bumped.**

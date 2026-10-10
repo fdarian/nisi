@@ -54,13 +54,15 @@ export const createHarnessAdapter = (
 ): HarnessV1 => {
 	switch (harness) {
 		case "claude-code":
-			return createClaudeCode(model === undefined ? {} : { model });
+			return createClaudeCode({ auth: "auto" });
 		case "codex":
-			return createCodex(model === undefined ? {} : { model });
+			return createCodex({ auth: "auto" });
 		case "opencode": {
-			if (model === undefined) return createOpenCode();
-			const { provider, model: modelId } = splitProviderModel(model);
-			return createOpenCode({ model: modelId, provider });
+			if (model === undefined) return createOpenCode({ auth: "auto" });
+			return createOpenCode({
+				auth: "auto",
+				provider: splitProviderModel(model).provider,
+			});
 		}
 		case "pi": {
 			// `agentDir` is what makes the harness read the *user's* Pi
@@ -73,12 +75,7 @@ export const createHarnessAdapter = (
 			// discovery reads Pi's real store and execution read a different,
 			// empty one. Same directory for both is what keeps that list honest.
 			const agentDir = getAgentDir();
-			if (model === undefined) return createPi({ agentDir });
-			const { provider, model: modelId } = splitProviderModel(model);
-			return createPi({
-				agentDir,
-				model: provider === undefined ? modelId : `${provider}/${modelId}`,
-			});
+			return createPi({ agentDir });
 		}
 	}
 };

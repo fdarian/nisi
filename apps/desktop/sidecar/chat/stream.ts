@@ -1,5 +1,10 @@
 import type { HarnessAgent, HarnessAgentSession } from "@ai-sdk/harness/agent";
-import { type ToolSet, toUIMessageStream, type UIMessageChunk } from "ai";
+import {
+	type TextStreamPart,
+	type ToolSet,
+	toUIMessageStream,
+	type UIMessageChunk,
+} from "ai";
 import { Cause, type Context, Effect } from "effect";
 import { filterMeaninglessStreamErrors } from "../harness/stream-errors.ts";
 import { errorMessage } from "../rpc-errors.ts";
@@ -77,7 +82,9 @@ export async function* streamChatTurn(options: {
 	// interface `agent.stream()` is typed to return, hence the cast.
 	const tools = (result as unknown as { readonly tools: ToolSet }).tools;
 	const chunkStream = toUIMessageStream({
-		stream: filterMeaninglessStreamErrors(result.stream),
+		stream: filterMeaninglessStreamErrors(
+			result.stream as ReadableStream<TextStreamPart<ToolSet>>,
+		),
 		tools,
 		onError: (error) => {
 			Effect.runFork(

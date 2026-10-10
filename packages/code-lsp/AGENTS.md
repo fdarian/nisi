@@ -34,8 +34,8 @@ and later calls send a full `textDocument/didChange` with the current text.
   legend.
 - `src/binary.ts` — root-aware `resolveTsLspBinary`, including the environment override and
   worktree-local TypeScript 7 check.
-- `src/ts-lsp-download.ts` — the pinned platform release map, SHA-512 verification, atomic cache
-  install, and process-wide single-flight for concurrent worktree starts.
+- `src/ts-lsp-download.ts` — the pinned platform release map and TypeScript-specific cache
+  validation; `@repo/npm-tarball` handles SHA-512 verification, atomic install, and single-flight.
 - `src/client.ts` — the process lifecycle (spawn, wire the stdin/stdout pumps, `initialize`, graceful
   shutdown), document-open notifications, and the four query methods, composing everything above.
   The one file that touches `ChildProcessSpawner`.

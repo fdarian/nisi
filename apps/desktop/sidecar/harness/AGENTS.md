@@ -39,12 +39,13 @@ against a review session imports from this directory rather than reaching into a
 - `models.ts` — `getHarnessModels`, the per-harness `walkthrough.models`/`refreshModels` path.
   Checks binary presence first, then calls `HarnessModelCache` with the corresponding discovery
   function. A missing CLI returns unavailable even if a previous model list is cached.
-- `sandbox.ts` — `resolveSandboxSettings`: picks `@repo/harness-local`'s `LocalSandboxSettings` mode
-  (`"in-place"` vs `"relocated"`) per harness for a given `repoRoot`, and the fixed
-  `~/.nisi/harness-sandbox` scratch root relocated mode uses — see `@repo/harness-local`'s own
-  AGENTS.md ("Two sandbox modes") for why claude-code/codex/opencode need relocating and Pi doesn't.
-  Every caller that constructs a `HarnessAgent` against a review session's worktree goes through this
-  rather than re-deriving the mode itself.
+- `sandbox.ts` — the sandbox-backend seam: `SandboxOwner`, `SandboxBackend`, and `SANDBOX_BACKENDS`.
+  See "Sandbox backends" below.
+- `sandbox-local.ts` — `localSandboxBackend`, the only backend: `@repo/harness-local`'s
+  `createLocalSandbox` with `resolveSandboxSettings` picking `"in-place"` vs `"relocated"` per harness
+  for a `repoRoot`, and the fixed `~/.nisi/harness-sandbox` scratch root relocated mode uses — see
+  `@repo/harness-local`'s own AGENTS.md ("Two sandbox modes") for why claude-code/codex/opencode need
+  relocating and Pi doesn't. Relocation is a local-backend concern; other backends don't share it.
 - `inactive-tools.ts` — `FILE_MUTATING_BUILTINS`: each adapter's builtin tools that write to the
   filesystem, fed to `HarnessAgent`'s `inactiveTools` so an agent stays read-only against the user's
   real worktree. `bash` is deliberately left active in every case — an agent needs it to explore, and
@@ -60,6 +61,51 @@ against a review session imports from this directory rather than reaching into a
   `toUIMessageStream`, which turns *every* `error` part into a visible chunk unconditionally and
   offers no way to suppress one via its `onError` option (that only controls the chunk's message
   text).
+
+## Sandbox backends
+
+Where a harness CLI runs is chosen by the `sandboxMode` setting (`@repo/settings`). A feature that
+builds a `HarnessAgent` (`chat/sessions.ts`, `walkthrough/generate.ts`) reads the setting when it
+starts a *new* session — a live session keeps the backend it started on — and calls
+`SANDBOX_BACKENDS[mode].create(harness, repoRoot, owner)`. It passes the returned `provider` and
+`workDir` to `HarnessAgent` (`sandbox` / `sandboxConfig.workDir`) and later `session.stop()`s it.
+
+```ts
+type SandboxBackend = {
+  create(harness: HarnessId, repoRoot: string, owner: SandboxOwner): Promise<{
+    provider: HarnessV1SandboxProvider; // AI SDK's sandbox interface
+    workDir: string;                    // relative; HarnessAgent throws on an absolute path
+  }>;
+};
+type SandboxOwner =
+  | { kind: "chat"; threadId: string }
+  | { kind: "walkthrough"; reviewSessionId: string };
+```
+
+- `repoRoot` is the user's worktree; the agent must be able to read and edit it.
+- `owner` says what the sandbox is for. A backend that keeps persistent machines can key one by it
+  (a chat thread's id, or a review session's id for its walkthrough) so it can find and reuse or
+  clean up that machine; ids stay stable for the owner's lifetime. Chat threads don't survive a
+  sidecar restart, so anything keyed by `threadId` is orphaned by one. The local backend ignores it.
+- `create` may be slow (starting a VM, downloading a runtime); chat shows "Setting up sandbox…"
+  for a new thread while it runs. Throwing surfaces as a failed chat turn / `failed` walkthrough event.
+- There is no admin surface (status, setup, stop, remove); add one when a backend has a consumer for it.
+
+**Adding a backend**
+1. Add the value to `SANDBOX_MODES` in `packages/settings/src/sandbox-mode.ts`. That widens the
+   store's `Settings`, `@repo/sidecar-api`'s `SandboxMode` schema, and the frontend type.
+2. Write `sandbox-<name>.ts` here exporting a `SandboxBackend`.
+3. Add it to `SANDBOX_BACKENDS` in `sandbox.ts` — the `Record<SandboxMode, …>` fails to compile
+   until you do.
+4. Migration: none for the new value. The `sandboxMode` column is `text({ enum })` — typed in
+   TypeScript, no SQLite CHECK. Only if the backend also needs new settings columns, generate one
+   (`@repo/db`'s AGENTS.md; commit it alone).
+5. UI: `HarnessesSection` in `src/features/settings/settings-page.tsx` doesn't render a Sandbox
+   select while `SANDBOX_MODES` has one entry. Add a `SettingsRow` + `Select` over `SANDBOX_MODES`
+   that calls `update({ sandboxMode })` when the second value lands.
+6. The sidecar ships as a `bun build --compile` binary: anything the backend loads at runtime has to
+   survive that (see [compiled-binary-differences](../../../knowledge/compiled-binary-differences.md)).
+   `@repo/npm-tarball` downloads and verifies a pinned npm tarball into a cache directory.
 
 ## Gotchas
 
