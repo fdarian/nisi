@@ -700,7 +700,35 @@ export class Store extends Context.Service<Store>()("Store", {
 						const known = yield* settingsStore.getRepoPath(pr.owner, pr.repo);
 						if (known !== null) return;
 						const root = yield* resolveMainCloneRoot(repoRoot);
-						yield* verifyRepoPathMatchesOrigin(root, pr.owner, pr.repo);
+						const mismatch = yield* verifyRepoPathMatchesOrigin(
+							root,
+							pr.owner,
+							pr.repo,
+							{ detectMovedRepo: true },
+						).pipe(
+							Effect.as(null),
+							Effect.catchTag("RepoPathOriginMismatch", Effect.succeed),
+						);
+						if (mismatch !== null) {
+							// The user is never told otherwise: this runs after a CLI open has
+							// already succeeded, so a logged warning is invisible to them.
+							if (
+								mismatch.movedOnGitHub &&
+								mismatch.actualOwner !== null &&
+								mismatch.actualRepo !== null
+							) {
+								emit({
+									type: "repo-origin-moved",
+									path: mismatch.path,
+									expectedOwner: mismatch.expectedOwner,
+									expectedRepo: mismatch.expectedRepo,
+									actualOwner: mismatch.actualOwner,
+									actualRepo: mismatch.actualRepo,
+								});
+								return;
+							}
+							return yield* mismatch;
+						}
 						yield* settingsStore.setRepoPath(pr.owner, pr.repo, root);
 						yield* prIndex.refresh(root, pr.owner, pr.repo);
 					}).pipe(
