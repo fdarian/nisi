@@ -5,6 +5,7 @@ import {
 	type ChatThreadCloseFailureReporter,
 	closeChatThreadsForSession,
 } from "./chat/sessions.ts";
+import { stopGuideWatch } from "./guide/watch.ts";
 import { AttentionState } from "./pull-request-attention.ts";
 import type { AppServices } from "./services.ts";
 import { SessionWatch } from "./session-watch.ts";
@@ -138,6 +139,7 @@ const closeSessionSideEffects = (
 				Effect.all([
 					sessionWatch.remove(sessionId),
 					attention.remove(sessionId),
+					Effect.sync(() => stopGuideWatch(sessionId)),
 				]).pipe(
 					Effect.flatMap(() =>
 						Effect.logInfo("session close teardown finished", {

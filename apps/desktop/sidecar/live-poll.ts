@@ -6,7 +6,9 @@ import {
 import { SettingsStore } from "@repo/settings";
 import { Duration, Effect, Schedule } from "effect";
 import { emit } from "./events.ts";
+import { guideWatchedSessionIds } from "./guide/watch.ts";
 import { AttentionState } from "./pull-request-attention.ts";
+import { readRefState } from "./ref-state.ts";
 import { SessionWatch } from "./session-watch.ts";
 import { Store } from "./store.ts";
 
@@ -57,6 +59,29 @@ const previousSignatures = new Map<string, StoredSignature>();
 const unresolvableSessions = new Set<string>();
 
 /**
+ * `readRepoChangeSignature`, except that when no worktree dirt is looked at
+ * and `readRefState` can vouch for the repo layout, HEAD's movement is read as
+ * a fingerprint of `.git/HEAD`, its branch ref and `packed-refs` — plain file
+ * reads, no `git rev-parse` spawn every tick. The fingerprint stands in for
+ * `headSha`; nothing outside the equality check reads it.
+ */
+const readSignature = (repoRoot: string, includeUncommitted: boolean) =>
+	Effect.gen(function* () {
+		if (!includeUncommitted) {
+			const fingerprint = yield* readRefState(repoRoot, "HEAD").pipe(
+				Effect.catchTag("WorktreeReadFailed", () => Effect.succeed(undefined)),
+			);
+			if (fingerprint !== undefined) {
+				return {
+					headSha: `refs:${fingerprint}`,
+					files: new Map(),
+				} satisfies RepoChangeSignature;
+			}
+		}
+		return yield* readRepoChangeSignature(repoRoot, { includeUncommitted });
+	});
+
+/**
  * Reads one session's cheap change signature (HEAD sha, plus — only when
  * the `includeUncommitted` setting is on — a content hash per dirty path,
  * see `readRepoChangeSignature`) and emits `session-files-changed` if it
@@ -98,9 +123,7 @@ export const checkSessionForChanges = (sessionId: string) =>
 		const includeUncommitted = settings.includeUncommitted;
 
 		const repoRoot = yield* store.resolveSessionRepoRoot(sessionId);
-		const signature = yield* readRepoChangeSignature(repoRoot, {
-			includeUncommitted,
-		});
+		const signature = yield* readSignature(repoRoot, includeUncommitted);
 
 		const previous = previousSignatures.get(sessionId);
 		previousSignatures.set(sessionId, { signature, includeUncommitted });
@@ -110,6 +133,7 @@ export const checkSessionForChanges = (sessionId: string) =>
 			!repoChangeSignatureEquals(previous.signature, signature)
 		) {
 			emit({ type: "session-files-changed", sessionId });
+			emit({ type: "guide-changed", sessionId });
 			const attention = yield* AttentionState;
 			yield* attention.markChanged(sessionId);
 		}
@@ -142,7 +166,10 @@ const pollOnce = Effect.gen(function* () {
 	const store = yield* Store;
 	const sessionWatch = yield* SessionWatch;
 	const sessions = yield* store.listSessions();
-	const watchedIds = yield* sessionWatch.list();
+	const watchedIds = new Set([
+		...(yield* sessionWatch.list()),
+		...guideWatchedSessionIds(),
+	]);
 	const watchedSessions = sessions.filter((session) =>
 		watchedIds.has(session.id),
 	);

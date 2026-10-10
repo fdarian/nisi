@@ -5,7 +5,11 @@ import { Tabs, TabsContent } from "#/components/ui/tabs";
 import { useDevToolScope } from "#/features/devtools/dev-tool-context";
 import { useRefetchToasts } from "#/features/devtools/use-refetch-toasts";
 import { GuideView } from "#/features/guide/guide-view";
-import { guideExists, useGuide } from "#/features/guide/use-guide";
+import {
+	guideExists,
+	useGuide,
+	useGuideWatch,
+} from "#/features/guide/use-guide";
 import type { Session } from "#/features/pull-request/data/pr-data";
 import {
 	useFileChanges,
@@ -86,11 +90,7 @@ export function PrView({
 	// (`app-shell.tsx`'s `useTabSuspension`), so this has to live somewhere
 	// that survives that to land back on the same sub-tab on resume.
 	const [activeTab, setActiveTab] = useSessionActiveTab(session.id);
-	const guide = useGuide(
-		orpc,
-		session.id,
-		isSelectedTab && activeTab === "guide",
-	);
+	const guide = useGuide(orpc, session.id);
 	const hasGuide = guideExists(guide.data);
 	// The user can flip `walkthroughEnabled` off while sitting on the
 	// Walkthrough tab — its `TabsTrigger`/`TabsContent` stop rendering below,
@@ -144,6 +144,9 @@ export function PrView({
 		sessionId: session.id,
 	});
 	const watched = isFilesChangedVisible && windowFocused;
+	// Not tied to the sub-tab: the Guide tab itself appears when an agent
+	// publishes a guide, whichever tab is showing.
+	useGuideWatch(orpc, session.id, isSelectedTab && windowFocused);
 	useSessionWatch(orpc, session.id, watched);
 	// The same `watched` rising edge doubles as the refetch trigger for
 	// switching into this tab and regaining window focus — see
@@ -238,7 +241,6 @@ export function PrView({
 					{hasGuide && (
 						<TabsContent className="flex min-h-0 flex-1" value="guide">
 							<GuideView
-								enabled={isSelectedTab && tabsValue === "guide"}
 								files={files}
 								onOpenFile={openFile}
 								orpc={orpc}

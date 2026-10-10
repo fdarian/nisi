@@ -350,6 +350,7 @@ export function createMockSidecarClient(
 					kind: "missing",
 					path: "/repo/.nisi/guide/guide.mdx",
 				},
+			setWatching: async () => undefined,
 			// Only the `nisi guide` CLI calls these; no story does.
 			validate: async () => {
 				throw new Error("guide.validate has no story fixture");

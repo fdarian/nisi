@@ -97,6 +97,18 @@ export const guideContract = {
 		.input(Schema.Struct({ sessionId: Schema.String }))
 		.output(GuideResult)
 		.errors({ NOT_FOUND: {}, INTERNAL_SERVER_ERROR: {} }),
+	/**
+	 * Turns on the `guide-changed` event for a session: the sidecar then watches
+	 * its `.nisi/guide/` folder (even before it exists) and its head. `get` is
+	 * never polled, so a client that isn't watching only learns of a change by
+	 * refetching when it starts to.
+	 */
+	setWatching: oc
+		.input(
+			Schema.Struct({ sessionId: Schema.String, watching: Schema.Boolean }),
+		)
+		.output(Schema.Void)
+		.errors({ NOT_FOUND: {}, INTERNAL_SERVER_ERROR: {} }),
 	validate: oc
 		.input(GuideDiffInput)
 		.output(

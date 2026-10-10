@@ -39,6 +39,11 @@ import { OpenSessionTarget, Session } from "./sessions.ts";
  * `pullRequests.recordRepoPath`'s `ORIGIN_MOVED` error so the app can offer the
  * same `pullRequests.repointOrigin` fix without a picked folder.
  *
+ * `guide-changed` says a session's `guide.get` result is stale: its
+ * `.nisi/guide/` folder (bundle inputs or recorded checks) changed, or the
+ * session's head moved. Only sent for sessions the client asked for through
+ * `guide.setWatching`.
+ *
  * `code-index-lsp-status-changed` is rooted by worktree rather than session:
  * one pooled language server can serve multiple sessions, so every window
  * sharing that root must observe the same transition.
@@ -122,6 +127,11 @@ export const SidecarEvent = Schema.Union([
 		seq: Schema.Number,
 		type: Schema.Literal("session-updated"),
 		session: Session,
+	}),
+	Schema.Struct({
+		seq: Schema.Number,
+		type: Schema.Literal("guide-changed"),
+		sessionId: Schema.String,
 	}),
 	Schema.Struct({
 		seq: Schema.Number,

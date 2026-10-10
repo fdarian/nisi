@@ -55,14 +55,13 @@ const HANDLE_HIT_SIZE = { coarse: 12, fine: 12 };
 export function GuideView(props: {
 	orpc: SidecarQueryUtils;
 	session: Session;
-	enabled: boolean;
 	files: readonly FileChange[];
 	reviewState: ReadonlyMap<string, ReviewStateEntry>;
 	setViewed: (path: string, viewed: boolean) => void;
 	onOpenFile: (path: string) => void;
 }): React.ReactElement {
 	const [target, setTarget] = useState<GuideTarget | null>(null);
-	const guide = useGuide(props.orpc, props.session.id, props.enabled);
+	const guide = useGuide(props.orpc, props.session.id);
 
 	if (guide.error != null) {
 		return (

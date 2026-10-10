@@ -80,6 +80,7 @@ import {
 	scannablePaths,
 } from "./guide/symbols.ts";
 import { previewRepoGuide, validateRepoGuide } from "./guide/tools.ts";
+import { startGuideWatch, stopGuideWatch } from "./guide/watch.ts";
 import { listHarnesses } from "./harness/harnesses.ts";
 import { getHarnessModels } from "./harness/models.ts";
 import { receiveFrontendMarks } from "./launch-trace/handler.ts";
@@ -328,7 +329,7 @@ type ServerContext = WithEffectContext<AppServices> &
  * `port` is `undefined` in every real boot (prod, `bun run sidecar`
  * standalone) — Bun picks an ephemeral one, same as before. `index.ts` passes
  * an explicit one when `NISI_DEV_SIDECAR_PORT` is set, so the port survives a
- * `bun --watch` restart instead of rotating under it — see that file and the
+ * sidecar restart instead of rotating under it — see that file and the
  * root `AGENTS.md`'s "The seam".
  */
 export function bindHealthCheckServer(token: string, port?: number) {
@@ -2328,6 +2329,43 @@ export function attachRouter(
 				);
 				cacheSymbols(input.sessionId, key, symbols);
 				return { ...built, symbols };
+			}),
+			setWatching: authed.guide.setWatching.effect(function* ({
+				input,
+				errors,
+			}) {
+				if (!input.watching) {
+					stopGuideWatch(input.sessionId);
+					return;
+				}
+				const store = yield* Store;
+				const repoRoot = yield* resolveCodeIndexRepoRoot(
+					store.resolveSessionRepoRoot(input.sessionId),
+					input.sessionId,
+					errors,
+				);
+				yield* Effect.try({
+					try: () =>
+						startGuideWatch(
+							input.sessionId,
+							repoRoot,
+							() => emit({ type: "guide-changed", sessionId: input.sessionId }),
+							(cause) =>
+								void runWithMainContext(
+									Effect.logWarning("guide folder watcher failed", {
+										sessionId: input.sessionId,
+										cause,
+									}),
+								),
+						),
+					catch: (cause) =>
+						errors.INTERNAL_SERVER_ERROR({
+							message: `couldn't watch ${repoRoot}: ${cause instanceof Error ? cause.message : String(cause)}`,
+						}),
+				});
+				// Baselines the head so the first real move is seen; the client
+				// refetches on its own when it starts watching.
+				yield* checkSessionForChanges(input.sessionId);
 			}),
 			validate: authed.guide.validate.effect(function* ({ input, errors }) {
 				return yield* Effect.tryPromise({

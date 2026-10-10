@@ -73,8 +73,8 @@ boot; in dev, `scripts/dev.ts` pins both instead, passed down via
 `NISI_DEV_SIDECAR_PORT`/`NISI_DEV_SIDECAR_TOKEN` (see [Dev/prod isolation](#devprod-isolation)) —
 the port is a second devsess sticky port on the session, so it survives across separate `bun dev`
 runs the same way the vite port does; the token has no sticky equivalent, so it's minted fresh each
-run and held for that run's whole lifetime. Both matter because the sidecar runs under `bun --watch`
-there, and a per-boot-random pair would otherwise rotate on every restart out from under a frontend
+run and held for that run's whole lifetime. Both matter because the sidecar is restarted on every save
+there (`scripts/watch-sidecar.ts`), and a per-boot-random pair would otherwise rotate on every restart out from under a frontend
 that already froze `{ port, token }` into its own env at its own boot. `acquireSidecar`'s atomic
 create is what makes two sidecars booting at the same instant against the same data dir resolve to
 exactly one owner instead of a split brain — see `sidecar/AGENTS.md`'s `index.ts` entry for the
@@ -96,7 +96,7 @@ in `lib.rs` — keep them if you touch that file.
 claims and publishes it with, so both ends of the handshake share one dependency.
 
 - **Dev**: `bun dev` runs `scripts/dev.ts`, a [devsess](https://devsess.fdarian.com/) orchestrator
-  (see below) that races the sidecar (`bun --watch sidecar/index.ts`) against `tauri dev`
+  (see below) that races the sidecar (`scripts/watch-sidecar.ts`, which restarts a fresh `sidecar/index.ts` process when a file in its import graph changes) against `tauri dev`
   (`Effect.raceAll` — either exiting kills the other, via each process's Effect `Scope`).
   `beforeDevCommand` only runs `vite`; the sidecar is started by `dev.ts`, not by Tauri. `bun dev
   --browser` swaps `tauri dev` for a plain `vite dev` against the same sidecar instead — see
