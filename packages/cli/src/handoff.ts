@@ -1,6 +1,6 @@
-import { homedir } from "node:os";
 import { join } from "node:path";
 import { isDefinedError, safe } from "@orpc/client";
+import { getDataDirConfig } from "@repo/db/paths";
 import type { OpenSessionTarget, Session } from "@repo/sidecar-api";
 import { makeSidecarClient } from "@repo/sidecar-api/client";
 import { readSidecarJson } from "deskkit/sidecar";
@@ -35,12 +35,8 @@ const pollTimeoutConfig = Config.number("NISI_LAUNCH_TIMEOUT_MS").pipe(
 	Config.withDefault(15_000),
 );
 
-/** Same default as the sidecar's own handshake file — see `apps/desktop/sidecar/index.ts`. */
-export const dataDirConfig = Config.string("NISI_DATA_DIR").pipe(
-	Config.withDefault(
-		join(homedir(), "Library", "Application Support", "com.nisi.desktop"),
-	),
-);
+/** Same resolution as the sidecar's own handshake file — see `apps/desktop/sidecar/index.ts`. */
+export const dataDirConfig = getDataDirConfig();
 
 /**
  * Same `<dataDir>/logs/sidecar.log` the sidecar itself writes to (see
