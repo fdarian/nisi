@@ -26,6 +26,7 @@
 @theme inline {
 	--animate-skeleton: skeleton 2s -1s infinite linear;
 	--animate-caret-blink: 1s ease-out infinite caret-blink;
+	--animate-dot-loader: dot-loader 1.4s ease-in-out infinite;
 	--animate-toast-success-odd: toast-success-odd 0.32s
 		cubic-bezier(0.5, 1, 0.89, 1);
 	--animate-toast-success-even: toast-success-even 0.32s
@@ -93,6 +94,18 @@
 	@keyframes skeleton {
 		to {
 			background-position: -200% 0;
+		}
+	}
+
+	@keyframes dot-loader {
+		0%,
+		40%,
+		100% {
+			opacity: 0.18;
+		}
+
+		15% {
+			opacity: 1;
 		}
 	}
 

@@ -2,6 +2,7 @@
 
 import { XIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { DotLoader } from "#/components/dot-loader";
 import { Avatar, AvatarFallback, AvatarImage } from "#/components/ui/avatar";
 import { Badge } from "#/components/ui/badge";
 import {
@@ -108,6 +109,9 @@ export function OpenPullRequestPalette(
 	);
 	const results = search.results;
 	const searchErrorMessage = friendlySearchError(search.error);
+	// A pending debounce counts too: between the keystroke and the request
+	// firing, nothing else on screen says the palette noticed the typing.
+	const isLoading = search.isSearching || query !== debouncedQuery;
 	const recent = useSearchPullRequests(props.orpc, "", props.open, []);
 	const saved = usePullRequestRepositories(props.orpc, props.open);
 	const repositories = paletteRepositories(
@@ -293,6 +297,11 @@ export function OpenPullRequestPalette(
 											</div>
 										) : undefined
 									}
+									endContent={
+										isLoading && results.length > 0 ? (
+											<DotLoader className="me-4 w-4 shrink-0 text-muted-foreground opacity-60" />
+										) : undefined
+									}
 									onKeyDown={(event) => {
 										if (
 											event.key === "Backspace" &&
@@ -308,7 +317,18 @@ export function OpenPullRequestPalette(
 								/>
 								<Separator />
 								<CommandEmpty>
-									{searchErrorMessage ?? "No pull requests found."}
+									{results.length === 0 &&
+									isLoading &&
+									searchErrorMessage === null ? (
+										<div className="flex items-center justify-center gap-3 text-muted-foreground">
+											<DotLoader className="w-8" />
+											{query === "" || debouncedQuery === ""
+												? "Loading pull requests…"
+												: "Searching…"}
+										</div>
+									) : (
+										(searchErrorMessage ?? "No pull requests found.")
+									)}
 								</CommandEmpty>
 								<CommandList>
 									{(pr: PullRequestSearchResult) => (

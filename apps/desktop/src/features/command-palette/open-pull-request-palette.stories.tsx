@@ -5,6 +5,7 @@ import type {
 	PullRequestRepository,
 	PullRequestSearchResult,
 } from "#/features/pull-request/data/pull-requests-data";
+import type { SidecarQueryUtils } from "#/infra/backend-context";
 import { createMockOrpc } from "../../../.storybook/mock-orpc";
 import { OpenPullRequestPalette } from "./open-pull-request-palette";
 
@@ -39,16 +40,34 @@ const RESULTS: PullRequestSearchResult[] = [
 	},
 ];
 
-const orpc = createMockOrpc({
+const FIXTURES = {
 	pullRequestSearchResults: RESULTS,
 	pullRequestRepositories: [
 		{ owner: "fdarian", repo: "furl" },
 		{ owner: "acme", repo: "widgets" },
 	],
+};
+
+const orpc = createMockOrpc(FIXTURES);
+
+// The mock's delay is a real setTimeout, so a delay longer than any story
+// session keeps the search pending.
+const NEVER_MS = 60 * 60 * 1000;
+
+const slowOrpc = createMockOrpc({
+	...FIXTURES,
+	pullRequestSearchDelayMs: 1500,
+});
+const neverOrpc = createMockOrpc({
+	...FIXTURES,
+	pullRequestSearchDelayMs: NEVER_MS,
 });
 
-function PaletteStory(): React.ReactElement {
-	const [open, setOpen] = useState(false);
+function PaletteStory(props: {
+	orpc?: SidecarQueryUtils;
+	initiallyOpen?: boolean;
+}): React.ReactElement {
+	const [open, setOpen] = useState(props.initiallyOpen === true);
 	const [repositories, setRepositories] = useState<PullRequestRepository[]>([]);
 	return (
 		<div className="p-8">
@@ -56,7 +75,7 @@ function PaletteStory(): React.ReactElement {
 			<OpenPullRequestPalette
 				open={open}
 				onOpenChange={setOpen}
-				orpc={orpc}
+				orpc={props.orpc === undefined ? orpc : props.orpc}
 				repositories={repositories}
 				onRepositoriesChange={setRepositories}
 				findExistingSessionId={() => undefined}
@@ -75,3 +94,13 @@ export default meta;
 
 type Story = StoryObj<typeof meta>;
 export const RepositoryFilter: Story = {};
+
+/** The search never settles: the empty state shows the dot loader. */
+export const Loading: Story = {
+	args: { orpc: neverOrpc, initiallyOpen: true },
+};
+
+/** First open shows the empty-state loader, then results; typing shows the input-row loader while the previous results stay up. */
+export const SlowSearch: Story = {
+	args: { orpc: slowOrpc, initiallyOpen: true },
+};

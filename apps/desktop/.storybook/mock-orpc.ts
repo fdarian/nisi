@@ -132,6 +132,8 @@ function settleMockResult<T>(result: MockResult<T> | undefined): Promise<T> {
 export type MockOrpcData = {
 	files?: readonly FileChange[];
 	filesDelayMs?: number;
+	/** Delays `pullRequests.search` — a value too large to ever elapse in a story keeps the first search pending. */
+	pullRequestSearchDelayMs?: number;
 	pullRequestSearchResults?: readonly PullRequestSearchResult[];
 	pullRequestRepositories?: readonly PullRequestRepository[];
 	/** `repositories.list`'s result. */
@@ -397,13 +399,18 @@ export function createMockSidecarClient(
 			ciJob: neverSettles,
 			rerunCiJob: neverSettles,
 			repositories: async () => data.pullRequestRepositories ?? [],
-			search: async (input) =>
-				(data.pullRequestSearchResults ?? []).filter(
+			search: async (input) => {
+				if (data.pullRequestSearchDelayMs !== undefined)
+					await new Promise((resolve) =>
+						setTimeout(resolve, data.pullRequestSearchDelayMs),
+					);
+				return (data.pullRequestSearchResults ?? []).filter(
 					(pr) =>
 						(input.repos.length === 0 ||
 							input.repos.includes(`${pr.owner}/${pr.repo}`)) &&
 						pr.title.toLowerCase().includes(input.query.toLowerCase()),
-				),
+				);
+			},
 			open: neverSettles,
 			recordRepoPath: async (input) => input,
 			repointOrigin: neverSettles,
