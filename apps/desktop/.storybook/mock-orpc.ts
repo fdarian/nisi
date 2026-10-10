@@ -20,6 +20,7 @@ import { AsyncIteratorClass } from "@orpc/shared";
 import { createTanstackQueryUtils } from "@orpc/tanstack-query";
 import type {
 	RepositoryDetail,
+	RepositorySessionStateBatch,
 	RepositorySummary,
 	SidecarClient,
 } from "@repo/sidecar-api";
@@ -133,6 +134,15 @@ export type MockOrpcData = {
 	repositories?: MockResult<readonly RepositorySummary[]>;
 	/** `repositories.get`'s result, whichever `owner/repo` is asked for — omit to leave it pending forever. */
 	repositoryDetail?: MockResult<RepositoryDetail>;
+	/** `repositories.sessionStates`'s events, each yielded `delayMs` after the previous one — omit for a stream that ends at once, i.e. nothing was pending. */
+	repositorySessionStates?: {
+		events: readonly {
+			delayMs: number;
+			batch: RepositorySessionStateBatch;
+		}[];
+		/** After the last event: `end` (the default) completes the stream, `hang` leaves it open so the story stays mid-resolution, `{ error }` fails it. */
+		afterEvents?: "end" | "hang" | { error: string };
+	};
 	/** `walkthrough.get`'s result — omit for "nothing generated yet", pass a fixture for the loaded reader. */
 	storedWalkthrough?: StoredWalkthrough | null;
 	/** Overrides `DEFAULT_HARNESSES` wholesale — pass a full four-entry list, not a patch. */
@@ -199,6 +209,18 @@ function neverIterator<T>(): AsyncIteratorClass<T, void> {
 		() => neverSettles(),
 		async () => undefined,
 	);
+}
+
+async function* replayRepositorySessionStates(
+	stream: NonNullable<MockOrpcData["repositorySessionStates"]>,
+): AsyncGenerator<RepositorySessionStateBatch> {
+	for (const event of stream.events) {
+		await new Promise((resolve) => setTimeout(resolve, event.delayMs));
+		yield event.batch;
+	}
+	if (stream.afterEvents === "hang") await neverSettles();
+	if (typeof stream.afterEvents === "object")
+		throw new Error(stream.afterEvents.error);
 }
 
 function liveValue<T>(value: T): AsyncIteratorClass<T, void> {
@@ -339,6 +361,12 @@ export function createMockSidecarClient(
 		repositories: {
 			list: () => settleMockResult(data.repositories ?? []),
 			get: () => settleMockResult(data.repositoryDetail),
+			sessionStates: async () =>
+				toAsyncIteratorClass(
+					replayRepositorySessionStates(
+						data.repositorySessionStates ?? { events: [] },
+					),
+				),
 		},
 		pullRequests: {
 			ciJob: neverSettles,

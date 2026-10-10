@@ -23,6 +23,7 @@ import { listOpenPullRequests } from "./open-pull-requests.ts";
 import { fetchPullRequestOverview } from "./overview.ts";
 import {
 	fetchPullRequestState,
+	fetchPullRequestStates,
 	headRef,
 	pullRequest,
 	repository,
@@ -108,6 +109,8 @@ export const GhGitHub = {
 					provide(pullRequest(repoRoot, number)),
 				pullRequestState: (cwd, owner, repo, number) =>
 					provide(fetchPullRequestState(cwd, owner, repo, number)),
+				pullRequestStates: (cwd, owner, repo) =>
+					provide(fetchPullRequestStates(cwd, owner, repo)),
 				headRef: (repoRoot, number) => provide(headRef(repoRoot, number)),
 				search: (cwd, query, repos) =>
 					provide(searchPullRequests(cwd, query, repos)),

@@ -57,6 +57,7 @@ export {
 	type PullRequestSearchError,
 	type PullRequestStackMergeError,
 	type PullRequestStateError,
+	type PullRequestStatesError,
 	type PullRequestWorktreeError,
 	type RepoMergeMethodsError,
 	RepoPathNoOriginRemote,

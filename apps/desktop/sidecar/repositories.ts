@@ -3,6 +3,7 @@ import {
 	GitHub,
 	originUrlOrNull,
 	type PullRequestStateError,
+	type PullRequestStatesError,
 	verifyRepoPathMatchesOrigin,
 } from "@repo/git";
 import {
@@ -16,9 +17,10 @@ import type {
 	RepositoryDetail,
 	RepositoryProblem,
 	RepositorySession,
+	RepositorySessionStateBatch,
 	RepositorySummary,
 } from "@repo/sidecar-api";
-import { Effect } from "effect";
+import { Effect, Stream } from "effect";
 import type { ChildProcessSpawner } from "effect/unstable/process";
 import { PrIndex } from "./pr-index.ts";
 
@@ -165,7 +167,7 @@ const fromGitHub = (state: "OPEN" | "CLOSED" | "MERGED"): PrState =>
 	state === "OPEN" ? "open" : state === "MERGED" ? "merged" : "closed";
 
 const describeStateFailure = (
-	error: PullRequestStateError | GitCommandError,
+	error: PullRequestStateError | PullRequestStatesError | GitCommandError,
 ): string => {
 	switch (error._tag) {
 		case "GhNotAuthenticated":
@@ -178,102 +180,177 @@ const describeStateFailure = (
 			return error.reason === ""
 				? "GitHub could not return this pull request"
 				: error.reason;
+		case "GitHubUnreachable":
+			return `GitHub could not be reached: ${error.reason}`;
 		case "GitCommandError":
 			return `${error.command} could not be run: ${error.stderr || String(error.cause)}`;
 	}
 };
 
-type Resolution = RepositorySession["state"];
+type ResolvedState = Extract<
+	RepositorySession["state"],
+	{ readonly kind: "resolved" }
+>;
 
-/**
- * Open per the PR index, else a persisted terminal state, else asked of
- * GitHub (once per PR number, 4 at a time) and persisted. A failed lookup
- * leaves only its own sessions unresolved and persists nothing for them.
- */
-const resolveSessionStates = (
+/** Open per the PR index, else a persisted terminal state; `null` when only GitHub can say. A persisted `open` is stale by definition, so it doesn't count. */
+const knownState = (
 	owner: string,
 	repo: string,
-	sessions: ReadonlyArray<PullRequestSessionRecord>,
-): Effect.Effect<
-	ReadonlyArray<{ session: PullRequestSessionRecord; state: Resolution }>,
+	session: PullRequestSessionRecord,
+): Effect.Effect<ResolvedState | null, never, PrIndex> =>
+	Effect.gen(function* () {
+		const index = yield* PrIndex;
+		const inIndex = yield* index.lookupPullRequest(owner, repo, session.number);
+		if (inIndex !== undefined) return { kind: "resolved", state: "open" };
+		return session.prState === "merged" || session.prState === "closed"
+			? { kind: "resolved", state: session.prState }
+			: null;
+	});
+
+/**
+ * Streams the PR states `getRepository` left `pending`, each persisted
+ * before it is yielded so a client that goes away keeps the work done so far.
+ * One `gh pr list` answers most of them as the first event; the rest, which
+ * that listing didn't return, are looked up one `gh pr view` at a time (4 at
+ * once) and yielded as each lands. A failed lookup is yielded `unresolved`
+ * and persists nothing. Account-wide failures (not authenticated,
+ * rate-limited) fail the listing for every PR identically, so they're
+ * reported for all of them at once instead of retried per PR.
+ */
+export const streamSessionStates = (
+	owner: string,
+	repo: string,
+): Stream.Stream<
+	RepositorySessionStateBatch,
 	ReviewStoreError | SessionNotFound,
 	GitHub | PrIndex | ReviewStore | ChildProcessSpawner.ChildProcessSpawner
 > =>
-	Effect.gen(function* () {
-		const github = yield* GitHub;
-		const index = yield* PrIndex;
-		const reviews = yield* ReviewStore;
-		const known = new Map<string, Resolution>();
-		for (const session of sessions) {
-			const inIndex = yield* index.lookupPullRequest(
+	Stream.unwrap(
+		Effect.gen(function* () {
+			const github = yield* GitHub;
+			const reviews = yield* ReviewStore;
+			const cwd = process.cwd();
+			const sessionsByNumber = new Map<number, PullRequestSessionRecord[]>();
+			for (const session of yield* reviews.listPullRequestSessions({
 				owner,
 				repo,
-				session.number,
-			);
-			if (inIndex !== undefined)
-				known.set(session.id, { kind: "resolved", state: "open" });
-			else if (session.prState === "merged" || session.prState === "closed")
-				known.set(session.id, { kind: "resolved", state: session.prState });
-		}
-		const unresolved = sessions.filter((session) => !known.has(session.id));
-		const fetched = new Map(
-			yield* Effect.forEach(
-				[...new Set(unresolved.map((session) => session.number))],
-				(number) =>
-					github.pullRequestState(process.cwd(), owner, repo, number).pipe(
-						Effect.tapError((error) =>
-							Effect.logWarning("Could not read a pull request's state", {
-								owner,
-								repo,
-								number,
-								error,
-							}),
-						),
-						Effect.match({
-							onFailure: (error): [number, Resolution] => [
-								number,
-								{ kind: "unresolved", reason: describeStateFailure(error) },
-							],
-							onSuccess: (state): [number, Resolution] => [
-								number,
-								{ kind: "resolved", state: fromGitHub(state) },
-							],
+			})) {
+				if ((yield* knownState(owner, repo, session)) !== null) continue;
+				const sharing = sessionsByNumber.get(session.number);
+				if (sharing === undefined)
+					sessionsByNumber.set(session.number, [session]);
+				else sharing.push(session);
+			}
+			const pending = [...sessionsByNumber.keys()];
+			if (pending.length === 0) return Stream.empty;
+
+			const persist = (number: number, state: PrState) =>
+				Effect.forEach(sessionsByNumber.get(number) ?? [], (session) =>
+					session.prState === state
+						? Effect.void
+						: reviews.setPrState(session.id, state),
+				);
+			const unresolved = (
+				number: number,
+				error: PullRequestStateError | PullRequestStatesError | GitCommandError,
+			) => ({
+				prNumber: number,
+				state: {
+					kind: "unresolved" as const,
+					reason: describeStateFailure(error),
+				},
+			});
+			const lookUp = (number: number) =>
+				github.pullRequestState(cwd, owner, repo, number).pipe(
+					Effect.tapError((error) =>
+						Effect.logWarning("Could not read a pull request's state", {
+							owner,
+							repo,
+							number,
+							error,
 						}),
 					),
-				{ concurrency: 4 },
-			),
-		);
-		for (const session of unresolved) {
-			const resolution = fetched.get(session.number);
-			if (resolution === undefined)
-				return yield* Effect.die(
-					new Error(`no state fetched for PR #${session.number}`),
+					Effect.matchEffect({
+						onFailure: (error) => Effect.succeed([unresolved(number, error)]),
+						onSuccess: (state) =>
+							persist(number, fromGitHub(state)).pipe(
+								Effect.as([
+									{
+										prNumber: number,
+										state: {
+											kind: "resolved" as const,
+											state: fromGitHub(state),
+										},
+									},
+								]),
+							),
+					}),
 				);
-			known.set(session.id, resolution);
-			if (
-				resolution.kind === "resolved" &&
-				session.prState !== resolution.state
-			)
-				yield* reviews.setPrState(session.id, resolution.state);
-		}
-		return yield* Effect.forEach(sessions, (session) => {
-			const state = known.get(session.id);
-			return state === undefined
-				? Effect.die(new Error(`no state resolved for session ${session.id}`))
-				: Effect.succeed({ session, state });
-		});
-	});
+			const lookUpEach = (numbers: ReadonlyArray<number>) =>
+				Stream.fromIterable(numbers).pipe(
+					Stream.mapEffect(lookUp, { concurrency: 4, unordered: true }),
+				);
+
+			const listing = yield* github.pullRequestStates(cwd, owner, repo).pipe(
+				Effect.tapError((error) =>
+					Effect.logWarning(
+						"Could not list a repository's pull request states",
+						{
+							owner,
+							repo,
+							error,
+						},
+					),
+				),
+				Effect.match({
+					onFailure: (error) => ({ listed: false as const, error }),
+					onSuccess: (states) => ({ listed: true as const, states }),
+				}),
+			);
+			if (!listing.listed) {
+				const error = listing.error;
+				return error._tag === "GhNotAuthenticated" ||
+					error._tag === "GhRateLimited"
+					? Stream.make(pending.map((number) => unresolved(number, error)))
+					: lookUpEach(pending);
+			}
+
+			const listed = new Map(
+				listing.states.map((entry) => [entry.number, entry.state]),
+			);
+			const answered = pending.flatMap((number) => {
+				const state = listed.get(number);
+				return state === undefined
+					? []
+					: [{ number, state: fromGitHub(state) }];
+			});
+			yield* Effect.forEach(answered, (entry) =>
+				persist(entry.number, entry.state),
+			);
+			const answeredNumbers = new Set(answered.map((entry) => entry.number));
+			return Stream.concat(
+				answered.length === 0
+					? Stream.empty
+					: Stream.make(
+							answered.map((entry) => ({
+								prNumber: entry.number,
+								state: { kind: "resolved" as const, state: entry.state },
+							})),
+						),
+				lookUpEach(pending.filter((number) => !answeredNumbers.has(number))),
+			);
+		}),
+	);
 
 export const getRepository = (
 	owner: string,
 	repo: string,
 ): Effect.Effect<
 	RepositoryDetail,
-	SettingsStoreError | ReviewStoreError | SessionNotFound | GitCommandError,
+	SettingsStoreError | ReviewStoreError | GitCommandError,
 	| SettingsStore
 	| ReviewStore
 	| PrIndex
-	| GitHub
 	| ChildProcessSpawner.ChildProcessSpawner
 > =>
 	Effect.gen(function* () {
@@ -290,10 +367,16 @@ export const getRepository = (
 			problem === "not-a-git-repo"
 				? null
 				: yield* originUrlOrNull(known.path);
-		const resolved = yield* resolveSessionStates(
-			known.owner,
-			known.repo,
-			known.sessions,
+		const sessions = yield* Effect.forEach(known.sessions, (session) =>
+			knownState(known.owner, known.repo, session).pipe(
+				Effect.map((state) => ({
+					id: session.id,
+					prNumber: session.number,
+					prTitle: session.title,
+					state: state ?? ({ kind: "pending" } as const),
+					updatedAt: session.updatedAt,
+				})),
+			),
 		);
 		return {
 			owner: known.owner,
@@ -301,12 +384,6 @@ export const getRepository = (
 			path: known.path,
 			remoteUrl,
 			problem,
-			sessions: resolved.map(({ session, state }) => ({
-				id: session.id,
-				prNumber: session.number,
-				prTitle: session.title,
-				state,
-				updatedAt: session.updatedAt,
-			})),
+			sessions,
 		};
 	});

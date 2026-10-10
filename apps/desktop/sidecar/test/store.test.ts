@@ -91,6 +91,7 @@ const mockGitHub: GitHubShape = {
 			isCrossRepository: false,
 		}),
 	pullRequestState: () => Effect.die(new Error("unused mock GitHub method")),
+	pullRequestStates: () => Effect.die(new Error("unused mock GitHub method")),
 	headRef: () => Effect.succeed("main"),
 	search: () => Effect.die(new Error("unused mock GitHub method")),
 	checks: () => Effect.die(new Error("unused mock GitHub method")),

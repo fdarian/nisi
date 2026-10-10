@@ -19,6 +19,27 @@ export function useRepository(
 	);
 }
 
+/**
+ * `repositories.sessionStates`'s events, accumulated: `data` is every batch
+ * received so far, growing while the stream runs (`.streamedOptions()`, unlike
+ * `.liveOptions()`, appends rather than replaces). Held back until `enabled` —
+ * the caller waits for `get` so the sidecar's pending set reflects what that
+ * response already showed as resolved.
+ */
+export function useRepositorySessionStates(
+	orpc: SidecarQueryUtils,
+	owner: string,
+	repo: string,
+	enabled: boolean,
+) {
+	return useQuery(
+		orpc.repositories.sessionStates.streamedOptions({
+			input: { owner, repo },
+			enabled,
+		}),
+	);
+}
+
 /** `undefined` outside the desktop shell (browser dev, Storybook), where paths just stay absolute. */
 export function useHomeDir(): string | undefined {
 	return useQuery({

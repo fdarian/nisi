@@ -12,6 +12,7 @@ import type {
 	PullRequestSearchError,
 	PullRequestStackMergeError,
 	PullRequestStateError,
+	PullRequestStatesError,
 	RepoMergeMethodsError,
 	WorkflowApprovalFailed,
 	WorkflowApprovalForbidden,
@@ -98,6 +99,18 @@ export type GitHubShape = {
 	) => Effect.Effect<
 		"OPEN" | "CLOSED" | "MERGED",
 		PullRequestStateError | GitCommandError
+	>;
+	/** Every PR of a repository in one `gh pr list`, newest first and capped, so a PR missing from it still needs {@link pullRequestState}. */
+	pullRequestStates: (
+		cwd: string,
+		owner: string,
+		repo: string,
+	) => Effect.Effect<
+		ReadonlyArray<{
+			readonly number: number;
+			readonly state: "OPEN" | "CLOSED" | "MERGED";
+		}>,
+		PullRequestStatesError | GitCommandError
 	>;
 	headRef: (
 		repoRoot: string,

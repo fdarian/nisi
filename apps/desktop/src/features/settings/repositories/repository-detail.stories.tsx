@@ -1,5 +1,9 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import { makeSessions, nisiDetail } from "./repositories.fixture";
+import {
+	makeSessions,
+	nisiDetail,
+	withPendingStates,
+} from "./repositories.fixture";
 import {
 	RepositoriesStory,
 	stubTauriForRepositories,
@@ -37,27 +41,90 @@ const unresolvedReasons = [
 	"GitHub could not return this pull request",
 ];
 
-export const UnresolvedStates: Story = {
-	args: {
-		initialPath: DETAIL_PATH,
-		data: {
-			repositoryDetail: nisiDetail({
-				sessions: makeSessions(12, Date.now()).map((session, index) =>
-					index % 4 === 1
-						? {
-								...session,
+/** The panel and the All list are there at once; skeletons hold each pending row's state icon until its event lands, and the tabs fill in as they do. */
+export const ResolvingStates: Story = (() => {
+	const detail = withPendingStates(makeSessions(30, Date.now()), 2);
+	const batch = (from: number, to: number) =>
+		detail.resolutions.slice(from, to);
+	return {
+		args: {
+			initialPath: DETAIL_PATH,
+			data: {
+				repositoryDetail: nisiDetail({ sessions: [...detail.sessions] }),
+				repositorySessionStates: {
+					events: [
+						{ delayMs: 2500, batch: batch(0, 8) },
+						{ delayMs: 1500, batch: batch(8, 9) },
+						{ delayMs: 1500, batch: batch(9, 10) },
+					],
+					afterEvents: "hang",
+				},
+			},
+		},
+	};
+})();
+
+export const StatesStreamedIn: Story = (() => {
+	const detail = withPendingStates(makeSessions(30, Date.now()), 3);
+	return {
+		args: {
+			initialPath: DETAIL_PATH,
+			data: {
+				repositoryDetail: nisiDetail({ sessions: [...detail.sessions] }),
+				repositorySessionStates: {
+					events: [
+						{ delayMs: 1500, batch: detail.resolutions.slice(0, 6) },
+						{ delayMs: 1000, batch: detail.resolutions.slice(6) },
+					],
+				},
+			},
+		},
+	};
+})();
+
+export const UnresolvedStates: Story = (() => {
+	const detail = withPendingStates(makeSessions(12, Date.now()), 4);
+	return {
+		args: {
+			initialPath: DETAIL_PATH,
+			data: {
+				repositoryDetail: nisiDetail({ sessions: [...detail.sessions] }),
+				repositorySessionStates: {
+					events: [
+						{
+							delayMs: 500,
+							batch: detail.resolutions.map((resolution, index) => ({
+								prNumber: resolution.prNumber,
 								state: {
 									kind: "unresolved" as const,
 									reason:
-										unresolvedReasons[(index - 1) / 4] ?? unresolvedReasons[0],
+										unresolvedReasons[index % unresolvedReasons.length] ??
+										unresolvedReasons[0],
 								},
-							}
-						: session,
-				),
-			}),
+							})),
+						},
+					],
+				},
+			},
 		},
-	},
-};
+	};
+})();
+
+export const StateStreamFailed: Story = (() => {
+	const detail = withPendingStates(makeSessions(12, Date.now()), 3);
+	return {
+		args: {
+			initialPath: DETAIL_PATH,
+			data: {
+				repositoryDetail: nisiDetail({ sessions: [...detail.sessions] }),
+				repositorySessionStates: {
+					events: [{ delayMs: 1000, batch: detail.resolutions.slice(0, 2) }],
+					afterEvents: { error: "database is locked" },
+				},
+			},
+		},
+	};
+})();
 
 export const PathMissing: Story = {
 	args: {

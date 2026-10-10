@@ -4,7 +4,13 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { BunServices } from "@effect/platform-bun";
 import { SqliteDb } from "@repo/db";
-import { GitHub, type GitHubShape, PullRequestNotFound } from "@repo/git";
+import {
+	GhNotAuthenticated,
+	GitHub,
+	type GitHubShape,
+	GitHubUnreachable,
+	PullRequestNotFound,
+} from "@repo/git";
 import { ReviewStore } from "@repo/review";
 import { SettingsStore } from "@repo/settings";
 import { ConfigProvider, type Context, Effect, Layer, Stream } from "effect";
@@ -14,6 +20,7 @@ import {
 	getRepository,
 	listRepositories,
 	sortByActivity,
+	streamSessionStates,
 } from "../repositories.ts";
 
 const sh = async (cwd: string, args: ReadonlyArray<string>) => {
@@ -45,7 +52,9 @@ const unused = () => Effect.die(new Error("unused mock GitHub method"));
 const unusedStream = () => Stream.die(new Error("unused mock GitHub method"));
 
 const githubWith = (
-	pullRequestState: GitHubShape["pullRequestState"],
+	overrides: Partial<
+		Pick<GitHubShape, "pullRequestState" | "pullRequestStates">
+	> = {},
 ): GitHubShape => ({
 	listOpenPullRequests: unused,
 	getActionsJob: unused,
@@ -53,7 +62,8 @@ const githubWith = (
 	rerunActionsJob: unused,
 	repository: unused,
 	pullRequest: unused,
-	pullRequestState,
+	pullRequestState: unused,
+	pullRequestStates: unused,
 	headRef: unused,
 	search: unused,
 	checks: unused,
@@ -70,6 +80,7 @@ const githubWith = (
 	watchMergeStatus: unusedStream,
 	watchStack: unusedStream,
 	watchOverview: unusedStream,
+	...overrides,
 });
 
 const indexWithOpen = (
@@ -225,7 +236,7 @@ describe("listRepositories", () => {
 						return yield* listRepositories;
 					}).pipe(
 						Effect.provide(
-							makeLayer(dataDir, githubWith(unused), indexWithOpen([2, 3])),
+							makeLayer(dataDir, githubWith(), indexWithOpen([2, 3])),
 						),
 					),
 				);
@@ -252,61 +263,52 @@ describe("listRepositories", () => {
 	});
 });
 
-describe("getRepository", () => {
-	const seed = Effect.gen(function* () {
-		const reviews = yield* ReviewStore;
-		const opened = [];
-		for (const number of [1, 2, 3, 4]) {
-			opened.push(
-				yield* reviews.openSession({
-					repoRoot: `/wt/${number}`,
-					baseRef: "main",
-					headRef: `f${number}`,
-					pr: { owner: "acme", repo: "widgets", number, title: `PR ${number}` },
-				}),
-			);
-		}
-		return opened;
-	});
+const seedPullRequests = Effect.gen(function* () {
+	const reviews = yield* ReviewStore;
+	const opened = [];
+	for (const number of [1, 2, 3, 4]) {
+		opened.push(
+			yield* reviews.openSession({
+				repoRoot: `/wt/${number}`,
+				baseRef: "main",
+				headRef: `f${number}`,
+				pr: { owner: "acme", repo: "widgets", number, title: `PR ${number}` },
+			}),
+		);
+	}
+	return opened;
+});
 
-	test("trusts the index and persisted terminal states, asks GitHub only for the rest, and remembers the answer", async () => {
+const pending = { kind: "pending" } as const;
+
+describe("getRepository", () => {
+	test("reports open per the index and persisted terminal states, and leaves the rest pending without asking GitHub", async () => {
 		const checkout = await makeCheckout("git@github.com:acme/widgets.git");
 		try {
 			await withDataDir(async (dataDir) => {
-				const asked: number[] = [];
-				const github = githubWith((_cwd, _owner, _repo, number) => {
-					asked.push(number);
-					return Effect.succeed("MERGED" as const);
-				});
-				const layer = makeLayer(dataDir, github, indexWithOpen([1]));
+				const layer = makeLayer(dataDir, githubWith(), indexWithOpen([1]));
 				const detail = await Effect.runPromise(
 					Effect.gen(function* () {
 						const settings = yield* SettingsStore;
 						const reviews = yield* ReviewStore;
 						yield* settings.setRepoPath("acme", "widgets", checkout);
-						const opened = yield* seed;
+						const opened = yield* seedPullRequests;
 						const closed = opened[1];
 						if (closed === undefined) return yield* Effect.die("seed");
 						yield* reviews.setPrState(closed.id, "closed");
-						const first = yield* getRepository("acme", "widgets");
-						const second = yield* getRepository("acme", "widgets");
-						return { first, second };
+						return yield* getRepository("acme", "widgets");
 					}).pipe(Effect.provide(layer)),
 				);
 
-				expect(asked.sort()).toEqual([3, 4]);
 				expect(
-					detail.first.sessions.map((entry) => [entry.prNumber, entry.state]),
+					detail.sessions.map((entry) => [entry.prNumber, entry.state]),
 				).toEqual([
-					[4, resolved("merged")],
-					[3, resolved("merged")],
+					[4, pending],
+					[3, pending],
 					[2, resolved("closed")],
 					[1, resolved("open")],
 				]);
-				expect(detail.second.sessions.map((entry) => entry.state)).toEqual(
-					detail.first.sessions.map((entry) => entry.state),
-				);
-				expect(detail.first).toMatchObject({
+				expect(detail).toMatchObject({
 					path: checkout,
 					remoteUrl: "git@github.com:acme/widgets.git",
 					problem: null,
@@ -317,71 +319,22 @@ describe("getRepository", () => {
 		}
 	});
 
-	test("a persisted open is stale and gets re-asked", async () => {
+	test("a persisted open is stale, so the session stays pending", async () => {
 		await withDataDir(async (dataDir) => {
-			const github = githubWith(() => Effect.succeed("MERGED" as const));
 			const states = await Effect.runPromise(
 				Effect.gen(function* () {
 					const reviews = yield* ReviewStore;
-					const [first] = yield* seed;
+					const [first] = yield* seedPullRequests;
 					if (first === undefined) return yield* Effect.die("seed");
 					yield* reviews.setPrState(first.id, "open");
 					const detail = yield* getRepository("acme", "widgets");
 					return detail.sessions.map((entry) => entry.state);
-				}).pipe(Effect.provide(makeLayer(dataDir, github, indexWithOpen([])))),
+				}).pipe(
+					Effect.provide(makeLayer(dataDir, githubWith(), indexWithOpen([]))),
+				),
 			);
 
-			expect(states).toEqual([
-				resolved("merged"),
-				resolved("merged"),
-				resolved("merged"),
-				resolved("merged"),
-			]);
-		});
-	});
-
-	test("one failed lookup leaves only that session unresolved and persists nothing for it", async () => {
-		await withDataDir(async (dataDir) => {
-			const github = githubWith((_cwd, _owner, _repo, number) =>
-				number === 3
-					? Effect.fail(
-							new PullRequestNotFound({
-								repoRoot: "/",
-								number,
-								reason: "boom",
-							}),
-						)
-					: Effect.succeed("MERGED" as const),
-			);
-			const result = await Effect.runPromise(
-				Effect.gen(function* () {
-					const reviews = yield* ReviewStore;
-					yield* seed;
-					const detail = yield* getRepository("acme", "widgets");
-					const stored = yield* reviews.listPullRequestSessions({
-						owner: "acme",
-						repo: "widgets",
-					});
-					return { detail, stored };
-				}).pipe(Effect.provide(makeLayer(dataDir, github, indexWithOpen([])))),
-			);
-
-			expect(
-				result.detail.sessions.map((entry) => [entry.prNumber, entry.state]),
-			).toEqual([
-				[4, resolved("merged")],
-				[3, { kind: "unresolved", reason: "boom" }],
-				[2, resolved("merged")],
-				[1, resolved("merged")],
-			]);
-			expect(
-				result.stored.map((record) => [record.number, record.prState]),
-			).toEqual([
-				[4, "merged"],
-				[3, null],
-				[2, "merged"],
-				[1, "merged"],
-			]);
+			expect(states).toEqual([pending, pending, pending, pending]);
 		});
 	});
 
@@ -389,16 +342,10 @@ describe("getRepository", () => {
 		await withDataDir(async (dataDir) => {
 			const detail = await Effect.runPromise(
 				Effect.gen(function* () {
-					yield* seed;
+					yield* seedPullRequests;
 					return yield* getRepository("acme", "widgets");
 				}).pipe(
-					Effect.provide(
-						makeLayer(
-							dataDir,
-							githubWith(() => Effect.succeed("OPEN" as const)),
-							indexWithOpen([]),
-						),
-					),
+					Effect.provide(makeLayer(dataDir, githubWith(), indexWithOpen([]))),
 				),
 			);
 
@@ -408,5 +355,283 @@ describe("getRepository", () => {
 				problem: "no-path",
 			});
 		});
+	});
+});
+
+describe("streamSessionStates", () => {
+	type Call = "list" | `view ${number}`;
+
+	/** Runs the stream to completion, recording each GitHub call and, per event, what was already persisted when it arrived. */
+	const run = async (
+		github: GitHubShape,
+		options: {
+			openNumbers?: ReadonlyArray<number>;
+			arrange?: Effect.Effect<void, unknown, ReviewStore>;
+		} = {},
+	) =>
+		await withDataDir((dataDir) =>
+			Effect.runPromise(
+				Effect.gen(function* () {
+					const reviews = yield* ReviewStore;
+					yield* seedPullRequests;
+					if (options.arrange !== undefined) yield* options.arrange;
+					const events = yield* streamSessionStates("acme", "widgets").pipe(
+						Stream.mapEffect((batch) =>
+							reviews
+								.listPullRequestSessions({ owner: "acme", repo: "widgets" })
+								.pipe(
+									Effect.map((stored) => ({
+										batch,
+										persisted: Object.fromEntries(
+											stored.map((record) => [record.number, record.prState]),
+										),
+									})),
+								),
+						),
+						Stream.runCollect,
+					);
+					const stored = yield* reviews.listPullRequestSessions({
+						owner: "acme",
+						repo: "widgets",
+					});
+					return {
+						events,
+						storedPairs: stored.map((record) => [
+							record.number,
+							record.prState,
+						]),
+						stored: Object.fromEntries(
+							stored.map((record) => [record.number, record.prState]),
+						),
+					};
+				}).pipe(
+					Effect.provide(
+						makeLayer(
+							dataDir,
+							github,
+							indexWithOpen(options.openNumbers ?? []),
+						),
+					),
+				),
+			),
+		);
+
+	const recording = (
+		calls: Call[],
+		handlers: {
+			list: GitHubShape["pullRequestStates"];
+			view?: GitHubShape["pullRequestState"];
+		},
+	) =>
+		githubWith({
+			pullRequestStates: (...args) => {
+				calls.push("list");
+				return handlers.list(...args);
+			},
+			pullRequestState: (cwd, owner, repo, number) => {
+				calls.push(`view ${number}`);
+				return handlers.view === undefined
+					? Effect.die(new Error("unexpected per-PR lookup"))
+					: handlers.view(cwd, owner, repo, number);
+			},
+		});
+
+	test("persists the whole listing, then yields it as a single event of the pending PRs only", async () => {
+		const calls: Call[] = [];
+		const result = await run(
+			recording(calls, {
+				list: () =>
+					Effect.succeed([
+						{ number: 4, state: "MERGED" as const },
+						{ number: 3, state: "CLOSED" as const },
+						{ number: 2, state: "OPEN" as const },
+						{ number: 1, state: "OPEN" as const },
+						{ number: 99, state: "MERGED" as const },
+					]),
+			}),
+			{ openNumbers: [1] },
+		);
+
+		expect(calls).toEqual(["list"]);
+		expect(result.events.map((entry) => entry.batch)).toEqual([
+			[
+				{ prNumber: 4, state: resolved("merged") },
+				{ prNumber: 3, state: resolved("closed") },
+				{ prNumber: 2, state: resolved("open") },
+			],
+		]);
+		expect(result.stored).toEqual({
+			1: null,
+			2: "open",
+			3: "closed",
+			4: "merged",
+		});
+	});
+
+	test("persists each state before yielding it", async () => {
+		const result = await run(
+			recording([], {
+				list: () => Effect.succeed([{ number: 4, state: "MERGED" as const }]),
+				view: () => Effect.succeed("CLOSED" as const),
+			}),
+		);
+
+		expect(result.events).toHaveLength(4);
+		for (const entry of result.events)
+			for (const update of entry.batch) {
+				expect(update.state.kind).toBe("resolved");
+				if (update.state.kind === "resolved")
+					expect(entry.persisted[update.prNumber]).toBe(update.state.state);
+			}
+	});
+
+	test("looks up one by one only what the listing didn't return, and yields each as it lands", async () => {
+		const calls: Call[] = [];
+		const result = await run(
+			recording(calls, {
+				list: () => Effect.succeed([{ number: 3, state: "MERGED" as const }]),
+				view: (_cwd, _owner, _repo, number) =>
+					Effect.succeed(
+						number === 2 ? ("OPEN" as const) : ("CLOSED" as const),
+					),
+			}),
+		);
+
+		expect(calls.slice().sort()).toEqual([
+			"list",
+			"view 1",
+			"view 2",
+			"view 4",
+		]);
+		expect(calls[0]).toBe("list");
+		expect(result.events[0]?.batch).toEqual([
+			{ prNumber: 3, state: resolved("merged") },
+		]);
+		expect(result.events.slice(1).map((entry) => entry.batch.length)).toEqual([
+			1, 1, 1,
+		]);
+		expect(result.stored).toEqual({
+			1: "closed",
+			2: "open",
+			3: "merged",
+			4: "closed",
+		});
+	});
+
+	test("a failed lookup is yielded unresolved and persists nothing for it", async () => {
+		const result = await run(
+			recording([], {
+				list: () => Effect.succeed([]),
+				view: (_cwd, _owner, _repo, number) =>
+					number === 3
+						? Effect.fail(
+								new PullRequestNotFound({
+									repoRoot: "/",
+									number,
+									reason: "boom",
+								}),
+							)
+						: Effect.succeed("MERGED" as const),
+			}),
+		);
+
+		const updates = result.events.flatMap((entry) => entry.batch);
+		expect(updates).toHaveLength(4);
+		expect(updates.find((update) => update.prNumber === 3)?.state).toEqual({
+			kind: "unresolved",
+			reason: "boom",
+		});
+		expect(result.stored).toEqual({
+			1: "merged",
+			2: "merged",
+			3: null,
+			4: "merged",
+		});
+	});
+
+	test("a listing that fails for a reason particular to it falls back to per-PR lookups for everything", async () => {
+		const calls: Call[] = [];
+		const result = await run(
+			recording(calls, {
+				list: () =>
+					Effect.fail(new GitHubUnreachable({ repoRoot: "/", reason: "dns" })),
+				view: () => Effect.succeed("MERGED" as const),
+			}),
+		);
+
+		expect(calls.slice().sort()).toEqual([
+			"list",
+			"view 1",
+			"view 2",
+			"view 3",
+			"view 4",
+		]);
+		expect(result.stored).toEqual({
+			1: "merged",
+			2: "merged",
+			3: "merged",
+			4: "merged",
+		});
+	});
+
+	test("an authentication failure is reported for every pending PR at once, without a lookup each", async () => {
+		const calls: Call[] = [];
+		const result = await run(
+			recording(calls, {
+				list: () => Effect.fail(new GhNotAuthenticated({ reason: "log in" })),
+			}),
+			{ openNumbers: [1] },
+		);
+
+		expect(calls).toEqual(["list"]);
+		expect(result.events).toHaveLength(1);
+		expect(result.events[0]?.batch).toEqual(
+			[4, 3, 2].map((prNumber) => ({
+				prNumber,
+				state: {
+					kind: "unresolved",
+					reason: "gh is not authenticated: log in",
+				},
+			})),
+		);
+		expect(result.stored).toEqual({ 1: null, 2: null, 3: null, 4: null });
+	});
+
+	test("with nothing pending it yields nothing and never asks GitHub", async () => {
+		const calls: Call[] = [];
+		const result = await run(
+			recording(calls, { list: () => Effect.succeed([]) }),
+			{
+				openNumbers: [1, 2, 3, 4],
+			},
+		);
+
+		expect(calls).toEqual([]);
+		expect(result.events).toEqual([]);
+	});
+
+	test("every session of a reused PR number gets the state", async () => {
+		const result = await run(
+			recording([], {
+				list: () => Effect.succeed([{ number: 3, state: "MERGED" as const }]),
+				view: () => Effect.succeed("CLOSED" as const),
+			}),
+			{
+				arrange: Effect.gen(function* () {
+					const reviews = yield* ReviewStore;
+					yield* reviews.openSession({
+						repoRoot: "/wt/again",
+						baseRef: "main",
+						headRef: "again",
+						pr: { owner: "acme", repo: "widgets", number: 3, title: "PR 3" },
+					});
+				}),
+			},
+		);
+
+		expect(result.storedPairs.filter(([number]) => number === 3)).toEqual([
+			[3, "merged"],
+			[3, "merged"],
+		]);
 	});
 });
