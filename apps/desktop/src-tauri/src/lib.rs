@@ -1,6 +1,7 @@
 mod activation;
 #[cfg(target_os = "macos")]
 mod chromium_window_drag;
+mod data_dir;
 mod editors;
 mod folder_picker;
 mod notifications;
@@ -387,9 +388,10 @@ pub fn run() {
                 .map(|switch| (format!("--{switch}"), None::<String>)),
         );
     }
-    if let Ok(data_dir) = std::env::var("NISI_DATA_DIR") {
+    let data_dir_override = data_dir::resolve().expect("failed to resolve the data dir override");
+    if let Some(data_dir) = &data_dir_override {
         // Chromium's ProcessSingleton locks the cache root; sharing prod's root makes CefInitialize fail while prod runs.
-        cef = cef.root_cache_path(PathBuf::from(data_dir).join("cef"));
+        cef = cef.root_cache_path(data_dir.join("cef"));
     }
 
     let builder = tauri::Builder::default()
@@ -462,12 +464,12 @@ pub fn run() {
                 }
             });
 
-            // NISI_DATA_DIR overrides the app data dir — useful for tests or ad-hoc
-            // isolation. Absent in prod (and in the plain `scripts/dev.ts` orchestrator),
-            // where the parent process never sets it, so app_data_dir() is the fallback.
-            let app_data_dir = match std::env::var("NISI_DATA_DIR") {
-                Ok(dir) => PathBuf::from(dir),
-                Err(_) => app
+            // NISI_DATA_DIR or config.toml's data_dir overrides the app data dir — useful
+            // for tests or ad-hoc isolation. Absent in prod (and in the plain
+            // `scripts/dev.ts` orchestrator), so app_data_dir() is the fallback.
+            let app_data_dir = match data_dir_override {
+                Some(dir) => dir,
+                None => app
                     .path()
                     .app_data_dir()
                     .map_err(|e| format!("could not resolve app data dir: {e}"))?,
