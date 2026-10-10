@@ -62,6 +62,7 @@ import {
 } from "#/features/pull-request/pr-status";
 import { PrStatusIcon } from "#/features/pull-request/pr-status-icon";
 import type { SidecarQueryUtils } from "#/infra/backend-context";
+import { BackgroundTasksIndicator } from "#/shell/background-tasks/background-tasks-indicator";
 import {
 	type PendingOpenTab,
 	pendingOpenTabValue,
@@ -97,7 +98,7 @@ type PrTabStripProps = {
 	 * a tab's context menu opens so the Suspend item can disable itself with
 	 * that as the shown reason, instead of the click just doing nothing. */
 	checkGenerationRunning: (sessionId: string) => Promise<boolean>;
-	/** Threaded through only for `UpdatePill` — the strip itself talks to no other sidecar procedure. */
+	/** Threaded through only for the right-edge pills (`BackgroundTasksIndicator`, `UpdatePill`) — the strip itself talks to no other sidecar procedure. */
 	orpc: SidecarQueryUtils;
 };
 
@@ -256,8 +257,11 @@ export function PrTabStrip({
 				</DndContext>
 				<OpenPullRequestButton onClick={onOpenPullRequest} />
 				<div className="flex-1" />
-				{/* The spacer pins the pill right, outside the scrolling tabs. */}
-				<UpdatePill orpc={orpc} />
+				{/* The spacer pins the pills right, outside the scrolling tabs. */}
+				<div className="flex shrink-0 items-center gap-2 self-center">
+					<BackgroundTasksIndicator orpc={orpc} sessions={sessions} />
+					<UpdatePill orpc={orpc} />
+				</div>
 			</ContextMenuTrigger>
 			<ContextMenuPopup align="start">
 				<ContextMenuItem onClick={() => setDevToolVisible(!devToolVisible)}>

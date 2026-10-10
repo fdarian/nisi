@@ -1748,6 +1748,37 @@ export function attachRouter(
 					return scheduled === null ? null : { method: scheduled.method };
 				},
 			),
+			scheduledMerges: authed.pullRequests.scheduledMerges.effect(
+				function* (request) {
+					const schedules = yield* ScheduledMerges;
+					const reviewStore = yield* ReviewStore;
+					const fail = (cause: unknown) =>
+						request.errors.SERVICE_UNAVAILABLE({ message: String(cause) });
+					const scheduled = yield* schedules.list().pipe(Effect.mapError(fail));
+					// Most recently active session first, so a PR reviewed from two worktrees reports the fresher title.
+					const recorded = yield* reviewStore
+						.listPullRequestSessions()
+						.pipe(Effect.mapError(fail));
+					return scheduled.map((merge) => {
+						const session = recorded.find(
+							(candidate) =>
+								candidate.number === merge.number &&
+								candidate.owner.toLowerCase() === merge.owner.toLowerCase() &&
+								candidate.repo.toLowerCase() === merge.repo.toLowerCase(),
+						);
+						return {
+							repoRoot: merge.repoRoot,
+							owner: merge.owner,
+							repo: merge.repo,
+							number: merge.number,
+							method: merge.method,
+							route: merge.route,
+							createdAt: merge.createdAt.getTime(),
+							...(session === undefined ? {} : { title: session.title }),
+						};
+					});
+				},
+			),
 			mergeStack: authed.pullRequests.mergeStack.effect(function* ({
 				input,
 				errors,

@@ -519,6 +519,23 @@ export const pullRequestsContract = {
 		)
 		.output(Schema.NullOr(Schema.Struct({ method: MergeMethod })))
 		.errors({ SERVICE_UNAVAILABLE: {} }),
+	/** Every scheduled merge, including those whose tab is closed. `title` is known only when the review store has a session row for the PR. */
+	scheduledMerges: oc
+		.output(
+			Schema.Array(
+				Schema.Struct({
+					repoRoot: Schema.String,
+					owner: Schema.String,
+					repo: Schema.String,
+					number: Schema.Number,
+					method: MergeMethod,
+					route: Schema.Literals(["merge", "stack"]),
+					createdAt: Schema.Number,
+					title: Schema.optional(Schema.String),
+				}),
+			),
+		)
+		.errors({ SERVICE_UNAVAILABLE: {} }),
 	markReady: oc
 		.input(
 			Schema.Struct({

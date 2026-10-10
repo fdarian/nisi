@@ -1187,6 +1187,9 @@ export function useScheduledMergeEvents(orpc: SidecarQueryUtils) {
 		void queryClient.invalidateQueries({
 			queryKey: orpc.pullRequests.scheduledMerge.key({ input }),
 		});
+		void queryClient.invalidateQueries({
+			queryKey: orpc.pullRequests.scheduledMerges.key(),
+		});
 		if (event.outcome === "merged") {
 			void queryClient.invalidateQueries({
 				queryKey: orpc.pullRequests.mergeStatus.key({ input }),
@@ -1207,15 +1210,20 @@ export function useScheduledMergeMutations(
 ) {
 	const queryClient = useQueryClient();
 	const onSuccess = (_data: unknown, params: PullRequestMergeStatusParams) =>
-		queryClient.invalidateQueries({
-			queryKey: orpc.pullRequests.scheduledMerge.key({
-				input: {
-					owner: params.owner,
-					repo: params.repo,
-					number: params.number,
-				},
+		Promise.all([
+			queryClient.invalidateQueries({
+				queryKey: orpc.pullRequests.scheduledMerge.key({
+					input: {
+						owner: params.owner,
+						repo: params.repo,
+						number: params.number,
+					},
+				}),
 			}),
-		});
+			queryClient.invalidateQueries({
+				queryKey: orpc.pullRequests.scheduledMerges.key(),
+			}),
+		]);
 	const scheduleMutation = useMutation({
 		...orpc.pullRequests.scheduleMerge.mutationOptions(),
 		onSuccess,
