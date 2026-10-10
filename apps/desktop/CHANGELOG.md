@@ -1,5 +1,11 @@
 # @repo/desktop
 
+## 0.6.2
+
+### Patch Changes
+
+- 03dfa95: Opening a PR from a repository that was renamed or transferred on GitHub now offers to update your clone's stale `origin` instead of refusing to open it.
+
 ## 0.6.1
 
 ### Patch Changes

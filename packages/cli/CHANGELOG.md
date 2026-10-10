@@ -1,5 +1,11 @@
 # @repo/cli
 
+## 0.6.2
+
+### Patch Changes
+
+- 12b2712: `nisi debug` prints the running app's in-memory state per open session (worktree existence and HEAD, watched state, last merge status and whether it's still polled) plus recent RPC failures, flagging anything that looks stuck.
+
 ## 0.6.1
 
 ## 0.6.0
