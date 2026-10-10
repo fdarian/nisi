@@ -49,7 +49,7 @@ Three parts, one seam:
 The sidecar binds a port and mints a token, then claims and publishes `{ port, token }` to
 `sidecar.json` in one atomic act — `deskkit/sidecar`'s `acquireSidecar`, wired up in
 `sidecar/index.ts` — in the app-data dir — macOS `~/Library/Application Support/com.nisi.desktop/`
-(override with `NISI_DATA_DIR`). `acquireSidecar` creates `sidecar.json` via a single `wx`
+(override with `NISI_DATA_DIR` or `~/.config/nisi/config.toml`'s `data_dir`). `acquireSidecar` creates `sidecar.json` via a single `wx`
 (`O_EXCL`) open-and-write, not a temp-file + `rename()`, so a concurrent reader can briefly observe
 an empty or partial file between the create and the write landing. In production (and a standalone
 `bun run sidecar`) that's an ephemeral `port: 0` bind and a fresh `crypto.randomUUID()` token every
@@ -108,8 +108,12 @@ claims and publishes it with, so both ends of the handshake share one dependency
 `bun dev` windows show the current Git branch in a reserved footer (`src/shell/dev-branch.tsx`); `build:dev` shows `Build <short commit>` there. `import.meta.env.DEV` excludes it from regular production builds.
 
 Dev and prod both resolve their data dir (`sidecar.json` + `app.db`, see [The seam](#the-seam))
-from `NISI_DATA_DIR`, defaulting to the same path — `~/Library/Application Support/com.nisi.desktop/`
-— when it's unset. Left alone, that means a `bun dev` sidecar and the production app's sidecar
+from `NISI_DATA_DIR`, else `data_dir` in `~/.config/nisi/config.toml`, else the same default —
+`~/Library/Application Support/com.nisi.desktop/`. The Tauri shell (`src-tauri/src/data_dir.rs`) and
+the TypeScript side (`@repo/db/paths`) apply identical rules, and the shell hands the resolved dir to
+the sidecar it spawns. A `data_dir` in config.toml is a global override that applies to prod *and*
+to any dev process whose `NISI_DATA_DIR` is unset; `bun dev` always sets the env var, so it wins.
+With neither set, left alone, that means a `bun dev` sidecar and the production app's sidecar
 fight over the same `sidecar.json` and the same SQLite file, and whichever wrote `sidecar.json`
 last is the one `nisi` (or the window you're looking at) actually talks to — this is what caused
 production to show a stale PR list while a dev server had the fresh one.
@@ -126,7 +130,7 @@ from the same session the same way, so it's stable across restarts too — only 
 fresh each `bun dev` run, since there's no sticky equivalent for it — see [The seam](#the-seam).
 
 `dev.ts` prints `NISI_DATA_DIR=<path>` on startup — that line is deliberately copy-pasteable.
-Since prod keeps the untouched default, a plain `nisi` from a terminal always reaches the
+Since prod keeps the untouched default (unless you set `data_dir` in config.toml), a plain `nisi` from a terminal always reaches the
 **production** app; pointing it at a dev session instead is `NISI_DATA_DIR=<path from that line> nisi`.
 There's no flag or auto-detection for this by design (see [The seam](#the-seam) for why
 `packages/cli` doesn't get special-cased here) — and note the override only works this way because
@@ -143,7 +147,7 @@ sidecar also re-publishes its own `sidecar.json` within ~5s if something deletes
 
 Going the other way — a dev sidecar against the *real* app-data dir instead of a session's —
 is `bun dev --prod-data-dir`. Safe to run even while the packaged app is open: it resolves the
-same `NISI_DATA_DIR` default prod does, and `deskkit/sidecar`'s `acquireSidecar` health-checks
+same data dir prod resolves, and `deskkit/sidecar`'s `acquireSidecar` health-checks
 any existing owner and refuses to boot (loudly) rather than splitting the data dir between two
 sidecars.
 

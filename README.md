@@ -66,6 +66,19 @@ nisi /path/to/other/repo
 
 You can also open a PR from app directly, you’ll be prompted for the folder where the branch will be cloned (it can reuse existing checkout).
 
+## Configuration
+
+nisi keeps its data (the review database and logs) in `~/Library/Application Support/com.nisi.desktop`.
+To keep it somewhere else, create `~/.config/nisi/config.toml`:
+
+```toml
+data_dir = "~/Documents/nisi"
+```
+
+`data_dir` must be an absolute path or start with `~/`. A misspelled key or an invalid value is
+reported as an error instead of silently falling back to the default. The `NISI_DATA_DIR`
+environment variable, when set, takes precedence.
+
 ## Features
 
 - Handy, vim-like, keymaps:

@@ -10,7 +10,7 @@ this package only knows how to open one connection, not what any bundle
 contains or how to apply one (that's `deskkit/sqlite`'s job now, see below).
 
 - `src/client.ts` — `SqliteDb`, the one shared connection + Drizzle client for
-  the whole sidecar process (`getAppDbPath`'s `app.db`, at `NISI_DATA_DIR`),
+  the whole sidecar process (`getAppDbPath`'s `app.db`, in the data dir),
   built on `deskkit/sqlite`'s `layerSqliteClient` (an `@effect/sql-sqlite-bun`
   `SqliteClient` with `PRAGMA foreign_keys = ON` already run) and
   `drizzle-orm/effect-sqlite-bun`'s `SqliteDrizzle.make()`. `yield* SqliteDb`
@@ -20,8 +20,14 @@ contains or how to apply one (that's `deskkit/sqlite`'s job now, see below).
   (`drizzle-orm/effect-core`'s `EffectDrizzleQueryError`), so each domain
   store maps that itself onto its own error type instead of this package
   re-wrapping it into a generic one.
-- `src/paths.ts` — `getDataDirConfig` (`NISI_DATA_DIR`, defaulting to
-  `~/Library/Application Support/com.nisi.desktop`) and `getAppDbPath`. The
+- `src/paths.ts` — `getDataDirConfig` and `getAppDbPath`. `getDataDirConfig` is the one TypeScript
+  resolver of the data dir (the sidecar and the CLI both use it, via the `@repo/db/paths` subpath):
+  `NISI_DATA_DIR`, else `data_dir` in `~/.config/nisi/config.toml`, else
+  `~/Library/Application Support/com.nisi.desktop`. The file is read only when the env var is
+  unset; a missing file falls through, but a malformed file, a non-string or relative `data_dir`
+  (a leading `~/` expands to home) or any other key fails the config rather than silently using
+  the default. The Tauri shell reimplements the same rules in
+  `apps/desktop/src-tauri/src/data_dir.rs` — change both together. The
   sidecar's own handshake file (`sidecar.json`) lives in the same directory,
   computed independently in `apps/desktop/sidecar/index.ts` — that one isn't
   SQLite, so it stays outside this package.
