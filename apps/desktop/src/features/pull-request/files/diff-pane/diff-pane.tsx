@@ -13,7 +13,7 @@ import type {
 import { parsePatchFiles } from "@pierre/diffs";
 import type { CodeViewHandle } from "@pierre/diffs/react";
 import { cn } from "cn";
-import { FileIcon } from "lucide-react";
+import { CheckCheckIcon, FileIcon } from "lucide-react";
 import {
 	useCallback,
 	useEffect,
@@ -269,6 +269,8 @@ type DiffPaneProps = {
 	setViewed: (path: string, viewed: boolean) => void;
 	onMarkSelectionReviewed: (path: string, range: HeadRange) => void;
 	optimisticBaselines: ReadonlyMap<string, string>;
+	/** `files` is empty because "Hide reviewed" hid every file, not because there were none. */
+	allFilesReviewed: boolean;
 	/** Opens a path in a whole-file viewer tab — the per-file "…" menu's "View full file" item (`DiffFileHeader`). */
 	onOpenFile: (path: string) => void;
 	diffStyle: DiffStyleMode;
@@ -445,6 +447,7 @@ export function DiffPane({
 	onMarkSelectionReviewed,
 	referenceTarget,
 	optimisticBaselines,
+	allFilesReviewed,
 	onOpenFile,
 	diffStyle,
 	wrapLines,
@@ -1567,6 +1570,20 @@ export function DiffPane({
 		if (selectedPath === lastReportedVisiblePathRef.current) return;
 		scrollToPath(selectedPath);
 	}, [selectedPath, scrollToPath]);
+
+	if (files.length === 0 && allFilesReviewed) {
+		return (
+			<Empty className="flex-1">
+				<EmptyMedia variant="icon">
+					<CheckCheckIcon />
+				</EmptyMedia>
+				<EmptyTitle>Everything reviewed</EmptyTitle>
+				<EmptyDescription>
+					Reviewed files are hidden. Turn off Hide reviewed to see them again.
+				</EmptyDescription>
+			</Empty>
+		);
+	}
 
 	if (files.length === 0) {
 		return (

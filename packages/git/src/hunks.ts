@@ -12,7 +12,7 @@ export type ChangedRun = {
 	readonly deletions: number;
 };
 
-const HUNK_HEADER = /^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@/;
+const HUNK_HEADER = /^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@/;
 
 export const parseChangedRuns = (patch: string): ChangedRun[] => {
 	const runs: ChangedRun[] = [];
@@ -35,7 +35,11 @@ export const parseChangedRuns = (patch: string): ChangedRun[] => {
 		const header = HUNK_HEADER.exec(line);
 		if (header !== null) {
 			close();
-			newLine = Number.parseInt(header[1] as string, 10);
+			const start = Number.parseInt(header[1] as string, 10);
+			// A hunk with no head lines (`-U0` on a pure removal) names the line
+			// before the removal; with context the removal lands on the next one.
+			// Both must give the same run.
+			newLine = header[2] === "0" ? start + 1 : start;
 			inHunk = true;
 			continue;
 		}

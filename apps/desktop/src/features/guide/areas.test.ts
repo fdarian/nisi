@@ -2,6 +2,8 @@ import { expect, test } from "bun:test";
 import {
 	filesInArea,
 	type GuideFile,
+	hunkClaimRange,
+	hunkReviewStatus,
 	isExemptFromAreas,
 	matchesGlob,
 	shortestUniqueSuffixes,
@@ -144,4 +146,42 @@ test("coverage is per hunk: a hunk no area claims is reported as path:range, a d
 		),
 	).toEqual([]);
 	expect(uncoveredHunks([MIDDLEWARE], [["src/**"]])).toEqual([]);
+});
+
+const patchOf = (header: string, ...lines: string[]) =>
+	["diff --git a/f b/f", header, ...lines].join("\n");
+
+test("a hunk with removed lines is claimed from the unchanged line above it", () => {
+	expect(hunkClaimRange({ startLine: 61, endLine: 62 }, 2)).toEqual({
+		startLine: 60,
+		endLine: 62,
+	});
+	expect(hunkClaimRange({ startLine: 61, endLine: 62 }, 0)).toEqual({
+		startLine: 61,
+		endLine: 62,
+	});
+	expect(hunkClaimRange({ startLine: 1, endLine: 1 }, 1).startLine).toBe(1);
+});
+
+test("a hunk reads Reviewed when the diff the pane shows has dropped it, removed lines included", () => {
+	const replaced = { startLine: 61, endLine: 62, additions: 2, deletions: 2 };
+	const unreviewed = patchOf("@@ -61,2 +61,2 @@", "-a", "-b", "+c", "+d");
+	expect(hunkReviewStatus(replaced, unreviewed)).toBe("unreviewed");
+	expect(hunkReviewStatus(replaced, "")).toBe("reviewed");
+	// the added lines were claimed but the removed ones still show
+	expect(
+		hunkReviewStatus(replaced, patchOf("@@ -61,2 +60,0 @@", "-a", "-b")),
+	).toBe("partial");
+	// another hunk's change doesn't count against this one
+	expect(
+		hunkReviewStatus(replaced, patchOf("@@ -90 +90 @@", "-x", "+y")),
+	).toBe("reviewed");
+});
+
+test("a pure removal is judged by the removed lines still showing at its position", () => {
+	const removal = { startLine: 70, endLine: 70, additions: 0, deletions: 2 };
+	expect(
+		hunkReviewStatus(removal, patchOf("@@ -70,2 +69,0 @@", "-a", "-b")),
+	).toBe("unreviewed");
+	expect(hunkReviewStatus(removal, "")).toBe("reviewed");
 });

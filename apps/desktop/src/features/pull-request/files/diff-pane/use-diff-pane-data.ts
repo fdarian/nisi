@@ -141,6 +141,7 @@ export function useDiffPaneData(params: {
 		addForcedPath,
 		optimisticBaselines: rangeReview.optimisticBaselines,
 		visibleFiles,
+		allFilesReviewed: files.length > 0 && visibleFiles.length === 0,
 		viewedCount,
 		handleRenderedPathsChange,
 		markSelectionReviewed,
@@ -154,7 +155,8 @@ export function useDiffPaneData(params: {
  * Files Changed's selection popover and the Guide's hunk rows go through, so
  * the optimistic baseline and the undo record are built the same way. `content`
  * is the file's loaded contents; without them the tick still lands, just
- * without the optimistic baseline.
+ * without the optimistic baseline. `claimId` is for a caller that must find the
+ * claim again to withdraw it; a selection's is random.
  */
 export function useRangeReview(
 	orpc: SidecarQueryUtils,
@@ -168,7 +170,12 @@ export function useRangeReview(
 	const undoStack = useSessionUndoStack(sessionId);
 	const setRangeViewed = useSetRangeViewed(orpc, sessionId);
 	const markRangeReviewed = useCallback(
-		(path: string, range: HeadRange, content: FileContent | undefined) => {
+		(
+			path: string,
+			range: HeadRange,
+			content: FileContent | undefined,
+			claimId?: string,
+		) => {
 			const baselineBefore =
 				optimisticBaselines.get(path) ??
 				content?.oldContent ??
@@ -182,7 +189,7 @@ export function useRangeReview(
 				baselineBefore !== undefined
 					? optimisticRangeBaseline(baselineBefore, content.newContent, range)
 					: undefined;
-			const blockId = `selection:${crypto.randomUUID()}`;
+			const blockId = claimId ?? `selection:${crypto.randomUUID()}`;
 			const blockLabel =
 				range.startLine === range.endLine
 					? `Selection L${range.startLine}`

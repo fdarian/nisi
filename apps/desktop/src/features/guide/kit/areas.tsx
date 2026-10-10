@@ -13,12 +13,14 @@ import {
 	type RangeReviewStatus,
 	rangeReviewStatus,
 } from "#/features/diff/review-coverage";
+import type { LineRange } from "#/features/diff/viewer/build-location-diff";
 import type { FileContent } from "#/features/pull-request/data/pr-data";
 import { splitPath } from "#/lib/tree-paths";
 import {
 	type ClaimedFile,
 	filesInArea,
 	hunkRange,
+	hunkReviewStatus,
 	shortestUniqueSuffixes,
 } from "../areas";
 import { AreaScopeProvider, useGuideContext } from "../guide-context";
@@ -203,13 +205,28 @@ function rowReview(
 	}
 	const range = parseLines(row.lines);
 	return {
-		status:
-			content === undefined
-				? undefined
-				: rangeReviewStatus([range], content.review),
+		status: content === undefined ? undefined : hunkStatus(row, range, content),
 		onToggle: (viewed) =>
-			reviews.setHunkViewed(row.path, range, content, viewed),
+			reviews.setHunkViewed(row.path, range, row.deletions, content, viewed),
 	};
+}
+
+/** Read off the diff the pane shows, so the row can't say Reviewed while the pane still lists the hunk. A truncated file has no patch to read, so only its reviewed ranges are left to go on. */
+function hunkStatus(
+	row: Row,
+	range: LineRange,
+	content: FileContent,
+): RangeReviewStatus {
+	if (content.truncated) return rangeReviewStatus([range], content.review);
+	return hunkReviewStatus(
+		{
+			startLine: range.startLine,
+			endLine: range.endLine,
+			additions: row.additions,
+			deletions: row.deletions,
+		},
+		content.patch,
+	);
 }
 
 /** Reviewed when every claimed hunk is, indeterminate when only some are; ticking it sets them all. */

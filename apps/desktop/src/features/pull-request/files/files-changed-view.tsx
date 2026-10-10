@@ -533,6 +533,7 @@ export function FilesChangedView({
 						onRefresh={onRefresh}
 					/>
 					<DiffPane
+						allFilesReviewed={data.allFilesReviewed && !isKeywordFilterActive}
 						optimisticBaselines={data.optimisticBaselines}
 						currentMatch={currentMatch}
 						diffStyle={diffStyle}

@@ -5,6 +5,9 @@
  * imports: it also runs in the browser.
  */
 
+import { parseChangedRuns } from "@repo/git/hunks";
+import type { RangeReviewStatus } from "#/features/diff/review-coverage";
+
 /** One run of changed lines in a file's head; a pure removal sits on the line it was removed before. */
 export type FileHunk = {
 	startLine: number;
@@ -194,6 +197,53 @@ function rangeLabel(startLine: number, endLine: number): string {
 /** `middleware.ts:12-38`'s numbers: a hunk's new-side range. */
 export function hunkRange(hunk: FileHunk): string {
 	return rangeLabel(hunk.startLine, hunk.endLine);
+}
+
+/**
+ * The lines to claim when ticking a hunk Reviewed. The hunk's own range holds
+ * only its added lines, and a claim over just those leaves the removed lines
+ * showing: they drop out of the diff only when the unchanged line above the
+ * hunk is claimed too (`synthesizeReviewedBaseline`). Files Changed's
+ * selection adds that line the same way (`selectionHeadRange`).
+ */
+export function hunkClaimRange(
+	hunk: { startLine: number; endLine: number },
+	deletions: number,
+): { startLine: number; endLine: number } {
+	if (deletions === 0) return hunk;
+	return { startLine: Math.max(1, hunk.startLine - 1), endLine: hunk.endLine };
+}
+
+/**
+ * A hunk tick's claim id, derived rather than random: a pure removal has no
+ * added line in the reviewed ranges the wire carries, so the id of the claim to
+ * withdraw can't be read back from them.
+ */
+export function hunkClaimBlockId(
+	path: string,
+	hunk: { startLine: number; endLine: number },
+): string {
+	return `guide-hunk:${path}:${hunk.startLine}-${hunk.endLine}`;
+}
+
+/**
+ * How much of a hunk the diff pane still shows as changed. `patch` is the
+ * pane's own diff (reviewed baseline to head), so a hunk reads Reviewed exactly
+ * when the pane has dropped it, removed lines included, which the reviewed
+ * ranges can't say for a pure removal.
+ */
+export function hunkReviewStatus(
+	hunk: FileHunk,
+	patch: string,
+): RangeReviewStatus {
+	let remaining = 0;
+	for (const run of parseChangedRuns(patch)) {
+		if (run.startLine > hunk.endLine || run.endLine < hunk.startLine) continue;
+		remaining += run.additions + run.deletions;
+	}
+	if (remaining === 0) return "reviewed";
+	if (remaining >= hunk.additions + hunk.deletions) return "unreviewed";
+	return "partial";
 }
 
 /**

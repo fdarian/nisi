@@ -10,6 +10,7 @@ import {
 	type GitHubShape,
 	PullRequestNotFound,
 } from "@repo/git";
+import { type ChangedRun, parseChangedRuns } from "@repo/git/hunks";
 import { ReviewStore } from "@repo/review";
 import { SettingsStore } from "@repo/settings";
 import {
@@ -23,6 +24,11 @@ import {
 	Result,
 	Stream,
 } from "effect";
+import {
+	hunkClaimBlockId,
+	hunkClaimRange,
+	hunkReviewStatus,
+} from "../../src/features/guide/areas.ts";
 import { subscribe } from "../events.ts";
 import { PrIndex } from "../pr-index.ts";
 import { PullRequestAttentionLive } from "../pull-request-attention.ts";
@@ -1722,6 +1728,107 @@ test("range claims change the Files Changed patch for a single added line", asyn
 		expect(result.after?.patch).toContain("+another change");
 		expect(result.walkthroughAfter?.review?.baselineKind).toBe("reviewed");
 		expect(result.walkthroughAfter?.patch).not.toContain("+selected addition");
+	});
+});
+
+test("ticking a Guide hunk row drops its removed lines too, for a replacement and a pure removal", async () => {
+	await withTestRepoAndDataDir(async (repoRoot, dataDir) => {
+		const baseLines = Array.from(
+			{ length: 40 },
+			(_, index) => `line ${index + 1}`,
+		);
+		await Bun.write(join(repoRoot, "a.ts"), `${baseLines.join("\n")}\n`);
+		await sh(repoRoot, ["add", "-A"]);
+		await sh(repoRoot, ["commit", "-q", "-m", "base lines"]);
+		await sh(repoRoot, ["checkout", "-q", "-b", "feature"]);
+		const headLines = [...baseLines];
+		// A hunk nobody ticks, so the file never counts as fully reviewed and
+		// is not ticked whole.
+		headLines.splice(34, 0, "untouched addition");
+		headLines.splice(29, 2);
+		headLines.splice(9, 2, "replacement one", "replacement two");
+		await Bun.write(join(repoRoot, "a.ts"), `${headLines.join("\n")}\n`);
+		await sh(repoRoot, ["add", "-A"]);
+		await sh(repoRoot, ["commit", "-q", "-m", "changes"]);
+
+		const result = await Effect.runPromise(
+			Effect.gen(function* () {
+				const store = yield* Store;
+				const session = yield* openedSession(
+					store.openSession(repoRoot, { kind: "branch", baseRef: "main" }),
+				);
+				const read = () =>
+					store
+						.readFileContents(
+							session.id,
+							[{ path: "a.ts", force: false }],
+							false,
+						)
+						.pipe(Effect.map((contents) => contents[0]?.content?.patch ?? ""));
+				const before = yield* read();
+				const hunks = parseChangedRuns(before);
+				const statuses = (patch: string) =>
+					hunks.map((hunk) => hunkReviewStatus(hunk, patch));
+				const tick = (hunk: ChangedRun, viewed: boolean) =>
+					store.setRangeViewed(
+						session.id,
+						"a.ts",
+						hunkClaimBlockId("a.ts", hunk),
+						"Hunk",
+						[hunkClaimRange(hunk, hunk.deletions)],
+						viewed,
+					);
+				const untouched = statuses(before);
+				// What the row used to write: the added lines alone.
+				yield* store.setRangeViewed(
+					session.id,
+					"a.ts",
+					"added-lines-only",
+					"Selection",
+					[{ startLine: 10, endLine: 11 }],
+					true,
+				);
+				const addedOnly = statuses(yield* read());
+				yield* store.setRangeViewed(
+					session.id,
+					"a.ts",
+					"added-lines-only",
+					"Selection",
+					[],
+					false,
+				);
+				const ticking = hunks.slice(0, 2);
+				for (const hunk of ticking) yield* tick(hunk, true);
+				const ticked = yield* read();
+				const tickedStatuses = statuses(ticked);
+				for (const hunk of ticking) yield* tick(hunk, false);
+				return {
+					hunks,
+					untouched,
+					addedOnly,
+					ticked,
+					tickedStatuses,
+					unticked: statuses(yield* read()),
+				};
+			}).pipe(Effect.provide(makeTestLayer(dataDir))),
+		);
+		expect(result.hunks.map((hunk) => hunk.deletions)).toEqual([2, 2, 0]);
+		expect(result.hunks.map((hunk) => hunk.additions)).toEqual([2, 0, 1]);
+		expect(result.untouched).toEqual([
+			"unreviewed",
+			"unreviewed",
+			"unreviewed",
+		]);
+		expect(result.addedOnly).toEqual(["partial", "unreviewed", "unreviewed"]);
+		expect(result.tickedStatuses).toEqual([
+			"reviewed",
+			"reviewed",
+			"unreviewed",
+		]);
+		expect(result.ticked).toContain("+untouched addition");
+		expect(result.ticked).not.toContain("-line");
+		expect(result.ticked).not.toContain("+replacement");
+		expect(result.unticked).toEqual(["unreviewed", "unreviewed", "unreviewed"]);
 	});
 });
 

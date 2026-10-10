@@ -10,6 +10,7 @@ import type {
 import { useFileContents } from "#/features/pull-request/data/pr-data";
 import { useRangeReview } from "#/features/pull-request/files/diff-pane/use-diff-pane-data";
 import type { SidecarQueryUtils } from "#/infra/backend-context";
+import { hunkClaimBlockId, hunkClaimRange } from "./areas";
 
 /**
  * The review state and setters an Area's rows tick: the same sources Files
@@ -25,6 +26,7 @@ export type GuideReviews = {
 	setHunkViewed: (
 		path: string,
 		range: LineRange,
+		deletions: number,
 		content: FileContent | undefined,
 		viewed: boolean,
 	) => void;
@@ -61,28 +63,40 @@ export function useGuideReviews(params: {
 		(
 			path: string,
 			range: LineRange,
+			deletions: number,
 			content: FileContent | undefined,
 			viewed: boolean,
 		) => {
 			if (viewed) {
-				markRangeReviewed(path, range, content);
+				markRangeReviewed(
+					path,
+					hunkClaimRange(range, deletions),
+					content,
+					hunkClaimBlockId(path, range),
+				);
 				return;
 			}
 			const claims = claimsOverlapping(range, content?.review);
 			// The hunk is reviewed only because the whole file is: that claim is
 			// the only one there is to withdraw.
-			if (claims.wholeFile) setViewed(path, false);
-			for (const block of claims.blocks) {
+			if (claims.wholeFile || fileViewed(path)) setViewed(path, false);
+			// A removed line has no reviewed range to name its claim, so the tick's
+			// own claim is withdrawn by the id it was written under.
+			const blocks = new Map(
+				claims.blocks.map((block) => [block.blockId, block.blockLabel]),
+			);
+			blocks.set(hunkClaimBlockId(path, range), "Hunk");
+			for (const [blockId, blockLabel] of blocks) {
 				setRangeViewed({
 					path,
-					blockId: block.blockId,
-					blockLabel: block.blockLabel,
+					blockId,
+					blockLabel,
 					ranges: [range],
 					viewed: false,
 				});
 			}
 		},
-		[markRangeReviewed, setRangeViewed, setViewed],
+		[markRangeReviewed, setRangeViewed, setViewed, fileViewed],
 	);
 
 	return useMemo(

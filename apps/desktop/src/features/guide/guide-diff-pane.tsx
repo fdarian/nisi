@@ -100,6 +100,7 @@ export function GuideDiffPane(props: {
 				showSidebarOptions={false}
 			/>
 			<DiffPane
+				allFilesReviewed={data.allFilesReviewed}
 				currentMatch={undefined}
 				diffStyle={diffStyle}
 				fileContents={data.fileContents}
