@@ -47,9 +47,9 @@ Guides are now written to `.nisi/guide` and read in the Guide tab, with test res
 </Sequence>
 
 <Areas>
-	<Area id="authoring" title="Authoring" subtitle="skill · scripts" paths={[".claude/skills/**"]}>
+	<Area id="authoring" title="Authoring" subtitle="cli · check" paths={["packages/cli/**"]}>
 		- `check.ts` runs a command and records it.
-		- `validate.ts` reports what the author must fix.
+		- `commands.ts` routes `nisi guide` to its subcommands.
 	</Area>
 	<Area id="bundle" title="Bundling" subtitle="sidecar" paths={["apps/desktop/sidecar/**", "packages/sidecar-api/src/**"]}>
 		- `guide.get` returns the bundle, the recorded runs and the head SHA. <Ref path="apps/desktop/sidecar/guide/build.ts" lines="70-95" />

@@ -64,8 +64,8 @@ function file(
 
 /** The diff the sample guide describes: every source file falls in one of its three Areas, and its Refs land on changed lines. */
 const SAMPLE_DIFF: DiffFile[] = [
-	file(".claude/skills/nisi-guide/scripts/check.ts", 113, 0, [1, 113]),
-	file(".claude/skills/nisi-guide/scripts/validate.ts", 100, 0, [1, 100]),
+	file("packages/cli/src/guide/check.ts", 113, 0, [1, 113]),
+	file("packages/cli/src/guide/commands.ts", 100, 0, [1, 100]),
 	file("apps/desktop/sidecar/guide/build.ts", 98, 30, [60, 100]),
 	file("packages/sidecar-api/src/guide.ts", 27, 0, [1, 27]),
 	file("apps/desktop/src/features/guide/evaluate.ts", 10, 2, [30, 65]),
