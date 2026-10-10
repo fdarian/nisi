@@ -12,34 +12,34 @@ const CLICK_SLOP = 4;
 /** How far (px) the hover highlight reaches above and below the pointer before it has fully faded. */
 const HIGHLIGHT_REACH = 360;
 
-/** Share of the foreground color at the pointer's height. */
-const HIGHLIGHT_PEAK = 0.22;
-
-/** A bell-shaped falloff, in (distance from the pointer as a share of the reach, share of the peak) pairs, so the line fades over a long stretch instead of cutting off in a short bright spot. */
+/** A bell-shaped falloff, in (distance from the pointer as a share of the reach, opacity) pairs, so the line fades over a long stretch instead of cutting off in a short bright spot. */
 const FALLOFF: readonly (readonly [number, number])[] = [
 	[1, 0],
-	[0.8, 0.06],
-	[0.6, 0.22],
-	[0.4, 0.5],
-	[0.2, 0.82],
+	[0.8, 0.08],
+	[0.6, 0.28],
+	[0.4, 0.58],
+	[0.2, 0.86],
 	[0, 1],
 ];
 
-function highlightStop(signedDistance: number, share: number): string {
-	const color = `color-mix(in oklab, var(--hl) ${(share * HIGHLIGHT_PEAK * 100).toFixed(2)}%, transparent)`;
-	return `${color} calc(var(--y) + ${Math.round(signedDistance * HIGHLIGHT_REACH)}px)`;
+function highlightStop(signedDistance: number, opacity: number): string {
+	return `rgb(0 0 0 / ${opacity}) calc(var(--y) + ${Math.round(signedDistance * HIGHLIGHT_REACH)}px)`;
 }
 
-const HIGHLIGHT_GRADIENT = `linear-gradient(to bottom, ${[
-	...FALLOFF.map(([distance, share]) => highlightStop(-distance, share)),
+/** An alpha mask over the card-shaped overlay: the border color shows only near the pointer. */
+const HIGHLIGHT_MASK = `linear-gradient(to bottom, ${[
+	...FALLOFF.map(([distance, opacity]) => highlightStop(-distance, opacity)),
 	...[...FALLOFF]
 		.reverse()
 		.slice(1)
-		.map(([distance, share]) => highlightStop(distance, share)),
+		.map(([distance, opacity]) => highlightStop(distance, opacity)),
 ].join(", ")})`;
 
 /** The pane's cards: each file's `<diffs-container>` host, and the toolbar card. */
 const CARD_SELECTOR = "diffs-container, [data-diff-pane-card]";
+
+/** The handle's offset (px) from the panel boundary, and so from the cards' left border it is centred 6px short of. */
+const HANDLE_OFFSET = 6;
 
 /** How far (px) inside the card's left border the probe for "which card is here" is taken. */
 const CARD_PROBE_INSET = 4;
@@ -68,10 +68,11 @@ function visibleSpan(card: Element): { top: number; bottom: number } {
  * the panel boundary (the toolbar's `mx-3`, `DiffCodeView`'s `px-3`; change
  * either and this moves off the edge), so the handle is centred in that gap,
  * 6px from the boundary, with an invisible hit area that stops at the card
- * border and never covers a card. On hover a highlight is drawn 6px further
- * right, over the cards' own border line, brightest at the pointer's height
- * and fading out above and below as the pointer moves; it stays lit along the
- * whole edge while dragging. A click that doesn't drag collapses the pane.
+ * border and never covers a card. On hover the border of the card under the
+ * pointer lights up, following the card's rounded corners (an overlay with the
+ * card's rect and radius whose left border shows through a mask), brightest at
+ * the pointer's height and fading out above and below as the pointer moves; it
+ * stays lit along that card's whole edge while dragging. A click that doesn't drag collapses the pane.
  * The tooltip rides the cursor.
  */
 export function GuideResizeHandle(props: {
@@ -82,20 +83,27 @@ export function GuideResizeHandle(props: {
 	/** Lights the border of the card at `clientY` only, with the gradient centred on the pointer. Between cards it hides, or with `keepLast` (while dragging) stays on the last card. */
 	const lightCardAt = (clientY: number, keepLast: boolean) => {
 		const glow = line.current;
-		if (glow === null) return;
-		const glowRect = glow.getBoundingClientRect();
+		const separator = glow?.parentElement;
+		if (glow == null || separator == null) return;
+		const separatorRect = separator.getBoundingClientRect();
 		const card = document
-			.elementsFromPoint(glowRect.x + CARD_PROBE_INSET, clientY)
+			.elementsFromPoint(
+				separatorRect.x + HANDLE_OFFSET + CARD_PROBE_INSET,
+				clientY,
+			)
 			.find((element) => element.matches(CARD_SELECTOR));
 		if (card === undefined) {
 			if (!keepLast) glow.style.visibility = "hidden";
 			return;
 		}
-		const span = visibleSpan(card);
-		const separatorTop = glow.parentElement?.getBoundingClientRect().top ?? 0;
-		glow.style.top = `${span.top - separatorTop}px`;
-		glow.style.height = `${span.bottom - span.top}px`;
-		glow.style.setProperty("--y", `${clientY - span.top}px`);
+		const rect = card.getBoundingClientRect();
+		const visible = visibleSpan(card);
+		glow.style.left = `${rect.left - separatorRect.left}px`;
+		glow.style.top = `${rect.top - separatorRect.top}px`;
+		glow.style.width = `${rect.width}px`;
+		glow.style.height = `${rect.height}px`;
+		glow.style.clipPath = `inset(${visible.top - rect.top}px 0 ${rect.bottom - visible.bottom}px 0)`;
+		glow.style.setProperty("--y", `${clientY - rect.top}px`);
 		glow.style.visibility = "visible";
 	};
 
@@ -151,14 +159,15 @@ export function GuideResizeHandle(props: {
 			<div
 				aria-hidden
 				className={cn(
-					"pointer-events-none invisible absolute left-1.5 w-px opacity-0 transition-opacity duration-150",
-					"[--hl:var(--color-foreground)] [--y:-9999px]",
-					"[background:var(--highlight)]",
+					// Card-shaped (the cards' own radius token), with only the left border
+					// colored: the corner curves come with it, and the mask picks how much shows.
+					"pointer-events-none invisible absolute rounded-xl border border-transparent border-l-muted-foreground opacity-0 transition-opacity duration-150",
+					"[--y:-9999px] [mask-image:var(--highlight)]",
 					"group-data-[separator=hover]/handle:opacity-100",
-					"group-data-[separator=active]/handle:opacity-100 group-data-[separator=active]/handle:[background:color-mix(in_oklab,var(--hl)_45%,transparent)]",
+					"group-data-[separator=active]/handle:opacity-100 group-data-[separator=active]/handle:[mask-image:none]",
 				)}
 				ref={line}
-				style={{ "--highlight": HIGHLIGHT_GRADIENT } as React.CSSProperties}
+				style={{ "--highlight": HIGHLIGHT_MASK } as React.CSSProperties}
 			/>
 		</Separator>
 	);
