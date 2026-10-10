@@ -1623,7 +1623,7 @@ export function DiffPane({
 				// margins on the inner scrolled container instead, which scrolls away
 				// like any other content and leaves the header flush with the top.
 				className={cn(
-					"min-h-0 w-full flex-1 overflow-auto overscroll-contain px-3 [contain:strict]",
+					"min-h-0 w-full flex-1 overflow-auto overscroll-contain px-diff-pane-inset [contain:strict]",
 					"[&_diffs-container]:[clip-path:inset(0_round_var(--radius-xl))]",
 				)}
 				highlighterOptions={diffTheme.highlighterOptions}

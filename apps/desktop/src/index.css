@@ -9,6 +9,11 @@
 	opacity: var(--files-data-opacity, 1);
 }
 
+/* The gap between the diff pane's edge and its cards. The toolbar's margin, the code view's padding and the Guide's split handle all read it, so changing it moves the handle with the cards. */
+@theme {
+	--spacing-diff-pane-inset: calc(var(--spacing) * 3);
+}
+
 @theme inline {
 	--animate-skeleton: skeleton 2s -1s infinite linear;
 	--animate-caret-blink: 1s ease-out infinite caret-blink;
