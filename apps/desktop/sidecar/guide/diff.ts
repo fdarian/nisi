@@ -3,8 +3,17 @@ import { classifyFile, parseChangedRuns } from "@repo/git";
 import type { DiffFile } from "../../src/features/guide/validate";
 
 export async function git(cwd: string, ...args: string[]): Promise<string> {
+	return runGit(cwd, args, undefined);
+}
+
+async function runGit(
+	cwd: string,
+	args: readonly string[],
+	stdin: Blob | undefined,
+): Promise<string> {
 	const proc = Bun.spawn(["git", ...args], {
 		cwd,
+		stdin,
 		stdout: "pipe",
 		stderr: "pipe",
 	});
@@ -83,17 +92,11 @@ async function linguistGenerated(
 	paths: readonly string[],
 ): Promise<Set<string>> {
 	if (paths.length === 0) return new Set();
-	const proc = Bun.spawn(
-		["git", "check-attr", "--stdin", "-z", "linguist-generated"],
-		{
-			cwd: repoRoot,
-			stdin: new Blob([paths.map((path) => `${path}\0`).join("")]),
-			stdout: "pipe",
-			stderr: "pipe",
-		},
+	const out = await runGit(
+		repoRoot,
+		["check-attr", "--stdin", "-z", "linguist-generated"],
+		new Blob([paths.map((path) => `${path}\0`).join("")]),
 	);
-	const out = await new Response(proc.stdout).text();
-	await proc.exited;
 	const tokens = out.split("\0");
 	const generated = new Set<string>();
 	for (let index = 0; index + 2 < tokens.length; index += 3) {
