@@ -332,7 +332,14 @@ export class ScheduledMerges extends Context.Service<ScheduledMerges>()(
 							}),
 						),
 					);
-			return { start, schedule, cancel, check, get: store.get };
+			return {
+				start,
+				schedule,
+				cancel,
+				check,
+				get: store.get,
+				list: store.list,
+			};
 		}),
 	},
 ) {

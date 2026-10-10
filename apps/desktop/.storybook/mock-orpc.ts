@@ -373,6 +373,7 @@ export function createMockSidecarClient(
 				scheduledMergeState.request = null;
 			},
 			scheduledMerge: async () => scheduledMergeState.request,
+			scheduledMerges: async () => [],
 			mergeStack: async () => undefined,
 			markReady: async () => undefined,
 			approveWorkflowRuns: async (input) => {
