@@ -38,6 +38,30 @@ const HIGHLIGHT_GRADIENT = `linear-gradient(to bottom, ${[
 		.map(([distance, share]) => highlightStop(distance, share)),
 ].join(", ")})`;
 
+/** The pane's cards: each file's `<diffs-container>` host, and the toolbar card. */
+const CARD_SELECTOR = "diffs-container, [data-diff-pane-card]";
+
+/** How far (px) inside the card's left border the probe for "which card is here" is taken. */
+const CARD_PROBE_INSET = 4;
+
+/** `card`'s vertical extent, cut to what its scrolling ancestors actually show. */
+function visibleSpan(card: Element): { top: number; bottom: number } {
+	const rect = card.getBoundingClientRect();
+	let top = rect.top;
+	let bottom = rect.bottom;
+	for (
+		let ancestor = card.parentElement;
+		ancestor !== null;
+		ancestor = ancestor.parentElement
+	) {
+		if (getComputedStyle(ancestor).overflowY === "visible") continue;
+		const bounds = ancestor.getBoundingClientRect();
+		top = Math.max(top, bounds.top);
+		bottom = Math.min(bottom, bounds.bottom);
+	}
+	return { top, bottom };
+}
+
 /**
  * The split handle between the guide and its diff pane, after Linear's
  * sidebar handle. It draws nothing at rest. The pane's cards sit 12px in from
@@ -55,6 +79,26 @@ export function GuideResizeHandle(props: {
 }): React.ReactElement {
 	const line = useRef<HTMLDivElement>(null);
 
+	/** Lights the border of the card at `clientY` only, with the gradient centred on the pointer. Between cards it hides, or with `keepLast` (while dragging) stays on the last card. */
+	const lightCardAt = (clientY: number, keepLast: boolean) => {
+		const glow = line.current;
+		if (glow === null) return;
+		const glowRect = glow.getBoundingClientRect();
+		const card = document
+			.elementsFromPoint(glowRect.x + CARD_PROBE_INSET, clientY)
+			.find((element) => element.matches(CARD_SELECTOR));
+		if (card === undefined) {
+			if (!keepLast) glow.style.visibility = "hidden";
+			return;
+		}
+		const span = visibleSpan(card);
+		const separatorTop = glow.parentElement?.getBoundingClientRect().top ?? 0;
+		glow.style.top = `${span.top - separatorTop}px`;
+		glow.style.height = `${span.bottom - span.top}px`;
+		glow.style.setProperty("--y", `${clientY - span.top}px`);
+		glow.style.visibility = "visible";
+	};
+
 	return (
 		// Not `ResizableHandle`: shadcn's wrapper renders its own children in place
 		// of the ones it is given.
@@ -66,13 +110,17 @@ export function GuideResizeHandle(props: {
 				<TooltipTrigger
 					render={
 						<div
-							className="absolute inset-y-0 -left-1.5 w-[13px] cursor-col-resize"
+							className="absolute inset-y-0 -left-1.5 w-[13px]"
 							onPointerDown={(event) => {
 								const startX = event.clientX;
 								const startY = event.clientY;
+								const follow = (moveEvent: PointerEvent) =>
+									lightCardAt(moveEvent.clientY, true);
+								window.addEventListener("pointermove", follow);
 								window.addEventListener(
 									"pointerup",
 									(upEvent) => {
+										window.removeEventListener("pointermove", follow);
 										const travelled = Math.hypot(
 											upEvent.clientX - startX,
 											upEvent.clientY - startY,
@@ -82,13 +130,7 @@ export function GuideResizeHandle(props: {
 									{ once: true },
 								);
 							}}
-							onPointerMove={(event) => {
-								const bounds = event.currentTarget.getBoundingClientRect();
-								line.current?.style.setProperty(
-									"--y",
-									`${event.clientY - bounds.top}px`,
-								);
-							}}
+							onPointerMove={(event) => lightCardAt(event.clientY, false)}
 						/>
 					}
 				/>
@@ -109,7 +151,7 @@ export function GuideResizeHandle(props: {
 			<div
 				aria-hidden
 				className={cn(
-					"pointer-events-none absolute inset-y-0 left-1.5 w-px opacity-0 transition-opacity duration-150",
+					"pointer-events-none invisible absolute left-1.5 w-px opacity-0 transition-opacity duration-150",
 					"[--hl:var(--color-foreground)] [--y:-9999px]",
 					"[background:var(--highlight)]",
 					"group-data-[separator=hover]/handle:opacity-100",

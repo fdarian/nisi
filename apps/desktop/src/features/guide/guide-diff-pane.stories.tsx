@@ -96,7 +96,10 @@ function Split(props: { initial: GuideTarget }): React.ReactElement {
 	>(new Map());
 	return (
 		<div className="flex h-screen bg-pane-surface text-foreground">
-			<ResizablePanelGroup orientation="horizontal">
+			<ResizablePanelGroup
+				orientation="horizontal"
+				resizeTargetMinimumSize={{ coarse: 12, fine: 12 }}
+			>
 				<ResizablePanel id="content" minSize="320px">
 					<div className="flex flex-col items-start gap-2 p-6 text-sm">
 						<p>Guide content</p>

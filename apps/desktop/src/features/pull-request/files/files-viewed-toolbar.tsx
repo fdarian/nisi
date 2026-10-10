@@ -46,7 +46,7 @@ export function FilesViewedToolbar(props: {
 	const wrapLines = useWrapLines(props.orpc);
 	const loading = props.counts === undefined;
 	return (
-		<div className={filesToolbarClassName}>
+		<div className={filesToolbarClassName} data-diff-pane-card="">
 			<span className="flex items-center gap-2">
 				<ProgressCircle counts={props.counts} />
 				<ViewedLabel counts={props.counts} />

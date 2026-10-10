@@ -44,6 +44,8 @@ const DIFF_PANEL = "diff";
 const CONTENT_MIN_WIDTH = "360px";
 const DIFF_MIN_WIDTH = "380px";
 const DIFF_DEFAULT_SIZE = "46%";
+/** The library's own drag zone around the handle, matched to the handle's tooltip area (`guide-resize-handle.tsx`) so the cursor, tooltip and drag all start in the same place. */
+const HANDLE_HIT_SIZE = { coarse: 12, fine: 12 };
 
 /**
  * The Guide tab: `<repoRoot>/.nisi/guide/guide.mdx`, bundled by the sidecar and
@@ -213,6 +215,7 @@ function GuideBody(props: {
 			defaultLayout={layout.defaultLayout}
 			onLayoutChanged={layout.onLayoutChanged}
 			orientation="horizontal"
+			resizeTargetMinimumSize={HANDLE_HIT_SIZE}
 		>
 			<ResizablePanel id={CONTENT_PANEL} minSize={CONTENT_MIN_WIDTH}>
 				<div
