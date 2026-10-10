@@ -322,9 +322,7 @@ export function OpenPullRequestPalette(
 									searchErrorMessage === null ? (
 										<div className="flex items-center justify-center gap-3 text-muted-foreground">
 											<DotLoader className="w-8" />
-											{query === "" || debouncedQuery === ""
-												? "Loading pull requests…"
-												: "Searching…"}
+											{query === "" ? "Loading pull requests…" : "Searching…"}
 										</div>
 									) : (
 										(searchErrorMessage ?? "No pull requests found.")
