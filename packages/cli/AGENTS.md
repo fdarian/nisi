@@ -42,7 +42,7 @@ the wire shape this grammar maps to.
   stream (`apps/desktop/src-tauri/src/activation.rs`), before GitHub resolution finishes.
   This identifies the dev sandbox or production instance that actually answered.
 - `src/debug.ts` / `src/debug-report.ts` — `nisi debug`: fetch via the same `sidecar.json` discovery
-  and `dataDirConfig` (`NISI_DATA_DIR`) as `handoff.ts`, then render. `debug-report.ts` is pure; its
+  and `dataDirConfig` (`getDataDirConfig` from `@repo/db/paths`: `NISI_DATA_DIR`, else config.toml's `data_dir`) as `handoff.ts`, then render. `debug-report.ts` is pure; its
   `sessionAnomalies` is where "worth a second look" is defined. This is how an agent inspects the
   sidecar without ever holding the bearer token.
 - `src/app-launch.ts` — resolves "the app" to launch cold (env override, `/Applications`, or a
@@ -53,7 +53,10 @@ the wire shape this grammar maps to.
   `handoff.ts`). With `NISI_DATA_DIR` set it refuses to launch (`dataDirLaunchRefusal`) unless the
   caller also set `NISI_APP_PATH` or `NISI_MEASUREMENT_INSTANCE=1`: nothing answering at an explicit
   data dir means a dev sandbox is down, and `open -n --env` on the installed bundle would boot a
-  second production-identity instance onto its data.
+  second production-identity instance onto its data. This check is deliberately env-only: it reads
+  `NISI_DATA_DIR` directly, not `getDataDirConfig`, and never forwards a config.toml `data_dir` via
+  `open --env` — the installed app reads config.toml itself, and a `data_dir` from that file is
+  the user's standing choice, not a sandbox to protect.
 
 ## Gotchas
 

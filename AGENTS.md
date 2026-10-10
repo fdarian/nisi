@@ -55,7 +55,9 @@ cd packages/<name> && bun test
 ```
 
 `cd apps/desktop && bun dev` runs an isolated dev sandbox — its own `sidecar.json`, its own SQLite
-file, keyed off `NISI_DATA_DIR` — so it never fights the production app over the same data. A plain
+file, keyed off `NISI_DATA_DIR` — so it never fights the production app over the same data. The data
+dir resolves as `NISI_DATA_DIR`, else `data_dir` in `~/.config/nisi/config.toml`, else the macOS
+default (see `packages/db/AGENTS.md`). A plain
 `nisi` always targets the production install; see `apps/desktop/AGENTS.md`'s "Dev/prod isolation"
 to point it at a dev sandbox instead.
 
