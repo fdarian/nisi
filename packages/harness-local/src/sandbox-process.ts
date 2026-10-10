@@ -28,12 +28,8 @@ export function toSandboxProcess(
 
 	return {
 		pid: child.pid,
-		stdout: Readable.toWeb(
-			child.stdout,
-		) as unknown as ReadableStream<Uint8Array>,
-		stderr: Readable.toWeb(
-			child.stderr,
-		) as unknown as ReadableStream<Uint8Array>,
+		stdout: Readable.toWeb(child.stdout),
+		stderr: Readable.toWeb(child.stderr),
 		async wait() {
 			const result = await exited;
 			if (abortSignal?.aborted) {
