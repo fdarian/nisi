@@ -4,12 +4,11 @@
 		"allowImportingTsExtensions": true,
 		"noErrorTruncation": true,
 		"types": ["bun"],
-		"skipLibCheck": true,
-		// `sidecar/guide/tools.ts` server-renders the Guide tab's React kit
-		// (`src/features/guide/`), which uses JSX, the DOM lib and the app's `#/` alias.
-		"jsx": "react-jsx",
-		"lib": ["ES2023", "DOM", "DOM.Iterable"],
-		"paths": { "#/*": ["./src/*"] }
+		"skipLibCheck": true
 	},
-	"include": ["sidecar"]
+	"include": ["sidecar"],
+	// `sidecar/guide/tools.ts` server-renders the Guide tab's React kit, which needs the
+	// DOM lib and JSX. That code type-checks in its own project; the sidecar sees only its
+	// declarations, so it stays free of the DOM lib.
+	"references": [{ "path": "./tsconfig.guide-render.json" }]
 }

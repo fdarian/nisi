@@ -1,0 +1,22 @@
+{
+	// Same files and options as `tsconfig.json`, plus the declaration emit that lets
+	// `tsconfig.sidecar.json` reference this project instead of compiling the Guide kit
+	// (JSX, DOM lib, `#/*`) itself. Declarations go to `node_modules/.cache`; nothing is
+	// written into the source tree.
+	"extends": "./tsconfig.json",
+	"compilerOptions": {
+		"composite": true,
+		"noEmit": false,
+		"emitDeclarationOnly": true,
+		"outDir": "./node_modules/.cache/tsc/guide-render"
+	},
+	"include": ["src"],
+	// A composite project must list every file it imports, and `include` skips dot
+	// directories, so the Storybook helpers that `src/**/*.stories.tsx` import go here.
+	"files": [
+		".storybook/mock-orpc.ts",
+		".storybook/decorators.tsx",
+		".storybook/preview.tsx"
+	],
+	"references": []
+}

@@ -65,8 +65,10 @@ seam" for the port/token handshake this boots into.
   commands call. They key on `repoRoot`, not a session: the author may have none open. `validateRepoGuide` and
   `previewRepoGuide` read the diff (`guide/diff.ts`: base resolution, `git diff -U0` hunks, untracked files, the
   classifier's `generated` flag), build the guide, and run `src/features/guide/{validate,static-render,guide-text}.ts`
-  — shared modules that live in the frontend tree, so `tsconfig.sidecar.json` carries the DOM lib, `jsx` and the `#/*`
-  alias for them. `localStorage` is stubbed only for the one synchronous render, never left on the globals.
+  — shared modules that live in the frontend tree. They type-check in `tsconfig.guide-render.json` (DOM lib, `jsx`, `#/*`;
+  a composite project emitting declarations only), which `tsconfig.sidecar.json` references, so the rest of the sidecar
+  stays free of the DOM lib. `check:type` builds that project first (`tsc -b`).
+  `localStorage` is stubbed only for the one synchronous render, never left on the globals.
   `preview` returns the guide's body HTML plus the app stylesheet (`guide/preview-css.ts`); the page shell and Chrome
   stay in the CLI, never the sidecar. The stylesheet comes from Vite and Tailwind when the sidecar runs from source
   (once per process, scanning the guide dir too), and from `guide/app-stylesheet.gen.txt` when compiled:
