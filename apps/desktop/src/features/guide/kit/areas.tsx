@@ -9,7 +9,10 @@ import {
 	useLayoutEffect,
 	useState,
 } from "react";
-import { rangeReviewStatus } from "#/features/diff/review-coverage";
+import {
+	type RangeReviewStatus,
+	rangeReviewStatus,
+} from "#/features/diff/review-coverage";
 import type { FileContent } from "#/features/pull-request/data/pr-data";
 import { splitPath } from "#/lib/tree-paths";
 import {
@@ -45,8 +48,15 @@ type Row = {
 	deletions: number;
 };
 
-/** A file the Area claims whole is one row; one it claims in part is a row per claimed hunk, named by its new-side range. */
-function fileRows(claimed: readonly ClaimedFile[]): Row[] {
+function sum(values: readonly number[]): number {
+	return values.reduce((total, value) => total + value, 0);
+}
+
+/** A file claimed in several hunks is one row (the sum of them) that opens onto a row per hunk. */
+type TopRow = Row & { hunks?: readonly Row[] };
+
+/** A file the Area claims whole is one row; one it claims in part is a row per claimed hunk, named by its new-side range, folded under one file row when there are several. */
+function fileRows(claimed: readonly ClaimedFile[]): TopRow[] {
 	const wholePaths = claimed
 		.filter((claim) => claim.hunks === null)
 		.map((claim) => claim.file.path);
@@ -56,7 +66,7 @@ function fileRows(claimed: readonly ClaimedFile[]): Row[] {
 			shortestUniqueSuffixes(wholePaths)[index] as string,
 		]),
 	);
-	return claimed.flatMap((claim): Row[] => {
+	return claimed.flatMap((claim): TopRow[] => {
 		if (claim.hunks === null) {
 			return [
 				{
@@ -68,22 +78,34 @@ function fileRows(claimed: readonly ClaimedFile[]): Row[] {
 			];
 		}
 		const basename = splitPath(claim.file.path).basename;
-		return claim.hunks.map((hunk) => ({
+		const hunks = claim.hunks.map((hunk) => ({
 			path: claim.file.path,
 			lines: hunkRange(hunk),
 			label: `${basename}:${hunkRange(hunk)}`,
 			additions: hunk.additions,
 			deletions: hunk.deletions,
 		}));
+		if (hunks.length === 1) return hunks;
+		return [
+			{
+				path: claim.file.path,
+				label: basename,
+				additions: sum(hunks.map((hunk) => hunk.additions)),
+				deletions: sum(hunks.map((hunk) => hunk.deletions)),
+				hunks,
+			},
+		];
 	});
 }
 
 /** The listed rows, each with its Reviewed checkbox where the app has review state to show. A separate component so the contents a hunk row's state needs are fetched only for rows an open Area lists. */
-function AreaRows(props: { rows: readonly Row[] }): React.ReactElement {
+function AreaRows(props: { rows: readonly TopRow[] }): React.ReactElement {
 	const reviews = useGuideContext().reviews;
 	const hunkPaths = [
 		...new Set(
-			props.rows.flatMap((row) => (row.lines === undefined ? [] : [row.path])),
+			props.rows.flatMap((row) =>
+				row.lines === undefined && row.hunks === undefined ? [] : [row.path],
+			),
 		),
 	];
 	// `reviews` is fixed for the life of a render tree (the app has it, the
@@ -95,18 +117,75 @@ function AreaRows(props: { rows: readonly Row[] }): React.ReactElement {
 				reviews.useFileReviews(hunkPaths);
 	return (
 		<>
-			{props.rows.map((row) => (
-				<li key={`${row.path}:${row.lines ?? ""}`}>
-					<FileRow
-						{...row}
-						review={
-							reviews === undefined
-								? undefined
-								: rowReview(row, reviews, contents?.get(row.path)?.content)
-						}
-					/>
-				</li>
-			))}
+			{props.rows.map((row) => {
+				const content = contents?.get(row.path)?.content;
+				return (
+					<li key={`${row.path}:${row.lines ?? ""}`}>
+						{row.hunks === undefined ? (
+							<FileRow
+								{...row}
+								review={
+									reviews === undefined
+										? undefined
+										: rowReview(row, reviews, content)
+								}
+							/>
+						) : (
+							<FileGroup
+								content={content}
+								hunks={row.hunks}
+								row={row}
+								review={
+									reviews === undefined
+										? undefined
+										: groupReview(row.hunks, reviews, content)
+								}
+							/>
+						)}
+					</li>
+				);
+			})}
+		</>
+	);
+}
+
+/** A file claimed in several hunks: its row, and the per-hunk rows indented beneath it while open. */
+function FileGroup(props: {
+	row: Row;
+	hunks: readonly Row[];
+	review: FileRowReview | undefined;
+	content: FileContent | undefined;
+}): React.ReactElement {
+	const guide = useGuideContext();
+	const reviews = guide.reviews;
+	const [open, setOpen] = useState(guide.expanded === true);
+	return (
+		<>
+			<FileRow
+				{...props.row}
+				group={{
+					hunkCount: props.hunks.length,
+					open,
+					onToggle: () => setOpen(!open),
+				}}
+				review={props.review}
+			/>
+			{open && (
+				<ul className="m-0 flex list-none flex-col gap-px p-0 pl-4">
+					{props.hunks.map((hunk) => (
+						<li key={hunk.lines}>
+							<FileRow
+								{...hunk}
+								review={
+									reviews === undefined
+										? undefined
+										: rowReview(hunk, reviews, props.content)
+								}
+							/>
+						</li>
+					))}
+				</ul>
+			)}
 		</>
 	);
 }
@@ -131,6 +210,30 @@ function rowReview(
 		onToggle: (viewed) =>
 			reviews.setHunkViewed(row.path, range, content, viewed),
 	};
+}
+
+/** Reviewed when every claimed hunk is, indeterminate when only some are; ticking it sets them all. */
+function groupReview(
+	hunks: readonly Row[],
+	reviews: GuideReviews,
+	content: FileContent | undefined,
+): FileRowReview {
+	const each = hunks.map((hunk) => rowReview(hunk, reviews, content));
+	return {
+		status: groupStatus(each.map((review) => review.status)),
+		onToggle: (viewed) => {
+			for (const review of each) review.onToggle(viewed);
+		},
+	};
+}
+
+export function groupStatus(
+	statuses: readonly (RangeReviewStatus | undefined)[],
+): RangeReviewStatus | undefined {
+	if (statuses.includes(undefined)) return undefined;
+	if (statuses.every((status) => status === "reviewed")) return "reviewed";
+	if (statuses.every((status) => status === "unreviewed")) return "unreviewed";
+	return "partial";
 }
 
 /** One part of the change: bullets written by the agent, and a file count and +/− computed by nisi from the diff. Only meaningful inside `Areas`. */

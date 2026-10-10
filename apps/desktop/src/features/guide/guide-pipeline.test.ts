@@ -9,6 +9,7 @@ import { evaluateGuide } from "./evaluate";
 import { GUIDE_COMPONENTS } from "./guide-components";
 import { GuideProvider } from "./guide-context";
 import { htmlToText } from "./guide-text";
+import { groupStatus } from "./kit/areas";
 import { renderGuideHtml } from "./static-render";
 import { checkGuide, type DiffFile, validateGuide } from "./validate";
 
@@ -601,4 +602,40 @@ test("Item and Skipped titles render backticked segments as inline code, linking
 	expect(out).toContain(
 		"[ ] Read ⟨a.ts⟩ and `parseConfig` [src/a.ts:12], not `cli.ts` or a stray ` tick",
 	);
+});
+
+test("an Area claiming several hunks of one file lists one file row with the summed stats, the hunks beneath; one hunk or a whole file stays a single row", async () => {
+	const result = await buildInline(`## Overview
+
+<Areas>
+	<Area id="real" title="Real" paths={["src/a.ts:1-5", "src/a.ts:20-25", "src/b.ts:1-5", "src/c.ts"]}>
+		- Body.
+	</Area>
+</Areas>
+`);
+	if (result.kind !== "ok") throw new Error("build failed");
+	const out = htmlToText(
+		renderGuideHtml(
+			result,
+			[
+				file("src/a.ts", 20, 4, [1, 5], [20, 25], [40, 50]),
+				file("src/b.ts", 10, 1, [1, 5], [30, 35]),
+				file("src/c.ts", 3, 0, [1, 3]),
+			],
+			{ expanded: true },
+		),
+	);
+	expect(out).toContain("⟨a.ts⟩ · 2 hunks +11 −4");
+	expect(out).toContain("  - ⟨a.ts:1-5⟩ +5 −4\n  - ⟨a.ts:20-25⟩ +6");
+	expect(out).toContain("- ⟨b.ts:1-5⟩ +5 −1");
+	expect(out).toContain("- ⟨c.ts⟩ +3");
+	expect(out).not.toContain("b.ts · ");
+});
+
+test("a file row is reviewed when all its hunks are, indeterminate when some are", () => {
+	expect(groupStatus(["reviewed", "reviewed"])).toBe("reviewed");
+	expect(groupStatus(["unreviewed", "unreviewed"])).toBe("unreviewed");
+	expect(groupStatus(["reviewed", "unreviewed"])).toBe("partial");
+	expect(groupStatus(["partial", "unreviewed"])).toBe("partial");
+	expect(groupStatus(["reviewed", undefined])).toBeUndefined();
 });

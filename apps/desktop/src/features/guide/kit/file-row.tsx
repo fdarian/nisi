@@ -1,6 +1,7 @@
 "use client";
 
 import { cn } from "cn";
+import { ChevronRightIcon } from "lucide-react";
 import { Checkbox } from "#/components/ui/checkbox";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "#/components/ui/tooltip";
 import type { RangeReviewStatus } from "#/features/diff/review-coverage";
@@ -12,6 +13,13 @@ import { DiffStat } from "./diff-stat";
 export type FileRowReview = {
 	status: RangeReviewStatus | undefined;
 	onToggle: (viewed: boolean) => void;
+};
+
+/** Makes a row the parent of its file's claimed hunk rows: the count toggles them open beneath it. */
+export type FileRowGroup = {
+	hunkCount: number;
+	open: boolean;
+	onToggle: () => void;
 };
 
 /**
@@ -26,6 +34,7 @@ export function FileRow(props: {
 	additions: number;
 	deletions: number;
 	review?: FileRowReview;
+	group?: FileRowGroup;
 }): React.ReactElement {
 	const guide = useGuideContext();
 	const scope = useAreaScope();
@@ -34,6 +43,11 @@ export function FileRow(props: {
 		lines: props.lines,
 	});
 	const reviewed = props.review?.status === "reviewed";
+	const stat = (
+		<span className="shrink-0 font-mono text-xs tabular-nums">
+			<DiffStat additions={props.additions} deletions={props.deletions} />
+		</span>
+	);
 	return (
 		<div
 			data-text="inline"
@@ -61,12 +75,7 @@ export function FileRow(props: {
 							>
 								{props.label}
 							</span>
-							<span className="shrink-0 font-mono text-xs tabular-nums">
-								<DiffStat
-									additions={props.additions}
-									deletions={props.deletions}
-								/>
-							</span>
+							{props.group === undefined && stat}
 						</button>
 					}
 				/>
@@ -78,6 +87,25 @@ export function FileRow(props: {
 					</span>
 				</TooltipPopup>
 			</Tooltip>
+			{props.group !== undefined && (
+				<>
+					<button
+						aria-expanded={props.group.open}
+						className="flex shrink-0 cursor-pointer items-center gap-0.5 rounded px-1 py-1 text-muted-foreground text-xs tabular-nums"
+						onClick={props.group.onToggle}
+						type="button"
+					>
+						<span aria-hidden>·</span> {props.group.hunkCount} hunks
+						<ChevronRightIcon
+							className={cn(
+								"size-3 transition-transform",
+								props.group.open && "rotate-90",
+							)}
+						/>
+					</button>
+					{stat}
+				</>
+			)}
 			{props.review !== undefined && (
 				<Checkbox
 					aria-label={`Mark ${props.label} reviewed`}
