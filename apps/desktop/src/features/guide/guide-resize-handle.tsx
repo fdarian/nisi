@@ -40,11 +40,14 @@ const HIGHLIGHT_GRADIENT = `linear-gradient(to bottom, ${[
 
 /**
  * The split handle between the guide and its diff pane, after Linear's
- * sidebar handle. It draws no line of its own: the diff pane's left border is
- * the line, and this sits on it with a wide invisible hit area. On hover a
- * highlight on that border is brightest at the pointer's height and fades out
- * above and below, following the pointer along it; solid along its whole length while dragging. A click
- * that doesn't drag collapses the pane. The tooltip rides the cursor.
+ * sidebar handle. It draws nothing at rest. It sits along the left edge of
+ * the pane's cards (the toolbar card's `mx-3` and `DiffCodeView`'s `px-3`
+ * inset them 12px from the panel boundary, hence `translate-x-3`), with a wide
+ * invisible hit area. On hover a highlight is drawn over the cards' own
+ * border line, brightest at the pointer's height and fading out above and
+ * below as the pointer moves; it stays lit along the whole edge while
+ * dragging. A click that doesn't drag collapses the pane. The tooltip rides
+ * the cursor.
  */
 export function GuideResizeHandle(props: {
 	onCollapse: () => void;
@@ -54,7 +57,10 @@ export function GuideResizeHandle(props: {
 	return (
 		// Not `ResizableHandle`: shadcn's wrapper renders its own children in place
 		// of the ones it is given.
-		<Separator className="group/handle relative z-10 w-0" disableDoubleClick>
+		<Separator
+			className="group/handle relative z-10 w-0 translate-x-3"
+			disableDoubleClick
+		>
 			<Tooltip trackCursorAxis="both">
 				<TooltipTrigger
 					render={

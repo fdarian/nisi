@@ -89,7 +89,7 @@ export function GuideDiffPane(props: {
 	const ignoreFirstCardPainted = useCallback(() => {}, []);
 	return (
 		<div
-			className={cn(filesMainClassName, "h-full border-l")}
+			className={cn(filesMainClassName, "h-full")}
 			onKeyDownCapture={() => setDismissed(target)}
 			onPointerDownCapture={() => setDismissed(target)}
 		>
