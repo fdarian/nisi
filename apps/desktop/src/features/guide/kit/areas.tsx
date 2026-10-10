@@ -253,7 +253,6 @@ export function Area(props: AreaProps): React.ReactElement {
 	});
 	const stats = filesInArea(guide.files, props.paths);
 	const color = colorForArea(guide.areaOrder, props.id);
-	const hovered = guide.hoveredArea === props.id;
 	// The static preview shows every file, so a reader of the PNG sees the whole list.
 	const rows = fileRows(stats.claimed);
 	const visibleCount =
@@ -263,10 +262,7 @@ export function Area(props: AreaProps): React.ReactElement {
 	return (
 		// biome-ignore lint/a11y/noStaticElementInteractions: hover only dims other areas' Sequence steps; the card has no action of its own
 		<section
-			className={cn(
-				"flex min-w-0 flex-col rounded-xl border bg-card px-4 py-3.5 transition-shadow",
-				hovered && "shadow-md",
-			)}
+			className="flex min-w-0 flex-col rounded-xl border bg-card px-4 py-3.5"
 			onMouseEnter={() => guide.setHoveredArea(props.id)}
 			onMouseLeave={() => guide.setHoveredArea(null)}
 		>
