@@ -11,6 +11,7 @@ import type {
 	PullRequestReadyError,
 	PullRequestSearchError,
 	PullRequestStackMergeError,
+	PullRequestStateError,
 	RepoMergeMethodsError,
 	WorkflowApprovalFailed,
 	WorkflowApprovalForbidden,
@@ -88,6 +89,15 @@ export type GitHubShape = {
 	) => Effect.Effect<
 		PullRequestRef | null,
 		PullRequestNotFound | GhOutputDecodeError | GitHubUnreachable
+	>;
+	pullRequestState: (
+		cwd: string,
+		owner: string,
+		repo: string,
+		number: number,
+	) => Effect.Effect<
+		"OPEN" | "CLOSED" | "MERGED",
+		PullRequestStateError | GitCommandError
 	>;
 	headRef: (
 		repoRoot: string,

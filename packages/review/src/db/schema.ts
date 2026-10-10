@@ -24,6 +24,13 @@ export const sessions = sqliteTable("sessions", {
 	repo: text(),
 	prNumber: integer({ mode: "number" }),
 	prTitle: text(),
+	/**
+	 * Last PR state the sidecar saw, for the Repositories settings page. Only
+	 * a terminal value (`merged`/`closed`) is trusted without re-checking: a
+	 * persisted `open` goes stale the moment the PR lands, so readers confirm
+	 * it against live state. `NULL` until something has observed the PR.
+	 */
+	prState: text().$type<"open" | "merged" | "closed">(),
 	baseRef: text().notNull(),
 	headRef: text().notNull(),
 	/** Null while the session is an open tab; set by `sessions.close`, cleared by the next `sessions.open`. */

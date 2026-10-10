@@ -1,0 +1,398 @@
+{
+	"version": "7",
+	"dialect": "sqlite",
+	"id": "d1bb9f26-9b42-478f-ba6a-76084e66875e",
+	"prevIds": ["3cd69537-4067-40ae-ba9e-0f29e3d1a89d"],
+	"ddl": [
+		{
+			"name": "review_range_claims",
+			"entityType": "tables"
+		},
+		{
+			"name": "reviewed_files",
+			"entityType": "tables"
+		},
+		{
+			"name": "sessions",
+			"entityType": "tables"
+		},
+		{
+			"type": "integer",
+			"notNull": false,
+			"autoincrement": true,
+			"default": null,
+			"generated": null,
+			"name": "id",
+			"entityType": "columns",
+			"table": "review_range_claims"
+		},
+		{
+			"type": "integer",
+			"notNull": true,
+			"autoincrement": false,
+			"default": null,
+			"generated": null,
+			"name": "sessionId",
+			"entityType": "columns",
+			"table": "review_range_claims"
+		},
+		{
+			"type": "text",
+			"notNull": true,
+			"autoincrement": false,
+			"default": null,
+			"generated": null,
+			"name": "path",
+			"entityType": "columns",
+			"table": "review_range_claims"
+		},
+		{
+			"type": "text",
+			"notNull": true,
+			"autoincrement": false,
+			"default": null,
+			"generated": null,
+			"name": "blockId",
+			"entityType": "columns",
+			"table": "review_range_claims"
+		},
+		{
+			"type": "text",
+			"notNull": true,
+			"autoincrement": false,
+			"default": null,
+			"generated": null,
+			"name": "blockLabel",
+			"entityType": "columns",
+			"table": "review_range_claims"
+		},
+		{
+			"type": "text",
+			"notNull": true,
+			"autoincrement": false,
+			"default": null,
+			"generated": null,
+			"name": "ranges",
+			"entityType": "columns",
+			"table": "review_range_claims"
+		},
+		{
+			"type": "text",
+			"notNull": true,
+			"autoincrement": false,
+			"default": null,
+			"generated": null,
+			"name": "snapshotHash",
+			"entityType": "columns",
+			"table": "review_range_claims"
+		},
+		{
+			"type": "integer",
+			"notNull": true,
+			"autoincrement": false,
+			"default": null,
+			"generated": null,
+			"name": "viewedAt",
+			"entityType": "columns",
+			"table": "review_range_claims"
+		},
+		{
+			"type": "integer",
+			"notNull": false,
+			"autoincrement": true,
+			"default": null,
+			"generated": null,
+			"name": "id",
+			"entityType": "columns",
+			"table": "reviewed_files"
+		},
+		{
+			"type": "integer",
+			"notNull": true,
+			"autoincrement": false,
+			"default": null,
+			"generated": null,
+			"name": "sessionId",
+			"entityType": "columns",
+			"table": "reviewed_files"
+		},
+		{
+			"type": "text",
+			"notNull": true,
+			"autoincrement": false,
+			"default": null,
+			"generated": null,
+			"name": "path",
+			"entityType": "columns",
+			"table": "reviewed_files"
+		},
+		{
+			"type": "integer",
+			"notNull": true,
+			"autoincrement": false,
+			"default": null,
+			"generated": null,
+			"name": "viewed",
+			"entityType": "columns",
+			"table": "reviewed_files"
+		},
+		{
+			"type": "text",
+			"notNull": false,
+			"autoincrement": false,
+			"default": null,
+			"generated": null,
+			"name": "snapshotHash",
+			"entityType": "columns",
+			"table": "reviewed_files"
+		},
+		{
+			"type": "integer",
+			"notNull": true,
+			"autoincrement": false,
+			"default": null,
+			"generated": null,
+			"name": "viewedAt",
+			"entityType": "columns",
+			"table": "reviewed_files"
+		},
+		{
+			"type": "integer",
+			"notNull": false,
+			"autoincrement": true,
+			"default": null,
+			"generated": null,
+			"name": "id",
+			"entityType": "columns",
+			"table": "sessions"
+		},
+		{
+			"type": "text",
+			"notNull": true,
+			"autoincrement": false,
+			"default": null,
+			"generated": null,
+			"name": "publicId",
+			"entityType": "columns",
+			"table": "sessions"
+		},
+		{
+			"type": "text",
+			"notNull": true,
+			"autoincrement": false,
+			"default": null,
+			"generated": null,
+			"name": "sessionKey",
+			"entityType": "columns",
+			"table": "sessions"
+		},
+		{
+			"type": "text",
+			"notNull": true,
+			"autoincrement": false,
+			"default": null,
+			"generated": null,
+			"name": "repoRoot",
+			"entityType": "columns",
+			"table": "sessions"
+		},
+		{
+			"type": "text",
+			"notNull": false,
+			"autoincrement": false,
+			"default": null,
+			"generated": null,
+			"name": "owner",
+			"entityType": "columns",
+			"table": "sessions"
+		},
+		{
+			"type": "text",
+			"notNull": false,
+			"autoincrement": false,
+			"default": null,
+			"generated": null,
+			"name": "repo",
+			"entityType": "columns",
+			"table": "sessions"
+		},
+		{
+			"type": "integer",
+			"notNull": false,
+			"autoincrement": false,
+			"default": null,
+			"generated": null,
+			"name": "prNumber",
+			"entityType": "columns",
+			"table": "sessions"
+		},
+		{
+			"type": "text",
+			"notNull": false,
+			"autoincrement": false,
+			"default": null,
+			"generated": null,
+			"name": "prTitle",
+			"entityType": "columns",
+			"table": "sessions"
+		},
+		{
+			"type": "text",
+			"notNull": false,
+			"autoincrement": false,
+			"default": null,
+			"generated": null,
+			"name": "prState",
+			"entityType": "columns",
+			"table": "sessions"
+		},
+		{
+			"type": "text",
+			"notNull": true,
+			"autoincrement": false,
+			"default": null,
+			"generated": null,
+			"name": "baseRef",
+			"entityType": "columns",
+			"table": "sessions"
+		},
+		{
+			"type": "text",
+			"notNull": true,
+			"autoincrement": false,
+			"default": null,
+			"generated": null,
+			"name": "headRef",
+			"entityType": "columns",
+			"table": "sessions"
+		},
+		{
+			"type": "integer",
+			"notNull": false,
+			"autoincrement": false,
+			"default": null,
+			"generated": null,
+			"name": "closedAt",
+			"entityType": "columns",
+			"table": "sessions"
+		},
+		{
+			"type": "integer",
+			"notNull": true,
+			"autoincrement": false,
+			"default": null,
+			"generated": null,
+			"name": "createdAt",
+			"entityType": "columns",
+			"table": "sessions"
+		},
+		{
+			"type": "integer",
+			"notNull": true,
+			"autoincrement": false,
+			"default": null,
+			"generated": null,
+			"name": "updatedAt",
+			"entityType": "columns",
+			"table": "sessions"
+		},
+		{
+			"columns": ["sessionId"],
+			"tableTo": "sessions",
+			"columnsTo": ["id"],
+			"onUpdate": "NO ACTION",
+			"onDelete": "CASCADE",
+			"nameExplicit": false,
+			"name": "review_range_claims_sessionId_sessions_id_fk",
+			"entityType": "fks",
+			"table": "review_range_claims"
+		},
+		{
+			"columns": ["sessionId"],
+			"tableTo": "sessions",
+			"columnsTo": ["id"],
+			"onUpdate": "NO ACTION",
+			"onDelete": "CASCADE",
+			"nameExplicit": false,
+			"name": "reviewed_files_sessionId_sessions_id_fk",
+			"entityType": "fks",
+			"table": "reviewed_files"
+		},
+		{
+			"columns": ["id"],
+			"nameExplicit": false,
+			"name": "review_range_claims_pk",
+			"table": "review_range_claims",
+			"entityType": "pks"
+		},
+		{
+			"columns": ["id"],
+			"nameExplicit": false,
+			"name": "reviewed_files_pk",
+			"table": "reviewed_files",
+			"entityType": "pks"
+		},
+		{
+			"columns": ["id"],
+			"nameExplicit": false,
+			"name": "sessions_pk",
+			"table": "sessions",
+			"entityType": "pks"
+		},
+		{
+			"columns": [
+				{
+					"value": "sessionId",
+					"isExpression": false
+				},
+				{
+					"value": "path",
+					"isExpression": false
+				},
+				{
+					"value": "blockId",
+					"isExpression": false
+				}
+			],
+			"isUnique": true,
+			"where": null,
+			"origin": "manual",
+			"name": "review_range_claims_session_path_block_idx",
+			"entityType": "indexes",
+			"table": "review_range_claims"
+		},
+		{
+			"columns": [
+				{
+					"value": "sessionId",
+					"isExpression": false
+				},
+				{
+					"value": "path",
+					"isExpression": false
+				}
+			],
+			"isUnique": true,
+			"where": null,
+			"origin": "manual",
+			"name": "reviewed_files_session_path_idx",
+			"entityType": "indexes",
+			"table": "reviewed_files"
+		},
+		{
+			"columns": ["publicId"],
+			"nameExplicit": false,
+			"name": "sessions_publicId_unique",
+			"entityType": "uniques",
+			"table": "sessions"
+		},
+		{
+			"columns": ["sessionKey"],
+			"nameExplicit": false,
+			"name": "sessions_sessionKey_unique",
+			"entityType": "uniques",
+			"table": "sessions"
+		}
+	],
+	"renames": []
+}

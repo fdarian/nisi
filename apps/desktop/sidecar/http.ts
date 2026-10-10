@@ -93,6 +93,7 @@ import {
 } from "./open-requests.ts";
 import { PrIndex } from "./pr-index.ts";
 import { AttentionState } from "./pull-request-attention.ts";
+import { getRepository, listRepositories } from "./repositories.ts";
 import { RpcErrorsPlugin } from "./rpc-errors.ts";
 import { RpcFailureLedger } from "./rpc-failure-ledger.ts";
 import { RpcLifecyclePlugin } from "./rpc-lifecycle.ts";
@@ -1287,6 +1288,54 @@ export function attachRouter(
 			restart: authed.update.restart.effect(function* () {
 				const updater = yield* Updater;
 				yield* updater.restart;
+			}),
+		},
+		repositories: {
+			list: authed.repositories.list.effect(function* ({ errors }) {
+				return yield* listRepositories.pipe(
+					Effect.catchTags({
+						SettingsStoreError: (cause) =>
+							Effect.fail(
+								errors.SERVICE_UNAVAILABLE({ message: cause.message }),
+							),
+						ReviewStoreError: (cause) =>
+							Effect.fail(
+								errors.SERVICE_UNAVAILABLE({ message: cause.message }),
+							),
+						GitCommandError: (cause) =>
+							Effect.fail(
+								errors.SERVICE_UNAVAILABLE({
+									message: `${cause.command} could not be run: ${cause.stderr || String(cause.cause)}`,
+								}),
+							),
+					}),
+				);
+			}),
+			get: authed.repositories.get.effect(function* ({ input, errors }) {
+				return yield* getRepository(input.owner, input.repo).pipe(
+					Effect.catchTags({
+						SettingsStoreError: (cause) =>
+							Effect.fail(
+								errors.SERVICE_UNAVAILABLE({ message: cause.message }),
+							),
+						ReviewStoreError: (cause) =>
+							Effect.fail(
+								errors.SERVICE_UNAVAILABLE({ message: cause.message }),
+							),
+						SessionNotFound: (cause) =>
+							Effect.fail(
+								errors.SERVICE_UNAVAILABLE({
+									message: `session not found: ${cause.sessionId}`,
+								}),
+							),
+						GitCommandError: (cause) =>
+							Effect.fail(
+								errors.SERVICE_UNAVAILABLE({
+									message: `${cause.command} could not be run: ${cause.stderr || String(cause.cause)}`,
+								}),
+							),
+					}),
+				);
 			}),
 		},
 		pullRequests: {

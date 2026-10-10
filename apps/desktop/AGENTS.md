@@ -30,6 +30,9 @@ Three parts, one seam:
   `preferredEditor`, `hideReviewed`, `includeUncommitted`, `enabledHarnesses` for the settings page's
   checkboxes) — theme is the one exception, staying in
   `localStorage` via `next-themes` (wired in `routes/__root.tsx`) since nothing server-side reads it.
+  `/settings/repositories` (`src/features/settings/repositories/`) lists known repositories and, per repo, its
+  sessions; a session row doesn't open a tab itself but enqueues a `nisi://open` deep link
+  (`enqueuePullRequestOpen`), which `useRedirectHomeOnPendingDeepLink` turns into a trip back to `/`.
   The diff pane (`src/features/pull-request/files/diff-pane/diff-pane.tsx`) renders with `@pierre/diffs`, same shadow-DOM/Worker-pool
   shape as the `@pierre/trees` sidebar — it renders `diff.fileContents`' `patch`/`oldContent` directly,
   no client-side slicing; a reviewed file's already-seen spans arrive pre-collapsed into ordinary
@@ -129,6 +132,12 @@ you set it yourself: devsess sets `NISI_DATA_DIR` only for the subprocesses `dev
 (`runManagedSubprocess` merges `env` into *that child's* environment), never for a separate shell
 you happen to have open. There's no direnv-style magic where opening a terminal "inside" a session
 picks it up automatically.
+
+If nothing answers at that `NISI_DATA_DIR` (the dev sandbox is down, or its `sidecar.json` is gone),
+`nisi` fails with an error naming the dir instead of cold-starting `/Applications/nisi.app` against
+it; setting `NISI_APP_PATH` (or `NISI_MEASUREMENT_INSTANCE=1`) opts back into that launch. A running
+sidecar also re-publishes its own `sidecar.json` within ~5s if something deletes it
+(`sidecar/index.ts`'s `keepHandshakePublished`).
 
 Going the other way — a dev sidecar against the *real* app-data dir instead of a session's —
 is `bun dev --prod-data-dir`. Safe to run even while the packaged app is open: it resolves the

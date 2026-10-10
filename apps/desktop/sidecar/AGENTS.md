@@ -31,6 +31,10 @@ seam" for the port/token handshake this boots into.
   on. That takeover's common trigger in dev is a fresh `bun dev` of the same devsess session
   finding a previous one's dead sidecar, since `scripts/dev.ts` pins the sidecar port to a sticky
   port for the whole session rather than a fresh one per run — see that file's own comment.
+  `keepHandshakePublished` then polls (5s) for `sidecar.json` going missing while this process is
+  still serving (a safety net for external deletion; `releaseSidecar` itself only removes a file
+  that still records this process's `{ port, token }`) — and re-claims it through
+  `acquireSidecar`, stopping if a different live owner has taken the dir.
 - `logging.ts` — `LoggingLive`: console (`Logger.consolePretty`, stderr) plus a
   `@repo/logging`-backed rotating file logger at `<dataDir>/logs/sidecar.log`, both gated by the
   same `LOG_LEVEL`-derived minimum level. This is the only place stdout-in-production's "goes
@@ -43,6 +47,12 @@ seam" for the port/token handshake this boots into.
   combined across sessions of the same PR. `http.ts` receives header-level focus/selection via
   `sessions.setAttention`; `live-poll.ts` marks local changes; `session-close.ts` removes entries.
   `GhGitHub.layer` consumes its `PullRequestAttention` stream to choose its polling cadence.
+- `repositories.ts` — behind `repositories.list`/`get` (Settings › Repositories). Reads `ReviewStore` and
+  `SettingsStore` directly, never `Store.listSessions`. `list` makes no GitHub calls (open counts come from
+  `PrIndex`); `get` resolves a session's state as index → persisted `merged`/`closed` → live
+  `GitHub.pullRequestState`, persisting what it fetches; a failed lookup leaves just that session
+  `unresolved` (reason on the wire) and persists nothing. `Store.recordPullRequestStatus` keeps
+  `sessions.prState` fresh from the merge-status watch.
 - `diagnostics-snapshot.ts`, `merge-status-ledger.ts`, `rpc-failure-ledger.ts` — behind `diagnostics.snapshot`
   (what `nisi debug` prints). The snapshot is strictly read-only: it lists open sessions straight from
   `ReviewStore` (never `Store.listSessions`, which prepares each base and can start a `git fetch`) and

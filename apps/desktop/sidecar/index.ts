@@ -11,10 +11,20 @@ import {
 import { makeSidecarClient } from "@repo/sidecar-api";
 import {
 	acquireSidecar,
+	readSidecarJson,
 	releaseSidecar,
+	type SidecarHandshake,
 	type SidecarLivenessCheck,
 } from "deskkit/sidecar";
-import { Config, Context, Effect, Layer, Option, Tracer } from "effect";
+import {
+	Config,
+	Context,
+	Effect,
+	Layer,
+	Option,
+	Schedule,
+	Tracer,
+} from "effect";
 import { FileSystem } from "effect/FileSystem";
 import { ChatSessions } from "./chat/sessions.ts";
 import { CodeLspPool } from "./code-index/state.ts";
@@ -55,6 +65,46 @@ const isSidecarAlive: SidecarLivenessCheck = (owner) =>
 			}),
 		),
 	).pipe(Effect.map((result) => result.isSuccess));
+
+const HANDSHAKE_CHECK_INTERVAL = "5 seconds";
+
+/**
+ * Re-publishes `sidecar.json` if it disappears while this process is still
+ * serving — a safety net for a `SIGKILL`'d-and-restarted neighbour or an
+ * external deletion, either of which would otherwise leave the CLI seeing no
+ * handshake and concluding no app is running. Goes through `acquireSidecar`
+ * (atomic `wx` create) rather than writing the file here, so a different live
+ * owner that has since claimed the dir is respected: the loop stops instead of
+ * fighting it.
+ */
+const keepHandshakePublished = (dataDir: string, owner: SidecarHandshake) =>
+	Effect.gen(function* () {
+		if ((yield* readSidecarJson(dataDir)) !== undefined) {
+			return false;
+		}
+		yield* Effect.logWarning(
+			"sidecar.json went missing while this sidecar is still running — re-publishing it",
+			{ dataDir, port: owner.port },
+		);
+		yield* acquireSidecar(dataDir, owner, isSidecarAlive);
+		return false;
+	}).pipe(
+		Effect.catchTag("SidecarAlreadyRunning", (error) =>
+			Effect.logWarning(
+				"another live sidecar now owns sidecar.json — no longer re-publishing it",
+				{ otherPort: error.port },
+			).pipe(Effect.as(true)),
+		),
+		Effect.catchCause((cause) =>
+			Effect.logError("could not re-publish sidecar.json", cause).pipe(
+				Effect.as(false),
+			),
+		),
+		Effect.repeat({
+			schedule: Schedule.spaced(HANDSHAKE_CHECK_INTERVAL),
+			until: (stop) => stop,
+		}),
+	);
 
 const program = Effect.scoped(
 	Effect.gen(function* () {
@@ -130,6 +180,8 @@ const program = Effect.scoped(
 				);
 			}
 
+			const owner: SidecarHandshake = { port, token };
+
 			// Atomic ownership *and* handshake publish, in the same act — deskkit's
 			// `acquireSidecar` (`deskkit/sidecar`) writes `sidecar.json` the
 			// moment its `wx` (`O_EXCL`) create succeeds, so there's no separate
@@ -155,14 +207,15 @@ const program = Effect.scoped(
 			// `acquireSidecar`'s own doc comment — not by this release ever
 			// running.
 			yield* Effect.acquireRelease(
-				acquireSidecar(dataDir, { port, token }, isSidecarAlive).pipe(
+				acquireSidecar(dataDir, owner, isSidecarAlive).pipe(
 					Effect.withSpan("sidecar.handshake.write"),
 				),
 				() =>
 					Effect.logInfo("releasing sidecar lock").pipe(
-						Effect.andThen(releaseSidecar(dataDir)),
+						Effect.andThen(releaseSidecar(dataDir, owner)),
 					),
 			);
+			yield* keepHandshakePublished(dataDir, owner).pipe(Effect.forkScoped);
 
 			// Only now — sidecar.json claimed and published in the one act above
 			// — does AppServices get built, which is what actually opens

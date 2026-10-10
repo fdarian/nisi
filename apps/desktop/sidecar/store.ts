@@ -1448,6 +1448,21 @@ export class Store extends Context.Service<Store>()("Store", {
 				return { ...diffHead, baseRef };
 			});
 
+		/** Keeps `sessions.prState` fresh for the Repositories settings page, closed tabs included. */
+		const persistPullRequestState = (
+			pr: PullRequestIdentity,
+			state: PullRequestFacts["state"],
+		) =>
+			Effect.gen(function* () {
+				const prState =
+					state === "OPEN" ? "open" : state === "MERGED" ? "merged" : "closed";
+				const recorded = yield* reviewStore.listPullRequestSessions(pr);
+				yield* Effect.forEach(
+					recorded.filter((session) => session.number === pr.number),
+					(session) => reviewStore.setPrState(session.id, prState),
+				);
+			});
+
 		/**
 		 * Feeds the PR's head, base and state into {@link pullRequestFacts} —
 		 * called by the merge-status watch, the one stream that already polls the
@@ -1476,6 +1491,11 @@ export class Store extends Context.Service<Store>()("Store", {
 				)
 					return;
 				pullRequestFacts.set(key, facts);
+				yield* persistPullRequestState(pr, facts.state).pipe(
+					Effect.catchCause((cause) =>
+						Effect.logWarning("Could not persist the PR state", { cause }),
+					),
+				);
 				const sessions = (yield* reviewStore.listOpenSessions()).filter(
 					(session) =>
 						session.pr !== null && pullRequestKey(session.pr) === key,

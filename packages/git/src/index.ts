@@ -56,6 +56,7 @@ export {
 	PullRequestRefNotFound,
 	type PullRequestSearchError,
 	type PullRequestStackMergeError,
+	type PullRequestStateError,
 	type PullRequestWorktreeError,
 	type RepoMergeMethodsError,
 	RepoPathNoOriginRemote,
@@ -114,6 +115,7 @@ export type { UnpushedCommits } from "./repo.ts";
 export {
 	commitExists,
 	headDescendsFrom,
+	originUrlOrNull,
 	resolveCurrentBranch,
 	resolveHeadSha,
 	resolveLocalDefaultBranch,

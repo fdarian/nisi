@@ -368,6 +368,13 @@ export class GhStackMergeFailed extends Schema.TaggedError<GhStackMergeFailed>()
 	},
 ) {}
 
+/** Every way `fetchPullRequestState` can fail — `PullRequestMergeabilityError` minus the push-access refusal, which only `mergeStateStatus` triggers. */
+export type PullRequestStateError =
+	| GhOutputDecodeError
+	| GhNotAuthenticated
+	| GhRateLimited
+	| PullRequestNotFound;
+
 export type PullRequestMergeabilityError =
 	| GhOutputDecodeError
 	| GhNotAuthenticated

@@ -19,6 +19,7 @@ import { fileContract } from "./file.ts";
 import { healthContract } from "./health.ts";
 import { overviewContract } from "./overview.ts";
 import { pullRequestsContract } from "./pull-requests.ts";
+import { repositoriesContract } from "./repositories.ts";
 import { reviewContract } from "./review.ts";
 import { sessionsContract } from "./sessions.ts";
 import { settingsContract } from "./settings.ts";
@@ -34,6 +35,7 @@ export * from "./file.ts";
 export * from "./health.ts";
 export * from "./overview.ts";
 export * from "./pull-requests.ts";
+export * from "./repositories.ts";
 export * from "./review.ts";
 export * from "./sessions.ts";
 export * from "./settings.ts";
@@ -55,6 +57,7 @@ export const contract = oc.errors({ UNAUTHORIZED: {} }).router({
 	chat: chatContract,
 	settings: settingsContract,
 	pullRequests: pullRequestsContract,
+	repositories: repositoriesContract,
 	overview: overviewContract,
 	update: updateContract,
 	codeIndex: codeIndexContract,
