@@ -68,11 +68,11 @@ function visibleSpan(card: Element): { top: number; bottom: number } {
  * the panel boundary (the toolbar's `mx-3`, `DiffCodeView`'s `px-3`; change
  * either and this moves off the edge), so the handle is centred in that gap,
  * 6px from the boundary, with an invisible hit area that stops at the card
- * border and never covers a card. On hover the border of the card under the
- * pointer lights up, following the card's rounded corners (an overlay with the
- * card's rect and radius whose left border shows through a mask), brightest at
- * the pointer's height and fading out above and below as the pointer moves; it
- * stays lit along that card's whole edge while dragging. A click that doesn't drag collapses the pane.
+ * border and never covers a card. On hover a 1px line lights the straight
+ * part of the border of the card under the pointer (it stops where the corner
+ * rounds), brightest at the pointer's height and fading out above and below
+ * along a fixed spread as the pointer moves; it stays lit along that segment
+ * while dragging. A click that doesn't drag collapses the pane.
  * The tooltip rides the cursor.
  */
 export function GuideResizeHandle(props: {
@@ -98,12 +98,22 @@ export function GuideResizeHandle(props: {
 		}
 		const rect = card.getBoundingClientRect();
 		const visible = visibleSpan(card);
+		// The straight part of the edge only: it stops where the corner starts to round.
+		const radius = Number.parseFloat(
+			getComputedStyle(glow).borderTopLeftRadius,
+		);
+		const top = Math.max(rect.top + radius, visible.top);
+		const bottom = Math.min(rect.bottom - radius, visible.bottom);
+		if (bottom <= top) {
+			glow.style.visibility = "hidden";
+			return;
+		}
 		glow.style.left = `${rect.left - separatorRect.left}px`;
-		glow.style.top = `${rect.top - separatorRect.top}px`;
-		glow.style.width = `${rect.width}px`;
-		glow.style.height = `${rect.height}px`;
-		glow.style.clipPath = `inset(${visible.top - rect.top}px 0 ${rect.bottom - visible.bottom}px 0)`;
-		glow.style.setProperty("--y", `${clientY - rect.top}px`);
+		glow.style.top = `${top - separatorRect.top}px`;
+		glow.style.height = `${bottom - top}px`;
+		// Measured from the pointer, never from the card: the line's ends only clip
+		// the gradient, so the peak keeps following the pointer up to either end.
+		glow.style.setProperty("--y", `${clientY - top}px`);
 		glow.style.visibility = "visible";
 	};
 
@@ -159,9 +169,8 @@ export function GuideResizeHandle(props: {
 			<div
 				aria-hidden
 				className={cn(
-					// Card-shaped (the cards' own radius token), with only the left border
-					// colored: the corner curves come with it, and the mask picks how much shows.
-					"pointer-events-none invisible absolute rounded-xl border border-transparent border-l-muted-foreground opacity-0 transition-opacity duration-150",
+					// `rounded-xl` is only read, for the cards' corner radius (`--radius-xl`).
+					"pointer-events-none invisible absolute w-px rounded-xl bg-muted-foreground opacity-0 transition-opacity duration-150",
 					"[--y:-9999px] [mask-image:var(--highlight)]",
 					"group-data-[separator=hover]/handle:opacity-100",
 					"group-data-[separator=active]/handle:opacity-100 group-data-[separator=active]/handle:[mask-image:none]",
