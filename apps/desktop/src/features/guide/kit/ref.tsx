@@ -82,11 +82,14 @@ export function GuideCode(
 		return <ProseCode {...props} className={CODE_ACCENT} />;
 	}
 	const place = `${symbol.path}:${symbol.line}`;
-	const openDeclaration = () =>
+	// preventDefault: inside a `<label>` (an `Item` title) the click would also toggle its checkbox.
+	const openDeclaration = (event: React.SyntheticEvent) => {
+		event.preventDefault();
 		guide.selectRef({ path: symbol.path, lines: String(symbol.line) }, scope, {
 			charStart: symbol.charStart,
 			charEnd: symbol.charEnd,
 		});
+	};
 	return (
 		<Tooltip>
 			<TooltipTrigger
@@ -102,7 +105,7 @@ export function GuideCode(
 						onKeyDown={(event) => {
 							if (event.key !== "Enter" && event.key !== " ") return;
 							event.preventDefault();
-							openDeclaration();
+							openDeclaration(event);
 						}}
 						role="button"
 						tabIndex={0}

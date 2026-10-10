@@ -4,6 +4,7 @@ import { Children, isValidElement, type ReactNode } from "react";
 import { Checkbox } from "#/components/ui/checkbox";
 import { useGuideContext } from "../guide-context";
 import { useTick, useTickedCount } from "../guide-ticks";
+import { InlineCode } from "./inline-code";
 
 type ItemProps = { id: string; title: string; children?: ReactNode };
 
@@ -35,7 +36,7 @@ export function Item(props: ItemProps): React.ReactElement {
 							ticked ? "text-muted-foreground line-through" : undefined
 						}
 					>
-						{props.title}
+						<InlineCode text={props.title} />
 					</span>
 					{props.children !== undefined && (
 						<span className="text-muted-foreground text-xs">

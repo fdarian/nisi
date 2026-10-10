@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { Children, isValidElement, type ReactNode, useState } from "react";
 import { useGuideContext } from "../guide-context";
+import { InlineCode } from "./inline-code";
 
 type SkippedProps = { title: string; children?: ReactNode };
 
@@ -47,7 +48,15 @@ function CheckRow(props: {
 				<span className="flex min-w-0 flex-1 flex-col">
 					<span>{props.check.title}</span>
 					<span className="flex flex-wrap items-center gap-x-2 text-muted-foreground text-xs">
-						<code className="break-all font-mono">{props.check.command}</code>
+						<code
+							className={cn(
+								"min-w-0 max-w-full whitespace-pre-wrap break-all font-mono",
+								// A multi-line inline probe would otherwise fill the page; opening the row shows it whole.
+								!open && "line-clamp-2",
+							)}
+						>
+							{props.check.command}
+						</code>
 						<span className="shrink-0">
 							at {props.check.sha.slice(0, SHORT_SHA)}
 						</span>
@@ -112,7 +121,9 @@ export function Checks(props: { children?: ReactNode }): React.ReactElement {
 						className="mt-0.5 size-4 shrink-0 text-amber-500"
 					/>
 					<span className="flex min-w-0 flex-col">
-						<span>{entry.title}</span>
+						<span>
+							<InlineCode text={entry.title} />
+						</span>
 						{entry.children !== undefined && (
 							<span className="text-muted-foreground text-xs">
 								{entry.children}

@@ -569,3 +569,36 @@ test("text: a name declared once in a changed file reads `name` [path:line]; oth
 		"`parseConfig()` [src/a.ts:12] and `Store.get` [src/store.ts:3] are linked, `a + b` and `unknown` are not.",
 	);
 });
+
+test("Item and Skipped titles render backticked segments as inline code, linking a changed path or declared name", async () => {
+	const result = await buildInline(`## Overview
+
+<Areas>
+	<Area id="real" title="Real" paths={["src/**"]}>
+		- Body.
+	</Area>
+</Areas>
+
+<Checks>
+	<Skipped title="Run \`parseConfig()\` for real">Needs creds.</Skipped>
+</Checks>
+
+<NeedsYou>
+	<Item id="a" title="Read \`src/a.ts\` and \`parseConfig\`, not \`cli.ts\` or a stray \` tick">Why.</Item>
+</NeedsYou>
+`);
+	if (result.kind !== "ok") throw new Error("build failed");
+	const html = renderGuideHtml(result, [file("src/a.ts", 1, 0, [1, 1])], {
+		expanded: true,
+		symbols: [
+			{ name: "parseConfig", path: "src/a.ts", line: 12 },
+			{ name: "cli", path: "src/cli.ts", line: 1 },
+		],
+	});
+	expect(html).not.toContain("`src/a.ts`");
+	const out = htmlToText(html);
+	expect(out).toContain("Run `parseConfig()` [src/a.ts:12] for real");
+	expect(out).toContain(
+		"[ ] Read ⟨a.ts⟩ and `parseConfig` [src/a.ts:12], not `cli.ts` or a stray ` tick",
+	);
+});

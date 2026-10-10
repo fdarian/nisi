@@ -25,6 +25,8 @@ Record the repo's standard check commands: whatever its package scripts, CI conf
 
 Something a command can say yes or no to: type check, lint, a test suite, a build, a script that exercises the change. Record the commands you ran to convince yourself the change works, not every command you ran.
 
+A repo without tests still gets checks: record a behaviour probe, a small command that exercises the change and exits non-zero when it is wrong. Put anything longer than a line or two in a script file (`.nisi/guide/probe.sh`, or the repo's own scripts folder if the probe is worth keeping) and record `nisi guide check "Parser handles empty input" -- bash .nisi/guide/probe.sh`. A giant inline command is hard to read in the Checks row, which clamps it to two lines.
+
 ## Skipped
 
 What you deliberately didn't run goes inside `<Checks>` as `<Skipped title="…">reason</Skipped>`, so the reader sees the gap instead of assuming coverage:

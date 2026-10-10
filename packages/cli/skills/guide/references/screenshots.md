@@ -4,7 +4,7 @@ Show what a reviewer would see, not what the code looks like. Screenshots are op
 
 - **The change is visible and you can run it locally**: capture it. Use an existing story, a throwaway story, or a dev server you start for the capture and stop afterwards. Aim for 2 to 6 images in total.
 - **The change isn't visible** (logic, config, a CLI): skip them.
-- **The repo can't run locally** (environment problems, missing services, credentials): skip them and say so in one line in the guide, for example under `Checks` as a `Skipped` item. Don't force a capture, fake a fixture, or build a mock server to get one.
+- **The repo can't run locally** (environment problems, missing services, credentials): skip them and say so in one line at the end of the Overview. Don't force a capture, fake a fixture, or build a mock server to get one.
 
 ## Components
 

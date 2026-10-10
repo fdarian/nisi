@@ -6,7 +6,7 @@ description: Write the reviewer's guide for the changes you just made, as a live
 # Writing a nisi guide
 
 After you change code, don't summarise it in chat. Write a guide: one MDX file that nisi renders in the
-PR's **Guide** tab, with an overview of what changed, screenshots, links into the diff, recorded check
+PR's **Guide** tab, with an overview of what changed, screenshots when the change is visible, links into the diff, recorded check
 results, and a checklist of what you need from the reviewer. The tab re-renders about 2 seconds after
 each save, so write it early and keep editing.
 
@@ -22,9 +22,12 @@ so it stays out of your commits, and never commit it.
 The app draws the title (the PR's own) and an "On this page" list built from your `##` headings, so
 write no `# h1`. Use these sections in this order, and drop one that doesn't apply:
 
-1. `## Overview`: one lead sentence saying what changed and why it matters, then `<Areas>`: the change
-   grouped into parts. Add a `<Sequence>` before it only when the change is about ordering or timing.
-2. `## See it`: screenshots of what a reviewer would see, when the change is visible and you can run it locally. If it isn't visible or the repo can't run locally, drop the section (and say so in one line); see `nisi skills get guide --ref screenshots.md`.
+1. `## Overview`: one lead sentence saying what changed and why it matters (two when a user-visible
+   consequence needs its own clause), then `<Areas>`: the change grouped into parts. Add a `<Sequence>`
+   before it only when the change is about ordering or timing. With no screenshots, end the Overview with
+   a one-line note saying so.
+2. `## See it`: only when you took screenshots of what a reviewer would see; otherwise there is no such
+   section. See `nisi skills get guide --ref screenshots.md`.
 3. `## How it works`: one `Note` per decision or caveat, each with a short label.
 4. `## Checks`: `<Checks />`.
 5. `## Needs you`: `NeedsYou`, the actions only the reviewer can take.
@@ -34,12 +37,16 @@ write no `# h1`. Use these sections in this order, and drop one that doesn't app
 - Bullets over prose; a paragraph is 2 sentences or fewer (`nisi guide validate` rejects a longer `Note` paragraph).
 - Every file you mention is a `<Ref path lines? />` or a backticked repo path, which links itself when
   the path is in the diff. Clicking opens that file's diff beside the guide. Cite a path once: either
-  the Ref or the backticked path, never both in the same paragraph (it renders twice).
+  the Ref or the backticked path, never both in the same paragraph (it renders twice). A backticked
+  identifier declared once in a changed file links to its declaration; a backticked filename that isn't
+  a changed path (`cli.ts`) stays plain code.
 - Each `Area` takes `paths` globs; nisi computes its file count and +/- from the diff, so don't write
   numbers. Every changed hunk of source must fall in some Area (tests, stories, docs, images and
   generated files are exempt).
 - A file shared by two areas: claim its hunks with `path:lines`.
 - Group dependency and tooling bumps (lockfile churn, config, CI) into one Area instead of one each.
+- A committed generated artifact that validate flags (a regenerated JSON schema, say) belongs to the
+  Area of the code that generates it.
 - Never write test results as prose: record them with `nisi guide check`.
 - A `Needs you` item is an action for the reviewer ("Compare both pages with the Paper designs"), with
   a one-line how or why. Never write "I haven't…"; that is a `Skipped` check or an action.
@@ -53,7 +60,8 @@ nisi guide validate
 
 `nisi guide check` runs a command and records the result for `<Checks />`. Record the repo's standard
 check commands (from its package scripts, CI, or AGENTS.md), plus an explicit command for any tests you
-touched that the default script doesn't cover. Run them after your last code change; committing first
+touched that the default script doesn't cover. A repo without tests: record a behaviour probe (a small
+command that exercises the change), in a script file when it is longer than a line or two. Run them after your last code change; committing first
 isn't required (a run on uncommitted work is marked as such, and a commit made after the run makes it
 stale). `nisi guide validate` builds and renders the guide as the tab does and lists
 what to fix (an h1, changed hunks no Area covers, a `Ref` to lines outside the diff, stale checks). Fix
@@ -69,8 +77,10 @@ nisi guide render --expand
 `nisi` is the app's command line, so it works from any repo. `validate` and `render` ask the app's sidecar
 to do the work, and `nisi` launches the app when it isn't running (`check` never needs it). The first call
 can take a few seconds while it starts. If you work on nisi itself with a dev build, set `NISI_DATA_DIR`
-to the dev sandbox's data dir (the line `bun dev` prints), or run the CLI from source
-(`bun packages/cli/src/index.ts guide …`), so you reach the dev sidecar and not the installed app.
+to the dev sandbox's data dir (the line `bun dev` prints), or run the CLI from source, so you reach the
+dev sidecar and not the installed app. Write the full command, `bun /abs/path/to/nisi/packages/cli/src/index.ts guide validate`,
+or define a shell function (`nisi() { bun /abs/path/to/nisi/packages/cli/src/index.ts "$@"; }`). Don't
+put the command in a `$VAR` and expand it unquoted: zsh doesn't word-split.
 
 ## Example
 

@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import {
-	type GuideFile,
 	filesInArea,
+	type GuideFile,
 	isExemptFromAreas,
 	matchesGlob,
 	shortestUniqueSuffixes,
