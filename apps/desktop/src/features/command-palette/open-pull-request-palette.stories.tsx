@@ -1,5 +1,11 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import { useState } from "react";
+import {
+	matchQuery,
+	QueryClient,
+	QueryClientProvider,
+	useQueryClient,
+} from "@tanstack/react-query";
+import { useEffect, useMemo, useState } from "react";
 import { Button } from "#/components/ui/button";
 import type {
 	PullRequestRepository,
@@ -40,42 +46,70 @@ const RESULTS: PullRequestSearchResult[] = [
 	},
 ];
 
-const FIXTURES = {
-	pullRequestSearchResults: RESULTS,
-	pullRequestRepositories: [
-		{ owner: "fdarian", repo: "furl" },
-		{ owner: "acme", repo: "widgets" },
-	],
+type SearchState = "loading" | "loaded" | "revalidating";
+
+/** Searches resolve this many times before every later one stays pending: none, all, or just the first (so a refetch leaves them revalidating). */
+const SETTLE_LIMIT: Record<SearchState, number | undefined> = {
+	loading: 0,
+	loaded: undefined,
+	revalidating: 1,
 };
 
-const orpc = createMockOrpc(FIXTURES);
+function PaletteStory(props: { state: SearchState }): React.ReactElement {
+	// Keyed by `state` from the outside, so each state gets its own cache and its own call count.
+	const queryClient = useMemo(
+		() => new QueryClient({ defaultOptions: { queries: { retry: false } } }),
+		[],
+	);
+	const orpc = useMemo(
+		() =>
+			createMockOrpc({
+				pullRequestSearchResults: RESULTS,
+				pullRequestRepositories: [
+					{ owner: "fdarian", repo: "furl" },
+					{ owner: "acme", repo: "widgets" },
+				],
+				pullRequestSearchSettleLimit: SETTLE_LIMIT[props.state],
+			}),
+		[props.state],
+	);
+	return (
+		<QueryClientProvider client={queryClient}>
+			<Palette orpc={orpc} refetchOnceLoaded={props.state === "revalidating"} />
+		</QueryClientProvider>
+	);
+}
 
-// The mock's delay is a real setTimeout, so a delay longer than any story
-// session keeps the search pending.
-const NEVER_MS = 60 * 60 * 1000;
-
-const slowOrpc = createMockOrpc({
-	...FIXTURES,
-	pullRequestSearchDelayMs: 1500,
-});
-const neverOrpc = createMockOrpc({
-	...FIXTURES,
-	pullRequestSearchDelayMs: NEVER_MS,
-});
-
-function PaletteStory(props: {
-	orpc?: SidecarQueryUtils;
-	initiallyOpen?: boolean;
+function Palette(props: {
+	orpc: SidecarQueryUtils;
+	refetchOnceLoaded: boolean;
 }): React.ReactElement {
-	const [open, setOpen] = useState(props.initiallyOpen === true);
+	const queryClient = useQueryClient();
+	const [open, setOpen] = useState(true);
 	const [repositories, setRepositories] = useState<PullRequestRepository[]>([]);
+
+	useEffect(() => {
+		if (!props.refetchOnceLoaded) return;
+		// The first search is the only one that settles, so the refetch this
+		// triggers is deterministically left in flight with results on screen.
+		const filters = { queryKey: props.orpc.pullRequests.search.key() };
+		return queryClient.getQueryCache().subscribe((event) => {
+			if (
+				event.type === "updated" &&
+				event.action.type === "success" &&
+				matchQuery(filters, event.query)
+			)
+				void queryClient.invalidateQueries(filters);
+		});
+	}, [queryClient, props.orpc, props.refetchOnceLoaded]);
+
 	return (
 		<div className="p-8">
 			<Button onClick={() => setOpen(true)}>Open pull requests</Button>
 			<OpenPullRequestPalette
 				open={open}
 				onOpenChange={setOpen}
-				orpc={props.orpc === undefined ? orpc : props.orpc}
+				orpc={props.orpc}
 				repositories={repositories}
 				onRepositoriesChange={setRepositories}
 				findExistingSessionId={() => undefined}
@@ -85,22 +119,22 @@ function PaletteStory(props: {
 	);
 }
 
+function KeyedPaletteStory(props: { state: SearchState }): React.ReactElement {
+	return <PaletteStory key={props.state} state={props.state} />;
+}
+
 const meta = {
 	title: "Pr/OpenPullRequestPalette",
-	component: PaletteStory,
-	parameters: { controls: { disable: true } },
-} satisfies Meta<typeof PaletteStory>;
+	component: KeyedPaletteStory,
+	args: { state: "loaded" },
+	argTypes: {
+		state: {
+			control: "radio",
+			options: ["loading", "loaded", "revalidating"],
+		},
+	},
+} satisfies Meta<typeof KeyedPaletteStory>;
 export default meta;
 
 type Story = StoryObj<typeof meta>;
-export const RepositoryFilter: Story = {};
-
-/** The search never settles: the empty state shows the dot loader. */
-export const Loading: Story = {
-	args: { orpc: neverOrpc, initiallyOpen: true },
-};
-
-/** First open shows the empty-state loader, then results; typing shows the input-row loader while the previous results stay up. */
-export const SlowSearch: Story = {
-	args: { orpc: slowOrpc, initiallyOpen: true },
-};
+export const Default: Story = {};
