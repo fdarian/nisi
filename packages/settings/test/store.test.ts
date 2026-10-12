@@ -120,6 +120,22 @@ describe("SettingsStore", () => {
 		});
 	});
 
+	test("sandboxMode defaults to local and survives an unrelated update", async () => {
+		await withTempDataDir(async (dataDir) => {
+			const result = await run(
+				dataDir,
+				Effect.gen(function* () {
+					const store = yield* SettingsStore;
+					const before = yield* store.get();
+					yield* store.update({ sidebarViewMode: "flat" });
+					return { before, after: yield* store.get() };
+				}),
+			);
+			expect(result.before.sandboxMode).toBe("local");
+			expect(result.after.sandboxMode).toBe("local");
+		});
+	});
+
 	test("update() returns the merged settings directly", async () => {
 		await withTempDataDir(async (dataDir) => {
 			const updated = await run(

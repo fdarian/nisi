@@ -5,6 +5,7 @@ import {
 	text,
 	uniqueIndex,
 } from "drizzle-orm/sqlite-core";
+import { SANDBOX_MODES } from "../sandbox-mode.ts";
 
 /**
  * Singleton row — at most one ever exists. `SettingsStore.get()` returns
@@ -25,6 +26,13 @@ export const settings = sqliteTable("settings", {
 	 * enforced.
 	 */
 	enabledHarnesses: text(),
+	/**
+	 * `text({ enum })` types the column in TypeScript only; SQLite gets no
+	 * CHECK constraint, so a new `SANDBOX_MODES` entry needs no migration.
+	 * Defaulted at the column level for the same `ALTER TABLE ADD COLUMN`
+	 * reason as `hideReviewed` below.
+	 */
+	sandboxMode: text({ enum: SANDBOX_MODES }).notNull().default("local"),
 	sidebarViewMode: text().notNull(),
 	diffStyleMode: text().notNull(),
 	/**

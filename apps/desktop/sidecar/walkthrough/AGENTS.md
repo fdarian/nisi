@@ -1,11 +1,11 @@
 # sidecar/walkthrough
 
 The Phase 3 wiring layer: turns `@repo/walkthrough`'s pure schema/validation/prompt functions and
-`@repo/harness-local`'s sandbox provider into the sidecar's `walkthrough.get` /
-`walkthrough.activeGeneration` / `walkthrough.generate` procedures. Neither of
-those two packages does I/O or knows about the other — this directory is where they actually meet.
+a sandbox backend (`sidecar/harness`) into the sidecar's `walkthrough.get` /
+`walkthrough.activeGeneration` / `walkthrough.generate` procedures. `@repo/walkthrough` does no
+I/O and doesn't know about sandboxes — this directory is where they actually meet.
 Harness-adapter plumbing that isn't walkthrough-specific (which CLI backs a harness, model
-discovery, sandbox mode, read-only tool gating) lives one level up in
+discovery, sandbox backends, read-only tool gating) lives one level up in
 [sidecar/harness](../harness/AGENTS.md), shared by every caller that drives a `HarnessAgent`.
 
 - `store.ts` — `WalkthroughStore`, persistence for generated walkthroughs (one row per session,

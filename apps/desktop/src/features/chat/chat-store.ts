@@ -43,6 +43,28 @@ import type { HarnessId } from "#/features/pull-request/walkthrough/walkthrough-
 import type { SidecarQueryUtils } from "#/infra/backend-context";
 import { createOrpcChatTransport, messageText } from "./chat-transport";
 
+export type SandboxPhase = "setting-up" | "ready";
+
+export function isSandboxStatus(
+	data: unknown,
+): data is { type: "data-sandbox-status"; data: { phase: SandboxPhase } } {
+	if (
+		typeof data !== "object" ||
+		data === null ||
+		!("type" in data) ||
+		data.type !== "data-sandbox-status" ||
+		!("data" in data)
+	)
+		return false;
+	const payload = data.data;
+	return (
+		typeof payload === "object" &&
+		payload !== null &&
+		"phase" in payload &&
+		(payload.phase === "setting-up" || payload.phase === "ready")
+	);
+}
+
 export type ChatThreadMeta = {
 	id: string;
 	/**
@@ -54,6 +76,7 @@ export type ChatThreadMeta = {
 	 */
 	harness: HarnessId | null;
 	model: string | undefined;
+	sandboxPhase: SandboxPhase | null;
 	/**
 	 * Diff-pane selections attached via "Ask" (`DiffSelectionPopover`) or the
 	 * composer's own chip `x` button — rendered as chips above the composer
@@ -177,12 +200,19 @@ export function getOrCreateChat(
 	orpc: SidecarQueryUtils,
 	sessionId: string,
 	threadId: string,
+	store: StoreApi<ChatStore>,
 ): Chat<UIMessage> {
 	const existing = chatInstances.get(threadId);
 	if (existing !== undefined) return existing;
 	const chat = new Chat<UIMessage>({
 		id: threadId,
 		transport: createOrpcChatTransport(orpc, sessionId, threadId),
+		onData: (data) => {
+			if (isSandboxStatus(data))
+				store.getState().setSandboxPhase(sessionId, threadId, data.data.phase);
+		},
+		onError: () => store.getState().setSandboxPhase(sessionId, threadId, null),
+		onFinish: () => store.getState().setSandboxPhase(sessionId, threadId, null),
 	});
 	chatInstances.set(threadId, chat);
 	return chat;
@@ -190,6 +220,11 @@ export function getOrCreateChat(
 
 type ChatStore = {
 	sessions: ReadonlyMap<string, SessionChatState>;
+	setSandboxPhase: (
+		sessionId: string,
+		threadId: string,
+		phase: SandboxPhase | null,
+	) => void;
 	/** Creates `threadId`, makes it the active thread, and opens the popup on it — the effect of both ⌘J-with-no-threads and an explicit "new thread" action. */
 	openNewThread: (sessionId: string, threadId: string) => void;
 	/**
@@ -246,9 +281,24 @@ function disposeChatInstance(threadId: string): void {
 	chatInstances.delete(threadId);
 }
 
-function createChatStore(): StoreApi<ChatStore> {
+export function createChatStore(): StoreApi<ChatStore> {
 	return createStore<ChatStore>((set) => ({
 		sessions: new Map(),
+		setSandboxPhase: (sessionId, threadId, phase) =>
+			set((state) => {
+				const session = state.sessions.get(sessionId);
+				if (!session?.threads.some((thread) => thread.id === threadId))
+					return state;
+				return {
+					sessions: withSession(state.sessions, sessionId, (current) => ({
+						...current,
+						threads: mapThread(current.threads, threadId, (thread) => ({
+							...thread,
+							sandboxPhase: phase,
+						})),
+					})),
+				};
+			}),
 		openNewThread: (sessionId, threadId) =>
 			set((state) => ({
 				sessions: withSession(state.sessions, sessionId, (session) => {
@@ -256,6 +306,7 @@ function createChatStore(): StoreApi<ChatStore> {
 						id: threadId,
 						harness: null,
 						model: undefined,
+						sandboxPhase: null,
 						references: [],
 					};
 					return {

@@ -12,6 +12,7 @@
 		"test": "bun test"
 	},
 	"dependencies": {
+		"@repo/npm-tarball": "workspace:*",
 		"effect": "catalog:",
 		"typescript": "7.0.2"
 	},

@@ -9,6 +9,7 @@ import {
 	type ChatThreadMeta,
 	deriveThreadTitle,
 	getOrCreateChat,
+	useChatStore,
 } from "./chat-store";
 
 type ChatTabProps = {
@@ -54,7 +55,7 @@ export function ChatTab({
 	onClose,
 }: ChatTabProps): React.ReactElement {
 	const { messages, status } = useChat({
-		chat: getOrCreateChat(orpc, sessionId, thread.id),
+		chat: getOrCreateChat(orpc, sessionId, thread.id, useChatStore()),
 	});
 	const title = deriveThreadTitle(messages);
 	const isStreaming = status === "submitted" || status === "streaming";

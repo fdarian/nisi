@@ -1,0 +1,44 @@
+diff --git a/dist/index.js b/dist/index.js
+index 78cf991..c20cc93 100644
+--- a/dist/index.js
++++ b/dist/index.js
+@@ -36,17 +36,28 @@ import { WebSocket } from "ws";
+ import { z as z2 } from "zod/v4";
+ 
+ // src/opencode-bootstrap.ts
+-import { createReadBridgeAsset } from "@ai-sdk/harness/utils";
+-var readBridgeAsset = createReadBridgeAsset({
+-  "package.json": new URL("./bridge/package.json", import.meta.url),
+-  "pnpm-lock.yaml": new URL("./bridge/pnpm-lock.yaml", import.meta.url),
+-  "pnpm-workspace.yaml": new URL(
+-    "./bridge/pnpm-workspace.yaml",
+-    import.meta.url
+-  ),
+-  "index.mjs": new URL("./bridge/index.mjs", import.meta.url),
+-  "host-tool-mcp.mjs": new URL("./bridge/host-tool-mcp.mjs", import.meta.url)
+-});
++import bridgePackageJsonText from "./bridge/package.json" with { type: "text" };
++import bridgePnpmLockYamlText from "./bridge/pnpm-lock.yaml" with { type: "text" };
++import bridgePnpmWorkspaceYamlText from "./bridge/pnpm-workspace.yaml" with { type: "text" };
++import bridgeIndexMjsText from "./bridge/index.mjs" with { type: "text" };
++import bridgeHostToolMcpMjsText from "./bridge/host-tool-mcp.mjs" with { type: "text" };
++// Bun only embeds bridge assets referenced by static imports in compiled binaries.
++var readBridgeAsset = async (name) => {
++  switch (name) {
++    case "package.json":
++      return bridgePackageJsonText;
++    case "pnpm-lock.yaml":
++      return bridgePnpmLockYamlText;
++    case "pnpm-workspace.yaml":
++      return bridgePnpmWorkspaceYamlText;
++    case "index.mjs":
++      return bridgeIndexMjsText;
++    case "host-tool-mcp.mjs":
++      return bridgeHostToolMcpMjsText;
++    default:
++      throw new Error(`bridge asset not found: ${name}`);
++  }
++};
+ var OPENCODE_BOOTSTRAP_DIR = ".harness-bootstrap/opencode";
+ var cachedBootstrap;
+ async function getOpenCodeBootstrap() {

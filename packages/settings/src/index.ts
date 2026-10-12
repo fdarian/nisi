@@ -1,6 +1,8 @@
 export { SettingsStoreError } from "./errors.ts";
 export type { MergeMethod } from "./repo-merge-method-store.ts";
 export { RepoMergeMethodStore } from "./repo-merge-method-store.ts";
+export type { SandboxMode } from "./sandbox-mode.ts";
+export { SANDBOX_MODES } from "./sandbox-mode.ts";
 export {
 	type ScheduledMerge,
 	type ScheduledMergeKey,

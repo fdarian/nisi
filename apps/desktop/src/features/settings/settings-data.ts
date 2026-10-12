@@ -6,6 +6,8 @@
  * the mechanism costs nothing extra once it exists. Theme stays in
  * `localStorage` via `next-themes` — nothing server-side ever reads it.
  */
+
+import type { SandboxMode } from "@repo/sidecar-api";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback } from "react";
 import type { HarnessId } from "#/features/pull-request/walkthrough/walkthrough-data";
@@ -21,6 +23,7 @@ export type Settings = {
 	 * See `@repo/settings`'s `Settings.enabledHarnesses` doc for the full story.
 	 */
 	enabledHarnesses: readonly HarnessId[] | null;
+	sandboxMode: SandboxMode;
 	sidebarViewMode: SidebarViewMode;
 	diffStyleMode: DiffStyleMode;
 	/**
@@ -69,6 +72,7 @@ export type Settings = {
  */
 const DEFAULT_SETTINGS: Settings = {
 	enabledHarnesses: null,
+	sandboxMode: "local",
 	sidebarViewMode: "tree",
 	diffStyleMode: "unified",
 	preferredEditor: null,

@@ -16,6 +16,10 @@ domain package's tables (`NISI_DATA_DIR`, same default as `@repo/review`/`@repo/
   `HarnessId`, same as `@repo/walkthrough`'s `harness` column does for the same reason. The
   sidecar's wiring layer (`apps/desktop/sidecar/http.ts`) is where "must be one of the four known
   ids" is actually enforced, at the wire boundary.
+- `src/sandbox-mode.ts` — `SANDBOX_MODES`/`SandboxMode`, where a harness agent runs. Import-free and
+  exported as `@repo/settings/sandbox-mode` so the wire contract and frontend can use the value list
+  without the SQLite store. The `sandboxMode` column is a TypeScript-only `text({ enum })`; adding a
+  mode needs no migration. See `apps/desktop/sidecar/harness/AGENTS.md` for adding a backend.
 - `src/db/client.ts` — `runMigrations`, a thin wrapper around `deskkit/sqlite`'s
   `applyEmbeddedMigrations` that re-maps its failure to this package's own `SettingsStoreError`. The
   store's own queries map their own `EffectDrizzleQueryError` failures the same way, directly in

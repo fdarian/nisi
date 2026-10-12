@@ -1,0 +1,1 @@
+ALTER TABLE `settings` ADD `sandboxMode` text DEFAULT 'local' NOT NULL;
