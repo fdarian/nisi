@@ -1,4 +1,3 @@
-import { type ChangedRun, parseChangedRuns } from "./hunks.ts";
 import { createHash } from "node:crypto";
 import { join } from "node:path";
 import { Effect } from "effect";
@@ -13,6 +12,7 @@ import {
 } from "./classify.ts";
 import type { GitCommandError, GitError } from "./errors.ts";
 import { git } from "./exec.ts";
+import { type ChangedRun, parseChangedRuns } from "./hunks.ts";
 import {
 	createAddedBinaryFilePatch,
 	createAddedFilePatch,

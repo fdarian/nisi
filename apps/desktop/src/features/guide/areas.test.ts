@@ -173,9 +173,9 @@ test("a hunk reads Reviewed when the diff the pane shows has dropped it, removed
 		hunkReviewStatus(replaced, patchOf("@@ -61,2 +60,0 @@", "-a", "-b")),
 	).toBe("partial");
 	// another hunk's change doesn't count against this one
-	expect(
-		hunkReviewStatus(replaced, patchOf("@@ -90 +90 @@", "-x", "+y")),
-	).toBe("reviewed");
+	expect(hunkReviewStatus(replaced, patchOf("@@ -90 +90 @@", "-x", "+y"))).toBe(
+		"reviewed",
+	);
 });
 
 test("a pure removal is judged by the removed lines still showing at its position", () => {
