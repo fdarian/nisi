@@ -21,16 +21,18 @@ import { hunkClaimBlockId, hunkClaimRange } from "./areas";
 export type GuideReviews = {
 	fileViewed: (path: string) => boolean;
 	setFileViewed: (path: string, viewed: boolean) => void;
-	/** A hook, because the contents behind a hunk row's state are only fetched for the rows an open Area actually lists. */
+	/** A hook, because the contents behind a hunk row's state are only fetched while an Area is open. */
 	useFileReviews: (paths: readonly string[]) => FileContentsMap;
-	setHunkViewed: (
+	/** All of one file's hunks in one call, so their optimistic baselines build on each other instead of each replacing the last. */
+	setHunksViewed: (
 		path: string,
-		range: LineRange,
-		deletions: number,
+		hunks: readonly ClaimedHunk[],
 		content: FileContent | undefined,
 		viewed: boolean,
 	) => void;
 };
+
+export type ClaimedHunk = { range: LineRange; deletions: number };
 
 const NO_FORCED_PATHS: ReadonlySet<string> = new Set();
 
@@ -45,7 +47,7 @@ export function useGuideReviews(params: {
 	const sessionId = params.sessionId;
 	const reviewState = params.reviewState;
 	const rangeReview = useRangeReview(orpc, sessionId, params.files);
-	const markRangeReviewed = rangeReview.markRangeReviewed;
+	const markRangesReviewed = rangeReview.markRangesReviewed;
 	const setRangeViewed = rangeReview.setRangeViewed;
 	const setViewed = params.setViewed;
 
@@ -59,44 +61,57 @@ export function useGuideReviews(params: {
 			useFileContents(orpc, sessionId, paths, NO_FORCED_PATHS, "all"),
 		[orpc, sessionId],
 	);
-	const setHunkViewed = useCallback(
+	const setHunksViewed = useCallback(
 		(
 			path: string,
-			range: LineRange,
-			deletions: number,
+			hunks: readonly ClaimedHunk[],
 			content: FileContent | undefined,
 			viewed: boolean,
 		) => {
 			if (viewed) {
-				markRangeReviewed(
+				markRangesReviewed(
 					path,
-					hunkClaimRange(range, deletions),
+					hunks.map((hunk) => ({
+						range: hunkClaimRange(hunk.range, hunk.deletions),
+						claimId: hunkClaimBlockId(path, hunk.range),
+					})),
 					content,
-					hunkClaimBlockId(path, range),
 				);
 				return;
 			}
-			const claims = claimsOverlapping(range, content?.review);
-			// The hunk is reviewed only because the whole file is: that claim is
-			// the only one there is to withdraw.
-			if (claims.wholeFile || fileViewed(path)) setViewed(path, false);
-			// A removed line has no reviewed range to name its claim, so the tick's
-			// own claim is withdrawn by the id it was written under.
-			const blocks = new Map(
-				claims.blocks.map((block) => [block.blockId, block.blockLabel]),
-			);
-			blocks.set(hunkClaimBlockId(path, range), "Hunk");
-			for (const [blockId, blockLabel] of blocks) {
-				setRangeViewed({
-					path,
-					blockId,
-					blockLabel,
-					ranges: [range],
-					viewed: false,
-				});
+			const claims = hunks.map((hunk) => ({
+				range: hunk.range,
+				overlapping: claimsOverlapping(hunk.range, content?.review),
+			}));
+			// A hunk reviewed only because the whole file is: that claim is the
+			// only one there is to withdraw.
+			if (
+				fileViewed(path) ||
+				claims.some((claim) => claim.overlapping.wholeFile)
+			)
+				setViewed(path, false);
+			for (const claim of claims) {
+				// A removed line has no reviewed range to name its claim, so the tick's
+				// own claim is withdrawn by the id it was written under.
+				const blocks = new Map(
+					claim.overlapping.blocks.map((block) => [
+						block.blockId,
+						block.blockLabel,
+					]),
+				);
+				blocks.set(hunkClaimBlockId(path, claim.range), "Hunk");
+				for (const [blockId, blockLabel] of blocks) {
+					setRangeViewed({
+						path,
+						blockId,
+						blockLabel,
+						ranges: [claim.range],
+						viewed: false,
+					});
+				}
 			}
 		},
-		[markRangeReviewed, setRangeViewed, setViewed, fileViewed],
+		[markRangesReviewed, setRangeViewed, setViewed, fileViewed],
 	);
 
 	return useMemo(
@@ -104,8 +119,8 @@ export function useGuideReviews(params: {
 			fileViewed,
 			setFileViewed: setViewed,
 			useFileReviews,
-			setHunkViewed,
+			setHunksViewed,
 		}),
-		[fileViewed, setViewed, useFileReviews, setHunkViewed],
+		[fileViewed, setViewed, useFileReviews, setHunksViewed],
 	);
 }

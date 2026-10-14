@@ -7,6 +7,7 @@ import {
 	isValidElement,
 	type ReactNode,
 	useLayoutEffect,
+	useMemo,
 	useState,
 } from "react";
 import {
@@ -14,7 +15,10 @@ import {
 	rangeReviewStatus,
 } from "#/features/diff/review-coverage";
 import type { LineRange } from "#/features/diff/viewer/build-location-diff";
-import type { FileContent } from "#/features/pull-request/data/pr-data";
+import type {
+	FileContent,
+	FileContentsMap,
+} from "#/features/pull-request/data/pr-data";
 import { splitPath } from "#/lib/tree-paths";
 import {
 	type ClaimedFile,
@@ -24,11 +28,11 @@ import {
 	shortestUniqueSuffixes,
 } from "../areas";
 import { AreaScopeProvider, useGuideContext } from "../guide-context";
-import type { GuideReviews } from "../guide-reviews";
+import type { ClaimedHunk, GuideReviews } from "../guide-reviews";
 import { parseLines } from "../refs";
 import { colorForArea } from "./area-colors";
 import { DiffStat } from "./diff-stat";
-import { FileRow, type FileRowReview } from "./file-row";
+import { FileRow, type FileRowReview, ReviewCheckbox } from "./file-row";
 
 type AreaProps = {
 	id: string;
@@ -100,16 +104,24 @@ function fileRows(claimed: readonly ClaimedFile[]): TopRow[] {
 	});
 }
 
-/** The listed rows, each with its Reviewed checkbox where the app has review state to show. A separate component so the contents a hunk row's state needs are fetched only for rows an open Area lists. */
-function AreaRows(props: { rows: readonly TopRow[] }): React.ReactElement {
+/** The listed rows, each with its Reviewed checkbox where the app has review state to show, and a select-all above them that covers every row, hidden ones included. */
+function AreaRows(props: {
+	title: string;
+	rows: readonly TopRow[];
+	visibleCount: number;
+}): React.ReactElement {
 	const reviews = useGuideContext().reviews;
-	const hunkPaths = [
+	const hunkPathList = [
 		...new Set(
 			props.rows.flatMap((row) =>
 				row.lines === undefined && row.hunks === undefined ? [] : [row.path],
 			),
 		),
 	];
+	const hunkPathsKey = hunkPathList.join("\0");
+	// `useFileContents` memoizes on the identity of the paths it's given.
+	// biome-ignore lint/correctness/useExhaustiveDependencies: `hunkPathsKey` is `hunkPathList`'s identity; the list is a fresh array each render
+	const hunkPaths = useMemo(() => hunkPathList, [hunkPathsKey]);
 	// `reviews` is fixed for the life of a render tree (the app has it, the
 	// static preview doesn't), so this hook is called on every render or on none.
 	const contents =
@@ -117,31 +129,43 @@ function AreaRows(props: { rows: readonly TopRow[] }): React.ReactElement {
 			? undefined
 			: // biome-ignore lint/correctness/useHookAtTopLevel: see above
 				reviews.useFileReviews(hunkPaths);
+	const rowLeaves =
+		reviews === undefined || contents === undefined
+			? undefined
+			: props.rows.map((row) => leavesOf(row, contents, reviews));
+	const selectAll =
+		reviews === undefined || rowLeaves === undefined
+			? undefined
+			: reviewOver(
+					rowLeaves.flat().filter((leaf) => leaf.available),
+					reviews,
+				);
 	return (
 		<>
-			{props.rows.map((row) => {
-				const content = contents?.get(row.path)?.content;
+			{selectAll !== undefined && props.rows.length > 1 && (
+				<li className="flex justify-end pr-1.5">
+					<ReviewCheckbox
+						label={`Mark all of ${props.title} reviewed`}
+						review={selectAll}
+					/>
+				</li>
+			)}
+			{props.rows.slice(0, props.visibleCount).map((row, index) => {
+				const leaves = rowLeaves?.[index];
+				const review =
+					reviews === undefined || leaves === undefined
+						? undefined
+						: reviewOver(leaves, reviews);
 				return (
 					<li key={`${row.path}:${row.lines ?? ""}`}>
 						{row.hunks === undefined ? (
-							<FileRow
-								{...row}
-								review={
-									reviews === undefined
-										? undefined
-										: rowReview(row, reviews, content)
-								}
-							/>
+							<FileRow {...row} review={review} />
 						) : (
 							<FileGroup
-								content={content}
 								hunks={row.hunks}
+								leaves={leaves}
+								review={review}
 								row={row}
-								review={
-									reviews === undefined
-										? undefined
-										: groupReview(row.hunks, reviews, content)
-								}
 							/>
 						)}
 					</li>
@@ -156,7 +180,8 @@ function FileGroup(props: {
 	row: Row;
 	hunks: readonly Row[];
 	review: FileRowReview | undefined;
-	content: FileContent | undefined;
+	/** One per hunk, in the same order. */
+	leaves: readonly ReviewLeaf[] | undefined;
 }): React.ReactElement {
 	const guide = useGuideContext();
 	const reviews = guide.reviews;
@@ -174,41 +199,75 @@ function FileGroup(props: {
 			/>
 			{open && (
 				<ul className="m-0 flex list-none flex-col gap-px p-0 pl-4">
-					{props.hunks.map((hunk) => (
-						<li key={hunk.lines}>
-							<FileRow
-								{...hunk}
-								review={
-									reviews === undefined
-										? undefined
-										: rowReview(hunk, reviews, props.content)
-								}
-							/>
-						</li>
-					))}
+					{props.hunks.map((hunk, index) => {
+						const leaf = props.leaves?.[index];
+						return (
+							<li key={hunk.lines}>
+								<FileRow
+									{...hunk}
+									review={
+										reviews === undefined || leaf === undefined
+											? undefined
+											: reviewOver([leaf], reviews)
+									}
+								/>
+							</li>
+						);
+					})}
 				</ul>
 			)}
 		</>
 	);
 }
 
-function rowReview(
-	row: Row,
+/** One thing a Reviewed checkbox covers: a file claimed whole, or one claimed hunk. A hunk whose file contents can't be loaded isn't `available`, so a select-all passes over it rather than greying out. */
+type ReviewLeaf =
+	| {
+			kind: "file";
+			path: string;
+			status: RangeReviewStatus;
+			available: true;
+	  }
+	| {
+			kind: "hunk";
+			path: string;
+			hunk: ClaimedHunk;
+			content: FileContent | undefined;
+			status: RangeReviewStatus | undefined;
+			available: boolean;
+	  };
+
+function leavesOf(
+	row: TopRow,
+	contents: FileContentsMap,
 	reviews: GuideReviews,
-	content: FileContent | undefined,
-): FileRowReview {
-	if (row.lines === undefined) {
+): ReviewLeaf[] {
+	return (row.hunks ?? [row]).map((each): ReviewLeaf => {
+		if (each.lines === undefined) {
+			return {
+				kind: "file",
+				path: each.path,
+				status: reviews.fileViewed(each.path) ? "reviewed" : "unreviewed",
+				available: true,
+			};
+		}
+		const entry = contents.get(each.path);
+		const content = entry?.content;
+		const range = parseLines(each.lines);
 		return {
-			status: reviews.fileViewed(row.path) ? "reviewed" : "unreviewed",
-			onToggle: (viewed) => reviews.setFileViewed(row.path, viewed),
+			kind: "hunk",
+			path: each.path,
+			hunk: { range, deletions: each.deletions },
+			content,
+			status:
+				content === undefined ? undefined : hunkStatus(each, range, content),
+			available: !(
+				entry !== undefined &&
+				entry.content === undefined &&
+				!entry.isLoading
+			),
 		};
-	}
-	const range = parseLines(row.lines);
-	return {
-		status: content === undefined ? undefined : hunkStatus(row, range, content),
-		onToggle: (viewed) =>
-			reviews.setHunkViewed(row.path, range, row.deletions, content, viewed),
-	};
+	});
 }
 
 /** Read off the diff the pane shows, so the row can't say Reviewed while the pane still lists the hunk. A truncated file has no patch to read, so only its reviewed ranges are left to go on. */
@@ -229,25 +288,44 @@ function hunkStatus(
 	);
 }
 
-/** Reviewed when every claimed hunk is, indeterminate when only some are; ticking it sets them all. */
-function groupReview(
-	hunks: readonly Row[],
+/** Ticking sets only the leaves not already in that state, so no redundant writes or undo entries; one file's hunks go in one call. */
+function reviewOver(
+	leaves: readonly ReviewLeaf[],
 	reviews: GuideReviews,
-	content: FileContent | undefined,
 ): FileRowReview {
-	const each = hunks.map((hunk) => rowReview(hunk, reviews, content));
 	return {
-		status: groupStatus(each.map((review) => review.status)),
+		status: groupStatus(leaves.map((leaf) => leaf.status)),
 		onToggle: (viewed) => {
-			for (const review of each) review.onToggle(viewed);
+			const target = viewed ? "reviewed" : "unreviewed";
+			const hunksByPath = new Map<
+				string,
+				{ content: FileContent | undefined; hunks: ClaimedHunk[] }
+			>();
+			for (const leaf of leaves) {
+				if (leaf.status === target) continue;
+				if (leaf.kind === "file") {
+					reviews.setFileViewed(leaf.path, viewed);
+					continue;
+				}
+				const file = hunksByPath.get(leaf.path) ?? {
+					content: leaf.content,
+					hunks: [],
+				};
+				file.hunks.push(leaf.hunk);
+				hunksByPath.set(leaf.path, file);
+			}
+			for (const [path, file] of hunksByPath) {
+				reviews.setHunksViewed(path, file.hunks, file.content, viewed);
+			}
 		},
 	};
 }
 
+/** Undefined while any of it is still loading, or when there's nothing to cover. */
 export function groupStatus(
 	statuses: readonly (RangeReviewStatus | undefined)[],
 ): RangeReviewStatus | undefined {
-	if (statuses.includes(undefined)) return undefined;
+	if (statuses.length === 0 || statuses.includes(undefined)) return undefined;
 	if (statuses.every((status) => status === "reviewed")) return "reviewed";
 	if (statuses.every((status) => status === "unreviewed")) return "unreviewed";
 	return "partial";
@@ -316,7 +394,11 @@ export function Area(props: AreaProps): React.ReactElement {
 				</div>
 				{open && (
 					<ul className="m-0 mt-2.5 flex list-none flex-col gap-px border-t p-0 pt-2">
-						<AreaRows rows={rows.slice(0, visibleCount)} />
+						<AreaRows
+							rows={rows}
+							title={props.title}
+							visibleCount={visibleCount}
+						/>
 						{hiddenCount > 0 && (
 							<li>
 								<button

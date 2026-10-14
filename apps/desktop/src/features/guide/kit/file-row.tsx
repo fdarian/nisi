@@ -15,6 +15,21 @@ export type FileRowReview = {
 	onToggle: (viewed: boolean) => void;
 };
 
+export function ReviewCheckbox(props: {
+	label: string;
+	review: FileRowReview;
+}): React.ReactElement {
+	return (
+		<Checkbox
+			aria-label={props.label}
+			checked={props.review.status === "reviewed"}
+			disabled={props.review.status === undefined}
+			indeterminate={props.review.status === "partial"}
+			onCheckedChange={(checked) => props.review.onToggle(checked)}
+		/>
+	);
+}
+
 /** Makes a row the parent of its file's claimed hunk rows: the count toggles them open beneath it. */
 export type FileRowGroup = {
 	hunkCount: number;
@@ -107,12 +122,9 @@ export function FileRow(props: {
 				</>
 			)}
 			{props.review !== undefined && (
-				<Checkbox
-					aria-label={`Mark ${props.label} reviewed`}
-					checked={reviewed}
-					disabled={props.review.status === undefined}
-					indeterminate={props.review.status === "partial"}
-					onCheckedChange={(checked) => props.review?.onToggle(checked)}
+				<ReviewCheckbox
+					label={`Mark ${props.label} reviewed`}
+					review={props.review}
 				/>
 			)}
 		</div>

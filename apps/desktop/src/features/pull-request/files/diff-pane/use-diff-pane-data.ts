@@ -169,47 +169,63 @@ export function useRangeReview(
 	// owning component unmounting on tab suspend, and every pane feeds one stack.
 	const undoStack = useSessionUndoStack(sessionId);
 	const setRangeViewed = useSetRangeViewed(orpc, sessionId);
-	const markRangeReviewed = useCallback(
+	/** Each range's optimistic baseline builds on the one before, since none of them is pending yet when the next is computed. */
+	const markRangesReviewed = useCallback(
 		(
 			path: string,
-			range: HeadRange,
+			claims: readonly { range: HeadRange; claimId?: string }[],
 			content: FileContent | undefined,
-			claimId?: string,
 		) => {
-			const baselineBefore =
+			let baselineBefore =
 				optimisticBaselines.get(path) ??
 				content?.oldContent ??
 				(files.some((file) => file.path === path && file.status === "added")
 					? ""
 					: undefined);
-			const baseline =
-				content !== undefined &&
-				!content.truncated &&
-				content.newContent !== undefined &&
-				baselineBefore !== undefined
-					? optimisticRangeBaseline(baselineBefore, content.newContent, range)
-					: undefined;
-			const blockId = claimId ?? `selection:${crypto.randomUUID()}`;
-			const blockLabel =
-				range.startLine === range.endLine
-					? `Selection L${range.startLine}`
-					: `Selection L${range.startLine}–L${range.endLine}`;
-			setRangeViewed(
-				{ path, blockId, blockLabel, ranges: [range], viewed: true },
-				() => {
-					undoStack.push({
-						kind: "range",
-						path,
-						blockId,
-						blockLabel,
-						range,
-						baselineBefore,
-					});
-				},
-				baseline,
-			);
+			for (const claim of claims) {
+				const range = claim.range;
+				const before = baselineBefore;
+				const baseline =
+					content !== undefined &&
+					!content.truncated &&
+					content.newContent !== undefined &&
+					before !== undefined
+						? optimisticRangeBaseline(before, content.newContent, range)
+						: undefined;
+				const blockId = claim.claimId ?? `selection:${crypto.randomUUID()}`;
+				const blockLabel =
+					range.startLine === range.endLine
+						? `Selection L${range.startLine}`
+						: `Selection L${range.startLine}–L${range.endLine}`;
+				setRangeViewed(
+					{ path, blockId, blockLabel, ranges: [range], viewed: true },
+					() => {
+						undoStack.push({
+							kind: "range",
+							path,
+							blockId,
+							blockLabel,
+							range,
+							baselineBefore: before,
+						});
+					},
+					baseline,
+				);
+				baselineBefore = baseline ?? before;
+			}
 		},
 		[setRangeViewed, undoStack, optimisticBaselines, files],
 	);
-	return { optimisticBaselines, setRangeViewed, undoStack, markRangeReviewed };
+	const markRangeReviewed = useCallback(
+		(path: string, range: HeadRange, content: FileContent | undefined) =>
+			markRangesReviewed(path, [{ range }], content),
+		[markRangesReviewed],
+	);
+	return {
+		optimisticBaselines,
+		setRangeViewed,
+		undoStack,
+		markRangeReviewed,
+		markRangesReviewed,
+	};
 }
