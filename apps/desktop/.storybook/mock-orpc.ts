@@ -18,12 +18,15 @@
  */
 import { AsyncIteratorClass } from "@orpc/shared";
 import { createTanstackQueryUtils } from "@orpc/tanstack-query";
-import type {
-	GuideResult,
-	RepositoryDetail,
-	RepositorySessionStateBatch,
-	RepositorySummary,
-	SidecarClient,
+import {
+	CODE_INDEX_SOURCE_CONTEXT_LINES_AFTER,
+	CODE_INDEX_SOURCE_CONTEXT_LINES_BEFORE,
+	type CodeIndexReferencesResult,
+	type GuideResult,
+	type RepositoryDetail,
+	type RepositorySessionStateBatch,
+	type RepositorySummary,
+	type SidecarClient,
 } from "@repo/sidecar-api";
 import type {
 	FileChange,
@@ -144,6 +147,10 @@ export type MockOrpcData = {
 		/** After the last event: `end` (the default) completes the stream, `hang` leaves it open so the story stays mid-resolution, `{ error }` fails it. */
 		afterEvents?: "end" | "hang" | { error: string };
 	};
+	/** `codeIndex.references`'s result, whichever symbol is asked for — omit to leave it pending forever. */
+	codeIndexReferences?: MockResult<CodeIndexReferencesResult>;
+	/** `codeIndex.referenceContext` slices the asked-for window out of these files' lines (keyed by path); `pending` leaves every context fetch hanging. */
+	codeIndexFileLines?: Readonly<Record<string, readonly string[]>> | "pending";
 	/** `walkthrough.get`'s result — omit for "nothing generated yet", pass a fixture for the loaded reader. */
 	storedWalkthrough?: StoredWalkthrough | null;
 	/** `guide.get`'s result — omit for "no guide written yet". */
@@ -476,15 +483,32 @@ export function createMockSidecarClient(
 			},
 			stop: async () => undefined,
 		},
-		// No story exercises go-to-definition/find-references yet — same
-		// reasoning as `events.subscribe` above.
+		// Only the peek-references dialog is covered; the LSP lifecycle and
+		// per-file occurrences stay pending, same reasoning as `events.subscribe`.
 		codeIndex: {
 			lspStatus: neverSettles,
 			startLsp: neverSettles,
 			stopLsp: neverSettles,
 			fileOccurrences: neverSettles,
-			references: neverSettles,
-			referenceContext: neverSettles,
+			references: () => settleMockResult(data.codeIndexReferences),
+			referenceContext: async ({ path, line }) => {
+				const fileLines = data.codeIndexFileLines;
+				if (fileLines === undefined || fileLines === "pending")
+					return neverSettles();
+				const lines = fileLines[path];
+				if (lines === undefined) return null;
+				const startLine = Math.max(
+					0,
+					line - CODE_INDEX_SOURCE_CONTEXT_LINES_BEFORE,
+				);
+				return {
+					startLine,
+					lines: lines.slice(
+						startLine,
+						line + CODE_INDEX_SOURCE_CONTEXT_LINES_AFTER + 1,
+					),
+				};
+			},
 		},
 	};
 
