@@ -36,16 +36,10 @@ export function ProseLink(
 	);
 }
 
-/** Headings are told apart by weight, size and spacing only — the cards are `text-sm`, so there's no room for a document-scale type ramp. */
-const proseComponents: Components = {
-	a: ProseLink,
-	blockquote: (props) => (
-		<blockquote
-			{...withoutNode(props)}
-			className="border-l-2 pl-3 text-muted-foreground"
-		/>
-	),
-	code: (props) => (
+export function ProseCode(
+	props: React.ComponentProps<"code">,
+): React.ReactElement {
+	return (
 		<code
 			{...withoutNode(props)}
 			className={cn(
@@ -53,7 +47,19 @@ const proseComponents: Components = {
 				props.className,
 			)}
 		/>
+	);
+}
+
+/** Headings are told apart by weight, size and spacing only — the cards are `text-sm`, so there's no room for a document-scale type ramp. */
+export const proseComponents: Components = {
+	a: ProseLink,
+	blockquote: (props) => (
+		<blockquote
+			{...withoutNode(props)}
+			className="border-l-2 pl-3 text-muted-foreground"
+		/>
 	),
+	code: ProseCode,
 	del: (props) => (
 		<del {...withoutNode(props)} className="text-muted-foreground" />
 	),

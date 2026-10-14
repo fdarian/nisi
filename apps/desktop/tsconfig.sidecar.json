@@ -6,5 +6,9 @@
 		"types": ["bun"],
 		"skipLibCheck": true
 	},
-	"include": ["sidecar"]
+	"include": ["sidecar"],
+	// `sidecar/guide/tools.ts` server-renders the Guide tab's React kit, which needs the
+	// DOM lib and JSX. That code type-checks in its own project; the sidecar sees only its
+	// declarations, so it stays free of the DOM lib.
+	"references": [{ "path": "./tsconfig.guide-render.json" }]
 }

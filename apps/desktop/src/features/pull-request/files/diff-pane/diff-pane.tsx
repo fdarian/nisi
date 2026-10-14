@@ -13,7 +13,7 @@ import type {
 import { parsePatchFiles } from "@pierre/diffs";
 import type { CodeViewHandle } from "@pierre/diffs/react";
 import { cn } from "cn";
-import { FileIcon } from "lucide-react";
+import { CheckCheckIcon, FileIcon } from "lucide-react";
 import {
 	useCallback,
 	useEffect,
@@ -29,6 +29,7 @@ import {
 	EmptyTitle,
 } from "#/components/ui/empty";
 import { Skeleton } from "#/components/ui/skeleton";
+import type { CodeIndexReferenceTarget } from "#/features/code-index/navigation/code-index-navigation";
 import { CodeIndexPeekDialog } from "#/features/code-index/peek/code-index-peek-panel";
 import { useCodeIndexInteractions } from "#/features/code-index/use-code-index-interactions";
 import type { DiffMatch } from "#/features/diff/diff-search";
@@ -47,7 +48,10 @@ import {
 	buildDiffCodeViewOptions,
 	DiffCodeView,
 } from "#/features/diff/viewer/diff-code-view";
-import { pollUntilReady } from "#/features/diff/viewer/diff-match-dom";
+import {
+	findMatchRowElement,
+	pollUntilReady,
+} from "#/features/diff/viewer/diff-match-dom";
 import { hashItemVersion } from "#/features/diff/viewer/item-version";
 import type {
 	FileChange,
@@ -61,6 +65,7 @@ import {
 	useSessionExpandedHiddenPaths,
 	useSessionFileCollapseOverrides,
 } from "#/features/pull-request/data/session-ui-store";
+import { useCodeIndexReferenceHighlighting } from "#/features/pull-request/file-view/reference-reveal/use-code-index-reference-highlighting";
 import { useDragAutoscroll } from "#/features/pull-request/files/use-drag-autoscroll";
 import type { DiffStyleMode } from "#/features/settings/settings-data";
 import type { SidecarQueryUtils } from "#/infra/backend-context";
@@ -76,6 +81,14 @@ import { type DiffHoverPoint, findHoveredFileId } from "./diff-hovered-file";
 import { findTopVisibleItemId } from "./diff-visible-file";
 import { resolvePlaceholderFile } from "./placeholder-file-cache";
 import { useDiffMatchHighlighting } from "./use-diff-match-highlighting";
+
+/** A head-side line's row: the added or context line, never a removed line that happens to share its number. */
+function findHeadRowElement(
+	root: ParentNode,
+	displayedLine: number,
+): HTMLElement | undefined {
+	return findMatchRowElement(root, "additions", displayedLine);
+}
 
 /** Why a file's whole body is hidden behind a "Show diff" placeholder by default — see `resolveHiddenFileReason`. */
 type HiddenFileReason = "generated" | "large";
@@ -203,6 +216,8 @@ export type DiffPaneHandle = {
 	scrollToPath: (path: string) => void;
 	/** Scrolls to one keyword-search match's own rendered row (`match.side`/`match.rowLine`, not `match.headLine` — see `DiffMatch`'s doc comment for why those can differ). Purely a viewport concern; the *highlight* on this match is driven declaratively by the `currentMatch` prop instead, so navigating and highlighting stay decoupled. */
 	scrollToMatch: (match: DiffMatch) => void;
+	/** Scrolls to a head-file (additions side) line of `path`, centered. For callers that cite a line rather than a search hit. */
+	scrollToLine: (path: string, line: number) => void;
 };
 
 type DiffPaneProps = {
@@ -254,11 +269,15 @@ type DiffPaneProps = {
 	setViewed: (path: string, viewed: boolean) => void;
 	onMarkSelectionReviewed: (path: string, range: HeadRange) => void;
 	optimisticBaselines: ReadonlyMap<string, string>;
+	/** `files` is empty because "Hide reviewed" hid every file, not because there were none. */
+	allFilesReviewed: boolean;
 	/** Opens a path in a whole-file viewer tab — the per-file "…" menu's "View full file" item (`DiffFileHeader`). */
 	onOpenFile: (path: string) => void;
 	diffStyle: DiffStyleMode;
 	/** Wraps long diff lines instead of letting them scroll horizontally — see `@repo/settings`'s `wrapLines`. */
 	wrapLines: boolean;
+	/** A token to highlight like a code-index jump does in the file viewer (purple background, underline); `line` is 0-based, on the head side. The caller clears it, as `FileView` does, when the user next interacts with the code. */
+	referenceTarget?: CodeIndexReferenceTarget;
 	ref?: React.Ref<DiffPaneHandle>;
 };
 
@@ -426,7 +445,9 @@ export function DiffPane({
 	reviewState,
 	setViewed,
 	onMarkSelectionReviewed,
+	referenceTarget,
 	optimisticBaselines,
+	allFilesReviewed,
 	onOpenFile,
 	diffStyle,
 	wrapLines,
@@ -625,6 +646,11 @@ export function DiffPane({
 		codeViewRef,
 		keywordMatchesByPath,
 		currentMatch,
+	});
+	const referenceHighlight = useCodeIndexReferenceHighlighting({
+		codeViewRef,
+		target: referenceTarget,
+		findRow: findHeadRowElement,
 	});
 
 	// Files the user clicked "Show diff" on to reveal a body hidden by default
@@ -1134,7 +1160,11 @@ export function DiffPane({
 				...buildDiffCodeViewOptions({
 					diffStyle,
 					enableLineSelection: true,
-					extraCSS: diffCardChromeCSS + highlightCSS + codeIndex.tokenCSS,
+					extraCSS:
+						diffCardChromeCSS +
+						highlightCSS +
+						referenceHighlight.highlightCSS +
+						codeIndex.tokenCSS,
 					overflow: wrapLines ? "wrap" : "scroll",
 					theme: diffTheme.theme,
 					onPostRender: (node, _instance, phase, context) => {
@@ -1155,6 +1185,10 @@ export function DiffPane({
 							hoveredFileHostsRef.current.set(node, context.item.id);
 						}
 						onItemPostRender(
+							context.item.id,
+							phase === "unmount" ? undefined : (node.shadowRoot ?? undefined),
+						);
+						referenceHighlight.onItemPostRender(
 							context.item.id,
 							phase === "unmount" ? undefined : (node.shadowRoot ?? undefined),
 						);
@@ -1182,6 +1216,8 @@ export function DiffPane({
 				itemMetadata,
 				highlightCSS,
 				onItemPostRender,
+				referenceHighlight.highlightCSS,
+				referenceHighlight.onItemPostRender,
 				reportFirstCardPainted,
 				codeIndex.tokenCSS,
 				codeIndex.notifyItemRendered,
@@ -1275,10 +1311,30 @@ export function DiffPane({
 		[scrollWhenReady],
 	);
 
-	useImperativeHandle(ref, () => ({ scrollToPath, scrollToMatch }), [
-		scrollToPath,
-		scrollToMatch,
-	]);
+	const pendingLineScrollFrame = useRef<number | null>(null);
+	const scrollToLine = useCallback(
+		(path: string, line: number) => {
+			scrollWhenReady(
+				path,
+				{
+					type: "line",
+					id: path,
+					lineNumber: line,
+					side: "additions",
+					align: "center",
+					behavior: "smooth",
+				},
+				pendingLineScrollFrame,
+			);
+		},
+		[scrollWhenReady],
+	);
+
+	useImperativeHandle(
+		ref,
+		() => ({ scrollToPath, scrollToMatch, scrollToLine }),
+		[scrollToPath, scrollToMatch, scrollToLine],
+	);
 
 	useEffect(
 		() => () => {
@@ -1287,6 +1343,9 @@ export function DiffPane({
 			}
 			if (pendingMatchScrollFrame.current !== null) {
 				cancelAnimationFrame(pendingMatchScrollFrame.current);
+			}
+			if (pendingLineScrollFrame.current !== null) {
+				cancelAnimationFrame(pendingLineScrollFrame.current);
 			}
 			if (settleTimeoutRef.current !== null) {
 				clearTimeout(settleTimeoutRef.current);
@@ -1512,6 +1571,20 @@ export function DiffPane({
 		scrollToPath(selectedPath);
 	}, [selectedPath, scrollToPath]);
 
+	if (files.length === 0 && allFilesReviewed) {
+		return (
+			<Empty className="flex-1">
+				<EmptyMedia variant="icon">
+					<CheckCheckIcon />
+				</EmptyMedia>
+				<EmptyTitle>Everything reviewed</EmptyTitle>
+				<EmptyDescription>
+					Reviewed files are hidden. Turn off Hide reviewed to see them again.
+				</EmptyDescription>
+			</Empty>
+		);
+	}
+
 	if (files.length === 0) {
 		return (
 			<Empty className="flex-1">
@@ -1567,7 +1640,7 @@ export function DiffPane({
 				// margins on the inner scrolled container instead, which scrolls away
 				// like any other content and leaves the header flush with the top.
 				className={cn(
-					"min-h-0 w-full flex-1 overflow-auto overscroll-contain px-3 [contain:strict]",
+					"min-h-0 w-full flex-1 overflow-auto overscroll-contain px-diff-pane-inset [contain:strict]",
 					"[&_diffs-container]:[clip-path:inset(0_round_var(--radius-xl))]",
 				)}
 				highlighterOptions={diffTheme.highlighterOptions}

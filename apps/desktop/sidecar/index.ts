@@ -131,7 +131,7 @@ const program = Effect.scoped(
 
 			// `NISI_DEV_SIDECAR_PORT`/`NISI_DEV_SIDECAR_TOKEN` are only ever set by
 			// `scripts/dev.ts`, which mints both once per `bun dev` run and pins them
-			// for its whole lifetime — this file runs under `bun --watch` in dev, and
+			// for its whole lifetime — this file is restarted by `scripts/watch-sidecar.ts` in dev, and
 			// a per-boot `crypto.randomUUID()`/ephemeral `port: 0` would otherwise
 			// rotate on every restart out from under a frontend that froze `{ port,
 			// token }` into its own build-time env at its own boot (vite's
@@ -202,7 +202,7 @@ const program = Effect.scoped(
 			// recovered by `isSidecarAlive` inside `acquireSidecar` on the next
 			// boot — or, when the recorded port is the one this process is
 			// already listening on (a pinned-port dev restart under
-			// `bun --watch`, or a `SIGKILL`'d sidecar whose ephemeral port got
+			// `scripts/watch-sidecar.ts`, or a `SIGKILL`'d sidecar whose ephemeral port got
 			// reassigned), taken over without a liveness check at all; see
 			// `acquireSidecar`'s own doc comment — not by this release ever
 			// running.

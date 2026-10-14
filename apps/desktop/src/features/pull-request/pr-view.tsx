@@ -4,6 +4,12 @@ import { useMemo } from "react";
 import { Tabs, TabsContent } from "#/components/ui/tabs";
 import { useDevToolScope } from "#/features/devtools/dev-tool-context";
 import { useRefetchToasts } from "#/features/devtools/use-refetch-toasts";
+import { GuideView } from "#/features/guide/guide-view";
+import {
+	guideExists,
+	useGuide,
+	useGuideWatch,
+} from "#/features/guide/use-guide";
 import type { Session } from "#/features/pull-request/data/pr-data";
 import {
 	useFileChanges,
@@ -84,14 +90,18 @@ export function PrView({
 	// (`app-shell.tsx`'s `useTabSuspension`), so this has to live somewhere
 	// that survives that to land back on the same sub-tab on resume.
 	const [activeTab, setActiveTab] = useSessionActiveTab(session.id);
+	const guide = useGuide(orpc, session.id);
+	const hasGuide = guideExists(guide.data);
 	// The user can flip `walkthroughEnabled` off while sitting on the
 	// Walkthrough tab — its `TabsTrigger`/`TabsContent` stop rendering below,
 	// so the value actually handed to `<Tabs>` must fall back to "files"
 	// regardless of what `activeTab` state still holds, rather than mutating
-	// `activeTab` itself in an effect. "overview"/"files" both stay valid
-	// regardless of the setting, so only "walkthrough" ever needs the fallback.
-	const tabsValue =
-		activeTab === "walkthrough" && !walkthroughEnabled ? "files" : activeTab;
+	// `activeTab` itself in an effect. The same goes for Guide when its file
+	// is deleted. "overview"/"files" stay valid either way.
+	const tabIsAbsent =
+		(activeTab === "walkthrough" && !walkthroughEnabled) ||
+		(activeTab === "guide" && !hasGuide);
+	const tabsValue = tabIsAbsent ? "files" : activeTab;
 	// Lifted above the tabs, not local to `WalkthroughView` — a reference/
 	// uncovered-file selection should survive switching away to Files Changed
 	// and back, not reset every time the Walkthrough tab remounts (and, same
@@ -134,6 +144,9 @@ export function PrView({
 		sessionId: session.id,
 	});
 	const watched = isFilesChangedVisible && windowFocused;
+	// Not tied to the sub-tab: the Guide tab itself appears when an agent
+	// publishes a guide, whichever tab is showing.
+	useGuideWatch(orpc, session.id, isSelectedTab && windowFocused);
 	useSessionWatch(orpc, session.id, watched);
 	// The same `watched` rising edge doubles as the refetch trigger for
 	// switching into this tab and regaining window focus — see
@@ -154,8 +167,8 @@ export function PrView({
 	const stat = diffStat({ files, isLoading, error });
 
 	const tabs = useMemo(
-		() => prViewTabs(walkthroughEnabled),
-		[walkthroughEnabled],
+		() => prViewTabs({ walkthroughEnabled, guideExists: hasGuide }),
+		[walkthroughEnabled, hasGuide],
 	);
 
 	return (
@@ -222,6 +235,18 @@ export function PrView({
 								orpc={orpc}
 								selection={walkthroughSelection}
 								session={session}
+							/>
+						</TabsContent>
+					)}
+					{hasGuide && (
+						<TabsContent className="flex min-h-0 flex-1" value="guide">
+							<GuideView
+								files={files}
+								onOpenFile={openFile}
+								orpc={orpc}
+								reviewState={reviewState}
+								session={session}
+								setViewed={setViewed}
 							/>
 						</TabsContent>
 					)}

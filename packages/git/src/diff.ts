@@ -12,6 +12,7 @@ import {
 } from "./classify.ts";
 import type { GitCommandError, GitError } from "./errors.ts";
 import { git } from "./exec.ts";
+import { type ChangedRun, parseChangedRuns } from "./hunks.ts";
 import {
 	createAddedBinaryFilePatch,
 	createAddedFilePatch,
@@ -44,6 +45,8 @@ export type FileChange = {
 	readonly deletions: number;
 	readonly fingerprint: string;
 	readonly binary: boolean;
+	/** The base-to-head changed runs, regardless of any review state; empty for binary files. */
+	readonly hunks: ReadonlyArray<ChangedRun>;
 };
 
 export type FileContent = {
@@ -506,6 +509,7 @@ export const getChangedFiles = (
 				additions: numstat?.additions ?? 0,
 				deletions: numstat?.deletions ?? 0,
 				binary,
+				hunks: parseChangedRuns(patch),
 				fingerprint: computeFingerprint({
 					status: entry.status,
 					oldPath: entry.oldPath,
@@ -543,6 +547,7 @@ export const getChangedFiles = (
 						additions: gated.truncated || binary ? 0 : countLines(text),
 						deletions: 0,
 						binary,
+						hunks: parseChangedRuns(patch),
 						fingerprint: computeFingerprint({
 							status,
 							oldPath: undefined,

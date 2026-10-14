@@ -97,12 +97,12 @@ const dev = Command.make(
 			// anything to `sidecar.json`. That's what lets `deskkit/sidecar`'s
 			// `acquireSidecar` recognize a previous run's dead sidecar reliably
 			// via its same-port takeover, rather than only within one run's own
-			// `bun --watch` restarts.
+			// `scripts/watch-sidecar.ts` restarts.
 			//
 			// The token has no sticky equivalent — it's minted fresh every run —
 			// but still needs to be pinned *for* that run's whole lifetime:
-			// `sidecar/index.ts` runs under `bun --watch` below, which restarts the
-			// process cleanly on every save, and a per-boot `crypto.randomUUID()`
+			// `sidecar/index.ts` runs under `scripts/watch-sidecar.ts` below, which
+			// restarts the process on every save, and a per-boot `crypto.randomUUID()`
 			// token would rotate under that restart out from under a frontend that
 			// froze `{ port, token }` into its own env at its own boot — so every
 			// request after a restart would 401 silently. See deskkit's sidecar
@@ -126,15 +126,19 @@ const dev = Command.make(
 				VITE_DEV_BACKEND_TOKEN: sidecarToken,
 			};
 
-			// `--watch`, not `--hot`: `--hot` re-runs the entry module in the same
-			// process without ever unwinding the previous evaluation, so every
-			// background loop (`startLivePolling`, `Updater.startChecks`) and the
-			// SQLite connection from every prior boot keeps running alongside the
-			// new one. `--watch` tears the process down and restarts it cleanly, so
-			// exactly one instance is ever live — see deskkit's sidecar README.
+			// `scripts/watch-sidecar.ts`, not `bun --watch` or `--hot`: `--hot` re-runs
+			// the entry module in the same process without ever unwinding the
+			// previous evaluation, so every background loop (`startLivePolling`,
+			// `Updater.startChecks`) and the SQLite connection from every prior boot
+			// keeps running alongside the new one. `bun --watch` does restart
+			// cleanly, but in place and without closing the descriptors it watched
+			// with (~1200 per reload): past ~10k, macOS `posix_spawn` fails with
+			// `EBADF` and every `git` the sidecar runs fails with it. The script
+			// restarts a fresh process per change, so exactly one instance is ever
+			// live and nothing accumulates. See deskkit's sidecar README.
 			const sidecarProcess = runManagedSubprocess(
 				"bun",
-				["run", "--watch", "sidecar/index.ts"],
+				["scripts/watch-sidecar.ts"],
 				{ env },
 			);
 

@@ -22,6 +22,7 @@ import {
 	CODE_INDEX_SOURCE_CONTEXT_LINES_AFTER,
 	CODE_INDEX_SOURCE_CONTEXT_LINES_BEFORE,
 	type CodeIndexReferencesResult,
+	type GuideResult,
 	type RepositoryDetail,
 	type RepositorySessionStateBatch,
 	type RepositorySummary,
@@ -152,6 +153,8 @@ export type MockOrpcData = {
 	codeIndexFileLines?: Readonly<Record<string, readonly string[]>> | "pending";
 	/** `walkthrough.get`'s result — omit for "nothing generated yet", pass a fixture for the loaded reader. */
 	storedWalkthrough?: StoredWalkthrough | null;
+	/** `guide.get`'s result — omit for "no guide written yet". */
+	guide?: GuideResult;
 	/** Overrides `DEFAULT_HARNESSES` wholesale — pass a full four-entry list, not a patch. */
 	harnesses?: readonly HarnessInfo[];
 	models?: Partial<Record<HarnessId, HarnessModels>>;
@@ -346,6 +349,21 @@ export function createMockSidecarClient(
 		file: {
 			get: async () => {
 				throw new Error("file.get has no story fixture yet");
+			},
+		},
+		guide: {
+			get: async (): Promise<GuideResult> =>
+				data.guide ?? {
+					kind: "missing",
+					path: "/repo/.nisi/guide/guide.mdx",
+				},
+			setWatching: async () => undefined,
+			// Only the `nisi guide` CLI calls these; no story does.
+			validate: async () => {
+				throw new Error("guide.validate has no story fixture");
+			},
+			preview: async () => {
+				throw new Error("guide.preview has no story fixture");
 			},
 		},
 		review: {

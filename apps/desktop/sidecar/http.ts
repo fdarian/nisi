@@ -71,6 +71,16 @@ import {
 	streamReady,
 	subscribe as subscribeToSidecarEvents,
 } from "./events.ts";
+import { buildGuide } from "./guide/build.ts";
+import {
+	cachedSymbols,
+	cacheSymbols,
+	diffKey,
+	scanDeclarations,
+	scannablePaths,
+} from "./guide/symbols.ts";
+import { previewRepoGuide, validateRepoGuide } from "./guide/tools.ts";
+import { startGuideWatch, stopGuideWatch } from "./guide/watch.ts";
 import { listHarnesses } from "./harness/harnesses.ts";
 import { getHarnessModels } from "./harness/models.ts";
 import { receiveFrontendMarks } from "./launch-trace/handler.ts";
@@ -319,7 +329,7 @@ type ServerContext = WithEffectContext<AppServices> &
  * `port` is `undefined` in every real boot (prod, `bun run sidecar`
  * standalone) — Bun picks an ephemeral one, same as before. `index.ts` passes
  * an explicit one when `NISI_DEV_SIDECAR_PORT` is set, so the port survives a
- * `bun --watch` restart instead of rotating under it — see that file and the
+ * sidecar restart instead of rotating under it — see that file and the
  * root `AGENTS.md`'s "The seam".
  */
 export function bindHealthCheckServer(token: string, port?: number) {
@@ -2238,6 +2248,146 @@ export function attachRouter(
 					Stream.mapError(mapFailure),
 				);
 				yield* streamToIterator(stream, mainContext, signal);
+			}),
+		},
+		guide: {
+			get: authed.guide.get.effect(function* ({ input, errors }) {
+				const store = yield* Store;
+				const repoRoot = yield* resolveCodeIndexRepoRoot(
+					store.resolveSessionRepoRoot(input.sessionId),
+					input.sessionId,
+					errors,
+				);
+				const built = yield* Effect.promise(() => buildGuide(repoRoot));
+				if (built.kind !== "ok") return built;
+				const settings = yield* (yield* SettingsStore).get();
+				const files = yield* store
+					.listChangedFiles(input.sessionId, settings.includeUncommitted)
+					.pipe(
+						Effect.catchTags({
+							SessionNotFound: () =>
+								Effect.fail(
+									errors.NOT_FOUND({
+										message: `session not found: ${input.sessionId}`,
+									}),
+								),
+							GitCommandError: (cause) =>
+								Effect.fail(
+									errors.INTERNAL_SERVER_ERROR({
+										message: formatGitCommandError(cause),
+									}),
+								),
+							WorktreeReadFailed: (cause) =>
+								Effect.fail(
+									errors.INTERNAL_SERVER_ERROR({
+										message: formatWorktreeReadFailed(cause),
+									}),
+								),
+							WorktreeRelocationFailed: (cause) =>
+								Effect.fail(
+									errors.INTERNAL_SERVER_ERROR({
+										message: formatWorktreeRelocationFailed(cause),
+									}),
+								),
+						}),
+					);
+				const key = diffKey(files);
+				const cached = cachedSymbols(input.sessionId, key);
+				if (cached !== undefined) return { ...built, symbols: cached };
+				const texts = yield* store
+					.readHeadTexts(input.sessionId, scannablePaths(files))
+					.pipe(
+						Effect.catchTags({
+							SessionNotFound: () =>
+								Effect.fail(
+									errors.NOT_FOUND({
+										message: `session not found: ${input.sessionId}`,
+									}),
+								),
+							GitCommandError: (cause) =>
+								Effect.fail(
+									errors.INTERNAL_SERVER_ERROR({
+										message: formatGitCommandError(cause),
+									}),
+								),
+							WorktreeReadFailed: (cause) =>
+								Effect.fail(
+									errors.INTERNAL_SERVER_ERROR({
+										message: formatWorktreeReadFailed(cause),
+									}),
+								),
+							WorktreeRelocationFailed: (cause) =>
+								Effect.fail(
+									errors.INTERNAL_SERVER_ERROR({
+										message: formatWorktreeRelocationFailed(cause),
+									}),
+								),
+						}),
+					);
+				const symbols = scanDeclarations(
+					[...texts].map(([path, content]) => ({ path, content })),
+				);
+				cacheSymbols(input.sessionId, key, symbols);
+				return { ...built, symbols };
+			}),
+			setWatching: authed.guide.setWatching.effect(function* ({
+				input,
+				errors,
+			}) {
+				if (!input.watching) {
+					stopGuideWatch(input.sessionId);
+					return;
+				}
+				const store = yield* Store;
+				const repoRoot = yield* resolveCodeIndexRepoRoot(
+					store.resolveSessionRepoRoot(input.sessionId),
+					input.sessionId,
+					errors,
+				);
+				yield* Effect.try({
+					try: () =>
+						startGuideWatch(
+							input.sessionId,
+							repoRoot,
+							() => emit({ type: "guide-changed", sessionId: input.sessionId }),
+							(cause) =>
+								void runWithMainContext(
+									Effect.logWarning("guide folder watcher failed", {
+										sessionId: input.sessionId,
+										cause,
+									}),
+								),
+						),
+					catch: (cause) =>
+						errors.INTERNAL_SERVER_ERROR({
+							message: `couldn't watch ${repoRoot}: ${cause instanceof Error ? cause.message : String(cause)}`,
+						}),
+				});
+				// Baselines the head so the first real move is seen; the client
+				// refetches on its own when it starts watching.
+				yield* checkSessionForChanges(input.sessionId);
+			}),
+			validate: authed.guide.validate.effect(function* ({ input, errors }) {
+				return yield* Effect.tryPromise({
+					try: () => validateRepoGuide(input.repoRoot, input.base),
+					catch: (cause) =>
+						errors.INTERNAL_SERVER_ERROR({
+							message: cause instanceof Error ? cause.message : String(cause),
+						}),
+				});
+			}),
+			preview: authed.guide.preview.effect(function* ({ input, errors }) {
+				return yield* Effect.tryPromise({
+					try: () =>
+						previewRepoGuide(input.repoRoot, input.base, {
+							expand: input.expand,
+							withCss: input.withCss,
+						}),
+					catch: (cause) =>
+						errors.INTERNAL_SERVER_ERROR({
+							message: cause instanceof Error ? cause.message : String(cause),
+						}),
+				});
 			}),
 		},
 		codeIndex: {

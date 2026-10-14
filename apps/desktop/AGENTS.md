@@ -39,6 +39,22 @@ Three parts, one seam:
   shape as the `@pierre/trees` sidebar — it renders `diff.fileContents`' `patch`/`oldContent` directly,
   no client-side slicing; a reviewed file's already-seen spans arrive pre-collapsed into ordinary
   context by the sidecar (`FileContentReview.baselineKind`, see `@repo/review`'s `reconcile`).
+  `src/features/guide/` renders the Guide tab: `evaluate.ts` runs the sidecar's bundled guide (`new Function`; the
+  Tauri CSP is `null`, so eval is allowed) against the app's own React and `kit/` (the `@nisi/guide` module).
+  Agents author it via `packages/cli/skills/guide/SKILL.md` (`nisi skills get guide`); `sample/` is a working guide that
+  `guide-pipeline.test.ts` builds and renders. Copy it to `<repo>/.nisi/guide/` to see it in the app.
+  The app owns the page chrome (the "On this page" list, the side pane a `Ref` opens); a guide has no
+  title and starts at `## Overview`. The Overview's `Area` cards compute their stats from the session
+  diff (`FileChange.hunks`, the base-to-head changed runs), matching globs and `path:lines` hunk claims with `areas.ts`, which `validate.ts` shares to find changed hunks no Area covers
+  (`nisi guide validate` runs it through the sidecar's `guide.validate`; `guide-overview.stories.tsx` is the visual check).
+  A click on a file row, hunk row, `Ref` or linked symbol opens `guide-diff-pane.tsx` beside the guide: Files Changed's own
+  `DiffPane` and `FilesViewedToolbar` over the clicked Area's files (or the one file a bare `Ref` cites), with the same
+  data assembly as Files Changed (`useDiffPaneData`). It shares the session UI store with Files Changed, so collapse
+  overrides and Reviewed ticks are the same state. Area rows tick Reviewed through `guide-reviews.ts`, the same
+  `reviewState`/`setViewed` and selection-claim path (`useRangeReview`) Files Changed uses. Inline code naming a symbol
+  declared once in a changed file links to it: `guide.get` returns the scan (`sidecar/guide/symbols.ts`), and the pane
+  highlights the exact token the way the file viewer does for a code-index jump. The walkthrough's `ReferencePane` is
+  what `pull-request/location-pane/location-pane.tsx` serves.
   `src/features/code-index/` holds LSP-powered code navigation (⌘-hover underline, ⌘-click peek
   references), backed server-side by a live TypeScript 7 language server (`@repo/code-lsp`) rather
   than a prebuilt SCIP index — one `useCodeIndexInteractions` hook shared by the diff pane's
@@ -57,8 +73,8 @@ boot; in dev, `scripts/dev.ts` pins both instead, passed down via
 `NISI_DEV_SIDECAR_PORT`/`NISI_DEV_SIDECAR_TOKEN` (see [Dev/prod isolation](#devprod-isolation)) —
 the port is a second devsess sticky port on the session, so it survives across separate `bun dev`
 runs the same way the vite port does; the token has no sticky equivalent, so it's minted fresh each
-run and held for that run's whole lifetime. Both matter because the sidecar runs under `bun --watch`
-there, and a per-boot-random pair would otherwise rotate on every restart out from under a frontend
+run and held for that run's whole lifetime. Both matter because the sidecar is restarted on every save
+there (`scripts/watch-sidecar.ts`), and a per-boot-random pair would otherwise rotate on every restart out from under a frontend
 that already froze `{ port, token }` into its own env at its own boot. `acquireSidecar`'s atomic
 create is what makes two sidecars booting at the same instant against the same data dir resolve to
 exactly one owner instead of a split brain — see `sidecar/AGENTS.md`'s `index.ts` entry for the
@@ -80,7 +96,7 @@ in `lib.rs` — keep them if you touch that file.
 claims and publishes it with, so both ends of the handshake share one dependency.
 
 - **Dev**: `bun dev` runs `scripts/dev.ts`, a [devsess](https://devsess.fdarian.com/) orchestrator
-  (see below) that races the sidecar (`bun --watch sidecar/index.ts`) against `tauri dev`
+  (see below) that races the sidecar (`scripts/watch-sidecar.ts`, which restarts a fresh `sidecar/index.ts` process when a file in its import graph changes) against `tauri dev`
   (`Effect.raceAll` — either exiting kills the other, via each process's Effect `Scope`).
   `beforeDevCommand` only runs `vite`; the sidecar is started by `dev.ts`, not by Tauri. `bun dev
   --browser` swaps `tauri dev` for a plain `vite dev` against the same sidecar instead — see

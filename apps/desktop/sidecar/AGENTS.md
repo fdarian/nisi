@@ -47,6 +47,34 @@ seam" for the port/token handshake this boots into.
   combined across sessions of the same PR. `http.ts` receives header-level focus/selection via
   `sessions.setAttention`; `live-poll.ts` marks local changes; `session-close.ts` removes entries.
   `GhGitHub.layer` consumes its `PullRequestAttention` stream to choose its polling cadence.
+- `guide/build.ts` — behind `guide.get`: bundles `<repoRoot>/.nisi/guide/guide.mdx` with `Bun.build` (MDX and
+  image plugins; React, the jsx runtimes and `@nisi/guide` stay external) into one CJS string the frontend
+  evaluates. Cached per repo on a hash of every file's path/mtime/size under `.nisi/guide/` except `checks/`,
+  because every `guide-changed` event refetches it. A missing guide or failed build is a result variant, not an RPC error. `EXTERNALS`
+  must match `src/features/guide/evaluate.ts`'s module map. The same call returns the runs recorded in
+  `.nisi/guide/checks/` (written by `nisi guide check`) and the worktree's head SHA, read fresh each time. It also returns
+  `symbols` (`guide/symbols.ts`): names declared exactly once, at column 0, in a changed TS/JS/Rust/Go/Python file,
+  with line and character span, found by a text scan of the session's head content and cached per session on the
+  diff's file fingerprints. No language server is involved.
+- `guide/watch.ts` — behind `guide.setWatching`: one FSEvents watcher chain per session the frontend asked for
+  (repo root, `.nisi/`, `.nisi/guide/` recursive, so a guide that doesn't exist yet is seen appearing), debounced into
+  a `guide-changed` event. `guide.get` is never polled; the same event is also emitted by `live-poll.ts` when the
+  session's head moves, and `live-poll.ts` ticks guide-watched sessions as well as Files-Changed-watched ones.
+  `session-close.ts` stops the watcher.
+- `guide/tools.ts` — behind `guide.validate` and `guide.preview`, which the `nisi guide validate|render` CLI
+  commands call. They key on `repoRoot`, not a session: the author may have none open. `validateRepoGuide` and
+  `previewRepoGuide` read the diff (`guide/diff.ts`: base resolution, `git diff -U0` hunks, untracked files, the
+  classifier's `generated` flag), build the guide, and run `src/features/guide/{validate,static-render,guide-text}.ts`
+  — shared modules that live in the frontend tree. They type-check in `tsconfig.guide-render.json` (DOM lib, `jsx`, `#/*`;
+  a composite project emitting declarations only), which `tsconfig.sidecar.json` references, so the rest of the sidecar
+  stays free of the DOM lib. `check:type` builds that project first (`tsc -b`).
+  `localStorage` is stubbed only for the one synchronous render, never left on the globals.
+  `preview` returns the guide's body HTML plus the app stylesheet (`guide/preview-css.ts`); the page shell and Chrome
+  stay in the CLI, never the sidecar. The stylesheet comes from Vite and Tailwind when the sidecar runs from source
+  (once per process, scanning the guide dir too), and from `guide/app-stylesheet.gen.txt` when compiled:
+  `build:sidecar` writes it first (`scripts/build-guide-css.ts`) and a static text import embeds it, since a compiled
+  sidecar has neither Vite nor a source tree. So a compiled sidecar's preview misses Tailwind classes that only a
+  guide's own custom component uses. `preview-css.ts` tells the two apart with `Bun.main.startsWith("/$bunfs/")`.
 - `repositories.ts` — behind `repositories.list`/`get`/`sessionStates` (Settings › Repositories). Reads
   `ReviewStore` and `SettingsStore` directly, never `Store.listSessions`. `list` and `get` make no GitHub calls:
   open counts and `get`'s `resolved`/`pending` states come from `PrIndex` and persisted `merged`/`closed`.
@@ -189,10 +217,11 @@ seam" for the port/token handshake this boots into.
 - `live-poll.ts` — `startLivePolling`, forked as a background fiber from `index.ts`'s boot program.
   Every `POLL_INTERVAL`, diffs each open session's `@repo/git` change signature against the previous
   tick (module-level `Map`, same in-memory-state shape as `events.ts`'s subscriber `Set`) and emits
-  `session-files-changed` when it moved; a stale-data refetch is the frontend's job once the event
+  `session-files-changed` (and `guide-changed`) when it moved; a stale-data refetch is the frontend's job once the event
   lands. `checkSessionForChanges` reads `SettingsStore`'s `includeUncommitted` itself (this poller has
   no per-request input to carry it) and threads it into `readRepoChangeSignature` — off (the common
-  case) skips `@repo/git`'s `status`/hashing outright, on hashes each dirty path's content. The stored
+  case) skips `@repo/git`'s `status`/hashing outright and, when `ref-state.ts` can vouch for the repo layout,
+  reads HEAD's movement from `.git/HEAD`/branch ref/`packed-refs` content instead of spawning `git rev-parse`, on hashes each dirty path's content. The stored
   signature carries the mode it was read under alongside the signature itself: a mode flip changes the
   signature's *shape* for a reason unrelated to the repo, so a check that lands right after the user
   toggles the setting re-baselines silently instead of emitting a spurious `session-files-changed` —

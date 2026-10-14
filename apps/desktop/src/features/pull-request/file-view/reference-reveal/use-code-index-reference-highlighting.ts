@@ -28,6 +28,11 @@ function referenceHighlightCSS(name: string): string {
 type UseCodeIndexReferenceHighlightingOptions<Metadata> = {
 	codeViewRef: React.RefObject<CodeViewHandle<Metadata, undefined> | null>;
 	target: CodeIndexReferenceTarget | undefined;
+	/** Locates the target's row by displayed line. Defaults to a whole-file row; a diff item has to say which side's row (see `findMatchRowElement`). */
+	findRow?: (
+		root: ParentNode,
+		displayedLine: number,
+	) => HTMLElement | undefined;
 };
 
 /**
@@ -49,6 +54,7 @@ export function useCodeIndexReferenceHighlighting<Metadata>(
 } {
 	const codeViewRef = props.codeViewRef;
 	const target = props.target;
+	const findRow = props.findRow ?? findFileLineRowElement;
 	const instanceId = useId().replace(/[^a-zA-Z0-9]/g, "");
 	const highlightName = useMemo(
 		() => `nisi-code-index-reference-${instanceId}`,
@@ -89,10 +95,7 @@ export function useCodeIndexReferenceHighlighting<Metadata>(
 			) {
 				return false;
 			}
-			const row = findFileLineRowElement(
-				shadowRoot,
-				codeIndexDisplayedLine(current),
-			);
+			const row = findRow(shadowRoot, codeIndexDisplayedLine(current));
 			const length = codeIndexTargetLength(current);
 			const range =
 				row === undefined || length === undefined
@@ -103,7 +106,7 @@ export function useCodeIndexReferenceHighlighting<Metadata>(
 			highlight.add(range);
 			return true;
 		},
-		[],
+		[findRow],
 	);
 	const tryApplyTarget = useCallback(
 		(current: CodeIndexReferenceTarget): boolean => {

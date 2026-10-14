@@ -35,6 +35,7 @@ type EventPayload =
 			readonly sessionId: string;
 	  }
 	| { readonly type: "session-updated"; readonly session: Session }
+	| { readonly type: "guide-changed"; readonly sessionId: string }
 	| {
 			readonly type: "code-index-lsp-status-changed";
 			readonly repoRoot: string;
