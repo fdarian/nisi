@@ -1,5 +1,6 @@
 "use client";
 
+import { useRender } from "@base-ui/react/use-render";
 import { cn } from "cn";
 import { AlertTriangleIcon, InboxIcon } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -57,7 +58,7 @@ import {
 	pendingOpenTabValue,
 	usePendingOpenTab,
 } from "./open-request/pending-open-tab";
-import { PrTabStrip } from "./tabs/pr-tab-strip";
+import { PrTabStrip, TITLE_STRIP_HEIGHT_CLASS } from "./tabs/pr-tab-strip";
 import { useTabOrder } from "./tabs/use-tab-order";
 import { useTabShortcuts } from "./tabs/use-tab-shortcuts";
 import { useTabSuspension } from "./tabs/use-tab-suspension";
@@ -124,21 +125,76 @@ export function AppShell(): React.ReactElement {
 	);
 }
 
+/**
+ * The window skeleton shared by every state of the shell. `render` swaps the
+ * root element (the ready state needs it to be the `TabsPrimitive.Root` that
+ * also owns the strip and panels); `titleBar` defaults to a bare drag region
+ * of the same height as `PrTabStrip` so the pane doesn't jump between states.
+ */
 function ShellFrame({
 	children,
+	footerEnd,
+	overlays,
+	render,
+	titleBar = (
+		<div
+			className={cn(TITLE_STRIP_HEIGHT_CLASS, "shrink-0")}
+			data-tauri-drag-region
+		/>
+	),
 }: {
 	children: React.ReactNode;
+	footerEnd?: React.ReactNode;
+	overlays?: React.ReactNode;
+	render?: React.ReactElement;
+	titleBar?: React.ReactNode;
+}): React.ReactElement {
+	return useRender({
+		render,
+		props: {
+			className: "flex h-screen flex-col bg-sidebar",
+			children: (
+				<>
+					{titleBar}
+					<FramePanel
+						className={cn(INSET_PANE_CLASS, "my-0")}
+						data-tauri-drag-region="false"
+					>
+						{children}
+					</FramePanel>
+					<div className="relative flex min-h-2 items-center">
+						<DevFooter />
+						<div className="grow" />
+						{footerEnd}
+					</div>
+					{overlays}
+				</>
+			),
+		},
+	});
+}
+
+function NoOpenPullRequests({
+	onOpen,
+}: {
+	onOpen: () => void;
 }): React.ReactElement {
 	return (
-		<div className="flex h-screen flex-col bg-sidebar">
-			<div className="h-10 shrink-0" data-tauri-drag-region />
-			<FramePanel className={cn(INSET_PANE_CLASS, "my-0")}>
-				{children}
-			</FramePanel>
-			<div className="relative flex min-h-2 items-center">
-				<DevFooter />
-			</div>
-		</div>
+		<Empty className="flex-1">
+			<EmptyMedia variant="icon">
+				<InboxIcon />
+			</EmptyMedia>
+			<EmptyTitle>No open pull requests</EmptyTitle>
+			<EmptyDescription>
+				Run <code>nisi</code> from a repo to open one, or pick one from your
+				open pull requests.
+			</EmptyDescription>
+			<EmptyContent>
+				<Button onClick={onOpen} size="sm">
+					Open pull request
+				</Button>
+			</EmptyContent>
+		</Empty>
 	);
 }
 
@@ -164,8 +220,7 @@ function AppShellReady({
 	const listed = useSessions(orpc, setRequestedActiveSessionId);
 	const open = useOpenRequest();
 	const request = open.request;
-	// Hooks run before the `sessions.length === 0` early return below, so a
-	// cold start into the empty state (nothing open yet) still opens a
+	// A cold start into the empty state (nothing open yet) still opens a
 	// pending deep link instead of stalling on it.
 	const deepLink = useDeepLinkOpener(
 		orpc,
@@ -366,167 +421,128 @@ function AppShellReady({
 		tabIds: sessionIds,
 	});
 
-	if (sessions.length === 0 && pendingOpenTab === null) {
-		return (
-			<ShellFrame>
-				<Empty className="flex-1">
-					<EmptyMedia variant="icon">
-						<InboxIcon />
-					</EmptyMedia>
-					<EmptyTitle>No open pull requests</EmptyTitle>
-					<EmptyDescription>
-						Run <code>nisi</code> from a repo to open one, or pick one from your
-						open pull requests.
-					</EmptyDescription>
-					<EmptyContent>
-						<Button onClick={openPalette} size="sm">
-							Open pull request
-						</Button>
-					</EmptyContent>
-				</Empty>
-				<OriginMovedDialog prompt={originMovedPrompt} />
-				<OpenPullRequestPalette
-					repositories={paletteRepositories}
-					onRepositoriesChange={setPaletteRepositories}
-					findExistingSessionId={findExistingSessionId}
-					onOpenChange={setPaletteOpen}
-					onSessionOpened={setRequestedActiveSessionId}
-					open={appViewActive && paletteOpen}
-					orpc={orpc}
-				/>
-				<CommandPalette
-					activeSession={activeSession}
-					onNavigateToTab={setActiveTab}
-					onOpenChange={setCommandPaletteOpen}
-					onSessionOpened={setRequestedActiveSessionId}
-					open={appViewActive && commandPaletteOpen}
-					orpc={orpc}
-				/>
-			</ShellFrame>
-		);
-	}
+	const hasOpenTabs = sessions.length > 0 || pendingOpenTab !== null;
 
 	return (
-		<TabsPrimitive.Root
-			className="flex h-screen flex-col bg-sidebar"
-			onValueChange={(value) => {
-				if (value === pendingTabId) {
-					setUserTabSelection(null);
-				} else if (typeof value === "string") {
-					selectSession(value);
-				}
-			}}
-			value={selectedTabId}
-			data-tauri-drag-region="deep"
-		>
-			<PrTabStrip
-				pendingOpenTab={pendingOpenTab}
-				activeSessionId={selectedSessionId}
-				checkGenerationRunning={tabSuspension.isGenerationRunning}
-				onActivateSession={selectSession}
-				onCloseOtherSessions={handleCloseOtherSessions}
-				onCloseSession={handleCloseSession}
-				onOpenPullRequest={openPalette}
-				onReorderSessions={tabOrder.reorder}
-				onSuspendTab={tabSuspension.suspendNow}
-				orpc={orpc}
-				sessions={sessions}
-				suspendedSessionIds={tabSuspension.suspendedSessionIds}
-			/>
-			<FramePanel
-				className={cn(INSET_PANE_CLASS, "my-0")}
-				data-tauri-drag-region="false"
-			>
-				{pendingOpenTab !== null && pendingTabId !== null && (
-					<TabsPrimitive.Panel
-						className={cn(
-							"flex min-h-0 flex-1 flex-col",
-							pendingOpenTab.status === "failed" &&
-								"items-center justify-center gap-3 p-6",
-						)}
-						value={pendingTabId}
-					>
-						{pendingOpenTab.status === "opening" ? (
-							<PendingPrView
-								orpc={orpc}
-								pullRequest={pendingOpenTab.pullRequest}
-								visible={appViewActive && selectedTabId === pendingTabId}
-							/>
-						) : pendingOpenTab.failure !== undefined ? (
-							<>
-								<p>{pendingOpenTab.failure.title}</p>
-								<p className="text-muted-foreground text-sm">
-									{pendingOpenTab.failure.message}
-								</p>
-								<Button onClick={pendingOpenTab.failure.dismiss} size="sm">
-									Dismiss
-								</Button>
-							</>
-						) : null}
-					</TabsPrimitive.Panel>
-				)}
-				{sessions.map((session) => (
-					<TabsPrimitive.Panel
-						className="flex min-h-0 flex-1 flex-col outline-none"
-						key={session.id}
-						// Every open PR tab's `PrView` stays mounted while its tab isn't
-						// suspended — this (not `isSelectedTab` below) is what tells a
-						// background-but-still-warm tab apart from one idle long enough
-						// to have unmounted (`useTabSuspension`). Dropping `keepMounted`
-						// for a suspended session lets Base UI's own "not the open
-						// panel" behavior actually unmount it — see that hook's doc
-						// comment for why that's safe: this panel's internal `mounted`
-						// state already went false shortly after the tab was last
-						// deselected, well before the suspend timer fires.
-						keepMounted={!tabSuspension.suspendedSessionIds.has(session.id)}
-						value={session.id}
-					>
-						<PrView
-							// `isSelectedTab` (not `keepMounted` above) is what tells the
-							// visible tab apart from a background one for the sidecar
-							// watch gating below and for keyboard shortcuts
-							// (`j`/`k`/`r`/`u`, `1`/`2`), which must only be live for
-							// whichever tab is selected.
-							isSelectedTab={session.id === selectedTabId}
-							onCloseTab={() => handleCloseSession(session.id)}
-							findExistingSessionId={findExistingSessionId}
-							onSessionOpened={setRequestedActiveSessionId}
-							orpc={orpc}
-							session={session}
-						/>
-					</TabsPrimitive.Panel>
-				))}
-			</FramePanel>
-
-			<div className="relative flex min-h-2 items-center">
-				<DevFooter />
-
-				<div className="grow" />
-
-				{activeSessionId !== null && (
+		<ShellFrame
+			footerEnd={
+				activeSessionId !== null && (
 					<ChatDock orpc={orpc} sessionId={activeSessionId} />
-				)}
-			</div>
-
-			<OriginMovedDialog prompt={originMovedPrompt} />
-			<OpenPullRequestPalette
-				repositories={paletteRepositories}
-				onRepositoriesChange={setPaletteRepositories}
-				findExistingSessionId={findExistingSessionId}
-				onOpenChange={setPaletteOpen}
-				onSessionOpened={setRequestedActiveSessionId}
-				open={appViewActive && paletteOpen}
-				orpc={orpc}
-			/>
-			<CommandPalette
-				activeSession={activeSession}
-				onNavigateToTab={setActiveTab}
-				onOpenChange={setCommandPaletteOpen}
-				onSessionOpened={setRequestedActiveSessionId}
-				open={appViewActive && commandPaletteOpen}
-				orpc={orpc}
-			/>
-		</TabsPrimitive.Root>
+				)
+			}
+			overlays={
+				<>
+					<OriginMovedDialog prompt={originMovedPrompt} />
+					<OpenPullRequestPalette
+						repositories={paletteRepositories}
+						onRepositoriesChange={setPaletteRepositories}
+						findExistingSessionId={findExistingSessionId}
+						onOpenChange={setPaletteOpen}
+						onSessionOpened={setRequestedActiveSessionId}
+						open={appViewActive && paletteOpen}
+						orpc={orpc}
+					/>
+					<CommandPalette
+						activeSession={activeSession}
+						onNavigateToTab={setActiveTab}
+						onOpenChange={setCommandPaletteOpen}
+						onSessionOpened={setRequestedActiveSessionId}
+						open={appViewActive && commandPaletteOpen}
+						orpc={orpc}
+					/>
+				</>
+			}
+			render={
+				<TabsPrimitive.Root
+					onValueChange={(value) => {
+						if (value === pendingTabId) {
+							setUserTabSelection(null);
+						} else if (typeof value === "string") {
+							selectSession(value);
+						}
+					}}
+					value={selectedTabId}
+					data-tauri-drag-region="deep"
+				/>
+			}
+			titleBar={
+				<PrTabStrip
+					pendingOpenTab={pendingOpenTab}
+					activeSessionId={selectedSessionId}
+					checkGenerationRunning={tabSuspension.isGenerationRunning}
+					onActivateSession={selectSession}
+					onCloseOtherSessions={handleCloseOtherSessions}
+					onCloseSession={handleCloseSession}
+					onOpenPullRequest={openPalette}
+					onReorderSessions={tabOrder.reorder}
+					onSuspendTab={tabSuspension.suspendNow}
+					orpc={orpc}
+					sessions={sessions}
+					suspendedSessionIds={tabSuspension.suspendedSessionIds}
+				/>
+			}
+		>
+			{!hasOpenTabs && <NoOpenPullRequests onOpen={openPalette} />}
+			{pendingOpenTab !== null && pendingTabId !== null && (
+				<TabsPrimitive.Panel
+					className={cn(
+						"flex min-h-0 flex-1 flex-col",
+						pendingOpenTab.status === "failed" &&
+							"items-center justify-center gap-3 p-6",
+					)}
+					value={pendingTabId}
+				>
+					{pendingOpenTab.status === "opening" ? (
+						<PendingPrView
+							orpc={orpc}
+							pullRequest={pendingOpenTab.pullRequest}
+							visible={appViewActive && selectedTabId === pendingTabId}
+						/>
+					) : pendingOpenTab.failure !== undefined ? (
+						<>
+							<p>{pendingOpenTab.failure.title}</p>
+							<p className="text-muted-foreground text-sm">
+								{pendingOpenTab.failure.message}
+							</p>
+							<Button onClick={pendingOpenTab.failure.dismiss} size="sm">
+								Dismiss
+							</Button>
+						</>
+					) : null}
+				</TabsPrimitive.Panel>
+			)}
+			{sessions.map((session) => (
+				<TabsPrimitive.Panel
+					className="flex min-h-0 flex-1 flex-col outline-none"
+					key={session.id}
+					// Every open PR tab's `PrView` stays mounted while its tab isn't
+					// suspended — this (not `isSelectedTab` below) is what tells a
+					// background-but-still-warm tab apart from one idle long enough
+					// to have unmounted (`useTabSuspension`). Dropping `keepMounted`
+					// for a suspended session lets Base UI's own "not the open
+					// panel" behavior actually unmount it — see that hook's doc
+					// comment for why that's safe: this panel's internal `mounted`
+					// state already went false shortly after the tab was last
+					// deselected, well before the suspend timer fires.
+					keepMounted={!tabSuspension.suspendedSessionIds.has(session.id)}
+					value={session.id}
+				>
+					<PrView
+						// `isSelectedTab` (not `keepMounted` above) is what tells the
+						// visible tab apart from a background one for the sidecar
+						// watch gating below and for keyboard shortcuts
+						// (`j`/`k`/`r`/`u`, `1`/`2`), which must only be live for
+						// whichever tab is selected.
+						isSelectedTab={session.id === selectedTabId}
+						onCloseTab={() => handleCloseSession(session.id)}
+						findExistingSessionId={findExistingSessionId}
+						onSessionOpened={setRequestedActiveSessionId}
+						orpc={orpc}
+						session={session}
+					/>
+				</TabsPrimitive.Panel>
+			))}
+		</ShellFrame>
 	);
 }
 
