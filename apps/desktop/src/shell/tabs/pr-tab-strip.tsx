@@ -195,7 +195,9 @@ export function PrTabStrip({
 						event.preventBaseUIHandler();
 					}
 				}}
-				render={<div className="flex shrink-0 pr-2" />}
+				render={
+					<div className={cn(TITLE_STRIP_HEIGHT_CLASS, "flex shrink-0 pr-2")} />
+				}
 			>
 				<TrafficLightSpace />
 				<DndContext
@@ -327,6 +329,15 @@ const PR_TAB_CLASS = cn(
 	"data-active:bg-background data-active:text-foreground data-active:bg-clip-padding data-active:shadow-xs/5",
 	"focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
 );
+
+/**
+ * The title strip's fixed height: a tab is 28px (`PR_TAB_CLASS`'s `py-1.5`
+ * around a 16px `text-xs` line) plus the list's `py-2`. Pinned rather than
+ * left to the tabs so the strip doesn't collapse when the last one closes;
+ * `ShellFrame`'s drag bar shares it so connecting doesn't jump either. Update
+ * it with the tab's padding or text size.
+ */
+export const TITLE_STRIP_HEIGHT_CLASS = "h-11";
 
 const PR_TAB_ICON_CLASS = "size-3.5 shrink-0";
 
