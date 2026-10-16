@@ -1,3 +1,4 @@
+import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { BunRuntime, BunServices } from "@effect/platform-bun";
@@ -18,6 +19,13 @@ const waitForVite = (url: string) =>
 	Effect.tryPromise(() => fetch(url)).pipe(
 		Effect.retry(Schedule.spaced("250 millis")),
 	);
+
+/**
+ * The real Electron executable, not `node_modules/.bin/electron`: that is a node
+ * wrapper which has to forward SIGTERM, and teardown once left the app running
+ * when it didn't.
+ */
+const electronBinary: string = createRequire(import.meta.url)("electron");
 
 const appDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -194,7 +202,7 @@ const dev = Command.make(
 					Effect.gen(function* () {
 						yield* waitForVite(viteUrl);
 						return yield* runManagedSubprocess(
-							path.join(appDir, "node_modules/.bin/electron"),
+							electronBinary,
 							[path.join(appDir, "dist-electron/main.js")],
 							{ env },
 						);
