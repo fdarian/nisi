@@ -319,18 +319,6 @@ importers:
       '@tanstack/react-router':
         specifier: ^1.170.32
         version: 1.170.32(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
-      '@tauri-apps/api':
-        specifier: 3.0.0-alpha.2
-        version: 3.0.0-alpha.2
-      '@tauri-apps/plugin-deep-link':
-        specifier: 3.0.0-alpha.2
-        version: 3.0.0-alpha.2
-      '@tauri-apps/plugin-opener':
-        specifier: 3.0.0-alpha.2
-        version: 3.0.0-alpha.2
-      '@tauri-apps/plugin-process':
-        specifier: 3.0.0-alpha.2
-        version: 3.0.0-alpha.2
       ai:
         specifier: 7.0.83
         version: 7.0.83(zod@4.5.4)
@@ -3153,18 +3141,6 @@ packages:
   '@tanstack/virtual-file-routes@1.162.0':
     resolution: {integrity: sha512-uhOeFyxLcU41HzvrxsGpiWdcMbScY1EDgbZ5K7DVRMYInbLYWAC0EA/kx9wXAoSM8q82bUG2hRl8+EAjE6XAbA==}
     engines: {node: '>=20.19'}
-
-  '@tauri-apps/api@3.0.0-alpha.2':
-    resolution: {integrity: sha512-W5MTTRAsbNqxSO5hf6U6gHwtTfW0ZnEyIWkmn9L6XYWFcSi0n1JtVQAIsJ6EZHLpJkchGEFwSeVBy+IcrtXl4g==}
-
-  '@tauri-apps/plugin-deep-link@3.0.0-alpha.2':
-    resolution: {integrity: sha512-XSDlYwnBZaTZjNMGeGwbSGk6Z3OjJaE/oicYhiDdCVcyqtRl0fCjQQz7SWfaTeSvcu3V9OX/dbA8+JKoQYRYPw==}
-
-  '@tauri-apps/plugin-opener@3.0.0-alpha.2':
-    resolution: {integrity: sha512-T3Y7Y/m+XybZqB2cI6SZD8St47GBONPTbFp+hSYFLHy5Lh0eNh0sv9TRyi7MElzUtUx0NWZltAOHuHzeo2UfWA==}
-
-  '@tauri-apps/plugin-process@3.0.0-alpha.2':
-    resolution: {integrity: sha512-ASkIJva1x92pbWQ/GfoP6VcEJJqjN+qYspZmldFl1gvZ/sm+zo5BO+p71s/tl5X7moqP66ti44tQezsjx+DEPw==}
 
   '@testing-library/dom@10.4.1':
     resolution: {integrity: sha512-o4PXJQidqJl82ckFaXUeoAW+XysPLauYI43Abki5hABd853iMhitooc6znOnczgbTYmEP6U6/y1ZyKAIsvMKGg==}
@@ -9254,20 +9230,6 @@ snapshots:
   '@tanstack/store@0.9.3': {}
 
   '@tanstack/virtual-file-routes@1.162.0': {}
-
-  '@tauri-apps/api@3.0.0-alpha.2': {}
-
-  '@tauri-apps/plugin-deep-link@3.0.0-alpha.2':
-    dependencies:
-      '@tauri-apps/api': 3.0.0-alpha.2
-
-  '@tauri-apps/plugin-opener@3.0.0-alpha.2':
-    dependencies:
-      '@tauri-apps/api': 3.0.0-alpha.2
-
-  '@tauri-apps/plugin-process@3.0.0-alpha.2':
-    dependencies:
-      '@tauri-apps/api': 3.0.0-alpha.2
 
   '@testing-library/dom@10.4.1':
     dependencies:

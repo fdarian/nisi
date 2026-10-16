@@ -48,7 +48,7 @@ function globalVirtualStoreRoots(): string[] {
 	return [segments.slice(0, linksIndex + 1).join(path.sep)];
 }
 
-/** `apps/desktop/package.json` is the version source of truth — see `scripts/sync-version.ts`. */
+/** `apps/desktop/package.json` is the version source of truth */
 function resolveAppVersion(): string {
 	const packageJsonPath = path.resolve(import.meta.dirname, "package.json");
 	const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, "utf-8"));
