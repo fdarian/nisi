@@ -62,9 +62,7 @@ const dev = Command.make(
 		prodDataDir: Flag.boolean("prod-data-dir").pipe(Flag.withDefault(false)),
 		// Binds vite to `0.0.0.0` (`VITE_HOST`, read by `vite.config.ts`) instead
 		// of localhost-only, so another device on the LAN can load the dev
-		// server — e.g. testing `--browser` mode from a phone. Distinct from
-		// `TAURI_DEV_HOST`, which points the HMR *client* at a specific address
-		// (see `vite.config.ts`); this only widens what the server binds to.
+		// server — e.g. testing `--browser` mode from a phone.
 		host: Flag.boolean("host").pipe(Flag.withDefault(false)),
 	},
 	({ browser, port, prodDataDir, host }) =>

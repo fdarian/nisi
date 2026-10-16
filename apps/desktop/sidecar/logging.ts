@@ -5,7 +5,7 @@ import { Effect, Layer, Logger } from "effect";
 
 /**
  * `<dataDir>/logs/sidecar.log` — the file half of "stdout goes nowhere in
- * production" (Rust spawns the compiled sidecar fire-and-forget, see
+ * production" (the Electron main process spawns the compiled sidecar fire-and-forget, see
  * `apps/desktop/AGENTS.md`'s "The seam"). Same `dataDir` resolution as the
  * handshake file and `app.db`, so `NISI_DATA_DIR` moves logs along with
  * everything else.

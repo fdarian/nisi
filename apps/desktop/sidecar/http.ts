@@ -316,7 +316,7 @@ type ServerContext = WithEffectContext<AppServices> &
 /**
  * Binds the real port immediately, answering only `health.check` — hand-rolled
  * to the exact wire shape `attachRouter`'s oRPC router below produces
- * (verified against `makeSidecarClient` and Rust's `is_backend_alive`),
+ * (verified against `makeSidecarClient` and `electron/backend.ts`'s `isBackendAlive`),
  * deliberately *before* `AppServices` exists at all. `index.ts` needs this
  * port already listening to record it in `deskkit/sidecar`'s `acquireSidecar`
  * claim — a liveness check against a port nothing answers on yet would make

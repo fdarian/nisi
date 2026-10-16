@@ -29,10 +29,10 @@ export const settings = sqliteTable("settings", {
 	diffStyleMode: text().notNull(),
 	/**
 	 * Scheme string of the user's preferred editor (`vscode`/`cursor`/`zed`/
-	 * `windsurf` — see `apps/desktop/src-tauri/src/editors.rs`'s
+	 * `windsurf` — see `apps/desktop/electron/editors.ts`'s
 	 * `CANDIDATE_EDITORS`), or `NULL` when never chosen. Plain text, not a
 	 * typed column — same reasoning as `enabledHarnesses` above, this package
-	 * stays independent of the frontend's/Rust's candidate list.
+	 * stays independent of the frontend's/Electron main process's candidate list.
 	 */
 	preferredEditor: text(),
 	/**
