@@ -105,6 +105,7 @@ const mockGitHub: GitHubShape = {
 	approveWorkflowRuns: () => Effect.die(new Error("unused mock GitHub method")),
 	overview: () => Effect.die(new Error("unused mock GitHub method")),
 	stack: () => Effect.die(new Error("unused mock GitHub method")),
+	stackSuggestion: () => Effect.die(new Error("unused mock GitHub method")),
 	mergeability: () => Effect.die(new Error("unused mock GitHub method")),
 	mergeMethods: () => Effect.die(new Error("unused mock GitHub method")),
 	merge: () => Effect.die(new Error("unused mock GitHub method")),
@@ -113,6 +114,8 @@ const mockGitHub: GitHubShape = {
 	watchChecks: () => Stream.die(new Error("unused mock GitHub method")),
 	watchMergeStatus: () => Stream.die(new Error("unused mock GitHub method")),
 	watchStack: () => Stream.die(new Error("unused mock GitHub method")),
+	watchStackSuggestion: () =>
+		Stream.die(new Error("unused mock GitHub method")),
 	watchOverview: () => Stream.die(new Error("unused mock GitHub method")),
 };
 

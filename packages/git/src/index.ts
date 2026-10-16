@@ -99,6 +99,7 @@ export type {
 	PullRequestStack,
 	PullRequestStackEntry,
 	PullRequestStackError,
+	PullRequestStackSuggestion,
 } from "./github/models.ts";
 export type { Hunk } from "./hunk.ts";
 export { parseHunks } from "./hunk.ts";

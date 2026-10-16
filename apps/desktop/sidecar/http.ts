@@ -1640,6 +1640,39 @@ export function attachRouter(
 				);
 				yield* streamToIterator(stream, mainContext, signal);
 			}),
+			// Inferred from branch names, so it is only a hint; same cwd/error story as `stack`.
+			stackSuggestion: authed.pullRequests.stackSuggestion.handler(
+				async function* (request) {
+					const input = request.input;
+					const errors = request.errors;
+					const signal = request.signal;
+					const stream = Stream.unwrap(
+						Effect.gen(function* () {
+							const github = yield* GitHub;
+							return github.watchStackSuggestion({
+								repoRoot: process.cwd(),
+								owner: input.owner,
+								repo: input.repo,
+								number: input.number,
+							});
+						}),
+					).pipe(
+						Stream.mapError((cause) => {
+							switch (cause._tag) {
+								case "GhNotAuthenticated":
+									return errors.GH_NOT_AUTHENTICATED({ message: cause.reason });
+								case "GhRateLimited":
+									return errors.TOO_MANY_REQUESTS({ message: cause.reason });
+								case "PullRequestNotFound":
+									return errors.NOT_FOUND({ message: cause.reason });
+								default:
+									return errors.SERVICE_UNAVAILABLE({ message: String(cause) });
+							}
+						}),
+					);
+					yield* streamToIterator(stream, mainContext, signal);
+				},
+			),
 			mergeStatus: authed.pullRequests.mergeStatus.handler(
 				async function* (request) {
 					const input = request.input;

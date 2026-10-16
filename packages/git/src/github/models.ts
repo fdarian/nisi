@@ -166,6 +166,14 @@ export type PullRequestStack = {
 	readonly entries: ReadonlyArray<PullRequestStackEntry>;
 };
 
+/** A chain of open PRs GitHub hasn't stacked; inferred from their branch names, never reported by GitHub. */
+export type PullRequestStackSuggestion = {
+	readonly baseRefName: string;
+	readonly size: number;
+	readonly position: number;
+	readonly entries: ReadonlyArray<PullRequestStackEntry>;
+};
+
 export type FetchPullRequestStackInput = {
 	readonly repoRoot: string;
 	readonly owner: string;

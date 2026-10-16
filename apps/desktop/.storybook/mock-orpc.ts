@@ -429,6 +429,8 @@ export function createMockSidecarClient(
 				stack === undefined
 					? async () => neverIterator()
 					: async () => liveValue(stack),
+			// No fixture field yet; the frontend slice adds one alongside the UI.
+			stackSuggestion: async () => neverIterator(),
 			merge: async () => undefined,
 			scheduleMerge: async (input) => {
 				scheduledMergeState.request = { method: input.method };

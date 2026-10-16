@@ -135,6 +135,17 @@ export const PullRequestStack = Schema.Struct({
 });
 export type PullRequestStack = Schema.Schema.Type<typeof PullRequestStack>;
 
+/** Mirrors `@repo/git`'s inferred stack suggestion: open PRs whose branches chain, which GitHub hasn't stacked. Inferred, never reported by GitHub. */
+export const PullRequestStackSuggestion = Schema.Struct({
+	baseRefName: Schema.String,
+	size: Schema.Number,
+	position: Schema.Number,
+	entries: Schema.Array(PullRequestStackEntry),
+});
+export type PullRequestStackSuggestion = Schema.Schema.Type<
+	typeof PullRequestStackSuggestion
+>;
+
 /**
  * Mirrors `@repo/git`'s `UnpushedCommits` — how many commits the local
  * worktree branch has that its remote doesn't, plus the remote ref
@@ -463,6 +474,25 @@ export const pullRequestsContract = {
 		)
 		.output(
 			eventIterator(Schema.toStandardSchemaV1(Schema.NullOr(PullRequestStack))),
+		)
+		.errors({
+			GH_NOT_AUTHENTICATED: {},
+			TOO_MANY_REQUESTS: {},
+			SERVICE_UNAVAILABLE: {},
+			NOT_FOUND: {},
+		}),
+	stackSuggestion: oc
+		.input(
+			Schema.Struct({
+				owner: Schema.String,
+				repo: Schema.String,
+				number: Schema.Number,
+			}),
+		)
+		.output(
+			eventIterator(
+				Schema.toStandardSchemaV1(Schema.NullOr(PullRequestStackSuggestion)),
+			),
 		)
 		.errors({
 			GH_NOT_AUTHENTICATED: {},

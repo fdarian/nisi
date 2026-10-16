@@ -71,6 +71,7 @@ const mockGitHub = (overrides: Partial<GitHubShape>): GitHubShape => ({
 	rerunActionsJob: unused,
 	overview: unused,
 	stack: () => Effect.succeed(null),
+	stackSuggestion: () => Effect.succeed(null),
 	mergeability: () => Effect.succeed(clean),
 	mergeMethods: unused,
 	merge: () => Effect.void,
@@ -79,6 +80,7 @@ const mockGitHub = (overrides: Partial<GitHubShape>): GitHubShape => ({
 	watchChecks: unusedStream,
 	watchMergeStatus: unusedStream,
 	watchStack: unusedStream,
+	watchStackSuggestion: unusedStream,
 	watchOverview: unusedStream,
 	...overrides,
 });

@@ -71,6 +71,7 @@ const githubWith = (
 	approveWorkflowRuns: unused,
 	overview: unused,
 	stack: unused,
+	stackSuggestion: unused,
 	mergeability: unused,
 	mergeMethods: unused,
 	merge: unused,
@@ -79,6 +80,7 @@ const githubWith = (
 	watchChecks: unusedStream,
 	watchMergeStatus: unusedStream,
 	watchStack: unusedStream,
+	watchStackSuggestion: unusedStream,
 	watchOverview: unusedStream,
 	...overrides,
 });

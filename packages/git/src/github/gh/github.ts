@@ -30,6 +30,7 @@ import {
 	searchPullRequests,
 } from "./pull-request.ts";
 import { fetchPullRequestStack } from "./stack.ts";
+import { fetchPullRequestStackSuggestion } from "./stack-suggestion.ts";
 import {
 	checksInterval,
 	kick,
@@ -89,6 +90,12 @@ export const GhGitHub = {
 				(input) => provide(fetchPullRequestStack(input)),
 				stackInterval,
 			);
+			const stackSuggestion = yield* makeWatch(
+				attention,
+				kicks,
+				(input) => provide(fetchPullRequestStackSuggestion(input)),
+				stackInterval,
+			);
 			const overview = yield* makeWatch(
 				attention,
 				kicks,
@@ -123,6 +130,8 @@ export const GhGitHub = {
 					),
 				overview: (input) => provide(fetchPullRequestOverview(input)),
 				stack: (input) => provide(fetchPullRequestStack(input)),
+				stackSuggestion: (input) =>
+					provide(fetchPullRequestStackSuggestion(input)),
 				mergeability: (repoRoot, number) =>
 					provide(fetchPullRequestMergeability(repoRoot, number)),
 				mergeMethods: (repoRoot, owner, repo) =>
@@ -152,6 +161,7 @@ export const GhGitHub = {
 				watchChecks: (input) => watchFromMap(checks, input),
 				watchMergeStatus: (input) => watchFromMap(mergeStatus, input),
 				watchStack: (input) => watchFromMap(stack, input),
+				watchStackSuggestion: (input) => watchFromMap(stackSuggestion, input),
 				watchOverview: (input) => watchFromMap(overview, input),
 			} satisfies GitHub["Service"];
 		}),
