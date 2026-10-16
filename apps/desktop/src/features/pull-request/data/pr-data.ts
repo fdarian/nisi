@@ -1025,6 +1025,14 @@ export type PullRequestStack = {
 	entries: readonly PullRequestStackEntry[];
 };
 
+/** Mirrors `PullRequestStackSuggestion` (`packages/sidecar-api/src/pull-requests.ts`): open PRs that chain but aren't a GitHub stack. */
+export type PullRequestStackSuggestion = {
+	size: number;
+	baseRefName: string;
+	position: number;
+	entries: readonly PullRequestStackEntry[];
+};
+
 export type PullRequestMergeStatusParams = {
 	repoRoot: string;
 	owner: string;
@@ -1108,6 +1116,20 @@ export function usePullRequestStack(
 	);
 }
 
+export function usePullRequestStackSuggestion(
+	orpc: SidecarQueryUtils,
+	params: PullRequestStackParams,
+	enabled = true,
+): UseQueryResult<PullRequestStackSuggestion | null> {
+	return useQuery(
+		orpc.pullRequests.stackSuggestion.liveOptions({
+			input: params,
+			enabled,
+			retry: retryDisconnectedLiveQuery,
+		}),
+	);
+}
+
 export type MergePullRequestParams = {
 	repoRoot: string;
 	owner: string;
@@ -1172,6 +1194,34 @@ export function useMergePullRequest(
 		merge,
 		mergeStack,
 		isPending: mutation.isPending || stackMutation.isPending,
+	};
+}
+
+export type CreatePullRequestStackParams = {
+	owner: string;
+	repo: string;
+	/** Bottom to top. */
+	numbers: readonly number[];
+};
+
+export type CreatePullRequestStackError =
+	| InferClientError<SidecarClient["pullRequests"]["createStack"]>
+	| Error;
+
+/** Doesn't touch the stack caches: the sidecar kicks the live stack streams after GitHub accepts, and they deliver the real stack. */
+export function useCreatePullRequestStack(orpc: SidecarQueryUtils): {
+	create: (params: CreatePullRequestStackParams, onCreated: () => void) => void;
+	reset: () => void;
+	isPending: boolean;
+	error: CreatePullRequestStackError | null;
+} {
+	const mutation = useMutation(orpc.pullRequests.createStack.mutationOptions());
+	return {
+		create: (params, onCreated) =>
+			mutation.mutate(params, { onSuccess: onCreated }),
+		reset: mutation.reset,
+		isPending: mutation.isPending,
+		error: mutation.error,
 	};
 }
 

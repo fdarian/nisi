@@ -1640,6 +1640,39 @@ export function attachRouter(
 				);
 				yield* streamToIterator(stream, mainContext, signal);
 			}),
+			// Inferred from branch names, so it is only a hint; same cwd/error story as `stack`.
+			stackSuggestion: authed.pullRequests.stackSuggestion.handler(
+				async function* (request) {
+					const input = request.input;
+					const errors = request.errors;
+					const signal = request.signal;
+					const stream = Stream.unwrap(
+						Effect.gen(function* () {
+							const github = yield* GitHub;
+							return github.watchStackSuggestion({
+								repoRoot: process.cwd(),
+								owner: input.owner,
+								repo: input.repo,
+								number: input.number,
+							});
+						}),
+					).pipe(
+						Stream.mapError((cause) => {
+							switch (cause._tag) {
+								case "GhNotAuthenticated":
+									return errors.GH_NOT_AUTHENTICATED({ message: cause.reason });
+								case "GhRateLimited":
+									return errors.TOO_MANY_REQUESTS({ message: cause.reason });
+								case "PullRequestNotFound":
+									return errors.NOT_FOUND({ message: cause.reason });
+								default:
+									return errors.SERVICE_UNAVAILABLE({ message: String(cause) });
+							}
+						}),
+					);
+					yield* streamToIterator(stream, mainContext, signal);
+				},
+			),
 			mergeStatus: authed.pullRequests.mergeStatus.handler(
 				async function* (request) {
 					const input = request.input;
@@ -1944,6 +1977,80 @@ export function attachRouter(
 								method: input.method,
 								cause,
 							}),
+						),
+					);
+			}),
+			// Like `stack`, creating a stack doesn't depend on a checked-out
+			// worktree, so the sidecar's own cwd is enough for `gh`.
+			createStack: authed.pullRequests.createStack.effect(function* ({
+				input,
+				errors,
+			}) {
+				const github = yield* GitHub;
+				yield* github
+					.createStack({
+						repoRoot: process.cwd(),
+						owner: input.owner,
+						repo: input.repo,
+						numbers: input.numbers,
+					})
+					.pipe(
+						Effect.tapError((cause) =>
+							Effect.logWarning("pull request stack creation failed", {
+								repo: `${input.owner}/${input.repo}`,
+								numbers: input.numbers,
+								reason: cause._tag,
+								detail:
+									cause._tag === "GitCommandError"
+										? `${cause.command} ${cause.args.join(" ")} (exit ${cause.exitCode}): ${cause.stderr}\n${String(cause.cause)}`
+										: cause.reason,
+							}),
+						),
+						Effect.catchTag("GhNotAuthenticated", (cause) =>
+							Effect.fail(
+								errors.GH_NOT_AUTHENTICATED({
+									message: `gh is not authenticated: ${cause.reason}`,
+									data: {
+										reason: "Authentication required",
+										detail: cause.reason,
+									},
+								}),
+							),
+						),
+						Effect.catchTag("GhRateLimited", (cause) =>
+							Effect.fail(
+								errors.TOO_MANY_REQUESTS({
+									message: cause.reason,
+									data: {
+										reason: "GitHub rate limit reached",
+										detail: cause.reason,
+									},
+								}),
+							),
+						),
+						Effect.catchTag("GhStackCreateFailed", (cause) =>
+							Effect.fail(
+								errors.STACK_CREATE_FAILED({
+									message: `GitHub couldn't create the stack in ${cause.owner}/${cause.repo}: ${cause.reason}`,
+									data: {
+										reason: /\bHTTP 404\b/i.test(cause.reason)
+											? "Stacked pull requests aren't enabled for this repo"
+											: "GitHub rejected the stack",
+										detail: cause.reason,
+									},
+								}),
+							),
+						),
+						Effect.catchTag("GitCommandError", (cause) =>
+							Effect.fail(
+								errors.SERVICE_UNAVAILABLE({
+									message: `${cause.command} could not be run: ${cause.stderr || String(cause.cause)}`,
+									data: {
+										reason: "Couldn't run gh",
+										detail: `${cause.command} ${cause.args.join(" ")} (exit ${cause.exitCode}): ${cause.stderr}\n${String(cause.cause)}`,
+									},
+								}),
+							),
 						),
 					);
 			}),

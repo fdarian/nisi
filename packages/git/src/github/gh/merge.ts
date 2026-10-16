@@ -26,6 +26,7 @@ import {
 	type PullRequestMergeability,
 } from "../models.ts";
 import { isAuthFailure, isRateLimited } from "./pull-request.ts";
+import { stackApiHeaders } from "./stack.ts";
 
 export const decodeMergeabilityView = (command: string, raw: string) =>
 	Schema.decodeUnknownEffect(Schema.fromJsonString(MergeabilityView))(raw).pipe(
@@ -319,13 +320,6 @@ const decodeAsyncMergeResponse = (command: string, raw: string) =>
 		),
 	);
 
-const stackMergeHeaders = [
-	"-H",
-	"Accept: application/vnd.github+json",
-	"-H",
-	"X-GitHub-Api-Version: 2026-03-10",
-] as const;
-
 const STACK_MERGE_TIMEOUT = "2 minutes";
 const STACK_MERGE_TIMEOUT_MESSAGE =
 	"GitHub is still processing the merge after 2 minutes; try again later.";
@@ -353,7 +347,7 @@ const pollStackMerge = (
 		const result = yield* ghResult(repoRoot, [
 			"api",
 			`repos/${owner}/${repo}/pulls/${number}/merge-async/${uuid}`,
-			...stackMergeHeaders,
+			...stackApiHeaders,
 		]);
 
 		if (result.exitCode !== 0) {
@@ -412,7 +406,7 @@ export const mergeStackPullRequest = (
 			"--method",
 			"PUT",
 			`repos/${owner}/${repo}/pulls/${number}/merge-async`,
-			...stackMergeHeaders,
+			...stackApiHeaders,
 			"-f",
 			`merge_method=${method}`,
 			...(matchHeadCommit === undefined

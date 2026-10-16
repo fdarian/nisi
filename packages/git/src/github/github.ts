@@ -10,6 +10,7 @@ import type {
 	PullRequestNotFound,
 	PullRequestReadyError,
 	PullRequestSearchError,
+	PullRequestStackCreateError,
 	PullRequestStackMergeError,
 	PullRequestStateError,
 	PullRequestStatesError,
@@ -26,6 +27,7 @@ import type {
 	ActionsJobError,
 	ActionsJobInput,
 	ActionsJobLogs,
+	CreatePullRequestStackInput,
 	FetchPullRequestChecksInput,
 	FetchPullRequestOverviewInput,
 	FetchPullRequestStackInput,
@@ -36,6 +38,7 @@ import type {
 	PullRequestOverview,
 	PullRequestStack,
 	PullRequestStackError,
+	PullRequestStackSuggestion,
 	RerunActionsJobInput,
 } from "./models.ts";
 
@@ -165,6 +168,15 @@ export type GitHubShape = {
 		PullRequestStack | null,
 		PullRequestStackError | GitCommandError
 	>;
+	stackSuggestion: (
+		input: FetchPullRequestStackInput,
+	) => Effect.Effect<
+		PullRequestStackSuggestion | null,
+		PullRequestStackError | GitCommandError
+	>;
+	createStack: (
+		input: CreatePullRequestStackInput,
+	) => Effect.Effect<void, PullRequestStackCreateError | GitCommandError>;
 	mergeability: (
 		repoRoot: string,
 		number: number,
@@ -218,6 +230,12 @@ export type GitHubShape = {
 		input: FetchPullRequestStackInput,
 	) => Stream.Stream<
 		PullRequestStack | null,
+		PullRequestStackError | GitCommandError
+	>;
+	watchStackSuggestion: (
+		input: FetchPullRequestStackInput,
+	) => Stream.Stream<
+		PullRequestStackSuggestion | null,
 		PullRequestStackError | GitCommandError
 	>;
 	watchOverview: (
