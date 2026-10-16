@@ -1,6 +1,5 @@
 import { copyActionsErrors, flattenActionsLog } from "@repo/git/actions-log";
 import type { CiJob, CiLogNode } from "@repo/sidecar-api";
-import { openUrl } from "@tauri-apps/plugin-opener";
 import Anser from "anser";
 import { cn } from "cn";
 import {
@@ -45,6 +44,7 @@ import {
 	useRerunCiJob,
 } from "#/features/pull-request/data/pr-data";
 import type { SidecarQueryUtils } from "#/infra/backend-context";
+import { native } from "#/infra/native";
 
 type DialogProps = {
 	orpc: SidecarQueryUtils;
@@ -120,13 +120,15 @@ export function CiLogDialog(props: DialogProps) {
 							size="icon"
 							variant="ghost"
 							onClick={() =>
-								void openUrl(job.htmlUrl).catch((error: unknown) =>
-									toastManager.add({
-										title: "Couldn't open GitHub",
-										description: String(error),
-										type: "error",
-									}),
-								)
+								void native()
+									.openUrl(job.htmlUrl)
+									.catch((error: unknown) =>
+										toastManager.add({
+											title: "Couldn't open GitHub",
+											description: String(error),
+											type: "error",
+										}),
+									)
 							}
 						>
 							<ExternalLink />

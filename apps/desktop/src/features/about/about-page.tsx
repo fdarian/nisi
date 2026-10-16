@@ -1,7 +1,7 @@
 "use client";
 
-import { openUrl } from "@tauri-apps/plugin-opener";
 import icon from "#/assets/icon.png";
+import { native } from "#/infra/native";
 import { useAboutWindowChrome } from "./use-about-window";
 
 const REPO_URL = "https://github.com/fdarian/nisi";
@@ -26,9 +26,9 @@ const APPKIT_BUTTON_CLASSNAME =
 	"whitespace-nowrap rounded-[8px] bg-black/[7%] px-2 h-[28px] font-normal text-[13px] text-neutral-900 shadow-[0_0.5px_1px_rgba(0,0,0,0.08)] hover:bg-black/[11%] active:bg-black/[17%] dark:bg-white/[12%] dark:text-neutral-50 dark:shadow-none dark:hover:bg-white/[16%] dark:active:bg-white/[22%]";
 
 /**
- * Content for the About window (`src-tauri/src/lib.rs`'s `build_about_window`)
+ * Content for the About window (`electron/about-window.ts`)
  * — a separate, fixed-size, native-styled window, not an in-app dialog. Shown
- * from Rust once the page finishes loading, not from here (`useAboutWindowChrome`).
+ * from the main process once the page finishes loading, not from here (`useAboutWindowChrome`).
  *
  * Background is `bg-sidebar` — an opaque theme token that already adapts to
  * light/dark everywhere else in the app (`app-shell.tsx`'s own root uses the
@@ -91,7 +91,7 @@ export function AboutPage(): React.ReactElement {
 				<dd className="text-left font-mono">
 					<button
 						className="pointer-events-auto cursor-pointer text-info-foreground hover:underline"
-						onClick={() => void openUrl(commitUrl)}
+						onClick={() => void native().openUrl(commitUrl)}
 						type="button"
 					>
 						{shortSha}
@@ -101,14 +101,14 @@ export function AboutPage(): React.ReactElement {
 			<div className="flex gap-2">
 				<button
 					className={APPKIT_BUTTON_CLASSNAME}
-					onClick={() => void openUrl(REPO_URL)}
+					onClick={() => void native().openUrl(REPO_URL)}
 					type="button"
 				>
 					GitHub
 				</button>
 				<button
 					className={APPKIT_BUTTON_CLASSNAME}
-					onClick={() => void openUrl(`${REPO_URL}/issues`)}
+					onClick={() => void native().openUrl(`${REPO_URL}/issues`)}
 					type="button"
 				>
 					Report an Issue

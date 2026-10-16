@@ -7,8 +7,8 @@ import { useAppViewActive } from "#/shell/app-view-context";
  * Cmd+K opens the app-wide command palette from anywhere — the standard
  * "command palette" chord (VS Code, Linear, Raycast, etc.), distinct from
  * Cmd+T's PR-opener palette (`use-open-pr-palette-shortcut.ts`). Nothing in
- * this app's Tauri menu (`src-tauri/src/lib.rs`) claims Cmd+K, so AppKit
- * never intercepts the chord before the webview sees it.
+ * this app's menu (`electron/menu.ts`) claims Cmd+K, so AppKit
+ * never intercepts the chord before the page sees it.
  */
 export function useCommandPaletteShortcut(onOpen: () => void): void {
 	const appViewActive = useAppViewActive();

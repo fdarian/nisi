@@ -1,9 +1,7 @@
 import { ORPCError } from "@orpc/client";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { invoke, isTauri } from "@tauri-apps/api/core";
-import { homeDir } from "@tauri-apps/api/path";
-import { revealItemsInDir } from "@tauri-apps/plugin-opener";
 import type { SidecarQueryUtils } from "#/infra/backend-context";
+import { hasNative, native } from "#/infra/native";
 
 export function useRepositories(orpc: SidecarQueryUtils) {
 	return useQuery(orpc.repositories.list.queryOptions());
@@ -44,14 +42,14 @@ export function useRepositorySessionStates(
 export function useHomeDir(): string | undefined {
 	return useQuery({
 		queryKey: ["home-dir"],
-		queryFn: homeDir,
-		enabled: isTauri(),
+		queryFn: () => native().homeDir(),
+		enabled: hasNative(),
 		staleTime: Number.POSITIVE_INFINITY,
 	}).data;
 }
 
 export function revealInFinder(path: string): Promise<void> {
-	return revealItemsInDir(path);
+	return native().revealInFinder(path);
 }
 
 /**
@@ -67,9 +65,9 @@ export function useChangeRepositoryPath(orpc: SidecarQueryUtils) {
 			owner: string;
 			repo: string;
 		}): Promise<"changed" | "cancelled"> => {
-			const picked = await invoke<string | null>("pick_folder", {
-				title: `Where is ${repository.owner}/${repository.repo} checked out?`,
-			});
+			const picked = await native().pickFolder(
+				`Where is ${repository.owner}/${repository.repo} checked out?`,
+			);
 			if (picked === null) return "cancelled";
 			await orpc.pullRequests.recordRepoPath.call({
 				owner: repository.owner,

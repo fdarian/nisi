@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from "@storybook/react-vite";
 import { REPOSITORIES } from "./repositories.fixture";
 import {
 	RepositoriesStory,
-	stubTauriForRepositories,
+	stubNativeForRepositories,
 } from "./repositories-story-harness";
 
 const LIST_PATH = "/settings/repositories";
@@ -10,7 +10,7 @@ const LIST_PATH = "/settings/repositories";
 const meta = {
 	title: "Settings/Repositories/List",
 	component: RepositoriesStory,
-	beforeEach: stubTauriForRepositories,
+	beforeEach: stubNativeForRepositories,
 	parameters: { controls: { disable: true } },
 } satisfies Meta<typeof RepositoriesStory>;
 export default meta;

@@ -421,7 +421,7 @@ export function FilesChangedView({
 	//
 	// `editors` is only probed lazily, right in the branch that needs it —
 	// this shortcut may never be pressed for a given tab, so there's no
-	// reason to fire a Tauri `invoke` for every open `FilesChangedView` up
+	// reason to fire a native editor probe for every open `FilesChangedView` up
 	// front just to support it. The already-set-`preferredEditor` branch
 	// below deliberately skips that probe (and so may show the raw scheme
 	// instead of the editor's display name if this tab never loaded the list
