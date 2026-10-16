@@ -153,7 +153,7 @@ function ShellFrame({
 			children: (
 				<>
 					{titleBar}
-					<FramePanel className={cn(INSET_PANE_CLASS, "my-0 app-no-drag")}>
+					<FramePanel className={cn(INSET_PANE_CLASS, "my-0")}>
 						{children}
 					</FramePanel>
 					<div className="relative flex min-h-2 items-center">
@@ -456,7 +456,6 @@ function AppShellReady({
 						}
 					}}
 					value={selectedTabId}
-					className="app-drag"
 				/>
 			}
 			titleBar={

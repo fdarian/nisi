@@ -114,10 +114,12 @@ export function Command({
 export function CommandInput(
 	props: React.ComponentProps<typeof AutocompleteInput> & {
 		startContent?: React.ReactNode;
+		endContent?: React.ReactNode;
 	},
 ): React.ReactElement {
 	const inputProps = { ...props };
 	delete inputProps.startContent;
+	delete inputProps.endContent;
 	const hasStartContent = props.startContent !== undefined;
 	const handleKeyDown: NonNullable<
 		React.ComponentProps<typeof AutocompleteInput>["onKeyDown"]
@@ -163,6 +165,7 @@ export function CommandInput(
 					startAddon={hasStartContent ? undefined : <SearchIcon />}
 				/>
 			</div>
+			{props.endContent}
 		</div>
 	);
 }
