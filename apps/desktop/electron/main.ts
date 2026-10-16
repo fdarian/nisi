@@ -215,7 +215,7 @@ async function start() {
 		handleAppProtocol();
 	}
 	const sidecarJsonPath = join(dataDir, "sidecar.json");
-	registerIpc(createBackendResolver(sidecarJsonPath));
+	registerIpc(createBackendResolver(sidecarJsonPath, () => sidecar));
 	if (app.isPackaged) {
 		spawnSidecar();
 	}

@@ -176,7 +176,11 @@ export async function watchActivation(
 		try {
 			let backend: BackendState;
 			try {
-				backend = await waitForSidecarJson(options.sidecarJsonPath);
+				// This loop already retries with backoff, so the bounded wait is enough here.
+				backend = await waitForSidecarJson(
+					options.sidecarJsonPath,
+					() => undefined,
+				);
 			} catch (e) {
 				throw new Error(
 					`activation bridge waiting for sidecar: ${errorMessage(e)}`,

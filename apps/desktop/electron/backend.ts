@@ -73,16 +73,47 @@ async function readSidecarJson(
 	return { port, token };
 }
 
+/** The slice of a `ChildProcess` the wait needs; both codes stay `null` until it exits. */
+export type SpawnedSidecar = {
+	exitCode: number | null;
+	signalCode: NodeJS.Signals | null;
+};
+
+type PollTiming = { attempts: number; intervalMs: number };
+
+function describeGiveUp(spawned: SpawnedSidecar | undefined): string {
+	if (spawned === undefined) {
+		return "no sidecar is running";
+	}
+	if (spawned.signalCode !== null) {
+		return `the spawned sidecar was killed by ${spawned.signalCode}`;
+	}
+	return `the spawned sidecar exited with code ${spawned.exitCode}`;
+}
+
 /**
- * Awaits a `sidecar.json` whose recorded sidecar actually answers, up to ~8 s
- * (16 x 500 ms). The file alone is never trusted: one left behind by a
- * `SIGKILL`'d sidecar would otherwise get cached by `createBackendResolver` for
- * the app's whole lifetime on a port nothing listens on. A dead recorded owner
- * is treated like a missing file, since a fresh sidecar may be about to
- * republish it.
+ * Awaits a `sidecar.json` whose recorded sidecar actually answers. The file
+ * alone is never trusted: one left behind by a `SIGKILL`'d sidecar would
+ * otherwise get cached by `createBackendResolver` for the app's whole lifetime
+ * on a port nothing listens on. A dead recorded owner is treated like a missing
+ * file, since a fresh sidecar may be about to republish it.
+ *
+ * `getSpawned` returns the sidecar child this app started, if any. While it is
+ * alive the wait has no deadline, because a cold first start can take longer
+ * than any fixed budget. Once it has exited (or none was spawned) the wait gives
+ * up after ~8 s (16 x 500 ms). A spawned child that exits early because another
+ * sidecar already owns the lock is fine: that owner's `sidecar.json` passes the
+ * health check.
  */
-export async function waitForSidecarJson(path: string): Promise<BackendState> {
-	for (let attempt = 0; attempt < POLL_ATTEMPTS; attempt++) {
+export async function waitForSidecarJson(
+	path: string,
+	getSpawned: () => SpawnedSidecar | undefined,
+	timing: PollTiming = {
+		attempts: POLL_ATTEMPTS,
+		intervalMs: POLL_INTERVAL_MS,
+	},
+): Promise<BackendState> {
+	for (let attempt = 1; ; attempt++) {
 		const state = await readSidecarJson(path);
 		if (
 			state !== undefined &&
@@ -90,20 +121,30 @@ export async function waitForSidecarJson(path: string): Promise<BackendState> {
 		) {
 			return state;
 		}
-		await sleep(POLL_INTERVAL_MS);
+		if (attempt >= timing.attempts) {
+			const spawned = getSpawned();
+			const running =
+				spawned !== undefined &&
+				spawned.exitCode === null &&
+				spawned.signalCode === null;
+			if (!running) {
+				throw new Error(
+					`sidecar.json not found (or its sidecar never answered) after ${(timing.attempts * timing.intervalMs) / 1000} s at ${path}; ${describeGiveUp(spawned)}`,
+				);
+			}
+		}
+		await sleep(timing.intervalMs);
 	}
-	throw new Error(
-		`sidecar.json not found (or its sidecar never answered) after 8 s at ${path}`,
-	);
 }
 
 /**
- * Concurrent callers share one in-flight wait. Only success is cached: a timed
- * out attempt leaves nothing behind, so a later call retries instead of being
+ * Concurrent callers share one in-flight wait (see `waitForSidecarJson` for
+ * when it gives up). Only success is cached: a failed attempt leaves nothing behind, so a later call retries instead of being
  * stuck with a permanently cached error.
  */
 export function createBackendResolver(
 	sidecarJsonPath: string,
+	getSpawned: () => SpawnedSidecar | undefined,
 ): () => Promise<BackendState> {
 	let resolved: BackendState | undefined;
 	let inFlight: Promise<BackendState> | undefined;
@@ -112,7 +153,7 @@ export function createBackendResolver(
 			return resolved;
 		}
 		if (inFlight === undefined) {
-			inFlight = waitForSidecarJson(sidecarJsonPath)
+			inFlight = waitForSidecarJson(sidecarJsonPath, getSpawned)
 				.then((state) => {
 					resolved = state;
 					return state;
