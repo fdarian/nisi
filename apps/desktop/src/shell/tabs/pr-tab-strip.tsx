@@ -112,9 +112,9 @@ type PrTabStripProps = {
  * top-left corner — so the strip reserves space for them and marks its own
  * background (not the tabs themselves) as a drag region.
  *
- * The ancestor's `app-drag` keeps the empty spacer draggable. A drag region
- * swallows clicks on everything inside it, so the tab list, the open button
- * and the pills each carry `app-no-drag`.
+ * The strip itself is the drag region, not a full-window ancestor (see
+ * `index.css`). A drag region swallows clicks on everything inside it, so the
+ * tab list, the open button and the pills each carry `app-no-drag`.
  *
  * Reorder uses dnd-kit's sortable preset (same method as Dice UI's Sortable):
  * `DndContext` + `SortableContext` + `useSortable`, horizontal list strategy,
@@ -196,7 +196,12 @@ export function PrTabStrip({
 					}
 				}}
 				render={
-					<div className={cn(TITLE_STRIP_HEIGHT_CLASS, "flex shrink-0 pr-2")} />
+					<div
+						className={cn(
+							TITLE_STRIP_HEIGHT_CLASS,
+							"app-drag flex shrink-0 pr-2",
+						)}
+					/>
 				}
 			>
 				<TrafficLightSpace />

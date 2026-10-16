@@ -12,7 +12,7 @@ import {
 export function DevToolButton(): React.ReactElement {
 	return (
 		<Popover>
-			<PopoverTrigger className="app-no-drag h-2 px-5 group cursor-pointer">
+			<PopoverTrigger className="h-2 px-5 group cursor-pointer">
 				<div className="h-0.5 w-10 rounded-full bg-muted group-hover:bg-muted-foreground transition" />
 			</PopoverTrigger>
 			<PopoverPopup align="start" className="w-64" side="top">

@@ -5,7 +5,10 @@
 
 @custom-variant dark (&:is(.dark *));
 
-/* Electron: a drag region swallows clicks and hover on every descendant, so each interactive descendant of an `app-drag` element needs its own `app-no-drag` region. */
+/*
+ * Electron: a drag region swallows clicks and hover on every descendant, so each interactive descendant of an `app-drag` element needs its own `app-no-drag` region.
+ * Keep `app-drag` on small leaf strips, never on a full-window ancestor with an `app-no-drag` content pane: the region is inherited, every descendant emits its own unclipped rect, and rows scrolled out of the pane punch no-drag holes in the strip above it.
+ */
 @utility app-drag {
 	-webkit-app-region: drag;
 }
