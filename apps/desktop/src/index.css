@@ -437,6 +437,12 @@
 	color: var(--shiki-dark, currentColor);
 }
 
+.markdown-document .markdown-code-block > code {
+	display: block;
+	min-width: max-content;
+	white-space: pre;
+}
+
 .markdown-document .markdown-code-block .shiki code {
 	display: block;
 	min-width: max-content;
@@ -450,12 +456,6 @@
 
 .markdown-document .markdown-code-block .shiki span {
 	color: var(--shiki-light, var(--code-foreground));
-}
-
-.markdown-document .markdown-code-block > code {
-	display: block;
-	min-width: max-content;
-	white-space: pre;
 }
 
 .dark .markdown-document .markdown-code-block .shiki {

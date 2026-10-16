@@ -54,8 +54,8 @@ export const requireInstrumentation = (
 			if (result.isSuccess) return;
 			const error = result.error;
 			const response =
-				typeof error === "object" && error !== null && "data" in error
-					? error.data
+				typeof error === "object" && error !== null && "response" in error
+					? error.response
 					: undefined;
 			const notFound =
 				(typeof error === "object" &&

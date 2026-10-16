@@ -18,6 +18,7 @@ const file = (
 	deletions: 0,
 	fingerprint: overrides.path,
 	binary: false,
+	hunks: [],
 	...overrides,
 });
 
