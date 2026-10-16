@@ -1,5 +1,6 @@
 import { join } from "node:path";
 import { app, type BrowserWindow, shell } from "electron";
+import { bundleDir } from "./bundle-dir";
 import { isHttpUrl } from "./external-url";
 
 /** Packaged builds serve `dist/` from `app-protocol.ts`; dev loads the Vite server. */
@@ -15,7 +16,7 @@ export function rendererOrigin(): string {
 }
 
 export const secureWebPreferences = {
-	preload: join(__dirname, "preload.js"),
+	preload: join(bundleDir(), "preload.js"),
 	contextIsolation: true,
 	sandbox: true,
 	nodeIntegration: false,

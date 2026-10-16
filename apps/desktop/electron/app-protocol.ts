@@ -2,6 +2,7 @@ import { statSync } from "node:fs";
 import { join, normalize, sep } from "node:path";
 import { pathToFileURL } from "node:url";
 import { net, protocol } from "electron";
+import { bundleDir } from "./bundle-dir";
 
 /** Must run before `app` is ready. */
 export function registerAppScheme() {
@@ -32,7 +33,7 @@ function isFile(path: string): boolean {
  * since TanStack router uses history routes and `/about` must load directly.
  */
 export function handleAppProtocol() {
-	const root = join(__dirname, "../dist");
+	const root = join(bundleDir(), "../dist");
 	protocol.handle("app", (request) => {
 		let pathname: string;
 		try {

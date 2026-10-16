@@ -1,5 +1,6 @@
 appId: com.nisi.desktop
 productName: nisi
+npmRebuild: false
 directories:
   output: release
 # main.ts and preload.ts are bundled with bun and the renderer is Vite output, so the asar needs
@@ -9,6 +10,7 @@ files:
   - dist/**
   - dist-electron/**
   - "!**/*.map"
+  - "!node_modules"
 extraFiles:
   - from: binaries
     to: MacOS
