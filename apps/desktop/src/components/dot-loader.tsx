@@ -4,8 +4,8 @@ import type React from "react";
 const ROWS = 3;
 const COLS = 5;
 const CELL = 4;
-const SWEEP_STEP_S = 0.12;
-const CYCLE_S = 1.4;
+/** Fraction of `--fetching-cycle` between neighbouring diagonals. the last diagonal's band must clear by 30%, where the text shimmer starts (`@keyframes dot-loader`). */
+const SWEEP_STEP = 0.029;
 
 const DOTS = Array.from({ length: ROWS * COLS }, (_, index) => {
 	const row = Math.floor(index / COLS);
@@ -15,10 +15,13 @@ const DOTS = Array.from({ length: ROWS * COLS }, (_, index) => {
 
 /**
  * A dot-matrix loader: a bright band sweeps diagonally across a grid of dim
- * dots. Pure CSS (`animate-dot-loader` in `index.css`) — each dot's
- * `animation-delay` is its diagonal position (row + col), offset negative by
- * one cycle so the sweep is already underway on mount. Colored by
- * `currentColor`; size it with a width class, the viewBox keeps the aspect.
+ * dots, then idles for the rest of `--fetching-cycle` (the cycle is shared
+ * with `FetchingIndicator`'s text shimmer, which runs in that idle time).
+ * Pure CSS (`animate-dot-loader` in `index.css`) — each dot's
+ * `animation-delay` is its diagonal position (row + col) as a fraction of the
+ * cycle, offset negative by one cycle so the sweep is already underway on
+ * mount. Colored by `currentColor`; size it with a width class, the viewBox
+ * keeps the aspect.
  */
 export function DotLoader({
 	className,
@@ -42,7 +45,7 @@ export function DotLoader({
 					cy={dot.row * CELL + CELL / 2}
 					r={1.1}
 					style={{
-						animationDelay: `${(dot.row + dot.col) * SWEEP_STEP_S - CYCLE_S}s`,
+						animationDelay: `calc(var(--fetching-cycle) * ${(dot.row + dot.col) * SWEEP_STEP - 1})`,
 					}}
 				/>
 			))}
