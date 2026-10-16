@@ -77,7 +77,7 @@ export function DiffWorkerPrewarm(props: {
 			}),
 		[settings.settings.diffThemeLight, settings.settings.diffThemeDark],
 	);
-	if (settings.isLoading) return <></>;
+	if (settings.isLoading) return null;
 	return (
 		<WorkerPoolContextProvider
 			poolOptions={poolOptions}
