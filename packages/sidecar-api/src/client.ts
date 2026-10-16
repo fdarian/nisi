@@ -11,8 +11,8 @@ export type SidecarClient = RouterContractClient<typeof contract>;
  * Build a typed oRPC client against a running sidecar's `{ port, token }`.
  *
  * `host` defaults to loopback, which is right for every caller that runs on the
- * same machine as the sidecar — the CLI, the lock's liveness check, the Tauri
- * webview. The exception is the browser dev harness reached from *another*
+ * same machine as the sidecar — the CLI, the lock's liveness check, the Electron
+ * renderer. The exception is the browser dev harness reached from *another*
  * device over the LAN (`bun dev --browser --host`): there the page is the only
  * thing that knows which address the sidecar was reached at, so it passes its
  * own `window.location.hostname` rather than letting this default to a loopback

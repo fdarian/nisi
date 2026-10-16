@@ -10,6 +10,8 @@ test("cold shutdown selects the exact worktree executable and its bundled sideca
 				`102 101 ${bundle}/Contents/MacOS/sidecar`,
 				`104 1 ${bundle}/Contents/MacOS/sidecar`,
 				`103 101 ${bundle}/Contents/Frameworks/nisi Helper.app/Contents/MacOS/nisi Helper`,
+				`105 101 ${bundle}/Contents/Frameworks/nisi Helper (Renderer).app/Contents/MacOS/nisi Helper (Renderer)`,
+				`106 101 ${bundle}/Contents/Frameworks/nisi Helper (GPU).app/Contents/MacOS/nisi Helper (GPU)`,
 				"200 1 /Applications/nisi.app/Contents/MacOS/nisi",
 				"201 200 /Applications/nisi.app/Contents/MacOS/sidecar",
 				"300 1 /other worktree/nisi.app/Contents/MacOS/nisi",

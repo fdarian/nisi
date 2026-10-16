@@ -38,7 +38,7 @@ seam" for the port/token handshake this boots into.
 - `logging.ts` — `LoggingLive`: console (`Logger.consolePretty`, stderr) plus a
   `@repo/logging`-backed rotating file logger at `<dataDir>/logs/sidecar.log`, both gated by the
   same `LOG_LEVEL`-derived minimum level. This is the only place stdout-in-production's "goes
-  nowhere" problem (Rust spawns the compiled sidecar fire-and-forget) actually gets fixed — read
+  nowhere" problem (the Electron main process spawns the compiled sidecar with stdio ignored) actually gets fixed — read
   the file, don't rely on the console sink outside dev.
 - `services.ts` — `AppServices`, the service union `mainContext` carries. One alias so `http.ts` and
   the walkthrough generation loop (which bridges Effect from a plain `async function*`, not `.effect()`)
@@ -208,7 +208,7 @@ seam" for the port/token handshake this boots into.
    uses the same `.handler()` escape hatch, for the same reason.
 - `open-requests.ts` — process-lifetime pending/terminal open requests and an independent native
   activation backlog. The frontend acknowledges a resolved tab after selecting it (or dismisses a
-  failure); Rust acknowledges activation after focusing the window. Each backlog replays independently
+  failure); the Electron main process acknowledges activation after focusing the window. Each backlog replays independently
   on reconnect, including requests for an already-open session. Unacknowledged settled requests and
   activation IDs expire after 30 minutes and are capped at 100; in-flight requests remain until settled.
 - `native-activation.ts` — bearer-authenticated native stream, acknowledgment, and ownership claim.

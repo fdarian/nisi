@@ -26,8 +26,8 @@ contains or how to apply one (that's `deskkit/sqlite`'s job now, see below).
   `~/Library/Application Support/com.nisi.desktop`. The file is read only when the env var is
   unset; a missing file falls through, but a malformed file, a non-string or relative `data_dir`
   (a leading `~/` expands to home) or any other key fails the config rather than silently using
-  the default. The Tauri shell reimplements the same rules in
-  `apps/desktop/src-tauri/src/data_dir.rs` — change both together. The
+  the default. The Electron main process reimplements the same rules in
+  `apps/desktop/electron/data-dir.ts` — change both together. The
   sidecar's own handshake file (`sidecar.json`) lives in the same directory,
   computed independently in `apps/desktop/sidecar/index.ts` — that one isn't
   SQLite, so it stays outside this package.

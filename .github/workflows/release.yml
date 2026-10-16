@@ -38,14 +38,6 @@ jobs:
           registry-url: "https://registry.npmjs.org"
           package-manager-cache: false # never use caching in release builds
 
-      - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Cache Rust
-        uses: swatinem/rust-cache@v2
-        with:
-          workspaces: apps/desktop/src-tauri
-
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
@@ -93,9 +85,9 @@ jobs:
         if: steps.release-check.outputs.should_release == 'true'
         run: |
           shopt -s nullglob
-          dmgs=(apps/desktop/src-tauri/target/release/bundle/dmg/*.dmg)
+          dmgs=(apps/desktop/release/*.dmg)
           if [ "${#dmgs[@]}" -ne 1 ]; then
-            echo "::error::expected exactly one dmg in bundle/dmg, found ${#dmgs[@]}: ${dmgs[*]}" >&2
+            echo "::error::expected exactly one dmg in apps/desktop/release, found ${#dmgs[@]}: ${dmgs[*]}" >&2
             exit 1
           fi
           mv "${dmgs[0]}" nisi-macos-arm64.dmg
