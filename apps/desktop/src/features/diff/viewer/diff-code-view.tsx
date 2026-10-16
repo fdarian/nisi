@@ -77,7 +77,8 @@ export function DiffWorkerPrewarm(props: {
 			}),
 		[settings.settings.diffThemeLight, settings.settings.diffThemeDark],
 	);
-	if (settings.isLoading) return null;
+	// biome-ignore lint/complexity/noUselessFragments: the return type is ReactElement, which excludes null
+	if (settings.isLoading) return <></>;
 	return (
 		<WorkerPoolContextProvider
 			poolOptions={poolOptions}
