@@ -42,14 +42,9 @@ const APPKIT_BUTTON_CLASSNAME =
  * but that's a choice specific to this one window, not the whole app.
  *
  * The whole panel is draggable by its background, like a real About window —
- * `data-tauri-drag-region` on the root, but Tauri only starts a drag when
- * the mousedown target itself carries that attribute, not an ancestor. The
- * icon, name, tagline, and info-grid labels/version are `pointer-events-none`
- * instead of each carrying the attribute themselves, so a mousedown there
- * falls through to the root and drags the window; `select-none` on the root
- * (inherited down) matches a native panel's non-selectable static text and
- * arrow cursor. The commit link and the two buttons opt back in with
- * `pointer-events-auto` — those still need to be clickable, not draggable.
+ * `app-drag` on the root; the commit link and the two buttons are
+ * `app-no-drag` so they stay clickable. `select-none` on the root (inherited
+ * down) matches a native panel's non-selectable static text and arrow cursor.
  *
  * Bottom-weighted, not centered, matching Ghostty: `pt-[80px]` pins the
  * icon's top edge a fixed distance below the transparent titlebar's traffic
@@ -68,29 +63,28 @@ export function AboutPage(): React.ReactElement {
 
 	return (
 		<div
-			className="flex h-screen w-screen select-none flex-col items-center gap-6 bg-sidebar px-8 pt-[80px] pb-[12px] text-center"
-			data-tauri-drag-region=""
+			className="app-drag flex h-screen w-screen select-none flex-col items-center gap-6 bg-sidebar px-8 pt-[80px] pb-[12px] text-center"
 			style={{ fontFamily: MACOS_SYSTEM_FONT }}
 		>
 			<img
 				alt=""
-				className="pointer-events-none size-28"
+				className="size-28"
 				src={icon}
 				style={{ filter: "drop-shadow(0 12px 20px rgba(0, 0, 0, 0.25))" }}
 			/>
-			<div className="pointer-events-none flex flex-col gap-1">
+			<div className="flex flex-col gap-1">
 				<h1 className="font-semibold text-2xl leading-tight">nisi</h1>
 				<p className="text-[11px] text-muted-foreground">
 					A simpler way to review code.
 				</p>
 			</div>
-			<dl className="pointer-events-none grid grid-cols-[auto_auto] gap-x-3 gap-y-0.5 text-[12px]">
+			<dl className="grid grid-cols-[auto_auto] gap-x-3 gap-y-0.5 text-[12px]">
 				<dt className="text-right">Version</dt>
 				<dd className="text-left font-mono">{__APP_VERSION__}</dd>
 				<dt className="text-right">Commit</dt>
 				<dd className="text-left font-mono">
 					<button
-						className="pointer-events-auto cursor-pointer text-info-foreground hover:underline"
+						className="app-no-drag cursor-pointer text-info-foreground hover:underline"
 						onClick={() => void native().openUrl(commitUrl)}
 						type="button"
 					>
@@ -98,7 +92,7 @@ export function AboutPage(): React.ReactElement {
 					</button>
 				</dd>
 			</dl>
-			<div className="flex gap-2">
+			<div className="app-no-drag flex gap-2">
 				<button
 					className={APPKIT_BUTTON_CLASSNAME}
 					onClick={() => void native().openUrl(REPO_URL)}

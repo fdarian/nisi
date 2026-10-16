@@ -21,12 +21,9 @@ export function SettingsSidebar(): React.ReactElement {
 	const pathname = useLocation({ select: (location) => location.pathname });
 	return (
 		<Sidebar variant="inset">
-			<SidebarHeader
-				className="h-10 justify-center pl-[78px]"
-				data-tauri-drag-region
-			>
+			<SidebarHeader className="app-drag h-10 justify-center pl-[78px]">
 				<Link
-					className="inline-flex w-fit items-center gap-1 text-muted-foreground text-sm transition-colors hover:text-foreground"
+					className="app-no-drag inline-flex w-fit items-center gap-1 text-muted-foreground text-sm transition-colors hover:text-foreground"
 					to="/"
 				>
 					<ChevronLeftIcon className="size-4" />

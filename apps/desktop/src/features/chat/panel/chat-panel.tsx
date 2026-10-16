@@ -232,8 +232,7 @@ function ChatPanelBody({
 	return (
 		<motion.div
 			animate={{ opacity: 1, scale: 1, y: 0 }}
-			className="fixed right-4 bottom-14 z-50 flex flex-col overflow-hidden rounded-xl border bg-popover text-popover-foreground shadow-lg/10"
-			data-tauri-drag-region="false"
+			className="app-no-drag fixed right-4 bottom-14 z-50 flex flex-col overflow-hidden rounded-xl border bg-popover text-popover-foreground shadow-lg/10"
 			exit={{ opacity: 0, scale: 0.96, y: 8 }}
 			initial={{ opacity: 0, scale: 0.96, y: 8 }}
 			style={{ width }}
