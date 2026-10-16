@@ -27,6 +27,7 @@
 	--animate-skeleton: skeleton 2s -1s infinite linear;
 	--animate-caret-blink: 1s ease-out infinite caret-blink;
 	--animate-dot-loader: dot-loader 1.4s ease-in-out infinite;
+	--animate-fetching-shimmer: fetching-shimmer 1.8s linear infinite;
 	--animate-toast-success-odd: toast-success-odd 0.32s
 		cubic-bezier(0.5, 1, 0.89, 1);
 	--animate-toast-success-even: toast-success-even 0.32s
@@ -106,6 +107,16 @@
 
 		15% {
 			opacity: 1;
+		}
+	}
+
+	@keyframes fetching-shimmer {
+		from {
+			background-position: 100% 0;
+		}
+
+		to {
+			background-position: 0% 0;
 		}
 	}
 
