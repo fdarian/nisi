@@ -8,10 +8,7 @@ import { ensureBuild } from "./build.ts";
 import { stopBundle } from "./processes.ts";
 
 export const desktopDir = resolve(import.meta.dir, "../..");
-export const bundlePath = join(
-	desktopDir,
-	"src-tauri/target/release/bundle/macos/nisi.app",
-);
+export const bundlePath = join(desktopDir, "release/mac-arm64/nisi.app");
 export const coldDataDir = join(desktopDir, ".data/measure-launch/data");
 export const newPrDataDir = join(
 	desktopDir,

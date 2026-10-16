@@ -27,7 +27,7 @@ export const POLL_INTERVAL_MS = 300;
 /**
  * How long to wait for a freshly-launched app to boot its sidecar before
  * giving up. A compiled release app launches in low single-digit seconds, so
- * 15s has real headroom — overridable for a slow machine (or a `tauri dev`
+ * 15s has real headroom — overridable for a slow machine (or a `bun dev`
  * cold boot, which is far slower than the compiled release app this is tuned
  * for).
  */

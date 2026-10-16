@@ -10,7 +10,7 @@ export class AppLaunchError extends Schema.TaggedError<AppLaunchError>()(
 	{ reason: Schema.String },
 ) {}
 
-/** `tauri.conf.json`'s `productName` — the compiled app bundle's file name. */
+/** `electron-builder.yml`'s `productName` — the packaged app bundle's file name. */
 const PRODUCT_NAME = "nisi";
 
 /** `src/app-launch.ts` -> `src` -> `cli` -> `packages` -> repo root. */
@@ -56,11 +56,8 @@ const candidateAppPaths = (): ReadonlyArray<string> => {
 			repoRoot(),
 			"apps",
 			"desktop",
-			"src-tauri",
-			"target",
 			"release",
-			"bundle",
-			"macos",
+			"mac-arm64",
 			`${PRODUCT_NAME}.app`,
 		),
 	];
@@ -77,7 +74,7 @@ const resolveAppPath = Effect.gen(function* () {
 		}
 	}
 	return yield* new AppLaunchError({
-		reason: `could not find the Nisi app (checked: ${candidates.join(", ")}) — build it with "bunx tauri build" in apps/desktop, or set NISI_APP_PATH`,
+		reason: `could not find the Nisi app (checked: ${candidates.join(", ")}) — build it with "bun run build" in apps/desktop, or set NISI_APP_PATH`,
 	});
 });
 
