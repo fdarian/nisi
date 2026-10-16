@@ -83,6 +83,25 @@ export function useSearchPullRequests(
 	};
 }
 
+/**
+ * The blank-query, no-repo-filter search the palette shows when opened. Shared
+ * with `#/infra/query-persistence.ts`, whose persistence filter matches this
+ * exact query key — change it here and both follow.
+ */
+export const RECENT_PULL_REQUESTS_INPUT = { query: "", repos: [] };
+
+export function useRecentPullRequests(
+	orpc: SidecarQueryUtils,
+	enabled: boolean,
+) {
+	return useSearchPullRequests(
+		orpc,
+		RECENT_PULL_REQUESTS_INPUT.query,
+		enabled,
+		RECENT_PULL_REQUESTS_INPUT.repos,
+	);
+}
+
 export type PullRequestRepository = { owner: string; repo: string };
 
 export function usePullRequestRepositories(

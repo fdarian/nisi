@@ -27,6 +27,7 @@ import {
 	type PullRequestSearchResult,
 	useOpenPullRequest,
 	usePullRequestRepositories,
+	useRecentPullRequests,
 	useSearchPullRequests,
 } from "#/features/pull-request/data/pull-requests-data";
 import { OriginMovedDialog } from "#/features/pull-request/open/origin-moved-dialog";
@@ -108,7 +109,7 @@ export function OpenPullRequestPalette(
 	);
 	const results = search.results;
 	const searchErrorMessage = friendlySearchError(search.error);
-	const recent = useSearchPullRequests(props.orpc, "", props.open, []);
+	const recent = useRecentPullRequests(props.orpc, props.open);
 	const saved = usePullRequestRepositories(props.orpc, props.open);
 	const repositories = paletteRepositories(
 		recent.results,

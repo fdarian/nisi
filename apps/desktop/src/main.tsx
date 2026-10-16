@@ -1,9 +1,11 @@
 import "./index.css";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClient } from "@tanstack/react-query";
+import { PersistQueryClientProvider } from "@tanstack/react-query-persist-client";
 import { createRouter, RouterProvider } from "@tanstack/react-router";
 import React from "react";
 import ReactDOM from "react-dom/client";
 import { frontendBootMark } from "#/infra/launch-trace";
+import { persistOptions } from "#/infra/query-persistence";
 import { startDeepLinkListener } from "#/shell/deep-link/deep-link-store";
 import { routeTree } from "./routeTree.gen";
 
@@ -38,8 +40,11 @@ declare module "@tanstack/react-router" {
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
 	<React.StrictMode>
-		<QueryClientProvider client={queryClient}>
+		<PersistQueryClientProvider
+			client={queryClient}
+			persistOptions={{ ...persistOptions }}
+		>
 			<RouterProvider router={router} />
-		</QueryClientProvider>
+		</PersistQueryClientProvider>
 	</React.StrictMode>,
 );
