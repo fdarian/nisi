@@ -17,11 +17,11 @@ sources:
 plain browser tab drives the real app against a live sidecar. The full recipe — including the
 scratch `NISI_DATA_DIR` rule — is in [apps/desktop/AGENTS.md](../apps/desktop/AGENTS.md).[^browser-harness]
 
-Anything that renders in the webview is therefore reachable from browser automation: sticky headers,
+Anything that renders in the renderer is therefore reachable from browser automation: sticky headers,
 row geometry, scroll behaviour, spinners, hit testing. Reach for it before concluding a UI change
 can't be verified.
 
-The genuine exceptions are the native surfaces Tauri owns, not the webview: titlebar drag,
+The genuine exceptions are the native surfaces the Electron shell owns, not the renderer: titlebar drag,
 double-click-to-zoom, and the ⌘W "Close Tab" menu item. Those need the packaged window.
 
 # A Shadow DOM assertion fails open

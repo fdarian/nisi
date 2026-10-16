@@ -1,20 +1,12 @@
 # @repo/desktop
 
-Tauri 3 alpha desktop app using Chromium/CEF: the port/token handshake between Rust and the Bun/Effect sidecar, the
+Electron desktop app: the port/token handshake between the Electron main process and the Bun/Effect sidecar, the
 sidecar's git/review/walkthrough/settings domains, and a frontend wired to that live contract —
 see `apps/desktop/sidecar/AGENTS.md` for how the sidecar's own pieces fit together.
 
-Native builds require Rust 1.95+, CMake, and Ninja. The first CEF build downloads ~1 GB into
-`~/Library/Caches/tauri-cef`; allow time and space for it. The packaged frontend origin is
-`http://tauri.localhost`.
-
 Three parts, one seam:
-- `src-tauri/` — **Rust, intentionally thin.** Spawns/discovers the sidecar, hands `{ port, token }` to
-  the frontend via the `get_backend` command, and owns the macOS app menu, built explicitly rather
-  than patched from `Menu::default` (see `build_macos_menu` in `src/lib.rs`). Little business logic
-  beyond window-focus routing in `on_menu_event` and `activation.rs`: the File menu's ⌘W item closes the About window
-  (`build_about_window`) directly when it's focused, otherwise emits `menu://close-tab` and lets the
-  frontend decide what that means; ⌘⇧W ("Close Window") always closes whichever window is focused.
+- `electron/` — **the shell, intentionally thin.** Spawns/discovers the sidecar, hands `{ port, token }` to
+  the frontend through `NativeApi.getBackend`, and owns the macOS app menu. See [The Electron shell](#the-electron-shell).
 - `sidecar/` — the real backend, a long-running Bun process (Effect). Implements `packages/sidecar-api`'s
   contract by composing `@repo/git` (pure PR/diff detection) and `@repo/review` (SQLite persistence)
   behind one `Store` service — see `sidecar/AGENTS.md`.
@@ -40,7 +32,7 @@ Three parts, one seam:
   no client-side slicing; a reviewed file's already-seen spans arrive pre-collapsed into ordinary
   context by the sidecar (`FileContentReview.baselineKind`, see `@repo/review`'s `reconcile`).
   `src/features/guide/` renders the Guide tab: `evaluate.ts` runs the sidecar's bundled guide (`new Function`; the
-  Tauri CSP is `null`, so eval is allowed) against the app's own React and `kit/` (the `@nisi/guide` module).
+  renderer is served with no CSP, so eval is allowed) against the app's own React and `kit/` (the `@nisi/guide` module).
   Agents author it via `packages/cli/skills/guide/SKILL.md` (`nisi skills get guide`); `sample/` is a working guide that
   `guide-pipeline.test.ts` builds and renders. Copy it to `<repo>/.nisi/guide/` to see it in the app.
   The app owns the page chrome (the "On this page" list, the side pane a `Ref` opens); a guide has no
@@ -81,37 +73,38 @@ exactly one owner instead of a split brain — see `sidecar/AGENTS.md`'s `index.
 full mechanism (liveness-checked recovery from a dead owner — skipped in favor of an immediate
 takeover when the recorded port is the one this process is already listening on, bounded retries).
 
-Rust's `get_backend` (`src-tauri/src/lib.rs`) polls `sidecar.json` **asynchronously** — it must
-never block the main thread, or the frontend's one-shot `invoke('get_backend')` wedges on a cold
-start — and health-checks the port it finds before trusting it, since a stale `sidecar.json` left
-behind by a `SIGKILL`'d sidecar would otherwise wedge `get_backend`'s `OnceCell` cache on a dead
-port for the app's whole lifetime. It also treats a read or parse failure on `sidecar.json` the
-same as "file not there yet" and keeps polling rather than surfacing a hard error — the
-correctness-critical counterpart to `acquireSidecar`'s single-syscall write above, since nothing on
-the frontend side retries a failed `get_backend` call. Regression-tested by the `#[tokio::test]`s
-in `lib.rs` — keep them if you touch that file.
+`electron/backend.ts` (`createBackendResolver`, behind `NativeApi.getBackend`) polls `sidecar.json`
+and health-checks the port it finds before trusting it, since a stale `sidecar.json` left behind
+by a `SIGKILL`'d sidecar would otherwise get cached on a dead port for the app's whole lifetime.
+It also treats a read or parse failure on `sidecar.json` the same as "file not there yet" and keeps
+polling rather than surfacing a hard error — the correctness-critical counterpart to
+`acquireSidecar`'s single-syscall write above, since nothing on the frontend side retries a failed
+`getBackend` call. Covered by `electron/backend.test.ts` — keep it passing if you touch that file.
 
 `scripts/dev.ts` and the CLI's `handoff.ts` (`packages/cli`) poll `sidecar.json` through
 `deskkit/sidecar`'s `awaitSidecarHandshake`/`readSidecarJson` — the same package `sidecar/index.ts`
 claims and publishes it with, so both ends of the handshake share one dependency.
 
 - **Dev**: `bun dev` runs `scripts/dev.ts`, a [devsess](https://devsess.fdarian.com/) orchestrator
-  (see below) that races the sidecar (`scripts/watch-sidecar.ts`, which restarts a fresh `sidecar/index.ts` process when a file in its import graph changes) against `tauri dev`
-  (`Effect.raceAll` — either exiting kills the other, via each process's Effect `Scope`).
-  `beforeDevCommand` only runs `vite`; the sidecar is started by `dev.ts`, not by Tauri. `bun dev
-  --browser` swaps `tauri dev` for a plain `vite dev` against the same sidecar instead — see
-  [Browser dev harness](#browser-dev-harness).
-- **Prod**: Rust spawns the compiled `binaries/sidecar` (`externalBin`, `shell:allow-spawn`) from
-  `.setup()` — fire-and-forget.
+  (see below) that races the sidecar (`scripts/watch-sidecar.ts`, which restarts a fresh `sidecar/index.ts` process when a file in its import graph changes) against the
+  frontend (`Effect.raceAll` — any of them exiting kills the others, via each process's Effect `Scope`).
+  The frontend side is `build:electron` run once, then `vite` and Electron (`dist-electron/main.js`)
+  started once vite answers. **`electron/` changes need a `bun dev` restart** — the main process and
+  preload are not watched. The sidecar is started by `dev.ts`, not by Electron (the main process only
+  spawns it when `app.isPackaged`). `bun dev --browser` swaps Electron for a plain `vite dev` against
+  the same sidecar instead — see [Browser dev harness](#browser-dev-harness).
+- **Prod**: the main process spawns the compiled `Contents/MacOS/sidecar` with `child_process.spawn` on
+  startup, with `NISI_DATA_DIR` and `NISI_ACTIVATION_OWNER_ID` (its own pid) in the environment, and
+  kills it on `will-quit`. It is a direct child, which `sidecar/updater/restart-helper.ts` relies on.
 - **CLI activation**: `sessions.open` registers a replayable request before GitHub work and publishes
-  it over the sidecar's bearer-authenticated `/native/activation` stream. `activation.rs` subscribes
-  with the launch owner's ID, shows/unminimizes/focuses the main window, and acknowledges the
+  it over the sidecar's bearer-authenticated `/native/activation` stream. `electron/activation.ts` subscribes
+  with the launch owner's ID, shows/unminimizes/focuses the main window (`window-activation.ts`), and acknowledges the
   activation separately from the frontend's request acknowledgment. Dev's sidecar is spawned by
   `scripts/dev.ts`, so this HTTP stream works in both dev and production; stdout would not.
   `src/infra/sidecar-events.tsx` owns the frontend event stream and
   `src/shell/open-request/open-request-data.tsx` replays pending opens on connection, including
   when the frontend is on `/settings`. A production app can inherit a still-live sidecar from a
-  crashed app process; its Rust watcher claims activation ownership only after the previous owner's
+  crashed app process; its `electron/activation.ts` watcher claims activation ownership only after the previous owner's
   stream disconnects (`sidecar/native-activation.ts`). A connected owner cannot be displaced.
 - Sidecar boot (`sidecar/index.ts`) is one Effect program run via `BunRuntime.runMain`: the HTTP
   server and `deskkit/sidecar`'s `acquireSidecar` claim are each acquired/released with
@@ -120,13 +113,60 @@ claims and publishes it with, so both ends of the handshake share one dependency
   process skips both releases; `acquireSidecar`'s own liveness check (not this scope) is what
   recovers from that on the next boot.
 
+## The Electron shell
+`electron/` is the main process and preload; `electron-builder.yml` packages it. The renderer (`src/`)
+reaches native features only through `window.nisi`, typed by `NativeApi` in `electron/native-api.ts`
+and implemented twice: `preload.ts` (`contextBridge`, one `ipcRenderer` call per method) and the
+`ipcMain` handlers registered in `main.ts` (channels are `nisi:<method>`). Adding a native feature
+means touching all three. The renderer runs with `contextIsolation` and `sandbox` on, `nodeIntegration`
+off; `renderer-window.ts` denies navigation and `window.open` and routes http(s) targets to
+`shell.openExternal`.
+
+- `main.ts` — lifecycle, window, IPC registration, sidecar spawn (packaged only), `open-url` deep links
+  (buffered until the renderer calls `takePendingDeepLinks`; no `requestSingleInstanceLock`, since the
+  sidecar lock owns single-instance and a dev instance must coexist with prod).
+- `backend.ts` — `getBackend`; see [The seam](#the-seam). `data-dir.ts` — data-dir resolution
+  (`NISI_DATA_DIR`, else `config.toml`'s `data_dir`, else the macOS default). Electron's own Chromium
+  state goes under `<data dir>/electron` (`userData`), so dev and prod never contend for a profile lock.
+- `activation.ts` / `window-activation.ts` — the CLI activation stream and raising the window.
+- `menu.ts` — the app menu, built from scratch. ⌘W is "Close Tab": it closes the About window
+  (`about-window.ts`) when that is focused, otherwise sends `close-tab` to the main window and the
+  frontend decides. ⌘⇧W ("Close Window") closes whichever window is focused. ⌘, sends `open-settings`.
+- `editors.ts` / `editor-url.ts` / `zed.ts` — "Open in editor". `measurement*.ts` — the
+  `NISI_MEASUREMENT_INSTANCE` mode used by `scripts/measure-launch/`.
+
+Renderer origin: packaged builds serve `dist/` through `protocol.handle("app", …)` at `app://nisi/`
+(`app-protocol.ts`), falling back to `index.html` for unknown paths since TanStack Router uses history
+routes. No CSP is set, which the Guide tab's `new Function` evaluation depends on. Dev loads
+`http://localhost:$VITE_PORT`.
+
+Packaging: `bun run build` builds the sidecar and CLI binaries, the frontend, then `build:electron`
+(`bun build` of `main.ts` + `preload.ts` into `dist-electron/`) and runs `electron-builder` — an
+arm64 `dmg` in `release/`. `extraFiles` puts the binaries at `Contents/MacOS/{sidecar,nisi-cli}`; the Homebrew cask,
+`scripts/measure-launch/` and the updater all assume those paths.
+
+Shell gotchas:
+- **`bun build` inlines `__dirname`/`__filename`** as the build machine's path, so `electron/bundle-dir.ts`
+  resolves the bundle directory at runtime through `require.resolve` (indirected so bun leaves it alone).
+  Use `bundleDir()` for anything next to `main.js`; never `__dirname`.
+- **`dist-electron/package.json` (`{"type":"commonjs"}`) is load-bearing**: `build:electron` writes it. This
+  package is `"type": "module"`, so without it Node would load the CJS `main.js`/`preload.js` as ESM, and
+  `bundleDir()` resolves the directory through that file.
+- **Ad-hoc signing needs `com.apple.security.cs.disable-library-validation` as well as `allow-jit`**
+  (`build/entitlements.plist`): without the former the hardened runtime refuses to load Electron's own
+  frameworks under an ad-hoc identity; `allow-jit` is for the bun-compiled binaries.
+- **`ipcMain.handle` rejections reach the renderer prefixed** `Error invoking remote method 'nisi:<x>':`.
+  Match on the tail of the message, not the whole string.
+- **Electron's postinstall needs its `allowBuilds` entry** (`electron: true` in `pnpm-workspace.yaml`):
+  pnpm skips unapproved build scripts, and that script is what downloads the Electron binary. Keep it.
+
 ## Dev/prod isolation
 `bun dev` windows show the current Git branch in a reserved footer (`src/shell/dev-branch.tsx`); `build:dev` shows `Build <short commit>` there. `import.meta.env.DEV` excludes it from regular production builds.
 
 Dev and prod both resolve their data dir (`sidecar.json` + `app.db`, see [The seam](#the-seam))
 from `NISI_DATA_DIR`, else `data_dir` in `~/.config/nisi/config.toml`, else the same default —
-`~/Library/Application Support/com.nisi.desktop/`. The Tauri shell (`src-tauri/src/data_dir.rs`) and
-the TypeScript side (`@repo/db/paths`) apply identical rules, and the shell hands the resolved dir to
+`~/Library/Application Support/com.nisi.desktop/`. The Electron main process (`electron/data-dir.ts`) and
+the sidecar side (`@repo/db/paths`) apply identical rules, and the main process hands the resolved dir to
 the sidecar it spawns. A `data_dir` in config.toml is a global override that applies to prod *and*
 to any dev process whose `NISI_DATA_DIR` is unset; `bun dev` always sets the env var, so it wins.
 With neither set, left alone, that means a `bun dev` sidecar and the production app's sidecar
@@ -137,10 +177,10 @@ production to show a stale PR list while a dev server had the fresh one.
 `scripts/dev.ts` fixes this with [devsess](https://devsess.fdarian.com/): each `bun dev` run resolves
 (or creates) a **session** — a directory under `apps/desktop/.data/sessions/<slug>/` (gitignored,
 `<slug>` a generated word like `walrus`, not something you choose) — and sets `NISI_DATA_DIR` to
-that session's own `data/` subdirectory before starting the sidecar and `tauri dev`. Each git
+that session's own `data/` subdirectory before starting the sidecar and Electron. Each git
 worktree resolves its own `apps/desktop/.data/sessions/` tree, so two worktrees' dev sessions never
 share one either. `dev.ts` also reads a sticky vite port from the session (`getStickyPort`) and
-passes it to `tauri dev` via `-c '{"build":{"devUrl":...}}'`, so the frontend port stays stable
+passes it down as `VITE_PORT` (vite binds it; the Electron main process loads `http://localhost:$VITE_PORT`), so the frontend port stays stable
 across restarts of the same session too. The sidecar gets a second, separately-named sticky port
 from the same session the same way, so it's stable across restarts too — only its token is minted
 fresh each `bun dev` run, since there's no sticky equivalent for it — see [The seam](#the-seam).
@@ -169,23 +209,23 @@ sidecars.
 
 ## Browser dev harness
 
-`invoke("get_backend")` (see [The seam](#the-seam)) only resolves inside the Tauri webview — a
-plain `vite dev` tab has no IPC bridge, so it throws immediately and the app can't render.
+`NativeApi.getBackend` (see [The seam](#the-seam)) only exists inside the Electron window — a
+plain `vite dev` tab has no preload bridge (`window.nisi` is undefined), so the app can't render.
 `src/infra/backend.ts`'s `getBackend()` has a **dev-only** escape hatch for this: when
 `import.meta.env.DEV` is true and both `VITE_DEV_BACKEND_PORT`/`VITE_DEV_BACKEND_TOKEN` are set, it
-uses those instead of calling into Rust — letting a real browser tab (devtools, screen recording,
+uses those instead of calling `window.nisi.getBackend()` — letting a real browser tab (devtools, screen recording,
 browser-automation tools) drive the app against a live sidecar. `import.meta.env.DEV` makes the
 whole branch dead code in a packaged build (Vite inlines it to `false` and strips the branch), so
 there's no path to it in production regardless of env vars, and the token is never logged.
 
 `bun dev` sets both env vars in every mode, so the vite server behind a plain `bun dev` is also
-openable in a browser tab — find its port with `devsess tail` (aliased `dev tail`). The Tauri
-webview takes the same override in dev, so `get_backend` only runs in packaged builds.
+openable in a browser tab — find its port with `devsess tail` (aliased `dev tail`). The Electron
+window takes the same override in dev, so `getBackend` only runs in packaged builds.
 
 **`bun dev --browser`** (from `apps/desktop`) is the path for an agent-owned server: same devsess orchestration as plain
 `bun dev` (own session, own `NISI_DATA_DIR`, sequenced instead of raced — the frontend process waits
 on the sidecar's `sidecar.json` handshake before it spawns `vite`, then both race each other same as
-`tauri dev` would), just with `vite dev` in place of the Tauri webview. Vite's port is the flag
+the Electron window would), just with a `vite dev` tab in place of it. Vite's port is the flag
 `--port <n>` if given, else `PORT`, else devsess's per-session sticky one. `PORT` is how
 `.claude/launch.json`'s `desktop-browser` entry drives it: that entry sets `"autoPort": true`, so
 the port is picked by whoever spawns the entry — its declared `"port"` when free, a free one when
@@ -273,12 +313,12 @@ fixture PR lives at `src/features/pull-request/walkthrough/walkthrough.fixture.t
   whenever a component renders against it again.
 
 ## Gotchas
-- `bun dev:vite` is vite-only — no Tauri IPC, so `invoke('get_backend')` throws. Useful only for
+- `bun dev:vite` is vite-only — no Electron preload, so `window.nisi.getBackend` is missing and the app can't connect. Useful only for
   checking the page renders, not the real connection.
 - `bun run sidecar` runs the sidecar standalone (useful for curl-testing `packages/sidecar-api`'s
   contract) — writes to the real app-data dir since `NISI_DATA_DIR` is unset outside a manual override.
-- The compiled `src-tauri/binaries/sidecar-*` is gitignored; `beforeBuildCommand` regenerates it via
-  `build:sidecar` (host triple `aarch64-apple-darwin` only — cross-compile is future work).
+- The compiled `binaries/sidecar` and `binaries/nisi-cli` are gitignored; `bun run build` regenerates
+  them via `build:sidecar`/`build:cli` (arm64 only — cross-compile is future work).
 - `build:sidecar`/`build:cli` both go through `scripts/build-binary.ts` rather than a bare
   `bun build --compile` — a `bun build --compile` output with no further step gets `SIGKILL`'d on
   Apple Silicon, so the script strips and re-applies a clean ad-hoc code signature after compiling.
@@ -286,18 +326,11 @@ fixture PR lives at `src/features/pull-request/walkthrough/walkthrough.fixture.t
   data-directory cache at `<data dir>/lsp/ts`; `@repo/code-lsp` first checks the reviewed worktree's
   TypeScript 7 package and then installs the pinned, SHA-512-verified platform package into that
   cache. The executable and its sibling `lib.*.d.ts` files stay together in every usable location.
-- **`externalBin` is not in `tauri.conf.json`** — it lives in `src-tauri/tauri.build.conf.json`, which
-  only `bun build` merges in (`tauri build --config …`). `tauri-build` validates every `externalBin`
-  path at compile time in *both* modes, so keeping it in the base config made `bun dev` fail on a
-  missing binary that dev never runs (dev's sidecar is `bun run sidecar/index.ts`, see
-  [Dev/prod isolation](#devprod-isolation)). The cost of the split: a rename of the binary or its
-  triple suffix now only breaks `bun build`, never dev.
-- **The `nisi://` deep-link scheme is registered once, in the base `tauri.conf.json`**
-  (`plugins.deep-link.desktop.schemes`), inherited by both `bun run build` and `bun run build:dev` —
-  unlike `externalBin` above, there's no dev-vs-build split to protect, since both bundles share
-  the same `identifier` and app-data dir. CEF's `tauri dev` runs from an `.app` bundle, but deep-link
-  registration should be tested against a build from `bun run build` or `bun run build:dev`, installed
-  somewhere LaunchServices can see it (`/Applications` or `~/Applications`; `/tmp` isn't
+- **The `nisi://` deep-link scheme is registered by electron-builder** (`protocols` in
+  `electron-builder.yml` writes `CFBundleURLTypes` into the packaged `Info.plist`). `bun dev` runs the
+  stock Electron binary from `node_modules`, whose bundle declares no `nisi://`, so dev can't receive
+  deep links from the OS. Test them against a build from `bun run build` or `bun run build:dev`,
+  installed somewhere LaunchServices can see it (`/Applications` or `~/Applications`; `/tmp` isn't
   LaunchServices-trusted).
 - **`HarnessInfo.available` and `.enabled` are independent, both always present.** `available` is a
   live `@repo/bin-resolver` binary-presence check (`sidecar/harness/availability.ts`), never
@@ -310,11 +343,10 @@ fixture PR lives at `src/features/pull-request/walkthrough/walkthrough.fixture.t
   into the shared `walkthrough.harnesses` query cache. `useHarnessModels` runs independent model
   queries only in the walkthrough/chat pickers; a slow CLI cannot hold up Settings or other models.
 - A keyboard shortcut that collides with a macOS menu accelerator can't be handled in the frontend
-  at all — AppKit gives the main menu first refusal, so the webview never sees the key. Give the
+  at all — AppKit gives the main menu first refusal, so the renderer never sees the key. Give the
   shortcut a real menu item that emits an event instead (⌘W does this); the rest live in
-  `src/shell/tabs/use-tab-shortcuts.ts` / `src/features/settings/use-settings-shortcut.ts`. A predefined item can also turn up
-  in more than one default submenu (`Menu::default()` seeded a `close_window` in both Window and
-  File) — `build_macos_menu` builds the whole tree explicitly instead of patching the default.
+  `src/shell/tabs/use-tab-shortcuts.ts` / `src/features/settings/use-settings-shortcut.ts`. A predefined role can also turn up
+  in more than one default submenu, each carrying its own Cmd+W — `electron/menu.ts` builds the whole tree explicitly instead of patching the default.
 - `#/*` → `src/*`, not `@/*`.
 - **`@ai-sdk/react` is pinned to an exact version, not the default caret range.** Its own
   `package.json` depends on an exact `ai` version too, one that moves in lockstep with

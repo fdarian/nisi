@@ -13,8 +13,8 @@ sources:
     resource: ../packages/db/AGENTS.md
     title: applyEmbeddedMigrations (packages/db/AGENTS.md)
   - id: entitlements
-    resource: ../apps/desktop/src-tauri/entitlements.plist
-    title: entitlements.plist (apps/desktop/src-tauri/)
+    resource: ../apps/desktop/build/entitlements.plist
+    title: entitlements.plist (apps/desktop/build/)
 ---
 
 The `.app` ships the sidecar as a `bun build --compile` binary. `bun dev` hides a whole class of bug
@@ -52,32 +52,26 @@ found` for exactly this reason, and only ever under the compiled binary. The bar
 reproduction recipe is in
 [packages/harness-local/AGENTS.md](../packages/harness-local/AGENTS.md).[^path-rule]
 
-**The packaged `.app`'s hardened runtime ships with no entitlements.** Different mechanism than the
+**The packaged `.app`'s hardened runtime grants nothing unless an entitlements file says so.** Different mechanism than the
 other four — this one is macOS code signing, not `bun build --compile`'s embedding rules — but the
 same shape: invisible in `bun dev` or a standalone `bun run sidecar`, because neither runs inside a
-hardened-runtime-signed process at all. Tauri's macOS bundler signs every executable it copies into
-`Contents/MacOS/` — the sidecar `externalBin`, not just the main binary — with the hardened runtime
-unconditionally on (`hardenedRuntime` defaults to `true` regardless of `signingIdentity`; even
-`signingIdentity: "-"` gets `flags=0x10002(adhoc,runtime)`). With no `bundle.macOS.entitlements`
-configured, `codesign -d --entitlements -` on the sidecar returned an empty blob, and a hardened
-runtime with no JIT entitlement makes `SharedArrayBuffer` undefined.
+hardened-runtime-signed process at all. electron-builder signs every executable it copies into
+`Contents/MacOS/` — the sidecar and `nisi-cli` from `extraFiles`, not just the main binary — with the
+hardened runtime on (`hardenedRuntime: true`; `identity: "-"` still gets `flags=0x10002(adhoc,runtime)`).
+With no JIT entitlement the hardened runtime makes `SharedArrayBuffer` undefined.
 `@anthropic-ai/claude-agent-sdk`'s bundled `sdk.mjs` does an unguarded `new Int32Array(new
 SharedArrayBuffer(4))` at module scope; the throw leaves the compiled sidecar's CJS interop chunk
 permanently half-initialized, so every later call into the SDK fails with `TypeError: undefined is
 not an object (evaluating 'iE.propagation')` — the `claude-code` harness silently discovers zero
-models and disappears from the model picker. Fixed with
-`apps/desktop/src-tauri/entitlements.plist` granting `com.apple.security.cs.allow-jit` only — that
-alone was sufficient; no need for the broader `com.apple.security.cs.allow-unsigned-executable-memory`
-— referenced via `bundle.macOS.entitlements` in both `tauri.build.conf.json` and
-`tauri.build.dev.conf.json` (both drive `tauri build` and sign the sidecar through the same
- codepath — but only when `bundle.macOS.signingIdentity` resolves, so both set `"-"`; without it
- the bundler skips signing entirely and the `.app` keeps only the linker's ad-hoc signature,
- which `usernotificationsd` rejects with `UNErrorDomain` error 1; `tauri dev` signs a CEF app
- bundle but does not bundle the compiled sidecar, so the base
- `tauri.conf.json` does not need the sidecar entitlement).[^entitlements] Confirmed on a real
- `tauri build`: `codesign -d --entitlements -` on the
-rebuilt sidecar shows the JIT key, and a `walkthrough.refreshHarnesses` call against that sidecar
-(via a hand-built `SidecarClient`, see below) returned the `claude-code` harness with 5 models
+models and disappears from the model picker. `apps/desktop/build/entitlements.plist` grants
+`com.apple.security.cs.allow-jit` — that alone fixes the sidecar; the broader
+`com.apple.security.cs.allow-unsigned-executable-memory` is not needed — and
+`com.apple.security.cs.disable-library-validation`, which the ad-hoc identity needs so the hardened
+runtime will load Electron's own frameworks. `electron-builder.yml` points both `entitlements` and
+`entitlementsInherit` at it, and `codesign -d --entitlements -` on `release/mac-arm64/nisi.app/Contents/MacOS/sidecar`
+shows both keys.[^entitlements] The original confirmation, on a Tauri-era build (not re-run under
+electron-builder), was a `walkthrough.refreshHarnesses` call against the rebuilt sidecar (via a
+hand-built `SidecarClient`, see below) that returned the `claude-code` harness with 5 models
 (`default`, `opus[1m]`, `claude-fable-5[1m]`, `sonnet`, `haiku`) and no error.
 
 Verifying this can't lean on `open`-ing a worktree-built `.app` — it shares production's bundle
@@ -97,4 +91,4 @@ the packaged app. **Re-verify a compiled build whenever a harness package is bum
 
 [^path-rule]: PATH widening (packages/harness-local/AGENTS.md)
 [^migrations]: applyEmbeddedMigrations (packages/db/AGENTS.md)
-[^entitlements]: entitlements.plist (apps/desktop/src-tauri/)
+[^entitlements]: entitlements.plist (apps/desktop/build/)

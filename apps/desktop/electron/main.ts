@@ -32,7 +32,7 @@ import { activateMainWindow } from "./window-activation";
 applyMeasurementSwitches();
 
 const dataOverride = resolveDataDirOverride(process.env);
-// Tauri's `app_data_dir` for this identifier.
+// The macOS default, matching `@repo/db/paths`.
 const dataDir =
 	dataOverride === null
 		? join(app.getPath("appData"), "com.nisi.desktop")

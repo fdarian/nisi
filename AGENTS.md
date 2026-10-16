@@ -1,6 +1,6 @@
 # nisi
 
-macOS code review tool for GitHub PRs. Tauri 3 alpha desktop app (Chromium/CEF runtime) + Bun/Effect sidecar. Two things make it
+macOS code review tool for GitHub PRs. Electron desktop app + Bun/Effect sidecar. Two things make it
 more than a diff viewer: **tracked changes** (ticking Reviewed snapshots the file, so the next push
 shows you `reviewed → head`, not the whole file again) and the **walkthrough** (an agent narrates the
 PR, every claim linked to a set of line ranges). Both are built; see `README.md` for what they do and
@@ -24,7 +24,7 @@ PR, every claim linked to a set of line ranges). Both are built; see `README.md`
 Workspaces declared in `pnpm-workspace.yaml` (`packages/*`, `apps/*`). Each has its own `AGENTS.md`
 with the detail — this is only the map.
 
-- `apps/desktop` — Tauri shell + Bun/Effect sidecar + React frontend.
+- `apps/desktop` — Electron shell + Bun/Effect sidecar + React frontend.
 - `apps/extension` — Chrome extension that hands a directly-arrived-at GitHub PR page to the app
   via a `nisi://` deep link.
 - `packages/sidecar-api` — oRPC contract shared by the sidecar and the frontend. Start here for wire shapes.
@@ -99,5 +99,4 @@ slow (roughly 13–28s) while nisi installs a pinned copy of it; every run after
     [teardown](knowledge/codeview-teardown-leak-patch.md),
     [scroll target](knowledge/codeview-stale-pending-scroll-target-patch.md), and
     [sticky jitter](knowledge/deferred-frontend-perf-work.md).
-  - `tauri-runtime-cef` — vendored alpha.4 adds a macOS launch-activation builder option; re-check on every tauri-runtime-cef bump; see [README](patches/tauri-runtime-cef/README.md).
 - `apps/desktop` aliases `#/*` → `src/*` (not `@/*`); the `packages/*` use relative imports.
