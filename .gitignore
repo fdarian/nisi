@@ -10,11 +10,6 @@ routeTree.gen.ts
 apps/desktop/sidecar/guide/app-stylesheet.gen.txt
 apps/desktop/.storybook-shots/
 
-# Rust
-**/src-tauri/target
-**/src-tauri/gen
-**/src-tauri/binaries
-
 # macOS
 .DS_Store
 
