@@ -2,7 +2,7 @@ import { HarnessAgent, type HarnessAgentSession } from "@ai-sdk/harness/agent";
 import { createLocalSandbox } from "@repo/harness-local";
 import type { HarnessId } from "@repo/sidecar-api";
 import { Context, Effect, Layer } from "effect";
-import { createHarnessAdapter } from "../harness/harnesses.ts";
+import { createHarnessAgentTarget } from "../harness/harnesses.ts";
 import { resolveSandboxSettings } from "../harness/sandbox.ts";
 import type { AppServices } from "../services.ts";
 
@@ -68,7 +68,7 @@ const startChatSession = async (
 	// conversation with the coding agent — the point is that it can actually
 	// do things, not just look.
 	const agent = new HarnessAgent({
-		harness: createHarnessAdapter(params.harness, params.model),
+		...createHarnessAgentTarget(params.harness, params.model),
 		sandbox: sandbox.provider,
 		sandboxConfig: { workDir: sandbox.workDir },
 		instructions: params.instructions,

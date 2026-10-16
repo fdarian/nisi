@@ -1,0 +1,46 @@
+diff --git a/dist/index.js b/dist/index.js
+index fc140dd..3bdcfad 100644
+--- a/dist/index.js
++++ b/dist/index.js
+@@ -325,7 +325,17 @@ const harnessV1CompactionPartSchema = z.object({
+ });
+ const harnessV1ErrorPartSchema = z.object({
+ 	type: z.literal("error"),
+-	error: z.unknown()
++	// nisi patch: `error` must tolerate being absent. Zod 4's `z.unknown()` is
++	// NOT implicitly optional (unlike Zod 3's), so a frame serialized from
++	// `{ type: "error", error: undefined }` — JSON.stringify drops the
++	// undefined key, yielding `{"type":"error","seq":N}` — fails the
++	// discriminated union with "expected nonoptional, received undefined" and
++	// tears down the whole stream. OpenCode's bridge emits exactly that frame
++	// partway through a busy session, which killed every non-trivial
++	// walkthrough generation. Upstream should widen this; until then a
++	// payload-less error part decodes and nisi's own loop ignores it (an error
++	// with no payload carries nothing to report).
++	error: z.unknown().optional()
+ });
+ const harnessV1RawPartSchema = z.object({
+ 	type: z.literal("raw"),
+diff --git a/dist/utils/index.js b/dist/utils/index.js
+index 703ea26..08263c7 100644
+--- a/dist/utils/index.js
++++ b/dist/utils/index.js
+@@ -1509,7 +1509,17 @@ const harnessV1CompactionPartSchema = z.object({
+ });
+ const harnessV1ErrorPartSchema = z.object({
+ 	type: z.literal("error"),
+-	error: z.unknown()
++	// nisi patch: `error` must tolerate being absent. Zod 4's `z.unknown()` is
++	// NOT implicitly optional (unlike Zod 3's), so a frame serialized from
++	// `{ type: "error", error: undefined }` — JSON.stringify drops the
++	// undefined key, yielding `{"type":"error","seq":N}` — fails the
++	// discriminated union with "expected nonoptional, received undefined" and
++	// tears down the whole stream. OpenCode's bridge emits exactly that frame
++	// partway through a busy session, which killed every non-trivial
++	// walkthrough generation. Upstream should widen this; until then a
++	// payload-less error part decodes and nisi's own loop ignores it (an error
++	// with no payload carries nothing to report).
++	error: z.unknown().optional()
+ });
+ const harnessV1RawPartSchema = z.object({
+ 	type: z.literal("raw"),
