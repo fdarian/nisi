@@ -1,4 +1,3 @@
-import { useMutation } from "@tanstack/react-query";
 import { useState } from "react";
 import { Button } from "#/components/ui/button";
 import { Switch } from "#/components/ui/switch";
@@ -24,11 +23,6 @@ function NotificationsContent(props: {
 	const openErrorState = useState<string | null>(null);
 	const openError = openErrorState[0];
 	const setOpenError = openErrorState[1];
-	const toggle = useMutation({
-		mutationFn: async (enabled: boolean) => {
-			update({ notificationsEnabled: enabled });
-		},
-	});
 	const enabled = query.settings.notificationsEnabled;
 	return (
 		<div className="mx-auto flex w-full max-w-2xl flex-col gap-6 overflow-y-auto px-8 py-12">
@@ -41,8 +35,10 @@ function NotificationsContent(props: {
 					<Switch
 						aria-label="Enable notifications"
 						checked={enabled}
-						disabled={!hasNative() || toggle.isPending}
-						onCheckedChange={(checked) => toggle.mutate(checked)}
+						disabled={!hasNative()}
+						onCheckedChange={(checked) =>
+							update({ notificationsEnabled: checked })
+						}
 					/>
 				</SettingsRow>
 				{!hasNative() && (
@@ -71,9 +67,9 @@ function NotificationsContent(props: {
 						</Button>
 					</div>
 				)}
-				{(toggle.error || openError) && (
+				{openError && (
 					<p role="alert" className="px-3.5 text-destructive text-sm">
-						{String(toggle.error || openError)}
+						{openError}
 					</p>
 				)}
 				<TestNotificationRow
