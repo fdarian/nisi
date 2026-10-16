@@ -2,6 +2,7 @@
 .turbo
 *.local*
 dist
+apps/desktop/dist-electron
 routeTree.gen.ts
 # Embedded by the compiled sidecar for `guide.preview`; made by `build:sidecar`.
 apps/desktop/sidecar/guide/app-stylesheet.gen.txt
