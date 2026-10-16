@@ -1980,6 +1980,80 @@ export function attachRouter(
 						),
 					);
 			}),
+			// Like `stack`, creating a stack doesn't depend on a checked-out
+			// worktree, so the sidecar's own cwd is enough for `gh`.
+			createStack: authed.pullRequests.createStack.effect(function* ({
+				input,
+				errors,
+			}) {
+				const github = yield* GitHub;
+				yield* github
+					.createStack({
+						repoRoot: process.cwd(),
+						owner: input.owner,
+						repo: input.repo,
+						numbers: input.numbers,
+					})
+					.pipe(
+						Effect.tapError((cause) =>
+							Effect.logWarning("pull request stack creation failed", {
+								repo: `${input.owner}/${input.repo}`,
+								numbers: input.numbers,
+								reason: cause._tag,
+								detail:
+									cause._tag === "GitCommandError"
+										? `${cause.command} ${cause.args.join(" ")} (exit ${cause.exitCode}): ${cause.stderr}\n${String(cause.cause)}`
+										: cause.reason,
+							}),
+						),
+						Effect.catchTag("GhNotAuthenticated", (cause) =>
+							Effect.fail(
+								errors.GH_NOT_AUTHENTICATED({
+									message: `gh is not authenticated: ${cause.reason}`,
+									data: {
+										reason: "Authentication required",
+										detail: cause.reason,
+									},
+								}),
+							),
+						),
+						Effect.catchTag("GhRateLimited", (cause) =>
+							Effect.fail(
+								errors.TOO_MANY_REQUESTS({
+									message: cause.reason,
+									data: {
+										reason: "GitHub rate limit reached",
+										detail: cause.reason,
+									},
+								}),
+							),
+						),
+						Effect.catchTag("GhStackCreateFailed", (cause) =>
+							Effect.fail(
+								errors.STACK_CREATE_FAILED({
+									message: `GitHub couldn't create the stack in ${cause.owner}/${cause.repo}: ${cause.reason}`,
+									data: {
+										reason: /\bHTTP 404\b/i.test(cause.reason)
+											? "Stacked pull requests aren't enabled for this repo"
+											: "GitHub rejected the stack",
+										detail: cause.reason,
+									},
+								}),
+							),
+						),
+						Effect.catchTag("GitCommandError", (cause) =>
+							Effect.fail(
+								errors.SERVICE_UNAVAILABLE({
+									message: `${cause.command} could not be run: ${cause.stderr || String(cause.cause)}`,
+									data: {
+										reason: "Couldn't run gh",
+										detail: `${cause.command} ${cause.args.join(" ")} (exit ${cause.exitCode}): ${cause.stderr}\n${String(cause.cause)}`,
+									},
+								}),
+							),
+						),
+					);
+			}),
 			// The PR header overflow menu's "Mark as Ready" item, shown only
 			// while `mergeStatus.isDraft` is true. Error mapping
 			// mirrors `merge`'s minus `CONFLICT` — readiness doesn't depend on

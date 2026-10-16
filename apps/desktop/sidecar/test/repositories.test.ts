@@ -76,6 +76,7 @@ const githubWith = (
 	mergeMethods: unused,
 	merge: unused,
 	mergeStack: unused,
+	createStack: unused,
 	markReady: unused,
 	watchChecks: unusedStream,
 	watchMergeStatus: unusedStream,

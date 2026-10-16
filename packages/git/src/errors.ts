@@ -368,6 +368,16 @@ export class GhStackMergeFailed extends Schema.TaggedError<GhStackMergeFailed>()
 	},
 ) {}
 
+/**
+ * GitHub refused to create a stack from the given PRs (stacked PRs not
+ * enabled for the repo, a chain that doesn't line up, a missing PR) — the
+ * reason is `gh`'s own stderr, which includes the HTTP status.
+ */
+export class GhStackCreateFailed extends Schema.TaggedError<GhStackCreateFailed>()(
+	"GhStackCreateFailed",
+	{ owner: Schema.String, repo: Schema.String, reason: Schema.String },
+) {}
+
 /** Every way `fetchPullRequestState` can fail — `PullRequestMergeabilityError` minus the push-access refusal, which only `mergeStateStatus` triggers. */
 export type PullRequestStateError =
 	| GhOutputDecodeError
@@ -425,6 +435,11 @@ export type PullRequestMergeError =
 	| PullRequestNotFound
 	| PullRequestNotMergeable
 	| GhMergeFailed;
+
+export type PullRequestStackCreateError =
+	| GhNotAuthenticated
+	| GhRateLimited
+	| GhStackCreateFailed;
 
 export type PullRequestStackMergeError =
 	| GhNotAuthenticated

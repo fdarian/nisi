@@ -4,11 +4,14 @@ import {
 	GhNotAuthenticated,
 	GhOutputDecodeError,
 	GhRateLimited,
+	GhStackCreateFailed,
 	type GitCommandError,
 	PullRequestNotFound,
+	type PullRequestStackCreateError,
 } from "../../errors.ts";
 import { ghResult } from "../../exec.ts";
 import type {
+	CreatePullRequestStackInput,
 	FetchPullRequestStackInput,
 	PullRequestStack,
 	PullRequestStackError,
@@ -185,4 +188,47 @@ export const fetchPullRequestStack = (
 			result.stdout,
 		);
 		return yield* toPullRequestStack(response, input.repoRoot, input.number);
+	});
+
+/** Headers GitHub's stacked-PR REST endpoints (create and async merge) require while they're versioned separately. */
+export const stackApiHeaders = [
+	"-H",
+	"Accept: application/vnd.github+json",
+	"-H",
+	"X-GitHub-Api-Version: 2026-03-10",
+] as const;
+
+/** Stacks the PRs in `numbers` (bottom to top; each base must be the previous head) through GitHub's REST endpoint. */
+export const createPullRequestStack = (
+	input: CreatePullRequestStackInput,
+): Effect.Effect<
+	void,
+	PullRequestStackCreateError | GitCommandError,
+	ChildProcessSpawner.ChildProcessSpawner
+> =>
+	Effect.gen(function* () {
+		const result = yield* ghResult(input.repoRoot, [
+			"api",
+			"--method",
+			"POST",
+			`repos/${input.owner}/${input.repo}/stacks`,
+			...stackApiHeaders,
+			...input.numbers.flatMap((number) => ["-F", `pull_requests[]=${number}`]),
+		]);
+
+		if (result.exitCode === 0) return;
+
+		if (isAuthFailure(result)) {
+			return yield* new GhNotAuthenticated({
+				reason: result.stderr.trim() || "gh is not authenticated",
+			});
+		}
+		if (isRateLimited(result.stderr)) {
+			return yield* new GhRateLimited({ reason: result.stderr.trim() });
+		}
+		return yield* new GhStackCreateFailed({
+			owner: input.owner,
+			repo: input.repo,
+			reason: result.stderr.trim() || `gh api stacks exited ${result.exitCode}`,
+		});
 	});

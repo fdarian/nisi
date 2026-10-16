@@ -110,6 +110,7 @@ const mockGitHub: GitHubShape = {
 	mergeMethods: () => Effect.die(new Error("unused mock GitHub method")),
 	merge: () => Effect.die(new Error("unused mock GitHub method")),
 	mergeStack: () => Effect.die(new Error("unused mock GitHub method")),
+	createStack: () => Effect.die(new Error("unused mock GitHub method")),
 	markReady: () => Effect.die(new Error("unused mock GitHub method")),
 	watchChecks: () => Stream.die(new Error("unused mock GitHub method")),
 	watchMergeStatus: () => Stream.die(new Error("unused mock GitHub method")),

@@ -10,6 +10,7 @@ import type {
 	PullRequestNotFound,
 	PullRequestReadyError,
 	PullRequestSearchError,
+	PullRequestStackCreateError,
 	PullRequestStackMergeError,
 	PullRequestStateError,
 	PullRequestStatesError,
@@ -26,6 +27,7 @@ import type {
 	ActionsJobError,
 	ActionsJobInput,
 	ActionsJobLogs,
+	CreatePullRequestStackInput,
 	FetchPullRequestChecksInput,
 	FetchPullRequestOverviewInput,
 	FetchPullRequestStackInput,
@@ -172,6 +174,9 @@ export type GitHubShape = {
 		PullRequestStackSuggestion | null,
 		PullRequestStackError | GitCommandError
 	>;
+	createStack: (
+		input: CreatePullRequestStackInput,
+	) => Effect.Effect<void, PullRequestStackCreateError | GitCommandError>;
 	mergeability: (
 		repoRoot: string,
 		number: number,

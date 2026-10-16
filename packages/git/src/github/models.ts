@@ -181,6 +181,14 @@ export type FetchPullRequestStackInput = {
 	readonly number: number;
 };
 
+export type CreatePullRequestStackInput = {
+	readonly repoRoot: string;
+	readonly owner: string;
+	readonly repo: string;
+	/** Bottom to top. */
+	readonly numbers: ReadonlyArray<number>;
+};
+
 export type PullRequestStackError =
 	| GhOutputDecodeError
 	| GhNotAuthenticated

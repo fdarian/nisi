@@ -29,7 +29,7 @@ import {
 	repository,
 	searchPullRequests,
 } from "./pull-request.ts";
-import { fetchPullRequestStack } from "./stack.ts";
+import { createPullRequestStack, fetchPullRequestStack } from "./stack.ts";
 import { fetchPullRequestStackSuggestion } from "./stack-suggestion.ts";
 import {
 	checksInterval,
@@ -132,6 +132,22 @@ export const GhGitHub = {
 				stack: (input) => provide(fetchPullRequestStack(input)),
 				stackSuggestion: (input) =>
 					provide(fetchPullRequestStackSuggestion(input)),
+				createStack: (input) =>
+					createPullRequestStack(input).pipe(
+						provide,
+						Effect.tap(() =>
+							Effect.all(
+								input.numbers.map((number) =>
+									kick(kicks, {
+										owner: input.owner,
+										repo: input.repo,
+										number,
+									}),
+								),
+								{ discard: true },
+							),
+						),
+					),
 				mergeability: (repoRoot, number) =>
 					provide(fetchPullRequestMergeability(repoRoot, number)),
 				mergeMethods: (repoRoot, owner, repo) =>

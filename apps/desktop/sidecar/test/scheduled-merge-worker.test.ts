@@ -76,6 +76,7 @@ const mockGitHub = (overrides: Partial<GitHubShape>): GitHubShape => ({
 	mergeMethods: unused,
 	merge: () => Effect.void,
 	mergeStack: unused,
+	createStack: unused,
 	markReady: unused,
 	watchChecks: unusedStream,
 	watchMergeStatus: unusedStream,

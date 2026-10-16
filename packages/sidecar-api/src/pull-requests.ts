@@ -534,6 +534,22 @@ export const pullRequestsContract = {
 			NOT_FOUND: { data: MergeFailure },
 			SERVICE_UNAVAILABLE: { data: MergeFailure },
 		}),
+	/** Creates a native GitHub stack from `numbers` (bottom to top). `STACK_CREATE_FAILED` is GitHub's own refusal; its `data.reason` is plain English and `data.detail` is `gh`'s message. */
+	createStack: oc
+		.input(
+			Schema.Struct({
+				owner: Schema.String,
+				repo: Schema.String,
+				numbers: Schema.Array(Schema.Number),
+			}),
+		)
+		.output(Schema.Void)
+		.errors({
+			GH_NOT_AUTHENTICATED: { data: MergeFailure },
+			TOO_MANY_REQUESTS: { data: MergeFailure },
+			STACK_CREATE_FAILED: { data: MergeFailure },
+			SERVICE_UNAVAILABLE: { data: MergeFailure },
+		}),
 	scheduleMerge: oc
 		.input(
 			Schema.Struct({

@@ -447,6 +447,7 @@ export function createMockSidecarClient(
 			scheduledMerge: async () => scheduledMergeState.request,
 			scheduledMerges: async () => [],
 			mergeStack: async () => undefined,
+			createStack: async () => undefined,
 			markReady: async () => undefined,
 			approveWorkflowRuns: async (input) => {
 				data.approveWorkflowRuns?.(input.runIds);

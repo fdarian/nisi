@@ -37,6 +37,7 @@ export {
 	GhOutputDecodeError,
 	GhPullRequestReadyFailed,
 	GhRateLimited,
+	GhStackCreateFailed,
 	GhStackMergeFailed,
 	GitCommandError,
 	type GitError,
@@ -56,6 +57,7 @@ export {
 	type PullRequestReadyError,
 	PullRequestRefNotFound,
 	type PullRequestSearchError,
+	type PullRequestStackCreateError,
 	type PullRequestStackMergeError,
 	type PullRequestStateError,
 	type PullRequestStatesError,
@@ -86,6 +88,7 @@ export {
 	type OpenPullRequestIndexOptions,
 } from "./github/github.ts";
 export type {
+	CreatePullRequestStackInput,
 	FetchPullRequestChecksInput,
 	FetchPullRequestOverviewInput,
 	FetchPullRequestStackInput,
