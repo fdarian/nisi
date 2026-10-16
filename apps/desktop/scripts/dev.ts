@@ -14,6 +14,11 @@ import { Config, Effect, Option, Schedule } from "effect";
 import { FileSystem } from "effect/FileSystem";
 import { Command, Flag } from "effect/unstable/cli";
 
+const waitForVite = (url: string) =>
+	Effect.tryPromise(() => fetch(url)).pipe(
+		Effect.retry(Schedule.spaced("250 millis")),
+	);
+
 const appDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 /**
@@ -25,6 +30,11 @@ const appDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
  * session gets its own `NISI_DATA_DIR` under `.data/sessions/<slug>/data`
  * (worktrees stop clobbering each other's `sidecar.json`, and dev never
  * touches prod's) and its own sticky vite port.
+ *
+ * Outside `--browser`, the frontend is vite plus the Electron main process
+ * (`dist-electron/main.js`, which loads the vite URL since it isn't packaged).
+ * `build:electron` runs once at startup, so a change under `electron/` needs a
+ * `bun dev` restart; renderer changes hot-reload through vite as usual.
  */
 const dev = Command.make(
 	"desktop-dev",
@@ -46,7 +56,7 @@ const dev = Command.make(
 		// of localhost-only, so another device on the LAN can load the dev
 		// server — e.g. testing `--browser` mode from a phone. Distinct from
 		// `TAURI_DEV_HOST`, which points the HMR *client* at a specific address
-		// for Tauri mobile dev; this only widens what the server binds to.
+		// (see `vite.config.ts`); this only widens what the server binds to.
 		host: Flag.boolean("host").pipe(Flag.withDefault(false)),
 	},
 	({ browser, port, prodDataDir, host }) =>
@@ -118,10 +128,9 @@ const dev = Command.make(
 				NISI_DEV_SIDECAR_PORT: String(sidecarPort),
 				NISI_DEV_SIDECAR_TOKEN: sidecarToken,
 				// Set in both modes, not just `--browser`: with these, the vite server
-				// `tauri dev` starts can also be opened in a plain browser tab (see
-				// `src/infra/backend.ts`). The Tauri webview picks them up too instead
-				// of `get_backend` — same sidecar either way, since this run pinned
-				// both.
+				// can also be opened in a plain browser tab (see
+				// `src/infra/backend.ts`). The Electron window picks them up too —
+				// same sidecar either way, since this run pinned both.
 				VITE_DEV_BACKEND_PORT: String(sidecarPort),
 				VITE_DEV_BACKEND_TOKEN: sidecarToken,
 			};
@@ -142,7 +151,14 @@ const dev = Command.make(
 				{ env },
 			);
 
-			// `--browser`: skip the Tauri webview entirely and open a plain
+			const viteUrl = `http://localhost:${vitePort}/`;
+			const viteProcess = runManagedSubprocess(
+				"bun",
+				["run", "dev:vite", "--strictPort"],
+				{ env },
+			);
+
+			// `--browser`: skip the Electron window entirely and open a plain
 			// `vite dev` tab against the sidecar instead, via the dev-only escape
 			// hatch in `src/infra/backend.ts` (see apps/desktop/AGENTS.md's "Browser
 			// dev harness"). Vite can't start until the sidecar has actually
@@ -150,37 +166,45 @@ const dev = Command.make(
 			// rather than starting both at once — still raced against the sidecar
 			// itself below, so a sidecar crash before publishing interrupts the
 			// wait instead of hanging forever.
-			const frontendProcess = browser
-				? Effect.gen(function* () {
-						yield* awaitSidecarHandshake(dataDir, { token: sidecarToken });
-						return yield* runManagedSubprocess("bun", ["run", "dev:vite"], {
-							env,
-						});
-					})
-				: runManagedSubprocess(
-						"bunx",
-						[
-							"tauri",
-							"dev",
-							"-c",
-							JSON.stringify({
-								build: { devUrl: `http://localhost:${vitePort}` },
-								// CEF's framework and helpers need a complete bundle signature to initialize on macOS.
-								bundle: { macOS: { signingIdentity: "-" } },
-							}),
-						],
-						{ env },
+			const browserFrontend = Effect.gen(function* () {
+				yield* awaitSidecarHandshake(dataDir, { token: sidecarToken });
+				return yield* viteProcess;
+			});
+
+			// Electron loads `http://localhost:${VITE_PORT}` the moment its window
+			// opens, so it must not start before vite is accepting connections.
+			const electronFrontend = Effect.gen(function* () {
+				const build = yield* runManagedSubprocess(
+					"bun",
+					["run", "build:electron"],
+					{ env },
+				).pipe(Effect.scoped);
+				if (build !== 0) {
+					return yield* Effect.fail(
+						new Error(`build:electron exited with code ${build}`),
 					);
+				}
+				return yield* Effect.raceAll([
+					viteProcess,
+					Effect.gen(function* () {
+						yield* waitForVite(viteUrl);
+						return yield* runManagedSubprocess(
+							path.join(appDir, "node_modules/.bin/electron"),
+							[path.join(appDir, "dist-electron/main.js")],
+							{ env },
+						);
+					}),
+				]);
+			});
+
+			const frontendProcess = browser ? browserFrontend : electronFrontend;
 
 			// Readiness for a devsess preset with `awaitPublish`: without it,
 			// `devsess start` waits forever. Vite serves on `vitePort` in both
-			// modes (`tauri dev` starts it via `beforeDevCommand`).
-			const viteUrl = `http://localhost:${vitePort}/`;
+			// modes.
 			const publishWhenReady = Effect.gen(function* () {
 				yield* awaitSidecarHandshake(dataDir, { token: sidecarToken });
-				yield* Effect.tryPromise(() => fetch(viteUrl)).pipe(
-					Effect.retry(Schedule.spaced("250 millis")),
-				);
+				yield* waitForVite(viteUrl);
 				yield* publishRunning({ url: viteUrl });
 			});
 
