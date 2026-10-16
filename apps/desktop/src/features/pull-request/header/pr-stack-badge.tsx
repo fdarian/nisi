@@ -1,5 +1,6 @@
 "use client";
 
+import { isDefinedError } from "@orpc/client";
 import {
 	GitMergeIcon,
 	GitPullRequestClosedIcon,
@@ -17,8 +18,12 @@ import {
 	PopoverTitle,
 	PopoverTrigger,
 } from "#/components/ui/popover";
-import type { PullRequestStackEntry } from "#/features/pull-request/data/pr-data";
+import type {
+	CreatePullRequestStackError,
+	PullRequestStackEntry,
+} from "#/features/pull-request/data/pr-data";
 import {
+	useCreatePullRequestStack,
 	usePullRequestStack,
 	usePullRequestStackSuggestion,
 } from "#/features/pull-request/data/pr-data";
@@ -151,6 +156,47 @@ function StackList(props: {
 	);
 }
 
+const createStackFailureMessage = (
+	error: CreatePullRequestStackError,
+): { reason: string; detail: string } => {
+	if (isDefinedError(error) && error.code !== "UNAUTHORIZED") {
+		return { reason: error.data.reason, detail: error.data.detail };
+	}
+	return {
+		reason: "Couldn't create the stack",
+		detail: error instanceof Error ? error.message : String(error),
+	};
+};
+
+function CreateStackFooter(props: {
+	isPending: boolean;
+	error: CreatePullRequestStackError | null;
+	onCreate: () => void;
+}): React.ReactElement {
+	const failure =
+		props.error === null ? null : createStackFailureMessage(props.error);
+
+	return (
+		<div className="mt-1 flex flex-col gap-2 px-4 pt-2 pb-2.5">
+			{failure !== null && (
+				<div className="text-xs" role="alert">
+					<p className="font-medium text-destructive-foreground">
+						{failure.reason}
+					</p>
+					<p className="mt-0.5 break-words text-muted-foreground">
+						{failure.detail}
+					</p>
+				</div>
+			)}
+			<div className="flex justify-end">
+				<Button loading={props.isPending} onClick={props.onCreate} size="sm">
+					Create stack
+				</Button>
+			</div>
+		</div>
+	);
+}
+
 function StackPopover(props: {
 	open: boolean;
 	onOpenChange: (open: boolean) => void;
@@ -164,6 +210,7 @@ function StackPopover(props: {
 	baseRefName: string;
 	currentNumber: number;
 	onOpenEntry: (number: number) => void;
+	footer?: React.ReactNode;
 }): React.ReactElement {
 	return (
 		<Popover onOpenChange={props.onOpenChange} open={props.open}>
@@ -197,6 +244,7 @@ function StackPopover(props: {
 								onOpenEntry={props.onOpenEntry}
 							/>
 						</div>
+						{props.footer}
 					</FramePanel>
 				</Frame>
 			</PopoverPopup>
@@ -227,6 +275,7 @@ export function PrStackBadge(
 	);
 	const suggestion = stack === null ? suggestionQuery.data : undefined;
 	const openPullRequest = useOpenPullRequest(props.orpc, props.onSessionOpened);
+	const createStack = useCreatePullRequestStack(props.orpc);
 
 	const openEntry = (number: number) => {
 		if (openPullRequest.isPending) return;
@@ -270,6 +319,9 @@ export function PrStackBadge(
 
 	if (suggestion === undefined || suggestion === null) return null;
 	const others = suggestion.size - 1;
+	const numbersBottomToTop = [...suggestion.entries]
+		.sort((left, right) => left.position - right.position)
+		.map((entry) => entry.number);
 
 	return (
 		<>
@@ -281,7 +333,26 @@ export function PrStackBadge(
 				currentNumber={props.number}
 				description="These pull requests chain but aren't stacked on GitHub yet."
 				entries={suggestion.entries}
-				onOpenChange={setOpen}
+				footer={
+					<CreateStackFooter
+						error={createStack.error}
+						isPending={createStack.isPending}
+						onCreate={() =>
+							createStack.create(
+								{
+									owner: props.owner,
+									repo: props.repo,
+									numbers: numbersBottomToTop,
+								},
+								() => setOpen(false),
+							)
+						}
+					/>
+				}
+				onOpenChange={(next) => {
+					if (!createStack.isPending) createStack.reset();
+					setOpen(next);
+				}}
 				onOpenEntry={openEntry}
 				open={open}
 				title="Suggested stack"

@@ -1197,6 +1197,34 @@ export function useMergePullRequest(
 	};
 }
 
+export type CreatePullRequestStackParams = {
+	owner: string;
+	repo: string;
+	/** Bottom to top. */
+	numbers: readonly number[];
+};
+
+export type CreatePullRequestStackError =
+	| InferClientError<SidecarClient["pullRequests"]["createStack"]>
+	| Error;
+
+/** Doesn't touch the stack caches: the sidecar kicks the live stack streams after GitHub accepts, and they deliver the real stack. */
+export function useCreatePullRequestStack(orpc: SidecarQueryUtils): {
+	create: (params: CreatePullRequestStackParams, onCreated: () => void) => void;
+	reset: () => void;
+	isPending: boolean;
+	error: CreatePullRequestStackError | null;
+} {
+	const mutation = useMutation(orpc.pullRequests.createStack.mutationOptions());
+	return {
+		create: (params, onCreated) =>
+			mutation.mutate(params, { onSuccess: onCreated }),
+		reset: mutation.reset,
+		isPending: mutation.isPending,
+		error: mutation.error,
+	};
+}
+
 export function useScheduledMerge(
 	orpc: SidecarQueryUtils,
 	params: PullRequestMergeStatusParams,
