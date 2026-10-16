@@ -1,7 +1,7 @@
 import type { GitCommandError, Hunk } from "@repo/git";
 import { diffContents } from "@repo/git";
 import { Effect } from "effect";
-import type { ChildProcessSpawner } from "effect/unstable/process";
+import type { ChildProcessSpawner } from "effect/process";
 
 /**
  * What currently vouches for a reviewed range: the whole-file Reviewed

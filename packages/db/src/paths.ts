@@ -71,10 +71,10 @@ const defaultDataDir = () =>
  * read when the env var is unset.
  */
 export const getDataDirConfig = () =>
-	Config.string("NISI_DATA_DIR").pipe(
+	Config.String("NISI_DATA_DIR").pipe(
 		Config.orElse(() =>
 			Config.succeed(getConfigFilePath()).pipe(
-				Config.mapOrFail((configPath) =>
+				Config.mapEffect((configPath) =>
 					readConfigFileDataDir(configPath, homedir()).pipe(
 						Effect.map((dataDir) => dataDir ?? defaultDataDir()),
 					),

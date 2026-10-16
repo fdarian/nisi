@@ -21,7 +21,7 @@ import type {
 	RepositorySummary,
 } from "@repo/sidecar-api";
 import { Effect, Stream } from "effect";
-import type { ChildProcessSpawner } from "effect/unstable/process";
+import type { ChildProcessSpawner } from "effect/process";
 import { PrIndex } from "./pr-index.ts";
 
 type PrState = "open" | "merged" | "closed";

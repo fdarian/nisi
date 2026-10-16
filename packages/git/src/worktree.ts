@@ -3,7 +3,7 @@ import { mkdir, realpath } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import { getDataDirConfig } from "@repo/db";
 import { Effect } from "effect";
-import type { ChildProcessSpawner } from "effect/unstable/process";
+import type { ChildProcessSpawner } from "effect/process";
 import {
 	type GitCommandError,
 	NoOriginRemote,

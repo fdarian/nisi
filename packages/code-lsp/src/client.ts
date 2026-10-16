@@ -12,7 +12,7 @@ import {
 	Stream,
 } from "effect";
 import type { FileSystem } from "effect/FileSystem";
-import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
+import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { resolveTsLspBinary } from "./binary.ts";
 import {
 	LspProcessError,

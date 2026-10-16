@@ -1,7 +1,7 @@
 import { Config, Effect } from "effect";
 import { emit } from "./events.ts";
 
-export const measurementInstance = Config.string(
+export const measurementInstance = Config.String(
 	"NISI_MEASUREMENT_INSTANCE",
 ).pipe(
 	Config.withDefault("0"),

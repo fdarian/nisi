@@ -44,7 +44,7 @@ import {
 	Stream,
 	Tracer,
 } from "effect";
-import type { ChildProcessSpawner } from "effect/unstable/process";
+import type { ChildProcessSpawner } from "effect/process";
 import {
 	ChatSessionNotFound,
 	resolveChatPromptContext,

@@ -3,7 +3,7 @@ import { lstat, readlink } from "node:fs/promises";
 import { join } from "node:path";
 import { Effect, Option } from "effect";
 import { FileSystem } from "effect/FileSystem";
-import type { ChildProcessSpawner } from "effect/unstable/process";
+import type { ChildProcessSpawner } from "effect/process";
 import { type GitCommandError, WorktreeReadFailed } from "./errors.ts";
 import { git } from "./exec.ts";
 

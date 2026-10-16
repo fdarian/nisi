@@ -52,7 +52,7 @@ export const readRefState = (
 				"GIT_SHALLOW_FILE",
 				"GIT_GRAFT_FILE",
 			],
-			(name) => Config.string(name).pipe(Config.option),
+			(name) => Config.String(name).pipe(Config.option),
 		);
 		if (overrides.some(Option.isSome)) return undefined;
 		const fs = yield* FileSystem;

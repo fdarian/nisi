@@ -6,8 +6,8 @@ import {
 	FetchHttpClient,
 	HttpClient,
 	HttpClientResponse,
-} from "effect/unstable/http";
-import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
+} from "effect/http";
+import { ChildProcess, ChildProcessSpawner } from "effect/process";
 
 export const TS_LSP_VERSION = "7.0.2";
 

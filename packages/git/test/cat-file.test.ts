@@ -1,7 +1,7 @@
 import { expect, spyOn, test } from "bun:test";
 import { BunServices } from "@effect/platform-bun";
 import { Deferred, Effect, Fiber, Stream } from "effect";
-import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
+import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { readFileContentsAtRef } from "../src/blob.ts";
 import { CatFileReaders } from "../src/cat-file.ts";
 import { cleanupTestRepo, makeTestRepo } from "./fixtures.ts";

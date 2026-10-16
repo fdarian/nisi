@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { join } from "node:path";
 import { Effect } from "effect";
 import { FileSystem } from "effect/FileSystem";
-import type { ChildProcessSpawner } from "effect/unstable/process";
+import type { ChildProcessSpawner } from "effect/process";
 import { resolveDiffBaseRef } from "./base.ts";
 import { type BlobEntry, readBlobExpressions, readBlobsAtRef } from "./blob.ts";
 import {

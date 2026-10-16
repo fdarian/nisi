@@ -1,7 +1,7 @@
 import { realpath } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { Effect, Schema } from "effect";
-import type { ChildProcessSpawner } from "effect/unstable/process";
+import type { ChildProcessSpawner } from "effect/process";
 import {
 	type GitCommandError,
 	RepoPathNoOriginRemote,

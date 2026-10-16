@@ -11,7 +11,7 @@ sidecar's `diagnostics.snapshot` (never launches the app, exits non-zero when no
 the handoff design this implements, and `packages/sidecar-api/src/sessions.ts`'s `OpenSessionTarget` for
 the wire shape this grammar maps to.
 
-- `src/index.ts` — the `Command` tree (Effect CLI, `effect/unstable/cli`): `nisi` with `pr`/`diff`/
+- `src/index.ts` — the `Command` tree (Effect CLI, `effect/cli`): `nisi` with `pr`/`diff`/
   `completion` as subcommands (`Command.withSubcommands`), `pr`/`diff` sharing one
   `run(pathArg, target)` that does the actual argument parsing, terminal reporting, and repo-root
   resolution — the two commands differ only in which `OpenSessionTarget` they resolve to
@@ -76,10 +76,10 @@ the wire shape this grammar maps to.
 
 ## Gotchas
 
-- `@effect/cli` is dead on the `effect@beta` line — this is `effect/unstable/cli`
+- `@effect/cli` is gone in effect 4 — the CLI toolkit is `effect/cli`
   (`Command`/`Flag`/`Argument`), run via `Command.run(cmd, { version })` +
   `Effect.provide(BunServices.layer)` + `BunRuntime.runMain`.
-- `effect/unstable/cli`'s own `--completions zsh` generator doesn't work for this command tree: `nisi`
+- `effect/cli`'s own `--completions zsh` generator doesn't work for this command tree: `nisi`
   declares both a positional `path` and subcommands, and the generator emits an `_arguments` spec for
   each at position 1, so `_arguments -C` aborts with a doubled-definition error before any completion
   state is set. `completion.ts`'s `_nisi` is hand-rolled instead — see its own doc comment.

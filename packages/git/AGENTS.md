@@ -98,8 +98,8 @@ exposes both one-shot reads and watch streams, so consumers never need to schedu
   lookup work around this; `getFileContents` does it by not pathspec-restricting the name-status
   call at all rather than needing to know the rename ahead of time. Caught by a real test
   (`test/patch.test.ts`) — don't reintroduce a single-path pathspec on a rename-sensitive call.
-- **`effect/unstable/process`'s barrel re-exports namespaces, not classes.** `ChildProcessSpawner`
-  imported from `effect/unstable/process` is the *module*; the service tag is
+- **`effect/process`'s barrel re-exports namespaces, not classes.** `ChildProcessSpawner`
+  imported from `effect/process` is the *module*; the service tag is
   `ChildProcessSpawner.ChildProcessSpawner`.
 - **`Effect.catchAll` doesn't exist in this Effect version** — use `Effect.orElseSucceed` (or
   `catchTag`/`catchCause` for narrower cases).

@@ -1,5 +1,5 @@
 import { Console, Effect } from "effect";
-import { Argument, Command, Flag } from "effect/unstable/cli";
+import { Argument, Command, Flag } from "effect/cli";
 import packageJson from "../../package.json" with { type: "json" };
 import {
 	formatSkillTable,
@@ -14,12 +14,12 @@ const embeddedNote = `(embedded in nisi ${packageJson.version})`;
 const writeRaw = (text: string) =>
 	Effect.sync(() => process.stdout.write(text));
 
-const jsonFlag = Flag.boolean("json").pipe(
+const jsonFlag = Flag.Boolean("json").pipe(
 	Flag.withDescription("Print name and description as JSON."),
 	Flag.withDefault(false),
 );
 
-const nameArgument = Argument.string("name").pipe(
+const nameArgument = Argument.String("name").pipe(
 	Argument.withDescription("A skill name from `nisi skills list`."),
 );
 
@@ -52,13 +52,13 @@ export const skillsCommand = <E>(fail: Effect.Effect<never, E>) => {
 		"get",
 		{
 			name: nameArgument,
-			ref: Flag.string("ref").pipe(
+			ref: Flag.String("ref").pipe(
 				Flag.withDescription(
 					"Print one reference file (e.g. screenshots.md) instead of SKILL.md.",
 				),
 				Flag.optional,
 			),
-			full: Flag.boolean("full").pipe(
+			full: Flag.Boolean("full").pipe(
 				Flag.withDescription(
 					"Print SKILL.md followed by every reference, each after a `--- references/<file> ---` banner.",
 				),
@@ -89,7 +89,7 @@ export const skillsCommand = <E>(fail: Effect.Effect<never, E>) => {
 
 	const skillPath = Command.make(
 		"path",
-		{ name: Argument.string("name").pipe(Argument.optional) },
+		{ name: Argument.String("name").pipe(Argument.optional) },
 		(options) =>
 			Effect.gen(function* () {
 				if (options.name._tag === "None") {

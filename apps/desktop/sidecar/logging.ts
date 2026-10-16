@@ -26,7 +26,10 @@ const consoleAndFileLoggers = Layer.unwrap(
 	Effect.gen(function* () {
 		const logFilePath = yield* logFilePathConfig;
 		const fileLogger = yield* rotatingFileLogger(logFilePath);
-		return Logger.layer([Logger.consolePretty({ stderr: true }), fileLogger]);
+		return Layer.merge(
+			Logger.layer([Logger.consolePretty(), fileLogger]),
+			Layer.succeed(Logger.LogToStderr, true),
+		);
 	}),
 );
 

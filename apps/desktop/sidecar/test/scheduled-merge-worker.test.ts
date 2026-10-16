@@ -28,7 +28,7 @@ import {
 	Stream,
 } from "effect";
 import type { FileSystem } from "effect/FileSystem";
-import type { ChildProcessSpawner } from "effect/unstable/process";
+import type { ChildProcessSpawner } from "effect/process";
 import { type SidecarEvent, subscribe } from "../events.ts";
 import { AutoMergeAlreadyRan, ScheduledMerges } from "../scheduled-merge.ts";
 import { Store } from "../store.ts";

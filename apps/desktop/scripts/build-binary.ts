@@ -1,6 +1,6 @@
 import { BunRuntime, BunServices } from "@effect/platform-bun";
 import { Effect } from "effect";
-import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
+import { ChildProcess, ChildProcessSpawner } from "effect/process";
 
 /** Runs `cmd` to completion with inherited stdio, failing if it exits non-zero. */
 const run = (cmd: string, args: ReadonlyArray<string>) =>

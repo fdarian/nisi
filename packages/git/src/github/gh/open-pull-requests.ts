@@ -114,7 +114,7 @@ export const listOpenPullRequests = (
 		): Effect.Effect<
 			void,
 			GhOutputDecodeError | GitHubUnreachable,
-			import("effect/unstable/process").ChildProcessSpawner.ChildProcessSpawner
+			import("effect/process").ChildProcessSpawner.ChildProcessSpawner
 		> =>
 			Effect.gen(function* () {
 				const nodes = page.pullRequests.nodes.filter(

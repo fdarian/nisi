@@ -13,7 +13,7 @@ import {
 	resolveMainCloneRoot,
 } from "@repo/git";
 import { Effect, Schema } from "effect";
-import type { ChildProcessSpawner } from "effect/unstable/process";
+import type { ChildProcessSpawner } from "effect/process";
 
 /**
  * `sessions.open`'s `target: { kind: "branch", headRef }` (the range-spelling

@@ -1,5 +1,5 @@
 import { Effect } from "effect";
-import type { ChildProcessSpawner } from "effect/unstable/process";
+import type { ChildProcessSpawner } from "effect/process";
 import type { GitCommandError } from "./errors.ts";
 import { git } from "./exec.ts";
 import type { OverviewCommit } from "./github/models.ts";

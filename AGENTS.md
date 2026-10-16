@@ -10,10 +10,10 @@ PR, every claim linked to a set of line ranges). Both are built; see `README.md`
 - **pnpm** for package management (`pnpm install`, `pnpm add <pkg>` from inside the target package,
   `enableGlobalVirtualStore: true` in `pnpm-workspace.yaml`) — never hand-edit `package.json`
   dependency fields. **Bun** is the runtime (`bun run ...`, `bun test`, `bun build --compile`).
-- **Effect v4** (`effect@rc`, currently `4.0.0-rc.x`, version shared via the `catalog:` entry in
-  `pnpm-workspace.yaml`) end-to-end. This is a pre-1.0 line with real API differences from v3 — e.g.
+- **Effect v4** (stable `effect@4.x`, version shared via the `catalog:` entry in
+  `pnpm-workspace.yaml`) end-to-end. It has real API differences from v3 — e.g.
   services are `Context.Service<Self, Shape>()("id")`, not `Effect.Service`; `@effect/platform-bun`
-  exports `BunServices.layer`, not `BunContext.layer`; subprocess spawning is `effect/unstable/process`.
+  exports `BunServices.layer`, not `BunContext.layer`; subprocess spawning is `effect/process`.
   Check `node_modules/effect/src/*.ts` before assuming a v3 pattern still applies.
 - **oRPC v2** (`beta` dist-tag) for the sidecar's wire contract — contract-first, `.effect()` handlers
   via `@orpc/experimental-effect` (see `packages/sidecar-api/AGENTS.md`).

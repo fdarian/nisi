@@ -20,7 +20,7 @@ import { SettingsStore, type SettingsStoreError } from "@repo/settings";
 import type { ChangedFileFacts } from "@repo/walkthrough";
 import { Effect, Schema } from "effect";
 import type { FileSystem } from "effect/FileSystem";
-import type { ChildProcessSpawner } from "effect/unstable/process";
+import type { ChildProcessSpawner } from "effect/process";
 import type { MergedPullRequestBaseUnavailable } from "../diff-base.ts";
 import { Store } from "../store.ts";
 

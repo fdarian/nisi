@@ -1,6 +1,6 @@
 import { lstat, readFile, readlink } from "node:fs/promises";
 import { Effect, Option } from "effect";
-import type { ChildProcessSpawner } from "effect/unstable/process";
+import type { ChildProcessSpawner } from "effect/process";
 import { CatFileReaders } from "./cat-file.ts";
 import type { GitCommandError } from "./errors.ts";
 import { WorktreeReadFailed } from "./errors.ts";
