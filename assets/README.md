@@ -11,13 +11,17 @@ not a detail; a dot marker is under one device pixel at 16px, a stem is not.
 | `logo.svg` | The mark. Body is `currentColor`, accent is fixed orange. |
 | `logo-mono.svg` | Same geometry, entirely `currentColor` — for one-colour contexts. |
 | `icon.svg` | App icon: the mark on a graphite superellipse, drawn to the macOS grid (824 in a 1024 canvas). |
-| `icon-1024.png` | Render of `icon.svg`, and the master the platform icon set is generated from. |
+| `icon-1024.png` | Render of `icon.svg`, and the master `icon.icns` is generated from. |
 
-Regenerate the app icons after changing `icon.svg`:
+The packaged app's icon is `apps/desktop/build/icon.icns` (read by `electron-builder.yml`). Regenerate it
+after changing `icon.svg`:
 
 ```bash
 rsvg-convert -w 1024 -h 1024 assets/icon.svg -o assets/icon-1024.png
-cd apps/desktop && bunx tauri icon ../../assets/icon-1024.png
+mkdir /tmp/icon.iconset
+for s in 16 32 128 256 512; do
+  sips -z $s $s assets/icon-1024.png --out /tmp/icon.iconset/icon_${s}x${s}.png
+  sips -z $((s*2)) $((s*2)) assets/icon-1024.png --out /tmp/icon.iconset/icon_${s}x${s}@2x.png
+done
+iconutil -c icns /tmp/icon.iconset -o apps/desktop/build/icon.icns
 ```
-
-`tauri icon` also emits `ios/` and `android/` directories — delete them, nisi is macOS only.

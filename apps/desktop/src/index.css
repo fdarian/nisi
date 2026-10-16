@@ -5,6 +5,15 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* Electron: a drag region swallows clicks and hover on every descendant, so each interactive descendant of an `app-drag` element needs its own `app-no-drag` region. */
+@utility app-drag {
+	-webkit-app-region: drag;
+}
+
+@utility app-no-drag {
+	-webkit-app-region: no-drag;
+}
+
 [data-files-data] {
 	opacity: var(--files-data-opacity, 1);
 }

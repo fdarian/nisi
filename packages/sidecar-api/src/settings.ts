@@ -45,7 +45,7 @@ export const Settings = Schema.Struct({
 	 * Scheme string of the user's preferred editor (`vscode`/`cursor`/`zed`/
 	 * `windsurf`), or `null` when never chosen. Loose `Schema.String`, not a
 	 * literal union — mirrors `@repo/settings`'s `Settings.preferredEditor`,
-	 * which stays independent of the frontend's/Rust's candidate list for the
+	 * which stays independent of the frontend's/Electron main process's candidate list for the
 	 * same reason `enabledHarnesses` does.
 	 */
 	preferredEditor: Schema.NullOr(Schema.String),

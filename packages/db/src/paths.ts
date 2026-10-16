@@ -17,8 +17,8 @@ export const getConfigFilePath = (): string =>
  * Reads `data_dir` from the user's `config.toml`. A missing file (or a file
  * without the key) yields `undefined`; anything else wrong with it fails
  * rather than falling back, so a typo can't silently point nisi at the
- * default data dir. The Rust side (`apps/desktop/src-tauri/src/data_dir.rs`)
- * implements the same rules — change both together.
+ * default data dir. The Electron main process
+ * (`apps/desktop/electron/data-dir.ts`) implements the same rules — change both together.
  */
 export const readConfigFileDataDir = (configPath: string, home: string) =>
 	Effect.gen(function* () {

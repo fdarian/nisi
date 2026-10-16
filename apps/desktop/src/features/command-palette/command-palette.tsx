@@ -1,6 +1,5 @@
 "use client";
 
-import { openUrl } from "@tauri-apps/plugin-opener";
 import {
 	CopyIcon,
 	ExternalLinkIcon,
@@ -28,6 +27,7 @@ import {
 	useSwitchToPr,
 } from "#/features/pull-request/data/pr-data";
 import type { SidecarQueryUtils } from "#/infra/backend-context";
+import { native } from "#/infra/native";
 
 type CommandAction = {
 	id: string;
@@ -149,7 +149,7 @@ function buildActions(
 			label: "Open Pull Request in GitHub",
 			icon: ExternalLinkIcon,
 			run: () => {
-				void openUrl(url);
+				void native().openUrl(url);
 			},
 		});
 	} else {

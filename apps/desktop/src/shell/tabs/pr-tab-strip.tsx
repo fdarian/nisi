@@ -110,11 +110,11 @@ type PrTabStripProps = {
  * The window uses a macOS overlay titlebar with `hiddenTitle: true` — no
  * native title bar remains to drag by, and the traffic lights float over the
  * top-left corner — so the strip reserves space for them and marks its own
- * background (not the tabs themselves) as a Tauri drag region.
+ * background (not the tabs themselves) as a drag region.
  *
- * The ancestor's `"deep"` drag region keeps the empty spacer draggable.
- * Tauri's drag script skips clickable tags and roles, so tabs and buttons
- * opt out without an explicit `="false"`.
+ * The ancestor's `app-drag` keeps the empty spacer draggable. A drag region
+ * swallows clicks on everything inside it, so the tab list, the open button
+ * and the pills each carry `app-no-drag`.
  *
  * Reorder uses dnd-kit's sortable preset (same method as Dice UI's Sortable):
  * `DndContext` + `SortableContext` + `useSortable`, horizontal list strategy,
@@ -213,7 +213,7 @@ export function PrTabStrip({
 						strategy={horizontalListSortingStrategy}
 					>
 						<ScrollArea
-							className="h-auto min-w-0 w-auto [&_[data-slot=scroll-area-scrollbar]]:hidden"
+							className="app-no-drag h-auto min-w-0 w-auto [&_[data-slot=scroll-area-scrollbar]]:hidden"
 							clampContentMinWidth={false}
 							scrollFade
 						>
@@ -260,7 +260,7 @@ export function PrTabStrip({
 				<OpenPullRequestButton onClick={onOpenPullRequest} />
 				<div className="flex-1" />
 				{/* The spacer pins the pills right, outside the scrolling tabs. */}
-				<div className="flex shrink-0 items-center gap-2 self-center">
+				<div className="app-no-drag flex shrink-0 items-center gap-2 self-center">
 					<BackgroundTasksIndicator orpc={orpc} sessions={sessions} />
 					<UpdatePill orpc={orpc} />
 				</div>
@@ -286,7 +286,7 @@ function OpenPullRequestButton({
 				render={
 					<Button
 						aria-label="Open pull request"
-						className="ml-1 shrink-0 self-center"
+						className="app-no-drag ml-1 shrink-0 self-center"
 						onClick={onClick}
 						size="icon-xs"
 						variant="ghost"
@@ -547,8 +547,10 @@ function PrTabPreview({
 }): React.ReactElement {
 	return (
 		<div
-			className={cn(PR_TAB_CLASS, "bg-background text-foreground shadow-xs/5")}
-			data-tauri-drag-region="false"
+			className={cn(
+				PR_TAB_CLASS,
+				"app-no-drag bg-background text-foreground shadow-xs/5",
+			)}
 		>
 			<PrTabIcon
 				isSuspended={isSuspended}

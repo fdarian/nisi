@@ -94,7 +94,7 @@ function buildTreeModel(files: readonly FileChange[]): TreeModel {
 /**
  * The row-actions dropdown `@pierre/trees` opens once its hover-revealed "…"
  * button (or a right-click) triggers it — the app's own `DropdownMenu`, not a
- * native Tauri menu. The tree wrapper stops bubbling context-menu events so
+ * native menu. The tree wrapper stops bubbling context-menu events so
  * ancestor handlers cannot open a second, native menu for the same gesture.
  *
  * Anchored to `context.anchorElement` so Base UI's positioner portals and

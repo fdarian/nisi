@@ -2,15 +2,13 @@
 .turbo
 *.local*
 dist
+apps/desktop/dist-electron
+apps/desktop/binaries
+apps/desktop/release
 routeTree.gen.ts
 # Embedded by the compiled sidecar for `guide.preview`; made by `build:sidecar`.
 apps/desktop/sidecar/guide/app-stylesheet.gen.txt
 apps/desktop/.storybook-shots/
-
-# Rust
-**/src-tauri/target
-**/src-tauri/gen
-**/src-tauri/binaries
 
 # macOS
 .DS_Store

@@ -7,6 +7,8 @@ catalog:
   "@effect/sql-sqlite-bun": 4.0.0-rc.112
 allowBuilds:
   '@google/genai': true
+  electron: true
+  electron-winstaller: false
   esbuild: true
   msgpackr-extract: true
   protobufjs: true

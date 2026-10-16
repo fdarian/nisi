@@ -27,7 +27,7 @@
    https://github.com/user-attachments/assets/1c0d96ec-0e86-4086-bf3a-70a0b5cb1ca3
 
   </details>
-- **Fast, and fully local** — Built with [Tauri](https://tauri.app/), `gh`, and SQLite
+- **Fast, and fully local** — Built with [Electron](https://www.electronjs.org/), `gh`, and SQLite
 - *[Soon]* **Bring your own harness** — Use your existing agents and subscription
 
 More on [features section](#features)

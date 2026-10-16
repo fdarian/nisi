@@ -6,7 +6,7 @@ import {
 } from "./repositories.fixture";
 import {
 	RepositoriesStory,
-	stubTauriForRepositories,
+	stubNativeForRepositories,
 } from "./repositories-story-harness";
 
 const DETAIL_PATH = "/settings/repositories/fdarian/nisi";
@@ -14,7 +14,7 @@ const DETAIL_PATH = "/settings/repositories/fdarian/nisi";
 const meta = {
 	title: "Settings/Repositories/Detail",
 	component: RepositoriesStory,
-	beforeEach: stubTauriForRepositories,
+	beforeEach: stubNativeForRepositories,
 	parameters: { controls: { disable: true } },
 } satisfies Meta<typeof RepositoriesStory>;
 export default meta;

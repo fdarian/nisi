@@ -135,7 +135,7 @@ const program = Effect.scoped(
 			// a per-boot `crypto.randomUUID()`/ephemeral `port: 0` would otherwise
 			// rotate on every restart out from under a frontend that froze `{ port,
 			// token }` into its own build-time env at its own boot (vite's
-			// `VITE_DEV_BACKEND_*`, Rust's `get_backend` `OnceCell` cache). Unset in
+			// `VITE_DEV_BACKEND_*`, `createBackendResolver`'s cache in `electron/backend.ts`). Unset in
 			// every other boot (prod, `bun run sidecar` standalone) — falls back to
 			// exactly the old per-boot-random behavior. See deskkit's sidecar README,
 			// "Running the sidecar under a file watcher".
@@ -194,9 +194,9 @@ const program = Effect.scoped(
 			//
 			// `acquireSidecar` writes directly, not via a temp file + rename, so
 			// a reader can briefly observe an empty or partial `sidecar.json`
-			// between the create and the write landing — Rust's
-			// `wait_for_sidecar_json` (`src-tauri/src/lib.rs`) treats a read or
-			// parse failure there the same as "file not there yet" and retries,
+			// between the create and the write landing — the Electron main
+			// process's `waitForSidecarJson` (`electron/backend.ts`) treats a read
+			// or parse failure there the same as "file not there yet" and retries,
 			// exactly per `deskkit/sidecar`'s README ("For non-deskkit readers of
 			// `sidecar.json`"). A `SIGKILL`'d owner's stale `sidecar.json` is
 			// recovered by `isSidecarAlive` inside `acquireSidecar` on the next

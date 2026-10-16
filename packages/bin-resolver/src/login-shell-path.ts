@@ -1,12 +1,7 @@
 import { execFileSync } from "node:child_process";
-
-/**
- * Wraps the probe's `PATH` in stdout so rc-file chatter around it (a greeting
- * banner, a version-manager's activation notice, `motd`-style output) can be
- * discarded instead of being parsed as directories. Everything between the
- * first and second occurrence is the `PATH` and nothing else.
- */
-const DELIMITER = "__NISI_LOGIN_SHELL_PATH__";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 /**
  * A login+interactive shell that hangs (a startup file waiting on input, a
@@ -14,6 +9,13 @@ const DELIMITER = "__NISI_LOGIN_SHELL_PATH__";
  * an optimization over `WELL_KNOWN_BIN_DIRS`, so giving up is always
  * survivable. Generous relative to the ~0.2-0.8s a real `zsh -lic` costs on a
  * loaded `.zshrc`.
+ *
+ * The timeout is only enforceable because the probe uses `SIGKILL` and no
+ * stdio pipes: `zsh -i` ignores `SIGTERM` while a foreground child runs, and a
+ * grandchild started by an rc file (a slow `sleep`, a network call) inherits
+ * a captured stdout and keeps it open, so `execFileSync` would wait on the
+ * pipe long after the shell was killed. The answer comes back through a file
+ * instead.
  */
 const PROBE_TIMEOUT_MS = 5_000;
 
@@ -28,15 +30,7 @@ const PROBE_TIMEOUT_MS = 5_000;
  * colon-joined string — the environment variable is the one representation
  * every shell agrees on.
  */
-const PROBE_SCRIPT = `printf %s '${DELIMITER}'; printenv PATH; printf %s '${DELIMITER}'`;
-
-const between = (text: string): string | undefined => {
-	const start = text.indexOf(DELIMITER);
-	if (start === -1) return undefined;
-	const end = text.indexOf(DELIMITER, start + DELIMITER.length);
-	if (end === -1) return undefined;
-	return text.slice(start + DELIMITER.length, end);
-};
+const probeScript = (outFile: string): string => `printenv PATH > '${outFile}'`;
 
 /**
  * The directories on the `PATH` the user's own login shell builds — the
@@ -55,34 +49,33 @@ const between = (text: string): string | undefined => {
  * `WELL_KNOWN_BIN_DIRS`, so an empty result just means resolution behaves
  * exactly as it did before this existed.
  */
-export const probeLoginShellDirs = (): ReadonlyArray<string> => {
+export const probeLoginShellDirs = (
+	timeoutMs: number = PROBE_TIMEOUT_MS,
+): ReadonlyArray<string> => {
 	const shell = process.env.SHELL;
 	if (shell === undefined || shell.length === 0) return [];
 
-	const stdout = ((): string | undefined => {
-		try {
-			return execFileSync(shell, ["-l", "-i", "-c", PROBE_SCRIPT], {
-				encoding: "utf-8",
-				timeout: PROBE_TIMEOUT_MS,
-				// The probe's whole point is reading a *clean* environment's
-				// startup files; stderr is rc-file noise (`zsh: can't change
-				// option: zle` from a non-tty interactive shell, deprecation
-				// warnings) that would otherwise leak into the sidecar's own
-				// output while telling us nothing.
-				stdio: ["ignore", "pipe", "ignore"],
-			});
-		} catch {
-			return undefined;
-		}
-	})();
-	if (stdout === undefined) return [];
-
-	const path = between(stdout);
-	if (path === undefined) return [];
-	return path
-		.trim()
-		.split(":")
-		.filter((dir) => dir.length > 0);
+	let dir: string | undefined;
+	try {
+		dir = mkdtempSync(join(tmpdir(), "nisi-login-path-"));
+		const outFile = join(dir, "path");
+		// stdio is fully ignored: stdout/stderr would be rc-file chatter anyway,
+		// and any open pipe can be held by an rc grandchild (see
+		// `PROBE_TIMEOUT_MS`). Throws on a non-zero exit or a timeout.
+		execFileSync(shell, ["-l", "-i", "-c", probeScript(outFile)], {
+			timeout: timeoutMs,
+			killSignal: "SIGKILL",
+			stdio: "ignore",
+		});
+		return readFileSync(outFile, "utf-8")
+			.trim()
+			.split(":")
+			.filter((entry) => entry.length > 0);
+	} catch {
+		return [];
+	} finally {
+		if (dir !== undefined) rmSync(dir, { recursive: true, force: true });
+	}
 };
 
 /**

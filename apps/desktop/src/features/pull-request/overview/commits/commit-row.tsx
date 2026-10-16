@@ -1,11 +1,11 @@
 "use client";
 
-import { openUrl } from "@tauri-apps/plugin-opener";
 import type React from "react";
 import { Avatar, AvatarFallback, AvatarImage } from "#/components/ui/avatar";
 import type { OverviewCommit } from "#/features/pull-request/data/pr-data";
 import { githubAvatarUrl } from "#/features/pull-request/data/pull-requests-data";
 import { CiStatusIcon } from "#/features/pull-request/header/ci-status";
+import { native } from "#/infra/native";
 
 /** Mirrors `open-pull-request-palette.tsx`'s helper of the same name — too small (one line) to be worth sharing across the two files. */
 function authorInitials(name: string): string {
@@ -45,8 +45,8 @@ export function CommitRow({ commit }: CommitRowProps): React.ReactElement {
 }
 
 /**
- * The short hash, linking to the commit on GitHub — `openUrl`
- * (`@tauri-apps/plugin-opener`), the same way `command-palette.tsx`'s "Open
+ * The short hash, linking to the commit on GitHub — through the native
+ * bridge's `openUrl`, the same way `command-palette.tsx`'s "Open
  * Pull Request in GitHub" and `ci-status.tsx`'s check rows open an external
  * URL, rather than a bare `<a target="_blank">`. Plain, non-interactive text
  * when `url` is `null` (branch mode has no GitHub commit to link to).
@@ -68,7 +68,7 @@ function CommitHashLink({
 	return (
 		<button
 			className="cursor-pointer font-mono text-muted-foreground text-xs hover:text-foreground hover:underline hover:underline-offset-2"
-			onClick={() => void openUrl(url)}
+			onClick={() => void native().openUrl(url)}
 			type="button"
 		>
 			{shortSha}

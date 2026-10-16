@@ -1,12 +1,8 @@
 "use client";
 
-import { isTauri } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
 import { useEffect } from "react";
+import { hasNative, native } from "#/infra/native";
 import { useAppViewActive } from "#/shell/app-view-context";
-
-/** Emitted by the File menu's "Close Tab" item — see `src-tauri/src/lib.rs`. */
-const CLOSE_TAB_EVENT = "menu://close-tab";
 
 /** ⌘1…⌘8 in order; ⌘9 is handled separately because it means "last", not "ninth". */
 const POSITION_CODES = [
@@ -61,12 +57,12 @@ type TabShortcutsOptions = {
  * ⌘W arrives as a *menu* event rather than a keystroke: it's a real File
  * menu item ("Close Tab", distinct from "Close Window" on ⌘⇧W) so it shows up
  * where macOS users look for it, and on macOS a menu key equivalent is
- * consumed before the webview ever sees the key anyway (see
- * `build_macos_menu` in `src-tauri/src/lib.rs`). That also means ⌘W is the
+ * consumed before the page ever sees the key anyway (the app menu lives in
+ * `electron/menu.ts`). That also means ⌘W is the
  * one shortcut here with no effect in a plain browser tab — there's no menu to
  * fire it and no window to close. ⌘⌥W has no menu item, so it's a plain
- * `keydown` chord instead — nothing in `build_macos_menu` claims that
- * accelerator, so the webview sees it directly.
+ * `keydown` chord instead — nothing in the app menu claims that
+ * accelerator, so the page sees it directly.
  */
 export function useTabShortcuts({
 	tabIds,
@@ -119,13 +115,13 @@ export function useTabShortcuts({
 		};
 
 		window.addEventListener("keydown", handleKeyDown);
-		const unlisten = isTauri()
-			? listen(CLOSE_TAB_EVENT, closeActiveTab)
+		const unlisten = hasNative()
+			? native().onMenu("close-tab", closeActiveTab)
 			: undefined;
 
 		return () => {
 			window.removeEventListener("keydown", handleKeyDown);
-			unlisten?.then((stop) => stop());
+			unlisten?.();
 		};
 	}, [
 		appViewActive,

@@ -87,9 +87,9 @@ export type RestartHelperParams = {
 	readonly brewPath: string;
 	readonly appPath: string;
 	/**
-	 * The sidecar's own `process.ppid` — Tauri's shell plugin spawns the
-	 * sidecar as a direct child of the app, so the app's pid is always the
-	 * sidecar's parent. Logged by the caller (`updater/service.ts`) so this
+	 * The sidecar's own `process.ppid` — the Electron main process spawns
+	 * the sidecar with `child_process.spawn`, so it is a direct child of the app
+	 * and the app's pid is always the sidecar's parent. Logged by the caller (`updater/service.ts`) so this
 	 * assumption is debuggable if it ever stops holding.
 	 */
 	readonly appPid: number;

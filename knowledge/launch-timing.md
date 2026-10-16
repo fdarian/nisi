@@ -54,7 +54,7 @@ Use `--cold` to measure startup of the app and sidecar, including CLI app launch
 bun scripts/measure-launch --cwd /absolute/path/to/pr-worktree --cold
 ```
 
-`--cold` uses `src-tauri/target/release/bundle/macos/nisi.app`. It prepares the build, streams any
+`--cold` uses `release/mac-arm64/nisi.app` (electron-builder's output under `apps/desktop`). It prepares the build, streams any
 build output, stops only that exact bundle's app and sidecar
 executables, and waits for them to exit. Its gitignored `.data/measure-launch/data/` self-initializes
 on the first run. The CLI launches a fresh app instance with that data dir, so `cli.app.launch.*`
@@ -87,17 +87,17 @@ identify the build commit and any uncommitted content hash. A source change duri
 fails rather than stamping an inconsistent artifact.
 
 CLI measurements use the shipped compiled artifact, not `bun packages/cli/src/index.ts`:
-managed modes use `nisi.app/Contents/MacOS/nisi-cli`, produced by the app's `beforeBuildCommand`
+managed modes use `nisi.app/Contents/MacOS/nisi-cli`, produced by `build:cli` inside `bun run build`
 and covered by the app stamp. Unmanaged warm mode builds only the CLI with the same
 `build-binary.ts` compile/sign helper and reuses `.data/measure-launch/cli/nisi` with its own
 `nisi.build-stamp.json`. Its content scope covers CLI/transitive workspace packages, dependency
-lock/config/patches, and the binary builder, excluding Markdown and tests, not desktop UI or Rust.
+lock/config/patches, and the binary builder, excluding Markdown and tests, not desktop UI or the Electron shell.
 The report names the compiled binary and its commit/content hash. Deep-link reports say `CLI: n/a`.
 
 Managed instances opt into `NISI_MEASUREMENT_INSTANCE=1` (renamed from `NISI_MOCK_KEYCHAIN`),
-forwarded by the CLI through `open --env` and inherited by Rust's sidecar subprocess.
-The Rust runtime uses CEF's mock secret storage (`--use-mock-keychain`) to avoid macOS keychain
-prompts. The dedicated opt-in accepts no arbitrary CEF switches; unset production/dev behavior
+forwarded by the CLI through `open --env` and inherited by the sidecar the Electron main process spawns.
+The main process appends Chromium's `use-mock-keychain` switch (`electron/measurement.ts`) to avoid macOS keychain
+prompts. The dedicated opt-in accepts no arbitrary Chromium switches; unset production/dev behavior
 is unchanged. Mock storage uses a public encryption constant, so keep it confined to isolated
 measurement data, never production credentials. Confirm prompt absence on the actual Mac;
 trace completion alone is not visual verification of that.
@@ -117,17 +117,17 @@ the existing `pullRequests.recordRepoPath` mapping before injection, matching a 
 mapped the repository. A traced `needs-repo-path` fails loudly before a folder picker can appear.
 
 No `nisi://` URL is ever handed to the OS. The managed instance's authenticated, environment-gated
-diagnostics RPC injects into the same frontend queue as plugin URLs; links retain their trace ID
+diagnostics RPC injects into the same frontend queue as OS-delivered `nisi://` URLs; links retain their trace ID
 and replay on event-stream reconnect until acknowledged. Everything from queue dequeue through
 `pullRequests.open`, mapping, worktree/session resolution and real paint is the production path.
-`NISI_MEASUREMENT_INSTANCE=1` gates both injection and CEF mock keychain; the old variable no
+`NISI_MEASUREMENT_INSTANCE=1` gates both injection and the mock keychain; the old variable no
 longer enables either. Production and ordinary dev instances reject injection.
 
 Warm/new-PR offsets start at **frontend deep-link receipt**, excluding OS-to-app URL delivery,
-the native plugin hop, and the injection RPC transport before receipt. Cold offsets start at
+the main-process hop, and the injection RPC transport before receipt. Cold offsets start at
 the explicit bundle launch (without the CLI), including startup and mapping preparation. Cold
-injection is delivered after the events stream connects, slightly later than the native plugin's
-startup `getCurrent()` path. Reports state these boundaries; activation ack and pending-panel
+injection is delivered after the events stream connects, slightly later than the
+`takePendingDeepLinks` startup path. Reports state these boundaries; activation ack and pending-panel
 milestones are N/A because this flow has neither CLI open requests nor their pending panel.
 
 PR worktrees follow the normal app policy: reuse an existing PR-head/nisi checkout; otherwise
@@ -171,26 +171,25 @@ later warm measurements of the same process do not contain boot milestones.
 `not observed`, not zero. The script waits up to 60 seconds; a timeout is an incomplete measurement.
 Managed instances disable Chromium's occluded-window backgrounding, renderer backgrounding, and
 background timer throttling through three fixed switches gated by `NISI_MEASUREMENT_INSTANCE`.
-At native setup, CEF's actual global command line is checked with `has_switch`; missing switches
-fail startup. Successful checks write `<data dir>/measurement-cef-switches.json` as evidence.
+Before the window opens, `app.commandLine.hasSwitch` confirms each switch (`verifyMeasurementSwitches`); missing switches
+fail startup. Successful checks write `<data dir>/measurement-chromium-switches.json` as evidence.
 Managed measurements continue through hidden intervals and report those intervals, including for
 deep links. A **minimized window may still stall**, as may screen locking; never treat such a
 timeout as render latency. Unmanaged instances remain unchanged and stop if visibility is lost.
 
 Managed launches use `open -n -g` with `NISI_MEASUREMENT_INSTANCE=1`. Native activation still
-unminimizes and reveals the window and acknowledges afterward, but does not focus or raise it.
-On macOS this uses AppKit `orderBack`, not Tauri `show()` (which makes the window key). The same
-activation policy applies to plugin deep links; injection itself never requests native focus.
-Managed startup also disables CEF event-loop activation with the vendored runtime's
-`Cef::activate_ignoring_other_apps(false)` builder option, alongside initial window `focus=false`.
-Production and ordinary dev activation remain unchanged.
+unminimizes and reveals the window and acknowledges afterward, but does not focus or raise it:
+`activateMainWindow` (`electron/window-activation.ts`) calls `showInactive()` rather than
+`show()`/`focus()`/`app.focus({ steal: true })`, and the main window is created hidden and shown
+inactive on `ready-to-show`. The same activation policy applies to OS-delivered deep links; injection
+itself never requests native focus. Production and ordinary dev activation remain unchanged.
 Verify by sampling `lsappinfo front` before, during and after, without driving the UI: the
 measurement instance must never become frontmost, including at startup and while real paint marks
 arrive for opens into the running instance. Hidden intervals remain part of the report.
 
 # Baseline — 2026-10-04
 
-Single native-only run on launch-trace branch revision `5614d52`, **dev sandbox, warm app, PR #87**
+Single native-only run, taken on the Tauri/CEF shell, on launch-trace branch revision `5614d52`, **dev sandbox, warm app, PR #87**
 (`fdarian/nisi`, Version Packages). The browser frontend was closed; Vite's connected frontend was
 the native `nisi Helper`. This is a reference measurement, not a repeated-trial budget.
 
@@ -212,7 +211,7 @@ the resolved list took another **0.7s**; from list to first diff took another **
 
 - **Baseline scope.** The reference above measures a warm native dev app, not process startup or
   an installed production build. `--cold` targets a checkout-local release bundle, not production.
-- **No Rust-side launch marks.** Activation acknowledgment stands in for window shown. Frontend
+- **No main-process launch marks.** Activation acknowledgment stands in for window shown. Frontend
   paint marks are animation-frame/DOM proxies, not compositor presentation measurements.
 - **One unreproduced native diff-worker timeout.** A native run logged
   `WorkerPoolManager: worker initialization timed out after 10000ms`. Native comparisons on

@@ -70,7 +70,8 @@ touching, not a guess.
 
 # Sticky header flicker in WKWebView — two candidates still unconfirmed
 
-The sticky file header visibly flickers while scrolling, in WKWebView specifically. One of three
+The sticky file header visibly flickered while scrolling in WKWebView, as reported against an earlier shell; the
+Electron shell renders with Chromium, and whether the flicker survives there is unchecked. One of three
 candidates is now confirmed and fixed; the other two remain untested.
 
 **Confirmed and fixed**: `CodeView.applyStickyPositioning` drew a fresh `Math.random()` offset on
@@ -84,7 +85,7 @@ activates only past `SCROLL_REBASE_THRESHOLD` (11,000,000px, `CodeView.js:114-11
 nisi run ~400,000px of scroll height, so the rebasing path this was meant to mask never engages,
 while the jitter itself was paid on every render regardless. Removed in
 `patches/@pierre%2Fdiffs@1.5.1.patch`. Verified fixed in the in-app Chromium preview pane, **not**
-in the production Tauri/WKWebView shell — the WKWebView-specific claim in this section's title is
+in the WKWebView it was reported in — the WKWebView-specific claim in this section's title is
 still unconfirmed for this candidate.
 
 **Still untested**: the `SlotPortals` portal churn described above, and our own `clip-path` on

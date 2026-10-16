@@ -27,7 +27,7 @@ export const POLL_INTERVAL_MS = 300;
 /**
  * How long to wait for a freshly-launched app to boot its sidecar before
  * giving up. A compiled release app launches in low single-digit seconds, so
- * 15s has real headroom — overridable for a slow machine (or a `tauri dev`
+ * 15s has real headroom — overridable for a slow machine (or a `bun dev`
  * cold boot, which is far slower than the compiled release app this is tuned
  * for).
  */
@@ -67,10 +67,8 @@ export const isOwnTimeout = (error: unknown): boolean =>
 
 /**
  * A missing or mid-write `sidecar.json` is worth one more poll, not a hard
- * failure — never a fatal error the way Rust's `wait_for_sidecar_json`
- * treats a malformed (as opposed to missing) file; this CLI has no
- * equivalent short-circuit, since it's fine to just wait out `dataDir`'s
- * next poll either way. deskkit's `readSidecarJson` covers both cases the
+ * failure, same as the Electron main process's `waitForSidecarJson`
+ * (`apps/desktop/electron/backend.ts`). deskkit's `readSidecarJson` covers both cases the
  * same way already (`undefined` for "not there" and for "read but didn't
  * parse, even after its own short retry against the create-then-write
  * window"), so this only adds the debug logging `attempt` below relies on.

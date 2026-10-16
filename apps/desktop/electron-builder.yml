@@ -1,0 +1,33 @@
+appId: com.nisi.desktop
+productName: nisi
+npmRebuild: false
+directories:
+  output: release
+# main.ts and preload.ts are bundled with bun and the renderer is Vite output, so the asar needs
+# no node_modules. The sidecar and CLI are standalone compiled binaries shipped via extraFiles.
+files:
+  - package.json
+  - dist/**
+  - dist-electron/**
+  - "!**/*.map"
+  - "!node_modules"
+extraFiles:
+  - from: binaries
+    to: MacOS
+    filter:
+      - sidecar
+      - nisi-cli
+protocols:
+  - name: nisi
+    schemes:
+      - nisi
+mac:
+  target:
+    - target: dmg
+      arch: arm64
+  icon: build/icon.icns
+  identity: "-"
+  hardenedRuntime: true
+  gatekeeperAssess: false
+  entitlements: build/entitlements.plist
+  entitlementsInherit: build/entitlements.plist

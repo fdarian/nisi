@@ -39,7 +39,7 @@ the wire shape this grammar maps to.
   answered. Always the same POST either way; `target` just rides along, uninterpreted by this
   module. Bringing the window forward is not this module's job once a session already exists: the
   app that received the POST focuses its native window via the sidecar's replayable activation
-  stream (`apps/desktop/src-tauri/src/activation.rs`), before GitHub resolution finishes.
+  stream (`apps/desktop/electron/activation.ts`), before GitHub resolution finishes.
   This identifies the dev sandbox or production instance that actually answered.
 - `src/guide/` — `nisi guide check|validate|render`, the authoring commands for `.nisi/guide` (its authoring skill is
   `skills/guide/SKILL.md`, printed by `nisi skills get guide`); each resolves the git toplevel of the cwd. `check.ts` runs in the CLI alone and

@@ -1,6 +1,5 @@
 "use client";
 
-import { exit } from "@tauri-apps/plugin-process";
 import { cn } from "cn";
 import { DownloadIcon, RotateCcwIcon } from "lucide-react";
 import type React from "react";
@@ -9,6 +8,7 @@ import { Button } from "#/components/ui/button";
 import { Spinner } from "#/components/ui/spinner";
 import { toastManager } from "#/components/ui/toast";
 import type { SidecarQueryUtils } from "#/infra/backend-context";
+import { native } from "#/infra/native";
 import {
 	type UpdateState,
 	useDownloadUpdate,
@@ -116,7 +116,7 @@ export function UpdatePill({
 
 	const handleRestartClick = useCallback(() => {
 		restart()
-			.then(() => exit(0))
+			.then(() => native().exit())
 			.catch((error: unknown) => {
 				toastManager.add({
 					description: error instanceof Error ? error.message : String(error),

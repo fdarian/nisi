@@ -1,22 +1,9 @@
-import { invoke, isTauri } from "@tauri-apps/api/core";
+import { native } from "#/infra/native";
 
-export type NotificationPermission =
-	| "granted"
-	| "denied"
-	| "not_determined"
-	| "unsupported";
-
-export async function notificationPermission(): Promise<NotificationPermission> {
-	return isTauri() ? invoke("notification_permission") : "unsupported";
-}
-
-export async function requestNotificationPermission(): Promise<NotificationPermission> {
-	return isTauri() ? invoke("request_notification_permission") : "unsupported";
-}
-
-export function sendOsNotification(message: {
+/** `async` so `native()` throwing outside the app becomes a rejection callers can `.catch`. */
+export async function sendOsNotification(message: {
 	title: string;
 	body: string;
 }): Promise<void> {
-	return invoke("send_notification", message);
+	return native().sendNotification(message);
 }

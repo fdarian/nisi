@@ -1,9 +1,9 @@
-import { openUrl } from "@tauri-apps/plugin-opener";
 import { createContext, useContext, useEffect, useState } from "react";
 import { toastManager } from "#/components/ui/toast";
 import type { Session } from "#/features/pull-request/data/pr-data";
 import type { CiCheck } from "#/features/pull-request/header/ci-status";
 import type { SidecarQueryUtils } from "#/infra/backend-context";
+import { native } from "#/infra/native";
 import { CiLogDialog } from "./ci-log-dialog";
 
 const OpenCiCheck = createContext<((check: CiCheck) => void) | null>(null);
@@ -19,13 +19,15 @@ export function useOpenCiCheck() {
 					type: "error",
 				});
 		} else if (check.detailsUrl !== undefined) {
-			void openUrl(check.detailsUrl).catch((error: unknown) =>
-				toastManager.add({
-					title: "Couldn't open check",
-					description: String(error),
-					type: "error",
-				}),
-			);
+			void native()
+				.openUrl(check.detailsUrl)
+				.catch((error: unknown) =>
+					toastManager.add({
+						title: "Couldn't open check",
+						description: String(error),
+						type: "error",
+					}),
+				);
 		}
 	};
 }

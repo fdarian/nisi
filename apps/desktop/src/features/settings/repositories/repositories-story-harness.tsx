@@ -8,9 +8,9 @@ import {
 	RouterProvider,
 	useParams,
 } from "@tanstack/react-router";
-import { clearMocks, mockIPC } from "@tauri-apps/api/mocks";
 import { useMemo } from "react";
 import { BackendContext } from "#/infra/backend-context";
+import type { NativeApi } from "#/infra/native";
 import {
 	createMockSidecarClient,
 	type MockOrpcData,
@@ -21,28 +21,37 @@ import { RepositoryDetailPage } from "./repository-detail-page";
 
 export const STORY_HOME_DIR = "/Users/farrel";
 
-/**
- * Stubs the Tauri calls these pages make (`homeDir`, `pick_folder`,
- * `revealItemsInDir`) and marks the webview as Tauri so `useHomeDir` runs.
- * Use as a story `beforeEach`; the returned cleanup restores the globals so
- * other stories keep seeing a plain browser.
- */
-export function stubTauriForRepositories(): () => void {
-	const tauriGlobal = globalThis as { isTauri?: boolean };
-	tauriGlobal.isTauri = true;
-	mockIPC((command) => {
-		switch (command) {
-			case "plugin:path|resolve_directory":
-				return STORY_HOME_DIR;
-			case "pick_folder":
-				return `${STORY_HOME_DIR}/code/picked/repository`;
-			default:
-				return undefined;
-		}
-	});
+function unstubbed(method: string): () => never {
 	return () => {
-		clearMocks();
-		delete tauriGlobal.isTauri;
+		throw new Error(`${method} is not stubbed in this story`);
+	};
+}
+
+const REPOSITORIES_NATIVE_STUB: NativeApi = {
+	getBackend: unstubbed("getBackend"),
+	listAvailableEditors: unstubbed("listAvailableEditors"),
+	openInEditor: unstubbed("openInEditor"),
+	pickFolder: async () => `${STORY_HOME_DIR}/code/picked/repository`,
+	sendNotification: unstubbed("sendNotification"),
+	openUrl: unstubbed("openUrl"),
+	revealInFinder: async () => undefined,
+	homeDir: async () => STORY_HOME_DIR,
+	exit: unstubbed("exit"),
+	closeWindow: unstubbed("closeWindow"),
+	onMenu: unstubbed("onMenu"),
+	takePendingDeepLinks: unstubbed("takePendingDeepLinks"),
+	onDeepLink: unstubbed("onDeepLink"),
+};
+
+/**
+ * Stubs the native bridge these pages call (`homeDir`, `pickFolder`,
+ * `revealInFinder`) so `useHomeDir` runs. Use as a story `beforeEach`; the
+ * returned cleanup removes it so other stories keep seeing a plain browser.
+ */
+export function stubNativeForRepositories(): () => void {
+	window.nisi = REPOSITORIES_NATIVE_STUB;
+	return () => {
+		delete window.nisi;
 	};
 }
 

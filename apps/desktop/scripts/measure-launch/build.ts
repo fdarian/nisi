@@ -102,10 +102,6 @@ export const ensureBuild = (
 		const build = yield* Effect.try(() =>
 			Bun.spawn([process.execPath, "run", "build"], {
 				cwd: desktopDir,
-				env: {
-					...process.env,
-					CARGO_TARGET_DIR: join(desktopDir, "src-tauri/target"),
-				},
 				stdout: 2,
 				stderr: "inherit",
 			}),

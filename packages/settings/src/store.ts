@@ -31,7 +31,7 @@ export type Settings = {
 	readonly diffStyleMode: DiffStyleMode;
 	/**
 	 * Scheme string of the user's preferred editor (`vscode`/`cursor`/`zed`/
-	 * `windsurf` — see `apps/desktop/src-tauri/src/editors.rs`'s
+	 * `windsurf` — see `apps/desktop/electron/editors.ts`'s
 	 * `CANDIDATE_EDITORS`), or `null` when never chosen. Loose `string`, not a
 	 * literal union — this package stays independent of the frontend's/Rust's
 	 * candidate list, same reasoning as `enabledHarnesses` above.

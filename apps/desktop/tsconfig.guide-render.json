@@ -12,8 +12,10 @@
 	},
 	"include": ["src"],
 	// A composite project must list every file it imports, and `include` skips dot
-	// directories, so the Storybook helpers that `src/**/*.stories.tsx` import go here.
+	// directories, so the Storybook helpers that `src/**/*.stories.tsx` import go here,
+	// along with the Electron bridge contract `src/infra/native.ts` imports its types from.
 	"files": [
+		"electron/native-api.ts",
 		".storybook/mock-orpc.ts",
 		".storybook/decorators.tsx",
 		".storybook/preview.tsx"

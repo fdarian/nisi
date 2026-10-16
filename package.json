@@ -4,8 +4,7 @@
 	"license": "Apache-2.0",
 	"scripts": {
 		"format": "biome check --write",
-		"sync-version": "bun scripts/sync-version.ts",
-		"ci:version": "changeset version && bun run sync-version"
+		"ci:version": "changeset version"
 	},
 	"devDependencies": {
 		"@biomejs/biome": "2.4.15",
