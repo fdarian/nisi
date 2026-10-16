@@ -174,14 +174,19 @@ const dev = Command.make(
 			// Electron loads `http://localhost:${VITE_PORT}` the moment its window
 			// opens, so it must not start before vite is accepting connections.
 			const electronFrontend = Effect.gen(function* () {
-				const build = yield* runManagedSubprocess(
-					"bun",
-					["run", "build:electron"],
-					{ env },
-				).pipe(Effect.scoped);
-				if (build !== 0) {
+				// Not `runManagedSubprocess`: it would log a kill failure for this
+				// one-off after it has already exited.
+				const buildExit = yield* Effect.tryPromise(
+					() =>
+						Bun.spawn(["bun", "run", "build:electron"], {
+							cwd: appDir,
+							env: { ...process.env, ...env },
+							stdio: ["inherit", "inherit", "inherit"],
+						}).exited,
+				);
+				if (buildExit !== 0) {
 					return yield* Effect.fail(
-						new Error(`build:electron exited with code ${build}`),
+						new Error(`build:electron exited with code ${buildExit}`),
 					);
 				}
 				return yield* Effect.raceAll([

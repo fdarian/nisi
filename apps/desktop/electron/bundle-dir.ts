@@ -1,16 +1,14 @@
 import { dirname } from "node:path";
 
 /**
- * Directory holding the built `main.js`. Not `__dirname`: `bun build` inlines
- * it as the source directory's absolute path at build time, which points at
- * the build machine's checkout once the app is packaged.
+ * Directory holding the built `main.js` and `preload.js`. Not `__dirname`/
+ * `__filename`/`module.filename`: `bun build` replaces those with the source
+ * file's build-time path (it even strips `module.filename`), which points at
+ * the build machine's checkout once the app is packaged. And not
+ * `require.main`: unpackaged Electron reports its default-app bootstrap there
+ * (`filename === "electron"`). `require.resolve` is left alone by bun and asks
+ * the real module loader, so it is right in dev and inside `app.asar`.
  */
 export function bundleDir(): string {
-	const main = require.main;
-	if (main === undefined) {
-		throw new Error(
-			"require.main is undefined; main.js was not the entry point",
-		);
-	}
-	return dirname(main.filename);
+	return dirname(require.resolve("./preload.js"));
 }
