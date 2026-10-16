@@ -8,7 +8,13 @@ import { dirname } from "node:path";
  * `require.main`: unpackaged Electron reports its default-app bootstrap there
  * (`filename === "electron"`). `require.resolve` is left alone by bun and asks
  * the real module loader, so it is right in dev and inside `app.asar`.
+ *
+ * Neither a literal specifier works: bun resolves a missing one at build time
+ * and fails, and resolving `./preload.js` made it bundle `preload.ts` into
+ * `main.js`. Hence the indirection through a variable. `build:electron` writes
+ * `dist-electron/package.json`, so that file is always there at runtime.
  */
 export function bundleDir(): string {
-	return dirname(require.resolve("./preload.js"));
+	const sibling = ["./", "package.json"].join("");
+	return dirname(require.resolve(sibling));
 }
