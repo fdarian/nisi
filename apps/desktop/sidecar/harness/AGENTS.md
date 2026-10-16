@@ -35,7 +35,7 @@ against a review session imports from this directory rather than reaching into a
 - `harnesses.ts` — `listHarnesses` (the registry `walkthrough.harnesses`/`walkthrough.refreshHarnesses`
   return — always all four, each carrying an `enabled` flag against the caller-supplied
   `enabledHarnesses` set and live `available`/`binaryPath` from `availability.ts`; no model probe
-  runs on this path). Also `createHarnessAdapter` (harness/model choice → a real `HarnessV1` adapter).
+  runs on this path). Also `createHarnessAgentTarget` (harness/model choice → the `HarnessV1` adapter plus the `model` for `HarnessAgent`).
 - `models.ts` — `getHarnessModels`, the per-harness `walkthrough.models`/`refreshModels` path.
   Checks binary presence first, then calls `HarnessModelCache` with the corresponding discovery
   function. A missing CLI returns unavailable even if a previous model list is cached.
@@ -65,7 +65,7 @@ against a review session imports from this directory rather than reaching into a
 
 - **Pi discovery and Pi execution must read the same agent directory.** `discoverPiModels` uses
   `ModelRuntime.create()`'s defaults (which resolve under Pi's own `getAgentDir()`), and
-  `createHarnessAdapter` passes that same `getAgentDir()` to `createPi`. Omit it and
+  `createHarnessAgentTarget` passes that same `getAgentDir()` to `createPi`. Omit it and
   `@ai-sdk/harness-pi` mints a private agent dir with an empty `auth.json`, so every model
   discovery just listed as available fails at generate time with "No API key found for the
   selected model."

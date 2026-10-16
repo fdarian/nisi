@@ -17,7 +17,7 @@
 	},
 	"dependencies": {
 		"@effect/platform-bun": "catalog:",
-		"@orpc/client": "2.0.0-beta.21",
+		"@orpc/client": "2.0.0-beta.44",
 		"@repo/db": "workspace:*",
 		"@repo/git": "workspace:*",
 		"@repo/logging": "workspace:*",
@@ -27,7 +27,7 @@
 	},
 	"devDependencies": {
 		"@total-typescript/tsconfig": "1.0.4",
-		"@types/bun": "1.3.14",
+		"@types/bun": "1.4.3",
 		"typescript": "7.0.2"
 	}
 }

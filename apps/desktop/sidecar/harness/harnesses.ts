@@ -47,20 +47,33 @@ const splitProviderModel = (
 		: { provider: id.slice(0, slash), model: id.slice(slash + 1) };
 };
 
-/** Builds the real `HarnessV1` adapter instance for a harness/model choice — the transport `HarnessAgent` drives. */
-export const createHarnessAdapter = (
+/**
+ * What `HarnessAgent` needs to drive a harness/model choice: the `HarnessV1`
+ * adapter plus the `model` for the agent's own `model` setting — adapters no
+ * longer take the model themselves, only opencode's `provider` half of it.
+ */
+export type HarnessAgentTarget = {
+	readonly harness: HarnessV1;
+	readonly model: string | undefined;
+};
+
+export const createHarnessAgentTarget = (
 	harness: HarnessId,
 	model: string | undefined,
-): HarnessV1 => {
+): HarnessAgentTarget => {
 	switch (harness) {
 		case "claude-code":
-			return createClaudeCode(model === undefined ? {} : { model });
+			return { harness: createClaudeCode(), model };
 		case "codex":
-			return createCodex(model === undefined ? {} : { model });
+			return { harness: createCodex(), model };
 		case "opencode": {
-			if (model === undefined) return createOpenCode();
-			const { provider, model: modelId } = splitProviderModel(model);
-			return createOpenCode({ model: modelId, provider });
+			if (model === undefined)
+				return { harness: createOpenCode(), model: undefined };
+			const split = splitProviderModel(model);
+			return {
+				harness: createOpenCode({ provider: split.provider }),
+				model: split.model,
+			};
 		}
 		case "pi": {
 			// `agentDir` is what makes the harness read the *user's* Pi
@@ -72,13 +85,7 @@ export const createHarnessAdapter = (
 			// `discoverPiModels` had just listed it as available, because
 			// discovery reads Pi's real store and execution read a different,
 			// empty one. Same directory for both is what keeps that list honest.
-			const agentDir = getAgentDir();
-			if (model === undefined) return createPi({ agentDir });
-			const { provider, model: modelId } = splitProviderModel(model);
-			return createPi({
-				agentDir,
-				model: provider === undefined ? modelId : `${provider}/${modelId}`,
-			});
+			return { harness: createPi({ agentDir: getAgentDir() }), model };
 		}
 	}
 };

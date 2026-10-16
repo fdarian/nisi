@@ -19,7 +19,7 @@ import {
 import { registerTelemetry } from "ai";
 import type { Context } from "effect";
 import { Cause, Effect, Result, Schema } from "effect";
-import { createHarnessAdapter } from "../harness/harnesses.ts";
+import { createHarnessAgentTarget } from "../harness/harnesses.ts";
 import { FILE_MUTATING_BUILTINS } from "../harness/inactive-tools.ts";
 import { resolveSandboxSettings } from "../harness/sandbox.ts";
 import { describeStreamError } from "../harness/stream-errors.ts";
@@ -177,7 +177,7 @@ const startFreshSession = async (
 	const toolNames = WALKTHROUGH_TOOL_NAMES;
 	const walkthroughTools = createWalkthroughTools(buffer, toolNames);
 	const agent = new HarnessAgent({
-		harness: createHarnessAdapter(input.harness, input.model),
+		...createHarnessAgentTarget(input.harness, input.model),
 		sandbox: sandbox.provider,
 		sandboxConfig: { workDir: sandbox.workDir },
 		tools: {
