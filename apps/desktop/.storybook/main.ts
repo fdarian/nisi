@@ -33,8 +33,7 @@ async function withoutReactPlugin(
  * come from there, and the reference pane's diff view (a real Web Worker)
  * silently fails to paint without the last one. `mergeConfig` keeps
  * Storybook's own `plugins`/`server` additions rather than letting the
- * app config's (irrelevant here — Tauri dev server port, `src-tauri` watch
- * ignore) clobber them.
+ * app config's (irrelevant here — the dev server port and watch ignore list) clobber them.
  *
  * Loaded via Vite's own `loadConfigFromFile` rather than a bare
  * `import("../vite.config.ts")` — a bare dynamic import runs the file as
@@ -72,7 +71,7 @@ const config: StorybookConfig = {
 			// scoped to the workspace root — without also merging in the app
 			// config's pnpm-global-store addition (see that file's own comment),
 			// `@pierre/diffs`' worker script 403s here exactly the way it does in
-			// a cold `bun dev`/`tauri dev`, and the reference pane's diff view
+			// a cold `bun dev`, and the reference pane's diff view
 			// never paints.
 			server: { fs: { allow: loaded.config.server?.fs?.allow } },
 		});

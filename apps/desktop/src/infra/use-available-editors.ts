@@ -1,8 +1,8 @@
-import { invoke } from "@tauri-apps/api/core";
 import { useState } from "react";
 import { toastManager } from "#/components/ui/toast";
+import { native } from "#/infra/native";
 
-/** An editor with a URL scheme registered in macOS Launch Services — see `editors.rs`'s `list_available_editors`. */
+/** An editor with a URL scheme registered in macOS Launch Services — see `electron/editors.ts`. */
 export type EditorInfo = {
 	id: string;
 	name: string;
@@ -26,7 +26,8 @@ export function useAvailableEditors(): {
 	const [editors, setEditors] = useState<EditorInfo[]>([]);
 
 	const loadEditors = (): Promise<EditorInfo[]> =>
-		invoke<EditorInfo[]>("list_available_editors")
+		native()
+			.listAvailableEditors()
 			.then((result) => {
 				setEditors(result);
 				return result;
@@ -46,10 +47,10 @@ export function useAvailableEditors(): {
 /**
  * Opens `path` (a file or directory) in the editor registered for `scheme`,
  * alongside `repoRoot` — the repo/PR's root, always passed even when `path`
- * already points at that same root. Only Zed's backing `open_in_editor`
- * branch (`editors/zed.rs`) uses `repoRoot`; every other editor still opens
+ * already points at that same root. Only Zed's branch
+ * (`electron/editors.ts`) uses `repoRoot`; every other editor still opens
  * via the `<scheme>://file/<path>` URL and ignores it. Surfaces a failed
- * `open_in_editor` invoke as a toast rather than swallowing it, matching how
+ * `openInEditor` call as a toast rather than swallowing it, matching how
  * failed refetches are surfaced elsewhere (`use-refetch-toasts.ts`).
  */
 export function openInEditor(
@@ -58,13 +59,13 @@ export function openInEditor(
 	repoRoot: string,
 	path: string,
 ): void {
-	invoke("open_in_editor", { scheme, repoRoot, path }).catch(
-		(error: unknown) => {
+	native()
+		.openInEditor({ scheme, repoRoot, path })
+		.catch((error: unknown) => {
 			toastManager.add({
 				title: `Failed to open in ${editorName}`,
 				description: error instanceof Error ? error.message : String(error),
 				type: "error",
 			});
-		},
-	);
+		});
 }

@@ -9,13 +9,9 @@ import { agentationSourceLocation } from "agentation/vite";
 import { defineConfig, searchForWorkspaceRoot } from "vite";
 
 // @ts-expect-error process is a nodejs global
-const host = process.env.TAURI_DEV_HOST;
-// @ts-expect-error process is a nodejs global
 const port = process.env.VITE_PORT ? Number(process.env.VITE_PORT) : 1420;
 // `scripts/dev.ts --host` — binds the server to every interface instead of
-// localhost-only. Distinct from `host` above: `TAURI_DEV_HOST` points the HMR
-// *client* at a specific LAN address (Tauri mobile dev), this only widens
-// what the server binds to.
+// localhost-only.
 // @ts-expect-error process is a nodejs global
 const exposeHost = process.env.VITE_HOST === "true";
 
@@ -30,7 +26,7 @@ const exposeHost = process.env.VITE_HOST === "true";
  * worker is the visible casualty: `diff-code-view.tsx` builds its URL with
  * `new URL(..., import.meta.url)`, which resolves through the symlink to a
  * `/@fs/<store path>` request, and the refusal kills the whole diff pane with
- * "Worker error" on a cold dev server (`bun dev` and `tauri dev` included —
+ * "Worker error" on a cold dev server (`bun dev` included —
  * this is a dev-server check, not a browser one). `@fontsource-variable`'s
  * woff2 files go the same way.
  *
@@ -70,8 +66,7 @@ function resolveAppVersion(): string {
  * off the repo. No `"unknown"` fallback — a build that can't identify its
  * own commit should fail loudly instead of shipping a dialog that lies.
  *
- * `node:child_process`, not `Bun.spawnSync`: `tauri.conf.json`'s
- * `beforeDevCommand`/`beforeBuildCommand` run the `vite` binary through
+ * `node:child_process`, not `Bun.spawnSync`: the `vite` binary runs through
  * pnpm's `node_modules/.bin/vite` shim, which execs real `node` — `Bun` is
  * undefined in that process, so this config has to work under plain Node too.
  */
@@ -153,32 +148,19 @@ export default defineConfig(async (env) => ({
 		format: "es",
 	},
 
-	// Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`
-	//
-	// 1. prevent Vite from obscuring rust errors
-	clearScreen: false,
-	// 2. tauri expects a fixed port, fail if that port is not available
 	server: {
 		port,
+		// The Electron main process and the dev script both expect this exact port.
 		strictPort: true,
-		host: host || exposeHost || false,
+		host: exposeHost || false,
 		fs: {
 			allow: [
 				searchForWorkspaceRoot(import.meta.dirname),
 				...globalVirtualStoreRoots(),
 			],
 		},
-		hmr: host
-			? {
-					protocol: "ws",
-					host,
-					port: 1421,
-				}
-			: undefined,
 		watch: {
 			ignored: [
-				// 3. tell Vite to ignore watching `src-tauri`
-				"**/src-tauri/**",
 				// devsess's per-session data dirs (`AGENTS.md`'s "Dev/prod isolation")
 				// live under here, and a PR worktree (`@repo/git`'s
 				// `openPullRequestWorktree`) lands inside one of those — a full git

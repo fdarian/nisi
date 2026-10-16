@@ -1,7 +1,7 @@
 /**
  * The provider stack every story needs, matching the real app's
  * (`src/main.tsx`, `src/routes/__root.tsx`) minus `BackendProvider` — stories
- * never call `invoke("get_backend")`, they pass a `createMockOrpc(...)`
+ * never call `native().getBackend()`, they pass a `createMockOrpc(...)`
  * result straight to the component under test instead.
  *
  * The preview follows the OS `prefers-color-scheme` by default — the same

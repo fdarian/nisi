@@ -3,7 +3,6 @@ import { useScheduledMergeEvents } from "#/features/pull-request/data/pr-data";
 import { useSettings } from "#/features/settings/settings-data";
 import type { SidecarQueryUtils } from "#/infra/backend-context";
 import { sendOsNotification } from "#/infra/notifications/os-notification";
-import { useNotificationPermission } from "#/infra/notifications/use-notification-permission";
 import { useSidecarEvent } from "#/infra/sidecar-events";
 import { useWindowFocused } from "#/infra/use-window-focused";
 import { scheduledMergeNotificationChannel } from "./scheduled-merge-notification-channel";
@@ -14,7 +13,6 @@ export function ScheduledMergeNotifications(props: {
 	useScheduledMergeEvents(props.orpc);
 	const focused = useWindowFocused();
 	const query = useSettings(props.orpc);
-	const permission = useNotificationPermission();
 	useSidecarEvent((event) => {
 		if (event.type !== "scheduledMergeSettled") return;
 		const pr = `${event.owner}/${event.repo}#${event.number}`;
@@ -29,7 +27,6 @@ export function ScheduledMergeNotifications(props: {
 			focused,
 			query.settings.notificationsEnabled,
 			query.settings.notifyScheduledMergeSettled,
-			permission.data,
 		);
 		const showToast = () =>
 			toastManager.add({

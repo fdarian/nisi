@@ -7,7 +7,7 @@ import { useAppViewActive } from "#/shell/app-view-context";
  * Cmd/Ctrl+J toggles the quick-chat popup for whatever PR tab is active;
  * Cmd/Ctrl+Shift+J always starts a new thread. Unclaimed by both the
  * frontend and the macOS menu accelerators registered in
- * `src-tauri/src/lib.rs` (only ⌘W/⌘⇧W), so the webview always sees the
+ * `electron/menu.ts` (only ⌘W/⌘⇧W), so the page always sees the
  * keydown. Fires regardless of focus, same as `use-settings-shortcut.ts` —
  * this is a real chord, not one of `use-key-bindings.ts`'s bare-key
  * bindings, so it isn't (and shouldn't be) suppressed while the chat

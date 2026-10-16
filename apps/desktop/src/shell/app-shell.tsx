@@ -137,10 +137,7 @@ function ShellFrame({
 	overlays,
 	render,
 	titleBar = (
-		<div
-			className={cn(TITLE_STRIP_HEIGHT_CLASS, "shrink-0")}
-			data-tauri-drag-region
-		/>
+		<div className={cn(TITLE_STRIP_HEIGHT_CLASS, "shrink-0 app-drag")} />
 	),
 }: {
 	children: React.ReactNode;
@@ -156,10 +153,7 @@ function ShellFrame({
 			children: (
 				<>
 					{titleBar}
-					<FramePanel
-						className={cn(INSET_PANE_CLASS, "my-0")}
-						data-tauri-drag-region="false"
-					>
+					<FramePanel className={cn(INSET_PANE_CLASS, "my-0 app-no-drag")}>
 						{children}
 					</FramePanel>
 					<div className="relative flex min-h-2 items-center">
@@ -462,7 +456,7 @@ function AppShellReady({
 						}
 					}}
 					value={selectedTabId}
-					data-tauri-drag-region="deep"
+					className="app-drag"
 				/>
 			}
 			titleBar={

@@ -16,7 +16,8 @@ export interface NativeApi {
 	openUrl(url: string): Promise<void>;
 	revealInFinder(path: string): Promise<void>;
 	homeDir(): Promise<string>;
-	exit(): Promise<void>; // app.exit(0); used by the update pill after restart()
+	/** `app.exit(0)`; used by the update pill after `restart()`. */
+	exit(): Promise<void>;
 	closeWindow(): void;
 	onMenu(event: MenuEvent, listener: () => void): () => void;
 	takePendingDeepLinks(): Promise<string[]>;

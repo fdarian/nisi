@@ -1,20 +1,20 @@
-import { invoke } from "@tauri-apps/api/core";
 import { frontendBootMark } from "./launch-trace";
+import { native } from "./native";
 
 type BackendInfo = {
 	port: number;
 	token: string;
-	/** Only set by the dev harness — see `devBackendOverride`. Rust's `get_backend` omits it, leaving `makeSidecarClient` on its loopback default. */
+	/** Only set by the dev harness — see `devBackendOverride`. the native `getBackend` omits it, leaving `makeSidecarClient` on its loopback default. */
 	host?: string;
 };
 
 /**
- * `invoke("get_backend")` only resolves inside the Tauri webview — a plain
- * `vite dev` tab has no IPC bridge and throws immediately, which makes it
+ * `native().getBackend()` only resolves inside the Electron shell — a plain
+ * `vite dev` tab has no `window.nisi` bridge and throws immediately, which makes it
  * impossible to open the app in a real browser for visual QA (devtools,
  * screen recording, extensions). When both env vars are set, this points the
- * frontend at an already-running sidecar instead of asking Rust for one.
- * `scripts/dev.ts` sets them in every dev mode, so the Tauri webview takes
+ * frontend at an already-running sidecar instead of asking the shell for one.
+ * `scripts/dev.ts` sets them in every dev mode, so the Electron window takes
  * this path in dev too.
  * `import.meta.env.DEV` makes the whole branch dead code in a packaged
  * build, so there's no path to it outside `vite dev` regardless of env
@@ -34,10 +34,9 @@ function devBackendOverride(): BackendInfo | undefined {
 	return { port: Number(port), token, host: window.location.hostname };
 }
 
-/** Invoke the Rust get_backend command to get sidecar connection info. Throws on failure. */
+/** Sidecar connection info. Throws on failure. */
 async function getBackend(): Promise<BackendInfo> {
-	const backend = await (devBackendOverride() ??
-		invoke<BackendInfo>("get_backend"));
+	const backend = await (devBackendOverride() ?? native().getBackend());
 	frontendBootMark("frontend.backend.resolved");
 	return backend;
 }

@@ -104,8 +104,7 @@ export function ChatDock({
 				animate={{
 					height: threads.length > 0 ? 36 : 0,
 				}}
-				className="mx-2 flex w-fit shrink-0 items-center gap-1.5 overflow-hidden overflow-x-auto px-2"
-				data-tauri-drag-region="false"
+				className="app-no-drag mx-2 flex w-fit shrink-0 items-center gap-1.5 overflow-hidden overflow-x-auto px-2"
 				initial={false}
 				transition={spring.slow}
 			>
