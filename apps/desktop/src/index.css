@@ -26,9 +26,17 @@
 	--spacing-diff-pane-inset: calc(var(--spacing) * 3);
 }
 
+/* One cycle for the whole fetching indicator — see `@keyframes dot-loader`. */
+:root {
+	--fetching-cycle: 2.4s;
+}
+
 @theme inline {
 	--animate-skeleton: skeleton 2s -1s infinite linear;
 	--animate-caret-blink: 1s ease-out infinite caret-blink;
+	--animate-dot-loader: dot-loader var(--fetching-cycle) linear infinite;
+	--animate-fetching-shimmer: fetching-shimmer var(--fetching-cycle) linear
+		infinite;
 	--animate-toast-success-odd: toast-success-odd 0.32s
 		cubic-bezier(0.5, 1, 0.89, 1);
 	--animate-toast-success-even: toast-success-even 0.32s
@@ -96,6 +104,33 @@
 	@keyframes skeleton {
 		to {
 			background-position: -200% 0;
+		}
+	}
+
+	/* The dots and the "Fetching" text share one cycle (`--fetching-cycle`): the
+	   dot band glides across the first 30% of it, the text band across the rest,
+	   each idle while the other runs. Keep the 30% in step with `SWEEP_STEP` in
+	   `dot-loader.tsx`. */
+	@keyframes dot-loader {
+		0%,
+		12.5%,
+		100% {
+			opacity: 0.18;
+		}
+
+		4% {
+			opacity: 1;
+		}
+	}
+
+	@keyframes fetching-shimmer {
+		0%,
+		30% {
+			background-position: 95% 0;
+		}
+
+		100% {
+			background-position: 5% 0;
 		}
 	}
 

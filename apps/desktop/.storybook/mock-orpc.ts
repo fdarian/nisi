@@ -132,6 +132,8 @@ function settleMockResult<T>(result: MockResult<T> | undefined): Promise<T> {
 export type MockOrpcData = {
 	files?: readonly FileChange[];
 	filesDelayMs?: number;
+	/** How many `pullRequests.search` calls resolve before every later one stays pending forever — omit for all of them to resolve. `0` keeps even the first search in flight; `1` gives one loaded result set that any refetch then leaves revalidating. */
+	pullRequestSearchSettleLimit?: number;
 	pullRequestSearchResults?: readonly PullRequestSearchResult[];
 	pullRequestRepositories?: readonly PullRequestRepository[];
 	/** `repositories.list`'s result. */
@@ -267,6 +269,7 @@ export function createMockSidecarClient(
 		request: data.scheduledMerge === undefined ? null : data.scheduledMerge,
 	};
 	const mergeStatusError = data.mergeStatusError;
+	let searchCalls = 0;
 	const stack = data.stack;
 	const checks = data.checks;
 	const approvedRuns = new Set<number>();
@@ -397,13 +400,20 @@ export function createMockSidecarClient(
 			ciJob: neverSettles,
 			rerunCiJob: neverSettles,
 			repositories: async () => data.pullRequestRepositories ?? [],
-			search: async (input) =>
-				(data.pullRequestSearchResults ?? []).filter(
+			search: async (input) => {
+				searchCalls += 1;
+				if (
+					data.pullRequestSearchSettleLimit !== undefined &&
+					searchCalls > data.pullRequestSearchSettleLimit
+				)
+					return neverSettles();
+				return (data.pullRequestSearchResults ?? []).filter(
 					(pr) =>
 						(input.repos.length === 0 ||
 							input.repos.includes(`${pr.owner}/${pr.repo}`)) &&
 						pr.title.toLowerCase().includes(input.query.toLowerCase()),
-				),
+				);
+			},
 			open: neverSettles,
 			recordRepoPath: async (input) => input,
 			repointOrigin: neverSettles,

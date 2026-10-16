@@ -2,6 +2,7 @@
 
 import { XIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { FetchingIndicator } from "#/components/fetching-indicator";
 import { Avatar, AvatarFallback, AvatarImage } from "#/components/ui/avatar";
 import { Badge } from "#/components/ui/badge";
 import {
@@ -108,6 +109,9 @@ export function OpenPullRequestPalette(
 	);
 	const results = search.results;
 	const searchErrorMessage = friendlySearchError(search.error);
+	// A pending debounce counts too: between the keystroke and the request
+	// firing, nothing else on screen says the palette noticed the typing.
+	const isLoading = search.isSearching || query !== debouncedQuery;
 	const recent = useSearchPullRequests(props.orpc, "", props.open, []);
 	const saved = usePullRequestRepositories(props.orpc, props.open);
 	const repositories = paletteRepositories(
@@ -164,6 +168,16 @@ export function OpenPullRequestPalette(
 			: searchErrorMessage !== null && results.length > 0
 				? searchErrorMessage
 				: null;
+
+	// First fetch with nothing to show yet: just the input and its "Fetching"
+	// indicator, rather than an empty list and footer that would pop in once
+	// results land. A pending open error still needs the footer to say so.
+	const collapsed =
+		!pickingRepository &&
+		isLoading &&
+		results.length === 0 &&
+		searchErrorMessage === null &&
+		footerMessage === null;
 
 	// The moved-repository dialog stands in for the palette rather than
 	// stacking on top of it; confirming re-opens the PR, whose `onOpened` above
@@ -293,6 +307,7 @@ export function OpenPullRequestPalette(
 											</div>
 										) : undefined
 									}
+									endContent={isLoading ? <FetchingIndicator /> : undefined}
 									onKeyDown={(event) => {
 										if (
 											event.key === "Backspace" &&
@@ -306,10 +321,14 @@ export function OpenPullRequestPalette(
 										}
 									}}
 								/>
-								<Separator />
-								<CommandEmpty>
-									{searchErrorMessage ?? "No pull requests found."}
-								</CommandEmpty>
+								{!collapsed && (
+									<>
+										<Separator />
+										<CommandEmpty>
+											{searchErrorMessage ?? "No pull requests found."}
+										</CommandEmpty>
+									</>
+								)}
 								<CommandList>
 									{(pr: PullRequestSearchResult) => (
 										<CommandItem
@@ -332,20 +351,22 @@ export function OpenPullRequestPalette(
 							</Command>
 						)}
 					</CommandPanel>
-					<CommandFooter>
-						<span className="flex items-center gap-1.5">
-							<Kbd>{pickingRepository ? "Esc" : "↵"}</Kbd>{" "}
-							{pickingRepository ? "Cancel" : "Open"}
-						</span>
-						{!pickingRepository && footerMessage !== null && (
-							<span className="text-destructive-foreground">
-								{footerMessage}
+					{!collapsed && (
+						<CommandFooter>
+							<span className="flex items-center gap-1.5">
+								<Kbd>{pickingRepository ? "Esc" : "↵"}</Kbd>{" "}
+								{pickingRepository ? "Cancel" : "Open"}
 							</span>
-						)}
-						<span className="ml-auto flex items-center gap-1.5">
-							<Kbd>⌘P</Kbd> Filter Project
-						</span>
-					</CommandFooter>
+							{!pickingRepository && footerMessage !== null && (
+								<span className="text-destructive-foreground">
+									{footerMessage}
+								</span>
+							)}
+							<span className="ml-auto flex items-center gap-1.5">
+								<Kbd>⌘P</Kbd> Filter Project
+							</span>
+						</CommandFooter>
+					)}
 				</CommandDialogPopup>
 			</CommandDialog>
 			<OriginMovedDialog prompt={openPr.originMoved} />
