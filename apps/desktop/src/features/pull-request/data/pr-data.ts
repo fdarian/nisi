@@ -1025,6 +1025,14 @@ export type PullRequestStack = {
 	entries: readonly PullRequestStackEntry[];
 };
 
+/** Mirrors `PullRequestStackSuggestion` (`packages/sidecar-api/src/pull-requests.ts`): open PRs that chain but aren't a GitHub stack. */
+export type PullRequestStackSuggestion = {
+	size: number;
+	baseRefName: string;
+	position: number;
+	entries: readonly PullRequestStackEntry[];
+};
+
 export type PullRequestMergeStatusParams = {
 	repoRoot: string;
 	owner: string;
@@ -1101,6 +1109,20 @@ export function usePullRequestStack(
 ): UseQueryResult<PullRequestStack | null> {
 	return useQuery(
 		orpc.pullRequests.stack.liveOptions({
+			input: params,
+			enabled,
+			retry: retryDisconnectedLiveQuery,
+		}),
+	);
+}
+
+export function usePullRequestStackSuggestion(
+	orpc: SidecarQueryUtils,
+	params: PullRequestStackParams,
+	enabled = true,
+): UseQueryResult<PullRequestStackSuggestion | null> {
+	return useQuery(
+		orpc.pullRequests.stackSuggestion.liveOptions({
 			input: params,
 			enabled,
 			retry: retryDisconnectedLiveQuery,

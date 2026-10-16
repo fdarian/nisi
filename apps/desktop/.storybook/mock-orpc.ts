@@ -34,6 +34,7 @@ import type {
 	PullRequestCheck,
 	PullRequestMergeStatus,
 	PullRequestStack,
+	PullRequestStackSuggestion,
 } from "#/features/pull-request/data/pr-data";
 import type {
 	PullRequestRepository,
@@ -172,6 +173,8 @@ export type MockOrpcData = {
 	mergeStatusError?: string;
 	/** `pullRequests.stack`'s result — omit to leave the mock pending forever. */
 	stack?: PullRequestStack | null;
+	/** `pullRequests.stackSuggestion`'s result — omit to leave the mock pending forever. */
+	stackSuggestion?: PullRequestStackSuggestion | null;
 	/** `pullRequests.checks`'s result — omit to leave the mock pending forever (`neverSettles`), same as `mergeStatus`. */
 	checks?: readonly PullRequestCheck[];
 	/** When set, `pullRequests.checks` rejects with this message instead of resolving. Takes priority over `checks` if both are set (they shouldn't be). */
@@ -271,6 +274,7 @@ export function createMockSidecarClient(
 	const mergeStatusError = data.mergeStatusError;
 	let searchCalls = 0;
 	const stack = data.stack;
+	const stackSuggestion = data.stackSuggestion;
 	const checks = data.checks;
 	const approvedRuns = new Set<number>();
 	const checksError = data.checksError;
@@ -429,8 +433,10 @@ export function createMockSidecarClient(
 				stack === undefined
 					? async () => neverIterator()
 					: async () => liveValue(stack),
-			// No fixture field yet; the frontend slice adds one alongside the UI.
-			stackSuggestion: async () => neverIterator(),
+			stackSuggestion:
+				stackSuggestion === undefined
+					? async () => neverIterator()
+					: async () => liveValue(stackSuggestion),
 			merge: async () => undefined,
 			scheduleMerge: async (input) => {
 				scheduledMergeState.request = { method: input.method };

@@ -9,6 +9,7 @@ import type { Meta, StoryObj } from "@storybook/react-vite";
 import type {
 	PullRequestMergeStatus,
 	PullRequestStack,
+	PullRequestStackSuggestion,
 	SessionTarget,
 } from "#/features/pull-request/data/pr-data";
 import { SidecarEventsProvider } from "#/infra/sidecar-events";
@@ -64,6 +65,13 @@ const STACK: PullRequestStack = {
 	],
 };
 
+const STACK_SUGGESTION: PullRequestStackSuggestion = {
+	size: STACK.size,
+	baseRefName: STACK.baseRefName,
+	position: STACK.position,
+	entries: STACK.entries,
+};
+
 const STORY_CLIENT = createMockSidecarClient();
 
 const meta: Meta<typeof PrHeader> = {
@@ -117,6 +125,18 @@ export const StackedPullRequest: Story = {
 	args: {
 		target: PR_TARGET,
 		orpc: createMockOrpc({ mergeStatus: BASE_STATUS, stack: STACK }),
+	},
+};
+
+/** Open PRs that chain but aren't a GitHub stack — a muted icon-only trigger offers the inferred stack. */
+export const SuggestedStack: Story = {
+	args: {
+		target: PR_TARGET,
+		orpc: createMockOrpc({
+			mergeStatus: BASE_STATUS,
+			stack: null,
+			stackSuggestion: STACK_SUGGESTION,
+		}),
 	},
 };
 
