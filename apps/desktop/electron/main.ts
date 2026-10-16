@@ -114,8 +114,9 @@ function createMainWindow(): BrowserWindow {
 		height: 720,
 		useContentSize: true,
 		title: "Nisi",
-		titleBarStyle: "hiddenInset",
-		trafficLightPosition: { x: 12, y: 24 },
+		titleBarStyle: "hidden",
+		// Centers the 14px lights in the 44px title strip, over `TrafficLightSpace` in pr-tab-strip.tsx.
+		trafficLightPosition: { x: 12, y: 15 },
 		show: !measurement,
 		webPreferences: secureWebPreferences,
 	});
