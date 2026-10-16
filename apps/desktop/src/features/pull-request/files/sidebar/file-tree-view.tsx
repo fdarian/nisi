@@ -65,6 +65,22 @@ function isDirectoryHandle(
 	return item.isDirectory();
 }
 
+/**
+ * Ancestor directories of `paths` minus the ones the user has collapsed.
+ * A directory with no handle (a new folder, or a segment swallowed by a
+ * compact-folder row) has no state to preserve and stays expanded.
+ */
+function collectExpandedDirectoryPaths(
+	model: { getItem(path: string): FileTreeItemHandle | null },
+	paths: readonly string[],
+): string[] {
+	return collectAncestorDirectoryPaths(paths).filter((dirPath) => {
+		const item = model.getItem(dirPath);
+		if (item === null || !isDirectoryHandle(item)) return true;
+		return item.isExpanded();
+	});
+}
+
 function buildTreeModel(files: readonly FileChange[]): TreeModel {
 	const treePaths: string[] = [];
 	const filePaths = new Set<string>();
@@ -212,11 +228,20 @@ export function FileTreeView({
 		reviewStateRef.current = reviewState;
 	}, [reviewState]);
 
+	// `files` gets a new identity on every review-state change, so resetting on
+	// `treeModel` identity would re-open every folder the user collapsed. Key
+	// the reset on the path set itself.
+	const treePathsKey = treeModel.treePaths.join("\n");
+	const treePaths = useMemo(
+		() => (treePathsKey === "" ? [] : treePathsKey.split("\n")),
+		[treePathsKey],
+	);
+
 	useEffect(() => {
-		model.resetPaths(treeModel.treePaths, {
-			initialExpandedPaths: collectAncestorDirectoryPaths(treeModel.treePaths),
+		model.resetPaths(treePaths, {
+			initialExpandedPaths: collectExpandedDirectoryPaths(model, treePaths),
 		});
-	}, [model, treeModel]);
+	}, [model, treePaths]);
 
 	const statusColorCSS = useMemo(() => buildStatusColorCSS(files), [files]);
 
