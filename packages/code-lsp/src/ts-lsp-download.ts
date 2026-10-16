@@ -2,11 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { join } from "node:path";
 import { Effect, Option, Schema, Semaphore, Stream } from "effect";
 import { FileSystem } from "effect/FileSystem";
-import {
-	FetchHttpClient,
-	HttpClient,
-	HttpClientResponse,
-} from "effect/http";
+import { FetchHttpClient, HttpClient, HttpClientResponse } from "effect/http";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 
 export const TS_LSP_VERSION = "7.0.2";

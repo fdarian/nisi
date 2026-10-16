@@ -12,8 +12,8 @@ import {
 	runManagedSubprocess,
 } from "devsess";
 import { Config, Effect, Option, Schedule } from "effect";
-import { FileSystem } from "effect/FileSystem";
 import { Command, Flag } from "effect/cli";
+import { FileSystem } from "effect/FileSystem";
 
 const waitForVite = (url: string) =>
 	Effect.tryPromise(() => fetch(url)).pipe(
