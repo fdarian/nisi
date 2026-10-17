@@ -52,17 +52,12 @@ function SettingsContent({
 }: {
 	orpc: SidecarQueryUtils;
 }): React.ReactElement {
-	const [walkthroughEnabled] = useWalkthroughEnabled(orpc);
-
 	return (
 		<div className="mx-auto flex w-full max-w-2xl flex-col gap-6 overflow-y-auto px-8 py-12">
 			<h1 className="font-semibold text-2xl tracking-tight">General</h1>
 			<AppearanceSection orpc={orpc} />
-			<WalkthroughSection orpc={orpc} />
-			{/* Harness configuration is meaningless while the feature is off, and
-			mounting it triggers a macOS folder-permission prompt via `useHarnesses`
-			— so it doesn't mount at all until the setting is on. */}
-			{walkthroughEnabled && <HarnessesSection orpc={orpc} />}
+			<FeatureFlagsSection orpc={orpc} />
+			<AgentsSection orpc={orpc} />
 		</div>
 	);
 }
@@ -198,11 +193,10 @@ function AppearanceSection({
 /**
  * The master toggle for the entire walkthrough feature — currently
  * unstable, so it defaults to off (see `@repo/settings`'s
- * `walkthroughEnabled`). Turning it off also unmounts `HarnessesSection`
- * (see `SettingsContent`) and the PR view's Walkthrough tab/keyboard
+ * `walkthroughEnabled`). It also gates the PR view's Walkthrough tab/keyboard
  * shortcuts (`pr-view.tsx`).
  */
-function WalkthroughSection({
+function FeatureFlagsSection({
 	orpc,
 }: {
 	orpc: SidecarQueryUtils;
@@ -211,7 +205,7 @@ function WalkthroughSection({
 		useWalkthroughEnabled(orpc);
 
 	return (
-		<SettingsSection title="Walkthrough">
+		<SettingsSection title="Feature Flags">
 			<SettingsRow
 				description="Let an agent narrate this PR, every claim linked to a set of line ranges. Unstable — off by default."
 				title="Enable walkthrough"
@@ -250,7 +244,7 @@ const UNAVAILABLE_REASON = "Not found on PATH or common install locations.";
  * The refresh button re-probes PATH and binary presence for a harness
  * installed while nisi was already open. Model discovery belongs to the picker.
  */
-function HarnessesSection({
+function AgentsSection({
 	orpc,
 }: {
 	orpc: SidecarQueryUtils;
@@ -284,7 +278,7 @@ function HarnessesSection({
 					<RefreshCwIcon />
 				</Button>
 			}
-			title="Harnesses"
+			title="Agents"
 		>
 			{harnesses.map((harness) => (
 				<SettingsRow
