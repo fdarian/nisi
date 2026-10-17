@@ -67,7 +67,11 @@ export function OverviewView({
 				</div>
 			) : (
 				<div className="flex min-h-0 flex-1">
-					<DescriptionPane description={overview.description} />
+					<DescriptionPane
+						description={overview.description}
+						orpc={orpc}
+						sessionId={session.id}
+					/>
 					<div className="flex min-h-0 w-[42%] max-w-2xl flex-col py-5 space-y-1 pr-3">
 						<p className="text-sm text-muted-foreground">Commits</p>
 						<CommitList commits={overview.commits} />

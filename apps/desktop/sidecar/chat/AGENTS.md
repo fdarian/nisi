@@ -14,8 +14,8 @@ own connection.
   `repoRoot` (`Store.resolveSessionRepoRoot`) plus enough of the review session (`baseRef`/`headRef`/
   `pr`) to name in the system prompt. Throws `ChatSessionNotFound` for an unknown `sessionId`, same
   treatment `http.ts` gives `walkthrough.generate`'s `GenerateSessionNotFound`.
-- `prompt.ts` — `buildChatInstructions`: deliberately thin. Names the repo/branch/PR under review,
-  nothing else. The agent has its full tool set against the same real worktree and can look (or act)
+- `prompt.ts` — `buildChatInstructions`: deliberately thin. Names the repo/branch/PR under review
+  and explains the selection references a user message may start with (`src/features/chat/chat-reference.ts`). The agent has its full tool set against the same real worktree and can look (or act)
   for itself, so this never grows into a second `gatherGenerationContext` diff briefing.
 - `sessions.ts` — `ChatSessions`, a `Context.Service` holding the popup's live thread registry:
   `threadId -> ThreadEntry` plus a `sessionId -> Set<threadId>` reverse index, both `Map`s closed

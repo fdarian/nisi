@@ -16,6 +16,7 @@
  * hook for a type would be the wrong dependency direction.
  */
 export type DiffSelectionReference = {
+	kind: "lines";
 	path: string;
 	startLine: number;
 	endLine: number;
