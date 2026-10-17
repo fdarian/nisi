@@ -3,7 +3,7 @@
  * horizontal-overflow bug (long fenced code, long URLs, long unbroken
  * tokens) without a live sidecar or a real streamed reply. `MessageList`
  * (`chat-panel.tsx`) is the right unit: it only takes `messages` +
- * `isWaitingForFirstReply`, no orpc/thread/session plumbing.
+ * `status`/`repoRoot`, no orpc/thread/session plumbing.
  *
  * `ChatPanelFrame` below mirrors `ChatPanelBody`'s real DOM chain (a
  * fixed-width, `overflow-hidden` shell around a `scrollFade` `ScrollArea`)
@@ -12,13 +12,13 @@
  * as in `MessageList` itself, so a bare render wouldn't reproduce it.
  */
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import type { UIMessage } from "ai";
-import { ScrollArea } from "#/components/ui/scroll-area";
-import { MessageList } from "./chat-panel";
+import type { ChatStatus, UIMessage } from "ai";
+import { MessageScroller } from "./chat-panel";
 import {
 	CHAT_PANEL_DEFAULT_WIDTH,
 	CHAT_PANEL_MIN_WIDTH,
 } from "./chat-panel-resize";
+import { useChatScroll } from "./use-chat-scroll";
 
 const LONG_SHELL_COMMAND =
 	"bun node_modules/@rheya/build-config/run.mjs --target=darwin-arm64 --profile=release --skip-cache-verification-step --emit-source-maps --output-dir=./dist/darwin-arm64/release";
@@ -39,9 +39,8 @@ const FIXTURE_MESSAGES: readonly UIMessage[] = [
 		role: "assistant",
 		parts: [
 			{
-				// A deliberately long, space-free tool name — the chip
-				// (`MessageBubble`'s `isToolUIPart` branch) needs to wrap the
-				// same way the text bubbles do, at the panel's minimum width.
+				// A deliberately long, space-free tool name — the step
+				// row (`chat-trace.tsx`) needs to truncate at the panel's minimum width.
 				type: "tool-runDiagnosticsWithAVeryLongToolNameThatHasNoSpacesForWrapTesting",
 				toolCallId: "call-1",
 				state: "input-available",
@@ -75,23 +74,76 @@ const FIXTURE_MESSAGES: readonly UIMessage[] = [
 	},
 ];
 
+const TRACE_MESSAGES: readonly UIMessage[] = [
+	{
+		id: "trace-1",
+		role: "user",
+		parts: [{ type: "text", text: "Why does the sidebar flicker?" }],
+	},
+	{
+		id: "trace-2",
+		role: "assistant",
+		parts: [
+			{ type: "step-start" },
+			{
+				type: "reasoning",
+				state: "done",
+				text: "The flicker is probably a remount.\nCheck the key first.",
+			},
+			{
+				type: "tool-Read",
+				toolCallId: "t-1",
+				state: "output-available",
+				input: {
+					file_path: "/tmp/storybook-repo/src/sidebar/sidebar.tsx",
+				},
+				output: "",
+			},
+			{
+				type: "tool-Bash",
+				toolCallId: "t-2",
+				state: "output-error",
+				input: {
+					description: "Run the sidebar tests",
+					command: LONG_SHELL_COMMAND,
+				},
+				errorText: "exit 1",
+			},
+			{ type: "text", text: "It remounts because the **key** changes." },
+			{
+				type: "tool-Grep",
+				toolCallId: "t-3",
+				state: "input-available",
+				input: { pattern: "key=\\{" },
+			},
+		],
+	},
+];
+
 type ChatPanelFrameProps = {
 	width: number;
 	messages: readonly UIMessage[];
+	status?: ChatStatus;
 };
 
 function ChatPanelFrame({
 	width,
 	messages,
+	status = "ready",
 }: ChatPanelFrameProps): React.ReactElement {
+	const scroll = useChatScroll("story-thread");
 	return (
 		<div
 			className="flex flex-col overflow-hidden rounded-xl border bg-popover text-popover-foreground"
 			style={{ width }}
 		>
-			<ScrollArea scrollFade style={{ height: 480 }}>
-				<MessageList isWaitingForFirstReply={false} messages={messages} />
-			</ScrollArea>
+			<MessageScroller
+				height={480}
+				messages={messages}
+				repoRoot="/tmp/storybook-repo"
+				scroll={scroll}
+				status={status}
+			/>
 		</div>
 	);
 }
@@ -114,4 +166,41 @@ export const DefaultWidth: Story = {
 /** The panel's minimum resize width (`CHAT_PANEL_MIN_WIDTH`) — the worst case a user can actually drag to; wrapping has to hold here too. */
 export const MinimumWidth: Story = {
 	args: { width: CHAT_PANEL_MIN_WIDTH },
+};
+
+/** Tool and reasoning runs as collapsible groups, split by a text part; the last group is still running. */
+export const Trace: Story = {
+	args: { width: CHAT_PANEL_DEFAULT_WIDTH, messages: TRACE_MESSAGES },
+	render: (args) => <ChatPanelFrame {...args} status="streaming" />,
+};
+
+/** Between sending and the first chunk of the reply. */
+export const Thinking: Story = {
+	args: {
+		width: CHAT_PANEL_DEFAULT_WIDTH,
+		messages: TRACE_MESSAGES.slice(0, 1),
+		status: "submitted",
+	},
+};
+
+const LONG_THREAD_MESSAGES: readonly UIMessage[] = Array.from(
+	{ length: 40 },
+	(_, index): UIMessage => ({
+		id: `long-${index}`,
+		role: index % 2 === 0 ? "user" : "assistant",
+		parts: [
+			{
+				type: "text",
+				text:
+					index % 2 === 0
+						? `Question ${index / 2 + 1}: how does this part of the diff behave?`
+						: `Answer ${(index - 1) / 2 + 1}: it reads the file, walks the hunks, and reports each changed range back with its surrounding context so the caller can render it.`,
+			},
+		],
+	}),
+);
+
+/** Opens pinned to the newest message; scrolling up releases the stick and shows the jump-to-latest button. */
+export const LongThread: Story = {
+	args: { width: CHAT_PANEL_DEFAULT_WIDTH, messages: LONG_THREAD_MESSAGES },
 };

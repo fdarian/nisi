@@ -42,6 +42,7 @@ import type { HarnessId } from "#/features/pull-request/walkthrough/walkthrough-
 import type { SidecarQueryUtils } from "#/infra/backend-context";
 import { type ChatReference, chatReferencesEqual } from "./chat-reference";
 import { createOrpcChatTransport, messageText } from "./chat-transport";
+import { forgetChatScroll } from "./panel/use-chat-scroll";
 
 export type ChatThreadMeta = {
 	id: string;
@@ -231,10 +232,11 @@ type ChatStore = {
 	clearSession: (sessionId: string) => void;
 };
 
-/** Stops (best-effort) and forgets `threadId`'s live `Chat` instance, if any. */
+/** Stops (best-effort) and forgets `threadId`'s live `Chat` instance and saved scroll position, if any. */
 function disposeChatInstance(threadId: string): void {
 	void chatInstances.get(threadId)?.stop();
 	chatInstances.delete(threadId);
+	forgetChatScroll(threadId);
 }
 
 function createChatStore(): StoreApi<ChatStore> {
