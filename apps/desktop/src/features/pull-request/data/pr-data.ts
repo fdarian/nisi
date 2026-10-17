@@ -1579,11 +1579,15 @@ export type UnpushedCommitsCheck =
 			/** Optional until the sidecar returns them — the dialog degrades to a count-only description without `commits`. */
 			localBranch?: string;
 			/** Newest first; may be shorter than `count` if the sidecar caps the list. */
-			commits?: ReadonlyArray<UnpushedCommit>;
+			commits?: ReadonlyArray<BranchCommit>;
+			/** The PR's commits already on `remoteRef`, newest first — what the merge will include. */
+			remoteCommits?: ReadonlyArray<BranchCommit>;
+			/** The PR's base branch name (e.g. `main`), where `remoteCommits` stop. */
+			baseRef?: string;
 	  }
 	| { status: "unverifiable"; message: string };
 
-export type UnpushedCommit = {
+export type BranchCommit = {
 	sha: string;
 	subject: string;
 	/** ISO 8601 */

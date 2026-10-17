@@ -1,11 +1,12 @@
 /**
  * Storybook coverage for `UnpushedCommitsDialog`'s two non-`"clean"`
- * outcomes (with and without per-commit detail) — no `orpc` dependency to
+ * outcomes (with and without per-commit detail, with and without the on-origin tab) — no `orpc` dependency to
  * mock here, unlike `PrMergeButton`'s own stories: this component is pure
  * presentation over whatever `useUnpushedCommitsCheck` resolved.
  */
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import type { UnpushedCommit } from "#/features/pull-request/data/pr-data";
+import { expect, userEvent, within } from "storybook/test";
+import type { BranchCommit } from "#/features/pull-request/data/pr-data";
 import { UnpushedCommitsDialog } from "./unpushed-commits-dialog";
 
 const meta: Meta<typeof UnpushedCommitsDialog> = {
@@ -35,7 +36,7 @@ function commit(
 	sha: string,
 	subject: string,
 	minutesAgo: number,
-): UnpushedCommit {
+): BranchCommit {
 	return {
 		sha,
 		subject,
@@ -56,6 +57,32 @@ const REALISTIC_COMMITS = [
 	),
 ];
 
+/** Older than every unpushed commit above, newest first — what's already on `REMOTE_REF`. */
+const ORIGIN_COMMITS = [
+	commit(
+		"5c1e8a07d3b94f62a0e7c9d1b3f5a7e9c2d4b6f8",
+		"Add S3 client wrapper around the AWS SDK",
+		60 * 26,
+	),
+	commit(
+		"e20b7d49a1c63f85d7b9e1a3c5f7092b4d6e8a0c",
+		"Move storage config into environment schema",
+		60 * 27,
+	),
+	commit(
+		"0fa38c6d2e4b7915c3a5e7d9f1b3a5c7e9d2f4b6",
+		"Extract upload retry policy",
+		60 * 50,
+	),
+	commit(
+		"b94d1f0e7a3c5826e8d0b2f4a6c8e0d2b4f6a8c1",
+		"Cover presigned URL expiry in tests",
+		60 * 52,
+	),
+];
+
+const BASE_REF = "main";
+
 /** Two unpushed commits with full detail — plural wording, graph, local branch header. */
 export const Unpushed: Story = {
 	args: {
@@ -65,6 +92,8 @@ export const Unpushed: Story = {
 			remoteRef: REMOTE_REF,
 			localBranch: LOCAL_BRANCH,
 			commits: REALISTIC_COMMITS,
+			remoteCommits: ORIGIN_COMMITS,
+			baseRef: BASE_REF,
 		},
 	},
 };
@@ -97,6 +126,14 @@ export const ManyUnpushedCommits: Story = {
 					20 + index * 55,
 				),
 			),
+			remoteCommits: Array.from({ length: 8 }, (_, index) =>
+				commit(
+					`${(0xabcde00 + index * 0x2222).toString(16)}1f2e3d4c5b6a79880a1b`,
+					`Groundwork ${8 - index} for the storage layer`,
+					60 * 30 + index * 90,
+				),
+			),
+			baseRef: BASE_REF,
 		},
 	},
 };
@@ -121,7 +158,33 @@ export const LongSubjects: Story = {
 					1_500,
 				),
 			],
+			remoteCommits: [
+				commit(
+					"6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b",
+					"Introduce a pluggable object-store interface so tests and production can swap implementations without touching callers",
+					60 * 40,
+				),
+				commit(
+					"3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d",
+					"Document the storage module",
+					60 * 41,
+				),
+			],
+			baseRef: BASE_REF,
 		},
+	},
+};
+
+/** Same data as `Unpushed`, opened on the "On origin" tab. */
+export const OriginTab: Story = {
+	args: Unpushed.args,
+	play: async ({ canvasElement }) => {
+		// The dialog renders in a portal, outside `canvasElement`.
+		const body = within(canvasElement.ownerDocument.body);
+		await userEvent.click(await body.findByRole("tab", { name: /On origin/ }));
+		await expect(
+			await body.findByRole("tab", { name: /On origin/, selected: true }),
+		).toBeVisible();
 	},
 };
 
