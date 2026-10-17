@@ -6,8 +6,10 @@ import {
 	GitPullRequestIcon,
 	LayoutDashboardIcon,
 	type LucideIcon,
+	MessageSquareIcon,
+	MessageSquarePlusIcon,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
 	Command,
 	CommandDialog,
@@ -21,6 +23,14 @@ import {
 } from "#/components/ui/command";
 import { Kbd } from "#/components/ui/kbd";
 import { Separator } from "#/components/ui/separator";
+import {
+	type ChatThreadMeta,
+	deriveThreadTitle,
+	getOrCreateChat,
+	useChatThreads,
+	useFocusChatThread,
+	useStartNewChat,
+} from "#/features/chat/chat-store";
 import type { Session } from "#/features/pull-request/data/pr-data";
 import {
 	pullRequestUrl,
@@ -34,6 +44,8 @@ type CommandAction = {
 	label: string;
 	icon: LucideIcon;
 	run: () => void;
+	/** The action moves focus somewhere itself (e.g. a chat composer), so closing the palette must not restore focus to what had it before. */
+	keepsFocus?: true;
 };
 
 type CommandPaletteProps = {
@@ -44,7 +56,8 @@ type CommandPaletteProps = {
 	 * session's target actually is — `null` (no open tab) offers nothing,
 	 * a `"pr"` target offers PR-only actions (like opening it on GitHub), and
 	 * a `"branch"` target offers branch-only actions (like switching to the
-	 * PR the branch belongs to, once one exists).
+	 * PR the branch belongs to, once one exists). Its chat threads are listed
+	 * too, plus "Start new chat".
 	 */
 	activeSession: Session | null;
 	orpc: SidecarQueryUtils;
@@ -64,21 +77,36 @@ export function CommandPalette({
 	onNavigateToTab,
 }: CommandPaletteProps): React.ReactElement {
 	const [query, setQuery] = useState("");
+	const restoreFocusOnClose = useRef(true);
 
 	useEffect(() => {
 		if (!open) return;
 		setQuery("");
+		restoreFocusOnClose.current = true;
 	}, [open]);
 
 	const { switchToPr } = useSwitchToPr(orpc, onSessionOpened);
-	const actions = buildActions(activeSession, switchToPr, onNavigateToTab);
+	const activeSessionId = activeSession === null ? null : activeSession.id;
+	const threads = useChatThreads(activeSessionId);
+	const focusChatThread = useFocusChatThread();
+	const startNewChat = useStartNewChat();
+	const actions = buildActions({
+		session: activeSession,
+		orpc,
+		threads,
+		switchToPr,
+		onNavigateToTab,
+		focusChatThread,
+		startNewChat,
+	});
 	const filtered = actions.filter((action) =>
 		action.label.toLowerCase().includes(query.toLowerCase()),
 	);
 
 	return (
 		<CommandDialog onOpenChange={onOpenChange} open={open}>
-			<CommandDialogPopup>
+			{/* Base UI's default restores focus to whatever had it before the palette opened, which would pull the caret back out of the chat composer a tick after a chat action focuses it — same hazard as `diff-selection-popover.tsx`'s `finalFocus={false}`. */}
+			<CommandDialogPopup finalFocus={() => restoreFocusOnClose.current}>
 				<CommandPanel>
 					<Command
 						filter={null}
@@ -115,23 +143,29 @@ export function CommandPalette({
 	);
 
 	function handleSelect(action: CommandAction) {
+		restoreFocusOnClose.current = action.keepsFocus !== true;
 		action.run();
 		onOpenChange(false);
 	}
 }
 
-function buildActions(
-	session: Session | null,
-	switchToPr: (sessionId: string) => void,
-	onNavigateToTab: (sessionId: string, tab: string) => void,
-): CommandAction[] {
+function buildActions(params: {
+	session: Session | null;
+	orpc: SidecarQueryUtils;
+	threads: readonly ChatThreadMeta[];
+	switchToPr: (sessionId: string) => void;
+	onNavigateToTab: (sessionId: string, tab: string) => void;
+	focusChatThread: (sessionId: string, threadId: string) => void;
+	startNewChat: (sessionId: string) => void;
+}): CommandAction[] {
+	const session = params.session;
 	if (session === null) return [];
 	const actions: CommandAction[] = [
 		{
 			id: "go-to-overview",
 			label: "Go to Overview",
 			icon: LayoutDashboardIcon,
-			run: () => onNavigateToTab(session.id, "overview"),
+			run: () => params.onNavigateToTab(session.id, "overview"),
 		},
 		{
 			id: "copy-branch-name",
@@ -159,8 +193,27 @@ function buildActions(
 			label: "Switch to PR",
 			icon: GitPullRequestIcon,
 			run: () => {
-				switchToPr(sessionId);
+				params.switchToPr(sessionId);
 			},
+		});
+	}
+	actions.push({
+		id: "start-new-chat",
+		label: "Start new chat",
+		icon: MessageSquarePlusIcon,
+		keepsFocus: true,
+		run: () => params.startNewChat(session.id),
+	});
+	for (const thread of params.threads) {
+		const title = deriveThreadTitle(
+			getOrCreateChat(params.orpc, session.id, thread.id).messages,
+		);
+		actions.push({
+			id: `chat-thread-${thread.id}`,
+			label: `Chat: ${title}`,
+			icon: MessageSquareIcon,
+			keepsFocus: true,
+			run: () => params.focusChatThread(session.id, thread.id),
 		});
 	}
 	return actions;
