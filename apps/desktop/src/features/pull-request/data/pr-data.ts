@@ -1577,7 +1577,6 @@ export type UnpushedCommitsCheck =
 			count: number;
 			remoteRef: string;
 			/** Optional until the sidecar returns them — the dialog degrades to a count-only description without `commits`. */
-			localBranch?: string;
 			/** Newest first; may be shorter than `count` if the sidecar caps the list. */
 			commits?: ReadonlyArray<BranchCommit>;
 			/** The PR's commits already on `remoteRef`, newest first — what the merge will include. */

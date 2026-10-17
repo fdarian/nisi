@@ -88,14 +88,13 @@ const ORIGIN_COMMITS = [
 
 const BASE_REF = "main";
 
-/** Two unpushed commits with full detail — plural wording, graph, local branch header. */
+/** Two unpushed commits with full detail — plural wording, tabbed graph. */
 export const Unpushed: Story = {
 	args: {
 		check: {
 			status: "unpushed",
 			count: 2,
 			remoteRef: REMOTE_REF,
-			localBranch: LOCAL_BRANCH,
 			commits: REALISTIC_COMMITS,
 			remoteCommits: ORIGIN_COMMITS,
 			baseRef: BASE_REF,
@@ -110,7 +109,6 @@ export const SingleUnpushedCommit: Story = {
 			status: "unpushed",
 			count: 1,
 			remoteRef: REMOTE_REF,
-			localBranch: LOCAL_BRANCH,
 			commits: REALISTIC_COMMITS.slice(0, 1),
 		},
 	},
@@ -123,7 +121,6 @@ export const ManyUnpushedCommits: Story = {
 			status: "unpushed",
 			count: 12,
 			remoteRef: REMOTE_REF,
-			localBranch: LOCAL_BRANCH,
 			commits: Array.from({ length: 12 }, (_, index) =>
 				commit(
 					`${(0xc0ffee0 + index * 0x1111).toString(16)}9d8c7b6a5f4e3d2c1b0a`,
@@ -150,7 +147,6 @@ export const LongSubjects: Story = {
 			status: "unpushed",
 			count: 2,
 			remoteRef: REMOTE_REF,
-			localBranch: LOCAL_BRANCH,
 			commits: [
 				commit(
 					"1d2c3b4a5f6e7d8c9b0a1f2e3d4c5b6a7f8e9d0c",
@@ -193,7 +189,7 @@ export const OriginTab: Story = {
 	},
 };
 
-/** Count only, no `commits` or `localBranch` — what the sidecar returns today. */
+/** Count only, no `commits` — what the sidecar returns today. */
 export const WithoutCommitDetails: Story = {
 	args: {
 		check: { status: "unpushed", count: 2, remoteRef: REMOTE_REF },
@@ -244,7 +240,7 @@ function pushStory(push: PushState): Story {
 /** The suggested-push action before anything has run. */
 export const PushIdle: Story = pushStory({ status: "idle" });
 
-/** `git push` in flight — Run is disabled and Merge anyway is blocked; the log scrolls as lines arrive. */
+/** `git push` in flight — the push row reads "Pushing…" and Merge anyway is blocked; the log scrolls as lines arrive. */
 export const PushRunning: Story = pushStory({
 	status: "running",
 	log: PUSH_LOG.slice(0, 5),
@@ -256,7 +252,7 @@ export const PushSucceeded: Story = pushStory({
 	log: PUSH_LOG,
 });
 
-/** Rejected push — destructive row, stderr log open, Run becomes Retry. */
+/** Rejected push — destructive row, stderr log open, the row becomes "Retry push". */
 export const PushFailed: Story = pushStory({
 	status: "failed",
 	log: PUSH_REJECTED_LOG,
@@ -301,7 +297,7 @@ function PushInteractiveDialog(
 	return <UnpushedCommitsDialog {...props} onPush={run} push={push} />;
 }
 
-/** Click Run to watch simulated `git push` output stream in and end in success; clicking again afterwards does nothing. */
+/** Click the push row to watch simulated `git push` output stream in and end in success; clicking again afterwards does nothing. */
 export const PushInteractive: Story = {
 	args: Unpushed.args,
 	render: (args) => <PushInteractiveDialog {...args} />,

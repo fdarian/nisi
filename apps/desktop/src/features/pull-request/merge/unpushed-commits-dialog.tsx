@@ -2,12 +2,14 @@
 
 import { cn } from "cn";
 import {
+	ArrowDown,
+	ArrowUp,
 	CircleAlert,
 	CircleCheck,
 	CircleHelp,
 	CloudCheck,
 	CloudOff,
-	Upload,
+	type LucideIcon,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import {
@@ -54,13 +56,18 @@ function commitCount(count: number): string {
 	return `${count} ${count === 1 ? "commit" : "commits"}`;
 }
 
-function RefPill(props: { children: string; className?: string }) {
+function RefPill(props: {
+	children: string;
+	className?: string;
+	title?: string;
+}) {
 	return (
 		<code
 			className={cn(
 				"rounded-md border bg-muted px-1.5 py-0.5 font-mono text-foreground text-xs [overflow-wrap:anywhere]",
 				props.className,
 			)}
+			title={props.title}
 		>
 			{props.children}
 		</code>
@@ -131,6 +138,14 @@ function ShortSha(props: { sha: string }) {
 	);
 }
 
+function RowRefPill(props: { children: string }) {
+	return (
+		<RefPill className="max-w-40 shrink truncate" title={props.children}>
+			{props.children}
+		</RefPill>
+	);
+}
+
 function CommitRow(props: {
 	commit: BranchCommit;
 	dot: DotKind;
@@ -157,12 +172,13 @@ function CommitRow(props: {
 				<span className="min-w-0 flex-1 truncate" title={props.commit.subject}>
 					{props.commit.subject}
 				</span>
-				{props.tag !== undefined && (
-					<RefPill className="max-w-40 shrink truncate">{props.tag}</RefPill>
+				{props.tag !== undefined ? (
+					<RowRefPill>{props.tag}</RowRefPill>
+				) : (
+					<span className="shrink-0 text-muted-foreground text-xs tabular-nums">
+						{relativeTime(authoredAt, props.now)}
+					</span>
 				)}
-				<span className="shrink-0 text-muted-foreground text-xs tabular-nums">
-					{relativeTime(authoredAt, props.now)}
-				</span>
 			</div>
 		</li>
 	);
@@ -172,7 +188,7 @@ function TailRow(props: { dot: React.ReactNode; children: React.ReactNode }) {
 	return (
 		<li className="flex items-stretch gap-3">
 			<Rail continuesDown={false} continuesUp dot={props.dot} />
-			<div className="flex min-w-0 flex-1 flex-col justify-center py-1.5 text-sm">
+			<div className="flex min-w-0 flex-1 items-baseline gap-2 py-1.5 text-sm">
 				{props.children}
 			</div>
 		</li>
@@ -233,28 +249,16 @@ function RemoteHeadTail(props: {
 				<span className="relative size-2.5 rounded-full bg-muted-foreground" />
 			}
 		>
-			<div className="flex min-w-0 items-baseline gap-2">
-				<RefPill className="min-w-0 shrink truncate">{props.remoteRef}</RefPill>
-				{props.head !== undefined ? (
-					<>
-						<ShortSha sha={props.head.sha} />
-						<span
-							className="min-w-0 flex-1 truncate"
-							title={props.head.subject}
-						>
-							{props.head.subject}
-						</span>
-					</>
-				) : (
-					<span className="shrink-0 text-muted-foreground text-xs">
-						merge includes up to here
+			{props.head !== undefined ? (
+				<>
+					<ShortSha sha={props.head.sha} />
+					<span className="min-w-0 flex-1 truncate" title={props.head.subject}>
+						{props.head.subject}
 					</span>
-				)}
-			</div>
-			{props.head !== undefined && (
-				<span className="text-muted-foreground text-xs">
-					merge includes up to here
-				</span>
+					<RowRefPill>{props.remoteRef}</RowRefPill>
+				</>
+			) : (
+				<RowRefPill>{props.remoteRef}</RowRefPill>
 			)}
 		</TailRow>
 	);
@@ -276,26 +280,22 @@ function BaseTail(props: { baseRef: string }) {
 
 function CountBadge(props: {
 	tone: "warning" | "success";
-	prefix?: string;
+	icon: LucideIcon;
 	children: number;
 }) {
 	return (
 		<span
 			className={cn(
-				"rounded-full px-1.5 py-px font-medium text-xs tabular-nums",
+				"inline-flex items-center gap-0.5 rounded-full px-1.5 py-px font-medium text-xs tabular-nums",
 				props.tone === "warning"
 					? "bg-warning/12 text-warning-foreground"
 					: "bg-success/12 text-success-foreground",
 			)}
 		>
-			{props.prefix}
+			<props.icon aria-hidden className="size-3" />
 			{props.children}
 		</span>
 	);
-}
-
-function LocalBranchPill(props: { branch: string }) {
-	return <RefPill className="min-w-0 truncate">{props.branch}</RefPill>;
 }
 
 /** Both panels stay mounted in one grid cell so the box is as tall as the taller list — switching tabs never resizes the dialog. */
@@ -312,21 +312,10 @@ function CommitGraph(props: {
 	const now = Date.now();
 	const remoteCommits = props.check.remoteCommits;
 	const isTabbed = remoteCommits !== undefined && remoteCommits.length > 0;
-	const localBranch = props.check.localBranch;
 
 	if (!isTabbed) {
 		return (
 			<div className="overflow-hidden rounded-lg border">
-				{localBranch !== undefined && (
-					<div className="flex items-center gap-2 border-b bg-muted/48 px-3 py-2">
-						<LocalBranchPill branch={localBranch} />
-						<span className="shrink-0">
-							<CountBadge prefix="↑" tone={localTone}>
-								{props.check.count}
-							</CountBadge>
-						</span>
-					</div>
-				)}
 				<CommitList
 					commits={props.commits}
 					dot={localDot}
@@ -348,18 +337,21 @@ function CommitGraph(props: {
 			className="gap-0 overflow-hidden rounded-lg border"
 			defaultValue="unpushed"
 		>
-			<div className="flex items-center justify-between gap-3 border-b bg-muted/48 px-2 py-1.5">
+			<div className="border-b bg-muted/48 px-2 py-1.5">
 				<TabsList size="sm">
 					<TabsTab value="unpushed">
 						{props.pushed ? "Pushed" : "Not pushed"}
-						<CountBadge tone={localTone}>{props.check.count}</CountBadge>
+						<CountBadge icon={ArrowUp} tone={localTone}>
+							{props.check.count}
+						</CountBadge>
 					</TabsTab>
 					<TabsTab value="origin">
 						On origin
-						<CountBadge tone="success">{remoteCommits.length}</CountBadge>
+						<CountBadge icon={ArrowDown} tone="success">
+							{remoteCommits.length}
+						</CountBadge>
 					</TabsTab>
 				</TabsList>
-				{localBranch !== undefined && <LocalBranchPill branch={localBranch} />}
 			</div>
 			<div className="grid grid-cols-[minmax(0,1fr)]">
 				<TabsPanel
@@ -421,67 +413,55 @@ function PushLog(props: { lines: ReadonlyArray<string>; follow: boolean }) {
 	);
 }
 
-function PushActionRow(props: {
+function PushButton(props: {
 	push: PushState;
 	check: UnpushedBranchCheck;
 	onPush: () => void;
+}) {
+	const running = props.push.status === "running";
+	return (
+		<button
+			className="-mx-2 -my-1 flex cursor-pointer items-center gap-2 rounded-md px-2 py-1 text-left text-sm outline-none transition-colors hover:bg-accent/60 focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-64"
+			disabled={running}
+			onClick={props.onPush}
+			type="button"
+		>
+			{running ? (
+				<Spinner className="size-4 shrink-0 text-muted-foreground" />
+			) : (
+				<ArrowUp className="size-4 shrink-0 text-muted-foreground" />
+			)}
+			<span className="min-w-0 flex-1 truncate">
+				{running
+					? "Pushing…"
+					: props.push.status === "failed"
+						? "Retry push"
+						: `Push ${commitCount(props.check.count)}`}
+			</span>
+			<code className="shrink-0 font-mono text-muted-foreground text-xs">
+				git push
+			</code>
+		</button>
+	);
+}
+
+function PushedRow(props: {
+	check: UnpushedBranchCheck;
 	logOpen: boolean;
 	onToggleLog: () => void;
 }) {
-	const push = props.push;
-	const iconClassName = "size-4 shrink-0";
 	return (
 		<div className="flex items-center gap-3 text-sm">
-			{push.status === "succeeded" ? (
-				<CircleCheck className={cn(iconClassName, "text-success-foreground")} />
-			) : push.status === "failed" ? (
-				<CircleAlert
-					className={cn(iconClassName, "text-destructive-foreground")}
-				/>
-			) : (
-				<Upload className={cn(iconClassName, "text-muted-foreground")} />
-			)}
+			<CircleCheck className="size-4 shrink-0 text-success-foreground" />
 			<div className="flex min-w-0 flex-1 items-center gap-2">
-				{push.status === "succeeded" ? (
-					<>
-						<span className="shrink-0">Pushed to</span>
-						<RefPill className="min-w-0 truncate">
-							{props.check.remoteRef}
-						</RefPill>
-					</>
-				) : push.status === "failed" ? (
-					<span className="font-medium text-destructive-foreground">
-						Push failed
-					</span>
-				) : (
-					<>
-						<span className="shrink-0">
-							Push {commitCount(props.check.count)} to
-						</span>
-						<RefPill className="min-w-0 truncate">
-							{props.check.remoteRef}
-						</RefPill>
-						<RefPill className="shrink-0 text-muted-foreground">
-							git push
-						</RefPill>
-					</>
-				)}
+				<span className="shrink-0">Pushed to</span>
+				<RefPill className="min-w-0 truncate" title={props.check.remoteRef}>
+					{props.check.remoteRef}
+				</RefPill>
 			</div>
-			{push.status === "succeeded" ? (
-				<Button onClick={props.onToggleLog} size="xs" variant="ghost">
-					{props.logOpen ? "Hide log" : "Show log"}
-				</Button>
-			) : (
-				<Button
-					disabled={push.status === "running"}
-					onClick={props.onPush}
-					size="xs"
-					variant="outline"
-				>
-					{push.status === "running" && <Spinner />}
-					{push.status === "failed" ? "Retry" : "Run"}
-				</Button>
-			)}
+			<Button onClick={props.onToggleLog} size="xs" variant="ghost">
+				{props.logOpen ? "Hide log" : "Show log"}
+			</Button>
 		</div>
 	);
 }
@@ -509,15 +489,20 @@ function SuggestedPush(props: {
 					push.status === "failed" && "border-destructive/32 bg-destructive/4",
 				)}
 			>
-				<PushActionRow
-					check={props.check}
-					logOpen={logOpen}
-					onPush={props.onPush}
-					onToggleLog={() => setLogToggled((open) => !open)}
-					push={push}
-				/>
+				{push.status === "succeeded" ? (
+					<PushedRow
+						check={props.check}
+						logOpen={logOpen}
+						onToggleLog={() => setLogToggled((open) => !open)}
+					/>
+				) : (
+					<PushButton check={props.check} onPush={props.onPush} push={push} />
+				)}
 				{push.status === "failed" && (
-					<p className="text-destructive-foreground text-xs">{push.error}</p>
+					<p className="flex items-start gap-1.5 text-destructive-foreground text-xs">
+						<CircleAlert className="mt-px size-3.5 shrink-0" />
+						{push.error}
+					</p>
 				)}
 				{logOpen && (
 					<PushLog follow={push.status === "running"} lines={logLines} />
@@ -553,8 +538,8 @@ export function UnpushedCommitsDialog({
 	const isPushed = showPush && pushState.status === "succeeded";
 	return (
 		<AlertDialog onOpenChange={onOpenChange} open={check !== null}>
-			<AlertDialogContent className="max-w-xl">
-				<AlertDialogHeader className="flex-row items-start gap-4 text-left">
+			<AlertDialogContent className="max-h-[calc(100dvh-2rem)] max-w-xl max-sm:max-h-[calc(100dvh-3rem)]">
+				<AlertDialogHeader className="shrink-0 flex-row items-start gap-4 text-left">
 					<span
 						className={cn(
 							"flex size-10 shrink-0 items-center justify-center rounded-xl [&_svg]:size-5",
@@ -586,7 +571,7 @@ export function UnpushedCommitsDialog({
 					</div>
 				</AlertDialogHeader>
 				{check?.status === "unpushed" && (showGraph || showPush) && (
-					<div className="mx-6 mb-6 flex flex-col gap-4">
+					<div className="flex min-h-0 flex-col gap-4 overflow-y-auto px-6 pb-6 *:shrink-0">
 						{check.commits !== undefined && (
 							<CommitGraph
 								check={check}
@@ -599,7 +584,7 @@ export function UnpushedCommitsDialog({
 						)}
 					</div>
 				)}
-				<AlertDialogFooter>
+				<AlertDialogFooter className="shrink-0">
 					<AlertDialogClose render={<Button variant="outline" />}>
 						Cancel
 					</AlertDialogClose>
