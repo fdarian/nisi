@@ -74,7 +74,7 @@ function RefPill(props: {
 	);
 }
 
-/** `count` is always >= 1 in the `"unpushed"` branch — `useUnpushedCommitsCheck` only ever produces that status for a nonzero count, `"clean"` covers zero. */
+/** `ahead` is always >= 1 in the `"unpushed"` branch — `useUnpushedCommitsCheck` only ever produces that status for a nonzero count, `"clean"` covers zero. */
 function UnpushedDescription(props: { check: UnpushedCheck; pushed: boolean }) {
 	if (props.check.status === "unverifiable") {
 		return `Nisi couldn't verify whether every local commit on this branch has been pushed: ${props.check.message}`;
@@ -83,15 +83,15 @@ function UnpushedDescription(props: { check: UnpushedCheck; pushed: boolean }) {
 		return (
 			<>
 				<RefPill>{props.check.remoteRef}</RefPill> now includes{" "}
-				{props.check.count === 1 ? "it" : "them"}, so the merge will too.
+				{props.check.ahead === 1 ? "it" : "them"}, so the merge will too.
 			</>
 		);
 	}
 	return (
 		<>
-			Your local branch is {commitCount(props.check.count)} ahead of{" "}
+			Your local branch is {commitCount(props.check.ahead)} ahead of{" "}
 			<RefPill>{props.check.remoteRef}</RefPill>. The merge uses what's on
-			GitHub, so {props.check.count === 1 ? "this stays" : "these stay"} behind.
+			GitHub, so {props.check.ahead === 1 ? "this stays" : "these stay"} behind.
 		</>
 	);
 }
@@ -302,22 +302,17 @@ function CountBadge(props: {
 const STACKED_PANEL_CLASS_NAME =
 	"col-start-1 row-start-1 [&[hidden]]:invisible [&[hidden]]:block";
 
-function CommitGraph(props: {
-	check: UnpushedBranchCheck;
-	commits: ReadonlyArray<BranchCommit>;
-	pushed: boolean;
-}) {
+function CommitGraph(props: { check: UnpushedBranchCheck; pushed: boolean }) {
 	const localDot: DotKind = props.pushed ? "origin" : "unpushed";
 	const localTone = props.pushed ? "success" : "warning";
 	const now = Date.now();
-	const remoteCommits = props.check.remoteCommits;
-	const isTabbed = remoteCommits !== undefined && remoteCommits.length > 0;
+	const origin = props.check.origin;
 
-	if (!isTabbed) {
+	if (origin === null || origin.commits.length === 0) {
 		return (
 			<div className="overflow-hidden rounded-lg border">
 				<CommitList
-					commits={props.commits}
+					commits={props.check.commits}
 					dot={localDot}
 					now={now}
 					tail={
@@ -326,7 +321,7 @@ function CommitGraph(props: {
 							remoteRef={props.check.remoteRef}
 						/>
 					}
-					totalCount={props.check.count}
+					totalCount={props.check.ahead}
 				/>
 			</div>
 		);
@@ -342,13 +337,13 @@ function CommitGraph(props: {
 					<TabsTab value="unpushed">
 						{props.pushed ? "Pushed" : "Not pushed"}
 						<CountBadge icon={ArrowUp} tone={localTone}>
-							{props.check.count}
+							{props.check.ahead}
 						</CountBadge>
 					</TabsTab>
 					<TabsTab value="origin">
 						On origin
 						<CountBadge icon={ArrowDown} tone="success">
-							{remoteCommits.length}
+							{origin.count}
 						</CountBadge>
 					</TabsTab>
 				</TabsList>
@@ -360,16 +355,16 @@ function CommitGraph(props: {
 					value="unpushed"
 				>
 					<CommitList
-						commits={props.commits}
+						commits={props.check.commits}
 						dot={localDot}
 						now={now}
 						tail={
 							<RemoteHeadTail
-								head={remoteCommits[0]}
+								head={origin.commits[0]}
 								remoteRef={props.check.remoteRef}
 							/>
 						}
-						totalCount={props.check.count}
+						totalCount={props.check.ahead}
 					/>
 				</TabsPanel>
 				<TabsPanel
@@ -378,16 +373,12 @@ function CommitGraph(props: {
 					value="origin"
 				>
 					<CommitList
-						commits={remoteCommits}
+						commits={origin.commits}
 						dot="origin"
 						now={now}
-						tail={
-							props.check.baseRef === undefined ? null : (
-								<BaseTail baseRef={props.check.baseRef} />
-							)
-						}
+						tail={<BaseTail baseRef={origin.baseRef} />}
 						topTag={props.check.remoteRef}
-						totalCount={remoteCommits.length}
+						totalCount={origin.count}
 					/>
 				</TabsPanel>
 			</div>
@@ -436,7 +427,7 @@ function PushButton(props: {
 					? "Pushing…"
 					: props.push.status === "failed"
 						? "Retry push"
-						: `Push ${commitCount(props.check.count)}`}
+						: `Push ${commitCount(props.check.ahead)}`}
 			</span>
 			<code className="shrink-0 font-mono text-muted-foreground text-xs">
 				git push
@@ -518,9 +509,8 @@ function SuggestedPush(props: {
  * — never a cached count) finds either real unpushed commits or can't tell
  * either way. Both cases render the same shape — only the copy differs — so
  * one component covers both rather than two near-identical dialogs. The
- * commit graph appears only when the check carries `commits` (tabbed into
- * "Not pushed" / "On origin" when `remoteCommits` is present too); without
- * `commits` the dialog falls back to the count-only description.
+ * commit graph is tabbed into "Not pushed" / "On origin" when the check
+ * carries commits already on the remote branch beyond the base.
  * `check === null` renders nothing rather than an empty dialog shell, so the
  * caller can keep this mounted unconditionally and just flip `check`.
  */
@@ -533,7 +523,6 @@ export function UnpushedCommitsDialog({
 }: UnpushedCommitsDialogProps): React.ReactElement {
 	const isUnverifiable = check?.status === "unverifiable";
 	const pushState: PushState = push ?? { status: "idle" };
-	const showGraph = check?.status === "unpushed" && check.commits !== undefined;
 	const showPush = check?.status === "unpushed" && onPush !== undefined;
 	const isPushed = showPush && pushState.status === "succeeded";
 	return (
@@ -561,7 +550,7 @@ export function UnpushedCommitsDialog({
 						<AlertDialogTitle>
 							{check === null || check.status === "unverifiable"
 								? "Can't verify pushed commits"
-								: `${commitCount(check.count)} ${isPushed ? "pushed" : "won't be merged"}`}
+								: `${commitCount(check.ahead)} ${isPushed ? "pushed" : "won't be merged"}`}
 						</AlertDialogTitle>
 						<AlertDialogDescription>
 							{check !== null && (
@@ -570,15 +559,9 @@ export function UnpushedCommitsDialog({
 						</AlertDialogDescription>
 					</div>
 				</AlertDialogHeader>
-				{check?.status === "unpushed" && (showGraph || showPush) && (
+				{check?.status === "unpushed" && (
 					<div className="flex min-h-0 flex-col gap-4 overflow-y-auto px-6 pb-6 *:shrink-0">
-						{check.commits !== undefined && (
-							<CommitGraph
-								check={check}
-								commits={check.commits}
-								pushed={isPushed}
-							/>
-						)}
+						<CommitGraph check={check} pushed={isPushed} />
 						{onPush !== undefined && (
 							<SuggestedPush check={check} onPush={onPush} push={pushState} />
 						)}

@@ -146,16 +146,39 @@ export type PullRequestStackSuggestion = Schema.Schema.Type<
 	typeof PullRequestStackSuggestion
 >;
 
+/** Mirrors `@repo/git`'s `BranchCommit`. */
+export const UnpushedBranchCommit = Schema.Struct({
+	sha: Schema.String,
+	subject: Schema.String,
+	/** ISO 8601 */
+	authoredAt: Schema.String,
+});
+export type UnpushedBranchCommit = Schema.Schema.Type<
+	typeof UnpushedBranchCommit
+>;
+
 /**
- * Mirrors `@repo/git`'s `UnpushedCommits` — how many commits the local
- * worktree branch has that its remote doesn't, plus the remote ref
- * (`origin/main`, or whatever `@{upstream}` names) that count was computed
- * against, since the pre-merge dialog names it rather than saying "the
- * remote" generically.
+ * Mirrors `@repo/git`'s `UnpushedCommits` — how the local worktree branch has
+ * diverged from its remote ref (`origin/main`, or whatever `@{upstream}`
+ * names; the pre-merge dialog names it rather than saying "the remote"
+ * generically): `ahead` commits only local, `behind` only on the remote.
+ * `commits` lists the unpushed ones newest first, capped at 5. `origin` is
+ * what the remote branch holds beyond `origin/<baseRef>` (what the merge
+ * will include), with the same cap; `null` when no `baseRef` was asked for
+ * or `origin/<baseRef>` doesn't exist locally.
  */
 export const UnpushedCommits = Schema.Struct({
-	count: Schema.Number,
 	remoteRef: Schema.String,
+	ahead: Schema.Number,
+	behind: Schema.Number,
+	commits: Schema.Array(UnpushedBranchCommit),
+	origin: Schema.NullOr(
+		Schema.Struct({
+			baseRef: Schema.String,
+			count: Schema.Number,
+			commits: Schema.Array(UnpushedBranchCommit),
+		}),
+	),
 });
 export type UnpushedCommits = Schema.Schema.Type<typeof UnpushedCommits>;
 
@@ -359,9 +382,10 @@ const RerunCiJobInput = Schema.Struct({
  *
  * `unpushedCommits` backs the pre-merge "you have local unpushed commits"
  * check — unlike every other procedure here, it's about the *local*
- * worktree branch, not the PR itself, so its input is just `repoRoot`
- * (whatever branch is actually checked out there). Wraps `@repo/git`'s
- * `resolveUnpushedCommitCount`; `NO_REMOTE_REF` is that function's one
+ * worktree branch, not the PR itself, so its input is `repoRoot` (whatever
+ * branch is actually checked out there) plus the PR's `baseRef`, which only
+ * scopes the `origin` part of the result. Wraps `@repo/git`'s
+ * `resolveUnpushedCommits`; `NO_REMOTE_REF` is that function's one
  * failure mode — no `@{upstream}` and no matching `origin/<branch>`, so
  * there's genuinely nothing to compare `HEAD` against — kept distinct from
  * `SERVICE_UNAVAILABLE` (a `git` command itself failing to run) since the
@@ -662,7 +686,12 @@ export const pullRequestsContract = {
 			SERVICE_UNAVAILABLE: { data: MergeFailure },
 		}),
 	unpushedCommits: oc
-		.input(Schema.Struct({ repoRoot: Schema.String }))
+		.input(
+			Schema.Struct({
+				repoRoot: Schema.String,
+				baseRef: Schema.NullOr(Schema.String),
+			}),
+		)
 		.output(UnpushedCommits)
 		.errors({
 			NO_REMOTE_REF: {},

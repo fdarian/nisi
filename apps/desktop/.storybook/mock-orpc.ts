@@ -27,6 +27,7 @@ import {
 	type RepositorySessionStateBatch,
 	type RepositorySummary,
 	type SidecarClient,
+	type UnpushedCommits,
 } from "@repo/sidecar-api";
 import type {
 	FileChange,
@@ -168,7 +169,7 @@ export type MockOrpcData = {
 	/** `pullRequests.mergeStatus`'s result — omit to leave the mock pending forever (`neverSettles`), same as before this field existed. */
 	mergeStatus?: PullRequestMergeStatus;
 	scheduledMerge?: { method: "merge" | "squash" | "rebase" } | null;
-	unpushedCommits?: { count: number; remoteRef: string };
+	unpushedCommits?: UnpushedCommits;
 	/** When set, `pullRequests.mergeStatus` rejects with this message instead of resolving — covers the "query failed and never once succeeded" case. Takes priority over `mergeStatus` if both are set (they shouldn't be). */
 	mergeStatusError?: string;
 	/** `pullRequests.stack`'s result — omit to leave the mock pending forever. */
@@ -471,7 +472,13 @@ export function createMockSidecarClient(
 								),
 			unpushedCommits: async () =>
 				data.unpushedCommits === undefined
-					? { count: 0, remoteRef: "origin/feature" }
+					? {
+							remoteRef: "origin/feature",
+							ahead: 0,
+							behind: 0,
+							commits: [],
+							origin: null,
+						}
 					: data.unpushedCommits,
 		},
 		// No story exercises the Overview tab yet — same reasoning as

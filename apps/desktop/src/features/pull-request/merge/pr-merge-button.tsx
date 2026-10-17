@@ -49,6 +49,8 @@ type PrMergeButtonProps = {
 	owner: string;
 	repo: string;
 	number: number;
+	/** The PR's base branch — scopes the "already on origin" half of the unpushed-commits dialog. */
+	baseRef: string | null;
 	/** This PR's tab is both the selected one and the window has focus — see `usePullRequestMergeStatus` (`pr-data.ts`). */
 	watched: boolean;
 	isSelectedTab: boolean;
@@ -204,6 +206,7 @@ export function PrMergeButton({
 	owner,
 	repo,
 	number,
+	baseRef,
 	watched,
 	isSelectedTab,
 }: PrMergeButtonProps): React.ReactElement {
@@ -346,7 +349,7 @@ export function PrMergeButton({
 			autoMerge.isPending
 		)
 			return;
-		const result = await checkUnpushedCommits(repoRoot);
+		const result = await checkUnpushedCommits(repoRoot, baseRef);
 		if (result.status === "clean") {
 			performAction(action);
 			return;

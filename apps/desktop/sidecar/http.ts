@@ -17,7 +17,7 @@ import {
 	type PullRequestStackMergeError,
 	parseActionsLog,
 	type RepoPathVerificationError,
-	resolveUnpushedCommitCount,
+	resolveUnpushedCommits,
 	type WorktreeReadFailed,
 	type WorktreeRelocationFailed,
 } from "@repo/git";
@@ -2260,12 +2260,15 @@ export function attachRouter(
 				},
 			),
 			// The pre-merge "you have local unpushed commits" check — about the
-			// local worktree branch, not the PR, so it only needs `repoRoot`.
+			// local worktree branch, not the PR; `baseRef` only scopes `origin`.
 			unpushedCommits: authed.pullRequests.unpushedCommits.effect(function* ({
 				input,
 				errors,
 			}) {
-				return yield* resolveUnpushedCommitCount(input.repoRoot).pipe(
+				return yield* resolveUnpushedCommits(
+					input.repoRoot,
+					input.baseRef,
+				).pipe(
 					Effect.catchTag("NoRemoteRefToCompare", (cause) =>
 						Effect.fail(
 							errors.NO_REMOTE_REF({

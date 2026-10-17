@@ -59,6 +59,7 @@ const meta: Meta<typeof PrMergeButton> = {
 		owner: "acme",
 		repo: "widgets",
 		number: 42,
+		baseRef: "main",
 		watched: true,
 		isSelectedTab: true,
 	},
@@ -68,7 +69,24 @@ export const AutoMergeWithUnpushedCommits: Story = {
 	args: {
 		orpc: createMockOrpc({
 			mergeStatus: { ...BASE_STATUS, mergeStateStatus: "BLOCKED" },
-			unpushedCommits: { count: 2, remoteRef: "origin/feature" },
+			unpushedCommits: {
+				remoteRef: "origin/feature",
+				ahead: 2,
+				behind: 0,
+				commits: [
+					{
+						sha: "a3f9c21e5b7d4086c1d2e3f40516273849a0b1c2",
+						subject: "Replace S3 mock with in-memory store",
+						authoredAt: new Date().toISOString(),
+					},
+					{
+						sha: "7be04d8a1c3f5927e6d8b0a4c2f1e3d5b7a9c8e6",
+						subject: "Fix bucket policy fixture",
+						authoredAt: new Date().toISOString(),
+					},
+				],
+				origin: null,
+			},
 		}),
 	},
 };

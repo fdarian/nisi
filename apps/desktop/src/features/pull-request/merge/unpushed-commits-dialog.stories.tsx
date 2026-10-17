@@ -1,7 +1,7 @@
 /**
  * Storybook coverage for `UnpushedCommitsDialog`'s two non-`"clean"`
- * outcomes (with and without per-commit detail, with and without the on-origin tab,
- * and each state of the suggested-push action) — no `orpc` dependency to
+ * outcomes (with and without the on-origin tab, and each state of the
+ * suggested-push action) — no `orpc` dependency to
  * mock here, unlike `PrMergeButton`'s own stories: this component is pure
  * presentation over whatever `useUnpushedCommitsCheck` resolved.
  */
@@ -93,11 +93,15 @@ export const Unpushed: Story = {
 	args: {
 		check: {
 			status: "unpushed",
-			count: 2,
 			remoteRef: REMOTE_REF,
+			ahead: 2,
+			behind: 0,
 			commits: REALISTIC_COMMITS,
-			remoteCommits: ORIGIN_COMMITS,
-			baseRef: BASE_REF,
+			origin: {
+				baseRef: BASE_REF,
+				count: ORIGIN_COMMITS.length,
+				commits: ORIGIN_COMMITS,
+			},
 		},
 	},
 };
@@ -107,35 +111,41 @@ export const SingleUnpushedCommit: Story = {
 	args: {
 		check: {
 			status: "unpushed",
-			count: 1,
 			remoteRef: REMOTE_REF,
+			ahead: 1,
+			behind: 0,
 			commits: REALISTIC_COMMITS.slice(0, 1),
+			origin: null,
 		},
 	},
 };
 
-/** 12 unpushed commits — the graph caps at 5 and shows "+7 more". */
+/** 12 unpushed commits and 8 on origin — the sidecar lists 5 of each and the graph shows "+7 more" / "+3 more". */
 export const ManyUnpushedCommits: Story = {
 	args: {
 		check: {
 			status: "unpushed",
-			count: 12,
 			remoteRef: REMOTE_REF,
-			commits: Array.from({ length: 12 }, (_, index) =>
+			ahead: 12,
+			behind: 0,
+			commits: Array.from({ length: 5 }, (_, index) =>
 				commit(
 					`${(0xc0ffee0 + index * 0x1111).toString(16)}9d8c7b6a5f4e3d2c1b0a`,
 					`Step ${12 - index} of the S3 mock replacement`,
 					20 + index * 55,
 				),
 			),
-			remoteCommits: Array.from({ length: 8 }, (_, index) =>
-				commit(
-					`${(0xabcde00 + index * 0x2222).toString(16)}1f2e3d4c5b6a79880a1b`,
-					`Groundwork ${8 - index} for the storage layer`,
-					60 * 30 + index * 90,
+			origin: {
+				baseRef: BASE_REF,
+				count: 8,
+				commits: Array.from({ length: 5 }, (_, index) =>
+					commit(
+						`${(0xabcde00 + index * 0x2222).toString(16)}1f2e3d4c5b6a79880a1b`,
+						`Groundwork ${8 - index} for the storage layer`,
+						60 * 30 + index * 90,
+					),
 				),
-			),
-			baseRef: BASE_REF,
+			},
 		},
 	},
 };
@@ -145,8 +155,9 @@ export const LongSubjects: Story = {
 	args: {
 		check: {
 			status: "unpushed",
-			count: 2,
 			remoteRef: REMOTE_REF,
+			ahead: 2,
+			behind: 0,
 			commits: [
 				commit(
 					"1d2c3b4a5f6e7d8c9b0a1f2e3d4c5b6a7f8e9d0c",
@@ -159,19 +170,22 @@ export const LongSubjects: Story = {
 					1_500,
 				),
 			],
-			remoteCommits: [
-				commit(
-					"6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b",
-					"Introduce a pluggable object-store interface so tests and production can swap implementations without touching callers",
-					60 * 40,
-				),
-				commit(
-					"3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d",
-					"Document the storage module",
-					60 * 41,
-				),
-			],
-			baseRef: BASE_REF,
+			origin: {
+				baseRef: BASE_REF,
+				count: 2,
+				commits: [
+					commit(
+						"6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b",
+						"Introduce a pluggable object-store interface so tests and production can swap implementations without touching callers",
+						60 * 40,
+					),
+					commit(
+						"3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d",
+						"Document the storage module",
+						60 * 41,
+					),
+				],
+			},
 		},
 	},
 };
@@ -186,13 +200,6 @@ export const OriginTab: Story = {
 		await expect(
 			await body.findByRole("tab", { name: /On origin/, selected: true }),
 		).toBeVisible();
-	},
-};
-
-/** Count only, no `commits` — what the sidecar returns today. */
-export const WithoutCommitDetails: Story = {
-	args: {
-		check: { status: "unpushed", count: 2, remoteRef: REMOTE_REF },
 	},
 };
 

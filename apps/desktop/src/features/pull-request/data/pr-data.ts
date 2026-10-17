@@ -1574,15 +1574,18 @@ export type UnpushedCommitsCheck =
 	| { status: "clean" }
 	| {
 			status: "unpushed";
-			count: number;
 			remoteRef: string;
-			/** Optional until the sidecar returns them — the dialog degrades to a count-only description without `commits`. */
-			/** Newest first; may be shorter than `count` if the sidecar caps the list. */
-			commits?: ReadonlyArray<BranchCommit>;
-			/** The PR's commits already on `remoteRef`, newest first — what the merge will include. */
-			remoteCommits?: ReadonlyArray<BranchCommit>;
-			/** The PR's base branch name (e.g. `main`), where `remoteCommits` stop. */
-			baseRef?: string;
+			/** Always >= 1 — `"clean"` covers `ahead === 0`, including behind-only. */
+			ahead: number;
+			behind: number;
+			/** The unpushed commits, newest first, capped by the sidecar (so possibly fewer than `ahead`). */
+			commits: ReadonlyArray<BranchCommit>;
+			/** What `remoteRef` holds beyond the PR's base branch — what the merge will include; `null` when the sidecar couldn't resolve `origin/<baseRef>`. */
+			origin: {
+				baseRef: string;
+				count: number;
+				commits: ReadonlyArray<BranchCommit>;
+			} | null;
 	  }
 	| { status: "unverifiable"; message: string };
 
@@ -1615,7 +1618,10 @@ const unpushedCommitsErrorMessage = (error: unknown): string => {
  * branch is a real outcome the caller renders, not an exceptional one.
  */
 export function useUnpushedCommitsCheck(orpc: SidecarQueryUtils): {
-	check: (repoRoot: string) => Promise<UnpushedCommitsCheck>;
+	check: (
+		repoRoot: string,
+		baseRef: string | null,
+	) => Promise<UnpushedCommitsCheck>;
 	isPending: boolean;
 } {
 	const mutation = useMutation(
@@ -1623,15 +1629,21 @@ export function useUnpushedCommitsCheck(orpc: SidecarQueryUtils): {
 	);
 
 	const check = useCallback(
-		async (repoRoot: string): Promise<UnpushedCommitsCheck> => {
+		async (
+			repoRoot: string,
+			baseRef: string | null,
+		): Promise<UnpushedCommitsCheck> => {
 			try {
-				const result = await mutation.mutateAsync({ repoRoot });
-				return result.count === 0
+				const result = await mutation.mutateAsync({ repoRoot, baseRef });
+				return result.ahead === 0
 					? { status: "clean" }
 					: {
 							status: "unpushed",
-							count: result.count,
 							remoteRef: result.remoteRef,
+							ahead: result.ahead,
+							behind: result.behind,
+							commits: result.commits,
+							origin: result.origin,
 						};
 			} catch (error) {
 				return {
