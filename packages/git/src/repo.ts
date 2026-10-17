@@ -105,7 +105,7 @@ export const originUrlOrNull = (repoRoot: string) =>
 	);
 
 /**
- * The remote ref {@link resolveUnpushedCommitCount} diffs `HEAD` against:
+ * The remote ref {@link resolveUnpushedCommits} diffs `HEAD` against:
  * the branch's configured `@{upstream}` when it has one, else
  * `origin/<currentBranch>` when that ref actually exists. `null` when
  * neither resolves — a branch nisi created for a PR worktree
@@ -129,27 +129,120 @@ const resolveComparisonRemoteRef = (repoRoot: string, currentBranch: string) =>
 			: null;
 	});
 
-/** How many commits `HEAD` has that its remote doesn't, plus the remote ref that count was computed against. */
-export type UnpushedCommits = {
-	readonly count: number;
-	readonly remoteRef: string;
+/** How many commits of each side {@link resolveUnpushedCommits} lists in full; the counts stay exact beyond it. */
+const MAX_LISTED_COMMITS = 5;
+
+const COMMIT_FIELD_SEP = "\x1f";
+
+export type BranchCommit = {
+	readonly sha: string;
+	readonly subject: string;
+	/** ISO 8601 */
+	readonly authoredAt: string;
 };
+
+/** The commits already on the remote branch that the base branch doesn't have — what a merge of the pushed branch will carry. */
+export type OriginCommits = {
+	readonly baseRef: string;
+	readonly count: number;
+	/** Newest first, capped at 5. */
+	readonly commits: ReadonlyArray<BranchCommit>;
+};
+
+/** How `HEAD` has diverged from the ref it should have been pushed to, plus enough commit detail to render both sides. */
+export type UnpushedCommits = {
+	readonly remoteRef: string;
+	/** Commits `HEAD` has that `remoteRef` doesn't. */
+	readonly ahead: number;
+	/** Commits `remoteRef` has that `HEAD` doesn't. */
+	readonly behind: number;
+	/** The unpushed commits, newest first, capped at 5. */
+	readonly commits: ReadonlyArray<BranchCommit>;
+	/** `null` when no `baseRef` was given or `origin/<baseRef>` doesn't exist. */
+	readonly origin: OriginCommits | null;
+};
+
+const parseDigits = (raw: string): number | null =>
+	/^\d+$/.test(raw) ? Number(raw) : null;
+
+/**
+ * Newest-first commits in `range`. NUL-terminated records (`-z`) with a unit
+ * separator between fields, so a subject can't break parsing.
+ */
+const listCommits = (repoRoot: string, range: string) =>
+	git(repoRoot, [
+		"log",
+		"-z",
+		"-n",
+		String(MAX_LISTED_COMMITS),
+		`--format=%H${COMMIT_FIELD_SEP}%s${COMMIT_FIELD_SEP}%aI`,
+		range,
+	]).pipe(
+		Effect.map((stdout) =>
+			stdout
+				.split("\0")
+				.filter((record) => record !== "")
+				.map((record): BranchCommit => {
+					const fields = record.split(COMMIT_FIELD_SEP);
+					const sha = fields[0];
+					const subject = fields[1];
+					const authoredAt = fields[2];
+					if (
+						fields.length !== 3 ||
+						sha === undefined ||
+						subject === undefined ||
+						authoredAt === undefined
+					) {
+						throw new Error(
+							`unparseable "git log" record: ${JSON.stringify(record)}`,
+						);
+					}
+					return { sha, subject, authoredAt };
+				}),
+		),
+	);
+
+const resolveOriginCommits = (
+	repoRoot: string,
+	baseRef: string,
+	range: string,
+) =>
+	Effect.gen(function* () {
+		const stdout = yield* git(repoRoot, ["rev-list", "--count", range]);
+		const count = parseDigits(stdout.trim());
+		if (count === null) {
+			return yield* new UnpushedCommitCountUnparseable({
+				repoRoot,
+				remoteRef: range,
+				raw: stdout,
+			});
+		}
+		const commits = yield* listCommits(repoRoot, range);
+		return { baseRef, count, commits } satisfies OriginCommits;
+	});
 
 /**
  * The pre-merge "you have local unpushed commits" check
  * (`apps/desktop/sidecar/http.ts`'s `unpushedCommits` handler) is built on:
  * how far `HEAD` has diverged, in commits, from the ref it should have been
  * pushed to. Resolves that ref via {@link resolveComparisonRemoteRef}, then
- * counts with `git rev-list --count <remoteRef>..HEAD` — commits reachable
- * from `HEAD` but not from `remoteRef`. Fails with
+ * reads ahead/behind with `git rev-list --left-right --count
+ * <remoteRef>...HEAD` (left = behind, right = ahead). Fails with
  * {@link NoRemoteRefToCompare} rather than returning `0` when no remote ref
  * resolves at all, since that's an unverifiable state, not "nothing to
  * push"; fails with {@link UnpushedCommitCountUnparseable} rather than
  * coercing (`Number()` on unexpected output silently produces `NaN`) when
- * `rev-list`'s stdout isn't the plain non-negative integer that flag always
+ * the counts aren't the two plain non-negative integers that flag always
  * prints on a zero exit.
+ *
+ * `origin` describes what the remote branch holds beyond `baseRef`, for
+ * callers that want to show what the merge will include; it needs
+ * `origin/<baseRef>` to exist locally and is `null` otherwise.
  */
-export const resolveUnpushedCommitCount = (repoRoot: string) =>
+export const resolveUnpushedCommits = (
+	repoRoot: string,
+	baseRef: string | null,
+) =>
 	Effect.gen(function* () {
 		const currentBranch = yield* resolveCurrentBranch(repoRoot);
 		const remoteRef = yield* resolveComparisonRemoteRef(
@@ -165,11 +258,20 @@ export const resolveUnpushedCommitCount = (repoRoot: string) =>
 
 		const stdout = yield* git(repoRoot, [
 			"rev-list",
+			"--left-right",
 			"--count",
-			`${remoteRef}..HEAD`,
+			`${remoteRef}...HEAD`,
 		]);
-		const raw = stdout.trim();
-		if (!/^\d+$/.test(raw)) {
+		const counts = stdout.trim().split(/\s+/).map(parseDigits);
+		const behind = counts[0];
+		const ahead = counts[1];
+		if (
+			counts.length !== 2 ||
+			behind === null ||
+			behind === undefined ||
+			ahead === null ||
+			ahead === undefined
+		) {
 			return yield* new UnpushedCommitCountUnparseable({
 				repoRoot,
 				remoteRef,
@@ -177,7 +279,24 @@ export const resolveUnpushedCommitCount = (repoRoot: string) =>
 			});
 		}
 
-		return { count: Number(raw), remoteRef } satisfies UnpushedCommits;
+		const commits = yield* listCommits(repoRoot, `${remoteRef}..HEAD`);
+
+		const origin =
+			baseRef !== null && (yield* refExists(repoRoot, `origin/${baseRef}`))
+				? yield* resolveOriginCommits(
+						repoRoot,
+						baseRef,
+						`origin/${baseRef}..${remoteRef}`,
+					)
+				: null;
+
+		return {
+			remoteRef,
+			ahead,
+			behind,
+			commits,
+			origin,
+		} satisfies UnpushedCommits;
 	});
 
 /** The commit `ref` currently points at — defaults to `HEAD`, the actual checked-out commit. */
