@@ -1,7 +1,7 @@
 import { Link, useLocation } from "@tanstack/react-router";
 import {
+	AsteriskIcon,
 	BellIcon,
-	BotIcon,
 	ChevronLeftIcon,
 	FlagIcon,
 	GitForkIcon,
@@ -73,7 +73,7 @@ export function SettingsSidebar(): React.ReactElement {
 									isActive={pathname === "/settings/agents"}
 									render={<Link to="/settings/agents" />}
 								>
-									<BotIcon />
+									<AsteriskIcon />
 									Agents
 								</SidebarMenuButton>
 							</SidebarMenuItem>
