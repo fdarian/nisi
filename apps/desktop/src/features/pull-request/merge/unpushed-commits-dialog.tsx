@@ -70,7 +70,7 @@ function Rail(props: {
 		<span className="relative flex w-3 shrink-0 items-center justify-center self-stretch">
 			<span
 				className={cn(
-					"absolute left-1/2 w-px -translate-x-1/2 bg-border",
+					"absolute left-1/2 w-px -translate-x-1/2 bg-foreground/20",
 					props.continuesUp ? "top-0" : "top-1/2",
 					props.continuesDown ? "bottom-0" : "bottom-1/2",
 				)}
@@ -148,7 +148,7 @@ function CommitGraph(props: {
 						<Rail
 							continuesDown
 							continuesUp
-							dot={<span className="size-1 rounded-full bg-border" />}
+							dot={<span className="size-1 rounded-full bg-foreground/30" />}
 						/>
 						<span className="py-1.5 text-muted-foreground text-xs">
 							+{hiddenCount} more
@@ -196,7 +196,7 @@ export function UnpushedCommitsDialog({
 	const isUnverifiable = check?.status === "unverifiable";
 	return (
 		<AlertDialog onOpenChange={onOpenChange} open={check !== null}>
-			<AlertDialogContent>
+			<AlertDialogContent className="max-w-xl">
 				<AlertDialogHeader className="flex-row items-start gap-4 text-left">
 					<span
 						className={cn(
