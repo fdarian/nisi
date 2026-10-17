@@ -13,12 +13,12 @@
  */
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import type { ChatStatus, UIMessage } from "ai";
-import { ScrollArea } from "#/components/ui/scroll-area";
-import { MessageList } from "./chat-panel";
+import { MessageScroller } from "./chat-panel";
 import {
 	CHAT_PANEL_DEFAULT_WIDTH,
 	CHAT_PANEL_MIN_WIDTH,
 } from "./chat-panel-resize";
+import { useChatScroll } from "./use-chat-scroll";
 
 const LONG_SHELL_COMMAND =
 	"bun node_modules/@rheya/build-config/run.mjs --target=darwin-arm64 --profile=release --skip-cache-verification-step --emit-source-maps --output-dir=./dist/darwin-arm64/release";
@@ -131,18 +131,19 @@ function ChatPanelFrame({
 	messages,
 	status = "ready",
 }: ChatPanelFrameProps): React.ReactElement {
+	const scroll = useChatScroll("story-thread");
 	return (
 		<div
 			className="flex flex-col overflow-hidden rounded-xl border bg-popover text-popover-foreground"
 			style={{ width }}
 		>
-			<ScrollArea scrollFade style={{ height: 480 }}>
-				<MessageList
-					repoRoot="/tmp/storybook-repo"
-					status={status}
-					messages={messages}
-				/>
-			</ScrollArea>
+			<MessageScroller
+				height={480}
+				messages={messages}
+				repoRoot="/tmp/storybook-repo"
+				scroll={scroll}
+				status={status}
+			/>
 		</div>
 	);
 }
@@ -180,4 +181,26 @@ export const Thinking: Story = {
 		messages: TRACE_MESSAGES.slice(0, 1),
 		status: "submitted",
 	},
+};
+
+const LONG_THREAD_MESSAGES: readonly UIMessage[] = Array.from(
+	{ length: 40 },
+	(_, index): UIMessage => ({
+		id: `long-${index}`,
+		role: index % 2 === 0 ? "user" : "assistant",
+		parts: [
+			{
+				type: "text",
+				text:
+					index % 2 === 0
+						? `Question ${index / 2 + 1}: how does this part of the diff behave?`
+						: `Answer ${(index - 1) / 2 + 1}: it reads the file, walks the hunks, and reports each changed range back with its surrounding context so the caller can render it.`,
+			},
+		],
+	}),
+);
+
+/** Opens pinned to the newest message; scrolling up releases the stick and shows the jump-to-latest button. */
+export const LongThread: Story = {
+	args: { width: CHAT_PANEL_DEFAULT_WIDTH, messages: LONG_THREAD_MESSAGES },
 };

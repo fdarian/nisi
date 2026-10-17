@@ -20,7 +20,12 @@
 import { useChat } from "@ai-sdk/react";
 import { useQuery } from "@tanstack/react-query";
 import type { ChatStatus, UIMessage } from "ai";
-import { ChevronDownIcon, ChevronUpIcon, XIcon } from "lucide-react";
+import {
+	ArrowDownIcon,
+	ChevronDownIcon,
+	ChevronUpIcon,
+	XIcon,
+} from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { ShimmerText } from "#/components/shimmer-text";
 import { Button } from "#/components/ui/button";
@@ -40,6 +45,7 @@ import type { SidecarQueryUtils } from "#/infra/backend-context";
 import { ChatComposer } from "../chat-composer";
 import { ChatMessage } from "./chat-message";
 import { ChatPanelResizeHandles, useChatPanelSize } from "./chat-panel-resize";
+import { type ChatScroll, useChatScroll } from "./use-chat-scroll";
 
 export function MessageList({
 	messages,
@@ -77,6 +83,43 @@ export function MessageList({
 			))}
 			{isThinking && (
 				<ShimmerText className="self-start text-sm">Thinking</ShimmerText>
+			)}
+		</div>
+	);
+}
+
+/** The scrolling message list with its jump-to-latest button; `scroll` comes from `useChatScroll`, which the caller owns because sending a message re-sticks. */
+export function MessageScroller({
+	scroll,
+	height,
+	...listProps
+}: {
+	scroll: ChatScroll;
+	height: number;
+	messages: readonly UIMessage[];
+	status: ChatStatus;
+	repoRoot: string | undefined;
+}): React.ReactElement {
+	return (
+		<div className="relative">
+			<ScrollArea
+				scrollFade
+				style={{ height }}
+				viewportRef={scroll.viewportRef}
+			>
+				<MessageList {...listProps} />
+			</ScrollArea>
+			{!scroll.stuckToBottom && (
+				<Button
+					aria-label="Jump to latest"
+					className="-translate-x-1/2 absolute bottom-3 left-1/2 rounded-full"
+					onClick={() => scroll.scrollToEnd("smooth")}
+					size="icon-sm"
+					title="Jump to latest"
+					variant="outline"
+				>
+					<ArrowDownIcon />
+				</Button>
 			)}
 		</div>
 	);
@@ -131,6 +174,8 @@ function ChatPanelBody({
 	const { messages, status, error, sendMessage, stop } = useChat({
 		chat: getOrCreateChat(orpc, sessionId, thread.id),
 	});
+
+	const scroll = useChatScroll(thread.id);
 
 	const title = deriveThreadTitle(messages);
 	// The same root the chat agent's sandbox is rooted at
@@ -218,6 +263,7 @@ function ChatPanelBody({
 									setLastChatModel({ harness, modelId: model });
 								}
 								dock.lockThreadHarness(thread.id, harness, model);
+								scroll.scrollToEnd();
 								void sendMessage({ text }, { body: { harness, model } });
 							}}
 							onStop={() => void stop()}
