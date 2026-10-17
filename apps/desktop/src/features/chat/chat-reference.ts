@@ -67,7 +67,7 @@ export function composeOutgoingMessage(
 	return `${references.map(formatChatReferenceForAgent).join("\n\n")}\n\n${text}`;
 }
 
-/** Chip label — too narrow for the full form, so `formatChatReferenceTitle` goes in the `title`. */
+/** Chip label — too narrow for the full form, so `formatChatReferenceForAgent` goes in the `title`. */
 export function formatChatReferenceShort(reference: ChatReference): string {
 	if (reference.kind === "lines")
 		return formatSelectionReferenceShort(reference);
@@ -78,11 +78,4 @@ export function formatChatReferenceShort(reference: ChatReference): string {
 			? flat
 			: `${flat.slice(0, SHORT_EXCERPT_LENGTH).trimEnd()}…`;
 	return `${label}: “${preview}”`;
-}
-
-/** Chip tooltip and remove-button label. */
-export function formatChatReferenceTitle(reference: ChatReference): string {
-	return reference.kind === "lines"
-		? formatSelectionReference(reference)
-		: formatExcerptForAgent(reference);
 }

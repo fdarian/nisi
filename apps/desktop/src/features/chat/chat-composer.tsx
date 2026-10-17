@@ -52,8 +52,8 @@ import type { SidecarQueryUtils } from "#/infra/backend-context";
 import {
 	type ChatReference,
 	composeOutgoingMessage,
+	formatChatReferenceForAgent,
 	formatChatReferenceShort,
-	formatChatReferenceTitle,
 } from "./chat-reference";
 
 type ChatComposerProps = {
@@ -93,7 +93,7 @@ function ReferenceChip({
 	onRemove: () => void;
 }): React.ReactElement {
 	const short = formatChatReferenceShort(reference);
-	const full = formatChatReferenceTitle(reference);
+	const full = formatChatReferenceForAgent(reference);
 	return (
 		<Badge className="max-w-full gap-1 pr-1 font-mono" variant="outline">
 			<span className="min-w-0 truncate" title={full}>
@@ -287,7 +287,7 @@ function ComposerBody({
 				<div className="flex flex-wrap gap-1">
 					{references.map((reference) => (
 						<ReferenceChip
-							key={formatChatReferenceTitle(reference)}
+							key={formatChatReferenceForAgent(reference)}
 							onRemove={() => onRemoveReference(reference)}
 							reference={reference}
 						/>

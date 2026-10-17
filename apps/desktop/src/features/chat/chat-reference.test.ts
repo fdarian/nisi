@@ -6,7 +6,6 @@ import {
 	type ExcerptReference,
 	formatChatReferenceForAgent,
 	formatChatReferenceShort,
-	formatChatReferenceTitle,
 } from "./chat-reference";
 
 const lines: ChatReference = {
@@ -79,7 +78,6 @@ describe("composeOutgoingMessage", () => {
 describe("chip labels", () => {
 	test("lines use the basename", () => {
 		expect(formatChatReferenceShort(lines)).toBe("b.ts#L1-3");
-		expect(formatChatReferenceTitle(lines)).toBe("src/a/b.ts#L1-3");
 	});
 
 	test("excerpt label collapses whitespace and truncates", () => {
@@ -93,12 +91,6 @@ describe("chip labels", () => {
 				text: "short\ntext",
 			}),
 		).toBe("Guide: “short text”");
-	});
-
-	test("excerpt title is the agent-facing form", () => {
-		expect(formatChatReferenceTitle(excerpt)).toBe(
-			formatChatReferenceForAgent(excerpt),
-		);
 	});
 });
 
