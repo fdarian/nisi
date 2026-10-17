@@ -1572,8 +1572,23 @@ export function useOverview(
  */
 export type UnpushedCommitsCheck =
 	| { status: "clean" }
-	| { status: "unpushed"; count: number; remoteRef: string }
+	| {
+			status: "unpushed";
+			count: number;
+			remoteRef: string;
+			/** Optional until the sidecar returns them — the dialog degrades to a count-only description without `commits`. */
+			localBranch?: string;
+			/** Newest first; may be shorter than `count` if the sidecar caps the list. */
+			commits?: ReadonlyArray<UnpushedCommit>;
+	  }
 	| { status: "unverifiable"; message: string };
+
+export type UnpushedCommit = {
+	sha: string;
+	subject: string;
+	/** ISO 8601 */
+	authoredAt: string;
+};
 
 /** `pullRequests.unpushedCommits`'s declared `NO_REMOTE_REF` carries no server-authored message (there's nothing to diff against, not a failure with detail) — named explicitly rather than falling through to `mergeStatusErrorMessage`'s generic copy. Anything else undeclared (sidecar unreachable) still gets that generic fallback. */
 const unpushedCommitsErrorMessage = (error: unknown): string => {
