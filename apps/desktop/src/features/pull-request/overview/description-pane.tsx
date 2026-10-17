@@ -32,11 +32,15 @@ export function DescriptionPane({
 	description,
 }: DescriptionPaneProps): React.ReactElement {
 	const body = description.body;
+	const scroller = useRef<HTMLDivElement>(null);
 	const card = useRef<HTMLDivElement>(null);
 	const selection = useProseSelection(card, "description");
 
 	return (
-		<div className="min-w-0 min-h-0 flex-1 overflow-auto pl-3 pr-6 py-5">
+		<div
+			className="min-w-0 min-h-0 flex-1 overflow-auto pl-3 pr-6 py-5"
+			ref={scroller}
+		>
 			<div className="mx-auto flex max-w-2xl gap-3 pb-12">
 				<Avatar className="mt-0.5 size-8 shrink-0">
 					<AvatarImage alt="" src={githubAvatarUrl(description.authorLogin)} />
@@ -64,6 +68,7 @@ export function DescriptionPane({
 				clear={selection.clear}
 				orpc={orpc}
 				reference={selection.reference}
+				scroller={scroller}
 				sessionId={sessionId}
 			/>
 		</div>

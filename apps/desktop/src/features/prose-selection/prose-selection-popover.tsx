@@ -7,7 +7,7 @@
  * the selection lives in the page's own scroll flow rather than a virtualized
  * pane.
  */
-import { useLayoutEffect, useState } from "react";
+import { type RefObject, useLayoutEffect, useState } from "react";
 import { Button } from "#/components/ui/button";
 import { Popover, PopoverPrimitive } from "#/components/ui/popover";
 import { Toolbar, ToolbarButton } from "#/components/ui/toolbar";
@@ -22,14 +22,34 @@ type ProseSelectionPopoverProps = {
 	orpc: SidecarQueryUtils;
 	reference: ExcerptReference | null;
 	anchorRect: DOMRect | null;
+	/** The element the selection scrolls inside: the popover hides when the selection leaves it and stays within its bounds. */
+	scroller: RefObject<HTMLElement | null>;
 	clear: () => void;
 };
+
+/** The part of `anchor` inside `boundary`, collapsed to its bottom edge; `null` when none of it is visible. */
+function clampToBoundary(anchor: DOMRect, boundary: DOMRect): DOMRect | null {
+	const visible =
+		anchor.bottom > boundary.top &&
+		anchor.top < boundary.bottom &&
+		anchor.right > boundary.left &&
+		anchor.left < boundary.right;
+	if (!visible) return null;
+	const left = Math.max(anchor.left, boundary.left);
+	return new DOMRect(
+		left,
+		Math.min(anchor.bottom, boundary.bottom),
+		Math.min(anchor.right, boundary.right) - left,
+		0,
+	);
+}
 
 export function ProseSelectionPopover({
 	sessionId,
 	orpc,
 	reference,
 	anchorRect,
+	scroller,
 	clear,
 }: ProseSelectionPopoverProps): React.ReactElement | null {
 	const dock = useChatDockActions(sessionId, orpc);
@@ -38,15 +58,23 @@ export function ProseSelectionPopover({
 	// a real `open: false -> true` edge, and a virtual anchor registers a render
 	// late — so open one commit after the reference appears instead of mounting
 	// already open (same reasoning as `diff-selection-popover.tsx`).
-	const visible = reference !== null && anchorRect !== null;
+	const scrollerElement = scroller.current;
+	// Base UI's hide middleware only looks at the portaled positioner's own
+	// clipping ancestors, so it can't hide an anchor scrolled out of `scroller`.
+	const boundary = scrollerElement?.getBoundingClientRect();
+	const visibleAnchor =
+		anchorRect !== null && boundary !== undefined
+			? clampToBoundary(anchorRect, boundary)
+			: null;
+	const visible = reference !== null && visibleAnchor !== null;
 	const [open, setOpen] = useState(false);
 	useLayoutEffect(() => {
 		setOpen(visible);
 	}, [visible]);
 
-	if (reference === null || anchorRect === null) return null;
+	if (reference === null || visibleAnchor === null) return null;
 
-	const virtualAnchor = { getBoundingClientRect: () => anchorRect };
+	const virtualAnchor = { getBoundingClientRect: () => visibleAnchor };
 
 	return (
 		<Popover
@@ -60,6 +88,7 @@ export function ProseSelectionPopover({
 					align="start"
 					anchor={virtualAnchor}
 					className="z-50 outline-none"
+					collisionBoundary={scrollerElement ?? undefined}
 					side="bottom"
 					sideOffset={8}
 				>

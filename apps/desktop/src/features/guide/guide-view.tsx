@@ -240,6 +240,7 @@ function GuideBody(props: {
 							clear={selection.clear}
 							orpc={props.orpc}
 							reference={selection.reference}
+							scroller={scroller}
 							sessionId={props.session.id}
 						/>
 						{props.target === null && (
