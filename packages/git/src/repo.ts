@@ -2,13 +2,14 @@ import { stat } from "node:fs/promises";
 import { Effect } from "effect";
 import { resolveBaseRemote } from "./base.ts";
 import {
+	GitCommandError,
 	NoDefaultBranch,
 	NoRemoteRefToCompare,
 	NotAGitRepository,
 	PushTargetUnresolvable,
 	UnpushedCommitCountUnparseable,
 } from "./errors.ts";
-import { git, gitResult } from "./exec.ts";
+import { type GhResult, git, gitResult } from "./exec.ts";
 
 /** Resolves the repository root for any path inside a git working tree. */
 export const resolveRepoRoot = (cwd: string) =>
@@ -205,6 +206,12 @@ export type UnpushedCommits = {
 	readonly behind: number;
 	/** The unpushed commits, newest first, capped at 5. */
 	readonly commits: ReadonlyArray<BranchCommit>;
+	/**
+	 * `remoteRef` isn't an ancestor of `HEAD` (it was rebased or otherwise
+	 * rewritten), so `ahead` and `commits` cover only the local commits whose
+	 * changes `remoteRef`'s tip lacks, not the commit-graph difference.
+	 */
+	readonly rewritten: boolean;
 	/** `null` when no `baseRef` was given or `origin/<baseRef>` doesn't exist. */
 	readonly origin: OriginCommits | null;
 };
@@ -213,17 +220,20 @@ const parseDigits = (raw: string): number | null =>
 	/^\d+$/.test(raw) ? Number(raw) : null;
 
 /**
- * Newest-first commits in `range`. NUL-terminated records (`-z`) with a unit
- * separator between fields, so a subject can't break parsing.
+ * Newest-first commits selected by `revisionArgs` (a range, or
+ * `--no-walk=sorted <shas>`), capped at {@link MAX_LISTED_COMMITS}.
+ * NUL-terminated records (`-z`) with a unit separator between fields, so a
+ * subject can't break parsing. `revisionArgs` must name at least one
+ * revision — `git log` with none silently walks from `HEAD`.
  */
-const listCommits = (repoRoot: string, range: string) =>
+const listCommits = (repoRoot: string, revisionArgs: ReadonlyArray<string>) =>
 	git(repoRoot, [
 		"log",
 		"-z",
 		"-n",
 		String(MAX_LISTED_COMMITS),
 		`--format=%H${COMMIT_FIELD_SEP}%s${COMMIT_FIELD_SEP}%aI`,
-		range,
+		...revisionArgs,
 	]).pipe(
 		Effect.map((stdout) =>
 			stdout
@@ -249,6 +259,96 @@ const listCommits = (repoRoot: string, range: string) =>
 		),
 	);
 
+const listCommitsBySha = (repoRoot: string, shas: ReadonlyArray<string>) =>
+	shas.length === 0
+		? Effect.succeed([])
+		: listCommits(repoRoot, ["--no-walk=sorted", ...shas]);
+
+/** A `git` invocation that exited with a code the caller doesn't treat as a meaningful answer. */
+const unexpectedExit = (
+	repoRoot: string,
+	args: ReadonlyArray<string>,
+	result: GhResult,
+) =>
+	new GitCommandError({
+		command: "git",
+		args,
+		cwd: repoRoot,
+		exitCode: result.exitCode,
+		stderr: result.stderr,
+		cause: new Error(
+			`git ${args.join(" ")} exited with code ${result.exitCode}: ${result.stderr}`,
+		),
+	});
+
+/**
+ * The `HEAD` commits that have a change `remoteRef` doesn't already contain,
+ * for the case where `remoteRef` is not an ancestor of `HEAD` (the remote
+ * branch was rewritten — rebased by GitHub's stacked-PR feature, or after a
+ * parent PR was squash-merged — so every old local SHA looks unpushed to
+ * `rev-list`). Candidates are the non-merge commits only `HEAD` has, minus
+ * those `--cherry-pick` matches by patch-id. Each candidate is then replayed
+ * onto `remoteRef` with `git merge-tree --write-tree -X ours`: if the merged
+ * tree equals `remoteRef`'s own tree, the commit's change is already there.
+ * `-X ours` makes a conflicting hunk count as superseded (the remote has
+ * since rewritten those lines), while non-conflicting hunks still alter the
+ * tree and so still count — e.g. a fix committed locally on top of the
+ * pre-rebase branch. A conflict `-X ours` can't resolve (modify/delete)
+ * exits 1 and counts as not contained; a root commit has no parent to use as
+ * merge base and counts too. Requires git >= 2.40 (`merge-tree
+ * --merge-base`, strategy options).
+ */
+const listCommitsMissingFromRewrittenRemote = (
+	repoRoot: string,
+	remoteRef: string,
+) =>
+	Effect.gen(function* () {
+		const candidatesOut = yield* git(repoRoot, [
+			"rev-list",
+			"--no-merges",
+			"--cherry-pick",
+			"--right-only",
+			"--parents",
+			`${remoteRef}...HEAD`,
+		]);
+		const candidates = candidatesOut
+			.split("\n")
+			.filter((line) => line !== "")
+			.map((line) => line.split(" "));
+		const remoteTree = (yield* git(repoRoot, [
+			"rev-parse",
+			`${remoteRef}^{tree}`,
+		])).trim();
+
+		const missing: Array<string> = [];
+		for (const candidate of candidates) {
+			const sha = candidate[0];
+			const parent = candidate[1];
+			if (sha === undefined) continue;
+			if (parent === undefined) {
+				missing.push(sha);
+				continue;
+			}
+			const args = [
+				"merge-tree",
+				"--write-tree",
+				"-X",
+				"ours",
+				`--merge-base=${parent}`,
+				remoteRef,
+				sha,
+			];
+			const result = yield* gitResult(repoRoot, args);
+			if (result.exitCode > 1) {
+				return yield* unexpectedExit(repoRoot, args, result);
+			}
+			const contained =
+				result.exitCode === 0 && result.stdout.split("\n")[0] === remoteTree;
+			if (!contained) missing.push(sha);
+		}
+		return missing;
+	});
+
 const resolveOriginCommits = (
 	repoRoot: string,
 	baseRef: string,
@@ -264,7 +364,7 @@ const resolveOriginCommits = (
 				raw: stdout,
 			});
 		}
-		const commits = yield* listCommits(repoRoot, range);
+		const commits = yield* listCommits(repoRoot, [range]);
 		return { baseRef, count, commits } satisfies OriginCommits;
 	});
 
@@ -281,6 +381,14 @@ const resolveOriginCommits = (
  * coercing (`Number()` on unexpected output silently produces `NaN`) when
  * the counts aren't the two plain non-negative integers that flag always
  * prints on a zero exit.
+ *
+ * Fetches the one remote branch first (via {@link resolvePushTarget}) so the
+ * remote-tracking ref isn't stale; a fetch or push-target failure fails the
+ * effect, since a stale comparison is worse than none. When `behind > 0` the
+ * remote was rewritten, and `ahead`/`commits` are narrowed to the local
+ * commits whose changes the remote tip lacks (see
+ * {@link listCommitsMissingFromRewrittenRemote}); `behind` stays the plain
+ * commit-graph count.
  *
  * `origin` describes what the remote branch holds beyond `baseRef`, for
  * callers that want to show what the merge will include; it needs
@@ -303,6 +411,9 @@ export const resolveUnpushedCommits = (
 			});
 		}
 
+		const pushTarget = yield* resolvePushTarget(repoRoot);
+		yield* git(repoRoot, ["fetch", pushTarget.remote, pushTarget.branch]);
+
 		const stdout = yield* git(repoRoot, [
 			"rev-list",
 			"--left-right",
@@ -311,13 +422,13 @@ export const resolveUnpushedCommits = (
 		]);
 		const counts = stdout.trim().split(/\s+/).map(parseDigits);
 		const behind = counts[0];
-		const ahead = counts[1];
+		const graphAhead = counts[1];
 		if (
 			counts.length !== 2 ||
 			behind === null ||
 			behind === undefined ||
-			ahead === null ||
-			ahead === undefined
+			graphAhead === null ||
+			graphAhead === undefined
 		) {
 			return yield* new UnpushedCommitCountUnparseable({
 				repoRoot,
@@ -326,7 +437,14 @@ export const resolveUnpushedCommits = (
 			});
 		}
 
-		const commits = yield* listCommits(repoRoot, `${remoteRef}..HEAD`);
+		const rewritten = behind > 0;
+		const missing = rewritten
+			? yield* listCommitsMissingFromRewrittenRemote(repoRoot, remoteRef)
+			: [];
+		const ahead = rewritten ? missing.length : graphAhead;
+		const commits = rewritten
+			? yield* listCommitsBySha(repoRoot, missing)
+			: yield* listCommits(repoRoot, [`${remoteRef}..HEAD`]);
 
 		const origin =
 			baseRef !== null && (yield* refExists(repoRoot, `origin/${baseRef}`))
@@ -342,6 +460,7 @@ export const resolveUnpushedCommits = (
 			ahead,
 			behind,
 			commits,
+			rewritten,
 			origin,
 		} satisfies UnpushedCommits;
 	});

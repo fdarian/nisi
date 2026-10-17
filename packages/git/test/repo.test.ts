@@ -76,6 +76,7 @@ describe("resolveUnpushedCommits", () => {
 				ahead: 0,
 				behind: 0,
 				commits: [],
+				rewritten: false,
 				origin: null,
 			});
 		} finally {
@@ -100,6 +101,7 @@ describe("resolveUnpushedCommits", () => {
 			expect(result.remoteRef).toBe("origin/main");
 			expect(result.ahead).toBe(2);
 			expect(result.behind).toBe(0);
+			expect(result.rewritten).toBe(false);
 			expect(result.commits.map((commit) => commit.subject)).toEqual([
 				"unpushed 2",
 				"unpushed 1",
@@ -140,6 +142,7 @@ describe("resolveUnpushedCommits", () => {
 			const result = await run(resolveUnpushedCommits(fixture.repo.root, null));
 			expect(result.ahead).toBe(1);
 			expect(result.behind).toBe(1);
+			expect(result.rewritten).toBe(true);
 			expect(result.commits.map((commit) => commit.subject)).toEqual([
 				"local only",
 			]);
@@ -257,6 +260,199 @@ describe("resolveUnpushedCommits", () => {
 			);
 			expect(exit._tag).toBe("Failure");
 		} finally {
+			await cleanupOriginBackedRepo(fixture);
+		}
+	});
+});
+
+/** A second working clone of `bareDir` — plays "GitHub" (or a teammate) rewriting the remote behind the local repo's back. */
+const makeOtherClone = async (bareDir: string): Promise<TestRepo> => {
+	const other = await makeTestRepo();
+	await other.git(["remote", "add", "origin", bareDir]);
+	await other.git(["fetch", "-q", "origin"]);
+	await other.git(["checkout", "-q", "-B", "main", "origin/main"]);
+	return other;
+};
+
+describe("resolveUnpushedCommits — remote rewritten behind the local branch", () => {
+	test("a plain push-ahead of 2 reports rewritten: false", async () => {
+		const fixture = await makeOriginBackedRepo();
+		try {
+			await fixture.repo.git(["checkout", "-q", "-b", "feature"]);
+			await fixture.repo.write("f.ts", "one\n");
+			await fixture.repo.commit("f1");
+			await fixture.repo.git(["push", "-q", "-u", "origin", "feature"]);
+			await fixture.repo.write("g.ts", "two\n");
+			await fixture.repo.commit("f2");
+			await fixture.repo.write("h.ts", "three\n");
+			await fixture.repo.commit("f3");
+
+			const result = await run(resolveUnpushedCommits(fixture.repo.root, null));
+			expect(result.remoteRef).toBe("origin/feature");
+			expect(result.ahead).toBe(2);
+			expect(result.behind).toBe(0);
+			expect(result.rewritten).toBe(false);
+			expect(result.commits.map((commit) => commit.subject)).toEqual([
+				"f3",
+				"f2",
+			]);
+		} finally {
+			await cleanupOriginBackedRepo(fixture);
+		}
+	});
+
+	test("fetches the remote branch first, so a stale tracking ref doesn't report pushed commits", async () => {
+		const fixture = await makeOriginBackedRepo();
+		try {
+			await fixture.repo.git(["checkout", "-q", "-b", "feature"]);
+			await fixture.repo.write("f.ts", "one\n");
+			const first = await fixture.repo.commit("f1");
+			await fixture.repo.git(["push", "-q", "-u", "origin", "feature"]);
+			await fixture.repo.write("g.ts", "two\n");
+			await fixture.repo.commit("f2");
+			await fixture.repo.git(["push", "-q", "origin", "feature"]);
+			await fixture.repo.git([
+				"update-ref",
+				"refs/remotes/origin/feature",
+				first,
+			]);
+
+			const result = await run(resolveUnpushedCommits(fixture.repo.root, null));
+			expect(result.ahead).toBe(0);
+			expect(result.rewritten).toBe(false);
+		} finally {
+			await cleanupOriginBackedRepo(fixture);
+		}
+	});
+
+	test("remote rebased onto a moved main, local stale: nothing missing", async () => {
+		const fixture = await makeOriginBackedRepo();
+		const other = await makeOtherClone(fixture.bareDir);
+		try {
+			await fixture.repo.git(["checkout", "-q", "-b", "feature"]);
+			await fixture.repo.write("f.ts", "one\n");
+			await fixture.repo.commit("f1");
+			await fixture.repo.git(["push", "-q", "-u", "origin", "feature"]);
+
+			await other.write("m.ts", "main moved\n");
+			await other.commit("main moves");
+			await other.git(["push", "-q", "origin", "main"]);
+			await other.git(["fetch", "-q", "origin", "feature"]);
+			await other.git(["checkout", "-q", "-b", "feature", "origin/feature"]);
+			await other.git(["rebase", "-q", "main"]);
+			await other.git(["push", "-q", "--force", "origin", "feature"]);
+
+			const result = await run(resolveUnpushedCommits(fixture.repo.root, null));
+			expect(result.remoteRef).toBe("origin/feature");
+			expect(result.ahead).toBe(0);
+			expect(result.behind).toBe(2);
+			expect(result.commits).toEqual([]);
+			expect(result.rewritten).toBe(true);
+		} finally {
+			await cleanupTestRepo(other);
+			await cleanupOriginBackedRepo(fixture);
+		}
+	});
+
+	test("parent PR squash-merged and child rebased remotely: parent and child commits are all contained", async () => {
+		const fixture = await makeOriginBackedRepo();
+		const other = await makeOtherClone(fixture.bareDir);
+		try {
+			await fixture.repo.git(["checkout", "-q", "-b", "parent"]);
+			await fixture.repo.write("p.ts", "p1\n");
+			await fixture.repo.commit("p1");
+			await fixture.repo.write("p.ts", "p1\np2\n");
+			await fixture.repo.commit("p2");
+			await fixture.repo.git(["push", "-q", "origin", "parent"]);
+			await fixture.repo.git(["checkout", "-q", "-b", "child"]);
+			await fixture.repo.write("c.ts", "c1\n");
+			await fixture.repo.commit("c1");
+			await fixture.repo.git(["push", "-q", "-u", "origin", "child"]);
+
+			await other.git(["fetch", "-q", "origin"]);
+			await other.git([
+				"-c",
+				"merge.ff=true",
+				"merge",
+				"-q",
+				"--squash",
+				"origin/parent",
+			]);
+			await other.git(["commit", "-q", "-m", "squash parent"]);
+			await other.git(["push", "-q", "origin", "main"]);
+			await other.git(["checkout", "-q", "-b", "child", "origin/child"]);
+			await other.git(["rebase", "-q", "--onto", "main", "origin/parent"]);
+			await other.git(["push", "-q", "--force", "origin", "child"]);
+
+			const result = await run(resolveUnpushedCommits(fixture.repo.root, null));
+			expect(result.remoteRef).toBe("origin/child");
+			expect(result.ahead).toBe(0);
+			expect(result.commits).toEqual([]);
+			expect(result.rewritten).toBe(true);
+		} finally {
+			await cleanupTestRepo(other);
+			await cleanupOriginBackedRepo(fixture);
+		}
+	});
+
+	test("a new local commit on top of the pre-rebase branch is still counted and listed", async () => {
+		const fixture = await makeOriginBackedRepo();
+		const other = await makeOtherClone(fixture.bareDir);
+		try {
+			await fixture.repo.git(["checkout", "-q", "-b", "feature"]);
+			await fixture.repo.write("f.ts", "one\n");
+			await fixture.repo.commit("f1");
+			await fixture.repo.git(["push", "-q", "-u", "origin", "feature"]);
+
+			await other.write("m.ts", "main moved\n");
+			await other.commit("main moves");
+			await other.git(["push", "-q", "origin", "main"]);
+			await other.git(["fetch", "-q", "origin", "feature"]);
+			await other.git(["checkout", "-q", "-b", "feature", "origin/feature"]);
+			await other.git(["rebase", "-q", "main"]);
+			await other.git(["push", "-q", "--force", "origin", "feature"]);
+
+			await fixture.repo.write("g.ts", "brand new lines\n");
+			await fixture.repo.commit("local fix");
+
+			const result = await run(resolveUnpushedCommits(fixture.repo.root, null));
+			expect(result.remoteRef).toBe("origin/feature");
+			expect(result.ahead).toBe(1);
+			expect(result.commits.map((commit) => commit.subject)).toEqual([
+				"local fix",
+			]);
+			expect(result.rewritten).toBe(true);
+		} finally {
+			await cleanupTestRepo(other);
+			await cleanupOriginBackedRepo(fixture);
+		}
+	});
+
+	test("lines the remote has since reformatted count as superseded, not missing", async () => {
+		const fixture = await makeOriginBackedRepo();
+		const other = await makeOtherClone(fixture.bareDir);
+		try {
+			await fixture.repo.git(["checkout", "-q", "-b", "feature"]);
+			await fixture.repo.write("x.ts", "alpha\nbeta\ngamma\n");
+			await fixture.repo.commit("x base");
+			await fixture.repo.write("x.ts", "alpha\nbeta changed\ngamma\n");
+			await fixture.repo.commit("x tweak");
+			await fixture.repo.git(["push", "-q", "-u", "origin", "feature"]);
+
+			await other.git(["fetch", "-q", "origin", "feature"]);
+			await other.git(["checkout", "-q", "-b", "feature", "origin/feature"]);
+			await other.git(["reset", "-q", "--hard", "main"]);
+			await other.write("x.ts", "ALPHA\nBETA CHANGED\nGAMMA\n");
+			await other.commit("x reformatted");
+			await other.git(["push", "-q", "--force", "origin", "feature"]);
+
+			const result = await run(resolveUnpushedCommits(fixture.repo.root, null));
+			expect(result.remoteRef).toBe("origin/feature");
+			expect(result.ahead).toBe(0);
+			expect(result.commits).toEqual([]);
+			expect(result.rewritten).toBe(true);
+		} finally {
+			await cleanupTestRepo(other);
 			await cleanupOriginBackedRepo(fixture);
 		}
 	});
