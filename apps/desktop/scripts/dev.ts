@@ -12,8 +12,8 @@ import {
 	runManagedSubprocess,
 } from "devsess";
 import { Config, Effect, Option, Schedule } from "effect";
+import { Command, Flag } from "effect/cli";
 import { FileSystem } from "effect/FileSystem";
-import { Command, Flag } from "effect/unstable/cli";
 
 const waitForVite = (url: string) =>
 	Effect.tryPromise(() => fetch(url)).pipe(
@@ -47,23 +47,23 @@ const appDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const dev = Command.make(
 	"desktop-dev",
 	{
-		browser: Flag.boolean("browser").pipe(Flag.withDefault(false)),
+		browser: Flag.Boolean("browser").pipe(Flag.withDefault(false)),
 		// Pins the vite port instead of devsess's per-session sticky one. Rarely
 		// needed by hand — `.claude/launch.json` gets the same effect from
 		// `autoPort`, which passes its chosen port through `PORT` (see
 		// `vitePort` below).
-		port: Flag.integer("port").pipe(Flag.optional),
+		port: Flag.Int("port").pipe(Flag.optional),
 		// Escape hatch out of devsess's per-session data dir, onto the same
 		// `NISI_DATA_DIR` prod (and a plain `nisi`) resolve to — see
 		// apps/desktop/AGENTS.md's "Dev/prod isolation". Safe to point at a
 		// live production app: `deskkit/sidecar`'s `acquireSidecar` health-
 		// checks any existing owner and refuses to boot (loudly) rather than
 		// splitting the data dir between two sidecars.
-		prodDataDir: Flag.boolean("prod-data-dir").pipe(Flag.withDefault(false)),
+		prodDataDir: Flag.Boolean("prod-data-dir").pipe(Flag.withDefault(false)),
 		// Binds vite to `0.0.0.0` (`VITE_HOST`, read by `vite.config.ts`) instead
 		// of localhost-only, so another device on the LAN can load the dev
 		// server — e.g. testing `--browser` mode from a phone.
-		host: Flag.boolean("host").pipe(Flag.withDefault(false)),
+		host: Flag.Boolean("host").pipe(Flag.withDefault(false)),
 	},
 	({ browser, port, prodDataDir, host }) =>
 		Effect.gen(function* () {
@@ -100,7 +100,7 @@ const dev = Command.make(
 			// back to a free one when something already holds it (a `bun dev`
 			// you started yourself), and opens its tab there — so vite has to
 			// bind what it was handed, not what the session remembers.
-			const envPort = yield* Config.number("PORT").pipe(Config.option);
+			const envPort = yield* Config.Number("PORT").pipe(Config.option);
 			const pinnedPort = Option.orElse(port, () => envPort);
 			const vitePort = Option.isSome(pinnedPort)
 				? pinnedPort.value

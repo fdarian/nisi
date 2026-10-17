@@ -18,7 +18,7 @@ const normalize = (raw: string): string =>
  * hard failure here, so "present but unrecognized" is treated the same way.
  */
 export const minimumLogLevelConfig: Config.Config<LogLevel.LogLevel> =
-	Config.string("LOG_LEVEL").pipe(
+	Config.String("LOG_LEVEL").pipe(
 		Config.withDefault("Info"),
 		Config.map((raw) => {
 			const candidate = normalize(raw);

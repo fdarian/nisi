@@ -2,7 +2,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { Config, Effect, Option, Schema } from "effect";
 import { FileSystem } from "effect/FileSystem";
-import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
+import { ChildProcess, ChildProcessSpawner } from "effect/process";
 
 /** Couldn't find an app bundle to launch, or `open` itself failed. */
 export class AppLaunchError extends Schema.TaggedError<AppLaunchError>()(
@@ -86,9 +86,9 @@ const resolveAppPath = Effect.gen(function* () {
  */
 export const launchApp = Effect.gen(function* () {
 	const dataDir = Option.getOrUndefined(
-		yield* Config.string("NISI_DATA_DIR").pipe(Config.option, Effect.orDie),
+		yield* Config.String("NISI_DATA_DIR").pipe(Config.option, Effect.orDie),
 	);
-	const measurementInstance = yield* Config.string(
+	const measurementInstance = yield* Config.String(
 		"NISI_MEASUREMENT_INSTANCE",
 	).pipe(Config.option, Effect.orDie);
 	const refusal = dataDirLaunchRefusal(

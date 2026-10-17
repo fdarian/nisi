@@ -1,6 +1,6 @@
 import type { OpenSessionTarget } from "@repo/sidecar-api";
 import { Console, Effect, Option } from "effect";
-import { Argument, Command, Flag } from "effect/unstable/cli";
+import { Argument, Command, Flag } from "effect/cli";
 import { parseBaseArgument } from "./base-argument.ts";
 import { zshCompletionScript } from "./completion.ts";
 import { runDebug } from "./debug.ts";
@@ -14,7 +14,7 @@ export const runCommand = <E, R>(
 	) => Effect.Effect<void, E, R>,
 	fail: Effect.Effect<never, E>,
 ) => {
-	const pathArgument = Argument.string("path").pipe(Argument.optional);
+	const pathArgument = Argument.String("path").pipe(Argument.optional);
 	const pr = Command.make("pr", { path: pathArgument }, (options) =>
 		run(options.path, { kind: "pr" }),
 	).pipe(
@@ -25,7 +25,7 @@ export const runCommand = <E, R>(
 	const diff = Command.make(
 		"diff",
 		{
-			base: Argument.string("base").pipe(Argument.optional),
+			base: Argument.String("base").pipe(Argument.optional),
 			path: pathArgument,
 		},
 		(options) => {
@@ -61,11 +61,11 @@ export const runCommand = <E, R>(
 	const debug = Command.make(
 		"debug",
 		{
-			session: Flag.string("session").pipe(
+			session: Flag.String("session").pipe(
 				Flag.withDescription("Only this session id (sessions.publicId)."),
 				Flag.optional,
 			),
-			json: Flag.boolean("json").pipe(
+			json: Flag.Boolean("json").pipe(
 				Flag.withDescription("Print the raw snapshot as JSON."),
 				Flag.withDefault(false),
 			),

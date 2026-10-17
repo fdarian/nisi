@@ -1,12 +1,12 @@
 import path from "node:path";
 import { resolveRepoRoot } from "@repo/git/repo";
 import { Console, Effect, Option } from "effect";
-import { Argument, Command, Flag } from "effect/unstable/cli";
+import { Argument, Command, Flag } from "effect/cli";
 import { recordCheck } from "./check.ts";
 import { renderPreview } from "./preview.ts";
 import { callGuideSidecar, describeGuideFailure } from "./sidecar.ts";
 
-const baseFlag = Flag.string("base").pipe(
+const baseFlag = Flag.String("base").pipe(
 	Flag.withDescription(
 		"Ref the diff is measured against. Default: origin/main when it isn't behind main, else main, else master.",
 	),
@@ -34,8 +34,8 @@ export const guideCommand = <E>(fail: Effect.Effect<never, E>) => {
 	const check = Command.make(
 		"check",
 		{
-			title: Argument.string("title"),
-			command: Argument.string("command").pipe(Argument.variadic({ min: 1 })),
+			title: Argument.String("title"),
+			command: Argument.String("command").pipe(Argument.variadic({ min: 1 })),
 		},
 		(options) =>
 			Effect.gen(function* () {
@@ -105,26 +105,26 @@ export const guideCommand = <E>(fail: Effect.Effect<never, E>) => {
 	const render = Command.make(
 		"render",
 		{
-			expand: Flag.boolean("expand").pipe(
+			expand: Flag.Boolean("expand").pipe(
 				Flag.withDescription(
 					"Stack every Tour frame, show both Sequence states, open the Area file lists.",
 				),
 				Flag.withDefault(false),
 			),
-			text: Flag.boolean("text").pipe(
+			text: Flag.Boolean("text").pipe(
 				Flag.withDescription(
 					"Print what a reader would take from the page as plain text (always expanded). Launches no browser.",
 				),
 				Flag.withDefault(false),
 			),
-			theme: Flag.choice("theme", ["light", "dark"]).pipe(
+			theme: Flag.Literals("theme", ["light", "dark"]).pipe(
 				Flag.withDefault("light"),
 			),
-			width: Flag.integer("width").pipe(
+			width: Flag.Int("width").pipe(
 				Flag.withDescription("Page width in CSS px."),
 				Flag.withDefault(900),
 			),
-			scale: Flag.float("scale").pipe(
+			scale: Flag.Finite("scale").pipe(
 				Flag.withDescription("Device scale factor."),
 				Flag.withDefault(2),
 			),

@@ -6,7 +6,7 @@ import { makeSidecarClient } from "@repo/sidecar-api/client";
 import { readSidecarJson } from "deskkit/sidecar";
 import { Config, Effect, Option } from "effect";
 import type { FileSystem } from "effect/FileSystem";
-import type { ChildProcessSpawner } from "effect/unstable/process";
+import type { ChildProcessSpawner } from "effect/process";
 
 /**
  * Per-POST-attempt timeout — long enough for a live sidecar, short enough that a dead one
@@ -31,7 +31,7 @@ export const POLL_INTERVAL_MS = 300;
  * cold boot, which is far slower than the compiled release app this is tuned
  * for).
  */
-export const pollTimeoutConfig = Config.number("NISI_LAUNCH_TIMEOUT_MS").pipe(
+export const pollTimeoutConfig = Config.Number("NISI_LAUNCH_TIMEOUT_MS").pipe(
 	Config.withDefault(15_000),
 );
 
@@ -117,7 +117,7 @@ const attempt = (
 
 		const client = makeSidecarClient(handshake);
 		const traceId = Option.getOrUndefined(
-			yield* Config.string("NISI_LAUNCH_TRACE").pipe(
+			yield* Config.String("NISI_LAUNCH_TRACE").pipe(
 				Config.option,
 				Effect.orDie,
 			),

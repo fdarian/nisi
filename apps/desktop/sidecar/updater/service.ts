@@ -10,7 +10,7 @@ import {
 	Schedule,
 } from "effect";
 import type { PlatformError } from "effect/PlatformError";
-import type { ChildProcessSpawner } from "effect/unstable/process";
+import type { ChildProcessSpawner } from "effect/process";
 import { APP_BUNDLE_PATH } from "./constants.ts";
 import {
 	BREW_BIN,

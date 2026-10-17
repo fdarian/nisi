@@ -4,7 +4,7 @@ import type { SidecarClient } from "@repo/sidecar-api/client";
 import { makeSidecarClient } from "@repo/sidecar-api/client";
 import { Effect } from "effect";
 import type { FileSystem } from "effect/FileSystem";
-import type { ChildProcessSpawner } from "effect/unstable/process";
+import type { ChildProcessSpawner } from "effect/process";
 import {
 	dataDirConfig,
 	isOwnTimeout,

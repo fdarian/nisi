@@ -1,7 +1,7 @@
 import { checkBinAvailability, resolveBin } from "@repo/bin-resolver";
 import { Effect, Stream } from "effect";
 import type { PlatformError } from "effect/PlatformError";
-import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
+import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { CASK_TOKEN } from "./constants.ts";
 
 /**

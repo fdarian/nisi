@@ -9,7 +9,7 @@ import {
 	Semaphore,
 	Stream,
 } from "effect";
-import { ChildProcessSpawner } from "effect/unstable/process";
+import { ChildProcessSpawner } from "effect/process";
 import { GitCommandError } from "./errors.ts";
 import { gitBytes, spawnCatFile } from "./exec.ts";
 

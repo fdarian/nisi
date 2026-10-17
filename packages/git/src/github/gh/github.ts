@@ -1,5 +1,5 @@
 import { Effect, Layer, PubSub } from "effect";
-import { ChildProcessSpawner } from "effect/unstable/process";
+import { ChildProcessSpawner } from "effect/process";
 import { GitHub } from "../github.ts";
 import {
 	getActionsJob,

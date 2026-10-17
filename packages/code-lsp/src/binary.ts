@@ -2,7 +2,7 @@ import { dirname, join } from "node:path";
 import { Effect, Option, Schema } from "effect";
 import type { FileSystem as FileSystemService } from "effect/FileSystem";
 import { FileSystem } from "effect/FileSystem";
-import type { ChildProcessSpawner } from "effect/unstable/process";
+import type { ChildProcessSpawner } from "effect/process";
 import { TsLspBinaryResolutionError } from "./errors.ts";
 import {
 	ensureTsLspBinary,

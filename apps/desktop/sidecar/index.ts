@@ -139,14 +139,14 @@ const program = Effect.scoped(
 			// every other boot (prod, `bun run sidecar` standalone) — falls back to
 			// exactly the old per-boot-random behavior. See deskkit's sidecar README,
 			// "Running the sidecar under a file watcher".
-			const pinnedPort = yield* Config.number("NISI_DEV_SIDECAR_PORT").pipe(
+			const pinnedPort = yield* Config.Number("NISI_DEV_SIDECAR_PORT").pipe(
 				Config.option,
 			);
-			const pinnedToken = yield* Config.string("NISI_DEV_SIDECAR_TOKEN").pipe(
+			const pinnedToken = yield* Config.String("NISI_DEV_SIDECAR_TOKEN").pipe(
 				Config.option,
 			);
 			const token = Option.getOrElse(pinnedToken, () => crypto.randomUUID());
-			const activationOwnerId = yield* Config.string(
+			const activationOwnerId = yield* Config.String(
 				"NISI_ACTIVATION_OWNER_ID",
 			).pipe(Config.option);
 

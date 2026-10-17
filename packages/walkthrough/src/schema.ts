@@ -71,9 +71,13 @@ export type Walkthrough = Schema.Schema.Type<typeof Walkthrough>;
  * The walkthrough schema as a JSON Schema document (draft 2020-12),
  * generated via Effect's built-in helper rather than hand-written — the
  * only way the system prompt's schema and `Walkthrough` can't drift apart.
+ * `onExcessProperty: "error"` keeps `additionalProperties: false` in the output
+ * (the 4.0.5 default omits it), telling the agent not to invent fields.
  */
-export const walkthroughJsonSchemaDocument =
-	Schema.toJsonSchemaDocument(Walkthrough);
+export const walkthroughJsonSchemaDocument = Schema.toJsonSchemaDocument(
+	Walkthrough,
+	{ onExcessProperty: "error" },
+);
 
 /** `walkthroughJsonSchemaDocument` flattened into one self-contained object (`$defs` inlined) — what `buildSystemPrompt` embeds. */
 export const walkthroughJsonSchema: Record<string, unknown> =

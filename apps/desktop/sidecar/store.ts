@@ -57,7 +57,7 @@ import {
 import { SettingsStore, type SettingsStoreError } from "@repo/settings";
 import { Context, Effect, Layer, Option, Schema, Scope } from "effect";
 import { FileSystem } from "effect/FileSystem";
-import type { ChildProcessSpawner } from "effect/unstable/process";
+import type { ChildProcessSpawner } from "effect/process";
 import { makeBaseRefresh } from "./base-refresh.ts";
 import {
 	type DiffBasePullRequest,

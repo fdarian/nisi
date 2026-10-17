@@ -2,9 +2,9 @@ packages:
   - "packages/*"
   - "apps/*"
 catalog:
-  effect: 4.0.0-rc.112
-  "@effect/platform-bun": 4.0.0-rc.112
-  "@effect/sql-sqlite-bun": 4.0.0-rc.112
+  effect: 4.0.5
+  "@effect/platform-bun": 4.0.5
+  "@effect/sql-sqlite-bun": 4.0.5
 allowBuilds:
   '@google/genai': true
   electron: true

@@ -7,7 +7,7 @@ export const LaunchTracingLive = Layer.unwrap(
 		const dataDir = yield* getDataDirConfig();
 		const exporter = yield* makeLaunchTracer({ dataDir, source: "cli" });
 		const id = Option.getOrUndefined(
-			yield* Config.string("NISI_LAUNCH_TRACE").pipe(Config.option),
+			yield* Config.String("NISI_LAUNCH_TRACE").pipe(Config.option),
 		);
 		yield* exporter.activate(id);
 		if (id !== undefined)

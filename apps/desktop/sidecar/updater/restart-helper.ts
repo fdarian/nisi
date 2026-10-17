@@ -2,7 +2,7 @@ import { join } from "node:path";
 import { getDataDirConfig } from "@repo/db";
 import { Effect } from "effect";
 import { FileSystem } from "effect/FileSystem";
-import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
+import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { CASK_TOKEN } from "./constants.ts";
 import { restartOutcomePathFor } from "./restart-outcome.ts";
 
