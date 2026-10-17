@@ -335,7 +335,7 @@ fixture PR lives at `src/features/pull-request/walkthrough/walkthrough.fixture.t
 - **`HarnessInfo.available` and `.enabled` are independent, both always present.** `available` is a
   live `@repo/bin-resolver` binary-presence check (`sidecar/harness/availability.ts`), never
   cached; `enabled` is `@repo/settings`'s `enabledHarnesses`, a user declaration. A harness can be
-  enabled but currently unavailable (its checkbox in `EnableHarnessesPanel`/`SettingsPage` stays
+  enabled but currently unavailable (its checkbox in `EnableHarnessesPanel`/`HarnessesSection` stays
   checked but disabled, with an inline reason — it isn't dropped from `enabledHarnesses`) or
   available but not yet enabled. `useHarnesses` (`src/features/pull-request/walkthrough/walkthrough-data.ts`) also exposes
   `refresh`/`isRefreshing`, wired to `walkthrough.refreshHarnesses` — the refresh icon next to the
