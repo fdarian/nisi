@@ -1,7 +1,14 @@
 "use client";
 
 import { cn } from "cn";
-import { CircleHelp, CloudOff } from "lucide-react";
+import {
+	CircleAlert,
+	CircleCheck,
+	CircleHelp,
+	CloudOff,
+	Upload,
+} from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import {
 	AlertDialog,
 	AlertDialogClose,
@@ -12,6 +19,7 @@ import {
 	AlertDialogTitle,
 } from "#/components/ui/alert-dialog";
 import { Button } from "#/components/ui/button";
+import { Spinner } from "#/components/ui/spinner";
 import { Tabs, TabsList, TabsPanel, TabsTab } from "#/components/ui/tabs";
 import type {
 	BranchCommit,
@@ -22,10 +30,20 @@ import { relativeTime } from "#/features/settings/repositories/repositories-view
 type UnpushedCheck = Exclude<UnpushedCommitsCheck, { status: "clean" }>;
 type UnpushedBranchCheck = Extract<UnpushedCheck, { status: "unpushed" }>;
 
+export type PushState =
+	| { status: "idle" }
+	| { status: "running"; log: ReadonlyArray<string> }
+	| { status: "succeeded"; log: ReadonlyArray<string> }
+	| { status: "failed"; log: ReadonlyArray<string>; error: string };
+
 type UnpushedCommitsDialogProps = {
 	check: UnpushedCheck | null;
 	onOpenChange: (open: boolean) => void;
 	onMergeAnyway: () => void;
+	/** Defaults to idle. Ignored unless `onPush` is given. */
+	push?: PushState;
+	/** Renders the "Suggested: push" action; the caller owns running `git push` and feeding `push` back. */
+	onPush?: () => void;
 };
 
 const MAX_VISIBLE_COMMITS = 5;
@@ -286,7 +304,7 @@ function CommitGraph(props: {
 
 	if (!isTabbed) {
 		return (
-			<div className="mx-6 mb-6 overflow-hidden rounded-lg border">
+			<div className="overflow-hidden rounded-lg border">
 				{localBranch !== undefined && (
 					<div className="flex items-center gap-2 border-b bg-muted/48 px-3 py-2">
 						<LocalBranchPill branch={localBranch} />
@@ -315,7 +333,7 @@ function CommitGraph(props: {
 
 	return (
 		<Tabs
-			className="mx-6 mb-6 gap-0 overflow-hidden rounded-lg border"
+			className="gap-0 overflow-hidden rounded-lg border"
 			defaultValue="unpushed"
 		>
 			<div className="flex items-center justify-between gap-3 border-b bg-muted/48 px-2 py-1.5">
@@ -331,7 +349,7 @@ function CommitGraph(props: {
 				</TabsList>
 				{localBranch !== undefined && <LocalBranchPill branch={localBranch} />}
 			</div>
-			<div className="grid">
+			<div className="grid grid-cols-[minmax(0,1fr)]">
 				<TabsPanel
 					className={STACKED_PANEL_CLASS_NAME}
 					keepMounted
@@ -373,6 +391,127 @@ function CommitGraph(props: {
 	);
 }
 
+function PushLog(props: { lines: ReadonlyArray<string> }) {
+	const ref = useRef<HTMLPreElement>(null);
+	// biome-ignore lint/correctness/useExhaustiveDependencies: re-scroll whenever a line arrives; the lines themselves aren't read here
+	useEffect(() => {
+		const element = ref.current;
+		if (element !== null) element.scrollTop = element.scrollHeight;
+	}, [props.lines.length]);
+	return (
+		<pre
+			className="max-h-32 overflow-auto whitespace-pre-wrap break-words rounded-md bg-muted px-2.5 py-2 font-mono text-muted-foreground text-xs select-text"
+			ref={ref}
+		>
+			{props.lines.join("\n")}
+		</pre>
+	);
+}
+
+function PushActionRow(props: {
+	push: PushState;
+	check: UnpushedBranchCheck;
+	onPush: () => void;
+	logOpen: boolean;
+	onToggleLog: () => void;
+}) {
+	const push = props.push;
+	const iconClassName = "size-4 shrink-0";
+	return (
+		<div className="flex items-center gap-3 text-sm">
+			{push.status === "succeeded" ? (
+				<CircleCheck className={cn(iconClassName, "text-success-foreground")} />
+			) : push.status === "failed" ? (
+				<CircleAlert
+					className={cn(iconClassName, "text-destructive-foreground")}
+				/>
+			) : (
+				<Upload className={cn(iconClassName, "text-muted-foreground")} />
+			)}
+			<div className="flex min-w-0 flex-1 items-center gap-2">
+				{push.status === "succeeded" ? (
+					<>
+						<span className="shrink-0">Pushed to</span>
+						<RefPill className="min-w-0 truncate">
+							{props.check.remoteRef}
+						</RefPill>
+					</>
+				) : push.status === "failed" ? (
+					<span className="font-medium text-destructive-foreground">
+						Push failed
+					</span>
+				) : (
+					<>
+						<span className="shrink-0">
+							Push {commitCount(props.check.count)} to
+						</span>
+						<RefPill className="min-w-0 truncate">
+							{props.check.remoteRef}
+						</RefPill>
+						<RefPill className="shrink-0 text-muted-foreground">
+							git push
+						</RefPill>
+					</>
+				)}
+			</div>
+			{push.status === "succeeded" ? (
+				<Button onClick={props.onToggleLog} size="xs" variant="ghost">
+					{props.logOpen ? "Hide log" : "Show log"}
+				</Button>
+			) : (
+				<Button
+					disabled={push.status === "running"}
+					onClick={props.onPush}
+					size="xs"
+					variant="outline"
+				>
+					{push.status === "running" && <Spinner />}
+					{push.status === "failed" ? "Retry" : "Run"}
+				</Button>
+			)}
+		</div>
+	);
+}
+
+function SuggestedPush(props: {
+	push: PushState;
+	check: UnpushedBranchCheck;
+	onPush: () => void;
+}) {
+	const [logToggled, setLogToggled] = useState(false);
+	const push = props.push;
+	const logLines = push.status === "idle" ? [] : push.log;
+	const logOpen =
+		push.status === "succeeded"
+			? logToggled
+			: push.status !== "idle" && logLines.length > 0;
+	return (
+		<div className="flex flex-col gap-2">
+			<span className="font-medium text-[0.6875rem] text-muted-foreground uppercase tracking-wider">
+				Suggested
+			</span>
+			<div
+				className={cn(
+					"flex flex-col gap-2 rounded-lg border px-3 py-2",
+					push.status === "failed" && "border-destructive/32 bg-destructive/4",
+				)}
+			>
+				<PushActionRow
+					check={props.check}
+					logOpen={logOpen}
+					onPush={props.onPush}
+					onToggleLog={() => setLogToggled((open) => !open)}
+					push={push}
+				/>
+				{push.status === "failed" && (
+					<p className="text-destructive-foreground text-xs">{push.error}</p>
+				)}
+				{logOpen && <PushLog lines={logLines} />}
+			</div>
+		</div>
+	);
+}
+
 /**
  * The pre-merge confirmation `PrMergeButton` opens when a fresh
  * `unpushedCommits` check (fired at click time, see `useUnpushedCommitsCheck`
@@ -389,8 +528,13 @@ export function UnpushedCommitsDialog({
 	check,
 	onOpenChange,
 	onMergeAnyway,
+	push,
+	onPush,
 }: UnpushedCommitsDialogProps): React.ReactElement {
 	const isUnverifiable = check?.status === "unverifiable";
+	const pushState: PushState = push ?? { status: "idle" };
+	const showGraph = check?.status === "unpushed" && check.commits !== undefined;
+	const showPush = check?.status === "unpushed" && onPush !== undefined;
 	return (
 		<AlertDialog onOpenChange={onOpenChange} open={check !== null}>
 			<AlertDialogContent className="max-w-xl">
@@ -416,25 +560,38 @@ export function UnpushedCommitsDialog({
 						</AlertDialogDescription>
 					</div>
 				</AlertDialogHeader>
-				{check?.status === "unpushed" && check.commits !== undefined && (
-					<CommitGraph check={check} commits={check.commits} />
+				{check?.status === "unpushed" && (showGraph || showPush) && (
+					<div className="mx-6 mb-6 flex flex-col gap-4">
+						{check.commits !== undefined && (
+							<CommitGraph check={check} commits={check.commits} />
+						)}
+						{onPush !== undefined && (
+							<SuggestedPush check={check} onPush={onPush} push={pushState} />
+						)}
+					</div>
 				)}
-				<AlertDialogFooter className="sm:items-center">
-					{!isUnverifiable && (
-						<p className="text-muted-foreground text-xs sm:mr-auto">
-							Push first to include them: <RefPill>git push</RefPill>
-						</p>
-					)}
+				<AlertDialogFooter>
 					<AlertDialogClose render={<Button variant="outline" />}>
 						Cancel
 					</AlertDialogClose>
-					<AlertDialogClose
-						render={
-							<Button onClick={onMergeAnyway} variant="warning-secondary" />
-						}
-					>
-						Merge anyway
-					</AlertDialogClose>
+					{pushState.status === "succeeded" && showPush ? (
+						<AlertDialogClose render={<Button onClick={onMergeAnyway} />}>
+							Merge
+						</AlertDialogClose>
+					) : (
+						<AlertDialogClose
+							disabled={pushState.status === "running" && showPush}
+							render={
+								<Button
+									disabled={pushState.status === "running" && showPush}
+									onClick={onMergeAnyway}
+									variant="warning-secondary"
+								/>
+							}
+						>
+							Merge anyway
+						</AlertDialogClose>
+					)}
 				</AlertDialogFooter>
 			</AlertDialogContent>
 		</AlertDialog>

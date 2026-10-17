@@ -1,13 +1,18 @@
 /**
  * Storybook coverage for `UnpushedCommitsDialog`'s two non-`"clean"`
- * outcomes (with and without per-commit detail, with and without the on-origin tab) — no `orpc` dependency to
+ * outcomes (with and without per-commit detail, with and without the on-origin tab,
+ * and each state of the suggested-push action) — no `orpc` dependency to
  * mock here, unlike `PrMergeButton`'s own stories: this component is pure
  * presentation over whatever `useUnpushedCommitsCheck` resolved.
  */
 import type { Meta, StoryObj } from "@storybook/react-vite";
+import { useEffect, useRef, useState } from "react";
 import { expect, userEvent, within } from "storybook/test";
 import type { BranchCommit } from "#/features/pull-request/data/pr-data";
-import { UnpushedCommitsDialog } from "./unpushed-commits-dialog";
+import {
+	type PushState,
+	UnpushedCommitsDialog,
+} from "./unpushed-commits-dialog";
 
 const meta: Meta<typeof UnpushedCommitsDialog> = {
 	title: "Pr/UnpushedCommitsDialog",
@@ -203,4 +208,101 @@ export const Unverifiable: Story = {
 			message: "This branch has no remote to compare against.",
 		},
 	},
+};
+
+const PUSH_LOG = [
+	"Enumerating objects: 9, done.",
+	"Counting objects: 100% (9/9), done.",
+	"Delta compression using up to 10 threads",
+	"Compressing objects: 100% (4/4), done.",
+	"Writing objects: 100% (5/5), 1.12 KiB | 1.12 MiB/s, done.",
+	"Total 5 (delta 3), reused 0 (delta 0), pack-reused 0",
+	"remote: Resolving deltas: 100% (3/3), completed with 3 local objects.",
+	"To github.com:acme/storage.git",
+	`   5c1e8a0..a3f9c21  ${LOCAL_BRANCH} -> ${LOCAL_BRANCH}`,
+];
+
+const PUSH_REJECTED_LOG = [
+	"To github.com:acme/storage.git",
+	` ! [rejected]        ${LOCAL_BRANCH} -> ${LOCAL_BRANCH} (non-fast-forward)`,
+	"error: failed to push some refs to 'github.com:acme/storage.git'",
+	"hint: Updates were rejected because the tip of your current branch is behind",
+	"hint: its remote counterpart. If you want to integrate the remote changes,",
+	"hint: use 'git pull' before pushing again.",
+];
+
+function pushStory(push: PushState): Story {
+	return {
+		args: {
+			...Unpushed.args,
+			push,
+			onPush: () => console.log("UnpushedCommitsDialog: push"),
+		},
+	};
+}
+
+/** The suggested-push action before anything has run. */
+export const PushIdle: Story = pushStory({ status: "idle" });
+
+/** `git push` in flight — Run is disabled and Merge anyway is blocked; the log scrolls as lines arrive. */
+export const PushRunning: Story = pushStory({
+	status: "running",
+	log: PUSH_LOG.slice(0, 5),
+});
+
+/** Pushed — the log collapses behind "Show log" and the primary button becomes a plain Merge. */
+export const PushSucceeded: Story = pushStory({
+	status: "succeeded",
+	log: PUSH_LOG,
+});
+
+/** Rejected push — destructive row, stderr log open, Run becomes Retry. */
+export const PushFailed: Story = pushStory({
+	status: "failed",
+	log: PUSH_REJECTED_LOG,
+	error:
+		"Updates were rejected: the remote branch has commits you don't have locally.",
+});
+
+const PUSH_LINE_DELAY_MS = 300;
+
+function PushInteractiveDialog(
+	props: React.ComponentProps<typeof UnpushedCommitsDialog>,
+) {
+	const [push, setPush] = useState<PushState>({ status: "idle" });
+	const timers = useRef<Array<ReturnType<typeof setTimeout>>>([]);
+	useEffect(
+		() => () => {
+			for (const timer of timers.current) clearTimeout(timer);
+		},
+		[],
+	);
+
+	const run = () => {
+		if (push.status === "running" || push.status === "succeeded") return;
+		setPush({ status: "running", log: [] });
+		PUSH_LOG.forEach((_, index) => {
+			timers.current.push(
+				setTimeout(
+					() => {
+						const log = PUSH_LOG.slice(0, index + 1);
+						setPush(
+							index === PUSH_LOG.length - 1
+								? { status: "succeeded", log }
+								: { status: "running", log },
+						);
+					},
+					(index + 1) * PUSH_LINE_DELAY_MS,
+				),
+			);
+		});
+	};
+
+	return <UnpushedCommitsDialog {...props} onPush={run} push={push} />;
+}
+
+/** Click Run to watch simulated `git push` output stream in and end in success; clicking again afterwards does nothing. */
+export const PushInteractive: Story = {
+	args: Unpushed.args,
+	render: (args) => <PushInteractiveDialog {...args} />,
 };
