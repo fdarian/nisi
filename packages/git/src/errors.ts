@@ -100,6 +100,16 @@ export class NoRemoteRefToCompare extends Schema.TaggedError<NoRemoteRefToCompar
 ) {}
 
 /**
+ * There's no remote branch to push to: `HEAD` is detached, or the branch's
+ * configured upstream isn't a branch on a remote (e.g. it tracks a local
+ * branch).
+ */
+export class PushTargetUnresolvable extends Schema.TaggedError<PushTargetUnresolvable>()(
+	"PushTargetUnresolvable",
+	{ repoRoot: Schema.String, reason: Schema.String },
+) {}
+
+/**
  * `git rev-list --count` (also with `--left-right`) exited `0` (so
  * `GitCommandError` doesn't apply) but its stdout wasn't the plain
  * non-negative integer(s) that flag always prints — near-unreachable in practice, but a value this

@@ -5,6 +5,7 @@ import {
 	NoDefaultBranch,
 	NoRemoteRefToCompare,
 	NotAGitRepository,
+	PushTargetUnresolvable,
 	UnpushedCommitCountUnparseable,
 } from "./errors.ts";
 import { git, gitResult } from "./exec.ts";
@@ -127,6 +128,52 @@ const resolveComparisonRemoteRef = (repoRoot: string, currentBranch: string) =>
 		return (yield* refExists(repoRoot, originCandidate))
 			? originCandidate
 			: null;
+	});
+
+export type PushTarget = {
+	readonly remote: string;
+	readonly branch: string;
+};
+
+/**
+ * Where `git push` should send the current branch: the remote and branch its
+ * upstream (`branch.<b>.remote` / `branch.<b>.merge`) names when it has one,
+ * else `origin` and the branch's own name — the same fallback
+ * {@link resolveComparisonRemoteRef} compares against.
+ */
+export const resolvePushTarget = (repoRoot: string) =>
+	Effect.gen(function* () {
+		const currentBranch = yield* resolveCurrentBranch(repoRoot);
+		if (currentBranch === "HEAD") {
+			return yield* new PushTargetUnresolvable({
+				repoRoot,
+				reason: "HEAD is detached, so there is no branch to push",
+			});
+		}
+
+		const remote = yield* gitOutputOrNull(repoRoot, [
+			"config",
+			"--get",
+			`branch.${currentBranch}.remote`,
+		]);
+		const merge = yield* gitOutputOrNull(repoRoot, [
+			"config",
+			"--get",
+			`branch.${currentBranch}.merge`,
+		]);
+		if (remote === null || merge === null) {
+			return { remote: "origin", branch: currentBranch } satisfies PushTarget;
+		}
+		if (remote === "." || !merge.startsWith("refs/heads/")) {
+			return yield* new PushTargetUnresolvable({
+				repoRoot,
+				reason: `${currentBranch} tracks ${merge} on "${remote}", which is not a branch on a remote`,
+			});
+		}
+		return {
+			remote,
+			branch: merge.slice("refs/heads/".length),
+		} satisfies PushTarget;
 	});
 
 /** How many commits of each side {@link resolveUnpushedCommits} lists in full; the counts stay exact beyond it. */

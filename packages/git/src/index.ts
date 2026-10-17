@@ -108,6 +108,8 @@ export type { Hunk } from "./hunk.ts";
 export { parseHunks } from "./hunk.ts";
 export type { ChangedRun } from "./hunks.ts";
 export { parseChangedRuns } from "./hunks.ts";
+export type { PushEvent, PushFailureReason } from "./push.ts";
+export { pushBranch } from "./push.ts";
 export { readIndexHead } from "./index-head.ts";
 export type {
 	GitHubTarget,
