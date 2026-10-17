@@ -400,11 +400,15 @@ export function ChatProvider({
 	return createElement(ChatStoreContext.Provider, { value: store }, children);
 }
 
-export function useChatThreads(sessionId: string): readonly ChatThreadMeta[] {
+/** `null` reads as no threads — see `useChatPopupOpen`. */
+export function useChatThreads(
+	sessionId: string | null,
+): readonly ChatThreadMeta[] {
 	const store = useChatStore();
-	return useStore(
-		store,
-		(state) => state.sessions.get(sessionId)?.threads ?? EMPTY_THREADS,
+	return useStore(store, (state) =>
+		sessionId === null
+			? EMPTY_THREADS
+			: (state.sessions.get(sessionId)?.threads ?? EMPTY_THREADS),
 	);
 }
 
@@ -458,6 +462,47 @@ export function useCycleActiveThread(): (
 ) => void {
 	const store = useChatStore();
 	return useStore(store, (state) => state.cycleActiveThread);
+}
+
+/**
+ * Unbound "show this thread and put the caret in its composer" — see
+ * `useCycleActiveThread` for why this isn't part of `useChatDockActions`.
+ * `setActiveThread` already opens and un-minimizes the popup.
+ */
+export function useFocusChatThread(): (
+	sessionId: string,
+	threadId: string,
+) => void {
+	const store = useChatStore();
+	const setActiveThread = useStore(store, (state) => state.setActiveThread);
+	const requestComposerFocus = useStore(
+		store,
+		(state) => state.requestComposerFocus,
+	);
+	return useCallback(
+		(sessionId, threadId) => {
+			setActiveThread(sessionId, threadId);
+			requestComposerFocus(sessionId);
+		},
+		[setActiveThread, requestComposerFocus],
+	);
+}
+
+/** Unbound counterpart of `useChatDockActions`' `openNewThread` + `requestComposerFocus` — see `useFocusChatThread`. */
+export function useStartNewChat(): (sessionId: string) => void {
+	const store = useChatStore();
+	const openNewThread = useStore(store, (state) => state.openNewThread);
+	const requestComposerFocus = useStore(
+		store,
+		(state) => state.requestComposerFocus,
+	);
+	return useCallback(
+		(sessionId) => {
+			openNewThread(sessionId, crypto.randomUUID());
+			requestComposerFocus(sessionId);
+		},
+		[openNewThread, requestComposerFocus],
+	);
 }
 
 /**
