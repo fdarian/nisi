@@ -16,6 +16,7 @@ import {
 	type PullRequestMergeError,
 	type PullRequestStackMergeError,
 	parseActionsLog,
+	pushBranch,
 	type RepoPathVerificationError,
 	resolveUnpushedCommits,
 	type WorktreeReadFailed,
@@ -2292,6 +2293,18 @@ export function attachRouter(
 					),
 				);
 			}),
+			// Failures are `failed` events in the stream, never an rpc error.
+			pushBranch: authed.pullRequests.pushBranch.handler(
+				async function* (request) {
+					yield* streamToIterator(
+						pushBranch(request.input.repoRoot, {
+							rebase: request.input.rebase,
+						}),
+						mainContext,
+						request.signal,
+					);
+				},
+			),
 		},
 		// Backs the Overview tab: a PR session dispatches to `@repo/git`'s
 		// GraphQL-backed `fetchPullRequestOverview`, a branch/diff session to

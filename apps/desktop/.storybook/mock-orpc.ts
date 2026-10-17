@@ -480,6 +480,7 @@ export function createMockSidecarClient(
 							origin: null,
 						}
 					: data.unpushedCommits,
+			pushBranch: async () => neverIterator(),
 		},
 		// No story exercises the Overview tab yet — same reasoning as
 		// `events.subscribe` above.

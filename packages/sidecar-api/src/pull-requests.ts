@@ -182,6 +182,27 @@ export const UnpushedCommits = Schema.Struct({
 });
 export type UnpushedCommits = Schema.Schema.Type<typeof UnpushedCommits>;
 
+/**
+ * Mirrors `@repo/git`'s `PushEvent` — what `pushBranch` streams while
+ * pushing the worktree branch, optionally after a `pull --rebase`. `step`
+ * announces each git command before it runs, `line` is one line of its
+ * merged stdout/stderr, and the stream always ends with `done` or `failed`.
+ * `failed.reason` is `"rejected"` when the remote has commits the branch
+ * lacks, and `"rebase-conflict"` when the rebase stopped on conflicts and
+ * was aborted (the worktree is as it was).
+ */
+export const PushEvent = Schema.Union([
+	Schema.Struct({ type: Schema.Literal("step"), command: Schema.String }),
+	Schema.Struct({ type: Schema.Literal("line"), text: Schema.String }),
+	Schema.Struct({ type: Schema.Literal("done") }),
+	Schema.Struct({
+		type: Schema.Literal("failed"),
+		reason: Schema.Literals(["rejected", "rebase-conflict", "other"]),
+		message: Schema.String,
+	}),
+]);
+export type PushEvent = Schema.Schema.Type<typeof PushEvent>;
+
 /** Mirrors `@repo/git`'s check statuses, including workflow runs awaiting approval. */
 export const PullRequestCheckStatus = Schema.Literals([
 	"passing",
@@ -390,6 +411,11 @@ const RerunCiJobInput = Schema.Struct({
  * there's genuinely nothing to compare `HEAD` against — kept distinct from
  * `SERVICE_UNAVAILABLE` (a `git` command itself failing to run) since the
  * frontend shows a different dialog for each.
+ *
+ * `pushBranch` pushes that same local worktree branch (to its upstream, else
+ * `origin/<branch>`), first rebasing onto the remote branch when `rebase` is
+ * set. Failures arrive as a terminal `failed` event rather than an oRPC
+ * error, so it declares none.
  *
  * `markReady` flips a draft PR to ready for review — the adapter uses
  * `owner`/`repo`/`number` to refresh that PR's live sources after success.
@@ -697,4 +723,12 @@ export const pullRequestsContract = {
 			NO_REMOTE_REF: {},
 			SERVICE_UNAVAILABLE: {},
 		}),
+	pushBranch: oc
+		.input(
+			Schema.Struct({
+				repoRoot: Schema.String,
+				rebase: Schema.Boolean,
+			}),
+		)
+		.output(eventIterator(Schema.toStandardSchemaV1(PushEvent))),
 };
