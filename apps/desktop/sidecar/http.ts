@@ -16,8 +16,9 @@ import {
 	type PullRequestMergeError,
 	type PullRequestStackMergeError,
 	parseActionsLog,
+	pushBranch,
 	type RepoPathVerificationError,
-	resolveUnpushedCommitCount,
+	resolveUnpushedCommits,
 	type WorktreeReadFailed,
 	type WorktreeRelocationFailed,
 } from "@repo/git";
@@ -2260,12 +2261,15 @@ export function attachRouter(
 				},
 			),
 			// The pre-merge "you have local unpushed commits" check — about the
-			// local worktree branch, not the PR, so it only needs `repoRoot`.
+			// local worktree branch, not the PR; `baseRef` only scopes `origin`.
 			unpushedCommits: authed.pullRequests.unpushedCommits.effect(function* ({
 				input,
 				errors,
 			}) {
-				return yield* resolveUnpushedCommitCount(input.repoRoot).pipe(
+				return yield* resolveUnpushedCommits(
+					input.repoRoot,
+					input.baseRef,
+				).pipe(
 					Effect.catchTag("NoRemoteRefToCompare", (cause) =>
 						Effect.fail(
 							errors.NO_REMOTE_REF({
@@ -2289,6 +2293,18 @@ export function attachRouter(
 					),
 				);
 			}),
+			// Failures are `failed` events in the stream, never an rpc error.
+			pushBranch: authed.pullRequests.pushBranch.handler(
+				async function* (request) {
+					yield* streamToIterator(
+						pushBranch(request.input.repoRoot, {
+							rebase: request.input.rebase,
+						}),
+						mainContext,
+						request.signal,
+					);
+				},
+			),
 		},
 		// Backs the Overview tab: a PR session dispatches to `@repo/git`'s
 		// GraphQL-backed `fetchPullRequestOverview`, a branch/diff session to

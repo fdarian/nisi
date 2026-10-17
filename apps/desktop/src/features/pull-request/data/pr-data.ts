@@ -15,7 +15,7 @@
  * comment for the split.
  */
 import { type InferClientError, ORPCError } from "@orpc/client";
-import type { SidecarClient } from "@repo/sidecar-api";
+import type { PushEvent, SidecarClient } from "@repo/sidecar-api";
 import type { Query, QueryClient, UseQueryResult } from "@tanstack/react-query";
 import {
 	useMutation,
@@ -1572,8 +1572,29 @@ export function useOverview(
  */
 export type UnpushedCommitsCheck =
 	| { status: "clean" }
-	| { status: "unpushed"; count: number; remoteRef: string }
+	| {
+			status: "unpushed";
+			remoteRef: string;
+			/** Always >= 1 — `"clean"` covers `ahead === 0`, including behind-only. */
+			ahead: number;
+			behind: number;
+			/** The unpushed commits, newest first, capped by the sidecar (so possibly fewer than `ahead`). */
+			commits: ReadonlyArray<BranchCommit>;
+			/** What `remoteRef` holds beyond the PR's base branch — what the merge will include; `null` when the sidecar couldn't resolve `origin/<baseRef>`. */
+			origin: {
+				baseRef: string;
+				count: number;
+				commits: ReadonlyArray<BranchCommit>;
+			} | null;
+	  }
 	| { status: "unverifiable"; message: string };
+
+export type BranchCommit = {
+	sha: string;
+	subject: string;
+	/** ISO 8601 */
+	authoredAt: string;
+};
 
 /** `pullRequests.unpushedCommits`'s declared `NO_REMOTE_REF` carries no server-authored message (there's nothing to diff against, not a failure with detail) — named explicitly rather than falling through to `mergeStatusErrorMessage`'s generic copy. Anything else undeclared (sidecar unreachable) still gets that generic fallback. */
 const unpushedCommitsErrorMessage = (error: unknown): string => {
@@ -1597,7 +1618,10 @@ const unpushedCommitsErrorMessage = (error: unknown): string => {
  * branch is a real outcome the caller renders, not an exceptional one.
  */
 export function useUnpushedCommitsCheck(orpc: SidecarQueryUtils): {
-	check: (repoRoot: string) => Promise<UnpushedCommitsCheck>;
+	check: (
+		repoRoot: string,
+		baseRef: string | null,
+	) => Promise<UnpushedCommitsCheck>;
 	isPending: boolean;
 } {
 	const mutation = useMutation(
@@ -1605,15 +1629,21 @@ export function useUnpushedCommitsCheck(orpc: SidecarQueryUtils): {
 	);
 
 	const check = useCallback(
-		async (repoRoot: string): Promise<UnpushedCommitsCheck> => {
+		async (
+			repoRoot: string,
+			baseRef: string | null,
+		): Promise<UnpushedCommitsCheck> => {
 			try {
-				const result = await mutation.mutateAsync({ repoRoot });
-				return result.count === 0
+				const result = await mutation.mutateAsync({ repoRoot, baseRef });
+				return result.ahead === 0
 					? { status: "clean" }
 					: {
 							status: "unpushed",
-							count: result.count,
 							remoteRef: result.remoteRef,
+							ahead: result.ahead,
+							behind: result.behind,
+							commits: result.commits,
+							origin: result.origin,
 						};
 			} catch (error) {
 				return {
@@ -1626,4 +1656,131 @@ export function useUnpushedCommitsCheck(orpc: SidecarQueryUtils): {
 	);
 
 	return { check, isPending: mutation.isPending };
+}
+
+/**
+ * What the unpushed-commits dialog renders for a `pullRequests.pushBranch`
+ * run. `log` is the merged git output, with each `step` rendered as
+ * `$ <command>`; `failed.error` is the sidecar's own message and `reason`
+ * lets the dialog pick which remedy to suggest.
+ */
+export type PushState =
+	| { status: "idle" }
+	| { status: "running"; log: ReadonlyArray<string> }
+	| { status: "succeeded"; log: ReadonlyArray<string> }
+	| {
+			status: "failed";
+			log: ReadonlyArray<string>;
+			reason: Extract<PushEvent, { type: "failed" }>["reason"];
+			error: string;
+	  };
+
+export function reducePushState(state: PushState, event: PushEvent): PushState {
+	const log = state.status === "idle" ? [] : state.log;
+	switch (event.type) {
+		case "step":
+			return { status: "running", log: [...log, `$ ${event.command}`] };
+		case "line":
+			return { status: "running", log: [...log, event.text] };
+		case "done":
+			return { status: "succeeded", log };
+		case "failed":
+			return {
+				status: "failed",
+				log,
+				reason: event.reason,
+				error: event.message,
+			};
+	}
+}
+
+/**
+ * Drives `pullRequests.pushBranch` the way `useWalkthroughGeneration` drives
+ * `walkthrough.generate`: the raw `.call(...)` iterator is consumed with
+ * `for await` and every event is folded through `reducePushState`, so
+ * nothing yielded in the same commit is dropped. The sidecar reports every
+ * git failure as a `failed` event; an iterator that itself throws (sidecar
+ * unreachable) is folded into the same shape with reason `"other"`, and a
+ * stream that ends without a terminal event is too — `running` must never
+ * outlive the call. Unmounting aborts the call.
+ *
+ * `onSucceeded` fires after the `done` event has been applied, and only for a
+ * run that wasn't aborted or reset.
+ */
+export function usePushBranch(
+	orpc: SidecarQueryUtils,
+	onSucceeded: () => void,
+): {
+	state: PushState;
+	run: (repoRoot: string, rebase: boolean) => void;
+	reset: () => void;
+} {
+	const [state, setState] = useState<PushState>({ status: "idle" });
+	const controllerRef = useRef<AbortController | null>(null);
+	const onSucceededRef = useRef(onSucceeded);
+	onSucceededRef.current = onSucceeded;
+
+	useEffect(
+		() => () => {
+			controllerRef.current?.abort();
+		},
+		[],
+	);
+
+	const reset = useCallback(() => {
+		controllerRef.current?.abort();
+		controllerRef.current = null;
+		setState({ status: "idle" });
+	}, []);
+
+	const run = useCallback(
+		(repoRoot: string, rebase: boolean) => {
+			if (controllerRef.current !== null) return;
+			const controller = new AbortController();
+			controllerRef.current = controller;
+			setState({ status: "running", log: [] });
+
+			void (async () => {
+				let terminal: PushEvent["type"] | null = null;
+				try {
+					const stream = await orpc.pullRequests.pushBranch.call(
+						{ repoRoot, rebase },
+						{ signal: controller.signal },
+					);
+					for await (const event of stream) {
+						if (controller.signal.aborted) return;
+						setState((current) => reducePushState(current, event));
+						if (event.type === "done" || event.type === "failed") {
+							terminal = event.type;
+						}
+					}
+					if (controller.signal.aborted) return;
+					if (terminal === null) {
+						setState((current) =>
+							reducePushState(current, {
+								type: "failed",
+								reason: "other",
+								message: "The push ended without reporting a result.",
+							}),
+						);
+					}
+				} catch (error) {
+					if (controller.signal.aborted) return;
+					setState((current) =>
+						reducePushState(current, {
+							type: "failed",
+							reason: "other",
+							message: error instanceof Error ? error.message : String(error),
+						}),
+					);
+					terminal = "failed";
+				}
+				if (controllerRef.current === controller) controllerRef.current = null;
+				if (terminal === "done") onSucceededRef.current();
+			})();
+		},
+		[orpc],
+	);
+
+	return { state, run, reset };
 }

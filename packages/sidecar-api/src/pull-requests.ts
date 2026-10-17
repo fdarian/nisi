@@ -146,18 +146,62 @@ export type PullRequestStackSuggestion = Schema.Schema.Type<
 	typeof PullRequestStackSuggestion
 >;
 
+/** Mirrors `@repo/git`'s `BranchCommit`. */
+export const UnpushedBranchCommit = Schema.Struct({
+	sha: Schema.String,
+	subject: Schema.String,
+	/** ISO 8601 */
+	authoredAt: Schema.String,
+});
+export type UnpushedBranchCommit = Schema.Schema.Type<
+	typeof UnpushedBranchCommit
+>;
+
 /**
- * Mirrors `@repo/git`'s `UnpushedCommits` — how many commits the local
- * worktree branch has that its remote doesn't, plus the remote ref
- * (`origin/main`, or whatever `@{upstream}` names) that count was computed
- * against, since the pre-merge dialog names it rather than saying "the
- * remote" generically.
+ * Mirrors `@repo/git`'s `UnpushedCommits` — how the local worktree branch has
+ * diverged from its remote ref (`origin/main`, or whatever `@{upstream}`
+ * names; the pre-merge dialog names it rather than saying "the remote"
+ * generically): `ahead` commits only local, `behind` only on the remote.
+ * `commits` lists the unpushed ones newest first, capped at 5. `origin` is
+ * what the remote branch holds beyond `origin/<baseRef>` (what the merge
+ * will include), with the same cap; `null` when no `baseRef` was asked for
+ * or `origin/<baseRef>` doesn't exist locally.
  */
 export const UnpushedCommits = Schema.Struct({
-	count: Schema.Number,
 	remoteRef: Schema.String,
+	ahead: Schema.Number,
+	behind: Schema.Number,
+	commits: Schema.Array(UnpushedBranchCommit),
+	origin: Schema.NullOr(
+		Schema.Struct({
+			baseRef: Schema.String,
+			count: Schema.Number,
+			commits: Schema.Array(UnpushedBranchCommit),
+		}),
+	),
 });
 export type UnpushedCommits = Schema.Schema.Type<typeof UnpushedCommits>;
+
+/**
+ * Mirrors `@repo/git`'s `PushEvent` — what `pushBranch` streams while
+ * pushing the worktree branch, optionally after a `pull --rebase`. `step`
+ * announces each git command before it runs, `line` is one line of its
+ * merged stdout/stderr, and the stream always ends with `done` or `failed`.
+ * `failed.reason` is `"rejected"` when the remote has commits the branch
+ * lacks, and `"rebase-conflict"` when the rebase stopped on conflicts and
+ * was aborted (the worktree is as it was).
+ */
+export const PushEvent = Schema.Union([
+	Schema.Struct({ type: Schema.Literal("step"), command: Schema.String }),
+	Schema.Struct({ type: Schema.Literal("line"), text: Schema.String }),
+	Schema.Struct({ type: Schema.Literal("done") }),
+	Schema.Struct({
+		type: Schema.Literal("failed"),
+		reason: Schema.Literals(["rejected", "rebase-conflict", "other"]),
+		message: Schema.String,
+	}),
+]);
+export type PushEvent = Schema.Schema.Type<typeof PushEvent>;
 
 /** Mirrors `@repo/git`'s check statuses, including workflow runs awaiting approval. */
 export const PullRequestCheckStatus = Schema.Literals([
@@ -359,13 +403,19 @@ const RerunCiJobInput = Schema.Struct({
  *
  * `unpushedCommits` backs the pre-merge "you have local unpushed commits"
  * check — unlike every other procedure here, it's about the *local*
- * worktree branch, not the PR itself, so its input is just `repoRoot`
- * (whatever branch is actually checked out there). Wraps `@repo/git`'s
- * `resolveUnpushedCommitCount`; `NO_REMOTE_REF` is that function's one
+ * worktree branch, not the PR itself, so its input is `repoRoot` (whatever
+ * branch is actually checked out there) plus the PR's `baseRef`, which only
+ * scopes the `origin` part of the result. Wraps `@repo/git`'s
+ * `resolveUnpushedCommits`; `NO_REMOTE_REF` is that function's one
  * failure mode — no `@{upstream}` and no matching `origin/<branch>`, so
  * there's genuinely nothing to compare `HEAD` against — kept distinct from
  * `SERVICE_UNAVAILABLE` (a `git` command itself failing to run) since the
  * frontend shows a different dialog for each.
+ *
+ * `pushBranch` pushes that same local worktree branch (to its upstream, else
+ * `origin/<branch>`), first rebasing onto the remote branch when `rebase` is
+ * set. Failures arrive as a terminal `failed` event rather than an oRPC
+ * error, so it declares none.
  *
  * `markReady` flips a draft PR to ready for review — the adapter uses
  * `owner`/`repo`/`number` to refresh that PR's live sources after success.
@@ -662,10 +712,23 @@ export const pullRequestsContract = {
 			SERVICE_UNAVAILABLE: { data: MergeFailure },
 		}),
 	unpushedCommits: oc
-		.input(Schema.Struct({ repoRoot: Schema.String }))
+		.input(
+			Schema.Struct({
+				repoRoot: Schema.String,
+				baseRef: Schema.NullOr(Schema.String),
+			}),
+		)
 		.output(UnpushedCommits)
 		.errors({
 			NO_REMOTE_REF: {},
 			SERVICE_UNAVAILABLE: {},
 		}),
+	pushBranch: oc
+		.input(
+			Schema.Struct({
+				repoRoot: Schema.String,
+				rebase: Schema.Boolean,
+			}),
+		)
+		.output(eventIterator(Schema.toStandardSchemaV1(PushEvent))),
 };

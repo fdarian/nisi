@@ -209,6 +209,101 @@ export const runBytes = (
 		}),
 	);
 
+/** One line of merged stdout/stderr, or the terminal exit code that ends the stream. */
+export type StreamedOutput =
+	| { readonly type: "line"; readonly text: string }
+	| { readonly type: "exit"; readonly exitCode: number };
+
+/**
+ * Progress output redraws one line with `\r`; only the last redraw is worth
+ * showing. A trailing `\r` (from `\r\n`) is dropped first so it doesn't
+ * select an empty segment.
+ */
+const finalCarriageReturnSegment = (line: string): string => {
+	const trimmed = line.endsWith("\r") ? line.slice(0, -1) : line;
+	return trimmed.slice(trimmed.lastIndexOf("\r") + 1);
+};
+
+const toProgressLines = <E, R>(
+	bytes: Stream.Stream<Uint8Array, E, R>,
+): Stream.Stream<string, E, R> =>
+	Stream.decodeText(bytes).pipe(
+		Stream.mapAccum(
+			() => "",
+			(pending, chunk) => {
+				const text = pending + chunk;
+				const lastNewline = text.lastIndexOf("\n");
+				if (lastNewline === -1) return [text, []] as const;
+				return [
+					text.slice(lastNewline + 1),
+					text
+						.slice(0, lastNewline)
+						.split("\n")
+						.map(finalCarriageReturnSegment),
+				] as const;
+			},
+			{
+				onHalt: (pending) =>
+					pending === "" ? [] : [finalCarriageReturnSegment(pending)],
+			},
+		),
+		Stream.filter((line) => line !== ""),
+	);
+
+/**
+ * Runs a command and streams its output as it arrives: stdout and stderr
+ * merged line by line (each split on its own, so a partial line on one never
+ * splices into the other), then a single `exit` item. A non-zero exit is not
+ * a stream failure; the error channel only carries a process that couldn't
+ * be spawned or read.
+ *
+ * `GIT_TERMINAL_PROMPT=0` is set by {@link gitStream} so a missing credential
+ * fails instead of waiting on a prompt nobody can answer.
+ */
+const runStream = (
+	cwd: string,
+	command: string,
+	args: ReadonlyArray<string>,
+	env: Record<string, string>,
+): Stream.Stream<
+	StreamedOutput,
+	GitCommandError,
+	ChildProcessSpawner.ChildProcessSpawner
+> =>
+	Stream.unwrap(
+		Effect.gen(function* () {
+			yield* logSpawnStart(command, args);
+
+			const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+			const handle = yield* spawner
+				.spawn(ChildProcess.make(command, args, { cwd, env, extendEnv: true }))
+				.pipe(
+					Effect.mapError((cause) => spawnFailure(command, args, cwd, cause)),
+					Effect.tapError((error) =>
+						logSpawnFailure(command, args, error.cause),
+					),
+				);
+
+			const lines = Stream.merge(
+				toProgressLines(handle.stdout),
+				toProgressLines(handle.stderr),
+			).pipe(
+				Stream.map((text): StreamedOutput => ({ type: "line", text })),
+				Stream.mapError((cause) => spawnFailure(command, args, cwd, cause)),
+			);
+			const exit = Stream.fromEffect(
+				handle.exitCode.pipe(
+					Effect.tap((exitCode) => logSpawnDone(command, args, exitCode)),
+					Effect.map(
+						(exitCode): StreamedOutput => ({ type: "exit", exitCode }),
+					),
+					Effect.mapError((cause) => spawnFailure(command, args, cwd, cause)),
+				),
+			);
+			return Stream.concat(lines, exit);
+		}),
+	);
+
 /**
  * Resolved once per process rather than per call — `resolveBin` only reads
  * `PATH`/`process.env` and the filesystem, neither of which changes over the
@@ -243,6 +338,10 @@ export const gitBytes = (
 	args: ReadonlyArray<string>,
 	input?: string,
 ) => runBytes(cwd, GIT_BIN, args, input);
+
+/** Streaming counterpart of {@link gitResult}; see {@link runStream}. */
+export const gitStream = (cwd: string, args: ReadonlyArray<string>) =>
+	runStream(cwd, GIT_BIN, args, { GIT_TERMINAL_PROMPT: "0" });
 
 export const spawnCatFile = (cwd: string) =>
 	Effect.gen(function* () {

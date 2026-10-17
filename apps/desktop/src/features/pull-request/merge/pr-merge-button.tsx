@@ -23,12 +23,14 @@ import type {
 	MergeMethod,
 	MergePullRequestError,
 	PullRequestMergeStatus,
+	PushState,
 	UnpushedCommitsCheck,
 } from "#/features/pull-request/data/pr-data";
 import {
 	useMergePullRequest,
 	usePullRequestMergeStatus,
 	usePullRequestStack,
+	usePushBranch,
 	useScheduledMerge,
 	useScheduledMergeMutations,
 	useUnpushedCommitsCheck,
@@ -49,6 +51,8 @@ type PrMergeButtonProps = {
 	owner: string;
 	repo: string;
 	number: number;
+	/** The PR's base branch — scopes the "already on origin" half of the unpushed-commits dialog. */
+	baseRef: string | null;
 	/** This PR's tab is both the selected one and the window has focus — see `usePullRequestMergeStatus` (`pr-data.ts`). */
 	watched: boolean;
 	isSelectedTab: boolean;
@@ -204,6 +208,7 @@ export function PrMergeButton({
 	owner,
 	repo,
 	number,
+	baseRef,
 	watched,
 	isSelectedTab,
 }: PrMergeButtonProps): React.ReactElement {
@@ -279,6 +284,28 @@ export function PrMergeButton({
 		action: "merge" | "schedule";
 	} | null>(null);
 
+	// A push that finished is only trusted once a fresh check agrees: until
+	// then the dialog is shown a still-running push so it can't be dismissed
+	// or merged past. A check that is still unpushed (the push landed
+	// elsewhere, or more commits arrived) replaces the dialog's check and
+	// resets the push so the next suggestion starts from the new facts.
+	const [verifyingPush, setVerifyingPush] = useState(false);
+	const verifyPush = async () => {
+		setVerifyingPush(true);
+		const result = await checkUnpushedCommits(repoRoot, baseRef);
+		setVerifyingPush(false);
+		if (result.status === "clean") return;
+		setPendingUnpushedCheck((current) =>
+			current === null ? null : { ...current, check: result },
+		);
+		pushBranch.reset();
+	};
+	const pushBranch = usePushBranch(orpc, verifyPush);
+	const dialogPush: PushState =
+		verifyingPush && pushBranch.state.status === "succeeded"
+			? { status: "running", log: pushBranch.state.log }
+			: pushBranch.state;
+
 	// Holds only the user's own dropdown pick — falls back to the
 	// scheduled method or server's `defaultMethod` until there is one, so a later
 	// refetch (e.g. the one `useMergePullRequest` fires on success) never
@@ -346,7 +373,7 @@ export function PrMergeButton({
 			autoMerge.isPending
 		)
 			return;
-		const result = await checkUnpushedCommits(repoRoot);
+		const result = await checkUnpushedCommits(repoRoot, baseRef);
 		if (result.status === "clean") {
 			performAction(action);
 			return;
@@ -459,11 +486,16 @@ export function PrMergeButton({
 				onMergeAnyway={() => {
 					if (pendingUnpushedCheck === null) return;
 					setPendingUnpushedCheck(null);
+					pushBranch.reset();
 					performAction(pendingUnpushedCheck.action);
 				}}
 				onOpenChange={(open) => {
-					if (!open) setPendingUnpushedCheck(null);
+					if (open) return;
+					setPendingUnpushedCheck(null);
+					pushBranch.reset();
 				}}
+				onPush={(rebase) => pushBranch.run(repoRoot, rebase)}
+				push={dialogPush}
 			/>
 			<MergeErrorDialog
 				failure={mergeFailure}

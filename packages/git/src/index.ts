@@ -119,7 +119,13 @@ export {
 	resolveReviewTarget,
 	resolveReviewTargetForPullRequest,
 } from "./pull-request.ts";
-export type { UnpushedCommits } from "./repo.ts";
+export type { PushEvent, PushFailureReason } from "./push.ts";
+export { pushBranch } from "./push.ts";
+export type {
+	BranchCommit,
+	OriginCommits,
+	UnpushedCommits,
+} from "./repo.ts";
 export {
 	commitExists,
 	headDescendsFrom,
@@ -129,7 +135,7 @@ export {
 	resolveLocalDefaultBranch,
 	resolveMergeBase,
 	resolveRepoRoot,
-	resolveUnpushedCommitCount,
+	resolveUnpushedCommits,
 } from "./repo.ts";
 export type { KnownRepoPath } from "./repo-path-mapping.ts";
 export {

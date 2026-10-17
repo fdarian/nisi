@@ -181,6 +181,7 @@ export function PrHeader({
 							/>
 						</div>
 						<PrMergeButton
+							baseRef={target.baseRef}
 							isSelectedTab={isSelectedTab}
 							number={target.number}
 							orpc={orpc}
