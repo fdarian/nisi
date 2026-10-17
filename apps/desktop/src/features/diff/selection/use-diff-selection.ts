@@ -424,6 +424,7 @@ export function useDiffSelection<Metadata>({
 				},
 			);
 			setReference({
+				kind: "lines",
 				path,
 				startLine: headRange.startLine,
 				endLine: headRange.endLine,
@@ -564,6 +565,7 @@ export function useDiffSelection<Metadata>({
 			const headRange = resolveHeadRange(start, end);
 			activeTextRangeRef.current = active.range;
 			setReference({
+				kind: "lines",
 				path,
 				startLine: headRange.startLine,
 				endLine: headRange.endLine,

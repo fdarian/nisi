@@ -43,17 +43,18 @@ import {
 import { Badge } from "#/components/ui/badge";
 import { Button, buttonVariants } from "#/components/ui/button";
 import {
-	type DiffSelectionReference,
-	formatSelectionReference,
-	formatSelectionReferenceShort,
-} from "#/features/diff/diff-reference";
-import {
 	type HarnessId,
 	useHarnesses,
 	useHarnessModels,
 } from "#/features/pull-request/walkthrough/walkthrough-data";
 import { useLastChatModel } from "#/features/settings/settings-data";
 import type { SidecarQueryUtils } from "#/infra/backend-context";
+import {
+	type ChatReference,
+	composeOutgoingMessage,
+	formatChatReferenceShort,
+	formatChatReferenceTitle,
+} from "./chat-reference";
 
 type ChatComposerProps = {
 	/** `null` until the thread's first message locks it in — see `chat-store.ts`'s `ChatThreadMeta` doc. */
@@ -62,11 +63,11 @@ type ChatComposerProps = {
 	/** From `useChat({ chat })` — `"submitted"`/`"streaming"` both count as busy for this composer's own send/stop toggle, same as the old `thread.status === "streaming"` check covered both phases at once. */
 	status: ChatStatus;
 	orpc: SidecarQueryUtils;
-	/** Diff-pane selections attached via "Ask" — rendered as removable chips above the input and folded into the outgoing message text on send (see `submit` below). */
-	references: readonly DiffSelectionReference[];
+	/** Selections attached via "Ask" — rendered as removable chips above the input and folded into the outgoing message text on send (see `submit` below). */
+	references: readonly ChatReference[];
 	/** Opaque counter — every change puts the caret back in the input. See `chat-store.ts`'s `SessionChatState.composerFocusRequest`. */
 	focusRequest: number;
-	onRemoveReference: (reference: DiffSelectionReference) => void;
+	onRemoveReference: (reference: ChatReference) => void;
 	onClearReferences: () => void;
 	onSend: (text: string, harness: HarnessId, model: string | undefined) => void;
 	onStop: () => void;
@@ -88,11 +89,11 @@ function ReferenceChip({
 	reference,
 	onRemove,
 }: {
-	reference: DiffSelectionReference;
+	reference: ChatReference;
 	onRemove: () => void;
 }): React.ReactElement {
-	const short = formatSelectionReferenceShort(reference);
-	const full = formatSelectionReference(reference);
+	const short = formatChatReferenceShort(reference);
+	const full = formatChatReferenceTitle(reference);
 	return (
 		<Badge className="max-w-full gap-1 pr-1 font-mono" variant="outline">
 			<span className="min-w-0 truncate" title={full}>
@@ -203,11 +204,7 @@ function ComposerBody({
 		const harness = threadHarness ?? selection?.harness ?? null;
 		if (harness === null) return;
 		const model = needsPicker ? selection?.modelId : threadModel;
-		const outgoingText =
-			references.length === 0
-				? text
-				: `${references.map(formatSelectionReference).join("\n")}\n\n${text}`;
-		onSend(outgoingText, harness, model);
+		onSend(composeOutgoingMessage(references, text), harness, model);
 		if (references.length > 0) onClearReferences();
 		editor.update(() => {
 			const root = $getRoot();
@@ -290,7 +287,7 @@ function ComposerBody({
 				<div className="flex flex-wrap gap-1">
 					{references.map((reference) => (
 						<ReferenceChip
-							key={formatSelectionReference(reference)}
+							key={formatChatReferenceTitle(reference)}
 							onRemove={() => onRemoveReference(reference)}
 							reference={reference}
 						/>
