@@ -1,7 +1,9 @@
 import { Link, useLocation } from "@tanstack/react-router";
 import {
+	AsteriskIcon,
 	BellIcon,
 	ChevronLeftIcon,
+	FlagIcon,
 	GitForkIcon,
 	SettingsIcon,
 } from "lucide-react";
@@ -55,6 +57,24 @@ export function SettingsSidebar(): React.ReactElement {
 								>
 									<BellIcon />
 									Notifications
+								</SidebarMenuButton>
+							</SidebarMenuItem>
+							<SidebarMenuItem>
+								<SidebarMenuButton
+									isActive={pathname === "/settings/feature-flags"}
+									render={<Link to="/settings/feature-flags" />}
+								>
+									<FlagIcon />
+									Feature Flags
+								</SidebarMenuButton>
+							</SidebarMenuItem>
+							<SidebarMenuItem>
+								<SidebarMenuButton
+									isActive={pathname === "/settings/agents"}
+									render={<Link to="/settings/agents" />}
+								>
+									<AsteriskIcon />
+									Agents
 								</SidebarMenuButton>
 							</SidebarMenuItem>
 							<SidebarMenuItem>
