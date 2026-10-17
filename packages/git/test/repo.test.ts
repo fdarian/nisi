@@ -76,7 +76,7 @@ describe("resolveUnpushedCommits", () => {
 				ahead: 0,
 				behind: 0,
 				commits: [],
-				rewritten: false,
+				diverged: false,
 				origin: null,
 			});
 		} finally {
@@ -101,7 +101,7 @@ describe("resolveUnpushedCommits", () => {
 			expect(result.remoteRef).toBe("origin/main");
 			expect(result.ahead).toBe(2);
 			expect(result.behind).toBe(0);
-			expect(result.rewritten).toBe(false);
+			expect(result.diverged).toBe(false);
 			expect(result.commits.map((commit) => commit.subject)).toEqual([
 				"unpushed 2",
 				"unpushed 1",
@@ -142,7 +142,7 @@ describe("resolveUnpushedCommits", () => {
 			const result = await run(resolveUnpushedCommits(fixture.repo.root, null));
 			expect(result.ahead).toBe(1);
 			expect(result.behind).toBe(1);
-			expect(result.rewritten).toBe(true);
+			expect(result.diverged).toBe(true);
 			expect(result.commits.map((commit) => commit.subject)).toEqual([
 				"local only",
 			]);
@@ -274,8 +274,8 @@ const makeOtherClone = async (bareDir: string): Promise<TestRepo> => {
 	return other;
 };
 
-describe("resolveUnpushedCommits — remote rewritten behind the local branch", () => {
-	test("a plain push-ahead of 2 reports rewritten: false", async () => {
+describe("resolveUnpushedCommits — remote diverged from the local branch", () => {
+	test("a plain push-ahead of 2 reports diverged: false", async () => {
 		const fixture = await makeOriginBackedRepo();
 		try {
 			await fixture.repo.git(["checkout", "-q", "-b", "feature"]);
@@ -291,11 +291,29 @@ describe("resolveUnpushedCommits — remote rewritten behind the local branch", 
 			expect(result.remoteRef).toBe("origin/feature");
 			expect(result.ahead).toBe(2);
 			expect(result.behind).toBe(0);
-			expect(result.rewritten).toBe(false);
+			expect(result.diverged).toBe(false);
 			expect(result.commits.map((commit) => commit.subject)).toEqual([
 				"f3",
 				"f2",
 			]);
+		} finally {
+			await cleanupOriginBackedRepo(fixture);
+		}
+	});
+
+	test("behind-only is not diverged and keeps the plain counts", async () => {
+		const fixture = await makeOriginBackedRepo();
+		try {
+			await fixture.repo.write("b.ts", "remote\n");
+			await fixture.repo.commit("remote only");
+			await fixture.repo.git(["push", "-q", "origin", "main"]);
+			await fixture.repo.git(["reset", "-q", "--hard", "HEAD~1"]);
+
+			const result = await run(resolveUnpushedCommits(fixture.repo.root, null));
+			expect(result.ahead).toBe(0);
+			expect(result.behind).toBe(1);
+			expect(result.commits).toEqual([]);
+			expect(result.diverged).toBe(false);
 		} finally {
 			await cleanupOriginBackedRepo(fixture);
 		}
@@ -319,7 +337,7 @@ describe("resolveUnpushedCommits — remote rewritten behind the local branch", 
 
 			const result = await run(resolveUnpushedCommits(fixture.repo.root, null));
 			expect(result.ahead).toBe(0);
-			expect(result.rewritten).toBe(false);
+			expect(result.diverged).toBe(false);
 		} finally {
 			await cleanupOriginBackedRepo(fixture);
 		}
@@ -347,7 +365,7 @@ describe("resolveUnpushedCommits — remote rewritten behind the local branch", 
 			expect(result.ahead).toBe(0);
 			expect(result.behind).toBe(2);
 			expect(result.commits).toEqual([]);
-			expect(result.rewritten).toBe(true);
+			expect(result.diverged).toBe(true);
 		} finally {
 			await cleanupTestRepo(other);
 			await cleanupOriginBackedRepo(fixture);
@@ -388,7 +406,7 @@ describe("resolveUnpushedCommits — remote rewritten behind the local branch", 
 			expect(result.remoteRef).toBe("origin/child");
 			expect(result.ahead).toBe(0);
 			expect(result.commits).toEqual([]);
-			expect(result.rewritten).toBe(true);
+			expect(result.diverged).toBe(true);
 		} finally {
 			await cleanupTestRepo(other);
 			await cleanupOriginBackedRepo(fixture);
@@ -421,7 +439,7 @@ describe("resolveUnpushedCommits — remote rewritten behind the local branch", 
 			expect(result.commits.map((commit) => commit.subject)).toEqual([
 				"local fix",
 			]);
-			expect(result.rewritten).toBe(true);
+			expect(result.diverged).toBe(true);
 		} finally {
 			await cleanupTestRepo(other);
 			await cleanupOriginBackedRepo(fixture);
@@ -450,7 +468,7 @@ describe("resolveUnpushedCommits — remote rewritten behind the local branch", 
 			expect(result.remoteRef).toBe("origin/feature");
 			expect(result.ahead).toBe(0);
 			expect(result.commits).toEqual([]);
-			expect(result.rewritten).toBe(true);
+			expect(result.diverged).toBe(true);
 		} finally {
 			await cleanupTestRepo(other);
 			await cleanupOriginBackedRepo(fixture);

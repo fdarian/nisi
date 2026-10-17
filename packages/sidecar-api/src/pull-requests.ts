@@ -162,11 +162,10 @@ export type UnpushedBranchCommit = Schema.Schema.Type<
  * diverged from its remote ref (`origin/main`, or whatever `@{upstream}`
  * names; the pre-merge dialog names it rather than saying "the remote"
  * generically): `ahead` commits only local, `behind` only on the remote.
- * `commits` lists the unpushed ones newest first, capped at 5. `rewritten`
- * means the remote ref isn't an ancestor of `HEAD` (rebased or force-pushed
- * out from under the local branch), so `ahead` and `commits` cover only the
- * local commits whose changes the remote tip lacks, not the commit-graph
- * difference. `origin` is
+ * `commits` lists the unpushed ones newest first, capped at 5. `diverged`
+ * means both sides have commits the other lacks (the remote was rebased, or
+ * pushed on top of), so `ahead` and `commits` cover only the local commits
+ * whose changes the remote tip lacks, not the commit-graph difference. `origin` is
  * what the remote branch holds beyond `origin/<baseRef>` (what the merge
  * will include), with the same cap; `null` when no `baseRef` was asked for
  * or `origin/<baseRef>` doesn't exist locally.
@@ -176,7 +175,7 @@ export const UnpushedCommits = Schema.Struct({
 	ahead: Schema.Number,
 	behind: Schema.Number,
 	commits: Schema.Array(UnpushedBranchCommit),
-	rewritten: Schema.Boolean,
+	diverged: Schema.Boolean,
 	origin: Schema.NullOr(
 		Schema.Struct({
 			baseRef: Schema.String,
@@ -411,9 +410,10 @@ const RerunCiJobInput = Schema.Struct({
  * worktree branch, not the PR itself, so its input is `repoRoot` (whatever
  * branch is actually checked out there) plus the PR's `baseRef`, which only
  * scopes the `origin` part of the result. Wraps `@repo/git`'s
- * `resolveUnpushedCommits`; `NO_REMOTE_REF` is that function's one
- * failure mode — no `@{upstream}` and no matching `origin/<branch>`, so
- * there's genuinely nothing to compare `HEAD` against — kept distinct from
+ * `resolveUnpushedCommits`; `NO_REMOTE_REF` covers its "nothing to compare
+ * `HEAD` against" failures — no `@{upstream}` and no matching
+ * `origin/<branch>`, or a detached/non-remote-tracking branch with no push
+ * target — kept distinct from
  * `SERVICE_UNAVAILABLE` (a `git` command itself failing to run) since the
  * frontend shows a different dialog for each.
  *

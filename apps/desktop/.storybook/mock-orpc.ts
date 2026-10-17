@@ -495,7 +495,7 @@ export function createMockSidecarClient(
 							ahead: 0,
 							behind: 0,
 							commits: [],
-							rewritten: false,
+							diverged: false,
 							origin: null,
 						}
 					: data.unpushedCommits,

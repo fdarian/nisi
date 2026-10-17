@@ -207,11 +207,12 @@ export type UnpushedCommits = {
 	/** The unpushed commits, newest first, capped at 5. */
 	readonly commits: ReadonlyArray<BranchCommit>;
 	/**
-	 * `remoteRef` isn't an ancestor of `HEAD` (it was rebased or otherwise
-	 * rewritten), so `ahead` and `commits` cover only the local commits whose
-	 * changes `remoteRef`'s tip lacks, not the commit-graph difference.
+	 * Both sides have commits the other lacks (`ahead > 0` and `behind > 0`),
+	 * e.g. the remote was rebased or someone pushed on top. `ahead` and
+	 * `commits` then cover only the local commits whose changes `remoteRef`'s
+	 * tip lacks, not the commit-graph difference. `false` for behind-only.
 	 */
-	readonly rewritten: boolean;
+	readonly diverged: boolean;
 	/** `null` when no `baseRef` was given or `origin/<baseRef>` doesn't exist. */
 	readonly origin: OriginCommits | null;
 };
@@ -283,7 +284,7 @@ const unexpectedExit = (
 
 /**
  * The `HEAD` commits that have a change `remoteRef` doesn't already contain,
- * for the case where `remoteRef` is not an ancestor of `HEAD` (the remote
+ * for the case where the branches diverged (the remote
  * branch was rewritten — rebased by GitHub's stacked-PR feature, or after a
  * parent PR was squash-merged — so every old local SHA looks unpushed to
  * `rev-list`). Candidates are the non-merge commits only `HEAD` has, minus
@@ -298,7 +299,7 @@ const unexpectedExit = (
  * merge base and counts too. Requires git >= 2.40 (`merge-tree
  * --merge-base`, strategy options).
  */
-const listCommitsMissingFromRewrittenRemote = (
+const listCommitsMissingFromDivergedRemote = (
 	repoRoot: string,
 	remoteRef: string,
 ) =>
@@ -384,10 +385,10 @@ const resolveOriginCommits = (
  *
  * Fetches the one remote branch first (via {@link resolvePushTarget}) so the
  * remote-tracking ref isn't stale; a fetch or push-target failure fails the
- * effect, since a stale comparison is worse than none. When `behind > 0` the
- * remote was rewritten, and `ahead`/`commits` are narrowed to the local
+ * effect, since a stale comparison is worse than none. When the branches
+ * diverged (`behind > 0` and a plain `ahead > 0`), `ahead`/`commits` are narrowed to the local
  * commits whose changes the remote tip lacks (see
- * {@link listCommitsMissingFromRewrittenRemote}); `behind` stays the plain
+ * {@link listCommitsMissingFromDivergedRemote}); `behind` stays the plain
  * commit-graph count.
  *
  * `origin` describes what the remote branch holds beyond `baseRef`, for
@@ -437,12 +438,12 @@ export const resolveUnpushedCommits = (
 			});
 		}
 
-		const rewritten = behind > 0;
-		const missing = rewritten
-			? yield* listCommitsMissingFromRewrittenRemote(repoRoot, remoteRef)
+		const diverged = behind > 0 && graphAhead > 0;
+		const missing = diverged
+			? yield* listCommitsMissingFromDivergedRemote(repoRoot, remoteRef)
 			: [];
-		const ahead = rewritten ? missing.length : graphAhead;
-		const commits = rewritten
+		const ahead = diverged ? missing.length : graphAhead;
+		const commits = diverged
 			? yield* listCommitsBySha(repoRoot, missing)
 			: yield* listCommits(repoRoot, [`${remoteRef}..HEAD`]);
 
@@ -460,7 +461,7 @@ export const resolveUnpushedCommits = (
 			ahead,
 			behind,
 			commits,
-			rewritten,
+			diverged,
 			origin,
 		} satisfies UnpushedCommits;
 	});

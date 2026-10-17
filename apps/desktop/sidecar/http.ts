@@ -2277,6 +2277,9 @@ export function attachRouter(
 							}),
 						),
 					),
+					Effect.catchTag("PushTargetUnresolvable", (cause) =>
+						Effect.fail(errors.NO_REMOTE_REF({ message: cause.reason })),
+					),
 					Effect.catchTag("GitCommandError", (cause) =>
 						Effect.fail(
 							errors.SERVICE_UNAVAILABLE({
