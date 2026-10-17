@@ -75,6 +75,7 @@ export const AutoMergeWithUnpushedCommits: Story = {
 				remoteRef: "origin/feature",
 				ahead: 2,
 				behind: 0,
+				rewritten: false,
 				commits: [
 					{
 						sha: "a3f9c21e5b7d4086c1d2e3f40516273849a0b1c2",
@@ -189,6 +190,7 @@ const UNPUSHED = {
 	remoteRef: "origin/feature",
 	ahead: 2,
 	behind: 0,
+	rewritten: false,
 	commits: [
 		{
 			sha: "a3f9c21e5b7d4086c1d2e3f40516273849a0b1c2",

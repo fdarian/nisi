@@ -162,7 +162,11 @@ export type UnpushedBranchCommit = Schema.Schema.Type<
  * diverged from its remote ref (`origin/main`, or whatever `@{upstream}`
  * names; the pre-merge dialog names it rather than saying "the remote"
  * generically): `ahead` commits only local, `behind` only on the remote.
- * `commits` lists the unpushed ones newest first, capped at 5. `origin` is
+ * `commits` lists the unpushed ones newest first, capped at 5. `rewritten`
+ * means the remote ref isn't an ancestor of `HEAD` (rebased or force-pushed
+ * out from under the local branch), so `ahead` and `commits` cover only the
+ * local commits whose changes the remote tip lacks, not the commit-graph
+ * difference. `origin` is
  * what the remote branch holds beyond `origin/<baseRef>` (what the merge
  * will include), with the same cap; `null` when no `baseRef` was asked for
  * or `origin/<baseRef>` doesn't exist locally.
@@ -172,6 +176,7 @@ export const UnpushedCommits = Schema.Struct({
 	ahead: Schema.Number,
 	behind: Schema.Number,
 	commits: Schema.Array(UnpushedBranchCommit),
+	rewritten: Schema.Boolean,
 	origin: Schema.NullOr(
 		Schema.Struct({
 			baseRef: Schema.String,

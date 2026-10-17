@@ -82,6 +82,16 @@ function UnpushedDescription(props: { check: UnpushedCheck; pushed: boolean }) {
 			</>
 		);
 	}
+	if (props.check.rewritten) {
+		return (
+			<>
+				<RefPill>{props.check.remoteRef}</RefPill> was rewritten (rebased on
+				GitHub?) and {commitCount(props.check.ahead)} on your local branch{" "}
+				{props.check.ahead === 1 ? "has" : "have"} changes not found there, so{" "}
+				{props.check.ahead === 1 ? "it" : "they"} won't be merged.
+			</>
+		);
+	}
 	return (
 		<>
 			Your local branch is {commitCount(props.check.ahead)} ahead of{" "}
@@ -575,7 +585,9 @@ export function UnpushedCommitsDialog({
 						<AlertDialogTitle>
 							{check === null || check.status === "unverifiable"
 								? "Can't verify pushed commits"
-								: `${commitCount(check.ahead)} ${isPushed ? "pushed" : "won't be merged"}`}
+								: check.rewritten && !isPushed
+									? "Remote branch was rewritten"
+									: `${commitCount(check.ahead)} ${isPushed ? "pushed" : "won't be merged"}`}
 						</AlertDialogTitle>
 						<AlertDialogDescription>
 							{check !== null && (
