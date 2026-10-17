@@ -18,16 +18,11 @@
  * for the fuller rationale.
  */
 import { useChat } from "@ai-sdk/react";
-import { getToolName, isTextUIPart, isToolUIPart, type UIMessage } from "ai";
-import { cn } from "cn";
-import {
-	ChevronDownIcon,
-	ChevronUpIcon,
-	LoaderCircleIcon,
-	XIcon,
-} from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import type { ChatStatus, UIMessage } from "ai";
+import { ChevronDownIcon, ChevronUpIcon, XIcon } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
-import ReactMarkdown, { type Components } from "react-markdown";
+import { ShimmerText } from "#/components/shimmer-text";
 import { Button } from "#/components/ui/button";
 import { ScrollArea } from "#/components/ui/scroll-area";
 import {
@@ -43,110 +38,17 @@ import {
 import { useLastChatModel } from "#/features/settings/settings-data";
 import type { SidecarQueryUtils } from "#/infra/backend-context";
 import { ChatComposer } from "../chat-composer";
+import { ChatMessage } from "./chat-message";
 import { ChatPanelResizeHandles, useChatPanelSize } from "./chat-panel-resize";
-
-const markdownComponents: Components = {
-	p: (props) => <p className="text-foreground" {...props} />,
-	ul: (props) => <ul className="list-disc space-y-1 pl-5" {...props} />,
-	ol: (props) => <ol className="list-decimal space-y-1 pl-5" {...props} />,
-	strong: (props) => (
-		<strong className="font-semibold text-foreground" {...props} />
-	),
-	code: (props) => (
-		<code
-			{...props}
-			className={cn(
-				"rounded bg-background/60 px-1 py-0.5 font-mono text-[0.8125em]",
-				props.className,
-			)}
-		/>
-	),
-	// Fenced blocks arrive as `<pre><code>` — the `code` renderer above still
-	// fires for the nested `<code>`, so its own bg/padding/rounding are
-	// cancelled here (`[&>code]:...`) rather than doubled up inside `pre`'s
-	// own box. `whitespace-pre-wrap` is load-bearing: a bare `<pre>` defaults
-	// to `white-space: pre`, which suppresses wrapping outright regardless of
-	// `overflow-wrap`.
-	pre: (props) => (
-		<pre
-			{...props}
-			className={cn(
-				"whitespace-pre-wrap wrap-anywhere rounded bg-background/60 px-2 py-1.5 font-mono text-[0.8125em] [&>code]:rounded-none [&>code]:bg-transparent [&>code]:p-0",
-				props.className,
-			)}
-		/>
-	),
-	a: (props) => (
-		<a
-			className="underline underline-offset-2"
-			rel="noreferrer"
-			target="_blank"
-			{...props}
-		/>
-	),
-};
-
-function MessageBubble({
-	message,
-}: {
-	message: UIMessage;
-}): React.ReactElement {
-	const isUser = message.role === "user";
-	return (
-		<div
-			className={cn(
-				"flex min-w-0 flex-col gap-1.5",
-				isUser ? "items-end" : "items-start",
-			)}
-		>
-			{message.parts.map((part, index) => {
-				if (isTextUIPart(part)) {
-					return (
-						<div
-							className={cn(
-								"min-w-0 max-w-[85%] wrap-anywhere rounded-2xl px-3 py-1.5 text-sm",
-								isUser
-									? "bg-primary text-primary-foreground"
-									: "bg-muted text-foreground",
-							)}
-							// biome-ignore lint/suspicious/noArrayIndexKey: AI SDK's `TextUIPart`/`ToolUIPart` carry no id of their own (a tool part's `toolCallId` isn't stable across a thread's other tool calls' array position, and text parts have no id at all — see `process-ui-message-stream.ts`, which drops the wire chunk's `id` once a part is assembled). `parts` is append-only for a message's whole streamed lifetime, so index is a safe identity here: nothing ever reorders or is removed out from under it.
-							key={index}
-						>
-							{isUser ? (
-								<span className="whitespace-pre-wrap wrap-anywhere">
-									{part.text}
-								</span>
-							) : (
-								<ReactMarkdown components={markdownComponents}>
-									{part.text}
-								</ReactMarkdown>
-							)}
-						</div>
-					);
-				}
-				if (isToolUIPart(part)) {
-					return (
-						<div
-							className="min-w-0 wrap-anywhere rounded-md bg-muted/60 px-2 py-1 text-muted-foreground text-xs"
-							// biome-ignore lint/suspicious/noArrayIndexKey: see the text-part branch above.
-							key={index}
-						>
-							{getToolName(part)}
-						</div>
-					);
-				}
-				return null;
-			})}
-		</div>
-	);
-}
 
 export function MessageList({
 	messages,
-	isWaitingForFirstReply,
+	status,
+	repoRoot,
 }: {
 	messages: readonly UIMessage[];
-	isWaitingForFirstReply: boolean;
+	status: ChatStatus;
+	repoRoot: string | undefined;
 }): React.ReactElement {
 	if (messages.length === 0) {
 		return (
@@ -157,16 +59,24 @@ export function MessageList({
 		);
 	}
 
+	const streaming = status === "streaming";
+	const lastIndex = messages.length - 1;
+	const isThinking =
+		status === "submitted" ||
+		(streaming && messages[lastIndex].role === "user");
+
 	return (
 		<div className="flex min-w-0 flex-col gap-3 px-3 py-3">
-			{messages.map((message) => (
-				<MessageBubble key={message.id} message={message} />
+			{messages.map((message, index) => (
+				<ChatMessage
+					key={message.id}
+					message={message}
+					repoRoot={repoRoot}
+					streaming={streaming && index === lastIndex}
+				/>
 			))}
-			{isWaitingForFirstReply && (
-				<div className="flex items-center gap-1.5 text-muted-foreground text-xs">
-					<LoaderCircleIcon className="size-3 animate-spin" />
-					Thinking…
-				</div>
+			{isThinking && (
+				<ShimmerText className="self-start text-sm">Thinking</ShimmerText>
 			)}
 		</div>
 	);
@@ -223,11 +133,13 @@ function ChatPanelBody({
 	});
 
 	const title = deriveThreadTitle(messages);
-	// `"submitted"`: the turn has been sent but no chunk of the reply has
-	// landed yet — AI SDK's own status expresses exactly the gap the old
-	// hand-rolled indicator used to infer from `thread.status === "streaming"
-	// && lastMessage.role === "user"`.
-	const isWaitingForFirstReply = status === "submitted";
+	// The same root the chat agent's sandbox is rooted at
+	// (`sidecar/chat/sessions.ts`), so tool paths can be shown relative to it.
+	const repoRootQuery = useQuery({
+		...orpc.sessions.list.queryOptions(),
+		select: (sessions) =>
+			sessions.find((session) => session.id === sessionId)?.repoRoot,
+	});
 
 	return (
 		<motion.div
@@ -279,8 +191,9 @@ function ChatPanelBody({
 					>
 						<ScrollArea scrollFade style={{ height }}>
 							<MessageList
-								isWaitingForFirstReply={isWaitingForFirstReply}
 								messages={messages}
+								repoRoot={repoRootQuery.data}
+								status={status}
 							/>
 						</ScrollArea>
 						{status === "error" && error !== undefined && (
