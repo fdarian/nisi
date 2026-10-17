@@ -6,10 +6,14 @@
  * bordered card holding the rendered markdown body. The PR title itself
  * isn't repeated here — `pr-header.tsx` already shows it.
  */
+import { useRef } from "react";
 import { Avatar, AvatarFallback, AvatarImage } from "#/components/ui/avatar";
+import { ProseSelectionPopover } from "#/features/prose-selection/prose-selection-popover";
+import { useProseSelection } from "#/features/prose-selection/use-prose-selection";
 import type { OverviewDescription } from "#/features/pull-request/data/pr-data";
 import { githubAvatarUrl } from "#/features/pull-request/data/pull-requests-data";
 import { ProseMarkdown } from "#/features/pull-request/prose-markdown";
+import type { SidecarQueryUtils } from "#/infra/backend-context";
 
 /** Mirrors `open-pull-request-palette.tsx`'s helper of the same name — too small (one line) to be worth sharing across the two files. */
 function authorInitials(login: string): string {
@@ -17,13 +21,19 @@ function authorInitials(login: string): string {
 }
 
 type DescriptionPaneProps = {
+	sessionId: string;
+	orpc: SidecarQueryUtils;
 	description: OverviewDescription;
 };
 
 export function DescriptionPane({
+	sessionId,
+	orpc,
 	description,
 }: DescriptionPaneProps): React.ReactElement {
 	const body = description.body;
+	const card = useRef<HTMLDivElement>(null);
+	const selection = useProseSelection(card, "description");
 
 	return (
 		<div className="min-w-0 min-h-0 flex-1 overflow-auto pl-3 pr-6 py-5">
@@ -34,7 +44,10 @@ export function DescriptionPane({
 						{authorInitials(description.authorLogin)}
 					</AvatarFallback>
 				</Avatar>
-				<div className="min-w-0 flex-1 rounded-lg border bg-background px-4 py-3 text-foreground text-sm leading-relaxed">
+				<div
+					className="min-w-0 flex-1 rounded-lg border bg-background px-4 py-3 text-foreground text-sm leading-relaxed"
+					ref={card}
+				>
 					{body === null || body.trim() === "" ? (
 						<p className="text-muted-foreground italic">
 							No description provided.
@@ -46,6 +59,13 @@ export function DescriptionPane({
 					)}
 				</div>
 			</div>
+			<ProseSelectionPopover
+				anchorRect={selection.anchorRect}
+				clear={selection.clear}
+				orpc={orpc}
+				reference={selection.reference}
+				sessionId={sessionId}
+			/>
 		</div>
 	);
 }

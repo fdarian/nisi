@@ -19,6 +19,8 @@ import {
 } from "#/components/ui/empty";
 import { ResizablePanel, ResizablePanelGroup } from "#/components/ui/resizable";
 import { Spinner } from "#/components/ui/spinner";
+import { ProseSelectionPopover } from "#/features/prose-selection/prose-selection-popover";
+import { useProseSelection } from "#/features/prose-selection/use-prose-selection";
 import type {
 	FileChange,
 	ReviewStateEntry,
@@ -200,6 +202,7 @@ function GuideBody(props: {
 	);
 	const scroller = useRef<HTMLDivElement>(null);
 	const content = useRef<HTMLDivElement>(null);
+	const selection = useProseSelection(content, "guide");
 
 	const layout = useDefaultLayout({
 		id: SPLIT_STORAGE_ID,
@@ -232,6 +235,13 @@ function GuideBody(props: {
 								</GuideErrorBoundary>
 							</GuideProvider>
 						</div>
+						<ProseSelectionPopover
+							anchorRect={selection.anchorRect}
+							clear={selection.clear}
+							orpc={props.orpc}
+							reference={selection.reference}
+							sessionId={props.session.id}
+						/>
 						{props.target === null && (
 							<aside className="absolute top-0 left-full ml-8 hidden h-full w-44 @5xl:block">
 								<div className="sticky top-0">
