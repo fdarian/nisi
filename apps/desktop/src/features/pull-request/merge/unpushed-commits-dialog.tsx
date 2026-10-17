@@ -5,6 +5,7 @@ import {
 	CircleAlert,
 	CircleCheck,
 	CircleHelp,
+	CloudCheck,
 	CloudOff,
 	Upload,
 } from "lucide-react";
@@ -67,9 +68,17 @@ function RefPill(props: { children: string; className?: string }) {
 }
 
 /** `count` is always >= 1 in the `"unpushed"` branch — `useUnpushedCommitsCheck` only ever produces that status for a nonzero count, `"clean"` covers zero. */
-function UnpushedDescription(props: { check: UnpushedCheck }) {
+function UnpushedDescription(props: { check: UnpushedCheck; pushed: boolean }) {
 	if (props.check.status === "unverifiable") {
 		return `Nisi couldn't verify whether every local commit on this branch has been pushed: ${props.check.message}`;
+	}
+	if (props.pushed) {
+		return (
+			<>
+				<RefPill>{props.check.remoteRef}</RefPill> now includes{" "}
+				{props.check.count === 1 ? "it" : "them"}, so the merge will too.
+			</>
+		);
 	}
 	return (
 		<>
@@ -296,7 +305,10 @@ const STACKED_PANEL_CLASS_NAME =
 function CommitGraph(props: {
 	check: UnpushedBranchCheck;
 	commits: ReadonlyArray<BranchCommit>;
+	pushed: boolean;
 }) {
+	const localDot: DotKind = props.pushed ? "origin" : "unpushed";
+	const localTone = props.pushed ? "success" : "warning";
 	const now = Date.now();
 	const remoteCommits = props.check.remoteCommits;
 	const isTabbed = remoteCommits !== undefined && remoteCommits.length > 0;
@@ -309,7 +321,7 @@ function CommitGraph(props: {
 					<div className="flex items-center gap-2 border-b bg-muted/48 px-3 py-2">
 						<LocalBranchPill branch={localBranch} />
 						<span className="shrink-0">
-							<CountBadge prefix="↑" tone="warning">
+							<CountBadge prefix="↑" tone={localTone}>
 								{props.check.count}
 							</CountBadge>
 						</span>
@@ -317,7 +329,7 @@ function CommitGraph(props: {
 				)}
 				<CommitList
 					commits={props.commits}
-					dot="unpushed"
+					dot={localDot}
 					now={now}
 					tail={
 						<RemoteHeadTail
@@ -339,8 +351,8 @@ function CommitGraph(props: {
 			<div className="flex items-center justify-between gap-3 border-b bg-muted/48 px-2 py-1.5">
 				<TabsList size="sm">
 					<TabsTab value="unpushed">
-						Not pushed
-						<CountBadge tone="warning">{props.check.count}</CountBadge>
+						{props.pushed ? "Pushed" : "Not pushed"}
+						<CountBadge tone={localTone}>{props.check.count}</CountBadge>
 					</TabsTab>
 					<TabsTab value="origin">
 						On origin
@@ -357,7 +369,7 @@ function CommitGraph(props: {
 				>
 					<CommitList
 						commits={props.commits}
-						dot="unpushed"
+						dot={localDot}
 						now={now}
 						tail={
 							<RemoteHeadTail
@@ -391,13 +403,14 @@ function CommitGraph(props: {
 	);
 }
 
-function PushLog(props: { lines: ReadonlyArray<string> }) {
+function PushLog(props: { lines: ReadonlyArray<string>; follow: boolean }) {
 	const ref = useRef<HTMLPreElement>(null);
 	// biome-ignore lint/correctness/useExhaustiveDependencies: re-scroll whenever a line arrives; the lines themselves aren't read here
 	useEffect(() => {
 		const element = ref.current;
-		if (element !== null) element.scrollTop = element.scrollHeight;
-	}, [props.lines.length]);
+		if (element === null) return;
+		element.scrollTop = props.follow ? element.scrollHeight : 0;
+	}, [props.lines.length, props.follow]);
 	return (
 		<pre
 			className="max-h-32 overflow-auto whitespace-pre-wrap break-words rounded-md bg-muted px-2.5 py-2 font-mono text-muted-foreground text-xs select-text"
@@ -506,7 +519,9 @@ function SuggestedPush(props: {
 				{push.status === "failed" && (
 					<p className="text-destructive-foreground text-xs">{push.error}</p>
 				)}
-				{logOpen && <PushLog lines={logLines} />}
+				{logOpen && (
+					<PushLog follow={push.status === "running"} lines={logLines} />
+				)}
 			</div>
 		</div>
 	);
@@ -535,6 +550,7 @@ export function UnpushedCommitsDialog({
 	const pushState: PushState = push ?? { status: "idle" };
 	const showGraph = check?.status === "unpushed" && check.commits !== undefined;
 	const showPush = check?.status === "unpushed" && onPush !== undefined;
+	const isPushed = showPush && pushState.status === "succeeded";
 	return (
 		<AlertDialog onOpenChange={onOpenChange} open={check !== null}>
 			<AlertDialogContent className="max-w-xl">
@@ -542,28 +558,41 @@ export function UnpushedCommitsDialog({
 					<span
 						className={cn(
 							"flex size-10 shrink-0 items-center justify-center rounded-xl [&_svg]:size-5",
-							isUnverifiable
-								? "bg-muted text-muted-foreground"
-								: "bg-warning/12 text-warning-foreground",
+							isUnverifiable && "bg-muted text-muted-foreground",
+							isPushed && "bg-success/12 text-success-foreground",
+							!(isUnverifiable || isPushed) &&
+								"bg-warning/12 text-warning-foreground",
 						)}
 					>
-						{isUnverifiable ? <CircleHelp /> : <CloudOff />}
+						{isUnverifiable ? (
+							<CircleHelp />
+						) : isPushed ? (
+							<CloudCheck />
+						) : (
+							<CloudOff />
+						)}
 					</span>
 					<div className="flex min-w-0 flex-col gap-2">
 						<AlertDialogTitle>
 							{check === null || check.status === "unverifiable"
 								? "Can't verify pushed commits"
-								: `${commitCount(check.count)} won't be merged`}
+								: `${commitCount(check.count)} ${isPushed ? "pushed" : "won't be merged"}`}
 						</AlertDialogTitle>
 						<AlertDialogDescription>
-							{check !== null && <UnpushedDescription check={check} />}
+							{check !== null && (
+								<UnpushedDescription check={check} pushed={isPushed} />
+							)}
 						</AlertDialogDescription>
 					</div>
 				</AlertDialogHeader>
 				{check?.status === "unpushed" && (showGraph || showPush) && (
 					<div className="mx-6 mb-6 flex flex-col gap-4">
 						{check.commits !== undefined && (
-							<CommitGraph check={check} commits={check.commits} />
+							<CommitGraph
+								check={check}
+								commits={check.commits}
+								pushed={isPushed}
+							/>
 						)}
 						{onPush !== undefined && (
 							<SuggestedPush check={check} onPush={onPush} push={pushState} />
