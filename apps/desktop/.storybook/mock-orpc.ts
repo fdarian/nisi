@@ -23,6 +23,7 @@ import {
 	CODE_INDEX_SOURCE_CONTEXT_LINES_BEFORE,
 	type CodeIndexReferencesResult,
 	type GuideResult,
+	type PushEvent,
 	type RepositoryDetail,
 	type RepositorySessionStateBatch,
 	type RepositorySummary,
@@ -169,7 +170,10 @@ export type MockOrpcData = {
 	/** `pullRequests.mergeStatus`'s result — omit to leave the mock pending forever (`neverSettles`), same as before this field existed. */
 	mergeStatus?: PullRequestMergeStatus;
 	scheduledMerge?: { method: "merge" | "squash" | "rebase" } | null;
+	/** `pullRequests.unpushedCommits`'s result until a `pushBranch` call streams `done`; every check after that reports a clean branch, as the real sidecar would. */
 	unpushedCommits?: UnpushedCommits;
+	/** What each `pullRequests.pushBranch` call streams, one event every `PUSH_EVENT_DELAY_MS`. Omit for a call that never produces anything. */
+	pushBranch?: (input: { rebase: boolean }) => readonly PushEvent[];
 	/** When set, `pullRequests.mergeStatus` rejects with this message instead of resolving — covers the "query failed and never once succeeded" case. Takes priority over `mergeStatus` if both are set (they shouldn't be). */
 	mergeStatusError?: string;
 	/** `pullRequests.stack`'s result — omit to leave the mock pending forever. */
@@ -248,6 +252,19 @@ function liveValue<T>(value: T): AsyncIteratorClass<T, void> {
 	);
 }
 
+const PUSH_EVENT_DELAY_MS = 250;
+
+async function* replayPush(
+	events: readonly PushEvent[],
+	onDone: () => void,
+): AsyncGenerator<PushEvent> {
+	for (const event of events) {
+		await new Promise((resolve) => setTimeout(resolve, PUSH_EVENT_DELAY_MS));
+		if (event.type === "done") onDone();
+		yield event;
+	}
+}
+
 async function* replayThenHang(
 	events: readonly GenerateEvent[],
 ): AsyncGenerator<GenerateEvent> {
@@ -269,6 +286,7 @@ export function createMockSidecarClient(
 	const fileContents = data.fileContents ?? {};
 	const runningGeneration = data.runningGeneration;
 	const mergeStatus = data.mergeStatus;
+	let branchPushed = false;
 	const scheduledMergeState = {
 		request: data.scheduledMerge === undefined ? null : data.scheduledMerge,
 	};
@@ -471,7 +489,7 @@ export function createMockSidecarClient(
 									),
 								),
 			unpushedCommits: async () =>
-				data.unpushedCommits === undefined
+				data.unpushedCommits === undefined || branchPushed
 					? {
 							remoteRef: "origin/feature",
 							ahead: 0,
@@ -480,7 +498,14 @@ export function createMockSidecarClient(
 							origin: null,
 						}
 					: data.unpushedCommits,
-			pushBranch: async () => neverIterator(),
+			pushBranch: async (input) =>
+				data.pushBranch === undefined
+					? neverIterator()
+					: toAsyncIteratorClass(
+							replayPush(data.pushBranch(input), () => {
+								branchPushed = true;
+							}),
+						),
 		},
 		// No story exercises the Overview tab yet — same reasoning as
 		// `events.subscribe` above.

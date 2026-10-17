@@ -5,14 +5,17 @@
  * mock here, unlike `PrMergeButton`'s own stories: this component is pure
  * presentation over whatever `useUnpushedCommitsCheck` resolved.
  */
+
+import type { PushEvent } from "@repo/sidecar-api";
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { useEffect, useRef, useState } from "react";
 import { expect, userEvent, within } from "storybook/test";
-import type { BranchCommit } from "#/features/pull-request/data/pr-data";
 import {
+	type BranchCommit,
 	type PushState,
-	UnpushedCommitsDialog,
-} from "./unpushed-commits-dialog";
+	reducePushState,
+} from "#/features/pull-request/data/pr-data";
+import { UnpushedCommitsDialog } from "./unpushed-commits-dialog";
 
 const meta: Meta<typeof UnpushedCommitsDialog> = {
 	title: "Pr/UnpushedCommitsDialog",
@@ -213,33 +216,91 @@ export const Unverifiable: Story = {
 	},
 };
 
-const PUSH_LOG = [
-	"Enumerating objects: 9, done.",
-	"Counting objects: 100% (9/9), done.",
-	"Delta compression using up to 10 threads",
-	"Compressing objects: 100% (4/4), done.",
-	"Writing objects: 100% (5/5), 1.12 KiB | 1.12 MiB/s, done.",
-	"Total 5 (delta 3), reused 0 (delta 0), pack-reused 0",
-	"remote: Resolving deltas: 100% (3/3), completed with 3 local objects.",
-	"To github.com:acme/storage.git",
-	`   5c1e8a0..a3f9c21  ${LOCAL_BRANCH} -> ${LOCAL_BRANCH}`,
+const PUSH_COMMAND = `git push --progress origin HEAD:${LOCAL_BRANCH}`;
+
+const PUSH_EVENTS: ReadonlyArray<PushEvent> = [
+	{ type: "step", command: PUSH_COMMAND },
+	...[
+		"Enumerating objects: 9, done.",
+		"Counting objects: 100% (9/9), done.",
+		"Delta compression using up to 10 threads",
+		"Compressing objects: 100% (4/4), done.",
+		"Writing objects: 100% (5/5), 1.12 KiB | 1.12 MiB/s, done.",
+		"Total 5 (delta 3), reused 0 (delta 0), pack-reused 0",
+		"remote: Resolving deltas: 100% (3/3), completed with 3 local objects.",
+		"To github.com:acme/storage.git",
+		`   5c1e8a0..a3f9c21  ${LOCAL_BRANCH} -> ${LOCAL_BRANCH}`,
+	].map((text): PushEvent => ({ type: "line", text })),
+	{ type: "done" },
 ];
 
-const PUSH_REJECTED_LOG = [
-	"To github.com:acme/storage.git",
-	` ! [rejected]        ${LOCAL_BRANCH} -> ${LOCAL_BRANCH} (non-fast-forward)`,
-	"error: failed to push some refs to 'github.com:acme/storage.git'",
-	"hint: Updates were rejected because the tip of your current branch is behind",
-	"hint: its remote counterpart. If you want to integrate the remote changes,",
-	"hint: use 'git pull' before pushing again.",
+const REJECTED_EVENTS: ReadonlyArray<PushEvent> = [
+	{ type: "step", command: PUSH_COMMAND },
+	...[
+		"To github.com:acme/storage.git",
+		` ! [rejected]        ${LOCAL_BRANCH} -> ${LOCAL_BRANCH} (non-fast-forward)`,
+		"error: failed to push some refs to 'github.com:acme/storage.git'",
+		"hint: Updates were rejected because the tip of your current branch is behind",
+		"hint: its remote counterpart. If you want to integrate the remote changes,",
+		"hint: use 'git pull' before pushing again.",
+	].map((text): PushEvent => ({ type: "line", text })),
+	{
+		type: "failed",
+		reason: "rejected",
+		message: `${REMOTE_REF} has commits your branch doesn't; pull them before pushing.`,
+	},
 ];
 
-function pushStory(push: PushState): Story {
+const REBASE_CONFLICT_EVENTS: ReadonlyArray<PushEvent> = [
+	{
+		type: "step",
+		command: `git pull --rebase --autostash origin ${LOCAL_BRANCH}`,
+	},
+	...[
+		"From github.com:acme/storage",
+		` * branch            ${LOCAL_BRANCH} -> FETCH_HEAD`,
+		"Rebasing (1/2)",
+		"Auto-merging src/storage/bucket-policy.ts",
+		"CONFLICT (content): Merge conflict in src/storage/bucket-policy.ts",
+		"error: could not apply 7be04d8... Fix bucket policy fixture",
+	].map((text): PushEvent => ({ type: "line", text })),
+	{ type: "step", command: "git rebase --abort" },
+	{
+		type: "failed",
+		reason: "rebase-conflict",
+		message:
+			"The rebase hit conflicts and was aborted; your worktree is unchanged.",
+	},
+];
+
+const OTHER_FAILURE_EVENTS: ReadonlyArray<PushEvent> = [
+	{ type: "step", command: PUSH_COMMAND },
+	{
+		type: "line",
+		text: "fatal: unable to access 'https://github.com/acme/storage.git/': Could not resolve host: github.com",
+	},
+	{
+		type: "failed",
+		reason: "other",
+		message:
+			"fatal: unable to access 'https://github.com/acme/storage.git/': Could not resolve host: github.com",
+	},
+];
+
+function pushStateAfter(events: ReadonlyArray<PushEvent>): PushState {
+	return events.reduce(reducePushState, { status: "idle" } as PushState);
+}
+
+function pushStory(
+	push: PushState,
+	check: Story["args"] = Unpushed.args,
+): Story {
 	return {
 		args: {
-			...Unpushed.args,
+			...check,
 			push,
-			onPush: () => console.log("UnpushedCommitsDialog: push"),
+			onPush: (rebase) =>
+				console.log(`UnpushedCommitsDialog: push (rebase: ${rebase})`),
 		},
 	};
 }
@@ -247,27 +308,59 @@ function pushStory(push: PushState): Story {
 /** The suggested-push action before anything has run. */
 export const PushIdle: Story = pushStory({ status: "idle" });
 
-/** `git push` in flight — the push row reads "Pushing…" and Merge anyway is blocked; the log scrolls as lines arrive. */
-export const PushRunning: Story = pushStory({
-	status: "running",
-	log: PUSH_LOG.slice(0, 5),
-});
+/** `git push` in flight — the push row reads "Pushing…", Cancel and Merge anyway are blocked, Escape does nothing; the log scrolls as lines arrive. */
+export const PushRunning: Story = pushStory(
+	pushStateAfter(PUSH_EVENTS.slice(0, 6)),
+);
 
 /** Pushed — the log collapses behind "Show log" and the primary button becomes a plain Merge. */
-export const PushSucceeded: Story = pushStory({
-	status: "succeeded",
-	log: PUSH_LOG,
-});
+export const PushSucceeded: Story = pushStory(pushStateAfter(PUSH_EVENTS));
 
-/** Rejected push — destructive row, stderr log open, the row becomes "Retry push". */
-export const PushFailed: Story = pushStory({
-	status: "failed",
-	log: PUSH_REJECTED_LOG,
-	error:
-		"Updates were rejected: the remote branch has commits you don't have locally.",
-});
+/** A failure that isn't a rejection (here, no network) — destructive row, log open, the row becomes "Retry push". */
+export const PushFailed: Story = pushStory(
+	pushStateAfter(OTHER_FAILURE_EVENTS),
+);
 
-const PUSH_LINE_DELAY_MS = 300;
+/** The branch is behind its remote, so a plain push can't succeed — rebase is the suggestion up front. */
+export const PullRebaseSuggested: Story = pushStory(
+	{ status: "idle" },
+	{
+		check: {
+			status: "unpushed",
+			remoteRef: REMOTE_REF,
+			ahead: 2,
+			behind: 3,
+			commits: REALISTIC_COMMITS,
+			origin: {
+				baseRef: BASE_REF,
+				count: ORIGIN_COMMITS.length,
+				commits: ORIGIN_COMMITS,
+			},
+		},
+	},
+);
+
+/** The check said ahead-only, but the push was rejected — the failed row now suggests the rebase. */
+export const PushRejectedSuggestsRebase: Story = pushStory(
+	pushStateAfter(REJECTED_EVENTS),
+);
+
+/** The rebase stopped on conflicts and was aborted — log stays open and explains the branch is untouched. */
+export const RebaseConflict: Story = pushStory(
+	pushStateAfter(REBASE_CONFLICT_EVENTS),
+	{
+		check: {
+			status: "unpushed",
+			remoteRef: REMOTE_REF,
+			ahead: 2,
+			behind: 3,
+			commits: REALISTIC_COMMITS,
+			origin: null,
+		},
+	},
+);
+
+const PUSH_EVENT_DELAY_MS = 300;
 
 function PushInteractiveDialog(
 	props: React.ComponentProps<typeof UnpushedCommitsDialog>,
@@ -284,18 +377,11 @@ function PushInteractiveDialog(
 	const run = () => {
 		if (push.status === "running" || push.status === "succeeded") return;
 		setPush({ status: "running", log: [] });
-		PUSH_LOG.forEach((_, index) => {
+		PUSH_EVENTS.forEach((event, index) => {
 			timers.current.push(
 				setTimeout(
-					() => {
-						const log = PUSH_LOG.slice(0, index + 1);
-						setPush(
-							index === PUSH_LOG.length - 1
-								? { status: "succeeded", log }
-								: { status: "running", log },
-						);
-					},
-					(index + 1) * PUSH_LINE_DELAY_MS,
+					() => setPush((current) => reducePushState(current, event)),
+					(index + 1) * PUSH_EVENT_DELAY_MS,
 				),
 			);
 		});

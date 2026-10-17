@@ -26,6 +26,7 @@ import { Spinner } from "#/components/ui/spinner";
 import { Tabs, TabsList, TabsPanel, TabsTab } from "#/components/ui/tabs";
 import type {
 	BranchCommit,
+	PushState,
 	UnpushedCommitsCheck,
 } from "#/features/pull-request/data/pr-data";
 import { relativeTime } from "#/features/settings/repositories/repositories-view";
@@ -33,20 +34,14 @@ import { relativeTime } from "#/features/settings/repositories/repositories-view
 type UnpushedCheck = Exclude<UnpushedCommitsCheck, { status: "clean" }>;
 type UnpushedBranchCheck = Extract<UnpushedCheck, { status: "unpushed" }>;
 
-export type PushState =
-	| { status: "idle" }
-	| { status: "running"; log: ReadonlyArray<string> }
-	| { status: "succeeded"; log: ReadonlyArray<string> }
-	| { status: "failed"; log: ReadonlyArray<string>; error: string };
-
 type UnpushedCommitsDialogProps = {
 	check: UnpushedCheck | null;
 	onOpenChange: (open: boolean) => void;
 	onMergeAnyway: () => void;
 	/** Defaults to idle. Ignored unless `onPush` is given. */
 	push?: PushState;
-	/** Renders the "Suggested: push" action; the caller owns running `git push` and feeding `push` back. */
-	onPush?: () => void;
+	/** Renders the "Suggested" push action; the caller owns running git (with `rebase` set when the rebase suggestion was clicked) and feeding `push` back. */
+	onPush?: (rebase: boolean) => void;
 };
 
 const MAX_VISIBLE_COMMITS = 5;
@@ -404,17 +399,42 @@ function PushLog(props: { lines: ReadonlyArray<string>; follow: boolean }) {
 	);
 }
 
+/** Behind-only needs a rebase before a push can succeed; a rejected push (or a conflicted rebase) proves the remote moved even if the check that opened the dialog predates it. */
+function suggestsRebase(check: UnpushedBranchCheck, push: PushState): boolean {
+	return (
+		check.behind > 0 ||
+		(push.status === "failed" &&
+			(push.reason === "rejected" || push.reason === "rebase-conflict"))
+	);
+}
+
+function pushLabel(
+	check: UnpushedBranchCheck,
+	push: PushState,
+	rebase: boolean,
+): string {
+	if (push.status === "running") return "Pushing…";
+	const base = rebase
+		? "Pull --rebase & push"
+		: `Push ${commitCount(check.ahead)}`;
+	if (push.status === "failed" && push.reason === "other") {
+		return rebase ? "Retry pull --rebase & push" : "Retry push";
+	}
+	return base;
+}
+
 function PushButton(props: {
 	push: PushState;
 	check: UnpushedBranchCheck;
-	onPush: () => void;
+	onPush: (rebase: boolean) => void;
 }) {
 	const running = props.push.status === "running";
+	const rebase = suggestsRebase(props.check, props.push);
 	return (
 		<button
 			className="-mx-2 -my-1 flex cursor-pointer items-center gap-2 rounded-md px-2 py-1 text-left text-sm outline-none transition-colors hover:bg-accent/60 focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-64"
 			disabled={running}
-			onClick={props.onPush}
+			onClick={() => props.onPush(rebase)}
 			type="button"
 		>
 			{running ? (
@@ -423,14 +443,10 @@ function PushButton(props: {
 				<ArrowUp className="size-4 shrink-0 text-muted-foreground" />
 			)}
 			<span className="min-w-0 flex-1 truncate">
-				{running
-					? "Pushing…"
-					: props.push.status === "failed"
-						? "Retry push"
-						: `Push ${commitCount(props.check.ahead)}`}
+				{pushLabel(props.check, props.push, rebase)}
 			</span>
 			<code className="shrink-0 font-mono text-muted-foreground text-xs">
-				git push
+				{rebase ? "git pull --rebase && git push" : "git push"}
 			</code>
 		</button>
 	);
@@ -460,7 +476,7 @@ function PushedRow(props: {
 function SuggestedPush(props: {
 	push: PushState;
 	check: UnpushedBranchCheck;
-	onPush: () => void;
+	onPush: (rebase: boolean) => void;
 }) {
 	const [logToggled, setLogToggled] = useState(false);
 	const push = props.push;
@@ -525,8 +541,17 @@ export function UnpushedCommitsDialog({
 	const pushState: PushState = push ?? { status: "idle" };
 	const showPush = check?.status === "unpushed" && onPush !== undefined;
 	const isPushed = showPush && pushState.status === "succeeded";
+	const isPushing = showPush && pushState.status === "running";
 	return (
-		<AlertDialog onOpenChange={onOpenChange} open={check !== null}>
+		<AlertDialog
+			onOpenChange={(open) => {
+				// Escape and outside clicks arrive here as well as the buttons —
+				// dismissing mid-push would orphan a git process the user can't see.
+				if (isPushing) return;
+				onOpenChange(open);
+			}}
+			open={check !== null}
+		>
 			<AlertDialogContent className="max-h-[calc(100dvh-2rem)] max-w-xl max-sm:max-h-[calc(100dvh-3rem)]">
 				<AlertDialogHeader className="shrink-0 flex-row items-start gap-4 text-left">
 					<span
@@ -568,7 +593,10 @@ export function UnpushedCommitsDialog({
 					</div>
 				)}
 				<AlertDialogFooter className="shrink-0">
-					<AlertDialogClose render={<Button variant="outline" />}>
+					<AlertDialogClose
+						disabled={isPushing}
+						render={<Button disabled={isPushing} variant="outline" />}
+					>
 						Cancel
 					</AlertDialogClose>
 					{pushState.status === "succeeded" && showPush ? (
@@ -577,10 +605,10 @@ export function UnpushedCommitsDialog({
 						</AlertDialogClose>
 					) : (
 						<AlertDialogClose
-							disabled={pushState.status === "running" && showPush}
+							disabled={isPushing}
 							render={
 								<Button
-									disabled={pushState.status === "running" && showPush}
+									disabled={isPushing}
 									onClick={onMergeAnyway}
 									variant="warning-secondary"
 								/>

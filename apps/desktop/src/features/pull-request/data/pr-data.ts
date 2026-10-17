@@ -15,7 +15,7 @@
  * comment for the split.
  */
 import { type InferClientError, ORPCError } from "@orpc/client";
-import type { SidecarClient } from "@repo/sidecar-api";
+import type { PushEvent, SidecarClient } from "@repo/sidecar-api";
 import type { Query, QueryClient, UseQueryResult } from "@tanstack/react-query";
 import {
 	useMutation,
@@ -1656,4 +1656,131 @@ export function useUnpushedCommitsCheck(orpc: SidecarQueryUtils): {
 	);
 
 	return { check, isPending: mutation.isPending };
+}
+
+/**
+ * What the unpushed-commits dialog renders for a `pullRequests.pushBranch`
+ * run. `log` is the merged git output, with each `step` rendered as
+ * `$ <command>`; `failed.error` is the sidecar's own message and `reason`
+ * lets the dialog pick which remedy to suggest.
+ */
+export type PushState =
+	| { status: "idle" }
+	| { status: "running"; log: ReadonlyArray<string> }
+	| { status: "succeeded"; log: ReadonlyArray<string> }
+	| {
+			status: "failed";
+			log: ReadonlyArray<string>;
+			reason: Extract<PushEvent, { type: "failed" }>["reason"];
+			error: string;
+	  };
+
+export function reducePushState(state: PushState, event: PushEvent): PushState {
+	const log = state.status === "idle" ? [] : state.log;
+	switch (event.type) {
+		case "step":
+			return { status: "running", log: [...log, `$ ${event.command}`] };
+		case "line":
+			return { status: "running", log: [...log, event.text] };
+		case "done":
+			return { status: "succeeded", log };
+		case "failed":
+			return {
+				status: "failed",
+				log,
+				reason: event.reason,
+				error: event.message,
+			};
+	}
+}
+
+/**
+ * Drives `pullRequests.pushBranch` the way `useWalkthroughGeneration` drives
+ * `walkthrough.generate`: the raw `.call(...)` iterator is consumed with
+ * `for await` and every event is folded through `reducePushState`, so
+ * nothing yielded in the same commit is dropped. The sidecar reports every
+ * git failure as a `failed` event; an iterator that itself throws (sidecar
+ * unreachable) is folded into the same shape with reason `"other"`, and a
+ * stream that ends without a terminal event is too — `running` must never
+ * outlive the call. Unmounting aborts the call.
+ *
+ * `onSucceeded` fires after the `done` event has been applied, and only for a
+ * run that wasn't aborted or reset.
+ */
+export function usePushBranch(
+	orpc: SidecarQueryUtils,
+	onSucceeded: () => void,
+): {
+	state: PushState;
+	run: (repoRoot: string, rebase: boolean) => void;
+	reset: () => void;
+} {
+	const [state, setState] = useState<PushState>({ status: "idle" });
+	const controllerRef = useRef<AbortController | null>(null);
+	const onSucceededRef = useRef(onSucceeded);
+	onSucceededRef.current = onSucceeded;
+
+	useEffect(
+		() => () => {
+			controllerRef.current?.abort();
+		},
+		[],
+	);
+
+	const reset = useCallback(() => {
+		controllerRef.current?.abort();
+		controllerRef.current = null;
+		setState({ status: "idle" });
+	}, []);
+
+	const run = useCallback(
+		(repoRoot: string, rebase: boolean) => {
+			if (controllerRef.current !== null) return;
+			const controller = new AbortController();
+			controllerRef.current = controller;
+			setState({ status: "running", log: [] });
+
+			void (async () => {
+				let terminal: PushEvent["type"] | null = null;
+				try {
+					const stream = await orpc.pullRequests.pushBranch.call(
+						{ repoRoot, rebase },
+						{ signal: controller.signal },
+					);
+					for await (const event of stream) {
+						if (controller.signal.aborted) return;
+						setState((current) => reducePushState(current, event));
+						if (event.type === "done" || event.type === "failed") {
+							terminal = event.type;
+						}
+					}
+					if (controller.signal.aborted) return;
+					if (terminal === null) {
+						setState((current) =>
+							reducePushState(current, {
+								type: "failed",
+								reason: "other",
+								message: "The push ended without reporting a result.",
+							}),
+						);
+					}
+				} catch (error) {
+					if (controller.signal.aborted) return;
+					setState((current) =>
+						reducePushState(current, {
+							type: "failed",
+							reason: "other",
+							message: error instanceof Error ? error.message : String(error),
+						}),
+					);
+					terminal = "failed";
+				}
+				if (controllerRef.current === controller) controllerRef.current = null;
+				if (terminal === "done") onSucceededRef.current();
+			})();
+		},
+		[orpc],
+	);
+
+	return { state, run, reset };
 }

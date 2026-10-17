@@ -6,7 +6,9 @@
  * once `state` is terminal) without a live sidecar/PR. Not meant to stick
  * around as permanent coverage — delete freely once verified.
  */
+import type { PushEvent } from "@repo/sidecar-api";
 import type { Meta, StoryObj } from "@storybook/react-vite";
+import { userEvent, within } from "storybook/test";
 import type {
 	PullRequestMergeStatus,
 	PullRequestStack,
@@ -181,4 +183,98 @@ export const AutoMergeScheduled: Story = {
 			scheduledMerge: { method: "squash" },
 		}),
 	},
+};
+
+const UNPUSHED = {
+	remoteRef: "origin/feature",
+	ahead: 2,
+	behind: 0,
+	commits: [
+		{
+			sha: "a3f9c21e5b7d4086c1d2e3f40516273849a0b1c2",
+			subject: "Replace S3 mock with in-memory store",
+			authoredAt: new Date(Date.now() - 12 * 60_000).toISOString(),
+		},
+		{
+			sha: "7be04d8a1c3f5927e6d8b0a4c2f1e3d5b7a9c8e6",
+			subject: "Fix bucket policy fixture",
+			authoredAt: new Date(Date.now() - 95 * 60_000).toISOString(),
+		},
+	],
+	origin: null,
+};
+
+const pushLines = (...texts: readonly string[]): PushEvent[] =>
+	texts.map((text) => ({ type: "line", text }));
+
+const PUSH_SUCCESS: PushEvent[] = [
+	{ type: "step", command: "git push --progress origin HEAD:feature" },
+	...pushLines(
+		"Writing objects: 100% (5/5), 1.12 KiB | 1.12 MiB/s, done.",
+		"To github.com:acme/widgets.git",
+		"   5c1e8a0..a3f9c21  feature -> feature",
+	),
+	{ type: "done" },
+];
+
+const openMergeDialog: Story["play"] = async ({ canvasElement }) => {
+	const canvas = within(canvasElement);
+	await userEvent.click(
+		await canvas.findByRole("button", { name: /Merge pull request/ }),
+	);
+};
+
+/** Opens the unpushed dialog on load; clicking "Push 2 commits" streams a mocked push, re-checks (now clean), and the primary becomes "Merge". */
+export const PushFlow: Story = {
+	args: {
+		orpc: createMockOrpc({
+			mergeStatus: BASE_STATUS,
+			unpushedCommits: UNPUSHED,
+			pushBranch: () => PUSH_SUCCESS,
+		}),
+	},
+	play: openMergeDialog,
+};
+
+/** The plain push is rejected, the row switches to "Pull --rebase & push", and that run succeeds. */
+export const PushRejectedThenRebase: Story = {
+	args: {
+		orpc: createMockOrpc({
+			mergeStatus: BASE_STATUS,
+			unpushedCommits: UNPUSHED,
+			pushBranch: ({ rebase }) =>
+				rebase
+					? [
+							{
+								type: "step",
+								command: "git pull --rebase --autostash origin feature",
+							},
+							...pushLines(
+								"Successfully rebased and updated refs/heads/feature.",
+							),
+							{
+								type: "step",
+								command: "git push --progress origin HEAD:feature",
+							},
+							...pushLines("   5c1e8a0..b4d2e11  feature -> feature"),
+							{ type: "done" },
+						]
+					: [
+							{
+								type: "step",
+								command: "git push --progress origin HEAD:feature",
+							},
+							...pushLines(
+								" ! [rejected]        feature -> feature (non-fast-forward)",
+							),
+							{
+								type: "failed",
+								reason: "rejected",
+								message:
+									"origin/feature has commits your branch doesn't; pull them before pushing.",
+							},
+						],
+		}),
+	},
+	play: openMergeDialog,
 };
