@@ -82,6 +82,17 @@ function UnpushedDescription(props: { check: UnpushedCheck; pushed: boolean }) {
 			</>
 		);
 	}
+	if (props.check.diverged) {
+		return (
+			<>
+				<RefPill>{props.check.remoteRef}</RefPill> has diverged from your local
+				branch (rebased on GitHub?), and {commitCount(props.check.ahead)}{" "}
+				{props.check.ahead === 1 ? "has" : "have"} changes not found there.{" "}
+				{props.check.ahead === 1 ? "It" : "They"} won't be included in this
+				merge.
+			</>
+		);
+	}
 	return (
 		<>
 			Your local branch is {commitCount(props.check.ahead)} ahead of{" "}
@@ -575,7 +586,9 @@ export function UnpushedCommitsDialog({
 						<AlertDialogTitle>
 							{check === null || check.status === "unverifiable"
 								? "Can't verify pushed commits"
-								: `${commitCount(check.ahead)} ${isPushed ? "pushed" : "won't be merged"}`}
+								: check.diverged && !isPushed
+									? `${commitCount(check.ahead)} not on ${check.remoteRef}`
+									: `${commitCount(check.ahead)} ${isPushed ? "pushed" : "won't be merged"}`}
 						</AlertDialogTitle>
 						<AlertDialogDescription>
 							{check !== null && (

@@ -99,6 +99,7 @@ export const Unpushed: Story = {
 			remoteRef: REMOTE_REF,
 			ahead: 2,
 			behind: 0,
+			diverged: false,
 			commits: REALISTIC_COMMITS,
 			origin: {
 				baseRef: BASE_REF,
@@ -117,7 +118,23 @@ export const SingleUnpushedCommit: Story = {
 			remoteRef: REMOTE_REF,
 			ahead: 1,
 			behind: 0,
+			diverged: false,
 			commits: REALISTIC_COMMITS.slice(0, 1),
+			origin: null,
+		},
+	},
+};
+
+/** The remote branch diverged from the local one (rebased, or pushed on top) — `ahead` and `commits` are only the local commits whose changes it lacks. */
+export const DivergedRemote: Story = {
+	args: {
+		check: {
+			status: "unpushed",
+			remoteRef: REMOTE_REF,
+			ahead: 2,
+			behind: 4,
+			diverged: true,
+			commits: REALISTIC_COMMITS,
 			origin: null,
 		},
 	},
@@ -131,6 +148,7 @@ export const ManyUnpushedCommits: Story = {
 			remoteRef: REMOTE_REF,
 			ahead: 12,
 			behind: 0,
+			diverged: false,
 			commits: Array.from({ length: 5 }, (_, index) =>
 				commit(
 					`${(0xc0ffee0 + index * 0x1111).toString(16)}9d8c7b6a5f4e3d2c1b0a`,
@@ -161,6 +179,7 @@ export const LongSubjects: Story = {
 			remoteRef: REMOTE_REF,
 			ahead: 2,
 			behind: 0,
+			diverged: false,
 			commits: [
 				commit(
 					"1d2c3b4a5f6e7d8c9b0a1f2e3d4c5b6a7f8e9d0c",
@@ -330,6 +349,7 @@ export const PullRebaseSuggested: Story = pushStory(
 			remoteRef: REMOTE_REF,
 			ahead: 2,
 			behind: 3,
+			diverged: true,
 			commits: REALISTIC_COMMITS,
 			origin: {
 				baseRef: BASE_REF,
@@ -354,6 +374,7 @@ export const RebaseConflict: Story = pushStory(
 			remoteRef: REMOTE_REF,
 			ahead: 2,
 			behind: 3,
+			diverged: true,
 			commits: REALISTIC_COMMITS,
 			origin: null,
 		},

@@ -1580,6 +1580,8 @@ export type UnpushedCommitsCheck =
 			behind: number;
 			/** The unpushed commits, newest first, capped by the sidecar (so possibly fewer than `ahead`). */
 			commits: ReadonlyArray<BranchCommit>;
+			/** Both sides have commits the other lacks, so `ahead`/`commits` are only the local commits whose changes `remoteRef` lacks. */
+			diverged: boolean;
 			/** What `remoteRef` holds beyond the PR's base branch — what the merge will include; `null` when the sidecar couldn't resolve `origin/<baseRef>`. */
 			origin: {
 				baseRef: string;
@@ -1643,6 +1645,7 @@ export function useUnpushedCommitsCheck(orpc: SidecarQueryUtils): {
 							ahead: result.ahead,
 							behind: result.behind,
 							commits: result.commits,
+							diverged: result.diverged,
 							origin: result.origin,
 						};
 			} catch (error) {
