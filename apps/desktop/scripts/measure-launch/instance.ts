@@ -164,10 +164,14 @@ export const primeShell = (shell: Shell) =>
 					);
 				yield* Effect.sleep("250 millis");
 			}
+			// A renderer killed mid-startup lingers 5-10 s as an orphan, which would trip stopBundle's helper wait.
+			yield* Effect.sleep("10 seconds");
 		}).pipe(
 			Effect.ensuring(
 				stopBundle(shell).pipe(
-					Effect.andThen(fs.remove(scratch, { recursive: true })),
+					Effect.ensuring(
+						fs.remove(scratch, { recursive: true }).pipe(Effect.orDie),
+					),
 					Effect.orDie,
 				),
 			),
