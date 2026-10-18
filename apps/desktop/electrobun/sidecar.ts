@@ -9,7 +9,7 @@ export function getSidecar() {
 
 /**
  * The sidecar ships next to the launcher in `Contents/MacOS`, put there by
- * `post-wrap.ts`. A direct child, which `sidecar/updater/restart-helper.ts`
+ * `post-build.ts`. A direct child, which `sidecar/updater/restart-helper.ts`
  * relies on.
  */
 export function spawnSidecar(env: { dataDir: string; ownerId: string }) {
