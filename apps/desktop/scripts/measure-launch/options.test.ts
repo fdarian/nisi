@@ -24,6 +24,10 @@ test("requires cwd and only accepts the checkout-local interface", () => {
 		shell: "electron",
 		memory: false,
 		memorySettleMs: 5000,
+		soak: false,
+		soakPrs: [],
+		soakIntervalMs: 2000,
+		soakIdleMs: 60_000,
 	});
 });
 
@@ -78,4 +82,72 @@ test("index waiting is restricted to new-PR measurement mode", () => {
 			"--wait-pr-index",
 		]).waitPrIndex,
 	).toBe(true);
+});
+
+test("soak needs a cold deep-link run and takes its own tuning flags", () => {
+	const pr = "https://github.com/fdarian/nisi/pull/158";
+	expect(
+		parseLaunchOptions(["--cwd", "/pr", "--cold", "--deeplink", pr, "--soak"]),
+	).toMatchObject({
+		soak: true,
+		soakPrs: [],
+		soakIntervalMs: 2000,
+		soakIdleMs: 60_000,
+	});
+	expect(
+		parseLaunchOptions([
+			"--cwd",
+			"/pr",
+			"--cold",
+			"--deeplink",
+			pr,
+			"--soak",
+			"--soak-prs",
+			"https://github.com/fdarian/nisi/pull/163, https://github.com/fdarian/nisi/pull/87",
+			"--soak-interval",
+			"500",
+			"--soak-idle",
+			"0",
+		]),
+	).toMatchObject({
+		soakPrs: [
+			"https://github.com/fdarian/nisi/pull/163",
+			"https://github.com/fdarian/nisi/pull/87",
+		],
+		soakIntervalMs: 500,
+		soakIdleMs: 0,
+	});
+	expect(() => parseLaunchOptions(["--cwd", "/pr", "--soak"])).toThrow(
+		"--soak requires --cold and --deeplink",
+	);
+	expect(() =>
+		parseLaunchOptions(["--cwd", "/pr", "--cold", "--soak"]),
+	).toThrow("--soak requires --cold and --deeplink");
+	expect(() =>
+		parseLaunchOptions(["--cwd", "/pr", "--cold", "--soak-idle", "10"]),
+	).toThrow("--soak-idle requires --soak");
+	expect(() =>
+		parseLaunchOptions([
+			"--cwd",
+			"/pr",
+			"--cold",
+			"--deeplink",
+			pr,
+			"--soak",
+			"--soak-interval",
+			"fast",
+		]),
+	).toThrow("--soak-interval requires a number of milliseconds");
+	expect(() =>
+		parseLaunchOptions([
+			"--cwd",
+			"/pr",
+			"--cold",
+			"--deeplink",
+			pr,
+			"--soak",
+			"--soak-prs",
+			" , ",
+		]),
+	).toThrow("--soak-prs requires a comma-separated list");
 });

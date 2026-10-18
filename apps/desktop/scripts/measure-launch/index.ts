@@ -30,6 +30,8 @@ import { parseLaunchOptions } from "./options.ts";
 import { waitForPrIndex } from "./pr-index.ts";
 import { runTracedOpen } from "./run.ts";
 import { shells } from "./shell.ts";
+import { formatSoak, soakCsv, summarizePhases } from "./soak.ts";
+import { runSoakScenario, startSoakRecorder } from "./soak-run.ts";
 
 const shellHeader = (name: string) =>
 	name === "electron" ? "" : `\nShell: ${name}`;
@@ -48,6 +50,19 @@ const program = Effect.gen(function* () {
 				? undefined
 				: yield* Effect.try(() => parseMeasurementPr(options.warmup as string));
 		yield* Effect.try(() => validateDeepLinkTargets(target, warmup));
+		const extraPrs = yield* Effect.try(() =>
+			options.soakPrs.map((raw, index) => {
+				const pr = parseMeasurementPr(raw);
+				validateDeepLinkTargets(target, pr);
+				if (
+					options.soakPrs
+						.slice(0, index)
+						.some((earlier) => parseMeasurementPr(earlier).number === pr.number)
+				)
+					throw new Error(`--soak-prs lists #${pr.number} twice`);
+				return { url: pr.url, traceId: crypto.randomUUID() };
+			}),
+		);
 		const dataDir = yield* prepareColdInstance(
 			shell,
 			options.rebuild,
@@ -61,7 +76,11 @@ const program = Effect.gen(function* () {
 				yield* withDeepLinkWorktreeCleanup(shell, options.cwd, dataDir, [
 					warmupId,
 					traceId,
+					...extraPrs.map((pr) => pr.traceId),
 				]);
+				const recorder = options.soak
+					? yield* startSoakRecorder(shell, options.soakIntervalMs)
+					: undefined;
 				const startedAt = Date.now();
 				const client = yield* launchDeepLinkInstance(
 					shell,
@@ -107,14 +126,31 @@ const program = Effect.gen(function* () {
 					url: target.url,
 					label: "Measured deep link",
 				});
+				if (recorder !== undefined) {
+					yield* runSoakScenario({
+						client,
+						dataDir,
+						recorder,
+						idleMs: options.soakIdleMs,
+						extraPrs,
+					});
+					return { records, memory: undefined, soak: recorder.finish() };
+				}
 				const memory = options.memory
 					? yield* sampleMemory(shell, options.memorySettleMs)
 					: undefined;
-				return { records, memory };
+				return { records, memory, soak: undefined };
 			}),
 		);
 		const records = measured.records;
 		const memory = measured.memory;
+		const soak = measured.soak;
+		const fs = yield* FileSystem;
+		const soakCsvPath = join(dataDir, "logs/soak", `${traceId}.csv`);
+		if (soak !== undefined) {
+			yield* fs.makeDirectory(join(dataDir, "logs/soak"), { recursive: true });
+			yield* fs.writeFileString(soakCsvPath, soakCsv(soak.samples));
+		}
 		const stamp = yield* readBuildStamp(shell.bundlePath);
 		const worktreeHeader = yield* Effect.try(() => formatWorktree(records));
 		const header = `${options.newPr ? `new PR into running app (warm-up: ${warmup?.url})` : "app startup"} — deep-link frontend injection${shellHeader(shell.name)}\nCLI: n/a\nExcludes OS URL delivery and native plugin hop; cold delivery waits for the events stream, later than plugin getCurrent.\n${stamp === undefined ? "Build stamp unavailable" : formatBuild(stamp)}`;
@@ -122,14 +158,28 @@ const program = Effect.gen(function* () {
 			yield* Console.error(`${header}\n${worktreeHeader}`);
 			yield* Console.log(
 				JSON.stringify(
-					memory === undefined ? records : { records, memory },
+					soak !== undefined
+						? {
+								records,
+								soak: {
+									intervalMs: options.soakIntervalMs,
+									idleMs: options.soakIdleMs,
+									prs: [target.url, ...extraPrs.map((pr) => pr.url)],
+									csv: soakCsvPath,
+									...soak,
+									summary: summarizePhases(soak),
+								},
+							}
+						: memory === undefined
+							? records
+							: { records, memory },
 					null,
 					2,
 				),
 			);
 		} else
 			yield* Console.log(
-				`${header}\n${worktreeHeader}\n\n${formatTimeline(records)}${memory === undefined ? "" : `\n\n${formatMemory(memory)}`}`,
+				`${header}\n${worktreeHeader}\n\n${formatTimeline(records)}${memory === undefined ? "" : `\n\n${formatMemory(memory)}`}${soak === undefined ? "" : `\n\n${formatSoak(soak, options.soakIntervalMs)}\nSoak PRs: ${[target.url, ...extraPrs.map((pr) => pr.url)].join(", ")}; idle ${options.soakIdleMs / 1000}s per idle phase\nCSV: ${soakCsvPath}`}`,
 			);
 		return;
 	}
