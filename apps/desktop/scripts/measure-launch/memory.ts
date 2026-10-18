@@ -1,6 +1,7 @@
 import { basename } from "node:path";
 import { Effect } from "effect";
-import { bundleRows, processTable } from "./processes.ts";
+import { attributedRows, processTable } from "./processes.ts";
+import { responsiblePid } from "./responsibility.ts";
 import type { Shell } from "./shell.ts";
 
 export const memoryRoles = [
@@ -77,6 +78,10 @@ export function classifyProcess(
 	const type = args.match(/(?:^|\s)--type=(\S+)/)?.[1];
 	if (type === "renderer") return "renderer";
 	if (type === "gpu-process") return "gpu";
+	const webKitService = basename(command);
+	if (webKitService.startsWith("com.apple.WebKit.WebContent"))
+		return "renderer";
+	if (webKitService === "com.apple.WebKit.GPU") return "gpu";
 	return "helper";
 }
 
@@ -182,7 +187,9 @@ export const sampleMemory = (shell: Shell, settleMs: number) =>
 	Effect.gen(function* () {
 		yield* Effect.sleep(`${settleMs} millis`);
 		const rows = yield* processTable.pipe(
-			Effect.flatMap((output) => Effect.try(() => bundleRows(output, shell))),
+			Effect.flatMap((output) =>
+				Effect.try(() => attributedRows(output, shell, responsiblePid)),
+			),
 		);
 		if (rows.length === 0)
 			return yield* Effect.fail(
@@ -208,5 +215,14 @@ export const sampleMemory = (shell: Shell, settleMs: number) =>
 			},
 			{ concurrency: "unbounded" },
 		);
+		if (
+			shell.webKitHelpers &&
+			!processes.some((entry) => entry.role === "renderer")
+		)
+			return yield* Effect.fail(
+				new Error(
+					`No WebKit WebContent process is attributed to ${shell.bundlePath}; responsible-PID attribution found none`,
+				),
+			);
 		return summarizeMemory(shell.name, settleMs, processes);
 	});

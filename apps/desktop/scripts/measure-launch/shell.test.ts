@@ -34,8 +34,35 @@ test("each shell owns its bundle, data dirs and executable lists", () => {
 			shells.electron.newPrDataDir,
 			shells.electrobun.coldDataDir,
 			shells.electrobun.newPrDataDir,
+			shells["electrobun-webkit"].coldDataDir,
+			shells["electrobun-webkit"].newPrDataDir,
 		]).size,
-	).toBe(4);
+	).toBe(6);
+});
+
+test("the WebKit variant has its own bundle, build script and no Chromium flags", () => {
+	const webkit = shells["electrobun-webkit"];
+	expect(
+		webkit.bundlePath.endsWith(
+			"build-electrobun-webkit/stable-macos-arm64/nisi-webkit.app",
+		),
+	).toBe(true);
+	expect(webkit.buildScript).toBe("build:electrobun-webkit");
+	expect(webkit.buildEnv).toEqual({});
+	expect(webkit.builtChromiumFlags).toEqual([]);
+	expect(webkit.selfExtracting).toBe(true);
+	expect(webkit.stopBeforeBuild).toBe(true);
+	expect(webkit.requiredExecutables).toEqual(
+		shells.electrobun.requiredExecutables,
+	);
+	expect(webkit.stopExecutables).toEqual(shells.electrobun.stopExecutables);
+	expect(stampFileName(webkit.bundlePath)).toBe(
+		"nisi-webkit.app.build-stamp.json",
+	);
+	expect(
+		[shells.electron, shells.electrobun].map((shell) => shell.webKitHelpers),
+	).toEqual([false, false]);
+	expect(webkit.webKitHelpers).toBe(true);
 });
 
 test("Electron's measured behavior is the pre-shell default", () => {
@@ -71,6 +98,7 @@ test("the wrapper marker lives in the bundle's Resources", () => {
 
 test("shell names are validated", () => {
 	expect(parseShellName("electrobun")).toBe("electrobun");
+	expect(parseShellName("electrobun-webkit")).toBe("electrobun-webkit");
 	expect(() => parseShellName("Electron")).toThrow("--shell must be one of");
 });
 

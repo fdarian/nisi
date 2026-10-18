@@ -3,8 +3,12 @@ import { MEASUREMENT_CHROMIUM_SWITCHES } from "../../electron/measurement-instan
 
 export const desktopDir = resolve(import.meta.dir, "../..");
 
-export type ShellName = "electron" | "electrobun";
-export const shellNames: readonly ShellName[] = ["electron", "electrobun"];
+export type ShellName = "electron" | "electrobun" | "electrobun-webkit";
+export const shellNames: readonly ShellName[] = [
+	"electron",
+	"electrobun",
+	"electrobun-webkit",
+];
 
 export type Shell = {
 	name: ShellName;
@@ -31,6 +35,11 @@ export type Shell = {
 	waitForHelpers: boolean;
 	/** Chromium switches the built bundle must record in `Contents/Resources/build.json`. */
 	builtChromiumFlags: readonly string[];
+	/**
+	 * The renderer, GPU and network processes are WebKit XPC services outside the bundle,
+	 * found by responsible PID; a sample without a renderer means that attribution failed.
+	 */
+	webKitHelpers: boolean;
 	coldDataDir: string;
 	newPrDataDir: string;
 };
@@ -51,6 +60,7 @@ export const shells: Readonly<Record<ShellName, Shell>> = {
 		stopBeforeBuild: false,
 		waitForHelpers: false,
 		builtChromiumFlags: [],
+		webKitHelpers: false,
 		coldDataDir: join(measureDir, "data"),
 		newPrDataDir: join(measureDir, "new-pr/data"),
 	},
@@ -80,8 +90,39 @@ export const shells: Readonly<Record<ShellName, Shell>> = {
 		stopBeforeBuild: true,
 		waitForHelpers: true,
 		builtChromiumFlags: [...MEASUREMENT_CHROMIUM_SWITCHES, "use-mock-keychain"],
+		webKitHelpers: false,
 		coldDataDir: join(measureDir, "electrobun/data"),
 		newPrDataDir: join(measureDir, "electrobun/new-pr/data"),
+	},
+	"electrobun-webkit": {
+		name: "electrobun-webkit",
+		bundlePath: join(
+			desktopDir,
+			"build-electrobun-webkit/stable-macos-arm64/nisi-webkit.app",
+		),
+		buildScript: "build:electrobun-webkit",
+		// WKWebView takes no Chromium switches; the sidecar's mock keychain comes from NISI_MEASUREMENT_INSTANCE at launch.
+		buildEnv: {},
+		requiredExecutables: [
+			"Contents/MacOS/launcher",
+			"Contents/MacOS/bun",
+			"Contents/MacOS/sidecar",
+			"Contents/MacOS/nisi-cli",
+		],
+		mainExecutables: ["Contents/MacOS/launcher", "Contents/MacOS/bun"],
+		sidecarExecutable: "Contents/MacOS/sidecar",
+		stopExecutables: [
+			"Contents/MacOS/launcher",
+			"Contents/MacOS/bun",
+			"Contents/MacOS/sidecar",
+		],
+		selfExtracting: true,
+		stopBeforeBuild: true,
+		waitForHelpers: false,
+		builtChromiumFlags: [],
+		webKitHelpers: true,
+		coldDataDir: join(measureDir, "electrobun-webkit/data"),
+		newPrDataDir: join(measureDir, "electrobun-webkit/new-pr/data"),
 	},
 };
 

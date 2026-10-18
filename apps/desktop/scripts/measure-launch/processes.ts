@@ -28,6 +28,25 @@ export function bundleRows(output: string, shell: Shell): ProcessRow[] {
 	);
 }
 
+/**
+ * The bundle's processes plus every process charged to one of them by macOS
+ * (WebKit's XPC services), which live outside the bundle.
+ */
+export function attributedRows(
+	output: string,
+	shell: Shell,
+	responsibleOf: (pid: number) => number | undefined,
+): ProcessRow[] {
+	const inBundle = bundleRows(output, shell);
+	const appPids = new Set(inBundle.map((row) => row.pid));
+	const charged = parseProcessRows(output).filter((row) => {
+		if (appPids.has(row.pid)) return false;
+		const responsible = responsibleOf(row.pid);
+		return responsible !== undefined && appPids.has(responsible);
+	});
+	return [...inBundle, ...charged];
+}
+
 export function bundleProcessIds(output: string, shell: Shell): number[] {
 	const executables = new Set(
 		shell.stopExecutables.map((path) => `${shell.bundlePath}/${path}`),

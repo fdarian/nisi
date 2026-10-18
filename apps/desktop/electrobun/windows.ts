@@ -148,7 +148,6 @@ export function createMainWindow(requests: NisiRequestHandlers) {
 	window = new BrowserWindow({
 		title: "Nisi",
 		frame: { width: 1100, height: 720 },
-		renderer: "cef",
 		url: windowUrl("/"),
 		preload: "views://bridge/index.js",
 		// "hiddenInset", not "hidden": only it keeps the traffic lights, and only it honors the offset (which is relative to their default spot, unlike Electron's absolute `trafficLightPosition`).
@@ -187,7 +186,6 @@ export function showAboutWindow(requests: NisiRequestHandlers) {
 	window = new BrowserWindow({
 		title: "About nisi",
 		frame: { width: 310, height: 450 },
-		renderer: "cef",
 		url: windowUrl("/about"),
 		preload: "views://bridge/index.js",
 		titleBarStyle: "hiddenInset",

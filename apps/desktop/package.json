@@ -10,6 +10,7 @@
 		"build": "bun run build:sidecar && bun run build:cli && bun run build:frontend && bun run build:electron && electron-builder",
 		"build:dev": "rm -f binaries/nisi-cli && bun run build:sidecar && bun run build:frontend:dev && bun run build:electron && electron-builder",
 		"build:electrobun": "bun run build:sidecar && bun run build:cli && bun run build:frontend && electrobun build --env=stable",
+		"build:electrobun-webkit": "NISI_ELECTROBUN_RENDERER=native bun run build:electrobun",
 		"build:electron": "bun build electron/main.ts electron/preload.ts --outdir dist-electron --target=node --format=cjs --external electron && echo '{\"type\":\"commonjs\"}' > dist-electron/package.json",
 		"build:frontend": "tsr generate && tsc && vite build",
 		"build:frontend:dev": "tsr generate && tsc && NODE_ENV=development vite build --minify false --sourcemap",

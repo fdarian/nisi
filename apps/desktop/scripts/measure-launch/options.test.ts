@@ -33,11 +33,20 @@ test("shell defaults to electron and rejects unknown shells", () => {
 		parseLaunchOptions(["--cwd", "/pr", "--cold", "--shell", "electrobun"])
 			.shell,
 	).toBe("electrobun");
+	expect(
+		parseLaunchOptions([
+			"--cwd",
+			"/pr",
+			"--cold",
+			"--shell",
+			"electrobun-webkit",
+		]).shell,
+	).toBe("electrobun-webkit");
 	expect(() =>
 		parseLaunchOptions(["--cwd", "/pr", "--shell", "tauri"]),
-	).toThrow("--shell must be one of electron, electrobun");
+	).toThrow("--shell must be one of electron, electrobun, electrobun-webkit");
 	expect(() => parseLaunchOptions(["--cwd", "/pr", "--shell"])).toThrow(
-		"--shell requires electron or electrobun",
+		"--shell requires electron, electrobun or electrobun-webkit",
 	);
 });
 

@@ -1,5 +1,9 @@
 import { expect, test } from "bun:test";
-import { bundleHelperIds, bundleProcessIds } from "./processes.ts";
+import {
+	attributedRows,
+	bundleHelperIds,
+	bundleProcessIds,
+} from "./processes.ts";
 import { type Shell, shells } from "./shell.ts";
 
 const bundle = "/work tree/nisi.app";
@@ -57,4 +61,44 @@ test("malformed ps rows fail instead of being skipped", () => {
 	expect(() => bundleProcessIds("not a row", electron)).toThrow(
 		"Invalid ps row",
 	);
+});
+
+const webkitBundle = "/work tree/nisi-webkit.app";
+const webkit: Shell = {
+	...shells["electrobun-webkit"],
+	bundlePath: webkitBundle,
+};
+const xpc = (name: string) =>
+	`/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/${name}.xpc/Contents/MacOS/${name}`;
+const webkitTable = [
+	`10 1 ${webkitBundle}/Contents/MacOS/launcher`,
+	`11 10 ${webkitBundle}/Contents/MacOS/bun`,
+	`12 11 ${webkitBundle}/Contents/MacOS/sidecar`,
+	`30 1 ${xpc("com.apple.WebKit.WebContent")}`,
+	`31 1 ${xpc("com.apple.WebKit.GPU")}`,
+	`32 1 ${xpc("com.apple.WebKit.Networking")}`,
+	`40 1 ${xpc("com.apple.WebKit.WebContent")}`,
+	`50 1 /usr/sbin/unattributable`,
+].join("\n");
+
+test("processes the OS charges to the app are sampled with the bundle's own", () => {
+	const responsible = new Map([
+		[30, 11],
+		[31, 11],
+		[32, 10],
+		[40, 999],
+	]);
+	expect(
+		attributedRows(webkitTable, webkit, (pid) => responsible.get(pid)).map(
+			(row) => row.pid,
+		),
+	).toEqual([10, 11, 12, 30, 31, 32]);
+});
+
+test("a table with no charged processes yields only the bundle", () => {
+	expect(
+		attributedRows(electrobunTable, electrobun, () => undefined).map(
+			(row) => row.pid,
+		),
+	).toEqual([10, 11, 12, 13, 14, 15]);
 });

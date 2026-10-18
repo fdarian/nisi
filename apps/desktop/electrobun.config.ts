@@ -11,11 +11,16 @@ const measurementChromiumFlags = Object.fromEntries(
 	]),
 );
 
+// `build:electrobun-webkit` sets `native`: system WKWebView, no bundled CEF. Windows follow the build's default renderer.
+const native = process.env.NISI_ELECTROBUN_RENDERER === "native";
+
 export default {
 	app: {
-		name: "nisi-electrobun",
+		name: native ? "nisi-webkit" : "nisi-electrobun",
 		// Not `com.nisi.desktop`: a second bundle with the installed app's ID makes LaunchServices activate that one instead.
-		identifier: "com.nisi.desktop.electrobun",
+		identifier: native
+			? "com.nisi.desktop.webkit"
+			: "com.nisi.desktop.electrobun",
 		version: "0.6.1",
 		urlSchemes: ["nisi"],
 	},
@@ -29,13 +34,16 @@ export default {
 		// `dist/` is the Vite build; `views://mainview/index.html` is what windows load.
 		copy: { dist: "views/mainview" },
 		// `build/` already holds the Electron icon and entitlements.
-		buildFolder: "build-electrobun",
-		artifactFolder: "release-electrobun",
+		buildFolder: native ? "build-electrobun-webkit" : "build-electrobun",
+		artifactFolder: native ? "release-electrobun-webkit" : "release-electrobun",
 		mac: {
-			bundleCEF: true,
-			defaultRenderer: "cef",
+			bundleCEF: !native,
+			defaultRenderer: native ? "native" : "cef",
 			icons: "electrobun/icon.iconset",
-			...(measurementBuild ? { chromiumFlags: measurementChromiumFlags } : {}),
+			// Chromium flags mean nothing to WKWebView.
+			...(measurementBuild && !native
+				? { chromiumFlags: measurementChromiumFlags }
+				: {}),
 		},
 	},
 	scripts: { postBuild: "electrobun/post-build.ts" },

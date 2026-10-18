@@ -27,3 +27,5 @@ apps/desktop/.storybook-shots/
 apps/desktop/.hutch
 apps/desktop/build-electrobun
 apps/desktop/release-electrobun
+apps/desktop/build-electrobun-webkit
+apps/desktop/release-electrobun-webkit

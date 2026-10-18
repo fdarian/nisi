@@ -5,7 +5,7 @@ const missingValue: Record<string, string> = {
 	"--cwd": "--cwd requires a PR worktree path",
 	"--warmup": "--warmup requires a PR worktree path",
 	"--deeplink": "--deeplink requires a PR worktree path",
-	"--shell": "--shell requires electron or electrobun",
+	"--shell": "--shell requires electron, electrobun or electrobun-webkit",
 	"--memory-settle": "--memory-settle requires a number of milliseconds",
 };
 

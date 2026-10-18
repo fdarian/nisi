@@ -94,6 +94,29 @@ test("processes are classified by executable, then by --type", () => {
 	);
 });
 
+test("WebKit's XPC services are classified by service name", () => {
+	const webkit: Shell = {
+		...shells["electrobun-webkit"],
+		bundlePath: "/work tree/nisi-webkit.app",
+	};
+	const service = (name: string) =>
+		`/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/${name}.xpc/Contents/MacOS/${name}`;
+	const classify = (command: string) =>
+		classifyProcess(webkit, command, command);
+	expect(classify(service("com.apple.WebKit.WebContent"))).toBe("renderer");
+	expect(
+		classify(service("com.apple.WebKit.WebContent.EnhancedSecurity")),
+	).toBe("renderer");
+	expect(classify(service("com.apple.WebKit.GPU"))).toBe("gpu");
+	expect(classify(service("com.apple.WebKit.Networking"))).toBe("helper");
+	expect(classify("/work tree/nisi-webkit.app/Contents/MacOS/bun")).toBe(
+		"main",
+	);
+	expect(classify("/work tree/nisi-webkit.app/Contents/MacOS/sidecar")).toBe(
+		"sidecar",
+	);
+});
+
 const sample = (
 	pid: number,
 	role: MemoryProcess["role"],
