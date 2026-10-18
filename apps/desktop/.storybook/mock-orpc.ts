@@ -308,6 +308,15 @@ export function createMockSidecarClient(
 			ackDeepLink: async () => {
 				throw new Error("Deep-link measurement is unavailable in Storybook");
 			},
+			runWorkloadStep: async () => {
+				throw new Error("Workload measurement is unavailable in Storybook");
+			},
+			ackWorkloadStep: async () => {
+				throw new Error("Workload measurement is unavailable in Storybook");
+			},
+			workloadStepStatus: async () => {
+				throw new Error("Workload measurement is unavailable in Storybook");
+			},
 			snapshot: async () => ({ sessions: [], rpcFailures: [] }),
 		},
 		health: {

@@ -1,6 +1,7 @@
 import { eventIterator, oc } from "@orpc/contract";
 import { Schema } from "effect";
 import { CodeIndexLspStatus } from "./code-index.ts";
+import { WorkloadStep } from "./diagnostics.ts";
 import { OpenSessionTarget, Session } from "./sessions.ts";
 
 /**
@@ -96,6 +97,12 @@ export const OpenRequest = Schema.Struct({
 export type OpenRequest = Schema.Schema.Type<typeof OpenRequest>;
 
 export const SidecarEvent = Schema.Union([
+	Schema.Struct({
+		seq: Schema.Number,
+		type: Schema.Literal("measurement-workload"),
+		id: Schema.String,
+		step: WorkloadStep,
+	}),
 	Schema.Struct({
 		seq: Schema.Number,
 		type: Schema.Literal("deep-link-injected"),

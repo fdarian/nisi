@@ -2,6 +2,7 @@ import type { SidecarClient, SidecarEvent } from "@repo/sidecar-api";
 import { createContext, useContext, useEffect, useRef } from "react";
 import { enqueueInjectedDeepLink } from "#/shell/deep-link/deep-link-store";
 import { frontendBootMark, receiveTracedDeepLink } from "./launch-trace";
+import { runWorkloadStepFor } from "./measurement-workload";
 
 type Listener = (event: SidecarEvent) => void;
 const EventContext = createContext<((listener: Listener) => () => void) | null>(
@@ -15,6 +16,7 @@ export function SidecarEventsProvider(props: {
 	const listeners = useRef(new Set<Listener>());
 	useEffect(() => {
 		const controller = new AbortController();
+		const performWorkloadStep = runWorkloadStepFor(props.client);
 		void (async () => {
 			while (!controller.signal.aborted) {
 				try {
@@ -35,6 +37,8 @@ export function SidecarEventsProvider(props: {
 									console.warn("Deep-link acknowledgment failed", error),
 								);
 						}
+						if (event.type === "measurement-workload")
+							performWorkloadStep(event);
 						for (const listener of listeners.current) listener(event);
 					}
 				} catch (error) {

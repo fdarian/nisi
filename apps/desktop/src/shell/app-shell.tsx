@@ -48,6 +48,7 @@ import { OriginMovedDialog } from "#/features/pull-request/open/origin-moved-dia
 import { PendingPrView } from "#/features/pull-request/pending-pr-view";
 import { PrView } from "#/features/pull-request/pr-view";
 import type { SidecarQueryUtils } from "#/infra/backend-context";
+import { useMeasurementTabs } from "#/infra/measurement-workload";
 import { useBackendContext } from "#/infra/backend-context";
 import { useLaunchMark } from "#/infra/launch-trace";
 import { useAppViewActive } from "./app-view-context";
@@ -378,6 +379,11 @@ function AppShellReady({
 		() => sessions.map((session) => session.id),
 		[sessions],
 	);
+	useMeasurementTabs({
+		activeSessionId: selectedSessionId,
+		sessionIds,
+		closeOtherTabs: handleCloseOtherSessions,
+	});
 	// The active session's chat popup gets first refusal on ⌘⇧]/⌘⇧[ — see
 	// `useTabShortcuts`'s `onChatThreadShortcut` doc comment.
 	const activeChatPopupOpen = useChatPopupOpen(selectedSessionId);
