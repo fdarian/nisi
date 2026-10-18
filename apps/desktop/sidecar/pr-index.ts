@@ -2,10 +2,12 @@ import {
 	GitHub,
 	type OpenPullRequestIndex,
 	type OpenPullRequestIndexOptions,
+	type PullRequestSearchResult,
 	readIndexHead,
+	searchOpenPullRequestIndexes,
 } from "@repo/git";
 import { SettingsStore } from "@repo/settings";
-import { Context, Effect, Layer, Schedule, Scope } from "effect";
+import { Context, Effect, Layer, Option, Schedule, Scope } from "effect";
 
 export const makePrIndex = <E, R>(
 	fetch: (
@@ -118,6 +120,16 @@ export const makePrIndex = <E, R>(
 		return {
 			refresh,
 			empty: () => entries.size === 0,
+			search: (
+				query: string,
+				repos: readonly string[],
+			): Option.Option<readonly PullRequestSearchResult[]> =>
+				repos.some((repo) => !entries.has(repo.toLowerCase()))
+					? Option.none()
+					: Option.some(
+							searchOpenPullRequestIndexes(entries.values(), query, repos),
+						),
+			
 			findNumber: (owner: string, repo: string, number: number) => {
 				const entry = entries.get(key(owner, repo));
 				const pr = entry?.prs.find((candidate) => candidate.number === number);
@@ -197,6 +209,7 @@ export class PrIndex extends Context.Service<PrIndex>()("sidecar/PrIndex", {
 		return {
 			lookup,
 			lookupPullRequest,
+			search: index.search,
 			refresh: index.refresh,
 			refreshKnown: maintenance.refreshKnown,
 			start: maintenance.start,

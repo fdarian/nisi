@@ -3,7 +3,7 @@ import type {
 	OpenPullRequestIndex,
 	OpenPullRequestIndexOptions,
 } from "@repo/git";
-import { Deferred, Effect, Fiber, Schedule } from "effect";
+import { Deferred, Effect, Fiber, Option, Schedule } from "effect";
 import { makePrIndex, makePrIndexMaintenance } from "../pr-index.ts";
 
 const entry: OpenPullRequestIndex = {
@@ -262,6 +262,38 @@ test("pages are usable before completion; incremental refreshes retain older PRs
 				expect(
 					index.find("acme", "widgets", "fork", "new-branch")?.pr.number,
 				).toBe(3);
+			}),
+		),
+	);
+});
+
+test("search is unanswerable until every named repo has an entry, then matches case-insensitively", async () => {
+	await Effect.runPromise(
+		Effect.scoped(
+			Effect.gen(function* () {
+				const index = yield* makePrIndex(() => Effect.succeed(entry));
+				const titles = (found: Option.Option<readonly { title: string }[]>) =>
+					Option.getOrThrow(found).map((pr) => pr.title);
+
+				expect(Option.isNone(index.search("newest", ["acme/widgets"]))).toBe(
+					true,
+				);
+				expect(titles(index.search("newest", []))).toEqual([]);
+
+				const refresh = yield* index.refresh("root", "acme", "widgets");
+				if (refresh === undefined)
+					return yield* Effect.die("refresh not started");
+				yield* Fiber.join(refresh);
+
+				expect(titles(index.search("newest", []))).toEqual(["Newest"]);
+				expect(titles(index.search("", ["ACME/Widgets"]))).toEqual([
+					"Newest",
+					"Older",
+				]);
+				expect(
+					Option.isNone(index.search("newest", ["acme/widgets", "acme/other"])),
+				).toBe(true);
+				expect(titles(index.search("nomatch", ["acme/widgets"]))).toEqual([]);
 			}),
 		),
 	);
