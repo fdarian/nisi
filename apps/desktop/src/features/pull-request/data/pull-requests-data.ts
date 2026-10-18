@@ -48,6 +48,30 @@ export type PullRequestSearchResult = {
 	rollupState: "EXPECTED" | "ERROR" | "FAILURE" | "PENDING" | "SUCCESS" | null;
 };
 
+/** `pullRequests.indexed`'s row: a search row plus the head branch, which the palette matches on but never shows. */
+export type IndexedPullRequest = PullRequestSearchResult & {
+	headRefName: string;
+};
+
+/**
+ * Every open PR in the sidecar's index, for the palette to filter on each
+ * keystroke. Mounted with the palette (before ⌘T opens) so the rows are warm;
+ * the sidecar's `pull-request-index-changed` event, not a timer, says they are
+ * stale. `#/infra/query-persistence.ts` persists this query's key.
+ */
+export function useIndexedPullRequests(
+	orpc: SidecarQueryUtils,
+): readonly IndexedPullRequest[] | undefined {
+	const queryClient = useQueryClient();
+	useSidecarEvent((event) => {
+		if (event.type !== "pull-request-index-changed") return;
+		void queryClient.invalidateQueries({
+			queryKey: orpc.pullRequests.indexed.key(),
+		});
+	});
+	return useQuery(orpc.pullRequests.indexed.queryOptions()).data;
+}
+
 /**
  * Live `gh`-backed search behind TanStack Query, keyed on `query` and `repos` — a repeat
  * of a query already seen this session (retyping after a backspace, opening

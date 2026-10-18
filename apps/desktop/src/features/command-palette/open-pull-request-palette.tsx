@@ -1,5 +1,6 @@
 "use client";
 
+import { hasSearchQualifier } from "@repo/git/search-query";
 import { XIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { FetchingIndicator } from "#/components/fetching-indicator";
@@ -26,6 +27,7 @@ import {
 	type OpenPullRequestParams,
 	type PullRequestRepository,
 	type PullRequestSearchResult,
+	useIndexedPullRequests,
 	useOpenPullRequest,
 	usePullRequestRepositories,
 	useRecentPullRequests,
@@ -35,11 +37,13 @@ import { OriginMovedDialog } from "#/features/pull-request/open/origin-moved-dia
 import { derivePrStatus } from "#/features/pull-request/pr-status";
 import { PrStatusIcon } from "#/features/pull-request/pr-status-icon";
 import type { SidecarQueryUtils } from "#/infra/backend-context";
+import { filterIndexedPullRequests } from "./filter-indexed-pull-requests";
 import { paletteRepositories, repositoryKey } from "./palette-repositories";
 
 /**
- * GitHub's search API allows 30 requests/minute authenticated — but that
- * budget only applies to requests actually *sent*, and a debounce (not a
+ * Debounce for the `gh` fallback search only; filtering the open-PR index
+ * isn't debounced. GitHub's search API allows 30 requests/minute
+ * authenticated — but that budget only applies to requests actually *sent*, and a debounce (not a
  * throttle) means sustained typing with no pause sends none at all: the
  * timer keeps getting pushed back by every keystroke, so a request only
  * fires once the user stops. What actually costs requests is bursty
@@ -74,15 +78,19 @@ function authorInitials(author: string): string {
 /**
  * Cmd+T and the tab strip's ghost "+" button both open this — a floating
  * search dialog listing open pull requests: the user's own latest, for a
- * blank query, or a live GraphQL search scoped to author-or-review-requested
- * for a typed one (see `@repo/git`'s `searchPullRequests` for the full
- * behavior, including the search-qualifier passthrough). Picking one hands
+ * blank query, or the sidecar's open-PR index filtered on every keystroke
+ * (`filterIndexedPullRequests`) for a typed one. A live GraphQL search
+ * scoped to author-or-review-requested (see `@repo/git`'s
+ * `searchPullRequests`, including the search-qualifier passthrough) answers
+ * only what the index can't: a query it finds nothing for, one using GitHub
+ * qualifiers, or a repository chip it has no rows for. Picking one hands
  * off to `pullRequests.open`, which creates or reuses a worktree — prompting
  * for a local checkout path first if this repo's never been opened before —
  * and opens it as a session the same way any other tab gets opened.
  *
- * `query` (what the input shows) and `debouncedQuery` (what's actually
- * searched, via `#/features/pull-request/data/pull-requests-data.ts`'s `useSearchPullRequests`) are
+ * `query` (what the input shows and the index filters) and `debouncedQuery`
+ * (when the `gh` search is allowed to fire, via
+ * `#/features/pull-request/data/pull-requests-data.ts`'s `useSearchPullRequests`) are
  * deliberately two separate pieces of state, debounced by hand below rather
  * than through a generic `useDebouncedValue(query, ms)` hook — the
  * reset-on-open effect needs both to snap back to `""` instantly, with no
@@ -102,18 +110,54 @@ export function OpenPullRequestPalette(
 	const [repositoryQuery, setRepositoryQuery] = useState("");
 	const inputRef = useRef<HTMLInputElement>(null);
 
+	const indexedRows = useIndexedPullRequests(props.orpc);
+	const recent = useRecentPullRequests(props.orpc, props.open);
+	const repositoryKeys = props.repositories.map(repositoryKey);
+	// Blank and unscoped is the recent-PRs list; anything else is a search.
+	const isBlank = query.trim() === "" && props.repositories.length === 0;
+	const localMatches =
+		isBlank || indexedRows === undefined
+			? []
+			: filterIndexedPullRequests(indexedRows, query, repositoryKeys);
+	// The index can only answer what it holds: GitHub qualifiers are `gh`
+	// syntax, and a chip for a repo with no indexed rows may just not be
+	// indexed (yet). Anything else it found nothing for is left to `gh` too —
+	// the PR may be one the index doesn't cover.
+	const needsGh =
+		!isBlank &&
+		(localMatches.length === 0 ||
+			hasSearchQualifier(query) ||
+			indexedRows === undefined ||
+			props.repositories.some((chip) =>
+				indexedRows.every(
+					(row) =>
+						repositoryKey(row).toLowerCase() !==
+						repositoryKey(chip).toLowerCase(),
+				),
+			));
+	// Keyed on `query` itself, not the debounced copy: the request only fires
+	// once they agree, and until then a cached answer for the exact query shows
+	// (or `keepPreviousData` holds the last gh rows) instead of a result set
+	// for some earlier keystroke.
 	const search = useSearchPullRequests(
 		props.orpc,
-		debouncedQuery,
-		props.open,
-		props.repositories.map(repositoryKey),
+		query,
+		props.open && needsGh && query === debouncedQuery,
+		repositoryKeys,
 	);
-	const results = search.results;
-	const searchErrorMessage = friendlySearchError(search.error);
-	// A pending debounce counts too: between the keystroke and the request
-	// firing, nothing else on screen says the palette noticed the typing.
-	const isLoading = search.isSearching || query !== debouncedQuery;
-	const recent = useRecentPullRequests(props.orpc, props.open);
+	const results = isBlank
+		? recent.results
+		: needsGh
+			? search.results
+			: localMatches;
+	const searchError = isBlank ? recent.error : needsGh ? search.error : null;
+	const searchErrorMessage = friendlySearchError(searchError);
+	// Local filtering is instant, so only the `gh` path loads. A pending
+	// debounce counts: between the keystroke and the request firing, nothing
+	// else on screen says the palette noticed the typing.
+	const isLoading = isBlank
+		? recent.isSearching
+		: needsGh && (search.isSearching || query !== debouncedQuery);
 	const saved = usePullRequestRepositories(props.orpc, props.open);
 	const repositories = paletteRepositories(
 		recent.results,

@@ -87,7 +87,6 @@ export {
 	type OpenPullRequestIndex,
 	type OpenPullRequestIndexOptions,
 } from "./github/github.ts";
-export { searchOpenPullRequestIndexes } from "./github/index-search.ts";
 export type {
 	CreatePullRequestStackInput,
 	FetchPullRequestChecksInput,

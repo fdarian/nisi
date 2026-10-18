@@ -14,13 +14,17 @@ const keyOnlyClient = createORPCClient<SidecarClient>({
 	},
 });
 
-const recentPullRequestsKeyHash = hashKey(
-	createTanstackQueryUtils(keyOnlyClient).pullRequests.search.queryKey({
-		input: RECENT_PULL_REQUESTS_INPUT,
-	}),
-);
+const pullRequestsQueries =
+	createTanstackQueryUtils(keyOnlyClient).pullRequests;
 
-/** Persists only the ⌘T palette's blank-query recent-PR list; everything else stays in memory. */
+const persistedKeyHashes = new Set([
+	hashKey(
+		pullRequestsQueries.search.queryKey({ input: RECENT_PULL_REQUESTS_INPUT }),
+	),
+	hashKey(pullRequestsQueries.indexed.queryKey()),
+]);
+
+/** Persists only the ⌘T palette's blank-query recent-PR list and open-PR index; everything else stays in memory. */
 export const persistOptions: PersistQueryClientProviderProps["persistOptions"] =
 	{
 		persister: createSyncStoragePersister({
@@ -32,6 +36,6 @@ export const persistOptions: PersistQueryClientProviderProps["persistOptions"] =
 		dehydrateOptions: {
 			shouldDehydrateQuery: (query) =>
 				defaultShouldDehydrateQuery(query) &&
-				hashKey(query.queryKey) === recentPullRequestsKeyHash,
+				persistedKeyHashes.has(hashKey(query.queryKey)),
 		},
 	};
