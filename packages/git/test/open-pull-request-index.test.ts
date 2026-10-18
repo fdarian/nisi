@@ -160,6 +160,16 @@ test("open PR index paginates, preserves ordering and surfaces auth/decode failu
 		expect(await Bun.file(log).text()).toContain(
 			"states: [OPEN, CLOSED, MERGED]",
 		);
+		const ghost = page(1, false);
+		const ghostNode = ghost.data.repository.pullRequests.nodes[0];
+		if (ghostNode === undefined) throw new Error("missing PR fixture");
+		Object.assign(ghostNode, { author: null });
+		await Bun.write(first, JSON.stringify(ghost));
+		expect(await run("0")).toMatchObject({
+			ok: true,
+			value: { prs: [{ number: 1, author: "ghost" }] },
+		});
+		await Bun.write(first, JSON.stringify(page(2, true)));
 		expect(await run("1")).toMatchObject({
 			ok: false,
 			tag: "GitHubUnreachable",

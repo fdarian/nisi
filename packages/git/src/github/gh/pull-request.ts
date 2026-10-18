@@ -90,7 +90,7 @@ export const SearchPrItem = Schema.Struct({
 	number: Schema.Number,
 	title: Schema.String,
 	repository: Schema.Struct({ nameWithOwner: Schema.String }),
-	author: Schema.Struct({ login: Schema.String }),
+	author: Schema.NullOr(Schema.Struct({ login: Schema.String })),
 	updatedAt: Schema.String,
 	url: Schema.String,
 	isDraft: Schema.Boolean,
@@ -139,6 +139,11 @@ const decodeSearchPrList = (command: string, raw: string) =>
 		),
 	);
 
+/** GraphQL returns `author: null` for a deleted account; GitHub's UI shows it as `ghost`. */
+export const authorLoginOf = (
+	author: Schema.Schema.Type<typeof SearchPrItem>["author"],
+): string => (author === null ? "ghost" : author.login);
+
 export const rollupStateOf = (
 	commits: Schema.Schema.Type<typeof SearchPrItem>["commits"],
 ): PullRequestSearchResult["rollupState"] =>
@@ -169,7 +174,7 @@ const toPullRequestSearchResult = (
 				repo,
 				number: item.number,
 				title: item.title,
-				author: item.author.login,
+				author: authorLoginOf(item.author),
 				updatedAt: item.updatedAt,
 				url: item.url,
 				isDraft: item.isDraft,

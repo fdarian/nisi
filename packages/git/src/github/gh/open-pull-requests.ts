@@ -5,7 +5,7 @@ import type {
 	OpenPullRequestIndex,
 	OpenPullRequestIndexOptions,
 } from "../github.ts";
-import { rollupStateOf, SearchPrItem } from "./pull-request.ts";
+import { authorLoginOf, rollupStateOf, SearchPrItem } from "./pull-request.ts";
 
 const Response = Schema.Struct({
 	data: Schema.Struct({
@@ -117,7 +117,7 @@ export const listOpenPullRequests = (
 			headOwner: pr.headRepositoryOwner?.login ?? null,
 			updatedAt: pr.updatedAt,
 			state: pr.state,
-			author: pr.author.login,
+			author: authorLoginOf(pr.author),
 			url: pr.url,
 			isDraft: pr.isDraft,
 			mergeable: pr.mergeable,
