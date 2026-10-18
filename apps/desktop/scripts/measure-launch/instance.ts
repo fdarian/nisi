@@ -6,7 +6,13 @@ import { Console, Effect } from "effect";
 import { FileSystem } from "effect/FileSystem";
 import { ensureBuild } from "./build.ts";
 import { stopBundle } from "./processes.ts";
-import { desktopDir, type Shell, shells, wrapperMarker } from "./shell.ts";
+import {
+	desktopDir,
+	missingChromiumFlags,
+	type Shell,
+	shells,
+	wrapperMarker,
+} from "./shell.ts";
 
 export const unavailableAppPath = join(
 	desktopDir,
@@ -172,6 +178,27 @@ export const primeShell = (shell: Shell) =>
 			);
 	});
 
+const requireBuiltFlags = (shell: Shell) =>
+	Effect.gen(function* () {
+		if (shell.builtChromiumFlags.length === 0) return;
+		const fs = yield* FileSystem;
+		const missing = yield* fs
+			.readFileString(join(shell.bundlePath, "Contents/Resources/build.json"))
+			.pipe(
+				Effect.flatMap((text) =>
+					Effect.try(() =>
+						missingChromiumFlags(text, shell.builtChromiumFlags),
+					),
+				),
+			);
+		if (missing.length > 0)
+			return yield* Effect.fail(
+				new Error(
+					`${shell.bundlePath} was not built with the measurement Chromium flags (${missing.join(", ")}); rerun with --rebuild`,
+				),
+			);
+	});
+
 export const prepareColdInstance = (
 	shell: Shell,
 	rebuild: boolean,
@@ -189,6 +216,7 @@ export const prepareColdInstance = (
 			);
 		yield* ensureBuild(desktopDir, shell, rebuild);
 		yield* primeShell(shell);
+		yield* requireBuiltFlags(shell);
 		yield* stopBundle(shell);
 		if (newPr && (yield* fs.exists(shell.newPrDataDir))) {
 			const real = yield* fs.realPath(shell.newPrDataDir);

@@ -110,32 +110,46 @@ export function summarizeMemory(
 const mib = (bytes: number) => `${(bytes / 1024 / 1024).toFixed(1)} MiB`;
 
 export function formatMemory(summary: MemorySummary): string {
-	const row = (
-		label: string,
-		count: number | undefined,
-		totals: Omit<Totals, "count">,
-	) =>
-		`${label.padEnd(26)}${(count === undefined ? "" : String(count)).padStart(5)}${mib(totals.rssBytes).padStart(14)}${mib(totals.footprintBytes).padStart(16)}`;
-	const lines = [
-		`Memory — ${summary.shell}, sampled ${(summary.settleMs / 1000).toFixed(1)}s after trace.done`,
-		`${"".padEnd(26)}${"procs".padStart(5)}${"RSS".padStart(14)}${"footprint".padStart(16)}`,
-	];
+	type Row = { label: string; count?: number; totals: Omit<Totals, "count"> };
+	const rows: Row[] = [];
 	for (const group of summary.groups) {
-		lines.push(row(roleLabels[group.role], group.count, group));
+		rows.push({
+			label: roleLabels[group.role],
+			count: group.count,
+			totals: group,
+		});
 		for (const entry of summary.processes.filter(
 			(candidate) => candidate.role === group.role,
 		))
-			lines.push(row(`  ${entry.name} [${entry.pid}]`, undefined, entry));
+			rows.push({ label: `  ${entry.name} [${entry.pid}]`, totals: entry });
 	}
-	lines.push(
-		row("total (with sidecar)", summary.withSidecar.count, summary.withSidecar),
-		row(
-			"total (without sidecar)",
-			summary.withoutSidecar.count,
-			summary.withoutSidecar,
-		),
+	rows.push(
+		{
+			label: "total (with sidecar)",
+			count: summary.withSidecar.count,
+			totals: summary.withSidecar,
+		},
+		{
+			label: "total (without sidecar)",
+			count: summary.withoutSidecar.count,
+			totals: summary.withoutSidecar,
+		},
 	);
-	return lines.join("\n");
+	const width = Math.max(...rows.map((row) => row.label.length)) + 2;
+	const line = (label: string, count: string, rss: string, footprint: string) =>
+		`${label.padEnd(width)}${count.padStart(5)}${rss.padStart(14)}${footprint.padStart(16)}`;
+	return [
+		`Memory — ${summary.shell}, sampled ${(summary.settleMs / 1000).toFixed(1)}s after trace.done`,
+		line("", "procs", "RSS", "footprint"),
+		...rows.map((row) =>
+			line(
+				row.label,
+				row.count === undefined ? "" : String(row.count),
+				mib(row.totals.rssBytes),
+				mib(row.totals.footprintBytes),
+			),
+		),
+	].join("\n");
 }
 
 const sampleOne = (

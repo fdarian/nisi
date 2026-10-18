@@ -75,6 +75,36 @@ the request, making the terminal paint mark ambiguous.
 - `--json` prints the collected records as a JSON array rather than the formatted report.
 - Raw records are JSONL at `<selected data dir>/logs/launch-traces/<traceId>.jsonl`.
 
+## Measuring the Electrobun shell
+
+`--shell electrobun` (default `electron`) points every managed mode at the Electrobun bundle,
+`build-electrobun/stable-macos-arm64/nisi-electrobun.app`, built by `bun run build:electrobun`. Per-shell
+paths, executable lists and data dirs live in one descriptor, `scripts/measure-launch/shell.ts`. Electrobun
+instances use their own data dirs (`.data/measure-launch/electrobun/{data,new-pr/data}`) and build stamp
+(`nisi-electrobun.app.build-stamp.json`), so the two shells never clobber each other. Unmanaged warm mode
+looks only at the chosen shell's managed data dirs (plus `bun dev` sandboxes for Electron).
+
+- **Priming.** A stable Electrobun build is a self-extracting wrapper that replaces itself on first launch
+  (10-25 s). After a build, and whenever `Contents/Resources/metadata.json` is still present, the script
+  launches it once against a scratch data dir, waits for that sidecar, stops it and deletes the dir, so the
+  extraction never lands in a measured run. The stamp hashes sources, so priming doesn't stale it.
+- **Measurement flavor.** Electrobun can only take Chromium flags at build time, so the script always builds with
+  `NISI_MEASUREMENT_BUILD=1`, which makes `electrobun.config.ts` add the three measurement switches plus
+  `use-mock-keychain` to `build.mac.chromiumFlags`. Don't ship or install that bundle. Rebuilding by hand with
+  `bun run build:electrobun` overwrites it with a non-measurement one.
+- **Stopping.** Matches `launcher`, `bun` and `sidecar` under the bundle, SIGTERM only, then also waits for the
+  CEF helpers (anything else under `Contents/`) to exit within the same 10 s.
+
+## Memory (`--memory`)
+
+Valid with any mode. After `trace.done` the script waits `--memory-settle <ms>` (default 5000), then samples every
+process whose executable is under `<bundle>/Contents/`: RSS from `ps`, physical footprint from
+`footprint -p <pid> --noCategories -f bytes` (works unprivileged for your own processes). Helpers are classified by
+their `--type=` argument. The report groups shell main / renderer(s) / GPU / other helpers / sidecar and totals
+with and without the sidecar, which is identical between shells. Footprint is the number to compare; RSS counts
+shared pages once per process. With `--json` and `--memory` the output is `{ "records": [...], "memory": {...} }`
+instead of a bare record array.
+
 ## Build reuse
 
 Managed modes compare HEAD and a SHA-256 content hash against `nisi.app.build-stamp.json` beside

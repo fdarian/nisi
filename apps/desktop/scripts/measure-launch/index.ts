@@ -55,7 +55,8 @@ const program = Effect.gen(function* () {
 		);
 		const traceId = crypto.randomUUID();
 		const warmupId = crypto.randomUUID();
-		const records = yield* Effect.scoped(
+		// Sampled inside the scope: its cleanup stops the app when it created a worktree.
+		const measured = yield* Effect.scoped(
 			Effect.gen(function* () {
 				yield* withDeepLinkWorktreeCleanup(shell, options.cwd, dataDir, [
 					warmupId,
@@ -100,19 +101,22 @@ const program = Effect.gen(function* () {
 					);
 					yield* waitForPrIndex(dataDir, startedAt);
 				}
-				return yield* runDeepLink({
+				const records = yield* runDeepLink({
 					dataDir,
 					traceId,
 					url: target.url,
 					label: "Measured deep link",
 				});
+				const memory = options.memory
+					? yield* sampleMemory(shell, options.memorySettleMs)
+					: undefined;
+				return { records, memory };
 			}),
 		);
+		const records = measured.records;
+		const memory = measured.memory;
 		const stamp = yield* readBuildStamp(shell.bundlePath);
 		const worktreeHeader = yield* Effect.try(() => formatWorktree(records));
-		const memory = options.memory
-			? yield* sampleMemory(shell, options.memorySettleMs)
-			: undefined;
 		const header = `${options.newPr ? `new PR into running app (warm-up: ${warmup?.url})` : "app startup"} — deep-link frontend injection${shellHeader(shell.name)}\nCLI: n/a\nExcludes OS URL delivery and native plugin hop; cold delivery waits for the events stream, later than plugin getCurrent.\n${stamp === undefined ? "Build stamp unavailable" : formatBuild(stamp)}`;
 		if (options.json) {
 			yield* Console.error(`${header}\n${worktreeHeader}`);

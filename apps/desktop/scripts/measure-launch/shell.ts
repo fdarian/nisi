@@ -1,4 +1,5 @@
 import { join, resolve } from "node:path";
+import { MEASUREMENT_CHROMIUM_SWITCHES } from "../../electron/measurement-instance.ts";
 
 export const desktopDir = resolve(import.meta.dir, "../..");
 
@@ -28,6 +29,8 @@ export type Shell = {
 	stopBeforeBuild: boolean;
 	/** Helpers (CEF) outlive the main processes briefly; stop waits for them too. */
 	waitForHelpers: boolean;
+	/** Chromium switches the built bundle must record in `Contents/Resources/build.json`. */
+	builtChromiumFlags: readonly string[];
 	coldDataDir: string;
 	newPrDataDir: string;
 };
@@ -47,6 +50,7 @@ export const shells: Readonly<Record<ShellName, Shell>> = {
 		selfExtracting: false,
 		stopBeforeBuild: false,
 		waitForHelpers: false,
+		builtChromiumFlags: [],
 		coldDataDir: join(measureDir, "data"),
 		newPrDataDir: join(measureDir, "new-pr/data"),
 	},
@@ -75,6 +79,7 @@ export const shells: Readonly<Record<ShellName, Shell>> = {
 		selfExtracting: true,
 		stopBeforeBuild: true,
 		waitForHelpers: true,
+		builtChromiumFlags: [...MEASUREMENT_CHROMIUM_SWITCHES, "use-mock-keychain"],
 		coldDataDir: join(measureDir, "electrobun/data"),
 		newPrDataDir: join(measureDir, "electrobun/new-pr/data"),
 	},
@@ -96,3 +101,22 @@ export const wrapperMarker = (shell: Shell) =>
 
 export const stampFileName = (bundlePath: string) =>
 	`${bundlePath.split("/").at(-1)}.build-stamp.json`;
+
+/** Electrobun records the flags it was built with, which catches a bundle rebuilt by hand without them. */
+export function missingChromiumFlags(
+	buildJson: string,
+	required: readonly string[],
+): string[] {
+	const recorded: unknown = JSON.parse(buildJson);
+	const flags = new Map<string, unknown>();
+	if (
+		typeof recorded === "object" &&
+		recorded !== null &&
+		"chromiumFlags" in recorded &&
+		typeof recorded.chromiumFlags === "object" &&
+		recorded.chromiumFlags !== null
+	)
+		for (const [flag, value] of Object.entries(recorded.chromiumFlags))
+			flags.set(flag, value);
+	return required.filter((flag) => flags.get(flag) !== true);
+}

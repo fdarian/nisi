@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import { join } from "node:path";
 import {
+	missingChromiumFlags,
 	parseShellName,
 	shells,
 	stampFileName,
@@ -71,4 +72,27 @@ test("the wrapper marker lives in the bundle's Resources", () => {
 test("shell names are validated", () => {
 	expect(parseShellName("electrobun")).toBe("electrobun");
 	expect(() => parseShellName("Electron")).toThrow("--shell must be one of");
+});
+
+test("a bundle missing recorded measurement flags is reported", () => {
+	const required = shells.electrobun.builtChromiumFlags;
+	expect(required).toContain("disable-renderer-backgrounding");
+	expect(required).toContain("use-mock-keychain");
+	const recorded = (flags: Record<string, boolean>) =>
+		JSON.stringify({ runtime: {}, chromiumFlags: flags });
+	expect(
+		missingChromiumFlags(
+			recorded(Object.fromEntries(required.map((flag) => [flag, true]))),
+			required,
+		),
+	).toEqual([]);
+	expect(
+		missingChromiumFlags(JSON.stringify({ runtime: {} }), required),
+	).toEqual([...required]);
+	expect(
+		missingChromiumFlags(recorded({ "use-mock-keychain": false }), [
+			"use-mock-keychain",
+		]),
+	).toEqual(["use-mock-keychain"]);
+	expect(shells.electron.builtChromiumFlags).toEqual([]);
 });
