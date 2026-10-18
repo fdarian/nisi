@@ -1,6 +1,6 @@
 import { resolve } from "node:path";
 import { Effect, Stream } from "effect";
-import type { ChildProcessSpawner } from "effect/unstable/process";
+import type { ChildProcessSpawner } from "effect/process";
 import type { GitCommandError, PushTargetUnresolvable } from "./errors.ts";
 import { git, gitStream } from "./exec.ts";
 import { pathExistsOnDisk, resolvePushTarget } from "./repo.ts";

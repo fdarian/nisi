@@ -413,6 +413,56 @@ describe("resolveUnpushedCommits — remote diverged from the local branch", () 
 		}
 	});
 
+	test("parent commit whose lines a later parent commit removes: replaying it alone must not flag it", async () => {
+		const fixture = await makeOriginBackedRepo();
+		const other = await makeOtherClone(fixture.bareDir);
+		try {
+			const lines = ["l1", "l2", "l3", "l4", "l5", "l6", "l7", "l8"];
+			await fixture.repo.write("q.ts", `${lines.join("\n")}\n`);
+			await fixture.repo.commit("add q");
+			await fixture.repo.git(["push", "-q", "origin", "main"]);
+
+			await fixture.repo.git(["checkout", "-q", "-b", "parent"]);
+			const withIntermediate = [...lines];
+			withIntermediate.splice(2, 0, "intermediate");
+			await fixture.repo.write("q.ts", `${withIntermediate.join("\n")}\n`);
+			await fixture.repo.commit("p1 adds intermediate line");
+			const final = [...lines.slice(0, 7), "l8 changed"];
+			await fixture.repo.write("q.ts", `${final.join("\n")}\n`);
+			await fixture.repo.commit("p2 removes it and edits the tail");
+			await fixture.repo.git(["push", "-q", "origin", "parent"]);
+			await fixture.repo.git(["checkout", "-q", "-b", "child"]);
+			await fixture.repo.write("c.ts", "c1\n");
+			await fixture.repo.commit("c1");
+			await fixture.repo.git(["push", "-q", "-u", "origin", "child"]);
+
+			await other.git(["fetch", "-q", "origin"]);
+			await other.git(["merge", "-q", "--ff-only", "origin/main"]);
+			await other.git([
+				"-c",
+				"merge.ff=true",
+				"merge",
+				"-q",
+				"--squash",
+				"origin/parent",
+			]);
+			await other.git(["commit", "-q", "-m", "squash parent"]);
+			await other.git(["push", "-q", "origin", "main"]);
+			await other.git(["checkout", "-q", "-b", "child", "origin/child"]);
+			await other.git(["rebase", "-q", "--onto", "main", "origin/parent"]);
+			await other.git(["push", "-q", "--force", "origin", "child"]);
+
+			const result = await run(resolveUnpushedCommits(fixture.repo.root, null));
+			expect(result.remoteRef).toBe("origin/child");
+			expect(result.ahead).toBe(0);
+			expect(result.commits).toEqual([]);
+			expect(result.diverged).toBe(true);
+		} finally {
+			await cleanupTestRepo(other);
+			await cleanupOriginBackedRepo(fixture);
+		}
+	});
+
 	test("a new local commit on top of the pre-rebase branch is still counted and listed", async () => {
 		const fixture = await makeOriginBackedRepo();
 		const other = await makeOtherClone(fixture.bareDir);

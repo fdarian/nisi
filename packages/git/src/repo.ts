@@ -287,16 +287,24 @@ const unexpectedExit = (
  * for the case where the branches diverged (the remote
  * branch was rewritten — rebased by GitHub's stacked-PR feature, or after a
  * parent PR was squash-merged — so every old local SHA looks unpushed to
- * `rev-list`). Candidates are the non-merge commits only `HEAD` has, minus
- * those `--cherry-pick` matches by patch-id. Each candidate is then replayed
- * onto `remoteRef` with `git merge-tree --write-tree -X ours`: if the merged
- * tree equals `remoteRef`'s own tree, the commit's change is already there.
- * `-X ours` makes a conflicting hunk count as superseded (the remote has
- * since rewritten those lines), while non-conflicting hunks still alter the
- * tree and so still count — e.g. a fix committed locally on top of the
- * pre-rebase branch. A conflict `-X ours` can't resolve (modify/delete)
- * exits 1 and counts as not contained; a root commit has no parent to use as
- * merge base and counts too. Requires git >= 2.40 (`merge-tree
+ * `rev-list`).
+ *
+ * The authority is a merge of the whole branch: `git merge-tree --write-tree
+ * -X ours <remoteRef> HEAD` yielding `remoteRef`'s own tree means nothing is
+ * missing. Replaying commits one at a time can't decide that, because it
+ * misreads an intermediate state a later commit undid — an early commit that
+ * adds lines a later one removes re-adds them cleanly on its own and looks
+ * missing. So per-commit replay only runs once the whole-branch check has
+ * failed, to attribute the commits: non-merge commits only `HEAD` has, minus
+ * those `--cherry-pick` matches by patch-id, each merged onto `remoteRef`
+ * from its own parent. `-X ours` makes a conflicting hunk count as superseded
+ * (the remote has since rewritten those lines), while non-conflicting hunks
+ * still alter the tree and so still count — e.g. a fix committed locally on
+ * top of the pre-rebase branch. A conflict `-X ours` can't resolve
+ * (modify/delete) exits 1 and counts as not contained; a root commit has no
+ * parent to use as merge base and counts too. If replay attributes nothing
+ * although the whole-branch check failed, every candidate is returned rather
+ * than hiding what that check proved. Requires git >= 2.40 (`merge-tree
  * --merge-base`, strategy options).
  */
 const listCommitsMissingFromDivergedRemote = (
@@ -321,33 +329,37 @@ const listCommitsMissingFromDivergedRemote = (
 			`${remoteRef}^{tree}`,
 		])).trim();
 
+		const mergesToRemoteTree = (mergeArgs: ReadonlyArray<string>) =>
+			Effect.gen(function* () {
+				const args = ["merge-tree", "--write-tree", "-X", "ours", ...mergeArgs];
+				const result = yield* gitResult(repoRoot, args);
+				if (result.exitCode > 1) {
+					return yield* unexpectedExit(repoRoot, args, result);
+				}
+				return (
+					result.exitCode === 0 && result.stdout.split("\n")[0] === remoteTree
+				);
+			});
+
+		if (yield* mergesToRemoteTree([remoteRef, "HEAD"])) return [];
+
 		const missing: Array<string> = [];
 		for (const candidate of candidates) {
 			const sha = candidate[0];
 			const parent = candidate[1];
 			if (sha === undefined) continue;
-			if (parent === undefined) {
+			if (
+				parent === undefined ||
+				!(yield* mergesToRemoteTree([`--merge-base=${parent}`, remoteRef, sha]))
+			) {
 				missing.push(sha);
-				continue;
 			}
-			const args = [
-				"merge-tree",
-				"--write-tree",
-				"-X",
-				"ours",
-				`--merge-base=${parent}`,
-				remoteRef,
-				sha,
-			];
-			const result = yield* gitResult(repoRoot, args);
-			if (result.exitCode > 1) {
-				return yield* unexpectedExit(repoRoot, args, result);
-			}
-			const contained =
-				result.exitCode === 0 && result.stdout.split("\n")[0] === remoteTree;
-			if (!contained) missing.push(sha);
 		}
-		return missing;
+		if (missing.length > 0) return missing;
+		return candidates.flatMap((candidate) => {
+			const sha = candidate[0];
+			return sha === undefined ? [] : [sha];
+		});
 	});
 
 const resolveOriginCommits = (
