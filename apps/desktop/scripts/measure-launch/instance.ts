@@ -1,19 +1,13 @@
-import { join, resolve } from "node:path";
+import { join } from "node:path";
 import { safe } from "@orpc/client";
 import { makeSidecarClient } from "@repo/sidecar-api";
 import { readSidecarJson } from "deskkit/sidecar";
-import { Effect } from "effect";
+import { Console, Effect } from "effect";
 import { FileSystem } from "effect/FileSystem";
 import { ensureBuild } from "./build.ts";
 import { stopBundle } from "./processes.ts";
+import { desktopDir, type Shell, shells, wrapperMarker } from "./shell.ts";
 
-export const desktopDir = resolve(import.meta.dir, "../..");
-export const bundlePath = join(desktopDir, "release/mac-arm64/nisi.app");
-export const coldDataDir = join(desktopDir, ".data/measure-launch/data");
-export const newPrDataDir = join(
-	desktopDir,
-	".data/measure-launch/new-pr/data",
-);
 export const unavailableAppPath = join(
 	desktopDir,
 	".data/measure-launch/app-launch-disabled.app",
@@ -72,19 +66,23 @@ export const requireInstrumentation = (
 		}
 	});
 
-export const runningInstance = Effect.gen(function* () {
-	const fs = yield* FileSystem;
-	const sessions = join(desktopDir, ".data/sessions");
-	const names = (yield* fs.exists(sessions))
-		? yield* fs.readDirectory(sessions)
-		: [];
-	const candidates = [
-		coldDataDir,
-		newPrDataDir,
-		...names.map((name) => join(sessions, name, "data")),
-	];
-	return yield* selectRunningInstance(candidates);
-});
+export const runningInstance = (shell: Shell) =>
+	Effect.gen(function* () {
+		const fs = yield* FileSystem;
+		const sessions = join(desktopDir, ".data/sessions");
+		const names = (yield* fs.exists(sessions))
+			? yield* fs.readDirectory(sessions)
+			: [];
+		const candidates = [
+			shell.coldDataDir,
+			shell.newPrDataDir,
+			// `bun dev` sandboxes run Electron.
+			...(shell === shells.electron
+				? names.map((name) => join(sessions, name, "data"))
+				: []),
+		];
+		return yield* selectRunningInstance(candidates);
+	});
 
 export const selectRunningInstance = (candidates: readonly string[]) =>
 	Effect.gen(function* () {
@@ -111,10 +109,77 @@ export const selectRunningInstance = (candidates: readonly string[]) =>
 		return instance.dataDir;
 	});
 
-export const prepareColdInstance = (rebuild: boolean, newPr = false) =>
+/** Only an explicit bundle path is ever given to LaunchServices, never a URL. */
+export const openBundle = (shell: Shell, dataDir: string) =>
+	Effect.gen(function* () {
+		const child = yield* Effect.try(() =>
+			Bun.spawn(
+				[
+					"open",
+					"-n",
+					"-g",
+					"--env",
+					`NISI_DATA_DIR=${dataDir}`,
+					"--env",
+					"NISI_MEASUREMENT_INSTANCE=1",
+					"-a",
+					shell.bundlePath,
+				],
+				{ stdout: "ignore", stderr: "inherit" },
+			),
+		);
+		const exit = yield* Effect.tryPromise(() => child.exited);
+		if (exit !== 0)
+			return yield* Effect.fail(
+				new Error(`Managed app launch failed with ${exit}`),
+			);
+	});
+
+/**
+ * Runs a self-extracting bundle once against a throwaway data dir so its first-launch
+ * extraction never lands inside a measured run.
+ */
+export const primeShell = (shell: Shell) =>
 	Effect.gen(function* () {
 		const fs = yield* FileSystem;
-		const dataDir = newPr ? newPrDataDir : coldDataDir;
+		if (!shell.selfExtracting || !(yield* fs.exists(wrapperMarker(shell))))
+			return;
+		yield* Console.error(
+			`Priming ${shell.bundlePath}: the first launch extracts the bundle in place`,
+		);
+		const scratch = yield* fs.makeTempDirectory({ prefix: "nisi-prime-" });
+		yield* Effect.gen(function* () {
+			yield* openBundle(shell, scratch);
+			const deadline = Date.now() + 120_000;
+			while (!(yield* liveInstance(scratch)).live) {
+				if (Date.now() >= deadline)
+					return yield* Effect.fail(
+						new Error("Timed out waiting for the priming launch to answer"),
+					);
+				yield* Effect.sleep("250 millis");
+			}
+		}).pipe(
+			Effect.ensuring(
+				stopBundle(shell).pipe(
+					Effect.andThen(fs.remove(scratch, { recursive: true })),
+					Effect.orDie,
+				),
+			),
+		);
+		if (yield* fs.exists(wrapperMarker(shell)))
+			return yield* Effect.fail(
+				new Error("Priming launched the bundle but it is still the wrapper"),
+			);
+	});
+
+export const prepareColdInstance = (
+	shell: Shell,
+	rebuild: boolean,
+	newPr = false,
+) =>
+	Effect.gen(function* () {
+		const fs = yield* FileSystem;
+		const dataDir = newPr ? shell.newPrDataDir : shell.coldDataDir;
 		const ignored = yield* Effect.tryPromise(() =>
 			Bun.$`git check-ignore ${dataDir}`.cwd(desktopDir).quiet().nothrow(),
 		);
@@ -122,15 +187,16 @@ export const prepareColdInstance = (rebuild: boolean, newPr = false) =>
 			return yield* Effect.fail(
 				new Error("The measurement data dir must be gitignored"),
 			);
-		yield* ensureBuild(desktopDir, bundlePath, rebuild);
-		yield* stopBundle(bundlePath);
-		if (newPr && (yield* fs.exists(newPrDataDir))) {
-			const real = yield* fs.realPath(newPrDataDir);
-			if (real !== newPrDataDir)
+		yield* ensureBuild(desktopDir, shell, rebuild);
+		yield* primeShell(shell);
+		yield* stopBundle(shell);
+		if (newPr && (yield* fs.exists(shell.newPrDataDir))) {
+			const real = yield* fs.realPath(shell.newPrDataDir);
+			if (real !== shell.newPrDataDir)
 				return yield* Effect.fail(
 					new Error("Refusing to reset a symlinked new-PR data dir"),
 				);
-			yield* fs.remove(newPrDataDir, { recursive: true });
+			yield* fs.remove(shell.newPrDataDir, { recursive: true });
 		}
 		yield* fs.makeDirectory(dataDir, { recursive: true });
 		return dataDir;

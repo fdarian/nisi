@@ -3,11 +3,11 @@ import { LaunchRecord } from "@repo/sidecar-api";
 import { Effect, Schema } from "effect";
 import { FileSystem } from "effect/FileSystem";
 import {
-	bundlePath,
 	liveInstance,
 	requireInstrumentation,
 	unavailableAppPath,
 } from "./instance.ts";
+import type { Shell } from "./shell.ts";
 
 const RecordSchema = Schema.fromJsonString(LaunchRecord);
 
@@ -25,6 +25,7 @@ export function windowWentHidden(records: readonly LaunchRecord[]): boolean {
 }
 
 export const runTracedOpen = (options: {
+	shell: Shell;
 	cwd: string;
 	dataDir: string;
 	traceId: string;
@@ -45,7 +46,9 @@ export const runTracedOpen = (options: {
 					...(options.managed ? { NISI_MEASUREMENT_INSTANCE: "1" } : {}),
 					NISI_LAUNCH_TRACE: options.traceId,
 					NISI_DATA_DIR: options.dataDir,
-					NISI_APP_PATH: options.launch ? bundlePath : unavailableAppPath,
+					NISI_APP_PATH: options.launch
+						? options.shell.bundlePath
+						: unavailableAppPath,
 				},
 				stdout: options.quiet ? "ignore" : "inherit",
 				stderr: "inherit",

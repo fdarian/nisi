@@ -1,4 +1,15 @@
 import type { ElectrobunConfig } from "electrobun";
+import { MEASUREMENT_CHROMIUM_SWITCHES } from "./electron/measurement-instance";
+
+// The Electron shell appends these at runtime (`electron/measurement.ts`); CEF only reads them at build time,
+// so `scripts/measure-launch` builds its Electrobun bundle with this set. Never set it for a shipped build.
+const measurementBuild = process.env.NISI_MEASUREMENT_BUILD === "1";
+const measurementChromiumFlags = Object.fromEntries(
+	[...MEASUREMENT_CHROMIUM_SWITCHES, "use-mock-keychain"].map((flag) => [
+		flag,
+		true,
+	]),
+);
 
 export default {
 	app: {
@@ -24,6 +35,7 @@ export default {
 			bundleCEF: true,
 			defaultRenderer: "cef",
 			icons: "electrobun/icon.iconset",
+			...(measurementBuild ? { chromiumFlags: measurementChromiumFlags } : {}),
 		},
 	},
 	scripts: { postBuild: "electrobun/post-build.ts" },

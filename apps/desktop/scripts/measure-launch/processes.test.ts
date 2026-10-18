@@ -1,8 +1,11 @@
 import { expect, test } from "bun:test";
-import { bundleProcessIds } from "./processes.ts";
+import { bundleHelperIds, bundleProcessIds } from "./processes.ts";
+import { type Shell, shells } from "./shell.ts";
+
+const bundle = "/work tree/nisi.app";
+const electron: Shell = { ...shells.electron, bundlePath: bundle };
 
 test("cold shutdown selects the exact worktree executable and its bundled sidecar child", () => {
-	const bundle = "/work tree/nisi.app";
 	expect(
 		bundleProcessIds(
 			[
@@ -16,7 +19,42 @@ test("cold shutdown selects the exact worktree executable and its bundled sideca
 				"201 200 /Applications/nisi.app/Contents/MacOS/sidecar",
 				"300 1 /other worktree/nisi.app/Contents/MacOS/nisi",
 			].join("\n"),
-			bundle,
+			electron,
 		),
 	).toEqual([101, 102, 104]);
+});
+
+const electrobunBundle = "/work tree/nisi-electrobun.app";
+const electrobun: Shell = {
+	...shells.electrobun,
+	bundlePath: electrobunBundle,
+};
+const electrobunTable = [
+	`10 1 ${electrobunBundle}/Contents/MacOS/launcher`,
+	`11 10 ${electrobunBundle}/Contents/MacOS/bun`,
+	`12 11 ${electrobunBundle}/Contents/MacOS/sidecar`,
+	`13 10 ${electrobunBundle}/Contents/Frameworks/bun Helper (Renderer).app/Contents/MacOS/bun Helper (Renderer)`,
+	`14 10 ${electrobunBundle}/Contents/Frameworks/bun Helper (GPU).app/Contents/MacOS/bun Helper (GPU)`,
+	`15 1 ${electrobunBundle}/Contents/MacOS/nisi-cli`,
+	`20 1 /Applications/nisi.app/Contents/MacOS/sidecar`,
+	`21 1 ${electrobunBundle}-other/Contents/MacOS/bun`,
+	`22 1 /other tree/nisi.app/Contents/MacOS/nisi`,
+].join("\n");
+
+test("Electrobun stops its launcher, bun and sidecar, and leaves CEF helpers to exit on their own", () => {
+	expect(bundleProcessIds(electrobunTable, electrobun)).toEqual([10, 11, 12]);
+	expect(bundleHelperIds(electrobunTable, electrobun)).toEqual([13, 14, 15]);
+});
+
+test("the Electron descriptor does not match Electrobun executables and vice versa", () => {
+	expect(bundleProcessIds(electrobunTable, electron)).toEqual([]);
+	expect(
+		bundleProcessIds(`101 1 ${bundle}/Contents/MacOS/nisi`, electrobun),
+	).toEqual([]);
+});
+
+test("malformed ps rows fail instead of being skipped", () => {
+	expect(() => bundleProcessIds("not a row", electron)).toThrow(
+		"Invalid ps row",
+	);
 });

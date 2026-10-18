@@ -9,7 +9,7 @@ import {
 	readStamp,
 	rebuildReason,
 } from "./build.ts";
-import { bundlePath, desktopDir } from "./instance.ts";
+import { desktopDir, type Shell } from "./shell.ts";
 
 export const cliScope = [
 	...["cli", "git", "logging", "sidecar-api", "db", "bin-resolver"].map(
@@ -34,12 +34,12 @@ export function formatCli(cli: MeasurementCli): string {
 	return `CLI: compiled binary ${cli.path} — ${formatBuild(cli.stamp)}`;
 }
 
-export const prepareCli = (managed: boolean) =>
+export const prepareCli = (shell: Shell, managed: boolean) =>
 	Effect.gen(function* () {
 		const fs = yield* FileSystem;
 		if (managed) {
-			const path = join(bundlePath, "Contents/MacOS/nisi-cli");
-			const stamp = yield* readBuildStamp(bundlePath);
+			const path = join(shell.bundlePath, "Contents/MacOS/nisi-cli");
+			const stamp = yield* readBuildStamp(shell.bundlePath);
 			if (stamp === undefined || !(yield* fs.exists(path)))
 				return yield* Effect.fail(
 					new Error("Managed app build is missing its compiled CLI or stamp"),

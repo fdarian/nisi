@@ -1,7 +1,11 @@
 import { Effect } from "effect";
+import type { Shell } from "./shell.ts";
 
-export function bundleProcessIds(output: string, bundle: string): number[] {
-	const processes = output
+export type ProcessRow = { pid: number; ppid: number; command: string };
+
+/** Parses `ps -axo pid=,ppid=,comm=`; `comm` is the full executable path, spaces included. */
+export function parseProcessRows(output: string): ProcessRow[] {
+	return output
 		.split("\n")
 		.filter((line) => line.trim().length > 0)
 		.map((line) => {
@@ -9,24 +13,46 @@ export function bundleProcessIds(output: string, bundle: string): number[] {
 			if (match === null) throw new Error(`Invalid ps row: ${line}`);
 			return {
 				pid: Number(match[1]),
-				command: match[3],
+				ppid: Number(match[2]),
+				command: match[3] as string,
 			};
 		});
-	return processes
-		.filter(
-			(entry) =>
-				entry.command === `${bundle}/Contents/MacOS/nisi` ||
-				entry.command === `${bundle}/Contents/MacOS/sidecar`,
-		)
-		.map((entry) => entry.pid);
 }
 
-export const stopBundle = (bundle: string) =>
+const contentsPrefix = (shell: Shell) => `${shell.bundlePath}/Contents/`;
+
+/** Every process whose executable lives inside the bundle. */
+export function bundleRows(output: string, shell: Shell): ProcessRow[] {
+	return parseProcessRows(output).filter((row) =>
+		row.command.startsWith(contentsPrefix(shell)),
+	);
+}
+
+export function bundleProcessIds(output: string, shell: Shell): number[] {
+	const executables = new Set(
+		shell.stopExecutables.map((path) => `${shell.bundlePath}/${path}`),
+	);
+	return parseProcessRows(output)
+		.filter((row) => executables.has(row.command))
+		.map((row) => row.pid);
+}
+
+/** Bundle processes that are not in the stop list, e.g. CEF helpers. */
+export function bundleHelperIds(output: string, shell: Shell): number[] {
+	const stopped = new Set(bundleProcessIds(output, shell));
+	return bundleRows(output, shell)
+		.filter((row) => !stopped.has(row.pid))
+		.map((row) => row.pid);
+}
+
+export const processTable = Effect.tryPromise(() =>
+	Bun.$`ps -axo pid=,ppid=,comm=`.text(),
+);
+
+export const stopBundle = (shell: Shell) =>
 	Effect.gen(function* () {
-		const snapshot = yield* Effect.tryPromise(() =>
-			Bun.$`ps -axo pid=,ppid=,comm=`.text(),
-		);
-		const pids = yield* Effect.try(() => bundleProcessIds(snapshot, bundle));
+		const snapshot = yield* processTable;
+		const pids = yield* Effect.try(() => bundleProcessIds(snapshot, shell));
 		const unique = [...new Set(pids)];
 		for (const pid of unique)
 			yield* Effect.try({
@@ -46,11 +72,27 @@ export const stopBundle = (bundle: string) =>
 		while (unique.length > 0) {
 			const output = yield* Effect.tryPromise(() => Bun.$`ps -axo pid=`.text());
 			const live = new Set(output.trim().split(/\s+/).map(Number));
-			if (unique.every((pid) => !live.has(pid))) return;
+			if (unique.every((pid) => !live.has(pid))) break;
 			if (Date.now() >= deadline)
 				return yield* Effect.fail(
 					new Error(
 						"Worktree app or sidecar did not exit after SIGTERM; refusing cold measurement",
+					),
+				);
+			yield* Effect.sleep("100 millis");
+		}
+		if (!shell.waitForHelpers) return;
+		while (true) {
+			const remaining = yield* processTable.pipe(
+				Effect.flatMap((output) =>
+					Effect.try(() => bundleHelperIds(output, shell)),
+				),
+			);
+			if (remaining.length === 0) return;
+			if (Date.now() >= deadline)
+				return yield* Effect.fail(
+					new Error(
+						`Helper processes of ${shell.bundlePath} did not exit after SIGTERM (${remaining.join(", ")}); refusing cold measurement`,
 					),
 				);
 			yield* Effect.sleep("100 millis");

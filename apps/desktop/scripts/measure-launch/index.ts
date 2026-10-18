@@ -19,23 +19,26 @@ import {
 	formatVisibility,
 } from "./format.ts";
 import {
-	bundlePath,
-	coldDataDir,
 	liveInstance,
-	newPrDataDir,
 	prepareColdInstance,
 	runningInstance,
 	unavailableAppPath,
 } from "./instance.ts";
+import { formatMemory, sampleMemory } from "./memory.ts";
 import { resolveWarmup } from "./new-pr.ts";
 import { parseLaunchOptions } from "./options.ts";
 import { waitForPrIndex } from "./pr-index.ts";
 import { runTracedOpen } from "./run.ts";
+import { shells } from "./shell.ts";
+
+const shellHeader = (name: string) =>
+	name === "electron" ? "" : `\nShell: ${name}`;
 
 const program = Effect.gen(function* () {
 	const options = yield* Effect.try(() =>
 		parseLaunchOptions(process.argv.slice(2)),
 	);
+	const shell = shells[options.shell];
 	if (options.deeplink !== undefined) {
 		const target = yield* Effect.try(() =>
 			parseMeasurementPr(options.deeplink as string),
@@ -45,17 +48,22 @@ const program = Effect.gen(function* () {
 				? undefined
 				: yield* Effect.try(() => parseMeasurementPr(options.warmup as string));
 		yield* Effect.try(() => validateDeepLinkTargets(target, warmup));
-		const dataDir = yield* prepareColdInstance(options.rebuild, options.newPr);
+		const dataDir = yield* prepareColdInstance(
+			shell,
+			options.rebuild,
+			options.newPr,
+		);
 		const traceId = crypto.randomUUID();
 		const warmupId = crypto.randomUUID();
 		const records = yield* Effect.scoped(
 			Effect.gen(function* () {
-				yield* withDeepLinkWorktreeCleanup(options.cwd, dataDir, [
+				yield* withDeepLinkWorktreeCleanup(shell, options.cwd, dataDir, [
 					warmupId,
 					traceId,
 				]);
 				const startedAt = Date.now();
 				const client = yield* launchDeepLinkInstance(
+					shell,
 					dataDir,
 					options.newPr ? warmupId : traceId,
 				);
@@ -100,15 +108,24 @@ const program = Effect.gen(function* () {
 				});
 			}),
 		);
-		const stamp = yield* readBuildStamp(bundlePath);
+		const stamp = yield* readBuildStamp(shell.bundlePath);
 		const worktreeHeader = yield* Effect.try(() => formatWorktree(records));
-		const header = `${options.newPr ? `new PR into running app (warm-up: ${warmup?.url})` : "app startup"} — deep-link frontend injection\nCLI: n/a\nExcludes OS URL delivery and native plugin hop; cold delivery waits for the events stream, later than plugin getCurrent.\n${stamp === undefined ? "Build stamp unavailable" : formatBuild(stamp)}`;
+		const memory = options.memory
+			? yield* sampleMemory(shell, options.memorySettleMs)
+			: undefined;
+		const header = `${options.newPr ? `new PR into running app (warm-up: ${warmup?.url})` : "app startup"} — deep-link frontend injection${shellHeader(shell.name)}\nCLI: n/a\nExcludes OS URL delivery and native plugin hop; cold delivery waits for the events stream, later than plugin getCurrent.\n${stamp === undefined ? "Build stamp unavailable" : formatBuild(stamp)}`;
 		if (options.json) {
 			yield* Console.error(`${header}\n${worktreeHeader}`);
-			yield* Console.log(JSON.stringify(records, null, 2));
+			yield* Console.log(
+				JSON.stringify(
+					memory === undefined ? records : { records, memory },
+					null,
+					2,
+				),
+			);
 		} else
 			yield* Console.log(
-				`${header}\n${worktreeHeader}\n\n${formatTimeline(records)}`,
+				`${header}\n${worktreeHeader}\n\n${formatTimeline(records)}${memory === undefined ? "" : `\n\n${formatMemory(memory)}`}`,
 			);
 		return;
 	}
@@ -118,10 +135,10 @@ const program = Effect.gen(function* () {
 			: yield* resolveWarmup(options.cwd, options.warmup);
 	const managed = options.cold || options.newPr;
 	const dataDir = yield* managed
-		? prepareColdInstance(options.rebuild, options.newPr)
-		: runningInstance;
+		? prepareColdInstance(shell, options.rebuild, options.newPr)
+		: runningInstance(shell);
 	const fs = yield* FileSystem;
-	const cli = yield* prepareCli(managed);
+	const cli = yield* prepareCli(shell, managed);
 	const startedAt = managed
 		? Date.now()
 		: yield* fs
@@ -143,6 +160,7 @@ const program = Effect.gen(function* () {
 		);
 	if (options.warmup !== undefined)
 		yield* runTracedOpen({
+			shell,
 			cwd: options.warmup,
 			dataDir,
 			traceId: crypto.randomUUID(),
@@ -181,6 +199,7 @@ const program = Effect.gen(function* () {
 		]);
 	}
 	const records = yield* runTracedOpen({
+		shell,
 		cwd: options.cwd,
 		dataDir,
 		traceId,
@@ -197,18 +216,30 @@ const program = Effect.gen(function* () {
 				: "running-instance quick check"
 			: `new PR into running app (warm-up: ${warmupLabel})`;
 	const stamp =
-		dataDir === coldDataDir || dataDir === newPrDataDir
-			? yield* readBuildStamp(bundlePath)
+		dataDir === shell.coldDataDir || dataDir === shell.newPrDataDir
+			? yield* readBuildStamp(shell.bundlePath)
 			: undefined;
-	const reportHeader = `${header}\n${stamp === undefined ? "Build stamp unavailable for this instance" : formatBuild(stamp)}\n${formatCli(cli)}`;
+	const memory = options.memory
+		? yield* sampleMemory(shell, options.memorySettleMs)
+		: undefined;
+	const reportHeader = `${header}${shellHeader(shell.name)}\n${stamp === undefined ? "Build stamp unavailable for this instance" : formatBuild(stamp)}\n${formatCli(cli)}`;
 	if (options.json) {
 		yield* Console.error(reportHeader);
-		yield* Console.log(JSON.stringify(records, null, 2));
+		yield* Console.log(
+			JSON.stringify(
+				memory === undefined ? records : { records, memory },
+				null,
+				2,
+			),
+		);
 		const alreadyOpen = formatAlreadyOpen(records);
 		if (alreadyOpen !== undefined) yield* Console.error(alreadyOpen);
 		const visibility = formatVisibility(records, Date.now());
 		if (visibility !== undefined) yield* Console.error(visibility);
-	} else yield* Console.log(`${reportHeader}\n\n${formatTimeline(records)}`);
+	} else
+		yield* Console.log(
+			`${reportHeader}\n\n${formatTimeline(records)}${memory === undefined ? "" : `\n\n${formatMemory(memory)}`}`,
+		);
 });
 BunRuntime.runMain(
 	program.pipe(

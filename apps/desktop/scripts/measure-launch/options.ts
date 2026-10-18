@@ -1,4 +1,13 @@
 import { resolve } from "node:path";
+import { parseShellName, type ShellName } from "./shell.ts";
+
+const missingValue: Record<string, string> = {
+	"--cwd": "--cwd requires a PR worktree path",
+	"--warmup": "--warmup requires a PR worktree path",
+	"--deeplink": "--deeplink requires a PR worktree path",
+	"--shell": "--shell requires electron or electrobun",
+	"--memory-settle": "--memory-settle requires a number of milliseconds",
+};
 
 export function parseLaunchOptions(argv: readonly string[]) {
 	const options: {
@@ -10,30 +19,41 @@ export function parseLaunchOptions(argv: readonly string[]) {
 		rebuild: boolean;
 		json: boolean;
 		waitPrIndex: boolean;
+		shell: ShellName;
+		memory: boolean;
+		memorySettleMs: number;
 	} = {
 		cold: false,
 		newPr: false,
 		rebuild: false,
 		json: false,
 		waitPrIndex: false,
+		shell: "electron",
+		memory: false,
+		memorySettleMs: 5000,
 	};
+	let memorySettleGiven = false;
 	for (const [index, arg] of argv.entries()) {
-		if (
-			index > 0 &&
-			(argv[index - 1] === "--cwd" ||
-				argv[index - 1] === "--warmup" ||
-				argv[index - 1] === "--deeplink")
-		)
+		const previous = argv[index - 1];
+		if (previous !== undefined && Object.hasOwn(missingValue, previous))
 			continue;
-		if (arg === "--cwd" || arg === "--warmup" || arg === "--deeplink") {
+		if (Object.hasOwn(missingValue, arg)) {
 			const value = argv[index + 1];
 			if (value === undefined || value.startsWith("--"))
-				throw new Error(`${arg} requires a PR worktree path`);
+				throw new Error(missingValue[arg] as string);
 			if (arg === "--cwd") options.cwd = resolve(value);
 			else if (arg === "--deeplink") options.deeplink = value;
-			else
+			else if (arg === "--shell") options.shell = parseShellName(value);
+			else if (arg === "--memory-settle") {
+				const settle = Number(value);
+				if (!Number.isInteger(settle) || settle < 0)
+					throw new Error("--memory-settle requires a number of milliseconds");
+				options.memorySettleMs = settle;
+				memorySettleGiven = true;
+			} else
 				options.warmup = argv.includes("--deeplink") ? value : resolve(value);
-		} else if (arg === "--cold") options.cold = true;
+		} else if (arg === "--memory") options.memory = true;
+		else if (arg === "--cold") options.cold = true;
 		else if (arg === "--new-pr") options.newPr = true;
 		else if (arg === "--rebuild") options.rebuild = true;
 		else if (arg === "--json") options.json = true;
@@ -44,6 +64,8 @@ export function parseLaunchOptions(argv: readonly string[]) {
 		throw new Error(
 			"Usage: bun scripts/measure-launch --cwd <pr worktree> [--cold] [--rebuild] [--json]",
 		);
+	if (memorySettleGiven && !options.memory)
+		throw new Error("--memory-settle requires --memory");
 	if (options.cold && options.newPr)
 		throw new Error("--cold and --new-pr are mutually exclusive");
 	if (options.deeplink !== undefined && !options.cold && !options.newPr)
