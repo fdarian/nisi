@@ -56,11 +56,48 @@ export type IndexedPullRequest = Omit<
 	headRefName: string;
 };
 
+/** What `pullRequests.indexed` returns — see `IndexedPullRequests` in `packages/sidecar-api/src/pull-requests.ts`. */
+export type IndexedPullRequestsResponse = {
+	rows: readonly IndexedPullRequest[];
+	incompleteRepos: readonly string[];
+};
+
+/**
+ * Re-adds the previously cached rows of every repository the sidecar says it
+ * couldn't index yet (`incompleteRepos`), so a failed or timed-out boot
+ * refresh doesn't wipe what an earlier launch persisted. `incompleteRepos`
+ * is passed through: a later merge keeps carrying those rows until a response
+ * stops listing the repository.
+ */
+export function mergeIncompleteRepos(
+	response: IndexedPullRequestsResponse,
+	previous: IndexedPullRequestsResponse | undefined,
+): IndexedPullRequestsResponse {
+	if (previous === undefined || response.incompleteRepos.length === 0) {
+		return response;
+	}
+	const incomplete = new Set(
+		response.incompleteRepos.map((repo) => repo.toLowerCase()),
+	);
+	const carried = previous.rows.filter((row) =>
+		incomplete.has(`${row.owner}/${row.repo}`.toLowerCase()),
+	);
+	return {
+		rows: [...response.rows, ...carried],
+		incompleteRepos: response.incompleteRepos,
+	};
+}
+
 /**
  * Every open PR in the sidecar's index, for the palette to filter on each
  * keystroke. Mounted with the palette (before ⌘T opens) so the rows are warm;
  * the sidecar's `pull-request-index-changed` event, not a timer, says they are
- * stale. `#/infra/query-persistence.ts` persists this query's key.
+ * stale. `#/infra/query-persistence.ts` persists this query's key, and the
+ * merge happens in the `queryFn` so the persisted copy is the merged one.
+ *
+ * A failed fetch (`SERVICE_UNAVAILABLE`) leaves TanStack Query's last data in
+ * place; with none, `undefined` sends the palette to `gh`. The error itself is
+ * never shown — the palette just treats the index as unavailable.
  */
 export function useIndexedPullRequests(
 	orpc: SidecarQueryUtils,
@@ -72,7 +109,15 @@ export function useIndexedPullRequests(
 			queryKey: orpc.pullRequests.indexed.key(),
 		});
 	});
-	return useQuery(orpc.pullRequests.indexed.queryOptions()).data?.rows;
+	const options = orpc.pullRequests.indexed.queryOptions();
+	return useQuery({
+		...options,
+		queryFn: async (context) =>
+			mergeIncompleteRepos(
+				await options.queryFn(context),
+				queryClient.getQueryData(options.queryKey),
+			),
+	}).data?.rows;
 }
 
 /**
@@ -94,6 +139,8 @@ export function useSearchPullRequests(
 ): {
 	results: readonly PullRequestSearchResult[];
 	isSearching: boolean;
+	/** `results` belong to an earlier query (`keepPreviousData`), not the one asked for. */
+	isPlaceholderData: boolean;
 	error: unknown;
 } {
 	const search = useQuery({
@@ -106,6 +153,7 @@ export function useSearchPullRequests(
 	return {
 		results: search.data ?? [],
 		isSearching: search.isFetching,
+		isPlaceholderData: search.isPlaceholderData,
 		error: search.error,
 	};
 }

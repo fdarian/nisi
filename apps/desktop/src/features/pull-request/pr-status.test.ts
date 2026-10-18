@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { derivePrStatus } from "./pr-status";
+import { deriveIndexedPrStatus, derivePrStatus } from "./pr-status";
 
 const ready = {
 	state: "OPEN",
@@ -51,4 +51,11 @@ describe("derivePrStatus", () => {
 			derivePrStatus({ ...ready, state: "CLOSED", mergeable: "UNKNOWN" }),
 		).toBe("default");
 	});
+});
+
+describe("deriveIndexedPrStatus", () => {
+	test("draft", () =>
+		expect(deriveIndexedPrStatus({ isDraft: true })).toBe("draft"));
+	test("plain open never claims ready, conflicts or CI", () =>
+		expect(deriveIndexedPrStatus({ isDraft: false })).toBe("default"));
 });

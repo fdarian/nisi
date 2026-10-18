@@ -24,6 +24,7 @@ import {
 	friendlyOpenPullRequestError,
 	friendlySearchError,
 	githubAvatarUrl,
+	type IndexedPullRequest,
 	type OpenPullRequestParams,
 	type PullRequestRepository,
 	type PullRequestSearchResult,
@@ -34,7 +35,10 @@ import {
 	useSearchPullRequests,
 } from "#/features/pull-request/data/pull-requests-data";
 import { OriginMovedDialog } from "#/features/pull-request/open/origin-moved-dialog";
-import { derivePrStatus } from "#/features/pull-request/pr-status";
+import {
+	deriveIndexedPrStatus,
+	derivePrStatus,
+} from "#/features/pull-request/pr-status";
 import { PrStatusIcon } from "#/features/pull-request/pr-status-icon";
 import type { SidecarQueryUtils } from "#/infra/backend-context";
 import { filterIndexedPullRequests } from "./filter-indexed-pull-requests";
@@ -136,20 +140,24 @@ export function OpenPullRequestPalette(
 				),
 			));
 	// Keyed on `query` itself, not the debounced copy: the request only fires
-	// once they agree, and until then a cached answer for the exact query shows
-	// (or `keepPreviousData` holds the last gh rows) instead of a result set
-	// for some earlier keystroke.
+	// once they agree, and until then a cached answer for the exact query shows.
 	const search = useSearchPullRequests(
 		props.orpc,
 		query,
 		props.open && needsGh && query === debouncedQuery,
 		repositoryKeys,
 	);
-	const results = isBlank
-		? recent.results
-		: needsGh
-			? search.results
-			: localMatches;
+	// `keepPreviousData` rows belong to some earlier query (often the blank
+	// recent list); showing them would let Enter open an unrelated PR, so the
+	// gh path shows nothing until its own answer lands.
+	const results: readonly (PullRequestSearchResult | IndexedPullRequest)[] =
+		isBlank
+			? recent.results
+			: needsGh
+				? search.isPlaceholderData
+					? []
+					: search.results
+				: localMatches;
 	const searchError = isBlank ? recent.error : needsGh ? search.error : null;
 	const searchErrorMessage = friendlySearchError(searchError);
 	// Local filtering is instant, so only the `gh` path loads. A pending
@@ -375,7 +383,7 @@ export function OpenPullRequestPalette(
 									</>
 								)}
 								<CommandList>
-									{(pr: PullRequestSearchResult) => (
+									{(pr: PullRequestSearchResult | IndexedPullRequest) => (
 										<CommandItem
 											key={`${pr.owner}/${pr.repo}#${pr.number}`}
 											onClick={() => handleSelect(pr)}
@@ -418,7 +426,7 @@ export function OpenPullRequestPalette(
 		</>
 	);
 
-	function handleSelect(pr: PullRequestSearchResult) {
+	function handleSelect(pr: PullRequestSearchResult | IndexedPullRequest) {
 		if (openPr.isPending) return;
 		const params = { owner: pr.owner, repo: pr.repo, number: pr.number };
 		const existingSessionId = props.findExistingSessionId(params);
@@ -431,25 +439,28 @@ export function OpenPullRequestPalette(
 	}
 }
 
+// Index rows carry no mergeability or CI, so they get the narrower status.
+function rowStatus(pr: PullRequestSearchResult | IndexedPullRequest) {
+	if (!("mergeable" in pr)) return deriveIndexedPrStatus(pr);
+	return derivePrStatus({
+		state: pr.state,
+		isDraft: pr.isDraft,
+		mergeable: pr.mergeable,
+		mergeStateStatus: pr.mergeStateStatus,
+		ciRunning: pr.rollupState === "PENDING" || pr.rollupState === "EXPECTED",
+	});
+}
+
 function PullRequestRow({
 	pr,
 	isOpening,
 }: {
-	pr: PullRequestSearchResult;
+	pr: PullRequestSearchResult | IndexedPullRequest;
 	isOpening: boolean;
 }): React.ReactElement {
 	return (
 		<div className="flex min-w-0 flex-1 items-center gap-2.5">
-			<PrStatusIcon
-				status={derivePrStatus({
-					state: pr.state,
-					isDraft: pr.isDraft,
-					mergeable: pr.mergeable,
-					mergeStateStatus: pr.mergeStateStatus,
-					ciRunning:
-						pr.rollupState === "PENDING" || pr.rollupState === "EXPECTED",
-				})}
-			/>
+			<PrStatusIcon status={rowStatus(pr)} />
 			<div className="min-w-0 flex-1">
 				<div className="flex min-w-0 items-center gap-1.5">
 					<span className="min-w-0 truncate">
