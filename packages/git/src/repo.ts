@@ -331,13 +331,7 @@ const listCommitsMissingFromDivergedRemote = (
 
 		const mergesToRemoteTree = (mergeArgs: ReadonlyArray<string>) =>
 			Effect.gen(function* () {
-				const args = [
-					"merge-tree",
-					"--write-tree",
-					"-X",
-					"ours",
-					...mergeArgs,
-				];
+				const args = ["merge-tree", "--write-tree", "-X", "ours", ...mergeArgs];
 				const result = yield* gitResult(repoRoot, args);
 				if (result.exitCode > 1) {
 					return yield* unexpectedExit(repoRoot, args, result);
@@ -356,11 +350,7 @@ const listCommitsMissingFromDivergedRemote = (
 			if (sha === undefined) continue;
 			if (
 				parent === undefined ||
-				!(yield* mergesToRemoteTree([
-					`--merge-base=${parent}`,
-					remoteRef,
-					sha,
-				]))
+				!(yield* mergesToRemoteTree([`--merge-base=${parent}`, remoteRef, sha]))
 			) {
 				missing.push(sha);
 			}
