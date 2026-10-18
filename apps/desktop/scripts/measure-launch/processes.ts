@@ -29,18 +29,31 @@ export function bundleRows(output: string, shell: Shell): ProcessRow[] {
 }
 
 /**
- * The bundle's processes plus every process charged to one of them by macOS
- * (WebKit's XPC services), which live outside the bundle.
+ * The bundle's processes plus every launchd-parented process macOS charges to
+ * one of them (WebKit's XPC services, and system services spun up on the app's
+ * behalf). The app's own subprocesses (the sidecar's git and gh) are charged to
+ * it too but are work, not shell memory, and the bundle-prefix match never counted them.
  */
 export function attributedRows(
 	output: string,
 	shell: Shell,
 	responsibleOf: (pid: number) => number | undefined,
 ): ProcessRow[] {
+	const table = parseProcessRows(output);
 	const inBundle = bundleRows(output, shell);
 	const appPids = new Set(inBundle.map((row) => row.pid));
-	const charged = parseProcessRows(output).filter((row) => {
-		if (appPids.has(row.pid)) return false;
+	const parents = new Map(table.map((row) => [row.pid, row.ppid]));
+	const descendsFromApp = (pid: number) => {
+		for (
+			let parent = parents.get(pid);
+			parent !== undefined && parent > 1;
+			parent = parents.get(parent)
+		)
+			if (appPids.has(parent)) return true;
+		return false;
+	};
+	const charged = table.filter((row) => {
+		if (appPids.has(row.pid) || descendsFromApp(row.pid)) return false;
 		const responsible = responsibleOf(row.pid);
 		return responsible !== undefined && appPids.has(responsible);
 	});

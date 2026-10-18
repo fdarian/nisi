@@ -79,14 +79,18 @@ const webkitTable = [
 	`32 1 ${xpc("com.apple.WebKit.Networking")}`,
 	`40 1 ${xpc("com.apple.WebKit.WebContent")}`,
 	`50 1 /usr/sbin/unattributable`,
+	`60 12 /opt/homebrew/bin/git`,
+	`61 60 /opt/homebrew/bin/git-remote-https`,
 ].join("\n");
 
-test("processes the OS charges to the app are sampled with the bundle's own", () => {
+test("processes the OS charges to the app are sampled, except the app's own subprocesses", () => {
 	const responsible = new Map([
 		[30, 11],
 		[31, 11],
 		[32, 10],
 		[40, 999],
+		[60, 12],
+		[61, 12],
 	]);
 	expect(
 		attributedRows(webkitTable, webkit, (pid) => responsible.get(pid)).map(
