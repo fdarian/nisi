@@ -55,14 +55,7 @@ export type OpenPullRequestIndex = {
 	readonly prs: readonly (PullRequestRef &
 		Pick<
 			PullRequestSearchResult,
-			| "updatedAt"
-			| "state"
-			| "author"
-			| "url"
-			| "isDraft"
-			| "mergeable"
-			| "mergeStateStatus"
-			| "rollupState"
+			"updatedAt" | "state" | "author" | "url" | "isDraft"
 		> & {
 			readonly headOwner: string | null;
 		})[];

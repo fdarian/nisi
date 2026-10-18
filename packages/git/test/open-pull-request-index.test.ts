@@ -68,13 +68,6 @@ test("open PR index paginates, preserves ordering and surfaces auth/decode failu
 								author: { login: "alice" },
 								url: `https://github.com/acme/project/pull/${number}`,
 								isDraft: false,
-								mergeable: "MERGEABLE",
-								mergeStateStatus: "CLEAN",
-								commits: {
-									nodes: [
-										{ commit: { statusCheckRollup: { state: "SUCCESS" } } },
-									],
-								},
 							},
 						],
 						pageInfo: { hasNextPage: more, endCursor: more ? "next" : null },
@@ -124,7 +117,17 @@ test("open PR index paginates, preserves ordering and surfaces auth/decode failu
 			ok: true,
 			value: {
 				highWaterMark: "2026-10-02T00:00:00Z",
-				prs: [{ number: 2, headOwner: "fork" }, { number: 1 }],
+				prs: [
+					{
+						number: 2,
+						headOwner: "fork",
+						author: "alice",
+						isDraft: false,
+						state: "OPEN",
+						url: "https://github.com/acme/project/pull/2",
+					},
+					{ number: 1 },
+				],
 			},
 			pages: [{ prs: [{ number: 2 }] }, { prs: [{ number: 1 }] }],
 		});
@@ -133,6 +136,10 @@ test("open PR index paginates, preserves ordering and surfaces auth/decode failu
 		expect(calls[1]).toContain("after=next");
 		expect(calls[0]).toContain("states: OPEN");
 		expect(calls[0]).toContain("field: UPDATED_AT");
+		for (const costly of ["mergeable", "mergeStateStatus", "statusCheckRollup"])
+			expect(calls[0]).not.toContain(costly);
+		expect(calls[0]).toContain("author { login }");
+		expect(calls[0]).toContain("isDraft url");
 		await Bun.write(log, "");
 		expect(await run("0", "2026-10-03T00:00:00Z")).toMatchObject({
 			ok: true,
