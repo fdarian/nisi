@@ -298,3 +298,35 @@ test("search is unanswerable until every named repo has an entry, then matches c
 		),
 	);
 });
+
+test("search ignores a repo whose first fetch has published pages but not completed", async () => {
+	await Effect.runPromise(
+		Effect.scoped(
+			Effect.gen(function* () {
+				const gate = yield* Deferred.make<void>();
+				const index = yield* makePrIndex((_path, _owner, _repo, options) =>
+					Effect.gen(function* () {
+						if (options?.onPage !== undefined) yield* options.onPage(entry);
+						yield* Deferred.await(gate);
+						return entry;
+					}),
+				);
+				const refresh = yield* index.refresh("root", "acme", "widgets");
+				if (refresh === undefined)
+					return yield* Effect.die("refresh not started");
+				yield* Effect.yieldNow;
+				expect(index.findNumber("acme", "widgets", 3)).toBeDefined();
+				expect(Option.isNone(index.search("newest", ["acme/widgets"]))).toBe(
+					true,
+				);
+				expect(Option.getOrThrow(index.search("newest", []))).toEqual([]);
+
+				yield* Deferred.succeed(gate, undefined);
+				yield* Fiber.join(refresh);
+				expect(
+					Option.getOrThrow(index.search("newest", [])).map((pr) => pr.title),
+				).toEqual(["Newest"]);
+			}),
+		),
+	);
+});

@@ -124,12 +124,17 @@ export const makePrIndex = <E, R>(
 				query: string,
 				repos: readonly string[],
 			): Option.Option<readonly PullRequestSearchResult[]> =>
-				repos.some((repo) => !entries.has(repo.toLowerCase()))
+				repos.some((repo) => !completed.has(repo.toLowerCase()))
 					? Option.none()
 					: Option.some(
-							searchOpenPullRequestIndexes(entries.values(), query, repos),
+							searchOpenPullRequestIndexes(
+								[...entries]
+									.filter(([id]) => completed.has(id))
+									.map(([, entry]) => entry),
+								query,
+								repos,
+							),
 						),
-
 			findNumber: (owner: string, repo: string, number: number) => {
 				const entry = entries.get(key(owner, repo));
 				const pr = entry?.prs.find((candidate) => candidate.number === number);

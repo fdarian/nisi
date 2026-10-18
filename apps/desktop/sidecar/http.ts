@@ -1385,21 +1385,11 @@ export function attachRouter(
 					}));
 				},
 			),
-			// Hybrid search. A typed query with no GitHub qualifier is answered from
-			// the in-memory open-PR index when it can: matching is instant and
-			// spans every repo the palette has indexed, where `gh` search costs a
-			// network round trip per keystroke. Anything the index can't answer
-			// falls back to live `gh` — a qualifier query (the index understands no
-			// qualifiers), a repo filter naming a repo not indexed yet, or no local
-			// match (the PR may exist on GitHub but not be indexed). The blank
-			// query is the palette's "recent PRs" fetch on open: it stays on `gh`
-			// (author/review-requested scoping the index doesn't know) and warms
-			// the index for the typed search that follows. See `@repo/git`'s
-			// `searchPullRequests` for the `gh` branching. `process.cwd()` is fine
-			// as the invocation directory: a PR search spans every repo the account
-			// can see, not one checkout, and `gh search prs` doesn't care what
-			// directory it runs from (verified live — same results run from this
-			// repo or from `/tmp`).
+			// Hybrid: typed, qualifier-free queries hit the open-PR index first
+			// (instant, no per-keystroke round trip). Qualifiers, unindexed repo
+			// filters and index misses fall back to `gh`; the blank query stays on
+			// `gh` (author/review-requested scope) and warms the index.
+			// `process.cwd()` is fine: `gh search prs` ignores its directory.
 			search: authed.pullRequests.search.effect(function* ({ input, errors }) {
 				const github = yield* GitHub;
 				const prIndex = yield* PrIndex;
