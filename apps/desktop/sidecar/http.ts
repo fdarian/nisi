@@ -12,7 +12,6 @@ import {
 	fetchBranchCommits,
 	type GitCommandError,
 	GitHub,
-	hasSearchQualifier,
 	type PullRequestChecksError,
 	type PullRequestMergeError,
 	type PullRequestStackMergeError,
@@ -1385,62 +1384,53 @@ export function attachRouter(
 					}));
 				},
 			),
-			// Hybrid: typed, qualifier-free queries hit the open-PR index first
-			// (instant, no per-keystroke round trip). Qualifiers, unindexed repo
-			// filters and index misses fall back to `gh`; the blank query stays on
-			// `gh` (author/review-requested scope) and warms the index.
+			// Always asks `gh`; the palette matches typed text against `indexed`
+			// itself and only calls this for what the index can't answer. The blank
+			// query is the palette opening, so it also refreshes the index in the
+			// background to keep `indexed` warm.
 			// `process.cwd()` is fine: `gh search prs` ignores its directory.
 			search: authed.pullRequests.search.effect(function* ({ input, errors }) {
 				const github = yield* GitHub;
 				const prIndex = yield* PrIndex;
-				const searchGh = Effect.gen(function* () {
-					yield* Effect.annotateCurrentSpan("search.source", "gh");
-					return yield* github
-						.search(process.cwd(), input.query, input.repos)
-						.pipe(
-							Effect.catchTag("GhNotAuthenticated", (cause) =>
-								Effect.fail(
-									errors.GH_NOT_AUTHENTICATED({
-										message: `gh is not authenticated: ${cause.reason}`,
-									}),
-								),
+				if (input.query.trim() === "" && input.repos.length === 0)
+					yield* prIndex.refreshKnown;
+				return yield* github
+					.search(process.cwd(), input.query, input.repos)
+					.pipe(
+						Effect.catchTag("GhNotAuthenticated", (cause) =>
+							Effect.fail(
+								errors.GH_NOT_AUTHENTICATED({
+									message: `gh is not authenticated: ${cause.reason}`,
+								}),
 							),
-							Effect.catchTag("GhRateLimited", (cause) =>
-								Effect.fail(
-									errors.TOO_MANY_REQUESTS({
-										message: `GitHub's search API is rate-limited right now: ${cause.reason}`,
-									}),
-								),
+						),
+						Effect.catchTag("GhRateLimited", (cause) =>
+							Effect.fail(
+								errors.TOO_MANY_REQUESTS({
+									message: `GitHub's search API is rate-limited right now: ${cause.reason}`,
+								}),
 							),
-							Effect.catchTag("GitHubSearchUnreachable", (cause) =>
-								Effect.fail(
-									errors.SERVICE_UNAVAILABLE({
-										message: `could not reach GitHub: ${cause.reason}`,
-									}),
-								),
+						),
+						Effect.catchTag("GitHubSearchUnreachable", (cause) =>
+							Effect.fail(
+								errors.SERVICE_UNAVAILABLE({
+									message: `could not reach GitHub: ${cause.reason}`,
+								}),
 							),
-							Effect.catchTag("GhOutputDecodeError", (cause) =>
-								Effect.fail(
-									errors.SERVICE_UNAVAILABLE({
-										message: `gh returned output nisi couldn't parse (${cause.command})`,
-									}),
-								),
+						),
+						Effect.catchTag("GhOutputDecodeError", (cause) =>
+							Effect.fail(
+								errors.SERVICE_UNAVAILABLE({
+									message: `gh returned output nisi couldn't parse (${cause.command})`,
+								}),
 							),
-						);
-				});
-				return yield* Effect.gen(function* () {
-					if (input.query.trim() === "" && input.repos.length === 0) {
-						yield* prIndex.refreshKnown;
-						return yield* searchGh;
-					}
-					if (hasSearchQualifier(input.query)) return yield* searchGh;
-					const indexed = prIndex.search(input.query, input.repos);
-					if (Option.isSome(indexed) && indexed.value.length > 0) {
-						yield* Effect.annotateCurrentSpan("search.source", "index");
-						return indexed.value;
-					}
-					return yield* searchGh;
-				}).pipe(Effect.withSpan("pull-requests.search"));
+						),
+					);
+			}),
+			indexed: authed.pullRequests.indexed.effect(function* () {
+				const prIndex = yield* PrIndex;
+				yield* prIndex.ready;
+				return prIndex.indexed();
 			}),
 			open: authed.pullRequests.open.effect(function* ({ input, errors }) {
 				const trace = yield* LaunchTrace;

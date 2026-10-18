@@ -3,7 +3,8 @@ import type {
 	OpenPullRequestIndex,
 	OpenPullRequestIndexOptions,
 } from "@repo/git";
-import { Deferred, Effect, Fiber, Option, Schedule } from "effect";
+import { Deferred, Effect, Fiber, Schedule } from "effect";
+import { subscribe } from "../events.ts";
 import { makePrIndex, makePrIndexMaintenance } from "../pr-index.ts";
 
 const entry: OpenPullRequestIndex = {
@@ -54,7 +55,7 @@ test("maintenance survives failed settings reads and attention refresh returns b
 						state.calls++;
 						return state.calls === 1
 							? Effect.fail("settings unavailable")
-							: Effect.void;
+							: Effect.succeed([]);
 					}),
 					Schedule.recurs(1),
 				);
@@ -97,8 +98,6 @@ test("index matches owner case-insensitively and branch exactly, dedupes refresh
 					index.find("acme", "widgets", "fork", "feature"),
 				).toBeUndefined();
 				yield* Deferred.succeed(gate, undefined);
-				if (refresh === undefined)
-					return yield* Effect.die("first refresh not started");
 				yield* Fiber.join(refresh);
 				expect(state.calls).toBe(1);
 				expect(index.findNumber("ACME", "Widgets", 2)?.pr.title).toBe("Older");
@@ -115,8 +114,6 @@ test("index matches owner case-insensitively and branch exactly, dedupes refresh
 				).toBeUndefined();
 				state.fail = true;
 				const failure = yield* index.refresh("root", "acme", "widgets");
-				if (failure === undefined)
-					return yield* Effect.die("failure refresh not started");
 				yield* Fiber.join(failure);
 				expect(
 					index.find("acme", "widgets", "fork", "feature")?.pr.number,
@@ -124,8 +121,6 @@ test("index matches owner case-insensitively and branch exactly, dedupes refresh
 				state.fail = false;
 				state.data = { ...entry, prs: [] };
 				const empty = yield* index.refresh("root", "acme", "widgets");
-				if (empty === undefined)
-					return yield* Effect.die("empty refresh not started");
 				yield* Fiber.join(empty);
 				expect(
 					index.find("acme", "widgets", "fork", "feature"),
@@ -154,7 +149,6 @@ test("incremental pages remove closed and merged PRs immediately and allow a lat
 					}),
 				);
 				const initial = yield* index.refresh("root", "acme", "widgets");
-				if (initial === undefined) return yield* Effect.die("missing refresh");
 				yield* Fiber.join(initial);
 				state.value = {
 					...entry,
@@ -163,7 +157,6 @@ test("incremental pages remove closed and merged PRs immediately and allow a lat
 					removedNumbers: [2, 3],
 				};
 				const closed = yield* index.refresh("root", "acme", "widgets");
-				if (closed === undefined) return yield* Effect.die("missing refresh");
 				yield* Fiber.join(closed);
 				expect(index.findNumber("acme", "widgets", 2)).toBeUndefined();
 				expect(index.findNumber("acme", "widgets", 3)).toBeUndefined();
@@ -173,7 +166,6 @@ test("incremental pages remove closed and merged PRs immediately and allow a lat
 					prs: entry.prs.filter((pr) => pr.number === 3),
 				};
 				const reopened = yield* index.refresh("root", "acme", "widgets");
-				if (reopened === undefined) return yield* Effect.die("missing refresh");
 				yield* Fiber.join(reopened);
 				expect(index.findNumber("acme", "widgets", 3)).toBeDefined();
 			}),
@@ -220,21 +212,17 @@ test("pages are usable before completion; incremental refreshes retain older PRs
 					() => state.time,
 				);
 				const initial = yield* index.refresh("root", "acme", "widgets");
-				if (initial === undefined)
-					return yield* Effect.die("missing initial refresh");
 				yield* Deferred.await(published);
 				expect(index.findNumber("acme", "widgets", 3)?.pr.title).toBe("Newest");
 				expect(
 					index.find("acme", "widgets", "fork", "feature")?.pr.number,
 				).toBe(3);
 				expect(index.findNumber("acme", "widgets", 2)).toBeUndefined();
-				expect(yield* index.refresh("root", "acme", "widgets")).toBeUndefined();
+				expect(yield* index.refresh("root", "acme", "widgets")).toBe(initial);
 				yield* Deferred.succeed(finish, undefined);
 				yield* Fiber.join(initial);
 				state.fail = true;
 				const failed = yield* index.refresh("root", "acme", "widgets");
-				if (failed === undefined)
-					return yield* Effect.die("missing failed refresh");
 				yield* Fiber.join(failed);
 				expect(index.findNumber("acme", "widgets", 3)?.pr.title).toBe(
 					"Updated",
@@ -242,8 +230,6 @@ test("pages are usable before completion; incremental refreshes retain older PRs
 				expect(index.findNumber("acme", "widgets", 2)?.pr.title).toBe("Older");
 				state.fail = false;
 				const incremental = yield* index.refresh("root", "acme", "widgets");
-				if (incremental === undefined)
-					return yield* Effect.die("missing incremental refresh");
 				yield* Fiber.join(incremental);
 				expect(requests[0]?.updatedSince).toBeUndefined();
 				expect(requests[1]?.updatedSince).toBe(first.highWaterMark);
@@ -251,8 +237,6 @@ test("pages are usable before completion; incremental refreshes retain older PRs
 				expect(index.findNumber("acme", "widgets", 2)).toBeDefined();
 				state.time = 30 * 60_000;
 				const full = yield* index.refresh("root", "acme", "widgets");
-				if (full === undefined)
-					return yield* Effect.die("missing full refresh");
 				yield* Fiber.join(full);
 				expect(requests[3]?.updatedSince).toBeUndefined();
 				expect(index.findNumber("acme", "widgets", 2)).toBeUndefined();
@@ -267,65 +251,165 @@ test("pages are usable before completion; incremental refreshes retain older PRs
 	);
 });
 
-test("search is unanswerable until every named repo has an entry, then matches case-insensitively", async () => {
+test("indexed lists only OPEN PRs of repos whose refresh completed, in the contract shape", async () => {
 	await Effect.runPromise(
 		Effect.scoped(
 			Effect.gen(function* () {
-				const index = yield* makePrIndex(() => Effect.succeed(entry));
-				const titles = (found: Option.Option<readonly { title: string }[]>) =>
-					Option.getOrThrow(found).map((pr) => pr.title);
-
-				expect(Option.isNone(index.search("newest", ["acme/widgets"]))).toBe(
-					true,
+				const gate = yield* Deferred.make<void>();
+				const widgets: OpenPullRequestIndex = {
+					...entry,
+					prs: entry.prs.map((pr) =>
+						pr.number === 2 ? { ...pr, state: "CLOSED" as const } : pr,
+					),
+				};
+				const slowEntry = {
+					...entry,
+					repository: { ...entry.repository, repo: "slow" },
+				};
+				const index = yield* makePrIndex((_path, _owner, repo, options) =>
+					Effect.gen(function* () {
+						if (repo === "widgets") return widgets;
+						if (options?.onPage !== undefined) yield* options.onPage(slowEntry);
+						yield* Deferred.await(gate);
+						return slowEntry;
+					}),
 				);
-				expect(titles(index.search("newest", []))).toEqual([]);
+				expect(index.indexed()).toEqual([]);
 
-				const refresh = yield* index.refresh("root", "acme", "widgets");
-				if (refresh === undefined)
-					return yield* Effect.die("refresh not started");
-				yield* Fiber.join(refresh);
-
-				expect(titles(index.search("newest", []))).toEqual(["Newest"]);
-				expect(titles(index.search("", ["ACME/Widgets"]))).toEqual([
-					"Newest",
-					"Older",
+				yield* Fiber.join(yield* index.refresh("root", "acme", "widgets"));
+				const slow = yield* index.refresh("root", "acme", "slow");
+				yield* Effect.yieldNow;
+				expect(index.findNumber("acme", "slow", 3)).toBeDefined();
+				expect(index.indexed()).toEqual([
+					{
+						owner: "acme",
+						repo: "widgets",
+						number: 3,
+						title: "Newest",
+						author: "alice",
+						updatedAt: "2026-10-01T00:00:00Z",
+						url: "https://github.com/acme/widgets/pull/1",
+						isDraft: false,
+						state: "OPEN",
+						mergeable: "MERGEABLE",
+						mergeStateStatus: "CLEAN",
+						rollupState: null,
+						headRefName: "feature",
+					},
 				]);
-				expect(
-					Option.isNone(index.search("newest", ["acme/widgets", "acme/other"])),
-				).toBe(true);
-				expect(titles(index.search("nomatch", ["acme/widgets"]))).toEqual([]);
+
+				yield* Deferred.succeed(gate, undefined);
+				yield* Fiber.join(slow);
+				expect(index.indexed().map((pr) => `${pr.repo}#${pr.number}`)).toEqual([
+					"widgets#3",
+					"slow#3",
+					"slow#2",
+				]);
 			}),
 		),
 	);
 });
 
-test("search ignores a repo whose first fetch has published pages but not completed", async () => {
+test("a successful refresh emits pull-request-index-changed once; page publishes and failures do not", async () => {
+	const events: string[] = [];
+	const unsubscribe = subscribe((event) => events.push(event.type));
+	try {
+		await Effect.runPromise(
+			Effect.scoped(
+				Effect.gen(function* () {
+					const state = { fail: false };
+					const index = yield* makePrIndex((_path, _owner, _repo, options) =>
+						Effect.gen(function* () {
+							if (options?.onPage !== undefined) yield* options.onPage(entry);
+							if (state.fail) return yield* Effect.fail("offline");
+							return entry;
+						}),
+					);
+					state.fail = true;
+					yield* Fiber.join(yield* index.refresh("root", "acme", "widgets"));
+					expect(events).toEqual([]);
+
+					state.fail = false;
+					yield* Fiber.join(yield* index.refresh("root", "acme", "widgets"));
+					expect(events).toEqual(["pull-request-index-changed"]);
+				}),
+			),
+		);
+	} finally {
+		unsubscribe();
+	}
+});
+
+const isSettled = (fiber: Fiber.Fiber<unknown, unknown>) =>
+	Effect.gen(function* () {
+		for (let turn = 0; turn < 5; turn++) yield* Effect.yieldNow;
+		return fiber.pollUnsafe() !== undefined;
+	});
+
+test("ready is immediate when no repository is known", async () => {
 	await Effect.runPromise(
 		Effect.scoped(
 			Effect.gen(function* () {
-				const gate = yield* Deferred.make<void>();
-				const index = yield* makePrIndex((_path, _owner, _repo, options) =>
+				const maintenance = yield* makePrIndexMaintenance(
+					Effect.succeed([]),
+					Schedule.recurs(0),
+				);
+				yield* maintenance.start;
+				yield* maintenance.ready;
+			}),
+		),
+	);
+});
+
+test("ready waits for the boot pass of every repository, including one that fails, and for a refresh already in flight", async () => {
+	await Effect.runPromise(
+		Effect.scoped(
+			Effect.gen(function* () {
+				const slowGate = yield* Deferred.make<void>();
+				const failGate = yield* Deferred.make<void>();
+				const index = yield* makePrIndex((_path, _owner, repo) =>
 					Effect.gen(function* () {
-						if (options?.onPage !== undefined) yield* options.onPage(entry);
-						yield* Deferred.await(gate);
+						yield* Deferred.await(repo === "slow" ? slowGate : failGate);
+						if (repo === "broken") return yield* Effect.fail("offline");
 						return entry;
 					}),
 				);
-				const refresh = yield* index.refresh("root", "acme", "widgets");
-				if (refresh === undefined)
-					return yield* Effect.die("refresh not started");
-				yield* Effect.yieldNow;
-				expect(index.findNumber("acme", "widgets", 3)).toBeDefined();
-				expect(Option.isNone(index.search("newest", ["acme/widgets"]))).toBe(
-					true,
+				const inFlight = yield* index.refresh("root", "acme", "slow");
+				const maintenance = yield* makePrIndexMaintenance(
+					Effect.gen(function* () {
+						return [
+							yield* index.refresh("root", "acme", "slow"),
+							yield* index.refresh("root", "acme", "broken"),
+						];
+					}),
+					Schedule.recurs(0),
 				);
-				expect(Option.getOrThrow(index.search("newest", []))).toEqual([]);
+				expect(yield* index.refresh("root", "acme", "slow")).toBe(inFlight);
+				yield* maintenance.start.pipe(Effect.forkScoped);
+				const ready = yield* maintenance.ready.pipe(Effect.forkScoped);
 
-				yield* Deferred.succeed(gate, undefined);
-				yield* Fiber.join(refresh);
-				expect(
-					Option.getOrThrow(index.search("newest", [])).map((pr) => pr.title),
-				).toEqual(["Newest"]);
+				expect(yield* isSettled(ready)).toBe(false);
+				yield* Deferred.succeed(failGate, undefined);
+				expect(yield* isSettled(ready)).toBe(false);
+				yield* Deferred.succeed(slowGate, undefined);
+				yield* Fiber.join(ready);
+				expect(index.findNumber("acme", "slow", 3)).toBeDefined();
+				expect(index.findNumber("acme", "broken", 3)).toBeUndefined();
+			}),
+		),
+	);
+});
+
+test("ready completes even when listing the known repositories fails", async () => {
+	await Effect.runPromise(
+		Effect.scoped(
+			Effect.gen(function* () {
+				const maintenance = yield* makePrIndexMaintenance(
+					Effect.fail("settings unavailable"),
+					Schedule.recurs(0),
+				);
+				yield* maintenance.start;
+				yield* maintenance.ready;
 			}),
 		),
 	);

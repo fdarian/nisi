@@ -437,6 +437,7 @@ export function createMockSidecarClient(
 						pr.title.toLowerCase().includes(input.query.toLowerCase()),
 				);
 			},
+			indexed: async () => [],
 			open: neverSettles,
 			recordRepoPath: async (input) => input,
 			repointOrigin: neverSettles,

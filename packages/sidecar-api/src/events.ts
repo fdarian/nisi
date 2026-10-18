@@ -44,6 +44,10 @@ import { OpenSessionTarget, Session } from "./sessions.ts";
  * session's head moved. Only sent for sessions the client asked for through
  * `guide.setWatching`.
  *
+ * `pull-request-index-changed` says a repository's open-PR index finished a
+ * refresh, so a cached `pullRequests.indexed` result is stale. It carries no
+ * repository: the result is one flat list across all repositories.
+ *
  * `code-index-lsp-status-changed` is rooted by worktree rather than session:
  * one pooled language server can serve multiple sessions, so every window
  * sharing that root must observe the same transition.
@@ -162,6 +166,10 @@ export const SidecarEvent = Schema.Union([
 		expectedRepo: Schema.String,
 		actualOwner: Schema.String,
 		actualRepo: Schema.String,
+	}),
+	Schema.Struct({
+		seq: Schema.Number,
+		type: Schema.Literal("pull-request-index-changed"),
 	}),
 	Schema.Struct({ seq: Schema.Number, type: Schema.Literal("stream-ready") }),
 	Schema.Struct({

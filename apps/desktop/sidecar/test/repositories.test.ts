@@ -13,14 +13,7 @@ import {
 } from "@repo/git";
 import { ReviewStore } from "@repo/review";
 import { SettingsStore } from "@repo/settings";
-import {
-	ConfigProvider,
-	type Context,
-	Effect,
-	Layer,
-	Option,
-	Stream,
-} from "effect";
+import { ConfigProvider, type Context, Effect, Layer, Stream } from "effect";
 import { PrIndex } from "../pr-index.ts";
 import {
 	collectRepositories,
@@ -97,7 +90,8 @@ const indexWithOpen = (
 	openNumbers: ReadonlyArray<number>,
 ): Context.Service.Shape<typeof PrIndex> => ({
 	lookup: () => Effect.succeed(undefined),
-	search: () => Option.none(),
+	indexed: () => [],
+	ready: Effect.void,
 	lookupPullRequest: (owner, repo, number) =>
 		Effect.succeed(
 			openNumbers.includes(number)
@@ -122,7 +116,7 @@ const indexWithOpen = (
 					}
 				: undefined,
 		),
-	refresh: () => Effect.succeed(undefined),
+	refresh: () => Effect.forkDetach(Effect.void),
 	refreshKnown: Effect.void,
 	start: Effect.never,
 });

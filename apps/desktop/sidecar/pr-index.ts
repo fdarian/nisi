@@ -2,12 +2,20 @@ import {
 	GitHub,
 	type OpenPullRequestIndex,
 	type OpenPullRequestIndexOptions,
-	type PullRequestSearchResult,
 	readIndexHead,
-	searchOpenPullRequestIndexes,
 } from "@repo/git";
 import { SettingsStore } from "@repo/settings";
-import { Context, Effect, Layer, Option, Schedule, Scope } from "effect";
+import type { IndexedPullRequest } from "@repo/sidecar-api";
+import {
+	Context,
+	Deferred,
+	Effect,
+	Fiber,
+	Layer,
+	Schedule,
+	Scope,
+} from "effect";
+import { emit } from "./events.ts";
 
 export const makePrIndex = <E, R>(
 	fetch: (
@@ -21,7 +29,7 @@ export const makePrIndex = <E, R>(
 	Effect.gen(function* () {
 		const scope = yield* Scope.Scope;
 		const entries = new Map<string, OpenPullRequestIndex>();
-		const pending = new Set<string>();
+		const pending = new Map<string, Fiber.Fiber<void>>();
 		const completed = new Map<
 			string,
 			{ highWaterMark?: string; fullAt: number }
@@ -45,13 +53,14 @@ export const makePrIndex = <E, R>(
 		};
 		const key = (owner: string, repo: string) =>
 			`${owner.toLowerCase()}/${repo.toLowerCase()}`;
-		// Uninterruptible so a caller can't be interrupted between marking the
-		// repository pending and forking the refresh that clears the mark.
+		// Uninterruptible so a caller can't be interrupted between forking the
+		// refresh and recording it as pending. An already-running refresh is
+		// returned as is, so callers can await it.
 		const refresh = (path: string, owner: string, repo: string) =>
 			Effect.gen(function* () {
 				const id = key(owner, repo);
-				if (pending.has(id)) return;
-				pending.add(id);
+				const running = pending.get(id);
+				if (running !== undefined) return running;
 				const previous = entries.get(id);
 				const last = completed.get(id);
 				const full =
@@ -60,7 +69,7 @@ export const makePrIndex = <E, R>(
 				const pages: OpenPullRequestIndex["prs"][number][] = [];
 				const removed = new Set<number>();
 				const seen = new Set<number>();
-				return yield* fetch(path, owner, repo, {
+				const fiber = yield* fetch(path, owner, repo, {
 					...(full ? {} : { updatedSince: last.highWaterMark }),
 					onPage: (page) =>
 						Effect.gen(function* () {
@@ -95,6 +104,7 @@ export const makePrIndex = <E, R>(
 									: { highWaterMark: value.highWaterMark }),
 								fullAt: full ? now() : last.fullAt,
 							});
+							emit({ type: "pull-request-index-changed" });
 						}),
 					),
 					Effect.tap((value) =>
@@ -109,6 +119,7 @@ export const makePrIndex = <E, R>(
 							cause,
 						}),
 					),
+					Effect.asVoid,
 					Effect.ensuring(Effect.sync(() => pending.delete(id))),
 					Effect.withSpan("pr-index.refresh", {
 						root: true,
@@ -116,25 +127,39 @@ export const makePrIndex = <E, R>(
 					}),
 					Effect.forkIn(scope),
 				);
+				// A fiber that already finished has already run its `ensuring`.
+				if (fiber.pollUnsafe() === undefined) pending.set(id, fiber);
+				return fiber;
 			}).pipe(Effect.uninterruptible);
 		return {
 			refresh,
 			empty: () => entries.size === 0,
-			search: (
-				query: string,
-				repos: readonly string[],
-			): Option.Option<readonly PullRequestSearchResult[]> =>
-				repos.some((repo) => !completed.has(repo.toLowerCase()))
-					? Option.none()
-					: Option.some(
-							searchOpenPullRequestIndexes(
-								[...entries]
-									.filter(([id]) => completed.has(id))
-									.map(([, entry]) => entry),
-								query,
-								repos,
-							),
+			indexed: (): readonly IndexedPullRequest[] =>
+				[...entries]
+					.filter(([id]) => completed.has(id))
+					.flatMap(([, entry]) =>
+						entry.prs.flatMap((pr) =>
+							pr.state === "OPEN"
+								? [
+										{
+											owner: entry.repository.owner,
+											repo: entry.repository.repo,
+											number: pr.number,
+											title: pr.title,
+											author: pr.author,
+											updatedAt: pr.updatedAt,
+											url: pr.url,
+											isDraft: pr.isDraft,
+											state: pr.state,
+											mergeable: pr.mergeable,
+											mergeStateStatus: pr.mergeStateStatus,
+											rollupState: pr.rollupState,
+											headRefName: pr.headRef,
+										},
+									]
+								: [],
 						),
+					),
 			findNumber: (owner: string, repo: string, number: number) => {
 				const entry = entries.get(key(owner, repo));
 				const pr = entry?.prs.find((candidate) => candidate.number === number);
@@ -162,21 +187,31 @@ export const makePrIndex = <E, R>(
 	});
 
 export const makePrIndexMaintenance = <E, R>(
-	refresh: Effect.Effect<void, E, R>,
+	refresh: Effect.Effect<readonly Fiber.Fiber<unknown>[], E, R>,
 	schedule = Schedule.spaced("5 minutes"),
 ) =>
 	Effect.gen(function* () {
 		const scope = yield* Scope.Scope;
+		const ready = yield* Deferred.make<void>();
 		const iteration = refresh.pipe(
 			Effect.catchCause((cause) =>
 				Effect.logWarning("Could not refresh known PR index repositories", {
 					cause,
-				}),
+				}).pipe(Effect.as([])),
 			),
 		);
+		// Only the boot pass waits for its refreshes; later ones must not stall
+		// the schedule behind a slow `gh`.
+		const tick = Effect.gen(function* () {
+			const fibers = yield* iteration;
+			if (yield* Deferred.isDone(ready)) return;
+			yield* Effect.forEach(fibers, Fiber.await, { discard: true });
+			yield* Deferred.succeed(ready, undefined);
+		});
 		return {
+			ready: Deferred.await(ready),
 			refreshKnown: iteration.pipe(Effect.forkIn(scope), Effect.asVoid),
-			start: iteration.pipe(Effect.repeat(schedule)),
+			start: tick.pipe(Effect.repeat(schedule)),
 		};
 	});
 
@@ -187,8 +222,10 @@ export class PrIndex extends Context.Service<PrIndex>()("sidecar/PrIndex", {
 		const index = yield* makePrIndex(github.listOpenPullRequests);
 		const refreshKnown = Effect.gen(function* () {
 			const paths = yield* settings.listRepoPaths();
+			const fibers: Fiber.Fiber<void>[] = [];
 			for (const path of paths)
-				yield* index.refresh(path.path, path.owner, path.repo);
+				fibers.push(yield* index.refresh(path.path, path.owner, path.repo));
+			return fibers;
 		});
 		const lookup = (repoRoot: string) =>
 			Effect.gen(function* () {
@@ -214,7 +251,8 @@ export class PrIndex extends Context.Service<PrIndex>()("sidecar/PrIndex", {
 		return {
 			lookup,
 			lookupPullRequest,
-			search: index.search,
+			indexed: index.indexed,
+			ready: maintenance.ready,
 			refresh: index.refresh,
 			refreshKnown: maintenance.refreshKnown,
 			start: maintenance.start,

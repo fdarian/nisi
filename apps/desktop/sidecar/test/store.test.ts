@@ -236,7 +236,8 @@ test("index disagreement upserts the correct PR's existing row without transferr
 		const canonicalRoot = await realpath(repoRoot);
 		const state = { number: 43, noPr: false };
 		const index: Context.Service.Shape<typeof PrIndex> = {
-			search: () => Option.none(),
+			indexed: () => [],
+			ready: Effect.void,
 			lookupPullRequest: () => Effect.succeed(undefined),
 			lookup: () =>
 				Effect.succeed({
@@ -258,7 +259,7 @@ test("index disagreement upserts the correct PR's existing row without transferr
 						rollupState: null,
 					},
 				}),
-			refresh: () => Effect.succeed(undefined),
+			refresh: () => Effect.forkDetach(Effect.void),
 			refreshKnown: Effect.void,
 			start: Effect.never,
 		};
@@ -1334,7 +1335,8 @@ describe("Store.openPullRequestSession — reuses open review sessions", () => {
 						Effect.die(
 							new Error("deep links must not probe local branch index keys"),
 						),
-					search: () => Option.none(),
+					indexed: () => [],
+					ready: Effect.void,
 					lookupPullRequest: (owner, repo, number) =>
 						Effect.sync(() => {
 							expect(owner.toLowerCase()).toBe("acme");
@@ -1364,7 +1366,7 @@ describe("Store.openPullRequestSession — reuses open review sessions", () => {
 								},
 							};
 						}),
-					refresh: () => Effect.succeed(undefined),
+					refresh: () => Effect.forkDetach(Effect.void),
 					refreshKnown: Effect.void,
 					start: Effect.never,
 				};
