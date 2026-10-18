@@ -180,6 +180,10 @@ Shell gotchas:
   `electrobun/post-build.ts` therefore puts `sidecar`/`nisi-cli` into `Contents/MacOS` at `postBuild` (a `postWrap` copy is discarded). Never rebuild over a running bundle: its quit path hangs.
 - Gaps against the Electron shell: no `Services` menu role, no folder-dialog title/parent sheet, notification clicks don't raise the window, "Open in" availability is a Spotlight bundle-ID check instead of a scheme-handler query, measurement-mode Chromium switches can't be set at runtime (only `chromiumFlags` in `electrobun.config.ts`), CEF's profile lives in `~/Library/Application Support/com.nisi.desktop.electrobun/stable/CEF` rather than under the data dir, no updater/signing/min window size.
 - CEF remote debugging is off in stable builds; set `ELECTROBUN_CEF_REMOTE_DEBUGGING_PORT=<port>` for one launch.
+- **WebKit variant.** `bun run build:electrobun-webkit` (`NISI_ELECTROBUN_RENDERER=native`) builds the same shell on the system
+  WKWebView with no bundled CEF: `nisi-webkit.app`, ID `com.nisi.desktop.webkit`, into `build-electrobun-webkit/` +
+  `release-electrobun-webkit/`. Windows don't name a renderer; they follow the build's `defaultRenderer`, so never hardcode one in `windows.ts`.
+  Chromium-only items above (`chromiumFlags`, CEF remote debugging, the CEF profile dir) don't apply to it.
 
 ## Dev/prod isolation
 `bun dev` windows show the current Git branch in a reserved footer (`src/shell/dev-branch.tsx`); `build:dev` shows `Build <short commit>` there. `import.meta.env.DEV` excludes it from regular production builds.
