@@ -1427,10 +1427,13 @@ export function attachRouter(
 						),
 					);
 			}),
-			indexed: authed.pullRequests.indexed.effect(function* () {
+			indexed: authed.pullRequests.indexed.effect(function* ({ errors }) {
 				const prIndex = yield* PrIndex;
-				yield* prIndex.ready;
-				return prIndex.indexed();
+				return yield* prIndex.indexed.pipe(
+					Effect.catchTag("SettingsStoreError", (cause) =>
+						Effect.fail(errors.SERVICE_UNAVAILABLE({ message: cause.message })),
+					),
+				);
 			}),
 			open: authed.pullRequests.open.effect(function* ({ input, errors }) {
 				const trace = yield* LaunchTrace;

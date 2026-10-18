@@ -90,8 +90,7 @@ const indexWithOpen = (
 	openNumbers: ReadonlyArray<number>,
 ): Context.Service.Shape<typeof PrIndex> => ({
 	lookup: () => Effect.succeed(undefined),
-	indexed: () => [],
-	ready: Effect.void,
+	indexed: Effect.succeed({ rows: [], incompleteRepos: [] }),
 	lookupPullRequest: (owner, repo, number) =>
 		Effect.succeed(
 			openNumbers.includes(number)
@@ -109,9 +108,6 @@ const indexWithOpen = (
 							author: "alice",
 							url: "https://github.com/acme/widgets/pull/1",
 							isDraft: false,
-							mergeable: "MERGEABLE",
-							mergeStateStatus: "CLEAN",
-							rollupState: null,
 						},
 					}
 				: undefined,

@@ -438,13 +438,23 @@ export function createMockSidecarClient(
 						pr.title.toLowerCase().includes(input.query.toLowerCase()),
 				);
 			},
-			indexed: async () =>
-				(data.pullRequestSearchResults ?? [])
+			indexed: async () => ({
+				rows: (data.pullRequestSearchResults ?? [])
 					.filter((pr) => pr.state === "OPEN")
 					.map((pr) => ({
-						...pr,
+						owner: pr.owner,
+						repo: pr.repo,
+						number: pr.number,
+						title: pr.title,
+						author: pr.author,
+						updatedAt: pr.updatedAt,
+						url: pr.url,
+						isDraft: pr.isDraft,
+						state: pr.state,
 						headRefName: `${pr.author}/${pr.repo}-${pr.number}`,
 					})),
+				incompleteRepos: [],
+			}),
 			open: neverSettles,
 			recordRepoPath: async (input) => input,
 			repointOrigin: neverSettles,

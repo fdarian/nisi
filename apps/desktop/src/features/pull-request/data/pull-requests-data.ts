@@ -48,8 +48,11 @@ export type PullRequestSearchResult = {
 	rollupState: "EXPECTED" | "ERROR" | "FAILURE" | "PENDING" | "SUCCESS" | null;
 };
 
-/** `pullRequests.indexed`'s row: a search row plus the head branch, which the palette matches on but never shows. */
-export type IndexedPullRequest = PullRequestSearchResult & {
+/** `pullRequests.indexed`'s row: a search row without CI or mergeability, plus the head branch, which the palette matches on but never shows. */
+export type IndexedPullRequest = Omit<
+	PullRequestSearchResult,
+	"mergeable" | "mergeStateStatus" | "rollupState"
+> & {
 	headRefName: string;
 };
 
@@ -69,7 +72,7 @@ export function useIndexedPullRequests(
 			queryKey: orpc.pullRequests.indexed.key(),
 		});
 	});
-	return useQuery(orpc.pullRequests.indexed.queryOptions()).data;
+	return useQuery(orpc.pullRequests.indexed.queryOptions()).data?.rows;
 }
 
 /**

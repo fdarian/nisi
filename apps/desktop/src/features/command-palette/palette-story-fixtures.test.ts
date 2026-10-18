@@ -48,9 +48,23 @@ test("palette story indexes the open search fixtures with a head branch", async 
 	const client = createMockSidecarClient({
 		pullRequestSearchResults: [pr, closed],
 	});
-	expect(await client.pullRequests.indexed()).toEqual([
-		{ ...pr, headRefName: "fdarian/furl-42" },
-	]);
+	expect(await client.pullRequests.indexed()).toEqual({
+		rows: [
+			{
+				owner: "fdarian",
+				repo: "furl",
+				number: 42,
+				title: "Add repository filters",
+				author: "fdarian",
+				updatedAt: "2026-09-30T12:00:00Z",
+				url: "https://github.com/fdarian/furl/pull/42",
+				isDraft: false,
+				state: "OPEN",
+				headRefName: "fdarian/furl-42",
+			},
+		],
+		incompleteRepos: [],
+	});
 });
 
 test("palette story returns the configured saved repository identities", async () => {

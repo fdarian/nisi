@@ -5,7 +5,7 @@ import {
 	readIndexHead,
 } from "@repo/git";
 import { SettingsStore } from "@repo/settings";
-import type { IndexedPullRequest } from "@repo/sidecar-api";
+import type { IndexedPullRequests } from "@repo/sidecar-api";
 import {
 	Context,
 	Deferred,
@@ -104,7 +104,12 @@ export const makePrIndex = <E, R>(
 									: { highWaterMark: value.highWaterMark }),
 								fullAt: full ? now() : last.fullAt,
 							});
-							emit({ type: "pull-request-index-changed" });
+							if (
+								full ||
+								value.prs.length > 0 ||
+								(value.removedNumbers?.length ?? 0) > 0
+							)
+								emit({ type: "pull-request-index-changed" });
 						}),
 					),
 					Effect.tap((value) =>
@@ -134,8 +139,10 @@ export const makePrIndex = <E, R>(
 		return {
 			refresh,
 			empty: () => entries.size === 0,
-			indexed: (): readonly IndexedPullRequest[] =>
-				[...entries]
+			indexed: (
+				known: readonly { readonly owner: string; readonly repo: string }[],
+			): IndexedPullRequests => ({
+				rows: [...entries]
 					.filter(([id]) => completed.has(id))
 					.flatMap(([, entry]) =>
 						entry.prs.flatMap((pr) =>
@@ -151,15 +158,16 @@ export const makePrIndex = <E, R>(
 											url: pr.url,
 											isDraft: pr.isDraft,
 											state: pr.state,
-											mergeable: pr.mergeable,
-											mergeStateStatus: pr.mergeStateStatus,
-											rollupState: pr.rollupState,
 											headRefName: pr.headRef,
 										},
 									]
 								: [],
 						),
 					),
+				incompleteRepos: [
+					...new Set(known.map((repo) => key(repo.owner, repo.repo))),
+				].filter((id) => !completed.has(id)),
+			}),
 			findNumber: (owner: string, repo: string, number: number) => {
 				const entry = entries.get(key(owner, repo));
 				const pr = entry?.prs.find((candidate) => candidate.number === number);
@@ -186,6 +194,10 @@ export const makePrIndex = <E, R>(
 		};
 	});
 
+// `ready` stops waiting for the boot refreshes after this long, so one hung
+// `gh` can't hold the palette's first index load forever.
+const BOOT_WAIT = "60 seconds";
+
 export const makePrIndexMaintenance = <E, R>(
 	refresh: Effect.Effect<readonly Fiber.Fiber<unknown>[], E, R>,
 	schedule = Schedule.spaced("5 minutes"),
@@ -200,13 +212,18 @@ export const makePrIndexMaintenance = <E, R>(
 				}).pipe(Effect.as([])),
 			),
 		);
-		// Only the boot pass waits for its refreshes; later ones must not stall
-		// the schedule behind a slow `gh`.
+		let booted = false;
+		// Only the boot pass gates `ready`, and it does so from its own fiber:
+		// waiting inline would stall the schedule behind a slow `gh`.
 		const tick = Effect.gen(function* () {
 			const fibers = yield* iteration;
-			if (yield* Deferred.isDone(ready)) return;
-			yield* Effect.forEach(fibers, Fiber.await, { discard: true });
-			yield* Deferred.succeed(ready, undefined);
+			if (booted) return;
+			booted = true;
+			yield* Effect.forEach(fibers, Fiber.await, { discard: true }).pipe(
+				Effect.race(Effect.sleep(BOOT_WAIT)),
+				Effect.andThen(Deferred.succeed(ready, undefined)),
+				Effect.forkIn(scope),
+			);
 		});
 		return {
 			ready: Deferred.await(ready),
@@ -251,8 +268,10 @@ export class PrIndex extends Context.Service<PrIndex>()("sidecar/PrIndex", {
 		return {
 			lookup,
 			lookupPullRequest,
-			indexed: index.indexed,
-			ready: maintenance.ready,
+			indexed: Effect.gen(function* () {
+				yield* maintenance.ready;
+				return index.indexed(yield* settings.listRepoPaths());
+			}),
 			refresh: index.refresh,
 			refreshKnown: maintenance.refreshKnown,
 			start: maintenance.start,

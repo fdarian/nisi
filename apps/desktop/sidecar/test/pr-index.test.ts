@@ -4,6 +4,7 @@ import type {
 	OpenPullRequestIndexOptions,
 } from "@repo/git";
 import { Deferred, Effect, Fiber, Schedule } from "effect";
+import { TestClock } from "effect/testing";
 import { subscribe } from "../events.ts";
 import { makePrIndex, makePrIndexMaintenance } from "../pr-index.ts";
 
@@ -22,9 +23,6 @@ const entry: OpenPullRequestIndex = {
 			author: "alice",
 			url: "https://github.com/acme/widgets/pull/1",
 			isDraft: false,
-			mergeable: "MERGEABLE",
-			mergeStateStatus: "CLEAN",
-			rollupState: null,
 		},
 		{
 			number: 2,
@@ -38,9 +36,6 @@ const entry: OpenPullRequestIndex = {
 			author: "alice",
 			url: "https://github.com/acme/widgets/pull/1",
 			isDraft: false,
-			mergeable: "MERGEABLE",
-			mergeStateStatus: "CLEAN",
-			rollupState: null,
 		},
 	],
 };
@@ -251,7 +246,7 @@ test("pages are usable before completion; incremental refreshes retain older PRs
 	);
 });
 
-test("indexed lists only OPEN PRs of repos whose refresh completed, in the contract shape", async () => {
+test("indexed lists only OPEN PRs of repos whose refresh completed, in the contract shape, and names the known repos still incomplete", async () => {
 	await Effect.runPromise(
 		Effect.scoped(
 			Effect.gen(function* () {
@@ -274,64 +269,114 @@ test("indexed lists only OPEN PRs of repos whose refresh completed, in the contr
 						return slowEntry;
 					}),
 				);
-				expect(index.indexed()).toEqual([]);
+				const known = [
+					{ owner: "acme", repo: "widgets" },
+					{ owner: "ACME", repo: "Slow" },
+					{ owner: "acme", repo: "never-fetched" },
+				];
+				expect(index.indexed(known)).toEqual({
+					rows: [],
+					incompleteRepos: ["acme/widgets", "acme/slow", "acme/never-fetched"],
+				});
 
 				yield* Fiber.join(yield* index.refresh("root", "acme", "widgets"));
 				const slow = yield* index.refresh("root", "acme", "slow");
 				yield* Effect.yieldNow;
 				expect(index.findNumber("acme", "slow", 3)).toBeDefined();
-				expect(index.indexed()).toEqual([
-					{
-						owner: "acme",
-						repo: "widgets",
-						number: 3,
-						title: "Newest",
-						author: "alice",
-						updatedAt: "2026-10-01T00:00:00Z",
-						url: "https://github.com/acme/widgets/pull/1",
-						isDraft: false,
-						state: "OPEN",
-						mergeable: "MERGEABLE",
-						mergeStateStatus: "CLEAN",
-						rollupState: null,
-						headRefName: "feature",
-					},
-				]);
+				expect(index.indexed(known)).toEqual({
+					rows: [
+						{
+							owner: "acme",
+							repo: "widgets",
+							number: 3,
+							title: "Newest",
+							author: "alice",
+							updatedAt: "2026-10-01T00:00:00Z",
+							url: "https://github.com/acme/widgets/pull/1",
+							isDraft: false,
+							state: "OPEN",
+							headRefName: "feature",
+						},
+					],
+					incompleteRepos: ["acme/slow", "acme/never-fetched"],
+				});
 
 				yield* Deferred.succeed(gate, undefined);
 				yield* Fiber.join(slow);
-				expect(index.indexed().map((pr) => `${pr.repo}#${pr.number}`)).toEqual([
+				const settled = index.indexed(known);
+				expect(settled.rows.map((pr) => `${pr.repo}#${pr.number}`)).toEqual([
 					"widgets#3",
 					"slow#3",
 					"slow#2",
 				]);
+				expect(settled.incompleteRepos).toEqual(["acme/never-fetched"]);
 			}),
 		),
 	);
 });
 
-test("a successful refresh emits pull-request-index-changed once; page publishes and failures do not", async () => {
+test("a refresh emits pull-request-index-changed only when it changed something", async () => {
 	const events: string[] = [];
 	const unsubscribe = subscribe((event) => events.push(event.type));
 	try {
 		await Effect.runPromise(
 			Effect.scoped(
 				Effect.gen(function* () {
-					const state = { fail: false };
-					const index = yield* makePrIndex((_path, _owner, _repo, options) =>
-						Effect.gen(function* () {
-							if (options?.onPage !== undefined) yield* options.onPage(entry);
-							if (state.fail) return yield* Effect.fail("offline");
-							return entry;
-						}),
+					const state = {
+						fail: false,
+						time: 0,
+						value: { ...entry, highWaterMark: "2026-10-01T00:00:00Z" },
+					};
+					const index = yield* makePrIndex(
+						(_path, _owner, _repo, options) =>
+							Effect.gen(function* () {
+								if (options?.onPage !== undefined)
+									yield* options.onPage(state.value);
+								if (state.fail) return yield* Effect.fail("offline");
+								return state.value;
+							}),
+						() => state.time,
 					);
+					const refresh = Effect.gen(function* () {
+						yield* Fiber.join(yield* index.refresh("root", "acme", "widgets"));
+						return events.splice(0);
+					});
+
 					state.fail = true;
-					yield* Fiber.join(yield* index.refresh("root", "acme", "widgets"));
-					expect(events).toEqual([]);
+					expect(yield* refresh).toEqual([]);
 
 					state.fail = false;
-					yield* Fiber.join(yield* index.refresh("root", "acme", "widgets"));
-					expect(events).toEqual(["pull-request-index-changed"]);
+					expect(yield* refresh).toEqual(["pull-request-index-changed"]);
+
+					state.value = {
+						...entry,
+						highWaterMark: "2026-10-02T00:00:00Z",
+						prs: [],
+					};
+					expect(yield* refresh).toEqual([]);
+
+					state.value = {
+						...entry,
+						highWaterMark: "2026-10-03T00:00:00Z",
+						prs: [],
+						removedNumbers: [2],
+					};
+					expect(yield* refresh).toEqual(["pull-request-index-changed"]);
+
+					state.value = {
+						...entry,
+						highWaterMark: "2026-10-04T00:00:00Z",
+						prs: entry.prs.slice(0, 1),
+					};
+					expect(yield* refresh).toEqual(["pull-request-index-changed"]);
+
+					state.time = 30 * 60_000;
+					state.value = {
+						...entry,
+						highWaterMark: "2026-10-04T00:00:00Z",
+						prs: [],
+					};
+					expect(yield* refresh).toEqual(["pull-request-index-changed"]);
 				}),
 			),
 		);
@@ -412,5 +457,59 @@ test("ready completes even when listing the known repositories fails", async () 
 				yield* maintenance.ready;
 			}),
 		),
+	);
+});
+
+test("ready resolves after the 60s cap when a boot refresh hangs, without blocking the schedule", async () => {
+	await Effect.runPromise(
+		Effect.scoped(
+			Effect.gen(function* () {
+				const hung = yield* Deferred.make<void>();
+				const state = { calls: 0 };
+				const index = yield* makePrIndex(() =>
+					Effect.gen(function* () {
+						yield* Deferred.await(hung);
+						return entry;
+					}),
+				);
+				const maintenance = yield* makePrIndexMaintenance(
+					Effect.suspend(() => {
+						state.calls++;
+						return Effect.map(
+							index.refresh("root", "acme", "widgets"),
+							(fiber) => [fiber],
+						);
+					}),
+					Schedule.recurs(2),
+				);
+				yield* maintenance.start;
+				expect(state.calls).toBe(3);
+				const ready = yield* maintenance.ready.pipe(Effect.forkScoped);
+
+				yield* TestClock.adjust("59 seconds");
+				expect(yield* isSettled(ready)).toBe(false);
+				yield* TestClock.adjust("1 second");
+				yield* Fiber.join(ready);
+				expect(index.findNumber("acme", "widgets", 3)).toBeUndefined();
+			}),
+		).pipe(Effect.provide(TestClock.layer())),
+	);
+});
+
+test("ready resolves as soon as the boot refreshes settle, before the cap", async () => {
+	await Effect.runPromise(
+		Effect.scoped(
+			Effect.gen(function* () {
+				const index = yield* makePrIndex(() => Effect.succeed(entry));
+				const maintenance = yield* makePrIndexMaintenance(
+					Effect.map(index.refresh("root", "acme", "widgets"), (fiber) => [
+						fiber,
+					]),
+					Schedule.recurs(0),
+				);
+				yield* maintenance.start;
+				yield* maintenance.ready;
+			}),
+		).pipe(Effect.provide(TestClock.layer())),
 	);
 });
