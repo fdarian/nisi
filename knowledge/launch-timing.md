@@ -105,6 +105,33 @@ with and without the sidecar, which is identical between shells. Footprint is th
 shared pages once per process. With `--json` and `--memory` the output is `{ "records": [...], "memory": {...} }`
 instead of a bare record array.
 
+## Sustained memory (`--soak`)
+
+A single `--memory` snapshot says little about a shell under real use. `--soak` (requires `--cold` and `--deeplink`,
+any `--shell`) samples memory every `--soak-interval <ms>` (default 2000) for the whole run, using the same sampler,
+process set and grouping as `--memory`, while a scripted workload runs:
+
+| Phase | What happens |
+|-------|--------------|
+| `open` | Cold launch and the `--deeplink` PR, through to `trace.done` |
+| `idle-1` | Idle for `--soak-idle <ms>` (default 60000) |
+| `scroll-1` | `scroll-files-changed` on the open PR |
+| `extra-tabs` | For each `--soak-prs <url,url,...>` (same repository): open it through the traced deep-link path, then `scroll-files-changed` |
+| `after-close` | `close-other-tabs`, then idle `--soak-idle` again |
+
+The workload is driven from inside the frontend, so it is identical on every shell (WKWebView has no CDP). The script calls
+the measurement-gated `diagnostics.runWorkloadStep`, which emits a `measurement-workload` event on the sidecar stream
+(replayed to new subscribers until acked, like injected deep links); `src/infra/measurement-workload.ts` performs it and
+calls `ackWorkloadStep`; the script polls `workloadStepStatus`. `scroll-files-changed` scrolls the diff pane's virtualizer
+top to bottom one viewport per ~250 ms (re-reading the total height each step, since placeholder heights are replaced as
+files render), then back to the top. `close-other-tabs` runs the tab strip's own "close other tabs" action keeping the first tab.
+The diff pane exposes `getViewport`/`scrollToPosition` on its handle for this; each `FilesChangedView` registers it by session id.
+
+Output is a per-phase table (start/peak/end of total footprint without the sidecar, renderer-group peak/end, sidecar
+start/peak/end) and, with `--json`, the whole series under `soak`. The series is also written as CSV to
+`<data dir>/logs/soak/<traceId>.csv`. A sample whose process exited mid-read is skipped and counted. Idle tabs
+suspend after five minutes (`use-tab-suspension.ts`), so a long run can include that.
+
 ## Build reuse
 
 Managed modes compare HEAD and a SHA-256 content hash against `nisi.app.build-stamp.json` beside
