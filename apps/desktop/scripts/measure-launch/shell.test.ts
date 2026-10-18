@@ -60,9 +60,11 @@ test("the WebKit variant has its own bundle, build script and no Chromium flags"
 		"nisi-webkit.app.build-stamp.json",
 	);
 	expect(
-		[shells.electron, shells.electrobun].map((shell) => shell.webKitHelpers),
+		[shells.electron, shells.electrobun].map(
+			(shell) => shell.attributeByResponsiblePid,
+		),
 	).toEqual([false, false]);
-	expect(webkit.webKitHelpers).toBe(true);
+	expect(webkit.attributeByResponsiblePid).toBe(true);
 });
 
 test("Electron's measured behavior is the pre-shell default", () => {

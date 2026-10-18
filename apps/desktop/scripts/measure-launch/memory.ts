@@ -188,7 +188,13 @@ export const sampleMemory = (shell: Shell, settleMs: number) =>
 		yield* Effect.sleep(`${settleMs} millis`);
 		const rows = yield* processTable.pipe(
 			Effect.flatMap((output) =>
-				Effect.try(() => attributedRows(output, shell, responsiblePid)),
+				Effect.try(() =>
+					attributedRows(
+						output,
+						shell,
+						shell.attributeByResponsiblePid ? responsiblePid : () => undefined,
+					),
+				),
 			),
 		);
 		if (rows.length === 0)
@@ -216,7 +222,7 @@ export const sampleMemory = (shell: Shell, settleMs: number) =>
 			{ concurrency: "unbounded" },
 		);
 		if (
-			shell.webKitHelpers &&
+			shell.attributeByResponsiblePid &&
 			!processes.some((entry) => entry.role === "renderer")
 		)
 			return yield* Effect.fail(

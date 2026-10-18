@@ -38,8 +38,10 @@ export type Shell = {
 	/**
 	 * The renderer, GPU and network processes are WebKit XPC services outside the bundle,
 	 * found by responsible PID; a sample without a renderer means that attribution failed.
+	 * Off for Chromium shells: there it would only add system services (e.g. SetStoreUpdateService)
+	 * that the bundle-prefix match, and every earlier measurement, leaves out.
 	 */
-	webKitHelpers: boolean;
+	attributeByResponsiblePid: boolean;
 	coldDataDir: string;
 	newPrDataDir: string;
 };
@@ -60,7 +62,7 @@ export const shells: Readonly<Record<ShellName, Shell>> = {
 		stopBeforeBuild: false,
 		waitForHelpers: false,
 		builtChromiumFlags: [],
-		webKitHelpers: false,
+		attributeByResponsiblePid: false,
 		coldDataDir: join(measureDir, "data"),
 		newPrDataDir: join(measureDir, "new-pr/data"),
 	},
@@ -90,7 +92,7 @@ export const shells: Readonly<Record<ShellName, Shell>> = {
 		stopBeforeBuild: true,
 		waitForHelpers: true,
 		builtChromiumFlags: [...MEASUREMENT_CHROMIUM_SWITCHES, "use-mock-keychain"],
-		webKitHelpers: false,
+		attributeByResponsiblePid: false,
 		coldDataDir: join(measureDir, "electrobun/data"),
 		newPrDataDir: join(measureDir, "electrobun/new-pr/data"),
 	},
@@ -120,7 +122,7 @@ export const shells: Readonly<Record<ShellName, Shell>> = {
 		stopBeforeBuild: true,
 		waitForHelpers: false,
 		builtChromiumFlags: [],
-		webKitHelpers: true,
+		attributeByResponsiblePid: true,
 		coldDataDir: join(measureDir, "electrobun-webkit/data"),
 		newPrDataDir: join(measureDir, "electrobun-webkit/new-pr/data"),
 	},
