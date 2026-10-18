@@ -30,6 +30,7 @@ Measured on an Apple Silicon Mac, 2026-10-19.
 | Cold launch → PR diff painted (`tab.content.painted`) | 4205 ms | 4922 ms |
 | Memory footprint, PR open, sidecar excluded | 330 MiB | 385 MiB |
 | Shell processes (sidecar excluded) | 4 | 7 |
+| Packaging step (after the shared sidecar/CLI/frontend builds) | 97 s (`electron-builder`, DMG) | 84 s (`electrobun build`, DMG + tar.zst; zstd dominates and varied 49–144 s) |
 
 Timings are medians of 14 runs per shell. Memory is the median `phys_footprint`.
 
