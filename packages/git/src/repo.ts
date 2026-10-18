@@ -305,7 +305,7 @@ const unexpectedExit = (
  * parent to use as merge base and counts too. If replay attributes nothing
  * although the whole-branch check failed, every candidate is returned rather
  * than hiding what that check proved. Requires git >= 2.40 (`merge-tree
- * --write-tree`, strategy options).
+ * --merge-base`, strategy options).
  */
 const listCommitsMissingFromDivergedRemote = (
 	repoRoot: string,
