@@ -86,7 +86,7 @@ const toPullRequestRef = (
 	isCrossRepository: view.isCrossRepository,
 });
 
-const SearchPrItem = Schema.Struct({
+export const SearchPrItem = Schema.Struct({
 	number: Schema.Number,
 	title: Schema.String,
 	repository: Schema.Struct({ nameWithOwner: Schema.String }),
@@ -139,6 +139,11 @@ const decodeSearchPrList = (command: string, raw: string) =>
 		),
 	);
 
+export const rollupStateOf = (
+	commits: Schema.Schema.Type<typeof SearchPrItem>["commits"],
+): PullRequestSearchResult["rollupState"] =>
+	commits.nodes[0]?.commit.statusCheckRollup?.state ?? null;
+
 /**
  * `repository.nameWithOwner` is `gh`'s own `"owner/name"` string, not a
  * struct — split here rather than trusting it blindly, so a shape `gh` ever
@@ -171,8 +176,7 @@ const toPullRequestSearchResult = (
 				state: item.state,
 				mergeable: item.mergeable,
 				mergeStateStatus: item.mergeStateStatus,
-				rollupState:
-					item.commits.nodes[0]?.commit.statusCheckRollup?.state ?? null,
+				rollupState: rollupStateOf(item.commits),
 			});
 };
 
@@ -241,7 +245,7 @@ const QUALIFIER_PATTERN = new RegExp(
 );
 
 /** Whether `query` already scopes itself with a GitHub search qualifier — see `QUALIFIER_PATTERN`. */
-const hasSearchQualifier = (query: string): boolean =>
+export const hasSearchQualifier = (query: string): boolean =>
 	QUALIFIER_PATTERN.test(query);
 
 /**
@@ -275,7 +279,7 @@ const SEARCH_QUERY = `query($q: String!, $n: Int!) {
     } }
   }
 }`;
-const SEARCH_LIMIT = 30;
+export const SEARCH_LIMIT = 30;
 
 /**
  * `gh` not authenticated — confirmed live with `GH_CONFIG_DIR` pointed at an

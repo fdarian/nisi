@@ -52,9 +52,20 @@ export type OpenPullRequestIndex = {
 	readonly repository: RepositoryIdentity;
 	readonly highWaterMark?: string;
 	readonly removedNumbers?: readonly number[];
-	readonly prs: readonly (PullRequestRef & {
-		readonly headOwner: string | null;
-	})[];
+	readonly prs: readonly (PullRequestRef &
+		Pick<
+			PullRequestSearchResult,
+			| "updatedAt"
+			| "state"
+			| "author"
+			| "url"
+			| "isDraft"
+			| "mergeable"
+			| "mergeStateStatus"
+			| "rollupState"
+		> & {
+			readonly headOwner: string | null;
+		})[];
 };
 
 export type OpenPullRequestIndexOptions = {

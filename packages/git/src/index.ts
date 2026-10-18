@@ -80,6 +80,7 @@ export { parseActionsLog } from "./github/actions-log.ts";
 export { PullRequestAttention } from "./github/gh/attention.ts";
 export { approveWorkflowRuns } from "./github/gh/checks.ts";
 export { GhGitHub } from "./github/gh/github.ts";
+export { hasSearchQualifier } from "./github/gh/pull-request.ts";
 export { mergeStatusInterval } from "./github/gh/watch.ts";
 export type { GitHubShape } from "./github/github.ts";
 export {
@@ -87,6 +88,7 @@ export {
 	type OpenPullRequestIndex,
 	type OpenPullRequestIndexOptions,
 } from "./github/github.ts";
+export { searchOpenPullRequestIndexes } from "./github/index-search.ts";
 export type {
 	CreatePullRequestStackInput,
 	FetchPullRequestChecksInput,

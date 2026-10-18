@@ -65,6 +65,16 @@ test("open PR index paginates, preserves ordering and surfaces auth/decode failu
 								updatedAt: `2026-10-0${number}T00:00:00Z`,
 								state: "OPEN",
 								headRepositoryOwner: { login: "fork" },
+								author: { login: "alice" },
+								url: `https://github.com/acme/project/pull/${number}`,
+								isDraft: false,
+								mergeable: "MERGEABLE",
+								mergeStateStatus: "CLEAN",
+								commits: {
+									nodes: [
+										{ commit: { statusCheckRollup: { state: "SUCCESS" } } },
+									],
+								},
 							},
 						],
 						pageInfo: { hasNextPage: more, endCursor: more ? "next" : null },
