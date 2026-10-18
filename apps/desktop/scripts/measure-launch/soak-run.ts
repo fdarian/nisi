@@ -2,7 +2,6 @@ import type { makeSidecarClient, WorkloadStep } from "@repo/sidecar-api";
 import { Console, Effect } from "effect";
 import { runDeepLink } from "./deeplink.ts";
 import { sampleMemory } from "./memory.ts";
-import type { Shell } from "./shell.ts";
 import {
 	type SoakPhase,
 	type SoakPhaseSpan,
@@ -21,7 +20,7 @@ const WORKLOAD_STEP_TIMEOUT_MS = 15 * 60_000;
  * Reads that fail before the first success are expected (the app is still
  * launching); later failures mean a process exited mid-read and are counted.
  */
-export const startSoakRecorder = (shell: Shell, intervalMs: number) =>
+export const startSoakRecorder = (intervalMs: number) =>
 	Effect.gen(function* () {
 		const startedAt = Date.now();
 		const samples: SoakSample[] = [];
@@ -32,7 +31,7 @@ export const startSoakRecorder = (shell: Shell, intervalMs: number) =>
 		const readOnce = Effect.gen(function* () {
 			const at = Date.now();
 			const phase = state.phase;
-			const summary = yield* sampleMemory(shell, 0);
+			const summary = yield* sampleMemory(0);
 			samples.push(toSoakSample(summary, phase, at, startedAt));
 		}).pipe(
 			Effect.catch((error) => {

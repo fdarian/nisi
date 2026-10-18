@@ -19,7 +19,10 @@ import {
 	formatVisibility,
 } from "./format.ts";
 import {
+	bundlePath,
+	coldDataDir,
 	liveInstance,
+	newPrDataDir,
 	prepareColdInstance,
 	runningInstance,
 	unavailableAppPath,
@@ -29,18 +32,13 @@ import { resolveWarmup } from "./new-pr.ts";
 import { parseLaunchOptions } from "./options.ts";
 import { waitForPrIndex } from "./pr-index.ts";
 import { runTracedOpen } from "./run.ts";
-import { shells } from "./shell.ts";
 import { formatSoak, soakCsv, summarizePhases } from "./soak.ts";
 import { runSoakScenario, startSoakRecorder } from "./soak-run.ts";
-
-const shellHeader = (name: string) =>
-	name === "electron" ? "" : `\nShell: ${name}`;
 
 const program = Effect.gen(function* () {
 	const options = yield* Effect.try(() =>
 		parseLaunchOptions(process.argv.slice(2)),
 	);
-	const shell = shells[options.shell];
 	if (options.deeplink !== undefined) {
 		const target = yield* Effect.try(() =>
 			parseMeasurementPr(options.deeplink as string),
@@ -63,27 +61,22 @@ const program = Effect.gen(function* () {
 				return { url: pr.url, traceId: crypto.randomUUID() };
 			}),
 		);
-		const dataDir = yield* prepareColdInstance(
-			shell,
-			options.rebuild,
-			options.newPr,
-		);
+		const dataDir = yield* prepareColdInstance(options.rebuild, options.newPr);
 		const traceId = crypto.randomUUID();
 		const warmupId = crypto.randomUUID();
 		// Sampled inside the scope: its cleanup stops the app when it created a worktree.
 		const measured = yield* Effect.scoped(
 			Effect.gen(function* () {
-				yield* withDeepLinkWorktreeCleanup(shell, options.cwd, dataDir, [
+				yield* withDeepLinkWorktreeCleanup(options.cwd, dataDir, [
 					warmupId,
 					traceId,
 					...extraPrs.map((pr) => pr.traceId),
 				]);
 				const recorder = options.soak
-					? yield* startSoakRecorder(shell, options.soakIntervalMs)
+					? yield* startSoakRecorder(options.soakIntervalMs)
 					: undefined;
 				const startedAt = Date.now();
 				const client = yield* launchDeepLinkInstance(
-					shell,
 					dataDir,
 					options.newPr ? warmupId : traceId,
 				);
@@ -137,7 +130,7 @@ const program = Effect.gen(function* () {
 					return { records, memory: undefined, soak: recorder.finish() };
 				}
 				const memory = options.memory
-					? yield* sampleMemory(shell, options.memorySettleMs)
+					? yield* sampleMemory(options.memorySettleMs)
 					: undefined;
 				return { records, memory, soak: undefined };
 			}),
@@ -151,9 +144,9 @@ const program = Effect.gen(function* () {
 			yield* fs.makeDirectory(join(dataDir, "logs/soak"), { recursive: true });
 			yield* fs.writeFileString(soakCsvPath, soakCsv(soak.samples));
 		}
-		const stamp = yield* readBuildStamp(shell.bundlePath);
+		const stamp = yield* readBuildStamp(bundlePath);
 		const worktreeHeader = yield* Effect.try(() => formatWorktree(records));
-		const header = `${options.newPr ? `new PR into running app (warm-up: ${warmup?.url})` : "app startup"} — deep-link frontend injection${shellHeader(shell.name)}\nCLI: n/a\nExcludes OS URL delivery and native plugin hop; cold delivery waits for the events stream, later than plugin getCurrent.\n${stamp === undefined ? "Build stamp unavailable" : formatBuild(stamp)}`;
+		const header = `${options.newPr ? `new PR into running app (warm-up: ${warmup?.url})` : "app startup"} — deep-link frontend injection\nCLI: n/a\nExcludes OS URL delivery and native plugin hop; cold delivery waits for the events stream, later than plugin getCurrent.\n${stamp === undefined ? "Build stamp unavailable" : formatBuild(stamp)}`;
 		if (options.json) {
 			yield* Console.error(`${header}\n${worktreeHeader}`);
 			yield* Console.log(
@@ -189,10 +182,10 @@ const program = Effect.gen(function* () {
 			: yield* resolveWarmup(options.cwd, options.warmup);
 	const managed = options.cold || options.newPr;
 	const dataDir = yield* managed
-		? prepareColdInstance(shell, options.rebuild, options.newPr)
-		: runningInstance(shell);
+		? prepareColdInstance(options.rebuild, options.newPr)
+		: runningInstance;
 	const fs = yield* FileSystem;
-	const cli = yield* prepareCli(shell, managed);
+	const cli = yield* prepareCli(managed);
 	const startedAt = managed
 		? Date.now()
 		: yield* fs
@@ -214,7 +207,6 @@ const program = Effect.gen(function* () {
 		);
 	if (options.warmup !== undefined)
 		yield* runTracedOpen({
-			shell,
 			cwd: options.warmup,
 			dataDir,
 			traceId: crypto.randomUUID(),
@@ -253,7 +245,6 @@ const program = Effect.gen(function* () {
 		]);
 	}
 	const records = yield* runTracedOpen({
-		shell,
 		cwd: options.cwd,
 		dataDir,
 		traceId,
@@ -270,13 +261,13 @@ const program = Effect.gen(function* () {
 				: "running-instance quick check"
 			: `new PR into running app (warm-up: ${warmupLabel})`;
 	const stamp =
-		dataDir === shell.coldDataDir || dataDir === shell.newPrDataDir
-			? yield* readBuildStamp(shell.bundlePath)
+		dataDir === coldDataDir || dataDir === newPrDataDir
+			? yield* readBuildStamp(bundlePath)
 			: undefined;
 	const memory = options.memory
-		? yield* sampleMemory(shell, options.memorySettleMs)
+		? yield* sampleMemory(options.memorySettleMs)
 		: undefined;
-	const reportHeader = `${header}${shellHeader(shell.name)}\n${stamp === undefined ? "Build stamp unavailable for this instance" : formatBuild(stamp)}\n${formatCli(cli)}`;
+	const reportHeader = `${header}\n${stamp === undefined ? "Build stamp unavailable for this instance" : formatBuild(stamp)}\n${formatCli(cli)}`;
 	if (options.json) {
 		yield* Console.error(reportHeader);
 		yield* Console.log(

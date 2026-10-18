@@ -2,8 +2,6 @@ import { createHash } from "node:crypto";
 import { dirname, join, resolve } from "node:path";
 import { Console, Effect, Schema } from "effect";
 import { FileSystem } from "effect/FileSystem";
-import { stopBundle } from "./processes.ts";
-import { type Shell, stampFileName, wrapperMarker } from "./shell.ts";
 
 const Stamp = Schema.Struct({
 	head: Schema.String,
@@ -72,29 +70,15 @@ export function formatBuild(stamp: BuildStamp): string {
 	return `Build ${stamp.head.slice(0, 7)}${stamp.hasChanges ? ` + uncommitted changes ${stamp.hash.slice(0, 12)}` : ""}`;
 }
 
-/** A self-extracting wrapper counts as built; priming extracts it before any measured run. */
-export const bundleIsBuilt = (shell: Shell) =>
-	Effect.gen(function* () {
-		const fs = yield* FileSystem;
-		if (shell.selfExtracting && (yield* fs.exists(wrapperMarker(shell))))
-			return true;
-		for (const executable of shell.requiredExecutables)
-			if (!(yield* fs.exists(join(shell.bundlePath, executable)))) return false;
-		return true;
-	});
-
-const stampPathFor = (bundle: string) =>
-	join(dirname(bundle), stampFileName(bundle));
-
 export const ensureBuild = (
 	desktopDir: string,
-	shell: Shell,
+	bundle: string,
 	forced: boolean,
 ) =>
 	Effect.gen(function* () {
 		const fs = yield* FileSystem;
 		const root = resolve(desktopDir, "../..");
-		const stampPath = stampPathFor(shell.bundlePath);
+		const stampPath = join(dirname(bundle), "nisi.app.build-stamp.json");
 		const current = yield* buildFingerprint(root);
 		const stamp = (yield* fs.exists(stampPath))
 			? yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Stamp))(
@@ -105,7 +89,8 @@ export const ensureBuild = (
 			current,
 			stamp,
 			forced,
-			yield* bundleIsBuilt(shell),
+			(yield* fs.exists(join(bundle, "Contents/MacOS/nisi"))) &&
+				(yield* fs.exists(join(bundle, "Contents/MacOS/nisi-cli"))),
 		);
 		if (reason === undefined && stamp !== undefined) {
 			yield* Console.error(
@@ -114,11 +99,9 @@ export const ensureBuild = (
 			return stamp;
 		}
 		yield* Console.error(`Rebuilding: ${reason}`);
-		if (shell.stopBeforeBuild) yield* stopBundle(shell);
 		const build = yield* Effect.try(() =>
-			Bun.spawn([process.execPath, "run", shell.buildScript], {
+			Bun.spawn([process.execPath, "run", "build"], {
 				cwd: desktopDir,
-				env: { ...process.env, ...shell.buildEnv },
 				stdout: 2,
 				stderr: "inherit",
 			}),
@@ -150,4 +133,4 @@ export const readStamp = (path: string) =>
 	});
 
 export const readBuildStamp = (bundle: string) =>
-	readStamp(stampPathFor(bundle));
+	readStamp(join(dirname(bundle), "nisi.app.build-stamp.json"));

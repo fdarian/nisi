@@ -23,9 +23,3 @@ apps/desktop/.storybook-shots/
 # Shared: this repo's changeset + PR conventions, loaded as a project skill.
 !.claude/skills
 /.nisi/
-# Electrobun shell: Hutch's generated devkit projection and build outputs.
-apps/desktop/.hutch
-apps/desktop/build-electrobun
-apps/desktop/release-electrobun
-apps/desktop/build-electrobun-webkit
-apps/desktop/release-electrobun-webkit

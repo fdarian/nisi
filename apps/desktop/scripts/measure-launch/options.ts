@@ -1,11 +1,9 @@
 import { resolve } from "node:path";
-import { parseShellName, type ShellName } from "./shell.ts";
 
 const missingValue: Record<string, string> = {
 	"--cwd": "--cwd requires a PR worktree path",
 	"--warmup": "--warmup requires a PR worktree path",
 	"--deeplink": "--deeplink requires a PR worktree path",
-	"--shell": "--shell requires electron, electrobun or electrobun-webkit",
 	"--memory-settle": "--memory-settle requires a number of milliseconds",
 	"--soak-prs": "--soak-prs requires a comma-separated list of PR URLs",
 	"--soak-interval": "--soak-interval requires a number of milliseconds",
@@ -29,7 +27,6 @@ export function parseLaunchOptions(argv: readonly string[]) {
 		rebuild: boolean;
 		json: boolean;
 		waitPrIndex: boolean;
-		shell: ShellName;
 		memory: boolean;
 		memorySettleMs: number;
 		soak: boolean;
@@ -42,7 +39,6 @@ export function parseLaunchOptions(argv: readonly string[]) {
 		rebuild: false,
 		json: false,
 		waitPrIndex: false,
-		shell: "electron",
 		memory: false,
 		memorySettleMs: 5000,
 		soak: false,
@@ -62,7 +58,6 @@ export function parseLaunchOptions(argv: readonly string[]) {
 				throw new Error(missingValue[arg] as string);
 			if (arg === "--cwd") options.cwd = resolve(value);
 			else if (arg === "--deeplink") options.deeplink = value;
-			else if (arg === "--shell") options.shell = parseShellName(value);
 			else if (arg === "--memory-settle") {
 				options.memorySettleMs = parseMilliseconds(arg, value, 0);
 				memorySettleGiven = true;

@@ -7,22 +7,16 @@ import {
 	parseProcessDetails,
 	summarizeMemory,
 } from "./memory.ts";
-import { type Shell, shells } from "./shell.ts";
 
-const bundle = "/work tree/nisi-electrobun.app";
-const electrobun: Shell = { ...shells.electrobun, bundlePath: bundle };
-const electron: Shell = {
-	...shells.electron,
-	bundlePath: "/work tree/nisi.app",
-};
+const bundle = "/work tree/nisi.app";
 const helper = (name: string) =>
-	`${bundle}/Contents/Frameworks/bun Helper (${name}).app/Contents/MacOS/bun Helper (${name})`;
+	`${bundle}/Contents/Frameworks/nisi Helper (${name}).app/Contents/MacOS/nisi Helper (${name})`;
 
 test("ps details keep the full args and convert KiB to bytes", () => {
 	expect(
 		parseProcessDetails(
 			[
-				` 11 204800 ${bundle}/Contents/MacOS/bun main.js`,
+				` 11 204800 ${bundle}/Contents/MacOS/nisi`,
 				`13  51200 ${helper("Renderer")} --type=renderer --lang=en-US`,
 			].join("\n"),
 		),
@@ -30,7 +24,7 @@ test("ps details keep the full args and convert KiB to bytes", () => {
 		{
 			pid: 11,
 			rssBytes: 204800 * 1024,
-			args: `${bundle}/Contents/MacOS/bun main.js`,
+			args: `${bundle}/Contents/MacOS/nisi`,
 		},
 		{
 			pid: 13,
@@ -46,7 +40,7 @@ test("footprint output yields phys_footprint bytes, not the formatted header", (
 		parseFootprint(
 			[
 				"======",
-				"bun [11]: 64-bit    Footprint: 138 MB (16384 bytes per page)",
+				"nisi [11]: 64-bit    Footprint: 138 MB (16384 bytes per page)",
 				"======",
 				"",
 				"Auxiliary data:",
@@ -59,62 +53,26 @@ test("footprint output yields phys_footprint bytes, not the formatted header", (
 });
 
 test("processes are classified by executable, then by --type", () => {
-	const classify = (shell: Shell, command: string, args = "") =>
-		classifyProcess(shell, command, `${command} ${args}`);
-	expect(classify(electrobun, `${bundle}/Contents/MacOS/launcher`)).toBe(
-		"main",
+	const classify = (command: string, args = "") =>
+		classifyProcess(bundle, command, `${command} ${args}`);
+	expect(classify(`${bundle}/Contents/MacOS/nisi`)).toBe("main");
+	expect(classify(`${bundle}/Contents/MacOS/sidecar`)).toBe("sidecar");
+	expect(classify(helper("Renderer"), "--type=renderer --lang=en")).toBe(
+		"renderer",
 	);
-	expect(classify(electrobun, `${bundle}/Contents/MacOS/bun`, "main.js")).toBe(
-		"main",
+	expect(classify(helper("GPU"), "--type=gpu-process --use-gl=angle")).toBe(
+		"gpu",
 	);
-	expect(classify(electrobun, `${bundle}/Contents/MacOS/sidecar`)).toBe(
-		"sidecar",
-	);
-	expect(
-		classify(electrobun, helper("Renderer"), "--type=renderer --lang=en"),
-	).toBe("renderer");
-	expect(
-		classify(electrobun, helper("GPU"), "--type=gpu-process --use-gl=angle"),
-	).toBe("gpu");
 	expect(
 		classify(
-			electrobun,
 			helper("Plugin"),
 			"--type=utility --utility-sub-type=network.mojom.NetworkService",
 		),
 	).toBe("helper");
-	expect(
-		classify(electrobun, `${bundle}/Contents/Frameworks/crashpad_handler`),
-	).toBe("helper");
-	expect(classify(electron, "/work tree/nisi.app/Contents/MacOS/nisi")).toBe(
-		"main",
-	);
-	expect(classify(electrobun, `${bundle}/Contents/MacOS/nisi-cli`)).toBe(
+	expect(classify(`${bundle}/Contents/Frameworks/crashpad_handler`)).toBe(
 		"helper",
 	);
-});
-
-test("WebKit's XPC services are classified by service name", () => {
-	const webkit: Shell = {
-		...shells["electrobun-webkit"],
-		bundlePath: "/work tree/nisi-webkit.app",
-	};
-	const service = (name: string) =>
-		`/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/${name}.xpc/Contents/MacOS/${name}`;
-	const classify = (command: string) =>
-		classifyProcess(webkit, command, command);
-	expect(classify(service("com.apple.WebKit.WebContent"))).toBe("renderer");
-	expect(
-		classify(service("com.apple.WebKit.WebContent.EnhancedSecurity")),
-	).toBe("renderer");
-	expect(classify(service("com.apple.WebKit.GPU"))).toBe("gpu");
-	expect(classify(service("com.apple.WebKit.Networking"))).toBe("helper");
-	expect(classify("/work tree/nisi-webkit.app/Contents/MacOS/bun")).toBe(
-		"main",
-	);
-	expect(classify("/work tree/nisi-webkit.app/Contents/MacOS/sidecar")).toBe(
-		"sidecar",
-	);
+	expect(classify(`${bundle}/Contents/MacOS/nisi-cli`)).toBe("helper");
 });
 
 const sample = (
@@ -131,7 +89,7 @@ const sample = (
 });
 
 test("totals are reported with and without the sidecar", () => {
-	const summary = summarizeMemory("electrobun", 5000, [
+	const summary = summarizeMemory(5000, [
 		sample(12, "sidecar", 100, 90),
 		sample(10, "main", 50, 40),
 		sample(13, "renderer", 300, 250),

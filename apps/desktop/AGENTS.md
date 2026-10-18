@@ -160,31 +160,6 @@ Shell gotchas:
 - **Electron's postinstall needs its `allowBuilds` entry** (`electron: true` in `pnpm-workspace.yaml`):
   pnpm skips unapproved build scripts, and that script is what downloads the Electron binary. Keep it.
 
-## The Electrobun shell
-`electrobun/` is a second shell for the same frontend and sidecar: Electrobun 2.0.2 (Bun main process) with bundled CEF
-(Chromium 147) in place of Electron. `bun run build:electrobun` builds the sidecar/CLI binaries, the frontend, then
-`electrobun build --env=stable` (Hutch, `packageManager: "pnpm"` in `hutch.config.ts`) into `build-electrobun/` +
-`release-electrobun/` (DMG, `.app.tar.zst`). Bundle ID `com.nisi.desktop.electrobun`, so it never collides with
-`/Applications/nisi.app`; it still resolves the same data dir, so **launch it with a scratch `NISI_DATA_DIR`**. There is no
-`bun dev` for it.
-
-- It reuses `electron/{backend,activation,data-dir,external-url,editor-url,zed,measurement-instance}.ts` (none import `electron`);
-  `windows.ts`, `menu.ts`, `editors.ts`, `requests.ts`, `sidecar.ts` re-implement the rest.
-- `rpc-schema.ts` is the `NativeApi` as Electrobun RPC; `bridge.ts` is bundled as a `build.views` IIFE and used as each
-  window's `preload`. CEF injects it as an inline `<script>` right after `<head>`, so `window.nisi` exists before the app bundle runs.
-- Windows load `views://mainview/index.html?nisi-route=<route>` (`views://` has no SPA fallback); `bridge.ts`
-  `history.replaceState`s to the route before the router boots. A reload after that would 404.
-- The main window is `titleBarStyle: "hiddenInset"` (the only style that keeps the traffic lights and honours `trafficLightOffset`, which is relative to their default spot).
-- Hutch ships the SDK through `.hutch/devkit`, not `node_modules`: `tsconfig.electrobun.json` maps `electrobun/*` there by hand, and `check:type` runs `electrobun prepare` first.
-- A stable build is a self-extracting wrapper whose first launch (~10-25 s) replaces the `.app` in place with the archived app.
-  `electrobun/post-build.ts` therefore puts `sidecar`/`nisi-cli` into `Contents/MacOS` at `postBuild` (a `postWrap` copy is discarded). Never rebuild over a running bundle: its quit path hangs.
-- Gaps against the Electron shell: no `Services` menu role, no folder-dialog title/parent sheet, notification clicks don't raise the window, "Open in" availability is a Spotlight bundle-ID check instead of a scheme-handler query, measurement-mode Chromium switches can't be set at runtime (only `chromiumFlags` in `electrobun.config.ts`), CEF's profile lives in `~/Library/Application Support/com.nisi.desktop.electrobun/stable/CEF` rather than under the data dir, no updater/signing/min window size.
-- CEF remote debugging is off in stable builds; set `ELECTROBUN_CEF_REMOTE_DEBUGGING_PORT=<port>` for one launch.
-- **WebKit variant.** `bun run build:electrobun-webkit` (`NISI_ELECTROBUN_RENDERER=native`) builds the same shell on the system
-  WKWebView with no bundled CEF: `nisi-webkit.app`, ID `com.nisi.desktop.webkit`, into `build-electrobun-webkit/` +
-  `release-electrobun-webkit/`. Windows don't name a renderer; they follow the build's `defaultRenderer`, so never hardcode one in `windows.ts`.
-  Chromium-only items above (`chromiumFlags`, CEF remote debugging, the CEF profile dir) don't apply to it.
-
 ## Dev/prod isolation
 `bun dev` windows show the current Git branch in a reserved footer (`src/shell/dev-branch.tsx`); `build:dev` shows `Build <short commit>` there. `import.meta.env.DEV` excludes it from regular production builds.
 

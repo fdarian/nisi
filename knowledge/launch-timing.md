@@ -75,52 +75,18 @@ the request, making the terminal paint mark ambiguous.
 - `--json` prints the collected records as a JSON array rather than the formatted report.
 - Raw records are JSONL at `<selected data dir>/logs/launch-traces/<traceId>.jsonl`.
 
-## Measuring the Electrobun shell
-
-`--shell electrobun` (default `electron`) points every managed mode at the Electrobun bundle,
-`build-electrobun/stable-macos-arm64/nisi-electrobun.app`, built by `bun run build:electrobun`. Per-shell
-paths, executable lists and data dirs live in one descriptor, `scripts/measure-launch/shell.ts`. Electrobun
-instances use their own data dirs (`.data/measure-launch/electrobun/{data,new-pr/data}`) and build stamp
-(`nisi-electrobun.app.build-stamp.json`), so the two shells never clobber each other. Unmanaged warm mode
-looks only at the chosen shell's managed data dirs (plus `bun dev` sandboxes for Electron).
-
-- **Priming.** A stable Electrobun build is a self-extracting wrapper that replaces itself on first launch
-  (10-25 s). After a build, and whenever `Contents/Resources/metadata.json` is still present, the script
-  launches it once against a scratch data dir, waits for that sidecar, stops it and deletes the dir, so the
-  extraction never lands in a measured run. The stamp hashes sources, so priming doesn't stale it.
-- **Measurement flavor.** Electrobun can only take Chromium flags at build time, so the script always builds with
-  `NISI_MEASUREMENT_BUILD=1`, which makes `electrobun.config.ts` add the three measurement switches plus
-  `use-mock-keychain` to `build.mac.chromiumFlags`. Don't ship or install that bundle. Rebuilding by hand with
-  `bun run build:electrobun` overwrites it with a non-measurement one.
-- **Stopping.** Matches `launcher`, `bun` and `sidecar` under the bundle, SIGTERM only, then also waits for the
-  CEF helpers (anything else under `Contents/`) to exit within the same 10 s.
-
-`--shell electrobun-webkit` is a third descriptor for the WebKit build (`bun run build:electrobun-webkit`,
-`build-electrobun-webkit/stable-macos-arm64/nisi-webkit.app`). It has its own data dirs
-(`.data/measure-launch/electrobun-webkit/...`) and stamp (`nisi-webkit.app.build-stamp.json`), is primed like the CEF
-bundle, and builds without Chromium flags (WKWebView has none). It has no in-bundle helpers, so stopping doesn't wait for any.
-
 ## Memory (`--memory`)
 
 Valid with any mode. After `trace.done` the script waits `--memory-settle <ms>` (default 5000), then samples every
 process whose executable is under `<bundle>/Contents/`: RSS from `ps`, physical footprint from
 `footprint -p <pid> --noCategories -f bytes` (works unprivileged for your own processes). Helpers are classified by
-their `--type=` argument. The report groups shell main / renderer(s) / GPU / other helpers / sidecar and totals
-with and without the sidecar, which is identical between shells. Footprint is the number to compare; RSS counts
-shared pages once per process. WebKit's WebContent, GPU and Networking processes are XPC services under
-`/System/Library/Frameworks/WebKit.framework`, parented to launchd and outside the bundle, so for
-`--shell electrobun-webkit` the script also samples every process whose *responsible PID* (what Activity Monitor
-charges; `responsibility_get_pid_responsible_for_pid` from libSystem via `bun:ffi`, works unprivileged) is one of the
-app's pids, minus the app's own subprocesses (the sidecar's git/gh). `com.apple.WebKit.WebContent*` is classified
-renderer, `com.apple.WebKit.GPU` GPU, the rest other helpers; the sample fails if no renderer is attributed. That
-includes system services macOS charges to the app (SetStoreUpdateService, MTLCompilerService, audio SandboxHelper),
-which the bundle-prefix match used for Electron and CEF leaves out, so WebKit totals read about 8 MiB of footprint high next to them, ~30 MiB when MTLCompilerService is up. With `--json` and `--memory` the output is `{ "records": [...], "memory": {...} }`
-instead of a bare record array.
+their `--type=` argument. The report groups main / renderer(s) / GPU / other helpers / sidecar and totals
+with and without the sidecar. Footprint is the number to compare; RSS counts shared pages once per process.
+With `--json` and `--memory` the output is `{ "records": [...], "memory": {...} }` instead of a bare record array.
 
 ## Sustained memory (`--soak`)
 
-A single `--memory` snapshot says little about a shell under real use. `--soak` (requires `--cold` and `--deeplink`,
-any `--shell`) samples memory every `--soak-interval <ms>` (default 2000) for the whole run, using the same sampler,
+A single `--memory` snapshot says little about the app under real use. `--soak` (requires `--cold` and `--deeplink`) samples memory every `--soak-interval <ms>` (default 2000) for the whole run, using the same sampler,
 process set and grouping as `--memory`, while a scripted workload runs:
 
 | Phase | What happens |
@@ -131,7 +97,7 @@ process set and grouping as `--memory`, while a scripted workload runs:
 | `extra-tabs` | For each `--soak-prs <url,url,...>` (same repository): open it through the traced deep-link path, then `scroll-files-changed` |
 | `after-close` | `close-other-tabs`, then idle `--soak-idle` again |
 
-The workload is driven from inside the frontend, so it is identical on every shell (WKWebView has no CDP). The script calls
+The workload is driven from inside the frontend, so the script needs no browser automation. It calls
 the measurement-gated `diagnostics.runWorkloadStep`, which emits a `measurement-workload` event on the sidecar stream
 (replayed to new subscribers until acked, like injected deep links); `src/infra/measurement-workload.ts` performs it and
 calls `ackWorkloadStep`; the script polls `workloadStepStatus`. `scroll-files-changed` scrolls the diff pane's virtualizer

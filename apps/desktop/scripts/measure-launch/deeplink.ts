@@ -3,12 +3,11 @@ import { LaunchRecord } from "@repo/sidecar-api";
 import { Console, Effect, Schema } from "effect";
 import { FileSystem } from "effect/FileSystem";
 import {
+	bundlePath,
 	liveInstance,
-	openBundle,
 	requireInstrumentation,
 } from "./instance.ts";
 import { stopBundle } from "./processes.ts";
-import type { Shell } from "./shell.ts";
 
 export function parseMeasurementPr(raw: string) {
 	const url = new URL(raw);
@@ -72,11 +71,7 @@ const awaitInstance = (dataDir: string) =>
 		);
 	});
 
-export const launchDeepLinkInstance = (
-	shell: Shell,
-	dataDir: string,
-	traceId: string,
-) =>
+export const launchDeepLinkInstance = (dataDir: string, traceId: string) =>
 	Effect.gen(function* () {
 		const exporter = yield* makeLaunchTracer({ dataDir, source: "cli" });
 		yield* exporter.activate(traceId);
@@ -89,7 +84,28 @@ export const launchDeepLinkInstance = (
 				attrs: {},
 			},
 		]);
-		yield* openBundle(shell, dataDir);
+		// Only an explicit bundle path is ever given to LaunchServices, never a URL.
+		const child = yield* Effect.try(() =>
+			Bun.spawn(
+				[
+					"open",
+					"-n",
+					"-g",
+					"--env",
+					`NISI_DATA_DIR=${dataDir}`,
+					"--env",
+					"NISI_MEASUREMENT_INSTANCE=1",
+					"-a",
+					bundlePath,
+				],
+				{ stdout: "ignore", stderr: "inherit" },
+			),
+		);
+		const exit = yield* Effect.tryPromise(() => child.exited);
+		if (exit !== 0)
+			return yield* Effect.fail(
+				new Error(`Managed app launch failed with ${exit}`),
+			);
 		return yield* awaitInstance(dataDir);
 	});
 
@@ -182,7 +198,6 @@ export function formatWorktree(records: readonly LaunchRecord[]): string {
 }
 
 export const withDeepLinkWorktreeCleanup = (
-	shell: Shell,
 	cwd: string,
 	dataDir: string,
 	traceIds: readonly string[],
@@ -193,7 +208,7 @@ export const withDeepLinkWorktreeCleanup = (
 				readTrace(dataDir, id),
 			)).flat();
 			const created = createdWorktrees(before, yield* snapshot(cwd), records);
-			if (created.length > 0) yield* stopBundle(shell);
+			if (created.length > 0) yield* stopBundle(bundlePath);
 			for (const path of created) {
 				yield* Console.error(
 					`Removing worktree created by this measurement: ${path}`,

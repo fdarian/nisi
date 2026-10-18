@@ -61,7 +61,7 @@ export type SoakPhaseSummary = {
 	phase: SoakPhase;
 	samples: number;
 	durationMs: number;
-	/** Physical footprint of everything but the sidecar, which is identical between shells. */
+	/** Physical footprint of everything but the sidecar. */
 	total: { start: number; peak: number; end: number };
 	renderer: { peak: number; end: number };
 	sidecar: { start: number; peak: number; end: number };

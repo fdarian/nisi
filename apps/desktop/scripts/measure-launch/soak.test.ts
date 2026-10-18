@@ -25,7 +25,7 @@ function summary(footprintMiB: Partial<Record<MemoryRole, number>>) {
 			footprintBytes: (value as number) * MiB,
 		}),
 	);
-	return summarizeMemory("electron", 0, processes);
+	return summarizeMemory(0, processes);
 }
 
 function sample(

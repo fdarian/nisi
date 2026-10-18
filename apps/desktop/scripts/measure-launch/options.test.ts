@@ -21,7 +21,6 @@ test("requires cwd and only accepts the checkout-local interface", () => {
 		rebuild: true,
 		json: true,
 		waitPrIndex: false,
-		shell: "electron",
 		memory: false,
 		memorySettleMs: 5000,
 		soak: false,
@@ -29,29 +28,6 @@ test("requires cwd and only accepts the checkout-local interface", () => {
 		soakIntervalMs: 2000,
 		soakIdleMs: 60_000,
 	});
-});
-
-test("shell defaults to electron and rejects unknown shells", () => {
-	expect(parseLaunchOptions(["--cwd", "/pr", "--cold"]).shell).toBe("electron");
-	expect(
-		parseLaunchOptions(["--cwd", "/pr", "--cold", "--shell", "electrobun"])
-			.shell,
-	).toBe("electrobun");
-	expect(
-		parseLaunchOptions([
-			"--cwd",
-			"/pr",
-			"--cold",
-			"--shell",
-			"electrobun-webkit",
-		]).shell,
-	).toBe("electrobun-webkit");
-	expect(() =>
-		parseLaunchOptions(["--cwd", "/pr", "--shell", "tauri"]),
-	).toThrow("--shell must be one of electron, electrobun, electrobun-webkit");
-	expect(() => parseLaunchOptions(["--cwd", "/pr", "--shell"])).toThrow(
-		"--shell requires electron, electrobun or electrobun-webkit",
-	);
 });
 
 test("memory sampling is valid in any mode, and its settle needs --memory", () => {

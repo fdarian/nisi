@@ -76,7 +76,7 @@ async function readSidecarJson(
 /** The slice of a `ChildProcess` the wait needs; both codes stay `null` until it exits. */
 export type SpawnedSidecar = {
 	exitCode: number | null;
-	signalCode: NodeJS.Signals | number | null;
+	signalCode: NodeJS.Signals | null;
 };
 
 type PollTiming = { attempts: number; intervalMs: number };

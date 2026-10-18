@@ -1,8 +1,7 @@
 import { basename } from "node:path";
 import { Effect } from "effect";
-import { attributedRows, processTable } from "./processes.ts";
-import { responsiblePid } from "./responsibility.ts";
-import type { Shell } from "./shell.ts";
+import { bundlePath } from "./instance.ts";
+import { bundleRows, processTable } from "./processes.ts";
 
 export const memoryRoles = [
 	"main",
@@ -14,7 +13,7 @@ export const memoryRoles = [
 export type MemoryRole = (typeof memoryRoles)[number];
 
 const roleLabels: Record<MemoryRole, string> = {
-	main: "shell main",
+	main: "main",
 	renderer: "renderer(s)",
 	gpu: "GPU",
 	helper: "other helpers",
@@ -32,7 +31,6 @@ export type MemoryProcess = {
 type Totals = { count: number; rssBytes: number; footprintBytes: number };
 
 export type MemorySummary = {
-	shell: string;
 	settleMs: number;
 	processes: MemoryProcess[];
 	groups: (Totals & { role: MemoryRole })[];
@@ -67,21 +65,15 @@ export function parseFootprint(output: string): number {
 }
 
 export function classifyProcess(
-	shell: Shell,
+	bundle: string,
 	command: string,
 	args: string,
 ): MemoryRole {
-	const inBundle = (relative: string) =>
-		command === `${shell.bundlePath}/${relative}`;
-	if (inBundle(shell.sidecarExecutable)) return "sidecar";
-	if (shell.mainExecutables.some(inBundle)) return "main";
+	if (command === `${bundle}/Contents/MacOS/sidecar`) return "sidecar";
+	if (command === `${bundle}/Contents/MacOS/nisi`) return "main";
 	const type = args.match(/(?:^|\s)--type=(\S+)/)?.[1];
 	if (type === "renderer") return "renderer";
 	if (type === "gpu-process") return "gpu";
-	const webKitService = basename(command);
-	if (webKitService.startsWith("com.apple.WebKit.WebContent"))
-		return "renderer";
-	if (webKitService === "com.apple.WebKit.GPU") return "gpu";
 	return "helper";
 }
 
@@ -95,12 +87,10 @@ const sum = (processes: readonly MemoryProcess[]): Totals => ({
 });
 
 export function summarizeMemory(
-	shell: string,
 	settleMs: number,
 	processes: readonly MemoryProcess[],
 ): MemorySummary {
 	return {
-		shell,
 		settleMs,
 		processes: [...processes].sort((a, b) => a.pid - b.pid),
 		groups: memoryRoles.map((role) => {
@@ -144,7 +134,7 @@ export function formatMemory(summary: MemorySummary): string {
 	const line = (label: string, count: string, rss: string, footprint: string) =>
 		`${label.padEnd(width)}${count.padStart(5)}${rss.padStart(14)}${footprint.padStart(16)}`;
 	return [
-		`Memory — ${summary.shell}, sampled ${(summary.settleMs / 1000).toFixed(1)}s after trace.done`,
+		`Memory — sampled ${(summary.settleMs / 1000).toFixed(1)}s after trace.done`,
 		line("", "procs", "RSS", "footprint"),
 		...rows.map((row) =>
 			line(
@@ -158,7 +148,6 @@ export function formatMemory(summary: MemorySummary): string {
 }
 
 const sampleOne = (
-	shell: Shell,
 	row: { pid: number; command: string },
 	detail: { rssBytes: number; args: string },
 ) =>
@@ -174,7 +163,7 @@ const sampleOne = (
 			);
 		return {
 			pid: row.pid,
-			role: classifyProcess(shell, row.command, detail.args),
+			role: classifyProcess(bundlePath, row.command, detail.args),
 			name: basename(row.command),
 			rssBytes: detail.rssBytes,
 			footprintBytes: yield* Effect.try(() =>
@@ -183,23 +172,17 @@ const sampleOne = (
 		} satisfies MemoryProcess;
 	});
 
-export const sampleMemory = (shell: Shell, settleMs: number) =>
+export const sampleMemory = (settleMs: number) =>
 	Effect.gen(function* () {
 		yield* Effect.sleep(`${settleMs} millis`);
 		const rows = yield* processTable.pipe(
 			Effect.flatMap((output) =>
-				Effect.try(() =>
-					attributedRows(
-						output,
-						shell,
-						shell.attributeByResponsiblePid ? responsiblePid : () => undefined,
-					),
-				),
+				Effect.try(() => bundleRows(output, bundlePath)),
 			),
 		);
 		if (rows.length === 0)
 			return yield* Effect.fail(
-				new Error(`No running processes under ${shell.bundlePath}/Contents`),
+				new Error(`No running processes under ${bundlePath}/Contents`),
 			);
 		const pids = rows.map((row) => row.pid).join(",");
 		const details = yield* Effect.tryPromise(() =>
@@ -217,18 +200,9 @@ export const sampleMemory = (shell: Shell, settleMs: number) =>
 							`Process ${row.pid} (${row.command}) exited during sampling`,
 						),
 					);
-				return sampleOne(shell, row, detail);
+				return sampleOne(row, detail);
 			},
 			{ concurrency: "unbounded" },
 		);
-		if (
-			shell.attributeByResponsiblePid &&
-			!processes.some((entry) => entry.role === "renderer")
-		)
-			return yield* Effect.fail(
-				new Error(
-					`No WebKit WebContent process is attributed to ${shell.bundlePath}; responsible-PID attribution found none`,
-				),
-			);
-		return summarizeMemory(shell.name, settleMs, processes);
+		return summarizeMemory(settleMs, processes);
 	});
