@@ -12,6 +12,7 @@ import {
 	fetchBranchCommits,
 	type GitCommandError,
 	GitHub,
+	hasSearchQualifier,
 	type PullRequestChecksError,
 	type PullRequestMergeError,
 	type PullRequestStackMergeError,
@@ -1384,46 +1385,72 @@ export function attachRouter(
 					}));
 				},
 			),
-			// Live `gh search prs`, no local index — see `@repo/git`'s
-			// `searchPullRequests` for the empty-query/typed-query/qualifier
-			// branching. `process.cwd()` is fine as the invocation directory: a
-			// PR search spans every repo the account can see, not one checkout,
-			// and `gh search prs` doesn't care what directory it runs from
-			// (verified live — same results run from this repo or from `/tmp`).
+			// Hybrid search. A typed query with no GitHub qualifier is answered from
+			// the in-memory open-PR index when it can: matching is instant and
+			// spans every repo the palette has indexed, where `gh` search costs a
+			// network round trip per keystroke. Anything the index can't answer
+			// falls back to live `gh` — a qualifier query (the index understands no
+			// qualifiers), a repo filter naming a repo not indexed yet, or no local
+			// match (the PR may exist on GitHub but not be indexed). The blank
+			// query is the palette's "recent PRs" fetch on open: it stays on `gh`
+			// (author/review-requested scoping the index doesn't know) and warms
+			// the index for the typed search that follows. See `@repo/git`'s
+			// `searchPullRequests` for the `gh` branching. `process.cwd()` is fine
+			// as the invocation directory: a PR search spans every repo the account
+			// can see, not one checkout, and `gh search prs` doesn't care what
+			// directory it runs from (verified live — same results run from this
+			// repo or from `/tmp`).
 			search: authed.pullRequests.search.effect(function* ({ input, errors }) {
 				const github = yield* GitHub;
-				return yield* github
-					.search(process.cwd(), input.query, input.repos)
-					.pipe(
-						Effect.catchTag("GhNotAuthenticated", (cause) =>
-							Effect.fail(
-								errors.GH_NOT_AUTHENTICATED({
-									message: `gh is not authenticated: ${cause.reason}`,
-								}),
+				const prIndex = yield* PrIndex;
+				const searchGh = Effect.gen(function* () {
+					yield* Effect.annotateCurrentSpan("search.source", "gh");
+					return yield* github
+						.search(process.cwd(), input.query, input.repos)
+						.pipe(
+							Effect.catchTag("GhNotAuthenticated", (cause) =>
+								Effect.fail(
+									errors.GH_NOT_AUTHENTICATED({
+										message: `gh is not authenticated: ${cause.reason}`,
+									}),
+								),
 							),
-						),
-						Effect.catchTag("GhRateLimited", (cause) =>
-							Effect.fail(
-								errors.TOO_MANY_REQUESTS({
-									message: `GitHub's search API is rate-limited right now: ${cause.reason}`,
-								}),
+							Effect.catchTag("GhRateLimited", (cause) =>
+								Effect.fail(
+									errors.TOO_MANY_REQUESTS({
+										message: `GitHub's search API is rate-limited right now: ${cause.reason}`,
+									}),
+								),
 							),
-						),
-						Effect.catchTag("GitHubSearchUnreachable", (cause) =>
-							Effect.fail(
-								errors.SERVICE_UNAVAILABLE({
-									message: `could not reach GitHub: ${cause.reason}`,
-								}),
+							Effect.catchTag("GitHubSearchUnreachable", (cause) =>
+								Effect.fail(
+									errors.SERVICE_UNAVAILABLE({
+										message: `could not reach GitHub: ${cause.reason}`,
+									}),
+								),
 							),
-						),
-						Effect.catchTag("GhOutputDecodeError", (cause) =>
-							Effect.fail(
-								errors.SERVICE_UNAVAILABLE({
-									message: `gh returned output nisi couldn't parse (${cause.command})`,
-								}),
+							Effect.catchTag("GhOutputDecodeError", (cause) =>
+								Effect.fail(
+									errors.SERVICE_UNAVAILABLE({
+										message: `gh returned output nisi couldn't parse (${cause.command})`,
+									}),
+								),
 							),
-						),
-					);
+						);
+				});
+				return yield* Effect.gen(function* () {
+					if (input.query.trim() === "" && input.repos.length === 0) {
+						yield* prIndex.refreshKnown;
+						return yield* searchGh;
+					}
+					if (hasSearchQualifier(input.query)) return yield* searchGh;
+					const indexed = prIndex.search(input.query, input.repos);
+					if (Option.isSome(indexed) && indexed.value.length > 0) {
+						yield* Effect.annotateCurrentSpan("search.source", "index");
+						return indexed.value;
+					}
+					return yield* searchGh;
+				}).pipe(Effect.withSpan("pull-requests.search"));
 			}),
 			open: authed.pullRequests.open.effect(function* ({ input, errors }) {
 				const trace = yield* LaunchTrace;

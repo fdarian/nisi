@@ -129,7 +129,7 @@ export const makePrIndex = <E, R>(
 					: Option.some(
 							searchOpenPullRequestIndexes(entries.values(), query, repos),
 						),
-			
+
 			findNumber: (owner: string, repo: string, number: number) => {
 				const entry = entries.get(key(owner, repo));
 				const pr = entry?.prs.find((candidate) => candidate.number === number);
