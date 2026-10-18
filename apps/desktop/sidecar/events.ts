@@ -1,7 +1,16 @@
-import type { CodeIndexLspStatus, OpenRequest } from "@repo/sidecar-api";
+import type {
+	CodeIndexLspStatus,
+	OpenRequest,
+	WorkloadStep,
+} from "@repo/sidecar-api";
 import type { Session } from "./store.ts";
 
 type EventPayload =
+	| {
+			readonly type: "measurement-workload";
+			readonly id: string;
+			readonly step: WorkloadStep;
+	  }
 	| {
 			readonly type: "deep-link-injected";
 			readonly url: string;
