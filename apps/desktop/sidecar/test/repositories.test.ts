@@ -90,6 +90,7 @@ const indexWithOpen = (
 	openNumbers: ReadonlyArray<number>,
 ): Context.Service.Shape<typeof PrIndex> => ({
 	lookup: () => Effect.succeed(undefined),
+	indexed: Effect.succeed({ rows: [], incompleteRepos: [] }),
 	lookupPullRequest: (owner, repo, number) =>
 		Effect.succeed(
 			openNumbers.includes(number)
@@ -102,11 +103,16 @@ const indexWithOpen = (
 							headRef: "main",
 							isCrossRepository: false,
 							headOwner: owner,
+							updatedAt: "2026-10-01T00:00:00Z",
+							state: "OPEN",
+							author: "alice",
+							url: "https://github.com/acme/widgets/pull/1",
+							isDraft: false,
 						},
 					}
 				: undefined,
 		),
-	refresh: () => Effect.succeed(undefined),
+	refresh: () => Effect.forkDetach(Effect.void),
 	refreshKnown: Effect.void,
 	start: Effect.never,
 });

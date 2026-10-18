@@ -43,6 +43,30 @@ test("palette story fixtures filter PRs by query and repository with OR semantic
 	).toEqual([]);
 });
 
+test("palette story indexes the open search fixtures with a head branch", async () => {
+	const closed = { ...pr, number: 7, state: "CLOSED" as const };
+	const client = createMockSidecarClient({
+		pullRequestSearchResults: [pr, closed],
+	});
+	expect(await client.pullRequests.indexed()).toEqual({
+		rows: [
+			{
+				owner: "fdarian",
+				repo: "furl",
+				number: 42,
+				title: "Add repository filters",
+				author: "fdarian",
+				updatedAt: "2026-09-30T12:00:00Z",
+				url: "https://github.com/fdarian/furl/pull/42",
+				isDraft: false,
+				state: "OPEN",
+				headRefName: "fdarian/furl-42",
+			},
+		],
+		incompleteRepos: [],
+	});
+});
+
 test("palette story returns the configured saved repository identities", async () => {
 	const repositories = [{ owner: "acme", repo: "widgets" }];
 	const client = createMockSidecarClient({

@@ -113,6 +113,15 @@ describe("searchPullRequests", () => {
 		expect(result.results.map((r) => r.number)).toEqual([50]);
 	});
 
+	test("a PR by a deleted user (null author) decodes with author ghost", async () => {
+		const result = await runAgainstGhStub("TRIGGER_GHOST");
+		expect(result.ok).toBe(true);
+		if (!result.ok) return;
+		expect(result.results.map((r) => [r.number, r.author])).toEqual([
+			[7, "ghost"],
+		]);
+	});
+
 	test("gh not authenticated (exit code 4) fails with GhNotAuthenticated", async () => {
 		const result = await runAgainstGhStub("TRIGGER_AUTH_FAIL");
 		expect(result.ok).toBe(false);

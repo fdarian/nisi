@@ -5,6 +5,7 @@ import type {
 	OpenPullRequestIndex,
 	OpenPullRequestIndexOptions,
 } from "../github.ts";
+import { authorLoginOf, SearchPrItem } from "./pull-request.ts";
 
 const Response = Schema.Struct({
 	data: Schema.Struct({
@@ -25,6 +26,9 @@ const Response = Schema.Struct({
 						headRepositoryOwner: Schema.NullOr(
 							Schema.Struct({ login: Schema.String }),
 						),
+						author: SearchPrItem.fields.author,
+						url: SearchPrItem.fields.url,
+						isDraft: SearchPrItem.fields.isDraft,
 					}),
 				),
 				pageInfo: Schema.Struct({
@@ -46,7 +50,7 @@ export const listOpenPullRequests = (
 		const updatedSince = options?.updatedSince;
 		const states =
 			updatedSince === undefined ? "OPEN" : "[OPEN, CLOSED, MERGED]";
-		const query = `query($owner: String!, $repo: String!, $after: String) { repository(owner: $owner, name: $repo) { owner { login } name defaultBranchRef { name } pullRequests(states: ${states}, first: 100, after: $after, orderBy: { field: UPDATED_AT, direction: DESC }) { nodes { number title baseRefName headRefName isCrossRepository updatedAt state headRepositoryOwner { login } } pageInfo { hasNextPage endCursor } } } }`;
+		const query = `query($owner: String!, $repo: String!, $after: String) { repository(owner: $owner, name: $repo) { owner { login } name defaultBranchRef { name } pullRequests(states: ${states}, first: 100, after: $after, orderBy: { field: UPDATED_AT, direction: DESC }) { nodes { number title baseRefName headRefName isCrossRepository updatedAt state headRepositoryOwner { login } author { login } isDraft url } pageInfo { hasNextPage endCursor } } } }`;
 		const fetchPage = (after?: string) =>
 			Effect.gen(function* () {
 				const args = [
@@ -108,6 +112,11 @@ export const listOpenPullRequests = (
 			headRef: pr.headRefName,
 			isCrossRepository: pr.isCrossRepository,
 			headOwner: pr.headRepositoryOwner?.login ?? null,
+			updatedAt: pr.updatedAt,
+			state: pr.state,
+			author: authorLoginOf(pr.author),
+			url: pr.url,
+			isDraft: pr.isDraft,
 		});
 		const collect = (
 			page: typeof first,

@@ -24,3 +24,8 @@ export function derivePrStatus(input: PrStatusInput): PrStatus {
 		return "ready";
 	return "default";
 }
+
+/** For rows without mergeability or CI (the palette's open-PR index, open PRs only): all that's knowable is draft or plain open. */
+export function deriveIndexedPrStatus(input: { isDraft: boolean }): PrStatus {
+	return input.isDraft ? "draft" : "default";
+}

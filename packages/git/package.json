@@ -7,7 +7,8 @@
 		".": "./src/index.ts",
 		"./repo": "./src/repo.ts",
 		"./actions-log": "./src/github/actions-log.ts",
-		"./hunks": "./src/hunks.ts"
+		"./hunks": "./src/hunks.ts",
+		"./search-query": "./src/github/search-query.ts"
 	},
 	"scripts": {
 		"check:type": "tsc --noEmit",

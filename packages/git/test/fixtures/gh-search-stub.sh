@@ -26,6 +26,10 @@ if has "TRIGGER_DECODE"; then
 	echo '{"data":{"search":{"nodes":[{"number":"wrong"}]}}}'
 	exit 0
 fi
+if has "TRIGGER_GHOST"; then
+	echo '{"data":{"search":{"nodes":[{"number":7,"title":"Orphaned","repository":{"nameWithOwner":"acme/widgets"},"author":null,"updatedAt":"2026-01-01T00:00:00Z","url":"https://github.com/acme/widgets/pull/7","isDraft":false,"state":"OPEN","mergeable":"UNKNOWN","mergeStateStatus":"UNKNOWN","commits":{"nodes":[]}}]}}}'
+	exit 0
+fi
 if ! has "is:pr" || ! has "sort:updated-desc" || ! has "n=30"; then
 	echo "missing qualifiers: $joined" >&2
 	exit 1

@@ -104,6 +104,7 @@ export type {
 	PullRequestStackError,
 	PullRequestStackSuggestion,
 } from "./github/models.ts";
+export { hasSearchQualifier } from "./github/search-query.ts";
 export type { Hunk } from "./hunk.ts";
 export { parseHunks } from "./hunk.ts";
 export type { ChangedRun } from "./hunks.ts";

@@ -236,6 +236,7 @@ test("index disagreement upserts the correct PR's existing row without transferr
 		const canonicalRoot = await realpath(repoRoot);
 		const state = { number: 43, noPr: false };
 		const index: Context.Service.Shape<typeof PrIndex> = {
+			indexed: Effect.succeed({ rows: [], incompleteRepos: [] }),
 			lookupPullRequest: () => Effect.succeed(undefined),
 			lookup: () =>
 				Effect.succeed({
@@ -247,9 +248,14 @@ test("index disagreement upserts the correct PR's existing row without transferr
 						headRef: "main",
 						isCrossRepository: false,
 						headOwner: "acme",
+						updatedAt: "2026-10-01T00:00:00Z",
+						state: "OPEN",
+						author: "alice",
+						url: "https://github.com/acme/widgets/pull/1",
+						isDraft: false,
 					},
 				}),
-			refresh: () => Effect.succeed(undefined),
+			refresh: () => Effect.forkDetach(Effect.void),
 			refreshKnown: Effect.void,
 			start: Effect.never,
 		};
@@ -1325,6 +1331,7 @@ describe("Store.openPullRequestSession — reuses open review sessions", () => {
 						Effect.die(
 							new Error("deep links must not probe local branch index keys"),
 						),
+					indexed: Effect.succeed({ rows: [], incompleteRepos: [] }),
 					lookupPullRequest: (owner, repo, number) =>
 						Effect.sync(() => {
 							expect(owner.toLowerCase()).toBe("acme");
@@ -1343,10 +1350,15 @@ describe("Store.openPullRequestSession — reuses open review sessions", () => {
 									headRef: "main",
 									isCrossRepository: false,
 									headOwner: "acme",
+									updatedAt: "2026-10-01T00:00:00Z",
+									state: "OPEN",
+									author: "alice",
+									url: "https://github.com/acme/widgets/pull/1",
+									isDraft: false,
 								},
 							};
 						}),
-					refresh: () => Effect.succeed(undefined),
+					refresh: () => Effect.forkDetach(Effect.void),
 					refreshKnown: Effect.void,
 					start: Effect.never,
 				};

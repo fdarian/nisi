@@ -1384,14 +1384,16 @@ export function attachRouter(
 					}));
 				},
 			),
-			// Live `gh search prs`, no local index — see `@repo/git`'s
-			// `searchPullRequests` for the empty-query/typed-query/qualifier
-			// branching. `process.cwd()` is fine as the invocation directory: a
-			// PR search spans every repo the account can see, not one checkout,
-			// and `gh search prs` doesn't care what directory it runs from
-			// (verified live — same results run from this repo or from `/tmp`).
+			// Always asks `gh`; the palette matches typed text against `indexed`
+			// itself and only calls this for what the index can't answer. The blank
+			// query is the palette opening, so it also refreshes the index in the
+			// background to keep `indexed` warm.
+			// `process.cwd()` is fine: `gh search prs` ignores its directory.
 			search: authed.pullRequests.search.effect(function* ({ input, errors }) {
 				const github = yield* GitHub;
+				const prIndex = yield* PrIndex;
+				if (input.query.trim() === "" && input.repos.length === 0)
+					yield* prIndex.refreshKnown;
 				return yield* github
 					.search(process.cwd(), input.query, input.repos)
 					.pipe(
@@ -1424,6 +1426,14 @@ export function attachRouter(
 							),
 						),
 					);
+			}),
+			indexed: authed.pullRequests.indexed.effect(function* ({ errors }) {
+				const prIndex = yield* PrIndex;
+				return yield* prIndex.indexed.pipe(
+					Effect.catchTag("SettingsStoreError", (cause) =>
+						Effect.fail(errors.SERVICE_UNAVAILABLE({ message: cause.message })),
+					),
+				);
 			}),
 			open: authed.pullRequests.open.effect(function* ({ input, errors }) {
 				const trace = yield* LaunchTrace;

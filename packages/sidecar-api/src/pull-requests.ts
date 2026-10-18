@@ -43,6 +43,41 @@ export type PullRequestSearchResult = Schema.Schema.Type<
 >;
 
 /**
+ * What the palette needs to match typed text against every open PR in the
+ * sidecar's index without a round trip per keystroke. It carries no CI or
+ * mergeability: the index query leaves those out because GitHub 502s on them
+ * at 100 nodes per page for busy repositories. `headRefName` is a match field
+ * only; it isn't rendered.
+ */
+export const IndexedPullRequest = Schema.Struct({
+	owner: PullRequestSearchResult.fields.owner,
+	repo: PullRequestSearchResult.fields.repo,
+	number: PullRequestSearchResult.fields.number,
+	title: PullRequestSearchResult.fields.title,
+	author: PullRequestSearchResult.fields.author,
+	updatedAt: PullRequestSearchResult.fields.updatedAt,
+	url: PullRequestSearchResult.fields.url,
+	isDraft: PullRequestSearchResult.fields.isDraft,
+	state: PullRequestSearchResult.fields.state,
+	headRefName: Schema.String,
+});
+export type IndexedPullRequest = Schema.Schema.Type<typeof IndexedPullRequest>;
+
+/**
+ * `incompleteRepos` lists the known repositories ("owner/repo", lower-cased)
+ * whose first full index refresh hasn't succeeded — it failed, or `indexed`
+ * stopped waiting for it — so `rows` has nothing for them. A client holding
+ * earlier rows for those repositories should keep them.
+ */
+export const IndexedPullRequests = Schema.Struct({
+	rows: Schema.Array(IndexedPullRequest),
+	incompleteRepos: Schema.Array(Schema.String),
+});
+export type IndexedPullRequests = Schema.Schema.Type<
+	typeof IndexedPullRequests
+>;
+
+/**
  * `open`'s two possible outcomes — a discriminated union rather than two
  * separate procedures (a pre-flight `resolveRepoPath` the frontend always
  * calls first) or a thrown "not configured" error. The palette only ever
@@ -461,6 +496,7 @@ export const pullRequestsContract = {
 			TOO_MANY_REQUESTS: {},
 			SERVICE_UNAVAILABLE: {},
 		}),
+	indexed: oc.output(IndexedPullRequests).errors({ SERVICE_UNAVAILABLE: {} }),
 	open: oc
 		.input(
 			Schema.Struct({

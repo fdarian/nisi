@@ -137,6 +137,7 @@ export type MockOrpcData = {
 	filesDelayMs?: number;
 	/** How many `pullRequests.search` calls resolve before every later one stays pending forever — omit for all of them to resolve. `0` keeps even the first search in flight; `1` gives one loaded result set that any refetch then leaves revalidating. */
 	pullRequestSearchSettleLimit?: number;
+	/** `pullRequests.search`'s rows; `pullRequests.indexed` lists the open ones too, each with a made-up head branch. */
 	pullRequestSearchResults?: readonly PullRequestSearchResult[];
 	pullRequestRepositories?: readonly PullRequestRepository[];
 	/** `repositories.list`'s result. */
@@ -437,6 +438,23 @@ export function createMockSidecarClient(
 						pr.title.toLowerCase().includes(input.query.toLowerCase()),
 				);
 			},
+			indexed: async () => ({
+				rows: (data.pullRequestSearchResults ?? [])
+					.filter((pr) => pr.state === "OPEN")
+					.map((pr) => ({
+						owner: pr.owner,
+						repo: pr.repo,
+						number: pr.number,
+						title: pr.title,
+						author: pr.author,
+						updatedAt: pr.updatedAt,
+						url: pr.url,
+						isDraft: pr.isDraft,
+						state: pr.state,
+						headRefName: `${pr.author}/${pr.repo}-${pr.number}`,
+					})),
+				incompleteRepos: [],
+			}),
 			open: neverSettles,
 			recordRepoPath: async (input) => input,
 			repointOrigin: neverSettles,
