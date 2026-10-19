@@ -14,7 +14,14 @@ import {
 } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { emit } from "../events.ts";
-import { parseTunnelUrl } from "./tunnel-url.ts";
+import {
+	describeUnexpectedExit,
+	isTunnelRegistered,
+	parseErrorMessage,
+	parseKillSignal,
+	parseTunnelUrl,
+	type TunnelExit,
+} from "./cloudflared-log.ts";
 
 export type PublicAccessOptions = {
 	readonly port: number;
@@ -118,7 +125,12 @@ export class PublicAccess extends Context.Service<PublicAccess>()(
 								),
 							)
 							.pipe(Scope.provide(scope));
-						const lastLine = yield* Ref.make("");
+						const lastError = yield* Ref.make<string | undefined>(undefined);
+						// The URL is printed before the tunnel can carry traffic, so it is
+						// held back until a connection registers. The two lines can arrive
+						// in either order.
+						const tunnelUrl = yield* Ref.make<string | undefined>(undefined);
+						const registered = yield* Ref.make(false);
 
 						yield* Stream.runDrain(handle.stdout).pipe(
 							Effect.ignore,
@@ -128,28 +140,41 @@ export class PublicAccess extends Context.Service<PublicAccess>()(
 							lines(handle.stderr),
 							(line) =>
 								Effect.gen(function* () {
-									yield* Ref.set(lastLine, line);
+									const errorMessage = parseErrorMessage(line);
+									if (errorMessage !== undefined) {
+										yield* Ref.set(lastError, errorMessage);
+									}
 									const url = parseTunnelUrl(line);
-									if (url === undefined) return;
-									const link = `${url}/#t=${options.token}`;
+									if (url !== undefined) yield* Ref.set(tunnelUrl, url);
+									if (isTunnelRegistered(line))
+										yield* Ref.set(registered, true);
+
+									const readyUrl = yield* Ref.get(tunnelUrl);
+									if (readyUrl === undefined || !(yield* Ref.get(registered))) {
+										return;
+									}
+									const link = `${readyUrl}/#t=${options.token}`;
 									const current = yield* Ref.get(state);
 									if (current.type === "on" && current.link === link) return;
-									yield* Effect.logInfo("public tunnel up", { url });
+									yield* Effect.logInfo("public tunnel up", { url: readyUrl });
 									yield* transition({ type: "on", link });
 								}),
 						).pipe(
 							Effect.andThen(handle.exitCode),
-							Effect.map((code) => `cloudflared exited with code ${code}`),
+							Effect.map((code): TunnelExit => ({ type: "code", code })),
 							// A signal-killed process fails `exitCode` instead of yielding one.
-							Effect.catchTag("PlatformError", () =>
-								Effect.succeed("cloudflared stopped unexpectedly"),
+							Effect.catchTag("PlatformError", (cause) =>
+								Effect.succeed<TunnelExit>({
+									type: "signal",
+									signal: parseKillSignal(cause.message),
+								}),
 							),
-							Effect.flatMap((reason) =>
-								Ref.get(lastLine).pipe(
-									Effect.flatMap((last) =>
+							Effect.flatMap((exit) =>
+								Ref.get(lastError).pipe(
+									Effect.flatMap((error) =>
 										reportUnexpectedExit(
 											scope,
-											last === "" ? reason : `${reason}: ${last}`,
+											describeUnexpectedExit(error, exit),
 										),
 									),
 								),
