@@ -676,6 +676,28 @@ describe("ReviewStore PR session listing", () => {
 		});
 	});
 
+	test("updateBaseRef repoints the base only, keeping the session and its sort position", async () => {
+		await withTempDataDir(async (dataDir) => {
+			const result = await run(
+				dataDir,
+				Effect.gen(function* () {
+					const store = yield* ReviewStore;
+					const older = yield* open(1);
+					yield* open(2);
+					const updated = yield* store.updateBaseRef(older.id, "develop");
+					const listed = yield* store.listPullRequestSessions();
+					const reopened = yield* open(1);
+					return { older, updated, reopened, listed };
+				}),
+			);
+
+			expect(result.updated.id).toBe(result.older.id);
+			expect(result.updated.baseRef).toBe("develop");
+			expect(result.reopened.id).toBe(result.older.id);
+			expect(result.listed.map((record) => record.number)).toEqual([2, 1]);
+		});
+	});
+
 	test("retargeting a session onto another PR forgets the old PR's state", async () => {
 		await withTempDataDir(async (dataDir) => {
 			const listed = await run(

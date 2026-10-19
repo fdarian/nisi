@@ -403,6 +403,30 @@ export class ReviewStore extends Context.Service<ReviewStore>()("ReviewStore", {
 				);
 			});
 
+		/**
+		 * Repoints only the diff base of a PR session, for when GitHub retargets
+		 * the PR (the PR it was stacked on merged). Not `retargetToPullRequest`:
+		 * the session stays the same PR, so its `sessionKey` is untouched. Leaves
+		 * `updatedAt` alone like `setPrState` — the base moving is not user
+		 * activity.
+		 */
+		const updateBaseRef = (
+			sessionId: string,
+			baseRef: string,
+		): Effect.Effect<Session, SessionNotFound | ReviewStoreError> =>
+			Effect.gen(function* () {
+				const row = yield* readSessionRow(sessionId);
+				const updated = yield* query(
+					db
+						.update(sessions)
+						.set({ baseRef })
+						.where(eq(sessions.id, row.id))
+						.returning()
+						.get(),
+				);
+				return toSession(updated);
+			});
+
 		const listOpenBranchSessions = (
 			repoRoot: string,
 			headRef: string,
@@ -709,6 +733,7 @@ export class ReviewStore extends Context.Service<ReviewStore>()("ReviewStore", {
 			listOpenBranchSessions,
 			listPullRequestSessions,
 			setPrState,
+			updateBaseRef,
 			closeSession,
 			getSession,
 			updateRepoRoot,

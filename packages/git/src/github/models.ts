@@ -211,6 +211,8 @@ export const MergeabilityView = Schema.Struct({
 	isDraft: Schema.Boolean,
 	headRefOid: Schema.String,
 	baseRefOid: Schema.String,
+	/** Changes when GitHub retargets the PR, e.g. after the PR it was stacked on merges. */
+	baseRefName: Schema.String,
 });
 
 export type PullRequestMergeability = Schema.Schema.Type<

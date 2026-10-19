@@ -1794,6 +1794,7 @@ export function attachRouter(
 											store.recordPullRequestStatus(input, {
 												headSha: status.mergeability.headRefOid,
 												baseSha: status.mergeability.baseRefOid,
+												baseRef: status.mergeability.baseRefName,
 												state: status.mergeability.state,
 											}),
 										);

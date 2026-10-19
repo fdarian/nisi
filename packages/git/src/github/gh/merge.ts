@@ -55,8 +55,8 @@ const isMergeStatusPermissionFailure = (stderr: string): boolean =>
 	MERGE_STATUS_PERMISSION_MARKERS.some((marker) => stderr.includes(marker));
 
 /**
- * `gh pr view <number> --json state,mergeable,mergeStateStatus,isDraft,headRefOid,baseRefOid` —
- * mergeability alone, distinct from `pull-request.ts`'s `PrView` fields
+ * `gh pr view <number> --json state,mergeable,mergeStateStatus,isDraft,headRefOid,baseRefOid,baseRefName` —
+ * mergeability alone (plus `baseRefName`, which changes when GitHub retargets the PR), distinct from `pull-request.ts`'s `PrView` fields
  * (`title`/`baseRefName`/`headRefName`) since a caller polling this while
  * `mergeable` is still `"UNKNOWN"` (GitHub computes it asynchronously) has
  * no reason to also re-fetch the PR's identity every couple of seconds.
@@ -85,7 +85,7 @@ export const fetchPullRequestMergeability = (
 			"view",
 			String(number),
 			"--json",
-			"state,mergeable,mergeStateStatus,isDraft,headRefOid,baseRefOid",
+			"state,mergeable,mergeStateStatus,isDraft,headRefOid,baseRefOid,baseRefName",
 		]);
 
 		if (result.exitCode !== 0) {

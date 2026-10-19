@@ -14,6 +14,7 @@ describe("merge status decoding", () => {
 			isDraft: false,
 			headRefOid: "0123456789abcdef0123456789abcdef01234567",
 			baseRefOid: "89abcdef0123456789abcdef0123456789abcdef",
+			baseRefName: "main",
 		} as const;
 		expect(
 			await Effect.runPromise(

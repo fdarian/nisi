@@ -604,6 +604,7 @@ describe("Store — a PR session's worktree that moved on to another commit", ()
 					const open = (headSha: string) => ({
 						headSha,
 						baseSha: "unused",
+						baseRef: "main",
 						state: "OPEN" as const,
 					});
 					const session = yield* reviews.openSession({
@@ -745,7 +746,7 @@ describe("Store — a PR session after the PR is merged", () => {
 		headSha: string,
 		baseSha: string,
 		state: "OPEN" | "MERGED",
-	) => ({ headSha, baseSha, state });
+	) => ({ headSha, baseSha, baseRef: "main", state });
 
 	for (const kind of ["merge commit", "squash", "rebase"] as const) {
 		test(`${kind}: the diff is the PR's changes and a reviewed file stays clean`, async () => {
@@ -1018,7 +1019,7 @@ describe("gatherGenerationContext — the worktree the agent will read", () => {
 		headSha: string,
 		baseSha: string,
 		state: "OPEN" | "MERGED",
-	) => ({ headSha, baseSha, state });
+	) => ({ headSha, baseSha, baseRef: "main", state });
 
 	/** `pr` has two commits off `main`; `main` is then advanced by a true merge of `pr`, in another worktree. */
 	const setup = async (root: string, parent: string) => {
@@ -2594,6 +2595,70 @@ describe("Store.openPullRequestSession — repo path resolution", () => {
 	});
 });
 
+describe("Store — a PR retargeted to another base", () => {
+	test("repoints a session still on the old base and corrects its diff, once", async () => {
+		await withTestRepoAndDataDir(async (repoRoot, dataDir) => {
+			const root = await realpath(repoRoot);
+			await sh(root, ["checkout", "-q", "-b", "lower"]);
+			await Bun.write(join(root, "lower.ts"), "lower\n");
+			await sh(root, ["add", "-A"]);
+			await sh(root, ["commit", "-q", "-m", "lower"]);
+			await sh(root, ["checkout", "-q", "-b", "pr"]);
+			await Bun.write(join(root, "a.ts"), "pr change\n");
+			await sh(root, ["commit", "-q", "-am", "pr"]);
+			const head = await shOut(root, ["rev-parse", "HEAD"]);
+			// The base refresh fetches origin/<base>; the repo is its own origin.
+			await sh(root, ["remote", "add", "origin", root]);
+			await sh(root, ["fetch", "-q", "origin"]);
+
+			await Effect.runPromise(
+				Effect.gen(function* () {
+					const store = yield* Store;
+					const reviews = yield* ReviewStore;
+					const pr = { owner: "acme", repo: "widgets", number: 7 };
+					const session = yield* reviews.openSession({
+						repoRoot: root,
+						baseRef: "lower",
+						headRef: "pr",
+						pr: { ...pr, title: "Stacked PR" },
+					});
+					const paths = store
+						.listChangedFiles(session.id, false)
+						.pipe(Effect.map((files) => files.map((file) => file.path)));
+					expect(yield* paths).toEqual(["a.ts"]);
+
+					const events: string[] = [];
+					const unsubscribe = subscribe((event) => {
+						if (
+							event.type === "session-diff-source-changed" ||
+							event.type === "session-files-changed"
+						)
+							events.push(`${event.type}:${event.sessionId}`);
+					});
+					yield* Effect.addFinalizer(() => Effect.sync(unsubscribe));
+
+					const retargeted = {
+						headSha: head,
+						baseSha: "unused",
+						baseRef: "main",
+						state: "OPEN" as const,
+					};
+					// First reading since the sidecar started: no `previous`, yet the
+					// tab was already on the wrong base.
+					yield* store.recordPullRequestStatus(pr, retargeted);
+
+					expect((yield* reviews.getSession(session.id)).baseRef).toBe("main");
+					expect(events).toEqual([`session-diff-source-changed:${session.id}`]);
+					expect(yield* paths).toEqual(["a.ts", "lower.ts"]);
+
+					yield* store.recordPullRequestStatus(pr, retargeted);
+					expect(events).toHaveLength(1);
+				}).pipe(Effect.scoped, Effect.provide(makeTestLayer(dataDir))),
+			);
+		});
+	}, 20_000);
+});
+
 describe("Store — persisting the PR state it learns", () => {
 	test("a merge-status reading is saved on every session of that PR, closed tabs included", async () => {
 		await withTestRepoAndDataDir(async (repoRoot, dataDir) => {
@@ -2613,7 +2678,12 @@ describe("Store — persisting the PR state it learns", () => {
 
 					yield* store.recordPullRequestStatus(
 						{ ...pr, owner: "acme" },
-						{ headSha: "head", baseSha: "base", state: "MERGED" },
+						{
+							headSha: "head",
+							baseSha: "base",
+							baseRef: "main",
+							state: "MERGED",
+						},
 					);
 
 					const [record] = yield* reviews.listPullRequestSessions(pr);

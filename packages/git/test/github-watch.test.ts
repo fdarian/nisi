@@ -51,6 +51,7 @@ describe("gh watch polling", () => {
 			isDraft: false,
 			headRefOid: "head",
 			baseRefOid: "base",
+			baseRefName: "main",
 		};
 		expect(
 			milliseconds(
