@@ -21,7 +21,37 @@ test("requires cwd and only accepts the checkout-local interface", () => {
 		rebuild: true,
 		json: true,
 		waitPrIndex: false,
+		memory: false,
+		memorySettleMs: 5000,
+		soak: false,
+		soakPrs: [],
+		soakIntervalMs: 2000,
+		soakIdleMs: 60_000,
+		discardFirst: false,
 	});
+});
+
+test("memory sampling is valid in any mode, and its settle needs --memory", () => {
+	expect(parseLaunchOptions(["--cwd", "/pr", "--memory"])).toMatchObject({
+		memory: true,
+		memorySettleMs: 5000,
+	});
+	expect(
+		parseLaunchOptions([
+			"--cwd",
+			"/pr",
+			"--cold",
+			"--memory",
+			"--memory-settle",
+			"1500",
+		]),
+	).toMatchObject({ memory: true, memorySettleMs: 1500 });
+	expect(() =>
+		parseLaunchOptions(["--cwd", "/pr", "--memory-settle", "1500"]),
+	).toThrow("--memory-settle requires --memory");
+	expect(() =>
+		parseLaunchOptions(["--cwd", "/pr", "--memory", "--memory-settle", "soon"]),
+	).toThrow("--memory-settle requires a number of milliseconds");
 });
 
 test("index waiting is restricted to new-PR measurement mode", () => {
@@ -38,4 +68,138 @@ test("index waiting is restricted to new-PR measurement mode", () => {
 			"--wait-pr-index",
 		]).waitPrIndex,
 	).toBe(true);
+});
+
+test("soak needs a cold deep-link run and takes its own tuning flags", () => {
+	const pr = "https://github.com/fdarian/nisi/pull/158";
+	expect(
+		parseLaunchOptions(["--cwd", "/pr", "--cold", "--deeplink", pr, "--soak"]),
+	).toMatchObject({
+		soak: true,
+		soakPrs: [],
+		soakIntervalMs: 2000,
+		soakIdleMs: 60_000,
+	});
+	expect(
+		parseLaunchOptions([
+			"--cwd",
+			"/pr",
+			"--cold",
+			"--deeplink",
+			pr,
+			"--soak",
+			"--soak-prs",
+			"https://github.com/fdarian/nisi/pull/163, https://github.com/fdarian/nisi/pull/87",
+			"--soak-interval",
+			"500",
+			"--soak-idle",
+			"0",
+		]),
+	).toMatchObject({
+		soakPrs: [
+			"https://github.com/fdarian/nisi/pull/163",
+			"https://github.com/fdarian/nisi/pull/87",
+		],
+		soakIntervalMs: 500,
+		soakIdleMs: 0,
+	});
+	expect(() => parseLaunchOptions(["--cwd", "/pr", "--soak"])).toThrow(
+		"--soak requires --cold and --deeplink",
+	);
+	expect(() =>
+		parseLaunchOptions(["--cwd", "/pr", "--cold", "--soak"]),
+	).toThrow("--soak requires --cold and --deeplink");
+	expect(() =>
+		parseLaunchOptions(["--cwd", "/pr", "--cold", "--soak-idle", "10"]),
+	).toThrow("--soak-idle requires --soak");
+	expect(() =>
+		parseLaunchOptions([
+			"--cwd",
+			"/pr",
+			"--cold",
+			"--deeplink",
+			pr,
+			"--soak",
+			"--soak-interval",
+			"fast",
+		]),
+	).toThrow("--soak-interval requires a number of milliseconds");
+	expect(() =>
+		parseLaunchOptions([
+			"--cwd",
+			"/pr",
+			"--cold",
+			"--deeplink",
+			pr,
+			"--soak",
+			"--soak-prs",
+			" , ",
+		]),
+	).toThrow("--soak-prs requires a comma-separated list");
+});
+
+test("repeated runs are for cold starts, and discarding the first needs them", () => {
+	const pr = "https://github.com/fdarian/nisi/pull/158";
+	expect(
+		parseLaunchOptions(["--cwd", "/pr", "--cold", "--runs", "3"]),
+	).toMatchObject({ runs: 3, discardFirst: false });
+	expect(
+		parseLaunchOptions([
+			"--cwd",
+			"/pr",
+			"--cold",
+			"--deeplink",
+			pr,
+			"--runs",
+			"5",
+			"--discard-first",
+		]),
+	).toMatchObject({ runs: 5, discardFirst: true });
+	expect(
+		parseLaunchOptions([
+			"--cwd",
+			"/pr",
+			"--cold",
+			"--deeplink",
+			pr,
+			"--soak",
+			"--runs",
+			"2",
+		]).runs,
+	).toBe(2);
+	expect(parseLaunchOptions(["--cwd", "/pr", "--cold"]).runs).toBeUndefined();
+	expect(() => parseLaunchOptions(["--cwd", "/pr", "--runs", "3"])).toThrow(
+		"--runs requires --cold",
+	);
+	expect(() =>
+		parseLaunchOptions([
+			"--cwd",
+			"/pr",
+			"--new-pr",
+			"--warmup",
+			"/other",
+			"--runs",
+			"3",
+		]),
+	).toThrow("--runs requires --cold");
+	for (const bad of ["0", "-1", "2.5", "many"])
+		expect(() =>
+			parseLaunchOptions(["--cwd", "/pr", "--cold", "--runs", bad]),
+		).toThrow("--runs requires a whole number of at least 1");
+	expect(() =>
+		parseLaunchOptions(["--cwd", "/pr", "--cold", "--runs"]),
+	).toThrow("--runs requires a whole number of at least 1");
+	expect(() =>
+		parseLaunchOptions(["--cwd", "/pr", "--cold", "--discard-first"]),
+	).toThrow("--discard-first requires --runs");
+	expect(() =>
+		parseLaunchOptions([
+			"--cwd",
+			"/pr",
+			"--cold",
+			"--runs",
+			"1",
+			"--discard-first",
+		]),
+	).toThrow("--discard-first requires --runs of at least 2");
 });

@@ -50,6 +50,7 @@ import { PrView } from "#/features/pull-request/pr-view";
 import type { SidecarQueryUtils } from "#/infra/backend-context";
 import { useBackendContext } from "#/infra/backend-context";
 import { useLaunchMark } from "#/infra/launch-trace";
+import { useMeasurementTabs } from "#/infra/measurement-workload";
 import { useAppViewActive } from "./app-view-context";
 import { useDeepLinkOpener } from "./deep-link/deep-link-data";
 import { DevBranch } from "./dev-branch";
@@ -378,6 +379,11 @@ function AppShellReady({
 		() => sessions.map((session) => session.id),
 		[sessions],
 	);
+	useMeasurementTabs({
+		activeSessionId: selectedSessionId,
+		sessionIds,
+		closeOtherTabs: handleCloseOtherSessions,
+	});
 	// The active session's chat popup gets first refusal on ⌘⇧]/⌘⇧[ — see
 	// `useTabShortcuts`'s `onChatThreadShortcut` doc comment.
 	const activeChatPopupOpen = useChatPopupOpen(selectedSessionId);

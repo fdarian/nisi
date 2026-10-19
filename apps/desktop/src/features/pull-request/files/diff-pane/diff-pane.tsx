@@ -218,6 +218,12 @@ export type DiffPaneHandle = {
 	scrollToMatch: (match: DiffMatch) => void;
 	/** Scrolls to a head-file (additions side) line of `path`, centered. For callers that cite a line rather than a search hit. */
 	scrollToLine: (path: string, line: number) => void;
+	/** The virtualizer's scroll geometry, for scrolling the whole pane rather than to a file (`infra/measurement-workload.ts`). `undefined` until the viewer has mounted. */
+	getViewport: () =>
+		| { scrollTop: number; height: number; scrollHeight: number }
+		| undefined;
+	/** An instant jump to an absolute scroll offset. */
+	scrollToPosition: (position: number) => void;
 };
 
 type DiffPaneProps = {
@@ -1330,10 +1336,33 @@ export function DiffPane({
 		[scrollWhenReady],
 	);
 
+	const getViewport = useCallback(() => {
+		const viewer = codeViewRef.current?.getInstance();
+		if (viewer === undefined) return undefined;
+		return {
+			scrollTop: viewer.getScrollTop(),
+			height: viewer.getHeight(),
+			scrollHeight: viewer.getScrollHeight(),
+		};
+	}, []);
+	const scrollToPosition = useCallback((position: number) => {
+		codeViewRef.current?.scrollTo({
+			type: "position",
+			position,
+			behavior: "instant",
+		});
+	}, []);
+
 	useImperativeHandle(
 		ref,
-		() => ({ scrollToPath, scrollToMatch, scrollToLine }),
-		[scrollToPath, scrollToMatch, scrollToLine],
+		() => ({
+			scrollToPath,
+			scrollToMatch,
+			scrollToLine,
+			getViewport,
+			scrollToPosition,
+		}),
+		[scrollToPath, scrollToMatch, scrollToLine, getViewport, scrollToPosition],
 	);
 
 	useEffect(

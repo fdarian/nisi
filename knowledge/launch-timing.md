@@ -75,6 +75,62 @@ the request, making the terminal paint mark ambiguous.
 - `--json` prints the collected records as a JSON array rather than the formatted report.
 - Raw records are JSONL at `<selected data dir>/logs/launch-traces/<traceId>.jsonl`.
 
+## Repeated runs (`--runs <n>`)
+
+Valid with `--cold` (plain or `--deeplink`) and with `--soak`; rejected for warm and `--new-pr` modes. The measurement runs `n` times
+in sequence. Before each run the script stops the instance and wipes `.data/measure-launch/data/`, so every run starts from no
+sessions: a session surviving from an earlier run, with its worktree already removed by cleanup, makes a repeated cold deep link time out.
+`--rebuild` applies to the first run only.
+
+A run that fails is reported on stderr (run index and error) and left out of the summary; the command fails only when every run does.
+The first run after a fresh build is slower (first launch of new binaries); `--discard-first` (needs `--runs` of at least 2) drops run 1
+from the summary. Runs that stay in the output are still listed under `runs` in `--json`.
+
+The text report prints, across the counted runs:
+
+- every milestone of the single-run report as median / min / max / n (`n` is the number of runs that observed it);
+- with `--memory`, physical footprint median / min / max per group and for the totals with and without the sidecar;
+- with `--soak`, the per-phase table with medians across runs, then whole-run figures per run reduced to median / min / max:
+  time-weighted average (trapezoidal over the samples), peak and final footprint without the sidecar, and each group's average.
+
+`--json` prints `{ "runs": [...], "summary": {...} }`: `runs` holds each successful run's payload exactly as a single run prints it,
+`summary` holds the statistics, `failures`, and which run indexes were counted.
+
+## Memory (`--memory`)
+
+Valid with any mode. After `trace.done` the script waits `--memory-settle <ms>` (default 5000), then samples every
+process whose executable is under `<bundle>/Contents/`: RSS from `ps`, physical footprint from
+`footprint -p <pid> --noCategories -f bytes` (works unprivileged for your own processes). Helpers are classified by
+their `--type=` argument. The report groups main / renderer(s) / GPU / other helpers / sidecar and totals
+with and without the sidecar. Footprint is the number to compare; RSS counts shared pages once per process.
+With `--json` and `--memory` the output is `{ "records": [...], "memory": {...} }` instead of a bare record array.
+
+## Sustained memory (`--soak`)
+
+A single `--memory` snapshot says little about the app under real use. `--soak` (requires `--cold` and `--deeplink`) samples memory every `--soak-interval <ms>` (default 2000) for the whole run, using the same sampler,
+process set and grouping as `--memory`, while a scripted workload runs:
+
+| Phase | What happens |
+|-------|--------------|
+| `open` | Cold launch and the `--deeplink` PR, through to `trace.done` |
+| `idle-1` | Idle for `--soak-idle <ms>` (default 60000) |
+| `scroll-1` | `scroll-files-changed` on the open PR |
+| `extra-tabs` | For each `--soak-prs <url,url,...>` (same repository): open it through the traced deep-link path, then `scroll-files-changed` |
+| `after-close` | `close-other-tabs`, then idle `--soak-idle` again |
+
+The workload is driven from inside the frontend, so the script needs no browser automation. It calls
+the measurement-gated `diagnostics.runWorkloadStep`, which emits a `measurement-workload` event on the sidecar stream
+(replayed to new subscribers until acked, like injected deep links); `src/infra/measurement-workload.ts` performs it and
+calls `ackWorkloadStep`; the script polls `workloadStepStatus`. `scroll-files-changed` scrolls the diff pane's virtualizer
+top to bottom one viewport per ~250 ms (re-reading the total height each step, since placeholder heights are replaced as
+files render), then back to the top. `close-other-tabs` runs the tab strip's own "close other tabs" action keeping the first tab.
+The diff pane exposes `getViewport`/`scrollToPosition` on its handle for this; each `FilesChangedView` registers it by session id.
+
+Output is a per-phase table (start/peak/end of total footprint without the sidecar, renderer-group peak/end, sidecar
+start/peak/end) and, with `--json`, the whole series under `soak`. The series is also written as CSV to
+`.data/measure-launch/soak/<traceId>.csv`, outside the cold data dir that `--runs` wipes. A sample whose process exited mid-read is
+skipped and counted. Idle tabs suspend after five minutes (`use-tab-suspension.ts`), so a long run can include that.
+
 ## Build reuse
 
 Managed modes compare HEAD and a SHA-256 content hash against `nisi.app.build-stamp.json` beside

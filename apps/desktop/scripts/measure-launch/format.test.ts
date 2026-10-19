@@ -4,6 +4,7 @@ import {
 	formatAlreadyOpen,
 	formatTimeline,
 	formatVisibility,
+	milestoneOffsets,
 } from "./format.ts";
 
 const mark = (
@@ -198,4 +199,45 @@ test("does not warn for visible, missing, or out-of-window visibility", () => {
 			600,
 		),
 	).toBeUndefined();
+});
+
+test("milestone offsets give the numbers the timeline prints, N/A for the deep-link flow", () => {
+	const cli = milestoneOffsets([
+		mark(1000, "cli.process-start"),
+		span("cli.app.launch", 1000, 1300, "a"),
+		mark(1500, "sidecar.router.ready"),
+		mark(2000, "tab.content.painted"),
+	]);
+	expect(cli.find((m) => m.name === "cli.app.launch.end")).toEqual({
+		name: "cli.app.launch.end",
+		status: "measured",
+		offsetMs: 300,
+	});
+	expect(cli.find((m) => m.name === "tab.content.painted")).toEqual({
+		name: "tab.content.painted",
+		status: "measured",
+		offsetMs: 1000,
+	});
+	expect(cli.find((m) => m.name === "pending-panel.painted")?.status).toBe(
+		"not-observed",
+	);
+	const deepLink = milestoneOffsets([
+		mark(500, "measurement.app-launch.start"),
+		mark(900, "deeplink.received"),
+		mark(1200, "tab.content.painted"),
+	]);
+	expect(deepLink.map((m) => m.name).slice(0, 3)).toEqual([
+		"deeplink.received",
+		"deeplink.dequeued",
+		"pull-requests.open.resolved",
+	]);
+	expect(deepLink.find((m) => m.name === "deeplink.received")).toMatchObject({
+		offsetMs: 400,
+	});
+	expect(deepLink.find((m) => m.name === "pending-panel.painted")?.status).toBe(
+		"n/a",
+	);
+	expect(() => milestoneOffsets([mark(1, "tab.content.painted")])).toThrow(
+		"no timeline origin",
+	);
 });

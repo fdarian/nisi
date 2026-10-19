@@ -31,6 +31,8 @@ importantly, the rules for deciding whether a thing belongs here at all.
 # Performance
 
 * [CLI-to-paint launch timing](launch-timing.md) - How to measure CLI-to-landing-tab paint, read the milestones, and compare with the native dev baseline.
+* [Where Electron startup time and memory go](electron-startup-memory-profile.md) - Cold-start critical path and sustained memory by process for the Electron build, the baseline to beat when squeezing either.
+* [Electrobun (CEF and WebKit) evaluated against Electron](electrobun-evaluation.md) - Why the desktop shell stays on Electron — startup, snapshot and sustained memory, and size of Electrobun 2.0.2 with CEF or WKWebView, measured against Electron 44.
 * [Files Changed performance budget](frontend-performance-budget.md) - the numbers to hold at ~221 changed files, and what regressing them looks like
 * [Deferred frontend perf work](deferred-frontend-perf-work.md) - known wins not taken yet, and one open symptom not yet bisected
 * [The @pierre/diffs CodeView teardown leak patch](codeview-teardown-leak-patch.md) - why `cleanAllRenderedItems()` now sweeps every item instead of just the last virtualization window, and the residual leak still open

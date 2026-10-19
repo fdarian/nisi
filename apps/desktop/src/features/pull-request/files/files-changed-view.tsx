@@ -32,6 +32,7 @@ import {
 	useWrapLines,
 } from "#/features/settings/settings-data";
 import type { SidecarQueryUtils } from "#/infra/backend-context";
+import { useRegisterDiffPane } from "#/infra/measurement-workload";
 import type { EditorInfo } from "#/infra/use-available-editors";
 import {
 	openInEditor,
@@ -86,6 +87,8 @@ export function FilesChangedView({
 	// than resetting it.
 	const [selectedPath, setSelectedPath] = useSessionSelectedPath(session.id);
 	const diffPaneRef = useRef<DiffPaneHandle>(null);
+	const getDiffPane = useCallback(() => diffPaneRef.current, []);
+	useRegisterDiffPane(session.id, getDiffPane);
 
 	const navigationHistory = useSessionNavigationHistory(session.id);
 

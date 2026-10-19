@@ -63,6 +63,19 @@ export type DiagnosticsSnapshot = Schema.Schema.Type<
 	typeof DiagnosticsSnapshot
 >;
 
+export const WorkloadStep = Schema.Literals([
+	"scroll-files-changed",
+	"close-other-tabs",
+]);
+export type WorkloadStep = Schema.Schema.Type<typeof WorkloadStep>;
+
+export const WorkloadStepStatus = Schema.Union([
+	Schema.Struct({ status: Schema.Literal("pending") }),
+	Schema.Struct({ status: Schema.Literal("ok") }),
+	Schema.Struct({ status: Schema.Literal("failed"), error: Schema.String }),
+]);
+export type WorkloadStepStatus = Schema.Schema.Type<typeof WorkloadStepStatus>;
+
 export const diagnosticsContract = {
 	injectDeepLink: oc
 		.errors({ FORBIDDEN: {}, BAD_REQUEST: {} })
@@ -72,6 +85,30 @@ export const diagnosticsContract = {
 		.errors({ FORBIDDEN: {} })
 		.input(Schema.Struct({ traceId: Schema.String }))
 		.output(Schema.Void),
+	/**
+	 * Asks the frontend to perform one scripted interaction (`measurement-workload`
+	 * event) so memory can be sampled under sustained use. The event is replayed to
+	 * every new event subscriber until `ackWorkloadStep`; `workloadStepStatus` is how
+	 * the caller learns the outcome.
+	 */
+	runWorkloadStep: oc
+		.errors({ FORBIDDEN: {}, BAD_REQUEST: {} })
+		.input(Schema.Struct({ id: Schema.String, step: WorkloadStep }))
+		.output(Schema.Void),
+	ackWorkloadStep: oc
+		.errors({ FORBIDDEN: {} })
+		.input(
+			Schema.Struct({
+				id: Schema.String,
+				ok: Schema.Boolean,
+				error: Schema.optional(Schema.String),
+			}),
+		)
+		.output(Schema.Void),
+	workloadStepStatus: oc
+		.errors({ FORBIDDEN: {}, NOT_FOUND: {} })
+		.input(Schema.Struct({ id: Schema.String }))
+		.output(WorkloadStepStatus),
 	launchMarks: oc
 		.input(
 			Schema.Struct({

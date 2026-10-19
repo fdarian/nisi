@@ -91,6 +91,7 @@ import {
 	injectedDeepLinks,
 	measurementInstance,
 } from "./measurement-deep-links.ts";
+import { workloadSteps } from "./measurement-workload.ts";
 import { translateMergeFailure } from "./merge-failure.ts";
 import { MergeStatusLedger } from "./merge-status-ledger.ts";
 import { createNativeActivationHandler } from "./native-activation.ts";
@@ -489,6 +490,54 @@ export function attachRouter(
 					);
 				yield* Effect.sync(() => injectedDeepLinks.ack(call.input.traceId));
 			}),
+			runWorkloadStep: authed.diagnostics.runWorkloadStep.effect(
+				function* (call) {
+					if (!(yield* measurementInstance))
+						return yield* Effect.fail(
+							call.errors.FORBIDDEN({
+								message: "Workload steps require a measurement instance",
+							}),
+						);
+					yield* Effect.try(() =>
+						workloadSteps.run(call.input.id, call.input.step),
+					).pipe(
+						Effect.mapError((error) =>
+							call.errors.BAD_REQUEST({ message: error.message }),
+						),
+					);
+				},
+			),
+			ackWorkloadStep: authed.diagnostics.ackWorkloadStep.effect(
+				function* (call) {
+					if (!(yield* measurementInstance))
+						return yield* Effect.fail(
+							call.errors.FORBIDDEN({
+								message: "Workload steps require a measurement instance",
+							}),
+						);
+					yield* Effect.sync(() =>
+						workloadSteps.ack(call.input.id, call.input.ok, call.input.error),
+					);
+				},
+			),
+			workloadStepStatus: authed.diagnostics.workloadStepStatus.effect(
+				function* (call) {
+					if (!(yield* measurementInstance))
+						return yield* Effect.fail(
+							call.errors.FORBIDDEN({
+								message: "Workload steps require a measurement instance",
+							}),
+						);
+					const status = workloadSteps.status(call.input.id);
+					if (status === undefined)
+						return yield* Effect.fail(
+							call.errors.NOT_FOUND({
+								message: `unknown workload step: ${call.input.id}`,
+							}),
+						);
+					return status;
+				},
+			),
 			snapshot: authed.diagnostics.snapshot.effect(function* ({
 				input,
 				errors,
@@ -1070,6 +1119,7 @@ export function attachRouter(
 				try {
 					yield ready;
 					for (const event of injectedDeepLinks.list()) yield event;
+					for (const event of workloadSteps.list()) yield event;
 					while (signal?.aborted !== true) {
 						const event = pending.shift();
 						if (event !== undefined) {

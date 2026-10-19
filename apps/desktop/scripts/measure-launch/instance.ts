@@ -14,6 +14,8 @@ export const newPrDataDir = join(
 	desktopDir,
 	".data/measure-launch/new-pr/data",
 );
+/** Soak CSVs live outside the cold data dir, which `--runs` wipes before every run. */
+export const soakDir = join(desktopDir, ".data/measure-launch/soak");
 export const unavailableAppPath = join(
 	desktopDir,
 	".data/measure-launch/app-launch-disabled.app",
@@ -111,7 +113,12 @@ export const selectRunningInstance = (candidates: readonly string[]) =>
 		return instance.dataDir;
 	});
 
-export const prepareColdInstance = (rebuild: boolean, newPr = false) =>
+/** `resetCold` wipes the cold data dir for a run that must start from nothing; new-PR data is always wiped. */
+export const prepareColdInstance = (
+	rebuild: boolean,
+	newPr = false,
+	resetCold = false,
+) =>
 	Effect.gen(function* () {
 		const fs = yield* FileSystem;
 		const dataDir = newPr ? newPrDataDir : coldDataDir;
@@ -124,13 +131,13 @@ export const prepareColdInstance = (rebuild: boolean, newPr = false) =>
 			);
 		yield* ensureBuild(desktopDir, bundlePath, rebuild);
 		yield* stopBundle(bundlePath);
-		if (newPr && (yield* fs.exists(newPrDataDir))) {
-			const real = yield* fs.realPath(newPrDataDir);
-			if (real !== newPrDataDir)
+		if ((newPr || resetCold) && (yield* fs.exists(dataDir))) {
+			const real = yield* fs.realPath(dataDir);
+			if (real !== dataDir)
 				return yield* Effect.fail(
-					new Error("Refusing to reset a symlinked new-PR data dir"),
+					new Error("Refusing to reset a symlinked measurement data dir"),
 				);
-			yield* fs.remove(newPrDataDir, { recursive: true });
+			yield* fs.remove(dataDir, { recursive: true });
 		}
 		yield* fs.makeDirectory(dataDir, { recursive: true });
 		return dataDir;
