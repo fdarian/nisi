@@ -205,6 +205,14 @@ seam" for the port/token handshake this boots into.
   anything outside `/api` and `/native` when `NISI_WEB_DIR` is set (the packaged app points it at `Resources/web`, an
   `extraResources` copy of `dist/`; unset in dev, where vite serves the frontend). Extensionless paths get `index.html`
   (history routes); a missing path with an extension is a 404.
+- `public-access/service.ts` — `PublicAccess`, built with `PublicAccess.layer({ port, token, webDir })` in `index.ts`'s
+  `makeMainLayer` since all three are known only after the port bind. While `Settings.publicAccessEnabled` is on it runs
+  `cloudflared tunnel --url http://127.0.0.1:<port>` (binary via `NISI_CLOUDFLARED_BIN` or `PATH`) in its own `Scope`,
+  and turns `starting` into `on { link }` when stderr prints the `trycloudflare.com` URL (`tunnel-url.ts`). `link` is
+  `<url>/#t=<sidecar token>`, so it is a full-access capability. `apply` is serialised; `index.ts` calls it at boot and
+  `settings.update` forks it, and every transition emits `public-access-changed`. A cloudflared exit nobody asked for
+  becomes an `error` state (no restart); `apply(false)` and sidecar shutdown close the scope and kill the process.
+  Without `NISI_WEB_DIR` it reports `error` rather than exposing a sidecar with no frontend.
 - `events.ts` — in-memory pub/sub for `events.subscribe`, ported from rheya's sidecar verbatim. oRPC's
   `.effect()` can't return a live async iterator (it resolves the generator via `runPromise`), so
   `events.subscribe` uses the lower-level `.handler(async function* ...)` instead, bridging this

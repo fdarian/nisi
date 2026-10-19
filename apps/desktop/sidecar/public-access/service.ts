@@ -140,8 +140,9 @@ export class PublicAccess extends Context.Service<PublicAccess>()(
 						).pipe(
 							Effect.andThen(handle.exitCode),
 							Effect.map((code) => `cloudflared exited with code ${code}`),
-							Effect.catchTag("PlatformError", (cause) =>
-								Effect.succeed(`cloudflared failed: ${cause.message}`),
+							// A signal-killed process fails `exitCode` instead of yielding one.
+							Effect.catchTag("PlatformError", () =>
+								Effect.succeed("cloudflared stopped unexpectedly"),
 							),
 							Effect.flatMap((reason) =>
 								Ref.get(lastLine).pipe(
