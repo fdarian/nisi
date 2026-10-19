@@ -1362,13 +1362,7 @@ export function DiffPane({
 			getViewport,
 			scrollToPosition,
 		}),
-		[
-			scrollToPath,
-			scrollToMatch,
-			scrollToLine,
-			getViewport,
-			scrollToPosition,
-		],
+		[scrollToPath, scrollToMatch, scrollToLine, getViewport, scrollToPosition],
 	);
 
 	useEffect(

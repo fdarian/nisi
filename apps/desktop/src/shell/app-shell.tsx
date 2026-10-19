@@ -48,9 +48,9 @@ import { OriginMovedDialog } from "#/features/pull-request/open/origin-moved-dia
 import { PendingPrView } from "#/features/pull-request/pending-pr-view";
 import { PrView } from "#/features/pull-request/pr-view";
 import type { SidecarQueryUtils } from "#/infra/backend-context";
-import { useMeasurementTabs } from "#/infra/measurement-workload";
 import { useBackendContext } from "#/infra/backend-context";
 import { useLaunchMark } from "#/infra/launch-trace";
+import { useMeasurementTabs } from "#/infra/measurement-workload";
 import { useAppViewActive } from "./app-view-context";
 import { useDeepLinkOpener } from "./deep-link/deep-link-data";
 import { DevBranch } from "./dev-branch";
