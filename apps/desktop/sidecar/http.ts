@@ -138,6 +138,7 @@ import {
 	getGeneration,
 } from "./walkthrough/generation-log.ts";
 import { WalkthroughStore } from "./walkthrough/store.ts";
+import { serveWebStatic } from "./web-static.ts";
 
 type MergeError =
 	| PullRequestMergeError
@@ -361,6 +362,7 @@ export function attachRouter(
 	token: string,
 	mainContext: Context.Context<AppServices>,
 	activationOwnerId?: string,
+	webDir?: string,
 ) {
 	// `events.subscribe`/`walkthrough.generate` are plain `.handler(async
 	// function* ...)` closures (see the comment on `events` below) — they
@@ -2766,6 +2768,13 @@ export function attachRouter(
 
 				if (result.matched) return result.response;
 
+				if (
+					webDir !== undefined &&
+					!requestUrl.pathname.startsWith("/api/") &&
+					!requestUrl.pathname.startsWith("/native/")
+				) {
+					return serveWebStatic(webDir, req);
+				}
 				return new Response("not found", { status: 404 });
 			} catch (error) {
 				await runWithMainContext(

@@ -150,6 +150,10 @@ const program = Effect.scoped(
 				"NISI_ACTIVATION_OWNER_ID",
 			).pipe(Config.option);
 
+			// Unset in dev, where vite serves the frontend; the packaged app points it
+			// at the bundled `dist/` copy in Resources.
+			const webDir = yield* Config.String("NISI_WEB_DIR").pipe(Config.option);
+
 			// Bound immediately, answering only health.check — deliberately
 			// before AppServices/SqliteDb exist at all. Two concerns force this
 			// order: the lock below needs a real, already-listening port to
@@ -240,6 +244,7 @@ const program = Effect.scoped(
 					token,
 					mainContext,
 					Option.getOrUndefined(activationOwnerId),
+					Option.getOrUndefined(webDir),
 				),
 			).pipe(Effect.withSpan("sidecar.router.attach"));
 

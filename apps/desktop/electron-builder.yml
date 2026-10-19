@@ -11,6 +11,10 @@ files:
   - dist-electron/**
   - "!**/*.map"
   - "!node_modules"
+# The sidecar serves this copy to a plain browser; `dist/**` above stays for the `app://` protocol.
+extraResources:
+  - from: dist
+    to: web
 extraFiles:
   - from: binaries
     to: MacOS

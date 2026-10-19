@@ -201,6 +201,10 @@ seam" for the port/token handshake this boots into.
   set and `available` against a live `@repo/bin-resolver` check — every harness stays a checkbox,
   not a filtered list, whether enabled, available, both, or neither. `walkthrough.models`/
   `refreshModels` use `sidecar/harness/models.ts` to fetch one harness's models independently.
+- `web-static.ts` — `serveWebStatic`: serves the frontend bundle to a plain browser. `http.ts` falls through to it for
+  anything outside `/api` and `/native` when `NISI_WEB_DIR` is set (the packaged app points it at `Resources/web`, an
+  `extraResources` copy of `dist/`; unset in dev, where vite serves the frontend). Extensionless paths get `index.html`
+  (history routes); a missing path with an extension is a 404.
 - `events.ts` — in-memory pub/sub for `events.subscribe`, ported from rheya's sidecar verbatim. oRPC's
   `.effect()` can't return a live async iterator (it resolves the generator via `runPromise`), so
   `events.subscribe` uses the lower-level `.handler(async function* ...)` instead, bridging this
