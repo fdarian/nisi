@@ -436,6 +436,8 @@ export class Store extends Context.Service<Store>()("Store", {
 		type SessionDiffSource = DiffHead & { readonly baseRef: string };
 		type PullRequestFacts = DiffBasePullRequest & {
 			readonly headSha: string;
+			/** The PR's current base branch; differs from the session's once GitHub retargets the PR. */
+			readonly baseRef: string;
 		};
 		/**
 		 * Each PR's head commit, base commit and state as last reported by the
@@ -1470,7 +1472,11 @@ export class Store extends Context.Service<Store>()("Store", {
 		 * worktree stops or starts being eligible, the commit to diff changes, or
 		 * the base tip switches to or from the pinned merged base) the session
 		 * gets `session-files-changed`, since nothing else notices a push or a
-		 * merge that didn't come from this worktree. Never fails: a status update
+		 * merge that didn't come from this worktree. A session whose stored
+		 * `baseRef` differs from the PR's (GitHub retargets the PR when the one
+		 * it was stacked on merges) is repointed instead, and gets
+		 * `session-diff-source-changed` regardless of `previous`, since its whole
+		 * diff was taken against the wrong base. Never fails: a status update
 		 * must not break the watch it rides on.
 		 */
 		const recordPullRequestStatus = (
@@ -1487,6 +1493,7 @@ export class Store extends Context.Service<Store>()("Store", {
 				if (
 					previous?.headSha === facts.headSha &&
 					previous.baseSha === facts.baseSha &&
+					previous.baseRef === facts.baseRef &&
 					previous.state === facts.state
 				)
 					return;
@@ -1504,6 +1511,27 @@ export class Store extends Context.Service<Store>()("Store", {
 				yield* Effect.forEach(sessions, (session) =>
 					Effect.gen(function* () {
 						const repoRoot = yield* resolveLiveRepoRoot(session);
+						if (session.baseRef !== facts.baseRef) {
+							// Fetched before the session moves onto the new base, so the
+							// fetch's own `session-files-changed` doesn't reach it: this
+							// diff is corrected below, not something to offer Refresh for.
+							// A failed fetch (offline) still leaves a correct base ref to
+							// diff against, just possibly a stale local copy.
+							yield* refreshBase(repoRoot, facts.baseRef).pipe(
+								Effect.catchCause((cause) =>
+									Effect.logWarning(
+										"Could not fetch the retargeted base of a session",
+										{ sessionId: session.id, baseRef: facts.baseRef, cause },
+									),
+								),
+							);
+							yield* reviewStore.updateBaseRef(session.id, facts.baseRef);
+							emit({
+								type: "session-diff-source-changed",
+								sessionId: session.id,
+							});
+							return;
+						}
 						const diffHeadFor = (known: PullRequestFacts | undefined) =>
 							resolveDiffHead(repoRoot, session.headRef, {
 								number: pr.number,
