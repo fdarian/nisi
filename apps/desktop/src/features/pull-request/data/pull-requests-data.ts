@@ -19,7 +19,7 @@ import {
 import { useState } from "react";
 import type { SidecarQueryUtils } from "#/infra/backend-context";
 import { launchMark, resolveTracedDeepLink } from "#/infra/launch-trace";
-import { native } from "#/infra/native";
+import { hasNative, native } from "#/infra/native";
 import { useSidecarEvent } from "#/infra/sidecar-events";
 import { seedResolvedSession } from "#/shell/open-request/resolved-session-cache";
 import type { Session } from "./pr-data";
@@ -286,6 +286,12 @@ async function resolvePullRequestOpen(
 		launchMark("deeplink.needs-repo-path");
 		throw new Error(
 			"Traced deep link needs a repo path; measurement must seed the mapping before injection (folder picker suppressed)",
+		);
+	}
+
+	if (!hasNative()) {
+		throw new Error(
+			`No checkout folder is linked for ${outcome.owner}/${outcome.repo} yet. Open it once in the nisi app on your Mac, then try again.`,
 		);
 	}
 
