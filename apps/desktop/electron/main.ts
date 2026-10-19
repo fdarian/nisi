@@ -97,6 +97,7 @@ function spawnSidecar() {
 				...process.env,
 				NISI_DATA_DIR: dataDir,
 				NISI_ACTIVATION_OWNER_ID: String(process.pid),
+				NISI_WEB_DIR: join(process.resourcesPath, "web"),
 			},
 			stdio: "ignore",
 		},

@@ -1,7 +1,7 @@
 "use client";
 
 import icon from "#/assets/icon.png";
-import { native } from "#/infra/native";
+import { openUrl } from "#/infra/open-url";
 import { useAboutWindowChrome } from "./use-about-window";
 
 const REPO_URL = "https://github.com/fdarian/nisi";
@@ -85,7 +85,7 @@ export function AboutPage(): React.ReactElement {
 				<dd className="text-left font-mono">
 					<button
 						className="app-no-drag cursor-pointer text-info-foreground hover:underline"
-						onClick={() => void native().openUrl(commitUrl)}
+						onClick={() => void openUrl(commitUrl)}
 						type="button"
 					>
 						{shortSha}
@@ -95,14 +95,14 @@ export function AboutPage(): React.ReactElement {
 			<div className="app-no-drag flex gap-2">
 				<button
 					className={APPKIT_BUTTON_CLASSNAME}
-					onClick={() => void native().openUrl(REPO_URL)}
+					onClick={() => void openUrl(REPO_URL)}
 					type="button"
 				>
 					GitHub
 				</button>
 				<button
 					className={APPKIT_BUTTON_CLASSNAME}
-					onClick={() => void native().openUrl(`${REPO_URL}/issues`)}
+					onClick={() => void openUrl(`${REPO_URL}/issues`)}
 					type="button"
 				>
 					Report an Issue

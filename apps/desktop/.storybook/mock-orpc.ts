@@ -65,6 +65,8 @@ const DEFAULT_SETTINGS: Settings = {
 	walkthroughEnabled: true,
 	notificationsEnabled: false,
 	notifyScheduledMergeSettled: true,
+	publicAccessEnabled: false,
+	publicAccessFeatureEnabled: false,
 	wrapLines: false,
 	lastChatHarness: null,
 	lastChatModel: null,
@@ -414,6 +416,9 @@ export function createMockSidecarClient(
 		// non-Homebrew install (i.e. every dev machine building Storybook)
 		// actually reports, so this is the mock's honest default rather than
 		// a placeholder.
+		publicAccess: {
+			status: async () => ({ type: "off" }) as const,
+		},
 		update: {
 			status: async () => ({ type: "unsupported" }) as const,
 			download: async () => undefined,

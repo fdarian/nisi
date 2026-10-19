@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { toastManager } from "#/components/ui/toast";
-import { native } from "#/infra/native";
+import { hasNative, native } from "#/infra/native";
 
 /** An editor with a URL scheme registered in macOS Launch Services — see `electron/editors.ts`. */
 export type EditorInfo = {
@@ -25,21 +25,22 @@ export function useAvailableEditors(): {
 } {
 	const [editors, setEditors] = useState<EditorInfo[]>([]);
 
-	const loadEditors = (): Promise<EditorInfo[]> =>
-		native()
-			.listAvailableEditors()
-			.then((result) => {
-				setEditors(result);
-				return result;
-			})
-			.catch((error: unknown) => {
-				toastManager.add({
-					title: "Failed to list available editors",
-					description: error instanceof Error ? error.message : String(error),
-					type: "error",
-				});
-				return [];
+	// Editors live on the Mac running nisi; a plain browser has nothing to open them with.
+	const loadEditors = async (): Promise<EditorInfo[]> => {
+		if (!hasNative()) return [];
+		try {
+			const result = await native().listAvailableEditors();
+			setEditors(result);
+			return result;
+		} catch (error) {
+			toastManager.add({
+				title: "Failed to list available editors",
+				description: error instanceof Error ? error.message : String(error),
+				type: "error",
 			});
+			return [];
+		}
+	};
 
 	return { editors, loadEditors };
 }

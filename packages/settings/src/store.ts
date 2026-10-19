@@ -55,6 +55,10 @@ export type Settings = {
 	readonly walkthroughEnabled: boolean;
 	readonly notificationsEnabled: boolean;
 	readonly notifyScheduledMergeSettled: boolean;
+	/** When true (and `publicAccessFeatureEnabled` too), the sidecar exposes itself through a public tunnel — see `sidecar/public-access/service.ts`. */
+	readonly publicAccessEnabled: boolean;
+	/** Feature flag: the Public Access settings page exists, and the tunnel runs, only while this is on. */
+	readonly publicAccessFeatureEnabled: boolean;
 	/** When true, long diff lines wrap instead of scrolling horizontally. */
 	readonly wrapLines: boolean;
 	/** Harness id of the last chat model sent with — see `db/schema.ts`'s `lastChatHarness` doc. */
@@ -94,6 +98,8 @@ export const DEFAULT_SETTINGS: Settings = {
 	walkthroughEnabled: false,
 	notificationsEnabled: false,
 	notifyScheduledMergeSettled: true,
+	publicAccessEnabled: false,
+	publicAccessFeatureEnabled: false,
 	wrapLines: false,
 	lastChatHarness: null,
 	lastChatModel: null,
@@ -114,6 +120,8 @@ const toSettings = (row: SettingsRow): Settings => ({
 	walkthroughEnabled: row.walkthroughEnabled,
 	notificationsEnabled: row.notificationsEnabled,
 	notifyScheduledMergeSettled: row.notifyScheduledMergeSettled,
+	publicAccessEnabled: row.publicAccessEnabled,
+	publicAccessFeatureEnabled: row.publicAccessFeatureEnabled,
 	wrapLines: row.wrapLines,
 	lastChatHarness: row.lastChatHarness,
 	lastChatModel: row.lastChatModel,
@@ -179,6 +187,8 @@ export class SettingsStore extends Context.Service<SettingsStore>()(
 						walkthroughEnabled: next.walkthroughEnabled,
 						notificationsEnabled: next.notificationsEnabled,
 						notifyScheduledMergeSettled: next.notifyScheduledMergeSettled,
+						publicAccessEnabled: next.publicAccessEnabled,
+						publicAccessFeatureEnabled: next.publicAccessFeatureEnabled,
 						wrapLines: next.wrapLines,
 						lastChatHarness: next.lastChatHarness,
 						lastChatModel: next.lastChatModel,

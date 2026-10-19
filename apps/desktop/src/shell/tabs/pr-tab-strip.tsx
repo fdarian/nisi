@@ -62,6 +62,7 @@ import {
 } from "#/features/pull-request/pr-status";
 import { PrStatusIcon } from "#/features/pull-request/pr-status-icon";
 import type { SidecarQueryUtils } from "#/infra/backend-context";
+import { hasNative } from "#/infra/native";
 import { BackgroundTasksIndicator } from "#/shell/background-tasks/background-tasks-indicator";
 import {
 	type PendingOpenTab,
@@ -267,7 +268,8 @@ export function PrTabStrip({
 				{/* The spacer pins the pills right, outside the scrolling tabs. */}
 				<div className="app-no-drag flex shrink-0 items-center gap-2 self-center">
 					<BackgroundTasksIndicator orpc={orpc} sessions={sessions} />
-					<UpdatePill orpc={orpc} />
+					{/* The update flow ends in a native `exit()`; a browser can't restart the app. */}
+					{hasNative() && <UpdatePill orpc={orpc} />}
 				</div>
 			</ContextMenuTrigger>
 			<ContextMenuPopup align="start">

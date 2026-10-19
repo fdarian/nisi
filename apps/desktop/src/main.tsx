@@ -4,6 +4,7 @@ import { PersistQueryClientProvider } from "@tanstack/react-query-persist-client
 import { createRouter, RouterProvider } from "@tanstack/react-router";
 import React from "react";
 import ReactDOM from "react-dom/client";
+import { captureWebToken } from "#/infra/backend";
 import { frontendBootMark } from "#/infra/launch-trace";
 import { persistOptions } from "#/infra/query-persistence";
 import { startDeepLinkListener } from "#/shell/deep-link/deep-link-store";
@@ -15,6 +16,9 @@ frontendBootMark("frontend.main");
 // the webview exists or React mounts. See `deep-link-store.ts`'s doc
 // comment for why this must never run again after this call.
 void startDeepLinkListener();
+
+// Must precede `createRouter`, which reads `location` — the token lives in the hash it strips.
+captureWebToken();
 
 const router = createRouter({ routeTree });
 // The sidecar's `events.subscribe` stream (session-opened/closed,
