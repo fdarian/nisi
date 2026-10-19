@@ -25,6 +25,7 @@ import { Tabs, TabsList, TabsTab } from "#/components/ui/tabs";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "#/components/ui/tooltip";
 import type { SidecarQueryUtils } from "#/infra/backend-context";
 import { useBackendContext } from "#/infra/backend-context";
+import { hasNative } from "#/infra/native";
 import { enqueuePullRequestOpen } from "#/shell/deep-link/deep-link-store";
 import {
 	friendlyRepositoryError,
@@ -170,7 +171,8 @@ function LocationSection(props: {
 		<LocationFrame
 			pathActions={
 				<>
-					{repository.path !== null &&
+					{hasNative() &&
+						repository.path !== null &&
 						repository.problem !== "path-missing" && (
 							<Button
 								onClick={() => {
@@ -182,19 +184,21 @@ function LocationSection(props: {
 								Reveal in Finder
 							</Button>
 						)}
-					<Button
-						disabled={change.isPending}
-						onClick={() =>
-							change.mutate({
-								owner: repository.owner,
-								repo: repository.repo,
-							})
-						}
-						size="xs"
-						variant="ghost"
-					>
-						{repository.path === null ? "Choose…" : "Change…"}
-					</Button>
+					{hasNative() && (
+						<Button
+							disabled={change.isPending}
+							onClick={() =>
+								change.mutate({
+									owner: repository.owner,
+									repo: repository.repo,
+								})
+							}
+							size="xs"
+							variant="ghost"
+						>
+							{repository.path === null ? "Choose…" : "Change…"}
+						</Button>
+					)}
 				</>
 			}
 			pathTitle={repository.path ?? undefined}

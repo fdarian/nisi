@@ -33,6 +33,7 @@ import {
 } from "#/features/settings/settings-data";
 import type { SidecarQueryUtils } from "#/infra/backend-context";
 import { useRegisterDiffPane } from "#/infra/measurement-workload";
+import { hasNative } from "#/infra/native";
 import type { EditorInfo } from "#/infra/use-available-editors";
 import {
 	openInEditor,
@@ -431,7 +432,7 @@ export function FilesChangedView({
 	// some other way) rather than pay a round trip on every press of an
 	// already-working shortcut.
 	const handleOpenInPreferredEditor = useCallback(async () => {
-		if (selectedPath === null) return;
+		if (selectedPath === null || !hasNative()) return;
 
 		if (preferredEditor !== null) {
 			const editorName =
