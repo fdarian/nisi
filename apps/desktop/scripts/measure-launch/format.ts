@@ -83,16 +83,90 @@ export function formatVisibility(
 	].join("\n");
 }
 
+export type Milestone =
+	| { name: string; status: "measured"; offsetMs: number }
+	| { name: string; status: "n/a" }
+	| { name: string; status: "not-observed" };
+
+const timelineStart = (
+	marks: readonly Extract<LaunchRecord, { type: "mark" }>[],
+	deepLink: boolean,
+) =>
+	deepLink
+		? (marks.find((mark) => mark.name === "measurement.app-launch.start") ??
+			marks.find((mark) => mark.name === "deeplink.received"))
+		: marks.find((mark) => mark.name === "cli.process-start");
+
+/** The milestone offsets the report prints, in the order it prints them. */
+export function milestoneOffsets(
+	records: readonly LaunchRecord[],
+): Milestone[] {
+	const marks = records.filter((record) => record.type === "mark");
+	const spans = records.filter((record) => record.type === "span");
+	const deepLink = marks.some((mark) => mark.name === "deeplink.received");
+	const start = timelineStart(marks, deepLink);
+	if (start === undefined)
+		throw new Error("Missing cli.process-start; no timeline origin available.");
+	const names = [
+		...(deepLink
+			? [
+					"deeplink.received",
+					"deeplink.dequeued",
+					"pull-requests.open.resolved",
+				]
+			: []),
+		"cli.app.launch.end",
+		"sidecar.router.ready",
+		"sidecar.activation.acked",
+		"pending-panel.painted",
+		"files.loading.painted",
+		"files.list.painted",
+		"files.first-diff.painted",
+		"overview.loading.painted",
+		"tab.content.painted",
+	];
+	return names.map((name): Milestone => {
+		if (
+			deepLink &&
+			[
+				"cli.app.launch.end",
+				"sidecar.activation.acked",
+				"pending-panel.painted",
+			].includes(name)
+		)
+			return { name, status: "n/a" };
+		const operation =
+			name === "cli.app.launch.end"
+				? "cli.app.launch"
+				: name === "sidecar.router.ready"
+					? "sidecar.router.attach"
+					: name === "sidecar.activation.acked"
+						? "activation.acked"
+						: undefined;
+		const at =
+			operation === undefined
+				? marks.find((entry) => entry.name === name)?.at
+				: spans.find((span) => span.name === operation)?.end;
+		if (at === undefined) return { name, status: "not-observed" };
+		return { name, status: "measured", offsetMs: at - start.at };
+	});
+}
+
+const formatMilestone = (milestone: Milestone) => {
+	if (milestone.status === "n/a")
+		return `${milestone.name}: N/A (deep-link flow)`;
+	if (milestone.status === "not-observed")
+		return `${milestone.name}: not observed`;
+	return `${milestone.name}: ${milestone.offsetMs.toFixed(1)} ms${milestone.offsetMs < 0 ? " (warm)" : ""}`;
+};
+
 export function formatTimeline(
 	records: readonly LaunchRecord[],
 	observedAt = Date.now(),
 ): string {
 	const marks = records.filter((record) => record.type === "mark");
 	const deepLink = marks.some((mark) => mark.name === "deeplink.received");
-	const start = deepLink
-		? (marks.find((mark) => mark.name === "measurement.app-launch.start") ??
-			marks.find((mark) => mark.name === "deeplink.received"))
-		: marks.find((mark) => mark.name === "cli.process-start");
+	const start = timelineStart(marks, deepLink);
 	if (start === undefined)
 		return "Missing cli.process-start; no timeline origin available.";
 	const spans = records.filter((record) => record.type === "span");
@@ -120,51 +194,7 @@ export function formatTimeline(
 		const previous = states[index - 1];
 		return `${(mark.at - start.at).toFixed(1).padStart(10)} ${(previous === undefined ? "—" : (mark.at - previous.at).toFixed(1)).padStart(9)} ${mark.source.padEnd(8)} ${mark.name} ${JSON.stringify(mark.attrs)}`;
 	});
-	const milestones = [
-		...(deepLink
-			? [
-					"deeplink.received",
-					"deeplink.dequeued",
-					"pull-requests.open.resolved",
-				]
-			: []),
-		"cli.app.launch.end",
-		"sidecar.router.ready",
-		"sidecar.activation.acked",
-		"pending-panel.painted",
-		"files.loading.painted",
-		"files.list.painted",
-		"files.first-diff.painted",
-		"overview.loading.painted",
-		"tab.content.painted",
-	];
-	const summary = milestones.map((name) => {
-		if (
-			deepLink &&
-			[
-				"cli.app.launch.end",
-				"sidecar.activation.acked",
-				"pending-panel.painted",
-			].includes(name)
-		)
-			return `${name}: N/A (deep-link flow)`;
-		const operation =
-			name === "cli.app.launch.end"
-				? "cli.app.launch"
-				: name === "sidecar.router.ready"
-					? "sidecar.router.attach"
-					: name === "sidecar.activation.acked"
-						? "activation.acked"
-						: undefined;
-		if (operation !== undefined) {
-			const span = spans.find((span) => span.name === operation);
-			if (span === undefined) return `${name}: not observed`;
-			return `${name}: ${(span.end - start.at).toFixed(1)} ms${span.end < start.at ? " (warm)" : ""}`;
-		}
-		const mark = marks.find((entry) => entry.name === name);
-		if (mark === undefined) return `${name}: not observed`;
-		return `${name}: ${(mark.at - start.at).toFixed(1)} ms${mark.at < start.at ? " (warm)" : ""}`;
-	});
+	const summary = milestoneOffsets(records).map(formatMilestone);
 	const byId = new Map(spans.map((span) => [span.spanId, span]));
 	const depth = (span: (typeof spans)[number]): number => {
 		const state = { span, depth: 0 };

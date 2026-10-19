@@ -110,7 +110,7 @@ export function summarizePhases(series: SoakSeries): SoakPhaseSummary[] {
 
 const mib = (bytes: number) => (bytes / 1024 / 1024).toFixed(0);
 
-export function formatSoak(series: SoakSeries, intervalMs: number): string {
+export function formatPhaseTable(rows: readonly SoakPhaseSummary[]): string[] {
 	const header = [
 		"phase",
 		"samples",
@@ -124,7 +124,7 @@ export function formatSoak(series: SoakSeries, intervalMs: number): string {
 		"sc peak",
 		"sc end",
 	];
-	const rows = summarizePhases(series).map((entry) => [
+	const cells = rows.map((entry) => [
 		entry.phase,
 		String(entry.samples),
 		(entry.durationMs / 1000).toFixed(0),
@@ -138,21 +138,27 @@ export function formatSoak(series: SoakSeries, intervalMs: number): string {
 		mib(entry.sidecar.end),
 	]);
 	const widths = header.map((title, index) =>
-		Math.max(title.length, ...rows.map((row) => (row[index] as string).length)),
+		Math.max(
+			title.length,
+			...cells.map((row) => (row[index] as string).length),
+		),
 	);
-	const line = (cells: string[]) =>
-		cells
+	const line = (row: string[]) =>
+		row
 			.map((cell, index) =>
 				index === 0
 					? cell.padEnd(widths[index] as number)
 					: cell.padStart(widths[index] as number),
 			)
 			.join("  ");
+	return [line(header), ...cells.map(line)];
+}
+
+export function formatSoak(series: SoakSeries, intervalMs: number): string {
 	return [
 		`Soak memory — physical footprint in MiB, ${series.samples.length} samples every ${(intervalMs / 1000).toFixed(1)}s${series.skippedSamples > 0 ? `, ${series.skippedSamples} skipped (a process exited mid-read)` : ""}`,
 		"total = everything but the sidecar; rend = renderer group; sc = sidecar",
-		line(header),
-		...rows.map(line),
+		...formatPhaseTable(summarizePhases(series)),
 	].join("\n");
 }
 

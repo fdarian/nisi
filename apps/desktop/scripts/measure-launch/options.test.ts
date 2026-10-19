@@ -27,6 +27,7 @@ test("requires cwd and only accepts the checkout-local interface", () => {
 		soakPrs: [],
 		soakIntervalMs: 2000,
 		soakIdleMs: 60_000,
+		discardFirst: false,
 	});
 });
 
@@ -135,4 +136,70 @@ test("soak needs a cold deep-link run and takes its own tuning flags", () => {
 			" , ",
 		]),
 	).toThrow("--soak-prs requires a comma-separated list");
+});
+
+test("repeated runs are for cold starts, and discarding the first needs them", () => {
+	const pr = "https://github.com/fdarian/nisi/pull/158";
+	expect(
+		parseLaunchOptions(["--cwd", "/pr", "--cold", "--runs", "3"]),
+	).toMatchObject({ runs: 3, discardFirst: false });
+	expect(
+		parseLaunchOptions([
+			"--cwd",
+			"/pr",
+			"--cold",
+			"--deeplink",
+			pr,
+			"--runs",
+			"5",
+			"--discard-first",
+		]),
+	).toMatchObject({ runs: 5, discardFirst: true });
+	expect(
+		parseLaunchOptions([
+			"--cwd",
+			"/pr",
+			"--cold",
+			"--deeplink",
+			pr,
+			"--soak",
+			"--runs",
+			"2",
+		]).runs,
+	).toBe(2);
+	expect(parseLaunchOptions(["--cwd", "/pr", "--cold"]).runs).toBeUndefined();
+	expect(() => parseLaunchOptions(["--cwd", "/pr", "--runs", "3"])).toThrow(
+		"--runs requires --cold",
+	);
+	expect(() =>
+		parseLaunchOptions([
+			"--cwd",
+			"/pr",
+			"--new-pr",
+			"--warmup",
+			"/other",
+			"--runs",
+			"3",
+		]),
+	).toThrow("--runs requires --cold");
+	for (const bad of ["0", "-1", "2.5", "many"])
+		expect(() =>
+			parseLaunchOptions(["--cwd", "/pr", "--cold", "--runs", bad]),
+		).toThrow("--runs requires a whole number of at least 1");
+	expect(() =>
+		parseLaunchOptions(["--cwd", "/pr", "--cold", "--runs"]),
+	).toThrow("--runs requires a whole number of at least 1");
+	expect(() =>
+		parseLaunchOptions(["--cwd", "/pr", "--cold", "--discard-first"]),
+	).toThrow("--discard-first requires --runs");
+	expect(() =>
+		parseLaunchOptions([
+			"--cwd",
+			"/pr",
+			"--cold",
+			"--runs",
+			"1",
+			"--discard-first",
+		]),
+	).toThrow("--discard-first requires --runs of at least 2");
 });

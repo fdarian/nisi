@@ -75,6 +75,27 @@ the request, making the terminal paint mark ambiguous.
 - `--json` prints the collected records as a JSON array rather than the formatted report.
 - Raw records are JSONL at `<selected data dir>/logs/launch-traces/<traceId>.jsonl`.
 
+## Repeated runs (`--runs <n>`)
+
+Valid with `--cold` (plain or `--deeplink`) and with `--soak`; rejected for warm and `--new-pr` modes. The measurement runs `n` times
+in sequence. Before each run the script stops the instance and wipes `.data/measure-launch/data/`, so every run starts from no
+sessions: a session surviving from an earlier run, with its worktree already removed by cleanup, makes a repeated cold deep link time out.
+`--rebuild` applies to the first run only.
+
+A run that fails is reported on stderr (run index and error) and left out of the summary; the command fails only when every run does.
+The first run after a fresh build is slower (first launch of new binaries); `--discard-first` (needs `--runs` of at least 2) drops run 1
+from the summary. Runs that stay in the output are still listed under `runs` in `--json`.
+
+The text report prints, across the counted runs:
+
+- every milestone of the single-run report as median / min / max / n (`n` is the number of runs that observed it);
+- with `--memory`, physical footprint median / min / max per group and for the totals with and without the sidecar;
+- with `--soak`, the per-phase table with medians across runs, then whole-run figures per run reduced to median / min / max:
+  time-weighted average (trapezoidal over the samples), peak and final footprint without the sidecar, and each group's average.
+
+`--json` prints `{ "runs": [...], "summary": {...} }`: `runs` holds each successful run's payload exactly as a single run prints it,
+`summary` holds the statistics, `failures`, and which run indexes were counted.
+
 ## Memory (`--memory`)
 
 Valid with any mode. After `trace.done` the script waits `--memory-settle <ms>` (default 5000), then samples every
@@ -107,8 +128,8 @@ The diff pane exposes `getViewport`/`scrollToPosition` on its handle for this; e
 
 Output is a per-phase table (start/peak/end of total footprint without the sidecar, renderer-group peak/end, sidecar
 start/peak/end) and, with `--json`, the whole series under `soak`. The series is also written as CSV to
-`<data dir>/logs/soak/<traceId>.csv`. A sample whose process exited mid-read is skipped and counted. Idle tabs
-suspend after five minutes (`use-tab-suspension.ts`), so a long run can include that.
+`.data/measure-launch/soak/<traceId>.csv`, outside the cold data dir that `--runs` wipes. A sample whose process exited mid-read is
+skipped and counted. Idle tabs suspend after five minutes (`use-tab-suspension.ts`), so a long run can include that.
 
 ## Build reuse
 

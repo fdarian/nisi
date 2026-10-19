@@ -4,13 +4,14 @@ const missingValue: Record<string, string> = {
 	"--cwd": "--cwd requires a PR worktree path",
 	"--warmup": "--warmup requires a PR worktree path",
 	"--deeplink": "--deeplink requires a PR worktree path",
+	"--runs": "--runs requires a whole number of at least 1",
 	"--memory-settle": "--memory-settle requires a number of milliseconds",
 	"--soak-prs": "--soak-prs requires a comma-separated list of PR URLs",
 	"--soak-interval": "--soak-interval requires a number of milliseconds",
 	"--soak-idle": "--soak-idle requires a number of milliseconds",
 };
 
-function parseMilliseconds(flag: string, value: string, minimum: number) {
+function parseWholeNumber(flag: string, value: string, minimum: number) {
 	const parsed = Number(value);
 	if (!Number.isInteger(parsed) || parsed < minimum)
 		throw new Error(missingValue[flag] as string);
@@ -33,6 +34,8 @@ export function parseLaunchOptions(argv: readonly string[]) {
 		soakPrs: string[];
 		soakIntervalMs: number;
 		soakIdleMs: number;
+		runs?: number;
+		discardFirst: boolean;
 	} = {
 		cold: false,
 		newPr: false,
@@ -45,6 +48,7 @@ export function parseLaunchOptions(argv: readonly string[]) {
 		soakPrs: [],
 		soakIntervalMs: 2000,
 		soakIdleMs: 60_000,
+		discardFirst: false,
 	};
 	let memorySettleGiven = false;
 	const soakFlagsGiven: string[] = [];
@@ -58,8 +62,9 @@ export function parseLaunchOptions(argv: readonly string[]) {
 				throw new Error(missingValue[arg] as string);
 			if (arg === "--cwd") options.cwd = resolve(value);
 			else if (arg === "--deeplink") options.deeplink = value;
+			else if (arg === "--runs") options.runs = parseWholeNumber(arg, value, 1);
 			else if (arg === "--memory-settle") {
-				options.memorySettleMs = parseMilliseconds(arg, value, 0);
+				options.memorySettleMs = parseWholeNumber(arg, value, 0);
 				memorySettleGiven = true;
 			} else if (arg === "--soak-prs") {
 				options.soakPrs = value
@@ -70,15 +75,16 @@ export function parseLaunchOptions(argv: readonly string[]) {
 					throw new Error(missingValue[arg] as string);
 				soakFlagsGiven.push(arg);
 			} else if (arg === "--soak-interval") {
-				options.soakIntervalMs = parseMilliseconds(arg, value, 100);
+				options.soakIntervalMs = parseWholeNumber(arg, value, 100);
 				soakFlagsGiven.push(arg);
 			} else if (arg === "--soak-idle") {
-				options.soakIdleMs = parseMilliseconds(arg, value, 0);
+				options.soakIdleMs = parseWholeNumber(arg, value, 0);
 				soakFlagsGiven.push(arg);
 			} else
 				options.warmup = argv.includes("--deeplink") ? value : resolve(value);
 		} else if (arg === "--memory") options.memory = true;
 		else if (arg === "--soak") options.soak = true;
+		else if (arg === "--discard-first") options.discardFirst = true;
 		else if (arg === "--cold") options.cold = true;
 		else if (arg === "--new-pr") options.newPr = true;
 		else if (arg === "--rebuild") options.rebuild = true;
@@ -96,6 +102,12 @@ export function parseLaunchOptions(argv: readonly string[]) {
 		throw new Error(`${soakFlagsGiven[0]} requires --soak`);
 	if (options.soak && (!options.cold || options.deeplink === undefined))
 		throw new Error("--soak requires --cold and --deeplink");
+	if (options.runs !== undefined && !options.cold)
+		throw new Error("--runs requires --cold");
+	if (options.discardFirst && options.runs === undefined)
+		throw new Error("--discard-first requires --runs");
+	if (options.discardFirst && (options.runs as number) < 2)
+		throw new Error("--discard-first requires --runs of at least 2");
 	if (options.cold && options.newPr)
 		throw new Error("--cold and --new-pr are mutually exclusive");
 	if (options.deeplink !== undefined && !options.cold && !options.newPr)
