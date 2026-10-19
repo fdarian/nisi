@@ -2678,7 +2678,12 @@ describe("Store — persisting the PR state it learns", () => {
 
 					yield* store.recordPullRequestStatus(
 						{ ...pr, owner: "acme" },
-						{ headSha: "head", baseSha: "base", baseRef: "main", state: "MERGED" },
+						{
+							headSha: "head",
+							baseSha: "base",
+							baseRef: "main",
+							state: "MERGED",
+						},
 					);
 
 					const [record] = yield* reviews.listPullRequestSessions(pr);
