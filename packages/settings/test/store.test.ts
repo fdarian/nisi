@@ -50,6 +50,19 @@ describe("SettingsStore", () => {
 			);
 		});
 	});
+	test("public access is off by default and persists once enabled", async () => {
+		await withTempDataDir(async (dataDir) => {
+			await run(
+				dataDir,
+				Effect.gen(function* () {
+					const store = yield* SettingsStore;
+					expect((yield* store.get()).publicAccessEnabled).toBe(false);
+					yield* store.update({ publicAccessEnabled: true });
+					expect((yield* store.get()).publicAccessEnabled).toBe(true);
+				}),
+			);
+		});
+	});
 	test("get() returns defaults before any update has been written", async () => {
 		await withTempDataDir(async (dataDir) => {
 			const result = await run(

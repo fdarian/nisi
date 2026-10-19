@@ -415,6 +415,9 @@ export function createMockSidecarClient(
 		// non-Homebrew install (i.e. every dev machine building Storybook)
 		// actually reports, so this is the mock's honest default rather than
 		// a placeholder.
+		publicAccess: {
+			status: async () => ({ type: "off" }) as const,
+		},
 		update: {
 			status: async () => ({ type: "unsupported" }) as const,
 			download: async () => undefined,

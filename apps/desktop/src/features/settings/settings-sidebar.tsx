@@ -5,6 +5,7 @@ import {
 	ChevronLeftIcon,
 	FlagIcon,
 	GitForkIcon,
+	GlobeIcon,
 	SettingsIcon,
 } from "lucide-react";
 import {
@@ -75,6 +76,15 @@ export function SettingsSidebar(): React.ReactElement {
 								>
 									<AsteriskIcon />
 									Agents
+								</SidebarMenuButton>
+							</SidebarMenuItem>
+							<SidebarMenuItem>
+								<SidebarMenuButton
+									isActive={pathname === "/settings/public-access"}
+									render={<Link to="/settings/public-access" />}
+								>
+									<GlobeIcon />
+									Public Access
 								</SidebarMenuButton>
 							</SidebarMenuItem>
 							<SidebarMenuItem>
