@@ -9,6 +9,7 @@ const clean: PullRequestMergeability = {
 	isDraft: false,
 	headRefOid: "head",
 	baseRefOid: "base",
+	baseRefName: "main",
 };
 const passing: readonly PullRequestCheck[] = [
 	{ name: "Tests", status: "passing" },
