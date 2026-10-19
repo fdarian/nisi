@@ -45,6 +45,8 @@ export type Settings = {
 	notifyScheduledMergeSettled: boolean;
 	/** See `@repo/settings`'s `Settings.publicAccessEnabled`. */
 	publicAccessEnabled: boolean;
+	/** See `@repo/settings`'s `Settings.publicAccessFeatureEnabled`. */
+	publicAccessFeatureEnabled: boolean;
 	/** When true, long diff lines wrap instead of scrolling horizontally. */
 	wrapLines: boolean;
 	/** Harness id of the last chat model sent with — see `@repo/settings`'s `Settings.lastChatHarness` doc. */
@@ -80,6 +82,7 @@ const DEFAULT_SETTINGS: Settings = {
 	notificationsEnabled: false,
 	notifyScheduledMergeSettled: true,
 	publicAccessEnabled: false,
+	publicAccessFeatureEnabled: false,
 	wrapLines: false,
 	lastChatHarness: null,
 	lastChatModel: null,
@@ -313,4 +316,20 @@ export function useLastChatModel(
 	);
 
 	return [value, setValue];
+}
+
+/** Whether the Public Access page exists at all — see `@repo/settings`'s `publicAccessFeatureEnabled`. */
+export function usePublicAccessFeatureEnabled(
+	orpc: SidecarQueryUtils,
+): [boolean, (publicAccessFeatureEnabled: boolean) => void] {
+	const { settings } = useSettings(orpc);
+	const update = useUpdateSettings(orpc);
+
+	const setEnabled = useCallback(
+		(publicAccessFeatureEnabled: boolean) =>
+			update({ publicAccessFeatureEnabled }),
+		[update],
+	);
+
+	return [settings.publicAccessFeatureEnabled, setEnabled];
 }

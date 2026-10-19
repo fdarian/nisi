@@ -1,4 +1,5 @@
 import type { PublicAccessStatus } from "@repo/sidecar-api";
+import { Navigate } from "@tanstack/react-router";
 import { CheckIcon, CopyIcon } from "lucide-react";
 import { useState } from "react";
 import { Button } from "#/components/ui/button";
@@ -10,6 +11,7 @@ import {
 	usePublicAccessEnabled,
 	usePublicAccessStatus,
 } from "./public-access-data";
+import { useSettings } from "./settings-data";
 import { SettingsRow, SettingsSection } from "./settings-section";
 
 export function PublicAccessPage(): React.ReactElement | null {
@@ -20,9 +22,17 @@ export function PublicAccessPage(): React.ReactElement | null {
 
 function PublicAccessContent(props: {
 	orpc: SidecarQueryUtils;
-}): React.ReactElement {
+}): React.ReactElement | null {
+	const settings = useSettings(props.orpc);
 	const enabledState = usePublicAccessEnabled(props.orpc);
 	const status = usePublicAccessStatus(props.orpc);
+
+	// Hold off while the first `settings.get` is in flight: the defaults say
+	// the flag is off, which would bounce a reload straight off this page.
+	if (settings.isLoading) return null;
+	if (!settings.settings.publicAccessFeatureEnabled) {
+		return <Navigate replace to="/settings/feature-flags" />;
+	}
 
 	return (
 		<div className="mx-auto flex w-full max-w-2xl flex-col gap-6 overflow-y-auto px-8 py-12">

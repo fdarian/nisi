@@ -282,7 +282,10 @@ const program = Effect.scoped(
 				const settingsStore = yield* SettingsStore;
 				yield* settingsStore.get().pipe(
 					Effect.flatMap((settings) =>
-						publicAccess.apply(settings.publicAccessEnabled),
+						publicAccess.apply(
+							settings.publicAccessFeatureEnabled &&
+								settings.publicAccessEnabled,
+						),
 					),
 					Effect.catchCause((cause) =>
 						Effect.logError("public access failed to start", { cause }),

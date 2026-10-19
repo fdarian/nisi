@@ -63,6 +63,21 @@ describe("SettingsStore", () => {
 			);
 		});
 	});
+	test("the public access feature flag is off by default and persists once enabled", async () => {
+		await withTempDataDir(async (dataDir) => {
+			await run(
+				dataDir,
+				Effect.gen(function* () {
+					const store = yield* SettingsStore;
+					expect((yield* store.get()).publicAccessFeatureEnabled).toBe(false);
+					yield* store.update({ publicAccessFeatureEnabled: true });
+					const settings = yield* store.get();
+					expect(settings.publicAccessFeatureEnabled).toBe(true);
+					expect(settings.publicAccessEnabled).toBe(false);
+				}),
+			);
+		});
+	});
 	test("get() returns defaults before any update has been written", async () => {
 		await withTempDataDir(async (dataDir) => {
 			const result = await run(

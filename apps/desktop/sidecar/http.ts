@@ -186,6 +186,7 @@ const toWireSettings = (settings: {
 	readonly notificationsEnabled: WireSettings["notificationsEnabled"];
 	readonly notifyScheduledMergeSettled: WireSettings["notifyScheduledMergeSettled"];
 	readonly publicAccessEnabled: WireSettings["publicAccessEnabled"];
+	readonly publicAccessFeatureEnabled: WireSettings["publicAccessFeatureEnabled"];
 	readonly wrapLines: WireSettings["wrapLines"];
 	readonly lastChatHarness: string | null;
 	readonly lastChatModel: WireSettings["lastChatModel"];
@@ -205,6 +206,7 @@ const toWireSettings = (settings: {
 	notificationsEnabled: settings.notificationsEnabled,
 	notifyScheduledMergeSettled: settings.notifyScheduledMergeSettled,
 	publicAccessEnabled: settings.publicAccessEnabled,
+	publicAccessFeatureEnabled: settings.publicAccessFeatureEnabled,
 	wrapLines: settings.wrapLines,
 	lastChatHarness:
 		settings.lastChatHarness === null
@@ -1344,13 +1346,18 @@ export function attachRouter(
 			update: authed.settings.update.effect(function* ({ input }) {
 				const store = yield* SettingsStore;
 				const next = yield* store.update(input);
-				if (input.publicAccessEnabled !== undefined) {
+				if (
+					input.publicAccessEnabled !== undefined ||
+					input.publicAccessFeatureEnabled !== undefined
+				) {
 					const publicAccess = yield* PublicAccess;
 					// Detached: the request must not wait for cloudflared, and the
 					// request fiber ending must not interrupt it. The outcome arrives
 					// as `public-access-changed`.
 					yield* Effect.forkDetach(
-						publicAccess.apply(next.publicAccessEnabled),
+						publicAccess.apply(
+							next.publicAccessFeatureEnabled && next.publicAccessEnabled,
+						),
 					);
 				}
 				return toWireSettings(next);

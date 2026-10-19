@@ -57,6 +57,8 @@ export const Settings = Schema.Struct({
 	notifyScheduledMergeSettled: Schema.Boolean,
 	/** See `@repo/settings`'s `Settings.publicAccessEnabled`. */
 	publicAccessEnabled: Schema.Boolean,
+	/** See `@repo/settings`'s `Settings.publicAccessFeatureEnabled`. */
+	publicAccessFeatureEnabled: Schema.Boolean,
 	/** See `@repo/settings`'s `Settings.wrapLines`. */
 	wrapLines: Schema.Boolean,
 	/** Harness id of the last chat model sent with — see `@repo/settings`'s `Settings.lastChatHarness` doc. */
@@ -94,6 +96,7 @@ export const SettingsUpdate = Schema.Struct({
 	notificationsEnabled: Schema.optional(Schema.Boolean),
 	notifyScheduledMergeSettled: Schema.optional(Schema.Boolean),
 	publicAccessEnabled: Schema.optional(Schema.Boolean),
+	publicAccessFeatureEnabled: Schema.optional(Schema.Boolean),
 	wrapLines: Schema.optional(Schema.Boolean),
 	lastChatHarness: Schema.optional(Schema.NullOr(HarnessId)),
 	lastChatModel: Schema.optional(Schema.NullOr(Schema.String)),

@@ -41,7 +41,8 @@ const lines = <E>(bytes: Stream.Stream<Uint8Array, E>) =>
 
 /**
  * Exposes the sidecar through a cloudflared quick tunnel while
- * `Settings.publicAccessEnabled` is on. The link it reports carries the
+ * `Settings.publicAccessFeatureEnabled` and `Settings.publicAccessEnabled`
+ * are both on (callers pass the conjunction to `apply`). The link it reports carries the
  * sidecar token, so it is a full-access capability; see
  * `packages/sidecar-api/src/public-access.ts`.
  */

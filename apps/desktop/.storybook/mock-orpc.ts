@@ -66,6 +66,7 @@ const DEFAULT_SETTINGS: Settings = {
 	notificationsEnabled: false,
 	notifyScheduledMergeSettled: true,
 	publicAccessEnabled: false,
+	publicAccessFeatureEnabled: false,
 	wrapLines: false,
 	lastChatHarness: null,
 	lastChatModel: null,

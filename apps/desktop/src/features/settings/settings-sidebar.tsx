@@ -19,9 +19,13 @@ import {
 	SidebarMenuButton,
 	SidebarMenuItem,
 } from "#/components/ui/sidebar";
+import type { SidecarQueryUtils } from "#/infra/backend-context";
+import { useBackendContext } from "#/infra/backend-context";
+import { useSettings } from "./settings-data";
 
 export function SettingsSidebar(): React.ReactElement {
 	const pathname = useLocation({ select: (location) => location.pathname });
+	const backend = useBackendContext();
 	return (
 		<Sidebar variant="inset">
 			<SidebarHeader className="app-drag h-10 justify-center pl-[78px]">
@@ -78,15 +82,9 @@ export function SettingsSidebar(): React.ReactElement {
 									Agents
 								</SidebarMenuButton>
 							</SidebarMenuItem>
-							<SidebarMenuItem>
-								<SidebarMenuButton
-									isActive={pathname === "/settings/public-access"}
-									render={<Link to="/settings/public-access" />}
-								>
-									<GlobeIcon />
-									Public Access
-								</SidebarMenuButton>
-							</SidebarMenuItem>
+							{backend.status === "ready" && (
+								<PublicAccessEntry orpc={backend.orpc} pathname={pathname} />
+							)}
 							<SidebarMenuItem>
 								<SidebarMenuButton
 									isActive={pathname.startsWith("/settings/repositories")}
@@ -101,5 +99,24 @@ export function SettingsSidebar(): React.ReactElement {
 				</SidebarGroup>
 			</SidebarContent>
 		</Sidebar>
+	);
+}
+
+function PublicAccessEntry(props: {
+	orpc: SidecarQueryUtils;
+	pathname: string;
+}): React.ReactElement | null {
+	const settings = useSettings(props.orpc).settings;
+	if (!settings.publicAccessFeatureEnabled) return null;
+	return (
+		<SidebarMenuItem>
+			<SidebarMenuButton
+				isActive={props.pathname === "/settings/public-access"}
+				render={<Link to="/settings/public-access" />}
+			>
+				<GlobeIcon />
+				Public Access
+			</SidebarMenuButton>
+		</SidebarMenuItem>
 	);
 }

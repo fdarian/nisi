@@ -1,7 +1,10 @@
 import { Switch } from "#/components/ui/switch";
 import type { SidecarQueryUtils } from "#/infra/backend-context";
 import { useBackendContext } from "#/infra/backend-context";
-import { useWalkthroughEnabled } from "./settings-data";
+import {
+	usePublicAccessFeatureEnabled,
+	useWalkthroughEnabled,
+} from "./settings-data";
 import { SettingsRow, SettingsSection } from "./settings-section";
 
 export function FeatureFlagsPage(): React.ReactElement | null {
@@ -34,6 +37,8 @@ function FeatureFlagsSection({
 }): React.ReactElement {
 	const [walkthroughEnabled, setWalkthroughEnabled] =
 		useWalkthroughEnabled(orpc);
+	const [publicAccessFeatureEnabled, setPublicAccessFeatureEnabled] =
+		usePublicAccessFeatureEnabled(orpc);
 
 	return (
 		<SettingsSection>
@@ -44,6 +49,15 @@ function FeatureFlagsSection({
 				<Switch
 					checked={walkthroughEnabled}
 					onCheckedChange={setWalkthroughEnabled}
+				/>
+			</SettingsRow>
+			<SettingsRow
+				description="Add a Public Access page to Settings for opening nisi from any browser through a temporary tunnel. Off by default."
+				title="Public Access"
+			>
+				<Switch
+					checked={publicAccessFeatureEnabled}
+					onCheckedChange={setPublicAccessFeatureEnabled}
 				/>
 			</SettingsRow>
 		</SettingsSection>
