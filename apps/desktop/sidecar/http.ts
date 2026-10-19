@@ -104,6 +104,7 @@ import {
 	resolveOpenRequest,
 } from "./open-requests.ts";
 import { PrIndex } from "./pr-index.ts";
+import { PublicAccess } from "./public-access/service.ts";
 import { AttentionState } from "./pull-request-attention.ts";
 import {
 	getRepository,
@@ -184,6 +185,7 @@ const toWireSettings = (settings: {
 	readonly walkthroughEnabled: WireSettings["walkthroughEnabled"];
 	readonly notificationsEnabled: WireSettings["notificationsEnabled"];
 	readonly notifyScheduledMergeSettled: WireSettings["notifyScheduledMergeSettled"];
+	readonly publicAccessEnabled: WireSettings["publicAccessEnabled"];
 	readonly wrapLines: WireSettings["wrapLines"];
 	readonly lastChatHarness: string | null;
 	readonly lastChatModel: WireSettings["lastChatModel"];
@@ -202,6 +204,7 @@ const toWireSettings = (settings: {
 	walkthroughEnabled: settings.walkthroughEnabled,
 	notificationsEnabled: settings.notificationsEnabled,
 	notifyScheduledMergeSettled: settings.notifyScheduledMergeSettled,
+	publicAccessEnabled: settings.publicAccessEnabled,
 	wrapLines: settings.wrapLines,
 	lastChatHarness:
 		settings.lastChatHarness === null
@@ -1340,7 +1343,23 @@ export function attachRouter(
 			}),
 			update: authed.settings.update.effect(function* ({ input }) {
 				const store = yield* SettingsStore;
-				return toWireSettings(yield* store.update(input));
+				const next = yield* store.update(input);
+				if (input.publicAccessEnabled !== undefined) {
+					const publicAccess = yield* PublicAccess;
+					// Detached: the request must not wait for cloudflared, and the
+					// request fiber ending must not interrupt it. The outcome arrives
+					// as `public-access-changed`.
+					yield* Effect.forkDetach(
+						publicAccess.apply(next.publicAccessEnabled),
+					);
+				}
+				return toWireSettings(next);
+			}),
+		},
+		publicAccess: {
+			status: authed.publicAccess.status.effect(function* () {
+				const publicAccess = yield* PublicAccess;
+				return yield* publicAccess.status;
 			}),
 		},
 		update: {

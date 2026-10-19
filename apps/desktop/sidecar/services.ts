@@ -12,6 +12,7 @@ import type { HarnessModelCache } from "./harness/model-store.ts";
 import type { LaunchTrace } from "./launch-trace/service.ts";
 import type { MergeStatusLedger } from "./merge-status-ledger.ts";
 import type { PrIndex } from "./pr-index.ts";
+import type { PublicAccess } from "./public-access/service.ts";
 import type { AttentionState } from "./pull-request-attention.ts";
 import type { RpcFailureLedger } from "./rpc-failure-ledger.ts";
 import type { ScheduledMerges } from "./scheduled-merge.ts";
@@ -37,6 +38,7 @@ export type AppServices =
 	| RepoMergeMethodStore
 	| ScheduledMergeStore
 	| ScheduledMerges
+	| PublicAccess
 	| SessionWatch
 	| Updater
 	| ChatSessions

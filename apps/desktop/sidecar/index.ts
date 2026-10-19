@@ -36,6 +36,10 @@ import { startLivePolling } from "./live-poll.ts";
 import { LoggingLive } from "./logging.ts";
 import { MergeStatusLedger } from "./merge-status-ledger.ts";
 import { PrIndex } from "./pr-index.ts";
+import {
+	PublicAccess,
+	type PublicAccessOptions,
+} from "./public-access/service.ts";
 import { RpcFailureLedger } from "./rpc-failure-ledger.ts";
 import { ScheduledMerges } from "./scheduled-merge.ts";
 import { SessionWatch } from "./session-watch.ts";
@@ -229,9 +233,13 @@ const program = Effect.scoped(
 			// second process from ever reaching this point concurrently: it's
 			// refused, or made to wait out `acquireSidecar`'s dead-owner
 			// recovery, before it can.
-			const services = yield* Layer.build(MainLayer).pipe(
-				Effect.withSpan("sidecar.services.init"),
-			);
+			const services = yield* Layer.build(
+				makeMainLayer({
+					port,
+					token,
+					webDir: Option.getOrUndefined(webDir),
+				}),
+			).pipe(Effect.withSpan("sidecar.services.init"));
 			// Detached RPC fibers need the services and tracer, but must not inherit
 			// the boot parent after it ends.
 			const mainContext = Context.merge(
@@ -268,6 +276,20 @@ const program = Effect.scoped(
 				const updater = yield* Updater;
 				yield* updater.startChecks();
 
+				// Forked: spawning cloudflared must not hold up the rest of boot, and
+				// its outcome is reported through `publicAccess.status`, not here.
+				const publicAccess = yield* PublicAccess;
+				const settingsStore = yield* SettingsStore;
+				yield* settingsStore.get().pipe(
+					Effect.flatMap((settings) =>
+						publicAccess.apply(settings.publicAccessEnabled),
+					),
+					Effect.catchCause((cause) =>
+						Effect.logError("public access failed to start", { cause }),
+					),
+					Effect.forkScoped,
+				);
+
 				yield* Effect.never;
 			}),
 			mainContext,
@@ -296,32 +318,34 @@ const program = Effect.scoped(
 // installer uses those same platform services and its live LSP server
 // processes get the exact same "dies with the sidecar" scope as everything
 // else here, per that file's own doc comment.
-const MainLayer = Layer.mergeAll(
-	Store.layer,
-	WalkthroughStore.layer,
-	SettingsStore.layer,
-	ScheduledMerges.layer.pipe(
-		Layer.provideMerge(
-			Layer.mergeAll(
-				ScheduledMergeStore.layer,
-				RepoMergeMethodStore.layer,
-				GitHubLive,
+const makeMainLayer = (publicAccess: PublicAccessOptions) =>
+	Layer.mergeAll(
+		Store.layer,
+		WalkthroughStore.layer,
+		SettingsStore.layer,
+		ScheduledMerges.layer.pipe(
+			Layer.provideMerge(
+				Layer.mergeAll(
+					ScheduledMergeStore.layer,
+					RepoMergeMethodStore.layer,
+					GitHubLive,
+				),
 			),
 		),
-	),
-	SessionWatch.layer,
-	MergeStatusLedger.layer,
-	RpcFailureLedger.layer,
-	Updater.layer,
-	ChatSessions.layer,
-	HarnessModelCache.layer,
-	CodeLspPool.layer,
-	CatFileReaders.layer,
-).pipe(
-	Layer.provideMerge(GitHubLive),
-	Layer.provideMerge(SqliteDb.layer),
-	Layer.provideMerge(BunServices.layer),
-);
+		SessionWatch.layer,
+		MergeStatusLedger.layer,
+		RpcFailureLedger.layer,
+		Updater.layer,
+		ChatSessions.layer,
+		HarnessModelCache.layer,
+		CodeLspPool.layer,
+		CatFileReaders.layer,
+		PublicAccess.layer(publicAccess),
+	).pipe(
+		Layer.provideMerge(GitHubLive),
+		Layer.provideMerge(SqliteDb.layer),
+		Layer.provideMerge(BunServices.layer),
+	);
 
 // Everything the program's prefix needs before `AppServices` exists:
 // `FileSystem` (`fs.makeDirectory`, the lock, `sidecar.json`) and

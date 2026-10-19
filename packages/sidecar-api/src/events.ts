@@ -45,6 +45,9 @@ import { OpenSessionTarget, Session } from "./sessions.ts";
  * session's head moved. Only sent for sessions the client asked for through
  * `guide.setWatching`.
  *
+ * `public-access-changed` says `publicAccess.status` is stale: the tunnel
+ * started, came up, stopped or died. It carries no payload.
+ *
  * `pull-request-index-changed` says a repository's open-PR index finished a
  * refresh, so a cached `pullRequests.indexed` result is stale. It carries no
  * repository: the result is one flat list across all repositories.
@@ -143,6 +146,10 @@ export const SidecarEvent = Schema.Union([
 		seq: Schema.Number,
 		type: Schema.Literal("guide-changed"),
 		sessionId: Schema.String,
+	}),
+	Schema.Struct({
+		seq: Schema.Number,
+		type: Schema.Literal("public-access-changed"),
 	}),
 	Schema.Struct({
 		seq: Schema.Number,

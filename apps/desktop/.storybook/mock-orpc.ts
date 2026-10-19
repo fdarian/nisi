@@ -65,6 +65,7 @@ const DEFAULT_SETTINGS: Settings = {
 	walkthroughEnabled: true,
 	notificationsEnabled: false,
 	notifyScheduledMergeSettled: true,
+	publicAccessEnabled: false,
 	wrapLines: false,
 	lastChatHarness: null,
 	lastChatModel: null,

@@ -60,6 +60,8 @@ export const settings = sqliteTable("settings", {
 	notifyScheduledMergeSettled: integer({ mode: "boolean" })
 		.notNull()
 		.default(true),
+	/** Same `ALTER TABLE ADD COLUMN` default story as `hideReviewed` above. */
+	publicAccessEnabled: integer({ mode: "boolean" }).notNull().default(false),
 	/**
 	 * Harness id of the last chat model the user actually sent a message
 	 * with, paired with `lastChatModel` below — `HarnessModelCombobox`

@@ -43,6 +43,8 @@ export type Settings = {
 	walkthroughEnabled: boolean;
 	notificationsEnabled: boolean;
 	notifyScheduledMergeSettled: boolean;
+	/** See `@repo/settings`'s `Settings.publicAccessEnabled`. */
+	publicAccessEnabled: boolean;
 	/** When true, long diff lines wrap instead of scrolling horizontally. */
 	wrapLines: boolean;
 	/** Harness id of the last chat model sent with — see `@repo/settings`'s `Settings.lastChatHarness` doc. */
@@ -77,6 +79,7 @@ const DEFAULT_SETTINGS: Settings = {
 	walkthroughEnabled: false,
 	notificationsEnabled: false,
 	notifyScheduledMergeSettled: true,
+	publicAccessEnabled: false,
 	wrapLines: false,
 	lastChatHarness: null,
 	lastChatModel: null,

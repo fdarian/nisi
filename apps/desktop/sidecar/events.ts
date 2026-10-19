@@ -46,6 +46,7 @@ type EventPayload =
 	| { readonly type: "session-updated"; readonly session: Session }
 	| { readonly type: "pull-request-index-changed" }
 	| { readonly type: "guide-changed"; readonly sessionId: string }
+	| { readonly type: "public-access-changed" }
 	| {
 			readonly type: "code-index-lsp-status-changed";
 			readonly repoRoot: string;

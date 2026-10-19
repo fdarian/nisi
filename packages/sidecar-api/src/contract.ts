@@ -19,6 +19,7 @@ import { fileContract } from "./file.ts";
 import { guideContract } from "./guide.ts";
 import { healthContract } from "./health.ts";
 import { overviewContract } from "./overview.ts";
+import { publicAccessContract } from "./public-access.ts";
 import { pullRequestsContract } from "./pull-requests.ts";
 import { repositoriesContract } from "./repositories.ts";
 import { reviewContract } from "./review.ts";
@@ -40,6 +41,7 @@ export * from "./file.ts";
 export * from "./guide.ts";
 export * from "./health.ts";
 export * from "./overview.ts";
+export * from "./public-access.ts";
 export * from "./pull-requests.ts";
 export * from "./repositories.ts";
 export * from "./review.ts";
@@ -63,6 +65,7 @@ export const contract = oc.errors({ UNAUTHORIZED: {} }).router({
 	walkthrough: walkthroughContract,
 	chat: chatContract,
 	settings: settingsContract,
+	publicAccess: publicAccessContract,
 	pullRequests: pullRequestsContract,
 	repositories: repositoriesContract,
 	overview: overviewContract,
