@@ -46,8 +46,10 @@ export function makeWebSocketSidecarClient(options: {
 	readonly port: number;
 	readonly token: string;
 	readonly host?: string;
+	/** `wss://` instead of `ws://` — for a sidecar reached through a TLS-terminating tunnel. */
+	readonly secure?: boolean;
 }): SidecarClient {
-	const origin = `ws://${options.host ?? "127.0.0.1"}:${options.port}`;
+	const origin = `${options.secure === true ? "wss" : "ws"}://${options.host ?? "127.0.0.1"}:${options.port}`;
 	const url = new URL("/api/ws", origin);
 	url.searchParams.set("token", options.token);
 	const link = new WebSocketRPCLink({

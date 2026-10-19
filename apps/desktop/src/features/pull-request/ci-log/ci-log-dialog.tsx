@@ -44,7 +44,7 @@ import {
 	useRerunCiJob,
 } from "#/features/pull-request/data/pr-data";
 import type { SidecarQueryUtils } from "#/infra/backend-context";
-import { native } from "#/infra/native";
+import { openUrl } from "#/infra/open-url";
 
 type DialogProps = {
 	orpc: SidecarQueryUtils;
@@ -120,15 +120,13 @@ export function CiLogDialog(props: DialogProps) {
 							size="icon"
 							variant="ghost"
 							onClick={() =>
-								void native()
-									.openUrl(job.htmlUrl)
-									.catch((error: unknown) =>
-										toastManager.add({
-											title: "Couldn't open GitHub",
-											description: String(error),
-											type: "error",
-										}),
-									)
+								void openUrl(job.htmlUrl).catch((error: unknown) =>
+									toastManager.add({
+										title: "Couldn't open GitHub",
+										description: String(error),
+										type: "error",
+									}),
+								)
 							}
 						>
 							<ExternalLink />

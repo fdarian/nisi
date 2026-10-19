@@ -9,7 +9,7 @@ import rehypeSanitize from "rehype-sanitize";
 import rehypeSlug from "rehype-slug";
 import remarkFrontmatter from "remark-frontmatter";
 import remarkGfm from "remark-gfm";
-import { native } from "#/infra/native";
+import { openUrl } from "#/infra/open-url";
 import { MarkdownCodeBlock } from "./markdown-code-block";
 import { markdownSanitizeSchema } from "./markdown-sanitize-schema";
 
@@ -33,7 +33,7 @@ function MarkdownLink(props: React.ComponentProps<"a">): React.ReactElement {
 	const handleClick = (event: React.MouseEvent<HTMLAnchorElement>) => {
 		if (href === undefined || isFragment) return;
 		event.preventDefault();
-		if (isExternal) void native().openUrl(href);
+		if (isExternal) void openUrl(href);
 	};
 
 	return (

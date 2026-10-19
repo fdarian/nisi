@@ -37,7 +37,7 @@ import {
 	useSwitchToPr,
 } from "#/features/pull-request/data/pr-data";
 import type { SidecarQueryUtils } from "#/infra/backend-context";
-import { native } from "#/infra/native";
+import { openUrl } from "#/infra/open-url";
 
 type CommandAction = {
 	id: string;
@@ -183,7 +183,7 @@ function buildActions(params: {
 			label: "Open Pull Request in GitHub",
 			icon: ExternalLinkIcon,
 			run: () => {
-				void native().openUrl(url);
+				void openUrl(url);
 			},
 		});
 	} else {

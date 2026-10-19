@@ -3,7 +3,7 @@
 import { useCallback } from "react";
 import type { Session } from "#/features/pull-request/data/pr-data";
 import { pullRequestUrl } from "#/features/pull-request/data/pr-data";
-import { native } from "#/infra/native";
+import { openUrl } from "#/infra/open-url";
 import { useKeyBindings } from "#/lib/use-key-bindings";
 
 type OpenInGitHubShortcutOptions = {
@@ -23,7 +23,7 @@ export function useOpenInGitHubShortcut(
 	const target = options.session.target;
 	const openPrInGitHub = useCallback(() => {
 		if (target.kind !== "pr") return;
-		void native().openUrl(pullRequestUrl(target));
+		void openUrl(pullRequestUrl(target));
 	}, [target]);
 
 	useKeyBindings({ "o g": openPrInGitHub }, { enabled: options.enabled });
