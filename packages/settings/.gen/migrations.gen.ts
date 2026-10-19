@@ -46,7 +46,7 @@ import m0013 from "../drizzle/20261001003544_keen_spot/migration.sql" with {
 import m0014 from "../drizzle/20261004083353_jazzy_susan_delgado/migration.sql" with {
 	type: "text",
 };
-import m0015 from "../drizzle/20261019111038_flat_thing/migration.sql" with {
+import m0015 from "../drizzle/20261019123627_slimy_skaar/migration.sql" with {
 	type: "text",
 };
 
@@ -67,6 +67,6 @@ export default {
 		{ name: "20260905104645_messy_vertigo", sql: m0012 },
 		{ name: "20261001003544_keen_spot", sql: m0013 },
 		{ name: "20261004083353_jazzy_susan_delgado", sql: m0014 },
-		{ name: "20261019111038_flat_thing", sql: m0015 },
+		{ name: "20261019123627_slimy_skaar", sql: m0015 },
 	],
 };

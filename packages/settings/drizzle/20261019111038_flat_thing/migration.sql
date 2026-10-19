@@ -1,1 +1,0 @@
-ALTER TABLE `settings` ADD `publicAccessEnabled` integer DEFAULT false NOT NULL;
