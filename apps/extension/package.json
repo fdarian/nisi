@@ -5,7 +5,7 @@
 	"type": "module",
 	"scripts": {
 		"build": "bun scripts/build.ts",
-		"check:type": "tsc --noEmit",
+		"check:type": "tsrs --noEmit",
 		"check:lint": "biome lint .",
 		"test": "bun test"
 	},
@@ -13,6 +13,7 @@
 		"@total-typescript/tsconfig": "1.0.4",
 		"@types/bun": "1.4.3",
 		"@types/chrome": "^0.3.5",
+		"tsrs": "catalog:",
 		"typescript": "7.0.2"
 	}
 }

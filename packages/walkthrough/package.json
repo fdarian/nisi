@@ -9,7 +9,7 @@
 		"./db-migrations": "./.gen/migrations.gen.ts"
 	},
 	"scripts": {
-		"check:type": "tsc --noEmit",
+		"check:type": "tsrs --noEmit",
 		"check:lint": "biome lint .",
 		"test": "bun test",
 		"db:generate": "bun -b drizzle-kit generate && bun -b deskkit gen-migrations && bunx biome check --write .gen/migrations.gen.ts",
@@ -28,6 +28,7 @@
 		"@total-typescript/tsconfig": "1.0.4",
 		"@types/bun": "1.4.3",
 		"drizzle-kit": "1.0.0-rc.5-5935859",
+		"tsrs": "catalog:",
 		"typescript": "7.0.2"
 	}
 }

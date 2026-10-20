@@ -17,7 +17,7 @@ built files by bare name, so `dist/` cannot mirror `src/`'s directory structure 
 every one of them. `dist/` is the load-unpacked target — point Chrome (or `--load-extension`) at
 `apps/extension/dist`, not the package root, and re-run the build after every source change;
 there's no watch mode. `Bun.build` strips types without checking them, so `bun run check:type`
-(`tsc --noEmit` with `@types/chrome`) is a separate step. No `#/*` alias: relative imports
+(`tsrs --noEmit` with `@types/chrome`) is a separate step. No `#/*` alias: relative imports
 (`../modules/direct-arrival.js`) stay short enough without one.
 
 - `modules/direct-arrival.ts` — `isDirectArrival`, the hand-off decision. Pure (no `chrome.*`

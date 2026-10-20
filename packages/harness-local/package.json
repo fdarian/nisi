@@ -7,7 +7,7 @@
 		".": "./src/index.ts"
 	},
 	"scripts": {
-		"check:type": "tsc --noEmit",
+		"check:type": "tsrs --noEmit",
 		"check:lint": "biome lint .",
 		"test": "bun test"
 	},
@@ -22,6 +22,7 @@
 		"@types/bun": "1.4.3",
 		"@types/ws": "^8.18.2",
 		"ai": "7.0.141",
+		"tsrs": "catalog:",
 		"typescript": "7.0.2",
 		"ws": "^8.22.0",
 		"zod": "^4.6.7"

@@ -5,6 +5,7 @@ catalog:
   effect: 4.0.5
   "@effect/platform-bun": 4.0.5
   "@effect/sql-sqlite-bun": 4.0.5
+  tsrs: 0.18.0-ts7.1.0-dev.20260929
 allowBuilds:
   '@google/genai': true
   electron: true

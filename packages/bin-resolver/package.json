@@ -7,13 +7,14 @@
 		".": "./src/index.ts"
 	},
 	"scripts": {
-		"check:type": "tsc --noEmit",
+		"check:type": "tsrs --noEmit",
 		"check:lint": "biome lint .",
 		"test": "bun test"
 	},
 	"devDependencies": {
 		"@total-typescript/tsconfig": "1.0.4",
 		"@types/bun": "1.4.3",
+		"tsrs": "catalog:",
 		"typescript": "7.0.2"
 	}
 }
