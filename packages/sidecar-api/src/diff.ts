@@ -173,7 +173,11 @@ export const FileContentResult = Schema.Struct({
 export type FileContentResult = Schema.Schema.Type<typeof FileContentResult>;
 
 export const diffContract = {
-	refreshBase: oc
+	/**
+	 * The user's Refresh: re-fetches the session's base and releases the head
+	 * the session was holding, so the next read shows the newest commit.
+	 */
+	refresh: oc
 		.input(Schema.Struct({ sessionId: Schema.String }))
 		.output(
 			Schema.Struct({ baseRef: Schema.String, baseMayBeStale: Schema.Boolean }),
@@ -191,6 +195,8 @@ export const diffContract = {
 			Schema.Struct({
 				files: Schema.Array(FileChange),
 				baseMayBeStale: Schema.Boolean,
+				/** A newer head commit exists than the one `files` and `fileContents` still show; cleared by `refresh`. */
+				headAdvanced: Schema.Boolean,
 			}),
 		)
 		.errors({ NOT_FOUND: {}, INTERNAL_SERVER_ERROR: {} }),

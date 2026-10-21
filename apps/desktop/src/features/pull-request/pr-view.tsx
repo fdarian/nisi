@@ -82,7 +82,7 @@ export function PrView({
 		hasPendingChanges,
 		isRefreshing: isRefreshingBase,
 		refresh: refreshFileChanges,
-	} = useLiveFileChanges(orpc, session.id);
+	} = useLiveFileChanges(orpc, session.id, fileChanges.headAdvanced === true);
 
 	const [walkthroughEnabled] = useWalkthroughEnabled(orpc);
 	// Lifted into the per-session UI store (`session-ui-store.ts`), not local

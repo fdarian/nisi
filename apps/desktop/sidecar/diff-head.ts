@@ -178,3 +178,19 @@ export const resolveDiffHead = (
 		};
 	});
 };
+
+/**
+ * Holds a session's diff on the commit it was already showing. `liveSha` is
+ * the commit `live` denotes right now and `pinnedSha` the one the session
+ * last displayed (`undefined` before its first read). When they differ, the
+ * pinned commit is diffed directly and the worktree stays out of it: it no
+ * longer sits at that commit, so its uncommitted changes don't belong to it.
+ */
+export const pinDiffHead = (
+	live: DiffHead,
+	liveSha: string,
+	pinnedSha: string | undefined,
+): DiffHead =>
+	pinnedSha === undefined || pinnedSha === liveSha
+		? live
+		: { headRef: pinnedSha, worktreeEligible: false };

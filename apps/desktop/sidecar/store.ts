@@ -28,6 +28,7 @@ import {
 	repointOriginToMovedRepo,
 	resolveCurrentBranch,
 	resolveDiffBaseRef,
+	resolveHeadSha,
 	resolveMainCloneRoot,
 	resolveMergeBase,
 	resolveReviewTarget,
@@ -68,6 +69,7 @@ import {
 import {
 	type DiffHead,
 	type InvalidHeadRef,
+	pinDiffHead,
 	resolveDiffHead,
 	validateHeadRef,
 } from "./diff-head.ts";
@@ -447,6 +449,15 @@ export class Store extends Context.Service<Store>()("Store", {
 		 * means the next watch reading repopulates it.
 		 */
 		const pullRequestFacts = new Map<string, PullRequestFacts>();
+
+		/**
+		 * The head commit each session is currently displaying, in memory only.
+		 * A new commit (a PR push, the worktree's `HEAD` moving) doesn't change
+		 * what a session shows until the user refreshes; see
+		 * `resolveSessionDiffHead`. Lost on restart, which just re-pins to the
+		 * live head on the next read.
+		 */
+		const pinnedHeadShas = new Map<string, string>();
 
 		/**
 		 * Open sessions whose `repoRoot` directory no longer exists, already
@@ -1220,7 +1231,9 @@ export class Store extends Context.Service<Store>()("Store", {
 			);
 
 		const closeSession = (sessionId: string) =>
-			reviewStore.closeSession(sessionId);
+			Effect.sync(() => pinnedHeadShas.delete(sessionId)).pipe(
+				Effect.andThen(reviewStore.closeSession(sessionId)),
+			);
 
 		/**
 		 * `paths`' current content, all read from the same universe the diff
@@ -1406,6 +1419,27 @@ export class Store extends Context.Service<Store>()("Store", {
 				? undefined
 				: pullRequestFacts.get(pullRequestKey(session.pr));
 
+		const resolveLiveSessionHead = (
+			session: ReviewSession,
+			repoRoot: string,
+			facts: PullRequestFacts | undefined,
+		) =>
+			Effect.gen(function* () {
+				const live = yield* resolveDiffHead(
+					repoRoot,
+					session.headRef,
+					session.pr === null
+						? null
+						: {
+								number: session.pr.number,
+								headSha: facts?.headSha,
+								merged: facts?.state === "MERGED",
+							},
+				);
+				const liveSha = yield* resolveHeadSha(repoRoot, live.headRef);
+				return { live, liveSha };
+			});
+
 		/**
 		 * What `session`'s diff is taken from: the {@link DiffHead} plus the
 		 * `baseRef` to hand `@repo/git`. Decided together, from one reading of the
@@ -1431,23 +1465,34 @@ export class Store extends Context.Service<Store>()("Store", {
 		> =>
 			Effect.gen(function* () {
 				const facts = sessionPullRequestFacts(session);
-				const diffHead = yield* resolveDiffHead(
-					repoRoot,
-					session.headRef,
-					session.pr === null
-						? null
-						: {
-								number: session.pr.number,
-								headSha: facts?.headSha,
-								merged: facts?.state === "MERGED",
-							},
-				);
+				const head = yield* resolveLiveSessionHead(session, repoRoot, facts);
+				// Read after the awaits above so a first read can't overwrite a pin
+				// another read set meanwhile.
+				const pinnedSha = pinnedHeadShas.get(session.id);
+				if (pinnedSha === undefined)
+					pinnedHeadShas.set(session.id, head.liveSha);
+				const diffHead = pinDiffHead(head.live, head.liveSha, pinnedSha);
 				const baseRef = yield* resolveDiffBase(
 					repoRoot,
 					session.baseRef,
 					facts,
 				);
 				return { ...diffHead, baseRef };
+			});
+
+		/** Whether a newer head exists than the one `sessionId` is still displaying. */
+		const readHeadAdvanced = (sessionId: string) =>
+			Effect.gen(function* () {
+				const session = yield* reviewStore.getSession(sessionId);
+				const pinnedSha = pinnedHeadShas.get(sessionId);
+				if (pinnedSha === undefined) return false;
+				const repoRoot = yield* resolveLiveRepoRoot(session);
+				const head = yield* resolveLiveSessionHead(
+					session,
+					repoRoot,
+					sessionPullRequestFacts(session),
+				);
+				return head.liveSha !== pinnedSha;
 			});
 
 		/** Keeps `sessions.prState` fresh for the Repositories settings page, closed tabs included. */
@@ -1526,6 +1571,7 @@ export class Store extends Context.Service<Store>()("Store", {
 								),
 							);
 							yield* reviewStore.updateBaseRef(session.id, facts.baseRef);
+							pinnedHeadShas.delete(session.id);
 							emit({
 								type: "session-diff-source-changed",
 								sessionId: session.id,
@@ -1549,6 +1595,7 @@ export class Store extends Context.Service<Store>()("Store", {
 						// The very first reading corrects a diff computed without it
 						// (e.g. an empty one for a merged PR); a later one is a new
 						// change the user may be mid-read of, so it only offers Refresh.
+						if (previous === undefined) pinnedHeadShas.delete(session.id);
 						emit({
 							type:
 								previous === undefined
@@ -1571,9 +1618,11 @@ export class Store extends Context.Service<Store>()("Store", {
 				),
 			);
 
-		const refreshSessionBase = (sessionId: string) =>
+		/** The user's Refresh: releases the head pin and re-fetches the base. */
+		const refreshSession = (sessionId: string) =>
 			Effect.gen(function* () {
 				const session = yield* reviewStore.getSession(sessionId);
+				pinnedHeadShas.delete(sessionId);
 				const repoRoot = yield* resolveLiveRepoRoot(session);
 				return yield* refreshBase(repoRoot, session.baseRef);
 			});
@@ -2254,7 +2303,8 @@ export class Store extends Context.Service<Store>()("Store", {
 			recordPullRequestStatus,
 			resolveScheduledMergeRepoRoot,
 			listChangedFiles,
-			refreshSessionBase,
+			refreshSession,
+			readHeadAdvanced,
 			readBaseMayBeStale,
 			readFileContents,
 			readFileViewerContent,

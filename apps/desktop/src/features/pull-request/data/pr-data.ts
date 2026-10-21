@@ -297,6 +297,7 @@ export function useFileChanges(
 ): {
 	files: readonly FileChange[];
 	baseMayBeStale: boolean | undefined;
+	headAdvanced: boolean | undefined;
 	isLoading: boolean;
 	error: unknown;
 } {
@@ -333,6 +334,7 @@ export function useFileChanges(
 	return {
 		files: query.data?.files ?? [],
 		baseMayBeStale: query.data?.baseMayBeStale,
+		headAdvanced: query.data?.headAdvanced,
 		isLoading: query.isLoading,
 		error: query.error,
 	};
@@ -801,7 +803,9 @@ export type LiveFileChanges = {
  * surface a "Refresh" affordance rather than yanking the diff out from under
  * whoever's reading it. Calling `refresh` fetches the base before invalidating
  * both queries so the sidebar and pane refetch, and clears the flag — a later
- * event re-sets it.
+ * event re-sets it. `headAdvanced` (from `diff.files`) keeps the affordance up
+ * across a reload, where the event is gone but the sidecar still holds the
+ * session on its old head until `diff.refresh`.
  * Deliberately session-wide (every `diff.fileContents` chunk, not just one
  * path's via `queryCoveredPath` the way `useSetFileViewed`/`useSetRangeViewed`
  * narrow it) — unlike those two, this event doesn't say *which* file moved,
@@ -815,18 +819,19 @@ export type LiveFileChanges = {
 export function useLiveFileChanges(
 	orpc: SidecarQueryUtils,
 	sessionId: string,
+	headAdvanced: boolean,
 ): LiveFileChanges {
 	const queryClient = useQueryClient();
-	const [hasPendingChanges, setHasPendingChanges] = useState(false);
+	const [hasPendingEvent, setHasPendingEvent] = useState(false);
 
 	useSidecarEvent((event) => {
 		if (event.type !== "session-files-changed") return;
 		if (event.sessionId !== sessionId) return;
-		setHasPendingChanges(true);
+		setHasPendingEvent(true);
 	});
 
 	const baseRefresh = useMutation({
-		...orpc.diff.refreshBase.mutationOptions(),
+		...orpc.diff.refresh.mutationOptions(),
 		onError: (error) =>
 			toastManager.add({
 				type: "error",
@@ -840,7 +845,7 @@ export function useLiveFileChanges(
 			queryClient.invalidateQueries({
 				queryKey: orpc.diff.fileContents.key({ input: { sessionId } }),
 			});
-			setHasPendingChanges(false);
+			setHasPendingEvent(false);
 		},
 	});
 	const refreshBase = baseRefresh.mutate;
@@ -849,7 +854,13 @@ export function useLiveFileChanges(
 		[refreshBase, sessionId],
 	);
 
-	return { hasPendingChanges, isRefreshing: baseRefresh.isPending, refresh };
+	// The sidecar keeps a session on the head it was showing, so a reload
+	// loses the event but not the fact that a newer commit is waiting.
+	return {
+		hasPendingChanges: hasPendingEvent || headAdvanced,
+		isRefreshing: baseRefresh.isPending,
+		refresh,
+	};
 }
 
 /**

@@ -29,7 +29,7 @@ open the window before the audience is watching.
 ## Extending it
 
 `demo-client.ts` is `createMockSidecarClient` (`.storybook/mock-orpc.ts`, the Storybook fake) plus
-overrides: the session list, a live merge-status stream that flips to MERGED, and `diff.refreshBase`.
+overrides: the session list, a live merge-status stream that flips to MERGED, and `diff.refresh`.
 Anything else the mock doesn't implement either never settles or throws "has no story fixture yet" —
 which surfaces as an error toast (`file.get` and `guide.*` still do). When a demo step hits one, add an
 override in `createDemoClient` rather than editing the mock, which Storybook shares.

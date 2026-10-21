@@ -116,7 +116,13 @@ seam" for the port/token handshake this boots into.
   (`setFileViewed`/`setRangeViewed`) path in `store.ts` need to consult it independently, on every
   call, rather than trusting a value resolved elsewhere. Also owns `InvalidHeadRef`/`validateHeadRef`
   — `resolveSessionTarget`'s explicit-`headRef` validation, mirroring `store.ts`'s own
-  `InvalidBaseRef`.
+  `InvalidBaseRef`. `pinDiffHead` holds a session on the commit it is displaying: `Store` keeps a
+  per-session in-memory pin, set by the first read and compared against the live head's sha, so a
+  PR push or a worktree commit changes nothing a session shows until the user's Refresh
+  (`diff.refresh` → `Store.refreshSession`) drops the pin. `diff.files`' `headAdvanced` reports a
+  pin that differs from the live head, which keeps the Refresh button up across a frontend reload.
+  `recordPullRequestStatus` drops the pin itself only where it corrects a diff
+  (`session-diff-source-changed`), never for `session-files-changed`.
 - `diff-base.ts` — `resolveDiffBase`: the one place that picks the `baseRef` every diff computation
   for a session passes to `@repo/git`. `Store.resolveSessionDiffHead` returns it together with the
   `DiffHead` (`.baseRef`), decided from one reading of the PR facts, so head and base can't disagree
