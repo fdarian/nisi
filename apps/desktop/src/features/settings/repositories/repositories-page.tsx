@@ -131,7 +131,7 @@ function RepositoryListCard(props: {
 	return (
 		<Card
 			aria-label={props.loading ? "Loading repositories" : undefined}
-			className="-mx-4 divide-y divide-border overflow-hidden"
+			className="-mx-4 shrink-0 divide-y divide-border overflow-hidden"
 			radius="lg"
 			role={props.loading ? "status" : undefined}
 		>
