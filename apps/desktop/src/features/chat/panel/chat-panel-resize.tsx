@@ -16,7 +16,7 @@
  * dragging there would just relocate the fixed corner instead of resizing
  * the panel.
  */
-import { useCallback, useState } from "react";
+import { type RefObject, useCallback, useRef, useState } from "react";
 
 const CHAT_PANEL_WIDTH_STORAGE_KEY = "nisi:chat-panel-width";
 const CHAT_PANEL_HEIGHT_STORAGE_KEY = "nisi:chat-panel-height";
@@ -31,6 +31,9 @@ const CHAT_PANEL_MAX_WIDTH = 640;
 const CHAT_PANEL_DEFAULT_HEIGHT = 320;
 const CHAT_PANEL_MIN_HEIGHT = 200;
 const CHAT_PANEL_MAX_HEIGHT = 640;
+
+/** The panel's `1rem` gap to the viewport's right/left edge (`right-4`), which is also the top gap its `max-h` leaves. */
+const CHAT_PANEL_VIEWPORT_MARGIN = 16;
 
 function clamp(value: number, min: number, max: number): number {
 	return Math.min(Math.max(value, min), max);
@@ -59,6 +62,7 @@ type ResizeAxis = "width" | "height" | "both";
 type ChatPanelSize = {
 	width: number;
 	height: number;
+	messageListRef: RefObject<HTMLDivElement | null>;
 	onLeftEdgePointerDown: (event: React.PointerEvent<HTMLDivElement>) => void;
 	onTopEdgePointerDown: (event: React.PointerEvent<HTMLDivElement>) => void;
 	onCornerPointerDown: (event: React.PointerEvent<HTMLDivElement>) => void;
@@ -87,6 +91,8 @@ export function useChatPanelSize(): ChatPanelSize {
 		),
 	);
 
+	const messageListRef = useRef<HTMLDivElement>(null);
+
 	const startDrag = useCallback(
 		(axis: ResizeAxis, event: React.PointerEvent<HTMLDivElement>) => {
 			if (event.button !== 0) return;
@@ -95,15 +101,24 @@ export function useChatPanelSize(): ChatPanelSize {
 			handle.setPointerCapture(event.pointerId);
 			const startX = event.clientX;
 			const startY = event.clientY;
-			const startWidth = width;
-			const startHeight = height;
+			const panel = handle.parentElement;
+			if (panel === null) throw new Error("Resize handle has no panel parent");
+			// The CSS viewport clamp can make the rendered size smaller than
+			// state; seeding from state would leave a dead zone at the drag start.
+			const startWidth = panel.getBoundingClientRect().width;
+			const startHeight =
+				messageListRef.current?.getBoundingClientRect().height ?? height;
 			let latestWidth = startWidth;
 			let latestHeight = startHeight;
 
 			function handleMove(moveEvent: PointerEvent): void {
+				// Without this, dragging past the window edge would persist a
+				// size that doesn't fit the window it was set in.
+				const clientX = Math.max(moveEvent.clientX, CHAT_PANEL_VIEWPORT_MARGIN);
+				const clientY = Math.max(moveEvent.clientY, CHAT_PANEL_VIEWPORT_MARGIN);
 				if (axis !== "height") {
 					latestWidth = clamp(
-						startWidth + (startX - moveEvent.clientX),
+						startWidth + (startX - clientX),
 						CHAT_PANEL_MIN_WIDTH,
 						CHAT_PANEL_MAX_WIDTH,
 					);
@@ -111,7 +126,7 @@ export function useChatPanelSize(): ChatPanelSize {
 				}
 				if (axis !== "width") {
 					latestHeight = clamp(
-						startHeight + (startY - moveEvent.clientY),
+						startHeight + (startY - clientY),
 						CHAT_PANEL_MIN_HEIGHT,
 						CHAT_PANEL_MAX_HEIGHT,
 					);
@@ -140,7 +155,7 @@ export function useChatPanelSize(): ChatPanelSize {
 			handle.addEventListener("pointermove", handleMove);
 			handle.addEventListener("pointerup", handleEnd);
 		},
-		[width, height],
+		[height],
 	);
 
 	const onLeftEdgePointerDown = useCallback(
@@ -159,6 +174,7 @@ export function useChatPanelSize(): ChatPanelSize {
 	return {
 		width,
 		height,
+		messageListRef,
 		onLeftEdgePointerDown,
 		onTopEdgePointerDown,
 		onCornerPointerDown,

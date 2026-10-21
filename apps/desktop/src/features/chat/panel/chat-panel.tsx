@@ -163,13 +163,7 @@ function ChatPanelBody({
 	const minimized = useChatPopupMinimized(sessionId);
 	const composerFocusRequest = useChatComposerFocusRequest(sessionId);
 	const dock = useChatDockActions(sessionId, orpc);
-	const {
-		width,
-		height,
-		onLeftEdgePointerDown,
-		onTopEdgePointerDown,
-		onCornerPointerDown,
-	} = useChatPanelSize();
+	const panelSize = useChatPanelSize();
 	const [, setLastChatModel] = useLastChatModel(orpc);
 	const { messages, status, error, sendMessage, stop } = useChat({
 		chat: getOrCreateChat(orpc, sessionId, thread.id),
@@ -189,17 +183,17 @@ function ChatPanelBody({
 	return (
 		<motion.div
 			animate={{ opacity: 1, scale: 1, y: 0 }}
-			className="fixed right-4 bottom-14 z-50 flex flex-col overflow-hidden rounded-xl border bg-popover text-popover-foreground shadow-lg/10"
+			className="fixed right-4 bottom-14 z-50 flex max-h-[calc(100vh-4.5rem)] max-w-[calc(100vw-2rem)] flex-col overflow-hidden rounded-xl border bg-popover text-popover-foreground shadow-lg/10"
 			exit={{ opacity: 0, scale: 0.96, y: 8 }}
 			initial={{ opacity: 0, scale: 0.96, y: 8 }}
-			style={{ width }}
+			style={{ width: panelSize.width }}
 			transition={{ duration: 0.15, ease: "easeOut" }}
 		>
 			<ChatPanelResizeHandles
 				minimized={minimized}
-				onCornerPointerDown={onCornerPointerDown}
-				onLeftEdgePointerDown={onLeftEdgePointerDown}
-				onTopEdgePointerDown={onTopEdgePointerDown}
+				onCornerPointerDown={panelSize.onCornerPointerDown}
+				onLeftEdgePointerDown={panelSize.onLeftEdgePointerDown}
+				onTopEdgePointerDown={panelSize.onTopEdgePointerDown}
 			/>
 			<div className="flex shrink-0 items-center justify-between gap-2 border-b px-3 py-2">
 				<span className="truncate font-medium text-sm">{title}</span>
@@ -234,7 +228,11 @@ function ChatPanelBody({
 						key="body"
 						transition={{ duration: 0.15, ease: "easeOut" }}
 					>
-						<ScrollArea scrollFade style={{ height }}>
+						<ScrollArea
+							ref={panelSize.messageListRef}
+							scrollFade
+							style={{ height: panelSize.height }}
+						>
 							<MessageList
 								messages={messages}
 								repoRoot={repoRootQuery.data}
