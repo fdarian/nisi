@@ -2,7 +2,7 @@
 
 /**
  * Client-only state for the quick-chat dock (⌘J) — the thread list and dock
- * UI (which thread is active, popup open/minimized), keyed by `sessionId`
+ * UI (which thread is active, popup open), keyed by `sessionId`
  * the same way `session-ui-store.tsx` keys per-tab UI state, plus the
  * module-scope `Map<threadId, Chat>` every thread's messages and streaming
  * status actually live on now.
@@ -71,7 +71,6 @@ type SessionChatState = {
 	threads: readonly ChatThreadMeta[];
 	activeThreadId: string | null;
 	popupOpen: boolean;
-	popupMinimized: boolean;
 	/**
 	 * Bumped every time something asks the composer to take the caret —
 	 * today only "Ask" (`askWithReference`). A counter rather than a derived
@@ -79,7 +78,7 @@ type SessionChatState = {
 	 * the state it would otherwise be inferred from actually changes on every
 	 * occurrence: a second "Ask" on the same lines dedups to the identical
 	 * `references` array (see `attachReference`), and the popup is already
-	 * open and un-minimized. `chat-composer.tsx` keys its focus effect on
+	 * open. `chat-composer.tsx` keys its focus effect on
 	 * this.
 	 */
 	composerFocusRequest: number;
@@ -90,7 +89,6 @@ function createDefaultSessionChatState(): SessionChatState {
 		threads: [],
 		activeThreadId: null,
 		popupOpen: false,
-		popupMinimized: false,
 		composerFocusRequest: 0,
 	};
 }
@@ -197,14 +195,13 @@ type ChatStore = {
 	 * `threads`, wrapping — the ⌘⇧]/⌘⇧[ effect when the chat popup owns the
 	 * combo (see `useTabShortcuts`'s `onChatThreadShortcut`, wired up in
 	 * `app-shell.tsx`). Unlike `setActiveThread`, this only changes which
-	 * thread is active: it never opens or un-minimizes the popup.
+	 * thread is active: it never opens the popup.
 	 */
 	cycleActiveThread: (
 		sessionId: string,
 		direction: "next" | "previous",
 	) => void;
 	setPopupOpen: (sessionId: string, open: boolean) => void;
-	setPopupMinimized: (sessionId: string, minimized: boolean) => void;
 	/** Locks in `harness`/`model` the first time a thread sends a message — a no-op on every later call for the same thread, mirroring the sidecar's own "first send wins" reattach posture. */
 	lockThreadHarness: (
 		sessionId: string,
@@ -256,7 +253,6 @@ function createChatStore(): StoreApi<ChatStore> {
 						threads: [...session.threads, thread],
 						activeThreadId: threadId,
 						popupOpen: true,
-						popupMinimized: false,
 					};
 				}),
 			})),
@@ -286,7 +282,6 @@ function createChatStore(): StoreApi<ChatStore> {
 					...session,
 					activeThreadId: threadId,
 					popupOpen: true,
-					popupMinimized: false,
 				})),
 			})),
 		cycleActiveThread: (sessionId, direction) =>
@@ -309,13 +304,6 @@ function createChatStore(): StoreApi<ChatStore> {
 				sessions: withSession(state.sessions, sessionId, (session) => ({
 					...session,
 					popupOpen: open,
-				})),
-			})),
-		setPopupMinimized: (sessionId, minimized) =>
-			set((state) => ({
-				sessions: withSession(state.sessions, sessionId, (session) => ({
-					...session,
-					popupMinimized: minimized,
 				})),
 			})),
 		lockThreadHarness: (sessionId, threadId, harness, model) =>
@@ -432,17 +420,6 @@ export function useChatPopupOpen(sessionId: string | null): boolean {
 	);
 }
 
-/** `null` reads as `false` — see `useChatPopupOpen`. */
-export function useChatPopupMinimized(sessionId: string | null): boolean {
-	const store = useChatStore();
-	return useStore(
-		store,
-		(state) =>
-			sessionId !== null &&
-			(state.sessions.get(sessionId)?.popupMinimized ?? false),
-	);
-}
-
 /** The session's focus-request counter — an opaque value to subscribers, meaningful only in that it changes. See `SessionChatState.composerFocusRequest`. */
 export function useChatComposerFocusRequest(sessionId: string): number {
 	const store = useChatStore();
@@ -469,7 +446,7 @@ export function useCycleActiveThread(): (
 /**
  * Unbound "show this thread and put the caret in its composer" — see
  * `useCycleActiveThread` for why this isn't part of `useChatDockActions`.
- * `setActiveThread` already opens and un-minimizes the popup.
+ * `setActiveThread` already opens the popup.
  */
 export function useFocusChatThread(): (
 	sessionId: string,
@@ -526,15 +503,14 @@ export function useChatDockActions(
 	/** See `ChatStore.cycleActiveThread`'s doc comment — bound to this session. */
 	cycleActiveThread: (direction: "next" | "previous") => void;
 	setPopupOpen: (open: boolean) => void;
-	setPopupMinimized: (minimized: boolean) => void;
 	lockThreadHarness: (
 		threadId: string,
 		harness: HarnessId,
 		model: string | undefined,
 	) => void;
 	/**
-	 * Attaches `reference` to the session's active thread, opening (and
-	 * un-minimizing) the popup on it — or, if the session has no threads
+	 * Attaches `reference` to the session's active thread, opening the
+	 * popup on it — or, if the session has no threads
 	 * yet, creates one first via the same path `openNewThread` uses, then
 	 * attaches to that. The "Ask" button's whole behavior.
 	 */
@@ -556,10 +532,6 @@ export function useChatDockActions(
 		(state) => state.cycleActiveThread,
 	);
 	const setPopupOpenAction = useStore(store, (state) => state.setPopupOpen);
-	const setPopupMinimizedAction = useStore(
-		store,
-		(state) => state.setPopupMinimized,
-	);
 	const lockThreadHarnessAction = useStore(
 		store,
 		(state) => state.lockThreadHarness,
@@ -609,10 +581,6 @@ export function useChatDockActions(
 		(open: boolean) => setPopupOpenAction(sessionId, open),
 		[setPopupOpenAction, sessionId],
 	);
-	const setPopupMinimized = useCallback(
-		(minimized: boolean) => setPopupMinimizedAction(sessionId, minimized),
-		[setPopupMinimizedAction, sessionId],
-	);
 	const lockThreadHarness = useCallback(
 		(threadId: string, harness: HarnessId, model: string | undefined) =>
 			lockThreadHarnessAction(sessionId, threadId, harness, model),
@@ -628,7 +596,6 @@ export function useChatDockActions(
 				const activeThreadId = session.activeThreadId ?? session.threads[0].id;
 				attachReferenceAction(sessionId, activeThreadId, reference);
 				setPopupOpenAction(sessionId, true);
-				setPopupMinimizedAction(sessionId, false);
 			} else {
 				const threadId = crypto.randomUUID();
 				openNewThreadAction(sessionId, threadId);
@@ -637,7 +604,7 @@ export function useChatDockActions(
 			// Unconditional, and deliberately not folded into either branch
 			// above: every "Ask" puts the caret in the composer, including the
 			// ones where nothing else here changed any state (same reference
-			// re-attached to an already-open, already-expanded popup). That case
+			// re-attached to an already-open popup). That case
 			// is the whole reason this is a separate signal rather than something
 			// the composer derives from `references`.
 			requestComposerFocusAction(sessionId);
@@ -647,7 +614,6 @@ export function useChatDockActions(
 			sessionId,
 			attachReferenceAction,
 			setPopupOpenAction,
-			setPopupMinimizedAction,
 			openNewThreadAction,
 			requestComposerFocusAction,
 		],
@@ -673,7 +639,6 @@ export function useChatDockActions(
 			setActiveThread,
 			cycleActiveThread,
 			setPopupOpen,
-			setPopupMinimized,
 			lockThreadHarness,
 			askWithReference,
 			removeReference,
@@ -686,7 +651,6 @@ export function useChatDockActions(
 			setActiveThread,
 			cycleActiveThread,
 			setPopupOpen,
-			setPopupMinimized,
 			lockThreadHarness,
 			askWithReference,
 			removeReference,

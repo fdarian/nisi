@@ -151,7 +151,7 @@ function ComposerBody({
 	} = useHarnessModels(orpc, needsPicker ? harnesses : []);
 	const [lastChatModel] = useLastChatModel(orpc);
 
-	// Takes the caret on mount (opening the popup, expanding from minimized,
+	// Takes the caret on mount (opening the popup,
 	// or switching threads — `chat-panel.tsx` keys `ChatComposer` by
 	// `thread.id`) and again on every `focusRequest` bump, which is "Ask"'s
 	// case: it attaches to the *already-mounted* active thread's composer, so
