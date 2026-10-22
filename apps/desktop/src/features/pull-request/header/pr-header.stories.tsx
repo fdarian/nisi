@@ -36,6 +36,7 @@ const PR_TARGET: SessionTarget = {
 	headRef: "feature-42",
 	owner: "acme",
 	repo: "widgets",
+	authorLogin: "fdarian",
 };
 
 const STACK: PullRequestStack = {
@@ -137,6 +138,22 @@ export const SuggestedStack: Story = {
 			stack: null,
 			stackSuggestion: STACK_SUGGESTION,
 		}),
+	},
+};
+
+/** A session persisted before the author column existed: the meta row starts at the branches. */
+export const NullAuthor: Story = {
+	args: {
+		target: { ...PR_TARGET, authorLogin: null },
+		orpc: createMockOrpc({ mergeStatus: BASE_STATUS }),
+	},
+};
+
+/** A branch/diff session: no `#N`, no PR actions; the meta row says what the diff is against. */
+export const BranchSession: Story = {
+	args: {
+		target: { kind: "branch", baseRef: "main", headRef: "feature-42" },
+		orpc: createMockOrpc({ mergeStatus: BASE_STATUS }),
 	},
 };
 

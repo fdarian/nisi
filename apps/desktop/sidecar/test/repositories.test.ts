@@ -223,7 +223,13 @@ describe("listRepositories", () => {
 								repoRoot: `/wt/${number}`,
 								baseRef: "main",
 								headRef: `f${number}`,
-								pr: { owner: "acme", repo: "widgets", number, title: "t" },
+								pr: {
+									owner: "acme",
+									repo: "widgets",
+									number,
+									title: "t",
+									authorLogin: "fdarian",
+								},
 							});
 						yield* reviews.openSession({
 							repoRoot: "/wt/s",
@@ -234,6 +240,7 @@ describe("listRepositories", () => {
 								repo: "sessions-only",
 								number: 9,
 								title: "t",
+								authorLogin: "fdarian",
 							},
 						});
 						yield* reviews.openSession({
@@ -281,7 +288,13 @@ const seedPullRequests = Effect.gen(function* () {
 				repoRoot: `/wt/${number}`,
 				baseRef: "main",
 				headRef: `f${number}`,
-				pr: { owner: "acme", repo: "widgets", number, title: `PR ${number}` },
+				pr: {
+					owner: "acme",
+					repo: "widgets",
+					number,
+					title: `PR ${number}`,
+					authorLogin: "fdarian",
+				},
 			}),
 		);
 	}
@@ -632,7 +645,13 @@ describe("streamSessionStates", () => {
 						repoRoot: "/wt/again",
 						baseRef: "main",
 						headRef: "again",
-						pr: { owner: "acme", repo: "widgets", number: 3, title: "PR 3" },
+						pr: {
+							owner: "acme",
+							repo: "widgets",
+							number: 3,
+							title: "PR 3",
+							authorLogin: "fdarian",
+						},
 					});
 				}),
 			},

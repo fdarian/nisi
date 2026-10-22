@@ -36,6 +36,7 @@ export const FIXTURE_SESSION: Session = {
 		headRef: "feature/optimistic-toggle",
 		owner: "acme",
 		repo: "todo-app",
+		authorLogin: "fdarian",
 	},
 };
 

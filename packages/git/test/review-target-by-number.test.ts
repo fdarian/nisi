@@ -26,6 +26,7 @@ type RunnerResult =
 			readonly owner: string | null;
 			readonly prNumber: number | null;
 			readonly prTitle: string | null;
+			readonly prAuthorLogin: string | null;
 	  }
 	| { readonly ok: false; readonly tag: string };
 
@@ -107,6 +108,7 @@ describe("resolveReviewTargetForPullRequest", () => {
 				expect(result.owner).toBe("acme");
 				expect(result.prNumber).toBe(42);
 				expect(result.prTitle).toBe("Add widgets");
+				expect(result.prAuthorLogin).toBe("fdarian");
 				expect(result.defaultBranch).toBe("main");
 			}
 		} finally {
@@ -153,6 +155,8 @@ describe("resolveReviewTargetForPullRequest", () => {
 			expect(result.ok).toBe(true);
 			if (result.ok) {
 				expect(result.prNumber).toBe(7);
+				// `author: null` is a deleted account.
+				expect(result.prAuthorLogin).toBe("ghost");
 			}
 		} finally {
 			await cleanupTestRepo(repo);

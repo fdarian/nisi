@@ -205,6 +205,7 @@ describe("scheduled merge worker", () => {
 							repo: input.repo,
 							number: input.number,
 							title: "PR",
+							authorLogin: "fdarian",
 						},
 					});
 					yield* worker.schedule({ ...input, repoRoot: oldPath });

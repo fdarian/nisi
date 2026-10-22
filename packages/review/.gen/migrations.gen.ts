@@ -13,6 +13,9 @@ import m0002 from "../drizzle/20260729140203_sloppy_warbound/migration.sql" with
 import m0003 from "../drizzle/20261008104331_daily_blade/migration.sql" with {
 	type: "text",
 };
+import m0004 from "../drizzle/20261022043433_mysterious_thena/migration.sql" with {
+	type: "text",
+};
 
 export default {
 	migrations: [
@@ -20,5 +23,6 @@ export default {
 		{ name: "20260729032016_square_nova", sql: m0001 },
 		{ name: "20260729140203_sloppy_warbound", sql: m0002 },
 		{ name: "20261008104331_daily_blade", sql: m0003 },
+		{ name: "20261022043433_mysterious_thena", sql: m0004 },
 	],
 };

@@ -107,6 +107,7 @@ describe("resolveReviewTarget", () => {
 									baseRef: "main",
 									headRef: "feature",
 									isCrossRepository: false,
+									authorLogin: "fdarian",
 								}),
 						}),
 					);
@@ -121,6 +122,7 @@ describe("resolveReviewTarget", () => {
 					baseRef: "main",
 					headRef: "feature",
 					isCrossRepository: false,
+					authorLogin: "fdarian",
 				},
 			});
 		} finally {

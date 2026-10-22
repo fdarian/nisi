@@ -24,6 +24,8 @@ export const sessions = sqliteTable("sessions", {
 	repo: text(),
 	prNumber: integer({ mode: "number" }),
 	prTitle: text(),
+	/** `NULL` for rows written before this column existed, until the session is next re-resolved. */
+	prAuthorLogin: text(),
 	/**
 	 * Last PR state the sidecar saw, for the Repositories settings page. Only
 	 * a terminal value (`merged`/`closed`) is trusted without re-checking: a

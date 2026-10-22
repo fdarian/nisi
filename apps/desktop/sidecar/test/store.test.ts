@@ -95,6 +95,7 @@ const mockGitHub: GitHubShape = {
 			baseRef: "main",
 			headRef: "main",
 			isCrossRepository: false,
+			authorLogin: "fdarian",
 		}),
 	pullRequestState: () => Effect.die(new Error("unused mock GitHub method")),
 	pullRequestStates: () => Effect.die(new Error("unused mock GitHub method")),
@@ -271,6 +272,7 @@ test("index disagreement upserts the correct PR's existing row without transferr
 								baseRef: "main",
 								headRef: "main",
 								isCrossRepository: false,
+								authorLogin: "fdarian",
 							},
 				),
 		};
@@ -287,6 +289,7 @@ test("index disagreement upserts the correct PR's existing row without transferr
 						title: "Current PR",
 						owner: "acme",
 						repo: "widgets",
+						authorLogin: "fdarian",
 					},
 				});
 				yield* reviews.markFileViewed(
@@ -611,7 +614,7 @@ describe("Store — a PR session's worktree that moved on to another commit", ()
 						repoRoot: root,
 						baseRef: "main",
 						headRef: "pr",
-						pr: { ...pr, title: "A PR" },
+						pr: { ...pr, title: "A PR", authorLogin: "fdarian" },
 					});
 					const paths = (includeUncommitted: boolean) =>
 						store
@@ -738,7 +741,7 @@ describe("Store — a session holds the head it was showing until Refresh", () =
 						repoRoot: root,
 						baseRef: "main",
 						headRef: "pr",
-						pr: { ...pr, title: "A PR" },
+						pr: { ...pr, title: "A PR", authorLogin: "fdarian" },
 					});
 					yield* store.recordPullRequestStatus(pr, open(first));
 					const events: string[] = [];
@@ -869,7 +872,7 @@ describe("Store — a PR session after the PR is merged", () => {
 								repoRoot: root,
 								baseRef: "main",
 								headRef: "pr",
-								pr: { ...pr, title: "A PR" },
+								pr: { ...pr, title: "A PR", authorLogin: "fdarian" },
 							});
 							const paths = store
 								.listChangedFiles(session.id, false)
@@ -968,7 +971,7 @@ describe("Store — a PR session after the PR is merged", () => {
 							repoRoot: root,
 							baseRef: "main",
 							headRef: "pr",
-							pr: { ...pr, title: "A PR" },
+							pr: { ...pr, title: "A PR", authorLogin: "fdarian" },
 						});
 						yield* store.recordPullRequestStatus(
 							pr,
@@ -1017,7 +1020,7 @@ describe("Store — a PR session after the PR is merged", () => {
 							repoRoot: root,
 							baseRef: "main",
 							headRef: "pr",
-							pr: { ...pr, title: "A PR" },
+							pr: { ...pr, title: "A PR", authorLogin: "fdarian" },
 						});
 						const paths = store
 							.listChangedFiles(session.id, false)
@@ -1072,7 +1075,7 @@ describe("Store — a PR session after the PR is merged", () => {
 							repoRoot: root,
 							baseRef: "main",
 							headRef: "pr",
-							pr: { ...pr, title: "A PR" },
+							pr: { ...pr, title: "A PR", authorLogin: "fdarian" },
 						});
 						const events: string[] = [];
 						const unsubscribe = subscribe((event) => {
@@ -1109,7 +1112,13 @@ describe("gatherGenerationContext — the worktree the agent will read", () => {
 		repoRoot: root,
 		baseRef: "main",
 		headRef: "pr",
-		pr: { owner: "acme", repo: "widgets", number: 9, title: "A PR" },
+		pr: {
+			owner: "acme",
+			repo: "widgets",
+			number: 9,
+			title: "A PR",
+			authorLogin: "fdarian",
+		},
 	});
 	const status = (
 		headSha: string,
@@ -1372,6 +1381,7 @@ describe("Store.openSession — reuses matching branch review state for a PR", (
 							title: "Add widgets",
 							owner: "acme",
 							repo: "widgets",
+							authorLogin: "fdarian",
 						},
 					});
 					const opened = yield* store.openSession(repoRoot, {
@@ -1537,6 +1547,7 @@ describe("Store.openPullRequestSession — reuses open review sessions", () => {
 												baseRef: "main",
 												headRef: changedHead ? "feature" : "main",
 												isCrossRepository: false,
+												authorLogin: "fdarian",
 											};
 										}),
 								},
@@ -1603,6 +1614,7 @@ describe("Store.openPullRequestSession — reuses open review sessions", () => {
 							title: "Existing",
 							owner: "Acme",
 							repo: "Widgets",
+							authorLogin: "fdarian",
 						},
 					});
 					const opened = yield* store.openPullRequestSession({
@@ -1736,6 +1748,7 @@ describe("Store.openPullRequestSession — reuses open review sessions", () => {
 												baseRef: "main",
 												headRef: "feature",
 												isCrossRepository: scenario === "fork",
+												authorLogin: "fdarian",
 											};
 										}),
 									headRef: () =>
@@ -2716,7 +2729,7 @@ describe("Store — a PR retargeted to another base", () => {
 						repoRoot: root,
 						baseRef: "lower",
 						headRef: "pr",
-						pr: { ...pr, title: "Stacked PR" },
+						pr: { ...pr, title: "Stacked PR", authorLogin: "fdarian" },
 					});
 					const paths = store
 						.listChangedFiles(session.id, false)
@@ -2768,7 +2781,7 @@ describe("Store — persisting the PR state it learns", () => {
 						repoRoot: root,
 						baseRef: "main",
 						headRef: "main",
-						pr: { ...pr, title: "A PR" },
+						pr: { ...pr, title: "A PR", authorLogin: "fdarian" },
 					});
 					yield* reviews.closeSession(session.id);
 

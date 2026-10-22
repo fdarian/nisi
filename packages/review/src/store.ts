@@ -25,6 +25,8 @@ export type SessionPullRequest = {
 	readonly title: string;
 	readonly owner: string;
 	readonly repo: string;
+	/** Null only for a session persisted before the column existed and not re-resolved since. */
+	readonly authorLogin: string | null;
 };
 
 export type Session = {
@@ -131,6 +133,7 @@ const toPullRequest = (row: SessionRow): SessionPullRequest | null =>
 				title: row.prTitle,
 				owner: row.owner,
 				repo: row.repo,
+				authorLogin: row.prAuthorLogin,
 			};
 
 const toPullRequestSessionRecord = (
@@ -222,6 +225,7 @@ export class ReviewStore extends Context.Service<ReviewStore>()("ReviewStore", {
 					repo: input.pr?.repo ?? null,
 					prNumber: input.pr?.number ?? null,
 					prTitle: input.pr?.title ?? null,
+					prAuthorLogin: input.pr?.authorLogin ?? null,
 					baseRef: input.baseRef,
 					headRef: input.headRef,
 					closedAt: null,
@@ -326,6 +330,7 @@ export class ReviewStore extends Context.Service<ReviewStore>()("ReviewStore", {
 									repo: pr.repo,
 									prNumber: pr.number,
 									prTitle: pr.title,
+									prAuthorLogin: pr.authorLogin,
 									// The old row's state described a different PR.
 									prState: null,
 									baseRef,

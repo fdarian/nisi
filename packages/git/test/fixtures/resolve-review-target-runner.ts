@@ -39,6 +39,7 @@ const result = Exit.isSuccess(exit)
 			owner: exit.value.github?.owner ?? null,
 			prNumber: exit.value.github?.pr?.number ?? null,
 			prTitle: exit.value.github?.pr?.title ?? null,
+			prAuthorLogin: exit.value.github?.pr?.authorLogin ?? null,
 		}
 	: {
 			ok: false as const,

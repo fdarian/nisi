@@ -89,7 +89,7 @@ test("reports a deleted repoRoot instead of failing the whole snapshot", () =>
 					repoRoot: gone,
 					baseRef: "main",
 					headRef: "feature",
-					pr: { ...pullRequest, title: "Dead" },
+					pr: { ...pullRequest, title: "Dead", authorLogin: "fdarian" },
 				});
 				yield* store.openSession({
 					repoRoot,
@@ -187,7 +187,7 @@ test("watched and pollScheduled follow attention, not just the last status", () 
 					repoRoot,
 					baseRef: "main",
 					headRef: "main",
-					pr: { ...pullRequest, title: "Seven" },
+					pr: { ...pullRequest, title: "Seven", authorLogin: "fdarian" },
 				});
 				const wire = {
 					id: opened.id,
@@ -196,6 +196,7 @@ test("watched and pollScheduled follow attention, not just the last status", () 
 						kind: "pr",
 						...pullRequest,
 						title: "Seven",
+						authorLogin: "fdarian",
 						baseRef: "main",
 						headRef: "main",
 					},

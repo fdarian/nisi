@@ -52,7 +52,7 @@ export type OpenPullRequestIndex = {
 	readonly repository: RepositoryIdentity;
 	readonly highWaterMark?: string;
 	readonly removedNumbers?: readonly number[];
-	readonly prs: readonly (PullRequestRef &
+	readonly prs: readonly (Omit<PullRequestRef, "authorLogin"> &
 		Pick<
 			PullRequestSearchResult,
 			"updatedAt" | "state" | "author" | "url" | "isDraft"

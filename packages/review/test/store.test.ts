@@ -13,7 +13,13 @@ const prInput = {
 	repoRoot: "/repo",
 	baseRef: "main",
 	headRef: "feature",
-	pr: { number: 42, title: "Add widgets", owner: "acme", repo: "widgets" },
+	pr: {
+		number: 42,
+		title: "Add widgets",
+		owner: "acme",
+		repo: "widgets",
+		authorLogin: "fdarian",
+	},
 };
 
 describe("ReviewStore sessions", () => {
@@ -33,6 +39,7 @@ describe("ReviewStore sessions", () => {
 				title: "Add widgets",
 				owner: "acme",
 				repo: "widgets",
+				authorLogin: "fdarian",
 			});
 			expect(session.id).toBeTruthy();
 		});
@@ -643,7 +650,13 @@ describe("ReviewStore PR session listing", () => {
 					const store = yield* ReviewStore;
 					yield* open(1);
 					yield* open(2, {
-						pr: { number: 2, title: "Other", owner: "acme", repo: "gadgets" },
+						pr: {
+							number: 2,
+							title: "Other",
+							owner: "acme",
+							repo: "gadgets",
+							authorLogin: "fdarian",
+						},
 					});
 					return yield* store.listPullRequestSessions({
 						owner: "ACME",
@@ -708,7 +721,13 @@ describe("ReviewStore PR session listing", () => {
 					yield* store.setPrState(session.id, "closed");
 					yield* store.retargetToPullRequest(
 						session.id,
-						{ number: 9, title: "Next", owner: "acme", repo: "widgets" },
+						{
+							number: 9,
+							title: "Next",
+							owner: "acme",
+							repo: "widgets",
+							authorLogin: "fdarian",
+						},
 						"main",
 						"feature-9",
 					);

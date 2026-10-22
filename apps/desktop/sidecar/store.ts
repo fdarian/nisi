@@ -151,6 +151,8 @@ export type SessionTarget =
 			readonly headRef: string;
 			readonly owner: string;
 			readonly repo: string;
+			/** Null only for a session persisted before this column existed and not re-resolved since. */
+			readonly authorLogin: string | null;
 	  }
 	| {
 			readonly kind: "branch";
@@ -250,6 +252,7 @@ const toSessionPullRequest = (
 				title: github.pr.title,
 				owner: github.owner,
 				repo: github.repo,
+				authorLogin: github.pr.authorLogin,
 			};
 
 const toWireSession = (session: ReviewSession): Session => ({
@@ -266,6 +269,7 @@ const toWireSession = (session: ReviewSession): Session => ({
 					headRef: session.headRef,
 					owner: session.pr.owner,
 					repo: session.pr.repo,
+					authorLogin: session.pr.authorLogin,
 				},
 });
 
@@ -399,7 +403,13 @@ const resolvedPullRequest = (
 ) => ({
 	baseRef: pr.baseRef,
 	headRef: pr.headRef,
-	pr: { owner, repo, number: pr.number, title: pr.title },
+	pr: {
+		owner,
+		repo,
+		number: pr.number,
+		title: pr.title,
+		authorLogin: pr.authorLogin,
+	},
 });
 
 /**
@@ -702,6 +712,7 @@ export class Store extends Context.Service<Store>()("Store", {
 									title: cached.pr.title,
 									owner: cached.repository.owner,
 									repo: cached.repository.repo,
+									authorLogin: cached.pr.author,
 								},
 							});
 				const outcome = yield* persistResolved(repoRoot, target, resolved);
@@ -1040,7 +1051,7 @@ export class Store extends Context.Service<Store>()("Store", {
 				const pr =
 					cached === undefined
 						? yield* github.pullRequest(repoRoot, input.number)
-						: cached.pr;
+						: { ...cached.pr, authorLogin: cached.pr.author };
 				if (pr === null || pr.number !== input.number) {
 					return yield* new PullRequestNotFound({
 						repoRoot,

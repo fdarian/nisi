@@ -9,12 +9,14 @@ import {
 type PrHeaderShellProps = {
 	/** First breadcrumb: the repository. */
 	repo: React.ReactNode;
-	/** Second breadcrumb: `#N`, or `vs <base>` for a branch session. */
-	refLabel: React.ReactNode;
+	/** Second breadcrumb: `#N` for a PR. Omitted (branch session): the breadcrumb ends at the repo. */
+	refLabel?: React.ReactNode;
 	/** Extra breadcrumb items after the second, e.g. a notice icon. Must fit the row's height. */
 	breadcrumbTrailing?: React.ReactNode;
 	title: React.ReactNode;
 	stat: React.ReactNode;
+	/** A muted row under the title: author and branches for a PR, what the diff is against for a branch session. */
+	meta?: React.ReactNode;
 	/** PR-only controls (CI, merge) between the title block and the menu. */
 	actions?: React.ReactNode;
 	menu: React.ReactNode;
@@ -32,12 +34,16 @@ export function PrHeaderShell(props: PrHeaderShellProps): React.ReactElement {
 				<Breadcrumb>
 					<BreadcrumbList className="text-xs h-6">
 						<BreadcrumbItem>{props.repo}</BreadcrumbItem>
-						<BreadcrumbSeparator />
-						<BreadcrumbItem>
-							<BreadcrumbPage className="text-muted-foreground">
-								{props.refLabel}
-							</BreadcrumbPage>
-						</BreadcrumbItem>
+						{props.refLabel !== undefined && (
+							<>
+								<BreadcrumbSeparator />
+								<BreadcrumbItem>
+									<BreadcrumbPage className="text-muted-foreground">
+										{props.refLabel}
+									</BreadcrumbPage>
+								</BreadcrumbItem>
+							</>
+						)}
 						{props.breadcrumbTrailing}
 					</BreadcrumbList>
 				</Breadcrumb>
@@ -47,6 +53,7 @@ export function PrHeaderShell(props: PrHeaderShellProps): React.ReactElement {
 					</h1>
 					{props.stat}
 				</div>
+				{props.meta}
 			</div>
 			{props.actions !== undefined && (
 				<div className="flex items-center gap-2">{props.actions}</div>

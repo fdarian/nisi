@@ -30,6 +30,7 @@ import type { DiffStat } from "./diff-stat";
 import { PrBaseStaleNotice } from "./pr-base-stale-notice";
 import { PrCiStatus } from "./pr-ci-status";
 import { PrDiffStat } from "./pr-diff-stat";
+import { PrHeaderMeta } from "./pr-header-meta";
 import { PrHeaderShell } from "./pr-header-shell";
 import { PrStackBadge } from "./pr-stack-badge";
 
@@ -138,10 +139,18 @@ export function PrHeader({
 							onSessionOpened={onSessionOpened}
 						/>
 					</div>
+				) : undefined
+			}
+			meta={
+				target.kind === "pr" ? (
+					<PrHeaderMeta
+						authorLogin={target.authorLogin}
+						baseRef={target.baseRef}
+						headRef={target.headRef}
+						mode="pr"
+					/>
 				) : (
-					<>
-						vs <span className="font-mono">{target.baseRef}</span>
-					</>
+					<PrHeaderMeta baseRef={target.baseRef} mode="branch" />
 				)
 			}
 			breadcrumbTrailing={
