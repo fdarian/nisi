@@ -32,7 +32,7 @@ import {
 } from "#/features/code-index/lsp/code-index-lsp-events";
 import { useIncludeUncommitted } from "#/features/settings/settings-data";
 import type { SidecarQueryUtils } from "#/infra/backend-context";
-import { useSidecarEvent } from "#/infra/sidecar-events";
+import { useSidecarEvent, useSidecarReconnect } from "#/infra/sidecar-events";
 import { FILE_CONTENTS_CHUNK_SIZE } from "./file-content-demand";
 import { useSetCodeIndexEnabled } from "./session-ui-store";
 
@@ -830,6 +830,10 @@ export function useLiveFileChanges(
 		if (event.sessionId !== sessionId) return;
 		setHasPendingEvent(true);
 	});
+	// A restarted sidecar dropped this session's head pin, so lazily fetched
+	// contents may now come from a newer head than the cached file list.
+	// Offer Refresh rather than applying it — Refresh stays user-driven.
+	useSidecarReconnect(() => setHasPendingEvent(true));
 
 	const baseRefresh = useMutation({
 		...orpc.diff.refresh.mutationOptions(),
@@ -900,6 +904,11 @@ export function useSessionWatch(
 			mutateRef.current({ sessionId, watching: false });
 		};
 	}, [sessionId, watched]);
+
+	// A restarted sidecar forgets watch registrations.
+	useSidecarReconnect(() => {
+		if (watched) mutateRef.current({ sessionId, watching: true });
+	});
 }
 
 export function usePullRequestAttention(
