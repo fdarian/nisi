@@ -4,15 +4,16 @@ import {
 	repoChangeSignatureEquals,
 } from "@repo/git";
 import { SettingsStore } from "@repo/settings";
-import { Duration, Effect, Schedule } from "effect";
+import { Duration, Effect, Fiber, Schedule, Semaphore } from "effect";
 import { emit } from "./events.ts";
 import { guideWatchedSessionIds } from "./guide/watch.ts";
 import { AttentionState } from "./pull-request-attention.ts";
 import { readRefState } from "./ref-state.ts";
+import { watchRefs } from "./ref-watch.ts";
 import { SessionWatch } from "./session-watch.ts";
 import { Store } from "./store.ts";
 
-/** How often each watched session's repo is checked for changes since the last tick. */
+/** How often a session that can't use the ref watcher is checked for changes. */
 export const POLL_INTERVAL = Duration.seconds(2);
 
 /**
@@ -28,9 +29,9 @@ type StoredSignature = {
 };
 
 /**
- * Previous poll's signature per session, keyed by the session's public id.
+ * Previous check's signature per session, keyed by the session's public id.
  * Module-level `Map`, not `Ref`-in-context: this state belongs to exactly
- * one thing (the single background poll loop started once at boot), the
+ * one thing (the live checks started by `syncLiveChecks`), the
  * same shape `events.ts`'s subscriber `Set` already uses for the sidecar's
  * other piece of long-lived in-memory state. Deliberately keyed by every
  * *open* session, not just watched ones — an unwatched-but-still-open
@@ -104,13 +105,13 @@ const readSignature = (repoRoot: string, includeUncommitted: boolean) =>
  * refetches on that toggle by itself (folded into its query key), so an
  * event here would be both wrong and redundant.
  *
- * Shared by `pollOnce`'s tick and `http.ts`'s `sessions.setWatching` — the
- * latter calls this directly for the rising-edge (unwatched → watched)
- * check, so the Refresh button can appear immediately instead of waiting up
- * to `POLL_INTERVAL` for the next tick.
+ * Shared by the live checks (`startLiveCheck`) and `http.ts`'s
+ * `sessions.setWatching` — the latter calls this directly for the rising-edge
+ * (unwatched → watched) check, so the Refresh button can appear immediately
+ * instead of waiting for the next ref change or poll tick.
  *
  * A transient git failure (e.g. a rebase mid-flight) is swallowed rather
- * than failing the caller — the next tick tries again, and one session's
+ * than failing the caller — the next check tries again, and one session's
  * hiccup shouldn't stop every other session from being checked.
  */
 export const checkSessionForChanges = (sessionId: string) =>
@@ -155,47 +156,151 @@ export const checkSessionForChanges = (sessionId: string) =>
 		Effect.orElseSucceed(() => undefined),
 	);
 
+type LiveCheckServices = Effect.Services<
+	ReturnType<typeof checkSessionForChanges>
+>;
+
+type LiveCheck = {
+	readonly includeUncommitted: boolean;
+	/** The root this check was started against, to notice a worktree that moved. */
+	readonly repoRoot: string | undefined;
+	readonly stop: Effect.Effect<void>;
+};
+
+/** One per session in `SessionWatch` or watched by the Guide tab. */
+const liveChecks = new Map<string, LiveCheck>();
+
+const reconcileLock = Semaphore.makeUnsafe(1);
+
+const resolveRepoRoot = (sessionId: string) =>
+	Effect.gen(function* () {
+		const store = yield* Store;
+		return yield* store.resolveSessionRepoRoot(sessionId);
+	}).pipe(Effect.orElseSucceed(() => undefined));
+
 /**
- * One poll tick: checks every open session currently in `SessionWatch`'s
- * registry (windowFocused && Files Changed active && its tab selected — see
- * `apps/desktop/src/features/pull-request/data/pr-data.ts`), not every open session — an
- * unfocused/backgrounded PR isn't showing its Files Changed tab to anyone,
- * so there's no one for a poll-driven event to reach.
+ * Runs `checkSessionForChanges` for one session until stopped: on every
+ * filesystem change to the repo's HEAD refs (`ref-watch.ts`), or on a
+ * `POLL_INTERVAL` timer when it can't watch. Polling covers
+ * `includeUncommitted` (dirty paths have no cheap event source), a repo layout
+ * `watchRefs` can't read, and a watcher that errors mid-life.
  */
-const pollOnce = Effect.gen(function* () {
-	const store = yield* Store;
-	const sessionWatch = yield* SessionWatch;
-	const sessions = yield* store.listSessions();
-	const watchedIds = new Set([
-		...(yield* sessionWatch.list()),
-		...guideWatchedSessionIds(),
-	]);
-	const watchedSessions = sessions.filter((session) =>
-		watchedIds.has(session.id),
-	);
+const startLiveCheck = (sessionId: string, includeUncommitted: boolean) =>
+	Effect.gen(function* () {
+		const services = yield* Effect.context<LiveCheckServices>();
+		const runFork = Effect.runForkWith(services);
+		const check = checkSessionForChanges(sessionId);
+		const poll = check.pipe(
+			Effect.repeat(Schedule.spaced(POLL_INTERVAL)),
+			Effect.asVoid,
+		);
 
-	yield* Effect.forEach(
-		watchedSessions,
-		(session) => checkSessionForChanges(session.id),
-		{ concurrency: "unbounded" },
-	);
+		const live: {
+			stopped: boolean;
+			watcher: { readonly close: () => void } | undefined;
+			poller: Fiber.Fiber<void> | undefined;
+		} = { stopped: false, watcher: undefined, poller: undefined };
 
-	// Drop signatures (and any remembered "unresolvable" state) for sessions
-	// that closed since the last tick, so neither map/set grows for the
-	// lifetime of a long-running sidecar process.
-	const openIds = new Set(sessions.map((session) => session.id));
-	for (const id of previousSignatures.keys()) {
-		if (!openIds.has(id)) previousSignatures.delete(id);
-	}
-	for (const id of unresolvableSessions) {
-		if (!openIds.has(id)) unresolvableSessions.delete(id);
-	}
-});
+		const startPolling = () => {
+			if (live.stopped || live.poller !== undefined) return;
+			live.poller = runFork(poll);
+		};
+		const stop = Effect.suspend(() => {
+			live.stopped = true;
+			live.watcher?.close();
+			return live.poller === undefined
+				? Effect.void
+				: Fiber.interrupt(live.poller);
+		});
 
-/** Forks the poll loop as a background fiber tied to the caller's scope. */
-export const startLivePolling = () =>
-	pollOnce.pipe(
-		Effect.repeat(Schedule.spaced(POLL_INTERVAL)),
-		Effect.asVoid,
-		Effect.forkScoped,
+		if (includeUncommitted) {
+			startPolling();
+			return {
+				includeUncommitted,
+				repoRoot: undefined,
+				stop,
+			} satisfies LiveCheck;
+		}
+
+		const repoRoot = yield* resolveRepoRoot(sessionId);
+		const watcher =
+			repoRoot === undefined
+				? undefined
+				: yield* watchRefs(
+						repoRoot,
+						() => void runFork(check),
+						(cause) => {
+							live.watcher?.close();
+							live.watcher = undefined;
+							startPolling();
+							void runFork(
+								Effect.logWarning("ref watcher failed — polling instead", {
+									sessionId,
+									cause,
+								}),
+							);
+						},
+					).pipe(Effect.orElseSucceed(() => undefined));
+
+		if (watcher === undefined) {
+			startPolling();
+		} else {
+			live.watcher = watcher;
+			// A ref may have moved between the caller's baseline and the watcher starting.
+			void runFork(check);
+		}
+		return { includeUncommitted, repoRoot, stop } satisfies LiveCheck;
+	});
+
+/**
+ * Brings the running live checks in line with the sessions that need one:
+ * every open session in `SessionWatch` (windowFocused && Files Changed active
+ * && its tab selected — see `apps/desktop/src/features/pull-request/data/pr-data.ts`)
+ * or watched by the Guide tab. An unfocused/backgrounded PR isn't showing
+ * anything a change event could reach. A check is restarted when the
+ * `includeUncommitted` setting flipped or its worktree moved since it started.
+ * Call it wherever one of those inputs changes.
+ */
+export const syncLiveChecks = () =>
+	reconcileLock.withPermits(1)(
+		Effect.gen(function* () {
+			const store = yield* Store;
+			const sessionWatch = yield* SessionWatch;
+			const settings = yield* (yield* SettingsStore).get();
+			const sessions = yield* store.listSessions();
+			const openIds = new Set(sessions.map((session) => session.id));
+			const desired = new Set(
+				[...(yield* sessionWatch.list()), ...guideWatchedSessionIds()].filter(
+					(id) => openIds.has(id),
+				),
+			);
+
+			for (const [sessionId, check] of [...liveChecks]) {
+				const stale =
+					!desired.has(sessionId) ||
+					check.includeUncommitted !== settings.includeUncommitted ||
+					(!check.includeUncommitted &&
+						check.repoRoot !== (yield* resolveRepoRoot(sessionId)));
+				if (!stale) continue;
+				liveChecks.delete(sessionId);
+				yield* check.stop;
+			}
+			for (const sessionId of desired) {
+				if (liveChecks.has(sessionId)) continue;
+				liveChecks.set(
+					sessionId,
+					yield* startLiveCheck(sessionId, settings.includeUncommitted),
+				);
+			}
+
+			// Drop signatures (and any remembered "unresolvable" state) for sessions
+			// that closed, so neither map/set grows for the lifetime of a
+			// long-running sidecar process.
+			for (const id of previousSignatures.keys()) {
+				if (!openIds.has(id)) previousSignatures.delete(id);
+			}
+			for (const id of unresolvableSessions) {
+				if (!openIds.has(id)) unresolvableSessions.delete(id);
+			}
+		}),
 	);

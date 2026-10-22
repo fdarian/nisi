@@ -122,7 +122,7 @@ export function PrView({
 	});
 	useOpenInGitHubShortcut({ enabled: isSelectedTab, session });
 
-	// Gates the sidecar's 2s worktree poller (`live-poll.ts`) to exactly the
+	// Gates the sidecar's live checks (`live-poll.ts`) to exactly the
 	// sessions someone could actually see a result from — window focused,
 	// Files Changed the visible tab, and (since every `PrView` stays mounted,
 	// see `isSelectedTab`'s doc comment) this PR's own tab selected, not some

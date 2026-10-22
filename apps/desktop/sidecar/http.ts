@@ -86,7 +86,7 @@ import { listHarnesses } from "./harness/harnesses.ts";
 import { getHarnessModels } from "./harness/models.ts";
 import { receiveFrontendMarks } from "./launch-trace/handler.ts";
 import { LaunchTrace } from "./launch-trace/service.ts";
-import { checkSessionForChanges } from "./live-poll.ts";
+import { checkSessionForChanges, syncLiveChecks } from "./live-poll.ts";
 import {
 	injectedDeepLinks,
 	measurementInstance,
@@ -791,6 +791,7 @@ export function attachRouter(
 					// where the session already closed (whose handler already
 					// removed it above) right before this call lands.
 					yield* sessionWatch.remove(input.sessionId);
+					yield* syncLiveChecks();
 					return;
 				}
 
@@ -808,8 +809,9 @@ export function attachRouter(
 				}
 
 				yield* sessionWatch.add(input.sessionId);
+				yield* syncLiveChecks();
 				// The rising-edge check: runs once, right here, rather than
-				// waiting up to POLL_INTERVAL for the next tick — this is what
+				// waiting for the next ref change or poll — this is what
 				// lets the Refresh affordance appear immediately on refocus.
 				// Only the signature check, never a diff invalidation — applying
 				// changes stays behind the user's own Refresh click.
@@ -1348,6 +1350,7 @@ export function attachRouter(
 			update: authed.settings.update.effect(function* ({ input }) {
 				const store = yield* SettingsStore;
 				const next = yield* store.update(input);
+				if (input.includeUncommitted !== undefined) yield* syncLiveChecks();
 				if (
 					input.publicAccessEnabled !== undefined ||
 					input.publicAccessFeatureEnabled !== undefined
@@ -2553,6 +2556,7 @@ export function attachRouter(
 			}) {
 				if (!input.watching) {
 					stopGuideWatch(input.sessionId);
+					yield* syncLiveChecks();
 					return;
 				}
 				const store = yield* Store;
@@ -2580,6 +2584,7 @@ export function attachRouter(
 							message: `couldn't watch ${repoRoot}: ${cause instanceof Error ? cause.message : String(cause)}`,
 						}),
 				});
+				yield* syncLiveChecks();
 				// Baselines the head so the first real move is seen; the client
 				// refetches on its own when it starts watching.
 				yield* checkSessionForChanges(input.sessionId);

@@ -32,7 +32,7 @@ import { GitHubLive } from "./github-live.ts";
 import { HarnessModelCache } from "./harness/model-store.ts";
 import { attachRouter, bindHealthCheckServer } from "./http.ts";
 import { LaunchTrace } from "./launch-trace/service.ts";
-import { startLivePolling } from "./live-poll.ts";
+import { syncLiveChecks } from "./live-poll.ts";
 import { LoggingLive } from "./logging.ts";
 import { MergeStatusLedger } from "./merge-status-ledger.ts";
 import { PrIndex } from "./pr-index.ts";
@@ -261,16 +261,13 @@ const program = Effect.scoped(
 		}).pipe(Effect.withSpan("sidecar.boot", { root: true }));
 		yield* Effect.provide(
 			Effect.gen(function* () {
-				// Backgrounded, tied to this program's scope — same shutdown path
-				// as the HTTP server above, just via the fiber getting
-				// interrupted instead of an acquireRelease finalizer.
-				yield* startLivePolling();
+				yield* syncLiveChecks();
 				const prIndex = yield* PrIndex;
 				yield* prIndex.start.pipe(Effect.forkScoped);
 				const scheduledMerges = yield* ScheduledMerges;
 				yield* scheduledMerges.start();
 
-				// Same shape as `startLivePolling` above, for auto-update's own
+				// Backgrounded like the PR index above, for auto-update's own
 				// background version check (first run ~10s out, then hourly —
 				// see `updater/service.ts`).
 				const updater = yield* Updater;

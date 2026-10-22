@@ -7,10 +7,10 @@ import { OpenSessionTarget, Session } from "./sessions.ts";
 /**
  * `session-opened` tracks the PR/worktree open path; CLI `sessions.open` uses
  * `open-resolved`, which also carries the open request's identity.
- * Phase 2 adds `session-files-changed`: the live-update poller's signal that
+ * Phase 2 adds `session-files-changed`: the sidecar's live-update signal that
  * a session's `diff.files`/`diff.fileContents` results are stale and worth
  * refetching — deliberately just a `sessionId`, not a diff of what changed,
- * since the poller only knows *that* something moved (via the cheap
+ * since the sidecar only knows *that* something moved (via the cheap
  * mtime/size signal — see `@repo/git`'s `readRepoChangeSignature`), not
  * *what*; the existing fetch procedures are already the source of truth for
  * the actual content.

@@ -7,7 +7,7 @@ import { SqliteDb } from "@repo/db";
 import { GhGitHub } from "@repo/git";
 import { ConfigProvider, Effect, Layer } from "effect";
 import { subscribe } from "../events.ts";
-import { checkSessionForChanges } from "../live-poll.ts";
+import { checkSessionForChanges, syncLiveChecks } from "../live-poll.ts";
 import { PullRequestAttentionLive } from "../pull-request-attention.ts";
 import { SessionWatch } from "../session-watch.ts";
 import { Store } from "../store.ts";
@@ -72,6 +72,11 @@ const withFixture = async (fn: (fixture: Fixture) => Promise<void>) => {
 	} finally {
 		await rm(parent, { recursive: true, force: true });
 	}
+};
+
+const waitFor = async (condition: () => boolean, timeoutMs: number) => {
+	const deadline = Date.now() + timeoutMs;
+	while (!condition() && Date.now() < deadline) await Bun.sleep(25);
 };
 
 /** What the `diff.files` handler reports for a session. */
@@ -248,5 +253,34 @@ sessionTest(
 			expect(yield* contentsOfA(session.id)).toMatchObject({
 				content: { newContent: "v1\n" },
 			});
+		}),
+);
+
+sessionTest(
+	"the live check announces a commit once, from the ref watcher, and ignores index churn",
+	(fixture, events) =>
+		Effect.gen(function* () {
+			const sessionWatch = yield* SessionWatch;
+			const session = yield* openWatchedSession(fixture.worktree);
+			yield* syncLiveChecks();
+
+			try {
+				yield* Effect.promise(() => fixture.commit(fixture.worktree, "v2\n"));
+				// Under POLL_INTERVAL, so only the watcher can have noticed it.
+				yield* Effect.promise(() => waitFor(() => events.length > 0, 1000));
+				yield* Effect.promise(() => Bun.sleep(500));
+				expect(events).toEqual([session.id]);
+
+				yield* Effect.promise(async () => {
+					await Bun.write(join(fixture.worktree, "a.ts"), "uncommitted\n");
+					await git(fixture.worktree, ["add", "a.ts"]);
+					await git(fixture.worktree, ["status"]);
+					await Bun.sleep(500);
+				});
+				expect(events).toEqual([session.id]);
+			} finally {
+				yield* sessionWatch.remove(session.id);
+				yield* syncLiveChecks();
+			}
 		}),
 );

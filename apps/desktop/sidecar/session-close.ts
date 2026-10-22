@@ -6,6 +6,7 @@ import {
 	closeChatThreadsForSession,
 } from "./chat/sessions.ts";
 import { stopGuideWatch } from "./guide/watch.ts";
+import { syncLiveChecks } from "./live-poll.ts";
 import { AttentionState } from "./pull-request-attention.ts";
 import type { AppServices } from "./services.ts";
 import { SessionWatch } from "./session-watch.ts";
@@ -141,6 +142,13 @@ const closeSessionSideEffects = (
 					attention.remove(sessionId),
 					Effect.sync(() => stopGuideWatch(sessionId)),
 				]).pipe(
+					Effect.andThen(syncLiveChecks()),
+					Effect.catchCause((cause) =>
+						Effect.logWarning("live check teardown failed", {
+							sessionId,
+							cause,
+						}),
+					),
 					Effect.flatMap(() =>
 						Effect.logInfo("session close teardown finished", {
 							sessionId,
