@@ -1,7 +1,6 @@
 "use client";
 
 import { MoreHorizontalIcon } from "lucide-react";
-import { BreadcrumbItem } from "#/components/ui/breadcrumb";
 import { Button } from "#/components/ui/button";
 import {
 	DropdownMenu,
@@ -124,9 +123,9 @@ export function PrHeader({
 	return (
 		<PrHeaderShell
 			repo={target.kind === "pr" ? `${target.owner}/${target.repo}` : repoName}
-			refLabel={
+			number={
 				target.kind === "pr" ? (
-					<div className="flex items-center gap-1.5">
+					<>
 						<span>#{target.number}</span>
 						<PrStackBadge
 							isSelectedTab={isSelectedTab}
@@ -138,7 +137,7 @@ export function PrHeader({
 							findExistingSessionId={findExistingSessionId}
 							onSessionOpened={onSessionOpened}
 						/>
-					</div>
+					</>
 				) : undefined
 			}
 			meta={
@@ -153,15 +152,13 @@ export function PrHeader({
 					<PrHeaderMeta baseRef={target.baseRef} mode="branch" />
 				)
 			}
-			breadcrumbTrailing={
+			trailing={
 				baseMayBeStale && (
-					<BreadcrumbItem>
-						<PrBaseStaleNotice
-							baseRef={target.baseRef}
-							isRetrying={isRetryingBase}
-							onRetry={onRetryBase}
-						/>
-					</BreadcrumbItem>
+					<PrBaseStaleNotice
+						baseRef={target.baseRef}
+						isRetrying={isRetryingBase}
+						onRetry={onRetryBase}
+					/>
 				)
 			}
 			title={target.kind === "pr" ? target.title : target.headRef}

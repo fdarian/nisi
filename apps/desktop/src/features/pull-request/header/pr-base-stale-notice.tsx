@@ -16,9 +16,9 @@ type PrBaseStaleNoticeProps = {
 };
 
 /**
- * Sits in the header's breadcrumb row instead of a banner above the diff: a
+ * Closes the header's context row instead of a banner above the diff: a
  * failed background base fetch is worth knowing but never worth pushing the
- * file list down. Fixed `size-5` keeps the row at its `h-6`.
+ * file list down. Fixed `size-5` keeps the row at its `h-5`.
  */
 export function PrBaseStaleNotice(
 	props: PrBaseStaleNoticeProps,

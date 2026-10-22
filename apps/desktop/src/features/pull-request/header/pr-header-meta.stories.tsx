@@ -1,4 +1,4 @@
-/** Design coverage for the header's meta row (author and branches) inside `PrHeaderShell`. */
+/** Design coverage for the header's context row (repo, author and branches) inside `PrHeaderShell`. */
 
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { MoreHorizontalIcon } from "lucide-react";
@@ -11,8 +11,10 @@ import {
 	createMockOrpc,
 	createMockSidecarClient,
 } from "../../../../.storybook/mock-orpc";
+import { PrBaseStaleNotice } from "./pr-base-stale-notice";
 import { PrHeaderMeta } from "./pr-header-meta";
 import { PrHeaderShell } from "./pr-header-shell";
+import { PrStackBadge } from "./pr-stack-badge";
 
 const STORY_CLIENT = createMockSidecarClient();
 const ORPC = createMockOrpc({
@@ -25,6 +27,32 @@ const ORPC = createMockOrpc({
 		defaultMethod: "squash",
 	},
 	checks: [{ name: "Tests", status: "passing" }],
+	stack: {
+		number: 7,
+		size: 2,
+		baseRefName: "main",
+		position: 2,
+		entries: [
+			{
+				position: 1,
+				number: 178,
+				title: "Add the data layer",
+				headRefName: "stack/one",
+				baseRefName: "main",
+				state: "OPEN",
+				isDraft: false,
+			},
+			{
+				position: 2,
+				number: 179,
+				title: "Hold a session on the head it is showing until Refresh",
+				headRefName: "stack/two",
+				baseRefName: "stack/one",
+				state: "OPEN",
+				isDraft: false,
+			},
+		],
+	},
 });
 
 const TITLE = "Hold a session on the head it is showing until Refresh";
@@ -33,7 +61,10 @@ type StoryProps = {
 	meta: React.ReactNode;
 	width: number;
 	repo?: string;
-	refLabel?: string;
+	/** Shows `#179` after the title, with the stack badge when `stacked`. */
+	numbered?: boolean;
+	stacked?: boolean;
+	staleBase?: boolean;
 	title?: string;
 	pr?: boolean;
 };
@@ -44,7 +75,25 @@ function HeaderStory(props: StoryProps): React.ReactElement {
 			<div style={{ width: props.width }}>
 				<PrHeaderShell
 					repo={props.repo ?? "fdarian/nisi"}
-					refLabel={props.refLabel}
+					number={
+						props.numbered === true ? (
+							<>
+								<span>#179</span>
+								{props.stacked === true && (
+									<PrStackBadge
+										findExistingSessionId={() => undefined}
+										isSelectedTab
+										number={179}
+										onSessionOpened={() => {}}
+										orpc={ORPC}
+										owner="fdarian"
+										repo="nisi"
+										watched
+									/>
+								)}
+							</>
+						) : undefined
+					}
 					title={props.title ?? TITLE}
 					stat={
 						<PrDiffStat
@@ -52,6 +101,15 @@ function HeaderStory(props: StoryProps): React.ReactElement {
 						/>
 					}
 					meta={props.meta}
+					trailing={
+						props.staleBase === true && (
+							<PrBaseStaleNotice
+								baseRef="main"
+								isRetrying={false}
+								onRetry={() => {}}
+							/>
+						)
+					}
 					actions={
 						props.pr === false ? undefined : (
 							<>
@@ -92,7 +150,7 @@ const meta: Meta<typeof HeaderStory> = {
 	title: "Pr/PrHeaderRedesign",
 	component: HeaderStory,
 	parameters: { layout: "fullscreen", controls: { disable: true } },
-	args: { width: 900, refLabel: "#179" },
+	args: { width: 900, numbered: true },
 };
 export default meta;
 
@@ -100,6 +158,36 @@ type Story = StoryObj<typeof meta>;
 
 export const PrArrow: Story = {
 	args: {
+		meta: (
+			<PrHeaderMeta
+				authorLogin="fdarian"
+				baseRef="main"
+				headRef="claude/pr-title-redesign-d6f5ea"
+				mode="pr"
+			/>
+		),
+	},
+};
+
+export const PrStacked: Story = {
+	args: {
+		stacked: true,
+		meta: (
+			<PrHeaderMeta
+				authorLogin="fdarian"
+				baseRef="main"
+				headRef="claude/pr-title-redesign-d6f5ea"
+				mode="pr"
+			/>
+		),
+	},
+};
+
+/** A failed base fetch: the warning icon closes the context row. */
+export const PrStaleBase: Story = {
+	args: {
+		stacked: true,
+		staleBase: true,
 		meta: (
 			<PrHeaderMeta
 				authorLogin="fdarian"
@@ -159,7 +247,18 @@ export const PrNarrow: Story = {
 export const BranchMode: Story = {
 	args: {
 		repo: "nisi",
-		refLabel: undefined,
+		numbered: false,
+		pr: false,
+		title: "claude/pr-title-redesign-d6f5ea",
+		meta: <PrHeaderMeta baseRef="main" mode="branch" />,
+	},
+};
+
+export const BranchModeStaleBase: Story = {
+	args: {
+		repo: "nisi",
+		numbered: false,
+		staleBase: true,
 		pr: false,
 		title: "claude/pr-title-redesign-d6f5ea",
 		meta: <PrHeaderMeta baseRef="main" mode="branch" />,
@@ -169,7 +268,7 @@ export const BranchMode: Story = {
 export const BranchModeLongBase: Story = {
 	args: {
 		repo: "nisi",
-		refLabel: undefined,
+		numbered: false,
 		pr: false,
 		title: "claude/pr-title-redesign-d6f5ea",
 		meta: <PrHeaderMeta baseRef={LONG_BASE} mode="branch" />,
@@ -180,7 +279,7 @@ export const BranchModeNarrow: Story = {
 	args: {
 		width: 480,
 		repo: "nisi",
-		refLabel: undefined,
+		numbered: false,
 		pr: false,
 		title: "claude/pr-title-redesign-d6f5ea",
 		meta: <PrHeaderMeta baseRef={LONG_BASE} mode="branch" />,

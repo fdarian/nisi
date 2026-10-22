@@ -121,7 +121,7 @@ export const ReadyPullRequest: Story = {
 	},
 };
 
-/** A stacked PR — the breadcrumb badge opens the stack navigator. */
+/** A stacked PR — the stack badge after `#N` opens the stack navigator. */
 export const StackedPullRequest: Story = {
 	args: {
 		target: PR_TARGET,
@@ -141,7 +141,7 @@ export const SuggestedStack: Story = {
 	},
 };
 
-/** A session persisted before the author column existed: the meta row starts at the branches. */
+/** A session persisted before the author column existed: the context row goes from the repo straight to the branches. */
 export const NullAuthor: Story = {
 	args: {
 		target: { ...PR_TARGET, authorLogin: null },
@@ -149,7 +149,7 @@ export const NullAuthor: Story = {
 	},
 };
 
-/** A branch/diff session: no `#N`, no PR actions; the meta row says what the diff is against. */
+/** A branch/diff session: no `#N`, no PR actions; the context row says what the diff is against. */
 export const BranchSession: Story = {
 	args: {
 		target: { kind: "branch", baseRef: "main", headRef: "feature-42" },
@@ -166,7 +166,7 @@ export const LoadingCounts: Story = {
 	},
 };
 
-/** A failed base fetch shows as a warning icon after the breadcrumb, not a banner. */
+/** A failed base fetch shows as a warning icon closing the context row, not a banner. */
 export const BaseMayBeStale: Story = {
 	args: {
 		target: PR_TARGET,
