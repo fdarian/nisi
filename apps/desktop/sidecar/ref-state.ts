@@ -25,6 +25,50 @@ const supportedRef = (ref: string) =>
 		!/^([A-Z_]+|main-worktree|worktrees)(\/|$)/.test(ref) &&
 		(!ref.startsWith("refs/") || sharedRef(ref)));
 
+const readOptionalFile = (fs: FileSystem, path: string) =>
+	fs.stat(path).pipe(
+		Effect.flatMap((stat) =>
+			stat.type === "Directory"
+				? Effect.succeed(undefined)
+				: fs.readFileString(path),
+		),
+		Effect.catchTag("PlatformError", (error) =>
+			error.reason._tag === "NotFound"
+				? Effect.succeed(undefined)
+				: Effect.fail(error),
+		),
+	);
+
+/**
+ * Where a repo's git state lives: the worktree's own `gitDir` (`HEAD`) and the
+ * `commonDir` it shares with the main clone (`refs/`, `packed-refs`). Undefined
+ * when the layout can't be read as plain files: no `.git`, a malformed
+ * `gitdir:` file, or a reftable ref store.
+ */
+export const resolveGitDirs = (repoRoot: string) =>
+	Effect.gen(function* () {
+		const fs = yield* FileSystem;
+		const marker = join(repoRoot, ".git");
+		if (!(yield* fs.exists(marker))) return undefined;
+		const stat = yield* fs.stat(marker);
+		const gitDir =
+			stat.type === "Directory"
+				? marker
+				: yield* readOptionalFile(fs, marker).pipe(
+						Effect.map((text) =>
+							text?.startsWith("gitdir: ")
+								? resolve(repoRoot, text.slice(8).trim())
+								: undefined,
+						),
+					);
+		if (gitDir === undefined) return undefined;
+		const common = yield* readOptionalFile(fs, join(gitDir, "commondir"));
+		const commonDir =
+			common === undefined ? gitDir : resolve(gitDir, common.trim());
+		if (yield* fs.exists(join(commonDir, "reftable"))) return undefined;
+		return { gitDir, commonDir };
+	});
+
 /** Content fingerprints catch packed refs and same-size/same-mtime rewrites; unsupported layouts stay on git. */
 export const readRefState = (
 	repoRoot: string,
@@ -56,37 +100,11 @@ export const readRefState = (
 		);
 		if (overrides.some(Option.isSome)) return undefined;
 		const fs = yield* FileSystem;
-		const optional = (path: string) =>
-			fs.stat(path).pipe(
-				Effect.flatMap((stat) =>
-					stat.type === "Directory"
-						? Effect.succeed(undefined)
-						: fs.readFileString(path),
-				),
-				Effect.catchTag("PlatformError", (error) =>
-					error.reason._tag === "NotFound"
-						? Effect.succeed(undefined)
-						: Effect.fail(error),
-				),
-			);
-		const marker = join(repoRoot, ".git");
-		if (!(yield* fs.exists(marker))) return undefined;
-		const stat = yield* fs.stat(marker);
-		const gitDir =
-			stat.type === "Directory"
-				? marker
-				: yield* optional(marker).pipe(
-						Effect.map((text) =>
-							text?.startsWith("gitdir: ")
-								? resolve(repoRoot, text.slice(8).trim())
-								: undefined,
-						),
-					);
-		if (gitDir === undefined) return undefined;
-		const common = yield* optional(join(gitDir, "commondir"));
-		const commonDir =
-			common === undefined ? gitDir : resolve(gitDir, common.trim());
-		if (yield* fs.exists(join(commonDir, "reftable"))) return undefined;
+		const optional = (path: string) => readOptionalFile(fs, path);
+		const dirs = yield* resolveGitDirs(repoRoot);
+		if (dirs === undefined) return undefined;
+		const gitDir = dirs.gitDir;
+		const commonDir = dirs.commonDir;
 		const config = yield* optional(join(commonDir, "config"));
 		if (
 			config === undefined ||
