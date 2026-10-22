@@ -11,6 +11,8 @@ export const SessionTarget = Schema.Union([
 		headRef: Schema.String,
 		owner: Schema.String,
 		repo: Schema.String,
+		/** Null only for a session persisted before this column existed and not re-resolved since. */
+		authorLogin: Schema.NullOr(Schema.String),
 	}),
 	Schema.Struct({
 		kind: Schema.Literal("branch"),

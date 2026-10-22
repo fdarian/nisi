@@ -32,6 +32,7 @@ const PrView = Schema.Struct({
 	baseRefName: Schema.String,
 	headRefName: Schema.String,
 	isCrossRepository: Schema.Boolean,
+	author: Schema.NullOr(Schema.Struct({ login: Schema.String })),
 });
 
 const decodeRepoView = (command: string, raw: string) =>
@@ -75,7 +76,7 @@ const isNoGitHubRepo = (stderr: string) =>
 	NO_GITHUB_REPO_MARKERS.some((marker) => stderr.includes(marker));
 
 const PR_VIEW_JSON_FIELDS =
-	"number,title,baseRefName,headRefName,isCrossRepository";
+	"number,title,baseRefName,headRefName,isCrossRepository,author";
 
 const toPullRequestRef = (
 	view: Schema.Schema.Type<typeof PrView>,
@@ -85,6 +86,7 @@ const toPullRequestRef = (
 	baseRef: view.baseRefName,
 	headRef: view.headRefName,
 	isCrossRepository: view.isCrossRepository,
+	authorLogin: authorLoginOf(view.author),
 });
 
 export const SearchPrItem = Schema.Struct({

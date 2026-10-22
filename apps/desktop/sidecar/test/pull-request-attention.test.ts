@@ -17,6 +17,7 @@ const session = (id: string): Session => ({
 		owner: "acme",
 		repo: "widgets",
 		title: "Feature",
+		authorLogin: "fdarian",
 		baseRef: "main",
 		headRef: "feature",
 	},

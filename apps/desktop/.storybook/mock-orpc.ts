@@ -343,6 +343,7 @@ export function createMockSidecarClient(
 					headRef: "HEAD",
 					owner: "storybook",
 					repo: "storybook",
+					authorLogin: "fdarian",
 				},
 			}),
 			list: async () => [],

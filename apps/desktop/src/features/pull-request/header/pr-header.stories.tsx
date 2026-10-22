@@ -36,6 +36,7 @@ const PR_TARGET: SessionTarget = {
 	headRef: "feature-42",
 	owner: "acme",
 	repo: "widgets",
+	authorLogin: "fdarian",
 };
 
 const STACK: PullRequestStack = {

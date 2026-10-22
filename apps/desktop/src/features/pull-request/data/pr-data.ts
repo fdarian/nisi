@@ -52,6 +52,8 @@ export type SessionTarget =
 			headRef: string;
 			owner: string;
 			repo: string;
+			/** Null only for a session persisted before this column existed and not re-resolved since. */
+			authorLogin: string | null;
 	  }
 	| { kind: "branch"; baseRef: string; headRef: string };
 
