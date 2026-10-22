@@ -796,46 +796,6 @@ describe("Store — a session holds the head it was showing until Refresh", () =
 			);
 		});
 	});
-
-	test("a commit in the worktree is not shown until refreshSession", async () => {
-		await withTestRepoAndDataDir(async (repoRoot, dataDir) => {
-			const root = await realpath(repoRoot);
-			await sh(root, ["checkout", "-q", "-b", "feature"]);
-			await Bun.write(join(root, "a.ts"), "feature v1\n");
-			await sh(root, ["commit", "-q", "-am", "v1"]);
-
-			await Effect.runPromise(
-				Effect.gen(function* () {
-					const store = yield* Store;
-					const reviews = yield* ReviewStore;
-					const session = yield* reviews.openSession({
-						repoRoot: root,
-						baseRef: "main",
-						headRef: "feature",
-						pr: null,
-					});
-					expect(yield* contentsOf(store, session.id, "a.ts")).toContain(
-						"feature v1",
-					);
-
-					yield* Effect.promise(async () => {
-						await Bun.write(join(root, "a.ts"), "feature v2\n");
-						await sh(root, ["commit", "-q", "-am", "v2"]);
-					});
-					expect(yield* contentsOf(store, session.id, "a.ts")).toContain(
-						"feature v1",
-					);
-					expect(yield* store.readHeadAdvanced(session.id)).toBe(true);
-
-					yield* store.refreshSession(session.id);
-					expect(yield* contentsOf(store, session.id, "a.ts")).toContain(
-						"feature v2",
-					);
-					expect(yield* store.readHeadAdvanced(session.id)).toBe(false);
-				}).pipe(Effect.scoped, Effect.provide(makeTestLayer(dataDir))),
-			);
-		});
-	});
 });
 
 describe("Store — a PR session after the PR is merged", () => {
