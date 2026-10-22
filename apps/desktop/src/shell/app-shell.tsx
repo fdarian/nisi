@@ -258,8 +258,17 @@ function AppShellReady({
 	const [paletteRepositories, setPaletteRepositories] = useState<
 		PullRequestRepository[]
 	>([]);
-	const openPalette = useCallback(() => setPaletteOpen(true), []);
-	useOpenPrPaletteShortcut(openPalette);
+	const [paletteOpensOnRepositoryPicker, setPaletteOpensOnRepositoryPicker] =
+		useState(false);
+	const openPalette = useCallback(() => {
+		setPaletteOpensOnRepositoryPicker(false);
+		setPaletteOpen(true);
+	}, []);
+	const openPaletteOnRepositoryPicker = useCallback(() => {
+		setPaletteOpensOnRepositoryPicker(true);
+		setPaletteOpen(true);
+	}, []);
+	useOpenPrPaletteShortcut(openPalette, openPaletteOnRepositoryPicker);
 
 	const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
 	const openCommandPalette = useCallback(() => setCommandPaletteOpen(true), []);
@@ -440,6 +449,7 @@ function AppShellReady({
 						onOpenChange={setPaletteOpen}
 						onSessionOpened={setRequestedActiveSessionId}
 						open={appViewActive && paletteOpen}
+						opensOnRepositoryPicker={paletteOpensOnRepositoryPicker}
 						orpc={orpc}
 					/>
 					<CommandPalette

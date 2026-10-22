@@ -67,6 +67,8 @@ type OpenPullRequestPaletteProps = {
 	repositories: readonly PullRequestRepository[];
 	onRepositoriesChange: (repositories: PullRequestRepository[]) => void;
 	open: boolean;
+	/** Whether the palette starts on the repository picker instead of the PR search each time it opens. */
+	opensOnRepositoryPicker: boolean;
 	onOpenChange: (open: boolean) => void;
 	orpc: SidecarQueryUtils;
 	/** Fires once `pullRequests.open` resolves — the caller sets `requestedActiveSessionId` (`app-shell.tsx`) so the new tab activates. */
@@ -80,7 +82,7 @@ function authorInitials(author: string): string {
 }
 
 /**
- * Cmd+T and the tab strip's ghost "+" button both open this — a floating
+ * Cmd+T and the tab strip's ghost "+" button both open this (Cmd+P too, on the repository picker) — a floating
  * search dialog listing open pull requests: the user's own latest, for a
  * blank query, or the sidecar's open-PR index filtered on every keystroke
  * (`filterIndexedPullRequests`) for a typed one. A live GraphQL search
@@ -193,7 +195,7 @@ export function OpenPullRequestPalette(
 		if (!props.open) return;
 		setQuery("");
 		setDebouncedQuery("");
-		setPickingRepository(false);
+		setPickingRepository(props.opensOnRepositoryPicker);
 		setRepositoryQuery("");
 		openPr.reset();
 	}, [props.open]);
