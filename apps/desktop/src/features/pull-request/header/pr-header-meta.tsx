@@ -20,7 +20,7 @@ function BranchChip(props: {
 }): React.ReactElement {
 	return (
 		<span
-			className="inline-flex min-w-0 max-w-64 items-center gap-1 rounded bg-muted px-1.5 font-mono text-muted-foreground"
+			className="inline-flex min-w-10 max-w-64 items-center gap-1 rounded bg-muted px-1.5 font-mono text-muted-foreground"
 			title={props.name}
 		>
 			{props.icon === true && <GitBranchIcon className="size-3 shrink-0" />}
@@ -53,7 +53,7 @@ function Author(props: { login: string | undefined }): React.ReactElement {
 
 export function PrHeaderMeta(props: PrHeaderMetaProps): React.ReactElement {
 	return (
-		<div className="flex h-5 min-w-0 items-center gap-1.5 whitespace-nowrap text-muted-foreground text-xs">
+		<div className="flex h-5 min-w-0 items-center overflow-hidden gap-1.5 whitespace-nowrap text-muted-foreground text-xs">
 			{props.mode === "branch" ? (
 				<>
 					<GitBranchIcon className="size-3.5 shrink-0" />

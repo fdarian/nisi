@@ -191,6 +191,21 @@ export const PrNarrow: Story = {
 	},
 };
 
+export const PrNarrowArrow: Story = {
+	args: {
+		width: 480,
+		meta: (
+			<PrHeaderMeta
+				author="fdarian"
+				baseRef={LONG_BASE}
+				headRef={LONG_HEAD}
+				mode="pr"
+				variant="arrow"
+			/>
+		),
+	},
+};
+
 export const BranchMode: Story = {
 	args: {
 		repo: "nisi",
