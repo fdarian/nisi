@@ -805,7 +805,8 @@ export type LiveFileChanges = {
  * both queries so the sidebar and pane refetch, and clears the flag — a later
  * event re-sets it. `headAdvanced` (from `diff.files`) keeps the affordance up
  * across a reload, where the event is gone but the sidecar still holds the
- * session on its old head until `diff.refresh`.
+ * session on its old head until `diff.refresh`. Nothing refetches on window
+ * focus or tab switch: the diff only changes when the user clicks Refresh.
  * Deliberately session-wide (every `diff.fileContents` chunk, not just one
  * path's via `queryCoveredPath` the way `useSetFileViewed`/`useSetRangeViewed`
  * narrow it) — unlike those two, this event doesn't say *which* file moved,
@@ -838,14 +839,19 @@ export function useLiveFileChanges(
 				title: "Could not refresh base",
 				description: error.message,
 			}),
+		// Returned so the mutation stays pending (`isRefreshing`) until the
+		// refetched `diff.files` has `headAdvanced: false` — otherwise the stale
+		// `headAdvanced: true` shows the Refresh button again for a moment.
 		onSettled: () => {
-			queryClient.invalidateQueries({
-				queryKey: orpc.diff.files.key({ input: { sessionId } }),
-			});
-			queryClient.invalidateQueries({
-				queryKey: orpc.diff.fileContents.key({ input: { sessionId } }),
-			});
 			setHasPendingEvent(false);
+			return Promise.all([
+				queryClient.invalidateQueries({
+					queryKey: orpc.diff.files.key({ input: { sessionId } }),
+				}),
+				queryClient.invalidateQueries({
+					queryKey: orpc.diff.fileContents.key({ input: { sessionId } }),
+				}),
+			]);
 		},
 	});
 	const refreshBase = baseRefresh.mutate;
@@ -963,37 +969,6 @@ export function useSwitchToPr(
 		},
 		isPending: mutation.isPending,
 	};
-}
-
-/**
- * Calls `refresh` on the false→true rising edge of `watched` — in
- * `pr-view.tsx`, `watched` is `windowFocused && isFilesChangedVisible`, so
- * that one edge is exactly the union of the two transitions Files Changed
- * should refetch on: switching into this PR's tab while the window is
- * focused, and regaining window focus while this tab is already the visible
- * one. Takes `refresh` rather than reimplementing the invalidation — reuses
- * `useLiveFileChanges`'s own `refresh`, which already covers both
- * `diff.files`/`diff.fileContents` and clears `hasPendingChanges`, correct
- * here since a refetch just applied everything that flag was announcing.
- *
- * Seeds the "previous" ref from `watched` itself, not `false` — an app that
- * opens already focused with Files Changed active starts `watched` at
- * `true`, and that initial value must not read as a rising edge (the query
- * is already loading on its own; firing `refresh` on top of it would be a
- * redundant, mount-time refetch, not a real transition).
- */
-export function useRefreshOnWatchedEdge(
-	watched: boolean,
-	refresh: () => void,
-): void {
-	const previouslyWatched = useRef(watched);
-
-	useEffect(() => {
-		if (!previouslyWatched.current && watched) {
-			refresh();
-		}
-		previouslyWatched.current = watched;
-	}, [watched, refresh]);
 }
 
 /** Mirrors `MergeMethod` (`packages/sidecar-api/src/pull-requests.ts`) — the merge strategy GitHub's own PR UI offers, in its own Merge → Squash → Rebase ordering. */

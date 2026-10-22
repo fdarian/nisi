@@ -15,7 +15,6 @@ import {
 	useFileChanges,
 	useLiveFileChanges,
 	usePullRequestAttention,
-	useRefreshOnWatchedEdge,
 	useReviewState,
 	useSessionWatch,
 	useSetFileViewed,
@@ -148,10 +147,6 @@ export function PrView({
 	// publishes a guide, whichever tab is showing.
 	useGuideWatch(orpc, session.id, isSelectedTab && windowFocused);
 	useSessionWatch(orpc, session.id, watched);
-	// The same `watched` rising edge doubles as the refetch trigger for
-	// switching into this tab and regaining window focus — see
-	// `useRefreshOnWatchedEdge`'s doc comment (`pr-data.ts`).
-	useRefreshOnWatchedEdge(watched, refreshFileChanges);
 	// `PrHeader`'s CI ring is on screen whenever this PR's tab is selected —
 	// unlike Files Changed above, it doesn't care which sub-tab is active —
 	// see `usePullRequestChecks`'s doc comment (`pr-data.ts`) for how this
