@@ -123,11 +123,7 @@ const sessionTest = (
 	body: (
 		fixture: Fixture,
 		events: string[],
-	) => Effect.Effect<
-		void,
-		unknown,
-		Layer.Success<Fixture["layer"]>
-	>,
+	) => Effect.Effect<void, unknown, Layer.Success<Fixture["layer"]>>,
 ) =>
 	test(name, () =>
 		withFixture(async (fixture) => {
