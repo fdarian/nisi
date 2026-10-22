@@ -31,7 +31,7 @@ export function PrHeaderSkeleton(
 						`${pullRequest.owner}/${pullRequest.repo}`
 					)
 				}
-				refLabel={
+				number={
 					pullRequest === undefined ? (
 						<Skeleton className="h-2 w-10" />
 					) : (

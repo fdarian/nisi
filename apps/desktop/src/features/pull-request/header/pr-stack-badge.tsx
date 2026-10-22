@@ -252,7 +252,7 @@ function StackPopover(props: {
 	);
 }
 
-/** A compact breadcrumb badge and read-only stack navigator for stacked PRs; for a PR GitHub hasn't stacked, an icon-only trigger offers the inferred chain. */
+/** A compact badge beside the PR number and read-only stack navigator for stacked PRs; for a PR GitHub hasn't stacked, an icon-only trigger offers the inferred chain. */
 export function PrStackBadge(
 	props: PrStackBadgeProps,
 ): React.ReactElement | null {
