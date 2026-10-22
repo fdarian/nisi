@@ -297,6 +297,7 @@ export function useFileChanges(
 ): {
 	files: readonly FileChange[];
 	baseMayBeStale: boolean | undefined;
+	headAdvanced: boolean | undefined;
 	isLoading: boolean;
 	error: unknown;
 } {
@@ -333,6 +334,7 @@ export function useFileChanges(
 	return {
 		files: query.data?.files ?? [],
 		baseMayBeStale: query.data?.baseMayBeStale,
+		headAdvanced: query.data?.headAdvanced,
 		isLoading: query.isLoading,
 		error: query.error,
 	};
@@ -801,7 +803,10 @@ export type LiveFileChanges = {
  * surface a "Refresh" affordance rather than yanking the diff out from under
  * whoever's reading it. Calling `refresh` fetches the base before invalidating
  * both queries so the sidebar and pane refetch, and clears the flag — a later
- * event re-sets it.
+ * event re-sets it. `headAdvanced` (from `diff.files`) keeps the affordance up
+ * across a reload, where the event is gone but the sidecar still holds the
+ * session on its old head until `diff.refresh`. Nothing refetches on window
+ * focus or tab switch: the diff only changes when the user clicks Refresh.
  * Deliberately session-wide (every `diff.fileContents` chunk, not just one
  * path's via `queryCoveredPath` the way `useSetFileViewed`/`useSetRangeViewed`
  * narrow it) — unlike those two, this event doesn't say *which* file moved,
@@ -815,32 +820,38 @@ export type LiveFileChanges = {
 export function useLiveFileChanges(
 	orpc: SidecarQueryUtils,
 	sessionId: string,
+	headAdvanced: boolean,
 ): LiveFileChanges {
 	const queryClient = useQueryClient();
-	const [hasPendingChanges, setHasPendingChanges] = useState(false);
+	const [hasPendingEvent, setHasPendingEvent] = useState(false);
 
 	useSidecarEvent((event) => {
 		if (event.type !== "session-files-changed") return;
 		if (event.sessionId !== sessionId) return;
-		setHasPendingChanges(true);
+		setHasPendingEvent(true);
 	});
 
 	const baseRefresh = useMutation({
-		...orpc.diff.refreshBase.mutationOptions(),
+		...orpc.diff.refresh.mutationOptions(),
 		onError: (error) =>
 			toastManager.add({
 				type: "error",
 				title: "Could not refresh base",
 				description: error.message,
 			}),
+		// Returned so the mutation stays pending (`isRefreshing`) until the
+		// refetched `diff.files` has `headAdvanced: false` — otherwise the stale
+		// `headAdvanced: true` shows the Refresh button again for a moment.
 		onSettled: () => {
-			queryClient.invalidateQueries({
-				queryKey: orpc.diff.files.key({ input: { sessionId } }),
-			});
-			queryClient.invalidateQueries({
-				queryKey: orpc.diff.fileContents.key({ input: { sessionId } }),
-			});
-			setHasPendingChanges(false);
+			setHasPendingEvent(false);
+			return Promise.all([
+				queryClient.invalidateQueries({
+					queryKey: orpc.diff.files.key({ input: { sessionId } }),
+				}),
+				queryClient.invalidateQueries({
+					queryKey: orpc.diff.fileContents.key({ input: { sessionId } }),
+				}),
+			]);
 		},
 	});
 	const refreshBase = baseRefresh.mutate;
@@ -849,7 +860,13 @@ export function useLiveFileChanges(
 		[refreshBase, sessionId],
 	);
 
-	return { hasPendingChanges, isRefreshing: baseRefresh.isPending, refresh };
+	// The sidecar keeps a session on the head it was showing, so a reload
+	// loses the event but not the fact that a newer commit is waiting.
+	return {
+		hasPendingChanges: hasPendingEvent || headAdvanced,
+		isRefreshing: baseRefresh.isPending,
+		refresh,
+	};
 }
 
 /**
@@ -952,37 +969,6 @@ export function useSwitchToPr(
 		},
 		isPending: mutation.isPending,
 	};
-}
-
-/**
- * Calls `refresh` on the false→true rising edge of `watched` — in
- * `pr-view.tsx`, `watched` is `windowFocused && isFilesChangedVisible`, so
- * that one edge is exactly the union of the two transitions Files Changed
- * should refetch on: switching into this PR's tab while the window is
- * focused, and regaining window focus while this tab is already the visible
- * one. Takes `refresh` rather than reimplementing the invalidation — reuses
- * `useLiveFileChanges`'s own `refresh`, which already covers both
- * `diff.files`/`diff.fileContents` and clears `hasPendingChanges`, correct
- * here since a refetch just applied everything that flag was announcing.
- *
- * Seeds the "previous" ref from `watched` itself, not `false` — an app that
- * opens already focused with Files Changed active starts `watched` at
- * `true`, and that initial value must not read as a rising edge (the query
- * is already loading on its own; firing `refresh` on top of it would be a
- * redundant, mount-time refetch, not a real transition).
- */
-export function useRefreshOnWatchedEdge(
-	watched: boolean,
-	refresh: () => void,
-): void {
-	const previouslyWatched = useRef(watched);
-
-	useEffect(() => {
-		if (!previouslyWatched.current && watched) {
-			refresh();
-		}
-		previouslyWatched.current = watched;
-	}, [watched, refresh]);
 }
 
 /** Mirrors `MergeMethod` (`packages/sidecar-api/src/pull-requests.ts`) — the merge strategy GitHub's own PR UI offers, in its own Merge → Squash → Rebase ordering. */

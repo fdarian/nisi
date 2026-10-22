@@ -371,10 +371,14 @@ export function createMockSidecarClient(
 					await new Promise((resolve) =>
 						setTimeout(resolve, data.filesDelayMs),
 					);
-				return { files: [...(data.files ?? [])], baseMayBeStale: false };
+				return {
+					files: [...(data.files ?? [])],
+					baseMayBeStale: false,
+					headAdvanced: false,
+				};
 			},
-			refreshBase: async () => {
-				throw new Error("diff.refreshBase has no story fixture yet");
+			refresh: async () => {
+				throw new Error("diff.refresh has no story fixture yet");
 			},
 			fileContents: async ({ paths }) =>
 				paths.map((request) => ({

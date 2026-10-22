@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { BunServices } from "@effect/platform-bun";
 import { Effect, Result } from "effect";
-import { resolveDiffHead, validateHeadRef } from "../diff-head.ts";
+import { pinDiffHead, resolveDiffHead, validateHeadRef } from "../diff-head.ts";
 
 /** Runs real `git` for test setup — the code under test uses its own Effect-based runner. */
 const sh = async (cwd: string, args: ReadonlyArray<string>): Promise<void> => {
@@ -298,5 +298,27 @@ describe("validateHeadRef", () => {
 		} finally {
 			await rm(repoRoot, { recursive: true, force: true });
 		}
+	});
+});
+
+describe("pinDiffHead", () => {
+	const worktree = { headRef: undefined, worktreeEligible: true };
+
+	test("keeps the live head before anything is pinned", () => {
+		expect(pinDiffHead(worktree, "aaa", undefined)).toBe(worktree);
+	});
+
+	test("keeps the live head while it is still the pinned commit", () => {
+		expect(pinDiffHead(worktree, "aaa", "aaa")).toBe(worktree);
+	});
+
+	test("diffs the pinned commit with the worktree off once the live head moved on", () => {
+		expect(pinDiffHead(worktree, "bbb", "aaa")).toEqual({
+			headRef: "aaa",
+			worktreeEligible: false,
+		});
+		expect(
+			pinDiffHead({ headRef: "bbb", worktreeEligible: false }, "bbb", "aaa"),
+		).toEqual({ headRef: "aaa", worktreeEligible: false });
 	});
 });

@@ -433,9 +433,9 @@ test("base refresh drops upstream-only files without changing head or remaining 
 					});
 					// Explicit refresh intentionally reuses a successful fetch for five seconds.
 					yield* Effect.sleep("5 seconds");
-					expect(
-						(yield* store.refreshSessionBase(session.id)).baseMayBeStale,
-					).toBe(false);
+					expect((yield* store.refreshSession(session.id)).baseMayBeStale).toBe(
+						false,
+					);
 					expect(movedSessions).toContain(session.id);
 					expect(movedSessions).toContain(other.id);
 					expect(staleSessions).toEqual([]);
@@ -455,9 +455,9 @@ test("base refresh drops upstream-only files without changing head or remaining 
 						]),
 					);
 					yield* Effect.sleep("5 seconds");
-					expect(
-						(yield* store.refreshSessionBase(session.id)).baseMayBeStale,
-					).toBe(true);
+					expect((yield* store.refreshSession(session.id)).baseMayBeStale).toBe(
+						true,
+					);
 					expect(yield* store.readBaseMayBeStale(session.id)).toBe(true);
 					expect(staleSessions).toContain(session.id);
 					expect(staleSessions).toContain(other.id);
@@ -470,9 +470,9 @@ test("base refresh drops upstream-only files without changing head or remaining 
 					yield* Effect.promise(() =>
 						sh(repoRoot, ["remote", "set-url", "origin", upstream]),
 					);
-					expect(
-						(yield* store.refreshSessionBase(session.id)).baseMayBeStale,
-					).toBe(false);
+					expect((yield* store.refreshSession(session.id)).baseMayBeStale).toBe(
+						false,
+					);
 					expect(yield* store.readBaseMayBeStale(session.id)).toBe(false);
 					expect(staleSessions).toContain(session.id);
 				}).pipe(Effect.scoped, Effect.provide(makeTestLayer(dataDir))),
@@ -564,9 +564,9 @@ describe("base refresh — a session whose directory was deleted", () => {
 						});
 						yield* Effect.addFinalizer(() => Effect.sync(unsubscribe));
 
-						expect(
-							(yield* store.refreshSessionBase(alive.id)).baseMayBeStale,
-						).toBe(false);
+						expect((yield* store.refreshSession(alive.id)).baseMayBeStale).toBe(
+							false,
+						);
 						expect(movedSessions).toContain(alive.id);
 						expect(movedSessions).not.toContain(dead.id);
 						expect(staleSessions).toEqual([]);
@@ -686,6 +686,9 @@ describe("Store — a PR session's worktree that moved on to another commit", ()
 						await rm(join(root, "other-dirty.ts"));
 						await sh(root, ["checkout", "-q", "pr"]);
 					});
+					// Held on the head the session was showing until the user refreshes.
+					expect(yield* paths(true)).toEqual(["a.ts", "b.ts"]);
+					yield* store.refreshSession(session.id);
 					expect(yield* paths(true)).toEqual([
 						"a.ts",
 						"b.ts",
@@ -696,6 +699,139 @@ describe("Store — a PR session's worktree that moved on to another commit", ()
 							(file) => file.path === "a.ts",
 						)?.review,
 					).toMatchObject({ viewed: true, changedSinceReview: false });
+				}).pipe(Effect.scoped, Effect.provide(makeTestLayer(dataDir))),
+			);
+		});
+	});
+});
+
+describe("Store — a session holds the head it was showing until Refresh", () => {
+	const contentsOf = (
+		store: Store["Service"],
+		sessionId: string,
+		path: string,
+	) =>
+		store
+			.readFileContents(sessionId, [{ path, force: false }], false)
+			.pipe(Effect.map((contents) => JSON.stringify(contents)));
+
+	test("a PR push announces files-changed but keeps the old list and contents until refreshSession", async () => {
+		await withTestRepoAndDataDir(async (repoRoot, dataDir) => {
+			const root = await realpath(repoRoot);
+			await sh(root, ["checkout", "-q", "-b", "pr"]);
+			await Bun.write(join(root, "a.ts"), "pr v1\n");
+			await sh(root, ["commit", "-q", "-am", "v1"]);
+			const first = await shOut(root, ["rev-parse", "HEAD"]);
+
+			await Effect.runPromise(
+				Effect.gen(function* () {
+					const store = yield* Store;
+					const reviews = yield* ReviewStore;
+					const pr = { owner: "acme", repo: "widgets", number: 5 };
+					const open = (headSha: string) => ({
+						headSha,
+						baseSha: "unused",
+						baseRef: "main",
+						state: "OPEN" as const,
+					});
+					const session = yield* reviews.openSession({
+						repoRoot: root,
+						baseRef: "main",
+						headRef: "pr",
+						pr: { ...pr, title: "A PR" },
+					});
+					yield* store.recordPullRequestStatus(pr, open(first));
+					const events: string[] = [];
+					const unsubscribe = subscribe((event) => {
+						if (event.type === "session-files-changed")
+							events.push(event.sessionId);
+					});
+					yield* Effect.addFinalizer(() => Effect.sync(unsubscribe));
+
+					expect(
+						(yield* store.listChangedFiles(session.id, false)).map(
+							(file) => file.path,
+						),
+					).toEqual(["a.ts"]);
+					expect(yield* contentsOf(store, session.id, "a.ts")).toContain(
+						"pr v1",
+					);
+					expect(yield* store.readHeadAdvanced(session.id)).toBe(false);
+
+					// The push exists on GitHub only: the worktree stays on the old head.
+					const pushed = yield* Effect.promise(async () => {
+						await sh(root, ["checkout", "-q", "-b", "pushed"]);
+						await Bun.write(join(root, "a.ts"), "pr v2\n");
+						await Bun.write(join(root, "new.ts"), "added by the push\n");
+						await sh(root, ["add", "-A"]);
+						await sh(root, ["commit", "-q", "-m", "v2"]);
+						const sha = await shOut(root, ["rev-parse", "HEAD"]);
+						await sh(root, ["checkout", "-q", "pr"]);
+						return sha;
+					});
+					yield* store.recordPullRequestStatus(pr, open(pushed));
+					expect(events).toEqual([session.id]);
+
+					expect(
+						(yield* store.listChangedFiles(session.id, false)).map(
+							(file) => file.path,
+						),
+					).toEqual(["a.ts"]);
+					expect(yield* contentsOf(store, session.id, "a.ts")).toContain(
+						"pr v1",
+					);
+					expect(yield* store.readHeadAdvanced(session.id)).toBe(true);
+
+					yield* store.refreshSession(session.id);
+					expect(
+						(yield* store.listChangedFiles(session.id, false)).map(
+							(file) => file.path,
+						),
+					).toEqual(["a.ts", "new.ts"]);
+					expect(yield* contentsOf(store, session.id, "a.ts")).toContain(
+						"pr v2",
+					);
+					expect(yield* store.readHeadAdvanced(session.id)).toBe(false);
+				}).pipe(Effect.scoped, Effect.provide(makeTestLayer(dataDir))),
+			);
+		});
+	});
+
+	test("a commit in the worktree is not shown until refreshSession", async () => {
+		await withTestRepoAndDataDir(async (repoRoot, dataDir) => {
+			const root = await realpath(repoRoot);
+			await sh(root, ["checkout", "-q", "-b", "feature"]);
+			await Bun.write(join(root, "a.ts"), "feature v1\n");
+			await sh(root, ["commit", "-q", "-am", "v1"]);
+
+			await Effect.runPromise(
+				Effect.gen(function* () {
+					const store = yield* Store;
+					const reviews = yield* ReviewStore;
+					const session = yield* reviews.openSession({
+						repoRoot: root,
+						baseRef: "main",
+						headRef: "feature",
+						pr: null,
+					});
+					expect(yield* contentsOf(store, session.id, "a.ts")).toContain(
+						"feature v1",
+					);
+
+					yield* Effect.promise(async () => {
+						await Bun.write(join(root, "a.ts"), "feature v2\n");
+						await sh(root, ["commit", "-q", "-am", "v2"]);
+					});
+					expect(yield* contentsOf(store, session.id, "a.ts")).toContain(
+						"feature v1",
+					);
+					expect(yield* store.readHeadAdvanced(session.id)).toBe(true);
+
+					yield* store.refreshSession(session.id);
+					expect(yield* contentsOf(store, session.id, "a.ts")).toContain(
+						"feature v2",
+					);
+					expect(yield* store.readHeadAdvanced(session.id)).toBe(false);
 				}).pipe(Effect.scoped, Effect.provide(makeTestLayer(dataDir))),
 			);
 		});

@@ -845,12 +845,9 @@ export function attachRouter(
 			}),
 		},
 		diff: {
-			refreshBase: authed.diff.refreshBase.effect(function* ({
-				input,
-				errors,
-			}) {
+			refresh: authed.diff.refresh.effect(function* ({ input, errors }) {
 				const store = yield* Store;
-				return yield* store.refreshSessionBase(input.sessionId).pipe(
+				return yield* store.refreshSession(input.sessionId).pipe(
 					Effect.catchTag("SessionNotFound", () =>
 						Effect.fail(
 							errors.NOT_FOUND({
@@ -880,11 +877,16 @@ export function attachRouter(
 					.listChangedFiles(input.sessionId, input.includeUncommitted ?? false)
 					.pipe(
 						Effect.flatMap((files) =>
-							store
-								.readBaseMayBeStale(input.sessionId)
-								.pipe(
-									Effect.map((baseMayBeStale) => ({ files, baseMayBeStale })),
-								),
+							Effect.all({
+								baseMayBeStale: store.readBaseMayBeStale(input.sessionId),
+								headAdvanced: store.readHeadAdvanced(input.sessionId),
+							}).pipe(
+								Effect.map((flags) => ({
+									files,
+									baseMayBeStale: flags.baseMayBeStale,
+									headAdvanced: flags.headAdvanced,
+								})),
+							),
 						),
 						Effect.catchTag("SessionNotFound", () =>
 							Effect.fail(
