@@ -6,13 +6,15 @@ import { githubAvatarUrl } from "#/features/pull-request/data/pull-requests-data
 type PrHeaderMetaProps =
 	| {
 			mode: "pr";
-			variant: "sentence" | "arrow";
-			/** `undefined` while the author is still loading. */
-			author: string | undefined;
+			/** `null` for a session not yet re-resolved since the author was added to the target. */
+			authorLogin: string | null;
 			baseRef: string;
 			headRef: string;
 	  }
 	| { mode: "branch"; baseRef: string };
+
+const META_ROW_CLASS =
+	"flex h-5 min-w-0 items-center gap-1.5 overflow-hidden whitespace-nowrap text-muted-foreground text-xs";
 
 function BranchChip(props: {
 	name: string;
@@ -29,15 +31,7 @@ function BranchChip(props: {
 	);
 }
 
-function Author(props: { login: string | undefined }): React.ReactElement {
-	if (props.login === undefined) {
-		return (
-			<>
-				<Skeleton className="size-4 shrink-0 rounded-full" />
-				<Skeleton className="h-3 w-16 shrink-0" />
-			</>
-		);
-	}
+function Author(props: { login: string }): React.ReactElement {
 	return (
 		<>
 			<Avatar className="size-4 shrink-0 bg-muted text-[8px]">
@@ -47,36 +41,39 @@ function Author(props: { login: string | undefined }): React.ReactElement {
 			<span className="shrink-0 font-medium text-foreground">
 				{props.login}
 			</span>
+			<span className="shrink-0">·</span>
 		</>
 	);
 }
 
 export function PrHeaderMeta(props: PrHeaderMetaProps): React.ReactElement {
+	if (props.mode === "branch") {
+		return (
+			<div className={META_ROW_CLASS}>
+				<GitBranchIcon className="size-3.5 shrink-0" />
+				<span className="shrink-0">Local diff against</span>
+				<BranchChip name={props.baseRef} />
+			</div>
+		);
+	}
 	return (
-		<div className="flex h-5 min-w-0 items-center overflow-hidden gap-1.5 whitespace-nowrap text-muted-foreground text-xs">
-			{props.mode === "branch" ? (
-				<>
-					<GitBranchIcon className="size-3.5 shrink-0" />
-					<span className="shrink-0">Local diff against</span>
-					<BranchChip name={props.baseRef} />
-				</>
-			) : props.variant === "sentence" ? (
-				<>
-					<Author login={props.author} />
-					<span className="shrink-0">wants to merge</span>
-					<BranchChip icon name={props.headRef} />
-					<span className="shrink-0">into</span>
-					<BranchChip name={props.baseRef} />
-				</>
-			) : (
-				<>
-					<Author login={props.author} />
-					<span className="shrink-0">·</span>
-					<BranchChip name={props.baseRef} />
-					<ArrowLeftIcon className="size-3 shrink-0" />
-					<BranchChip icon name={props.headRef} />
-				</>
-			)}
+		<div className={META_ROW_CLASS}>
+			{props.authorLogin !== null && <Author login={props.authorLogin} />}
+			<BranchChip name={props.baseRef} />
+			<ArrowLeftIcon className="size-3 shrink-0" />
+			<BranchChip icon name={props.headRef} />
+		</div>
+	);
+}
+
+/** Same height as `PrHeaderMeta`, so the loading header doesn't change height when the real one lands. */
+export function PrHeaderMetaSkeleton(): React.ReactElement {
+	return (
+		<div className={META_ROW_CLASS}>
+			<Skeleton className="size-4 shrink-0 rounded-full" />
+			<Skeleton className="h-3 w-16 shrink-0" />
+			<Skeleton className="h-3 w-14 shrink-0" />
+			<Skeleton className="h-3 w-24 shrink-0" />
 		</div>
 	);
 }

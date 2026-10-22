@@ -4,6 +4,7 @@ import { Skeleton } from "#/components/ui/skeleton";
 import { PrMergeButtonSkeleton } from "../merge/pr-merge-button";
 import { CiStatusSkeleton } from "./ci-status";
 import { PrDiffStat } from "./pr-diff-stat";
+import { PrHeaderMetaSkeleton } from "./pr-header-meta";
 import { PrHeaderShell } from "./pr-header-shell";
 
 type PrHeaderSkeletonProps = {
@@ -39,6 +40,7 @@ export function PrHeaderSkeleton(
 				}
 				title={<Skeleton className="inline-block h-3.5 w-72 align-middle" />}
 				stat={<PrDiffStat stat={{ status: "loading" }} />}
+				meta={<PrHeaderMetaSkeleton />}
 				actions={
 					pullRequest === undefined ? undefined : (
 						<>

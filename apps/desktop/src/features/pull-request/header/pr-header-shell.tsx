@@ -9,13 +9,13 @@ import {
 type PrHeaderShellProps = {
 	/** First breadcrumb: the repository. */
 	repo: React.ReactNode;
-	/** Second breadcrumb: `#N`, or `vs <base>` for a branch session. Omitted: the breadcrumb ends at the repo. */
+	/** Second breadcrumb: `#N` for a PR. Omitted (branch session): the breadcrumb ends at the repo. */
 	refLabel?: React.ReactNode;
 	/** Extra breadcrumb items after the second, e.g. a notice icon. Must fit the row's height. */
 	breadcrumbTrailing?: React.ReactNode;
 	title: React.ReactNode;
 	stat: React.ReactNode;
-	/** A muted row under the title: who opened it and which branches it merges. */
+	/** A muted row under the title: author and branches for a PR, what the diff is against for a branch session. */
 	meta?: React.ReactNode;
 	/** PR-only controls (CI, merge) between the title block and the menu. */
 	actions?: React.ReactNode;

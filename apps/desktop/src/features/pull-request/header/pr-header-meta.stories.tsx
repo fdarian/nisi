@@ -1,8 +1,4 @@
-/**
- * Design exploration for a header that also names the PR's author and its
- * branches. Not wired into `PrHeader` — `PrHeaderShell`'s `meta` slot is the
- * only live-code seam, and nothing passes it yet.
- */
+/** Design coverage for the header's meta row (author and branches) inside `PrHeaderShell`. */
 
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { MoreHorizontalIcon } from "lucide-react";
@@ -102,43 +98,28 @@ export default meta;
 
 type Story = StoryObj<typeof meta>;
 
-export const PrSentence: Story = {
-	args: {
-		meta: (
-			<PrHeaderMeta
-				author="fdarian"
-				baseRef="main"
-				headRef="claude/pr-title-redesign-d6f5ea"
-				mode="pr"
-				variant="sentence"
-			/>
-		),
-	},
-};
-
 export const PrArrow: Story = {
 	args: {
 		meta: (
 			<PrHeaderMeta
-				author="fdarian"
+				authorLogin="fdarian"
 				baseRef="main"
 				headRef="claude/pr-title-redesign-d6f5ea"
 				mode="pr"
-				variant="arrow"
 			/>
 		),
 	},
 };
 
-export const PrAuthorLoading: Story = {
+/** A session persisted before the author column existed: the avatar, login and separator are simply absent. */
+export const PrNullAuthor: Story = {
 	args: {
 		meta: (
 			<PrHeaderMeta
-				author={undefined}
+				authorLogin={null}
 				baseRef="main"
 				headRef="claude/pr-title-redesign-d6f5ea"
 				mode="pr"
-				variant="sentence"
 			/>
 		),
 	},
@@ -151,25 +132,10 @@ export const PrLongBranchNames: Story = {
 	args: {
 		meta: (
 			<PrHeaderMeta
-				author="fdarian"
+				authorLogin="fdarian"
 				baseRef={LONG_BASE}
 				headRef={LONG_HEAD}
 				mode="pr"
-				variant="sentence"
-			/>
-		),
-	},
-};
-
-export const PrLongBranchNamesArrow: Story = {
-	args: {
-		meta: (
-			<PrHeaderMeta
-				author="fdarian"
-				baseRef={LONG_BASE}
-				headRef={LONG_HEAD}
-				mode="pr"
-				variant="arrow"
 			/>
 		),
 	},
@@ -181,26 +147,10 @@ export const PrNarrow: Story = {
 		width: 480,
 		meta: (
 			<PrHeaderMeta
-				author="fdarian"
+				authorLogin="fdarian"
 				baseRef={LONG_BASE}
 				headRef={LONG_HEAD}
 				mode="pr"
-				variant="sentence"
-			/>
-		),
-	},
-};
-
-export const PrNarrowArrow: Story = {
-	args: {
-		width: 480,
-		meta: (
-			<PrHeaderMeta
-				author="fdarian"
-				baseRef={LONG_BASE}
-				headRef={LONG_HEAD}
-				mode="pr"
-				variant="arrow"
 			/>
 		),
 	},
