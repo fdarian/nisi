@@ -1,17 +1,15 @@
 import { Context, Effect, Layer, Ref } from "effect";
 
 /**
- * The set of session ids the live-poll loop (`live-poll.ts`) should actually
- * check on each tick — a `Ref`-backed service, not a module-level mutable
+ * The set of session ids `live-poll.ts` should actually run a live check
+ * for — a `Ref`-backed service, not a module-level mutable
  * global, since two separate modules touch this state: `http.ts`'s
  * `sessions.setWatching`/`sessions.close` handlers write it (in response to
  * the frontend's focus/tab predicate — see `apps/desktop/src/features/pull-request/data/pr-data.ts`),
- * and `live-poll.ts`'s `pollOnce` reads it every tick to narrow which open
- * sessions actually get polled. Membership here is orthogonal to a session
+ * and `live-poll.ts`'s `syncLiveChecks` reads it to narrow which open
+ * sessions actually get a check. Membership here is orthogonal to a session
  * being *open* (`Store.listSessions()`) — a session can be open but unwatched
- * (backgrounded, or Files Changed isn't the active tab) the same way a poller
- * tick already treats a transient per-session git failure as "try again next
- * tick" rather than a hard error.
+ * (backgrounded, or Files Changed isn't the active tab).
  */
 export class SessionWatch extends Context.Service<SessionWatch>()(
 	"SessionWatch",

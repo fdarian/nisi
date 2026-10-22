@@ -118,15 +118,16 @@ export const sessionsContract = {
 		.output(Schema.Void)
 		.errors({ NOT_FOUND: {} }),
 	/**
-	 * Toggles whether the sidecar's 2s worktree poller checks this session at
+	 * Toggles whether the sidecar runs its live check (a ref watcher, or a 2s
+	 * poll when it can't watch) for this session at
 	 * all — the frontend calls this with `watching: true` exactly while a
 	 * user could see the result (window focused, Files Changed the active
 	 * tab, this session's tab selected) and `false` otherwise, so a
-	 * backgrounded PR doesn't spend a poll tick on every open session
-	 * regardless of who's looking. Turning watching on also runs one
+	 * backgrounded PR doesn't cost a watcher or poll on every open
+	 * session regardless of who's looking. Turning watching on also runs one
 	 * immediate change check for this session (see `apps/desktop/sidecar/http.ts`),
-	 * so the Refresh affordance can appear right away instead of waiting up to
-	 * `POLL_INTERVAL` for the next tick.
+	 * so the Refresh affordance can appear right away instead of waiting for
+	 * the next ref change or poll.
 	 */
 	setWatching: oc
 		.input(

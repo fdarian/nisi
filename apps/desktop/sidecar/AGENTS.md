@@ -59,7 +59,7 @@ seam" for the port/token handshake this boots into.
 - `guide/watch.ts` — behind `guide.setWatching`: one FSEvents watcher chain per session the frontend asked for
   (repo root, `.nisi/`, `.nisi/guide/` recursive, so a guide that doesn't exist yet is seen appearing), debounced into
   a `guide-changed` event. `guide.get` is never polled; the same event is also emitted by `live-poll.ts` when the
-  session's head moves, and `live-poll.ts` ticks guide-watched sessions as well as Files-Changed-watched ones.
+  session's head moves, and `live-poll.ts` runs a live check for guide-watched sessions as well as Files-Changed-watched ones.
   `session-close.ts` stops the watcher.
 - `guide/tools.ts` — behind `guide.validate` and `guide.preview`, which the `nisi guide validate|render` CLI
   commands call. They key on `repoRoot`, not a session: the author may have none open. `validateRepoGuide` and
@@ -187,7 +187,7 @@ seam" for the port/token handshake this boots into.
   (cheap `stat` fast path, branch-keyed re-resolution against the PR's known main clone, tagged
   failure when the worktree is genuinely gone); `resolveLiveRepoRoot` is just the piece that persists
   a healed path back onto the session row (`ReviewStore.updateRepoRoot`) so every other caller —
-  including the next `live-poll.ts` tick — sees the fix too. `resolveSessionRepoRoot` is the
+  including the next `live-poll.ts` check — sees the fix too. `resolveSessionRepoRoot` is the
   sessionId-keyed public wrapper `live-poll.ts` calls, since it only ever starts from an id.
 - `http.ts` — `bindHealthCheckServer` binds the real port immediately with a hand-rolled
   `health.check`-only handler (no `AppServices` needed), which `index.ts` records via
@@ -233,24 +233,35 @@ seam" for the port/token handshake this boots into.
 - `native-activation.ts` — bearer-authenticated native stream, acknowledgment, and ownership claim.
   A new app process can claim a surviving sidecar only while its original app has no active stream,
   after a short reconnect grace period. `http.ts` delegates this route before oRPC dispatch.
-- `live-poll.ts` — `startLivePolling`, forked as a background fiber from `index.ts`'s boot program.
-  Every `POLL_INTERVAL`, diffs each open session's `@repo/git` change signature against the previous
-  tick (module-level `Map`, same in-memory-state shape as `events.ts`'s subscriber `Set`) and emits
-  `session-files-changed` (and `guide-changed`) when it moved; a stale-data refetch is the frontend's job once the event
-  lands. `checkSessionForChanges` reads `SettingsStore`'s `includeUncommitted` itself (this poller has
-  no per-request input to carry it) and threads it into `readRepoChangeSignature` — off (the common
-  case) skips `@repo/git`'s `status`/hashing outright and, when `ref-state.ts` can vouch for the repo layout,
-  reads HEAD's movement from `.git/HEAD`/branch ref/`packed-refs` content instead of spawning `git rev-parse`, on hashes each dirty path's content. The stored
-  signature carries the mode it was read under alongside the signature itself: a mode flip changes the
-  signature's *shape* for a reason unrelated to the repo, so a check that lands right after the user
-  toggles the setting re-baselines silently instead of emitting a spurious `session-files-changed` —
-  the frontend already refetches on that toggle on its own (folded into its query key).
-  `checkSessionForChanges` resolves `repoRoot` via `Store.resolveSessionRepoRoot` before reading a
-  signature (see `store.ts` above) rather than trusting a session's `repoRoot` as listed — but a
-  session whose worktree is genuinely gone (`WorktreeRelocationFailed`) gets added to
-  `unresolvableSessions` and logged exactly once: that condition can't self-clear tick-to-tick, so
-  retrying it every `POLL_INTERVAL` forever would just re-produce the WARN flood a dead `cwd` used
-  to cause on every git spawn. Pruned from that set the same tick a session closes.
+- `live-poll.ts` — `syncLiveChecks`, called from `index.ts`'s boot and wherever its inputs change
+  (`sessions.setWatching`, `guide.setWatching`, `session-close.ts`, `settings.update` when
+  `includeUncommitted` is in the patch). It keeps one live check per open session that is in
+  `SessionWatch` or watched by the Guide tab, in a module-level `Map` (same in-memory-state shape as
+  `events.ts`'s subscriber `Set`), restarting a check when the setting flips or its worktree moved. A
+  check only decides *when* `checkSessionForChanges` runs: on `ref-watch.ts`'s events with
+  `includeUncommitted` off, or every `POLL_INTERVAL` when that setting is on, the repo layout isn't
+  watchable, or the watcher errors. `checkSessionForChanges` stays the single comparator: it diffs the
+  session's `@repo/git` change signature against the previous one (module-level `Map`) and emits
+  `session-files-changed` (and `guide-changed`) when it moved; a stale-data refetch is the frontend's
+  job once the event lands. It reads `SettingsStore`'s `includeUncommitted` itself (no per-request
+  input to carry it) and threads it into `readRepoChangeSignature` — off (the common case) skips
+  `@repo/git`'s `status`/hashing outright and, when `ref-state.ts` can vouch for the repo layout,
+  reads HEAD's movement from `.git/HEAD`/branch ref/`packed-refs` content instead of spawning `git
+  rev-parse`; on hashes each dirty path's content. The stored signature carries the mode it was read
+  under alongside the signature itself: a mode flip changes the signature's *shape* for a reason
+  unrelated to the repo, so a check that lands right after the user toggles the setting re-baselines
+  silently instead of emitting a spurious `session-files-changed` — the frontend already refetches on
+  that toggle on its own (folded into its query key). `checkSessionForChanges` resolves `repoRoot` via
+  `Store.resolveSessionRepoRoot` before reading a signature (see `store.ts` above) rather than trusting
+  a session's `repoRoot` as listed — but a session whose worktree is genuinely gone
+  (`WorktreeRelocationFailed`) gets added to `unresolvableSessions` and logged exactly once: that
+  condition can't self-clear, so retrying it forever would just re-produce the WARN flood a dead
+  `cwd` causes on every git spawn. Pruned from that set when the session closes.
+- `ref-watch.ts` — `watchRefs`: debounced `fs.watch`es on the git dir (`HEAD`), the common dir
+  (`packed-refs`) and `refs/heads/` (recursive, since branch names contain `/`). Directories, not ref
+  files, because git renames `X.lock` over `X`; every other name (`index`, `ORIG_HEAD`, `logs/`) is
+  ignored. It fires on any branch's commit in the same clone, so the fingerprint compare in
+  `checkSessionForChanges` is what filters those. Layout resolution is `ref-state.ts`'s `resolveGitDirs`.
 - `walkthrough/` — Phase 3's wiring layer. See its own AGENTS.md.
 - `chat/` — the quick-chat popup's read-only `HarnessAgent` conversations, one per thread. See its
   own AGENTS.md.
@@ -274,7 +285,7 @@ seam" for the port/token handshake this boots into.
   AGENTS.md, "TS7 binary resolution"; this file remains the home of pooling and other process state.
 - `updater/` — macOS Homebrew-cask auto-update. `service.ts`'s `Updater` owns a `Ref<UpdateState>`
   and is the only writer of it: `startChecks()` (forked from `index.ts`'s boot program, same shape as
-  `startLivePolling` above) drives `idle ⇄ available` on an hourly `Schedule`, stopping for good the
+  `prIndex.start`) drives `idle ⇄ available` on an hourly `Schedule`, stopping for good the
   first time it finds this isn't a cask install; `download`/`restart` (the `update.*` oRPC handlers)
   own every other transition, so the poller can never stomp a download in flight or a cached artifact
   waiting for a restart. `homebrew.ts` resolves `brew` and shells out to it (`list --cask --versions`,

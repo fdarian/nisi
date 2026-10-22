@@ -53,8 +53,8 @@ exposes both one-shot reads and watch streams, so consumers never need to schedu
 - `change-signal.ts` — `readRepoChangeSignature`: HEAD's sha plus, only when `includeUncommitted` is
   `true`, a content hash (never mtime/size — collides too easily, see the module's doc comment) per
   path `git status --porcelain` reports dirty. `false` (default) skips `status` and hashing
-  entirely — the signature is just `headSha`. What the sidecar's live-update poller diffs
-  tick-to-tick to detect a session's files changed; the caller (`live-poll.ts`) resolves the flag
+  entirely — the signature is just `headSha`. What the sidecar's live check diffs
+  check-to-check to detect a session's files changed; the caller (`live-poll.ts`) resolves the flag
   from `@repo/settings` and passes it in, since this package doesn't read settings itself.
 - `diff.ts` — orchestrates the above into `getChangedFiles` (cheap, all files, metadata only) and
   `getFileContents` (every requested path's patch + gated content in one pass, so opening N files

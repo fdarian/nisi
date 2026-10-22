@@ -799,7 +799,7 @@ export type LiveFileChanges = {
 
 /**
  * Tracks whether `diff.files`/`diff.fileContents` have gone stale: on the
- * sidecar's `session-files-changed` event (the 2s worktree poller noticing a
+ * sidecar's `session-files-changed` event (the sidecar's live check noticing a
  * change — see `packages/sidecar-api/src/events.ts`) for *this* session, sets
  * `hasPendingChanges` instead of invalidating right away, so the caller can
  * surface a "Refresh" affordance rather than yanking the diff out from under
@@ -880,11 +880,11 @@ export function useLiveFileChanges(
  * frontend half of the poll-gating this session's `live-poll.ts` enforces on
  * the sidecar side. `watched` is meant to be `windowFocused && activeTab ===
  * "files" && this PrView is the selected PR tab` (see `pr-view.tsx`), so the
- * sidecar's 2s poller only checks a session while its Files Changed tab is
+ * sidecar only runs a session's live check while its Files Changed tab is
  * actually on screen for someone to see the result. Fires the mutation only
  * on an actual change to `watched` (never on every render, via the `ref`
  * below) and sends a final `false` on unmount, so backgrounding the tab or
- * closing it actually stops the poll rather than leaking a watch entry until
+ * closing it actually stops the check rather than leaking a watch entry until
  * `sessions.close` cleans it up on its own schedule.
  */
 export function useSessionWatch(
