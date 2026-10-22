@@ -16,7 +16,7 @@ type PrHeaderMetaProps =
 const META_ROW_CLASS =
 	"flex h-5 min-w-0 items-center gap-1.5 overflow-hidden whitespace-nowrap text-muted-foreground text-xs";
 
-function BranchChip(props: {
+export function BranchChip(props: {
 	name: string;
 	icon?: boolean;
 }): React.ReactElement {
@@ -31,7 +31,7 @@ function BranchChip(props: {
 	);
 }
 
-function Author(props: { login: string }): React.ReactElement {
+export function Author(props: { login: string }): React.ReactElement {
 	return (
 		<>
 			<Avatar className="size-4 shrink-0 bg-muted text-[8px]">
