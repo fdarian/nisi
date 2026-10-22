@@ -108,6 +108,7 @@ function Palette(props: {
 			<Button onClick={() => setOpen(true)}>Open pull requests</Button>
 			<OpenPullRequestPalette
 				open={open}
+				opensOnRepositoryPicker={false}
 				onOpenChange={setOpen}
 				orpc={props.orpc}
 				repositories={repositories}
