@@ -31,6 +31,8 @@ type FluidHover<T extends HTMLElement> = {
 	};
 	/** Ref callback for each hoverable item; items may mount in any order. */
 	registerItem: RefCallback<HTMLElement>;
+	/** Re-picks from the last pointer position, for events the hook can't see (e.g. a scroll inside a shadow root). */
+	refresh: () => void;
 	rect: Rect | null;
 	/** Steps on each pointer entry so the highlight fades in at the new item instead of sliding from the last one. */
 	session: number;
@@ -51,7 +53,7 @@ function measure(element: HTMLElement, container: HTMLElement): Rect {
 function pickNearest(
 	items: ReadonlySet<HTMLElement>,
 	axis: "x" | "y",
-	pointer: { x: number; y: number },
+	pointer: Pointer,
 ): HTMLElement | null {
 	let nearest: HTMLElement | null = null;
 	let nearestDistance = Number.POSITIVE_INFINITY;
@@ -87,14 +89,23 @@ function sameRect(a: Rect, b: Rect): boolean {
 /** Set on the lit item, so its descendants can restyle themselves (`group-data-[fluid-hover-active]/…`). */
 const ACTIVE_ATTR = "data-fluid-hover-active";
 
+type Pointer = { x: number; y: number };
+
+type FluidHoverOptions = {
+	/** Replaces the registry lookup for items the hook can't register as refs. Must be stable; returning null keeps the current item. */
+	resolveItem?: (pointer: Pointer) => HTMLElement | null;
+};
+
 /** `containerRef` must sit on a `relative` element that contains every registered item. */
 export function useFluidHover<T extends HTMLElement>(
 	axis: "x" | "y",
+	options?: FluidHoverOptions,
 ): FluidHover<T> {
+	const resolveItem = options?.resolveItem;
 	const containerRef = useRef<T | null>(null);
 	const itemsRef = useRef(new Set<HTMLElement>());
 	const frameRef = useRef<number | null>(null);
-	const pointerRef = useRef<{ x: number; y: number } | null>(null);
+	const pointerRef = useRef<Pointer | null>(null);
 	const sessionPendingRef = useRef(false);
 	const activeElementRef = useRef<HTMLElement | null>(null);
 	const [active, setActive] = useState<Active | null>(null);
@@ -111,7 +122,10 @@ export function useFluidHover<T extends HTMLElement>(
 		const container = containerRef.current;
 		const pointer = pointerRef.current;
 		if (container === null || pointer === null) return;
-		const element = pickNearest(itemsRef.current, axis, pointer);
+		const element =
+			resolveItem === undefined
+				? pickNearest(itemsRef.current, axis, pointer)
+				: resolveItem(pointer);
 		if (element === null) return;
 		if (sessionPendingRef.current && element !== activeElementRef.current) {
 			sessionPendingRef.current = false;
@@ -126,7 +140,7 @@ export function useFluidHover<T extends HTMLElement>(
 				? current
 				: { element, rect },
 		);
-	}, [axis]);
+	}, [axis, resolveItem]);
 
 	/** Re-picks from the last pointer position, which a layout shift or scroll can leave under a different item without a `mousemove`. */
 	const schedulePick = useCallback(() => {
@@ -195,6 +209,7 @@ export function useFluidHover<T extends HTMLElement>(
 		containerRef,
 		handlers: { onMouseEnter, onMouseLeave, onMouseMove },
 		registerItem,
+		refresh: schedulePick,
 		rect: active === null ? null : active.rect,
 		session,
 	};

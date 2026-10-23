@@ -24,7 +24,9 @@ export function buildTreeThemeStyle(): CSSProperties {
 	return {
 		"--trees-fg-override": "var(--sidebar-foreground)",
 		"--trees-fg-muted-override": "var(--muted-foreground)",
-		"--trees-bg-override": "var(--pane-surface-nested)",
+		// Transparent so the fluid hover highlight, which sits behind the tree,
+		// shows through; the sidebar already paints `--pane-surface-nested` behind it.
+		"--trees-bg-override": "transparent",
 		"--trees-bg-muted-override": "var(--sidebar-accent)",
 		"--trees-border-color-override": "var(--sidebar-border)",
 		"--trees-accent-override": "var(--primary)",
@@ -56,11 +58,55 @@ export const TREE_STICKY_BACKDROP_CSS = `
 }
 `;
 
+const ROW_SELECTOR = "button[data-item-path]";
+const CONTEXT_MENU_ANCHOR_SELECTOR = '[data-type="context-menu-anchor"]';
+
 const FOLDER_ICON_STYLE_ATTRIBUTE = "data-nisi-folder-icons";
 const STATUS_COLOR_STYLE_ATTRIBUTE = "data-nisi-status-color";
 
 function escapeCSSAttributeValue(value: string): string {
 	return value.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+}
+
+function getTreeShadowRoot(treeHost: HTMLElement | null): ShadowRoot | null {
+	return treeHost?.querySelector(FILE_TREE_TAG_NAME)?.shadowRoot ?? null;
+}
+
+/**
+ * The row under `pointer`, for `useFluidHover`'s `resolveItem`. Null — keep
+ * the current row — when the pointer is over the "…" overlay or over no row.
+ * Uses `elementsFromPoint` rather than the topmost hit because a parked
+ * (focused/dragged) row is invisible but can sit on top of a real one.
+ */
+export function resolveTreeRowAtPoint(
+	treeHost: HTMLElement | null,
+	pointer: { x: number; y: number },
+): HTMLElement | null {
+	const shadowRoot = getTreeShadowRoot(treeHost);
+	if (shadowRoot === null) return null;
+	for (const element of shadowRoot.elementsFromPoint(pointer.x, pointer.y)) {
+		if (element.closest(CONTEXT_MENU_ANCHOR_SELECTOR) !== null) return null;
+		const row = element.closest<HTMLElement>(ROW_SELECTOR);
+		if (row !== null && row.dataset.itemParked !== "true") return row;
+	}
+	return null;
+}
+
+/**
+ * Calls `onScroll` for scrolls inside the tree's shadow root, which never
+ * reach a `window` listener (`scroll` doesn't bubble or cross the shadow
+ * boundary). A capture listener on the root sees them without having to find
+ * the scroller. Returns null when the shadow root doesn't exist yet, so the
+ * caller can retry on the next frame.
+ */
+export function observeTreeScroll(
+	treeHost: HTMLElement | null,
+	onScroll: () => void,
+): (() => void) | null {
+	const shadowRoot = getTreeShadowRoot(treeHost);
+	if (shadowRoot === null) return null;
+	shadowRoot.addEventListener("scroll", onScroll, true);
+	return () => shadowRoot.removeEventListener("scroll", onScroll, true);
 }
 
 /**
@@ -73,8 +119,8 @@ function syncShadowStyle(
 	attribute: string,
 	css: string,
 ): boolean {
-	const shadowRoot = treeHost?.querySelector(FILE_TREE_TAG_NAME)?.shadowRoot;
-	if (!shadowRoot) return false;
+	const shadowRoot = getTreeShadowRoot(treeHost);
+	if (shadowRoot === null) return false;
 
 	const existingStyle = shadowRoot.querySelector<HTMLStyleElement>(
 		`style[${attribute}]`,
@@ -278,6 +324,38 @@ export function syncDecorationIconStyle(treeHost: HTMLElement | null): boolean {
 		treeHost,
 		DECORATION_ICON_STYLE_ATTRIBUTE,
 		buildDecorationIconCSS(),
+	);
+}
+
+const FLUID_HOVER_STYLE_ATTRIBUTE = "data-nisi-fluid-hover";
+
+/**
+ * The shared highlight (`FluidHoverHighlight`) replaces the per-row `:hover`
+ * fill, so plain hover goes transparent. The row whose context menu is open
+ * stays filled: the pointer moves into the menu and the highlight stops
+ * following it, but the row should stay lit. Selected rows keep their fill.
+ * `--truncate-marker-background-color` is pinned to the surface because the
+ * truncation marker paints an opaque patch that would otherwise inherit the
+ * now-transparent tree background.
+ */
+function buildFluidHoverCSS(): string {
+	return `
+[data-type="item"]:hover:not([data-item-context-hover="true"]):not([data-item-selected="true"]) {
+	background-color: transparent;
+}
+
+:host,
+[data-type="item"] {
+	--truncate-marker-background-color: var(--pane-surface);
+}
+`;
+}
+
+export function syncFluidHoverStyle(treeHost: HTMLElement | null): boolean {
+	return syncShadowStyle(
+		treeHost,
+		FLUID_HOVER_STYLE_ATTRIBUTE,
+		buildFluidHoverCSS(),
 	);
 }
 
