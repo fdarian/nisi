@@ -6,7 +6,7 @@ export function FilesSidebarRail(props: {
 	onSearch: () => void;
 }): React.ReactElement {
 	return (
-		<div className="flex h-full shrink-0 flex-col gap-1 bg-pane-surface-nested px-diff-pane-inset py-2">
+		<div className="flex h-full w-full flex-col gap-1 px-diff-pane-inset py-2">
 			<SidebarIconButton
 				icon={<PanelLeftOpenIcon />}
 				label="Expand sidebar"

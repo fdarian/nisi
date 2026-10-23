@@ -25,6 +25,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { useCallback } from "react";
 import { Button } from "#/components/ui/button";
 import type { SidecarQueryUtils } from "#/infra/backend-context";
+import { spring } from "#/lib/springs";
 import { useKeyBindings } from "#/lib/use-key-bindings";
 import {
 	useChatActiveThreadId,
@@ -34,7 +35,6 @@ import {
 } from "./chat-store";
 import { ChatTab } from "./chat-tab";
 import { ChatPanel } from "./panel/chat-panel";
-import { spring } from "./springs";
 import { useChatShortcut } from "./use-chat-shortcut";
 
 type ChatDockProps = {

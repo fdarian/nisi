@@ -12,11 +12,11 @@ import type { SidebarViewMode } from "#/features/settings/settings-data";
 import { useNativeGlassShowing } from "#/features/settings/window-glass";
 import { CATEGORY_LABELS, groupFilesByCategory } from "#/lib/tree-paths";
 import { useKeyBindings } from "#/lib/use-key-bindings";
-import { filesSidebarClassName } from "../files-changed-layout";
 import { FileTreeView, type FileTreeViewHandle } from "./file-tree-view";
 import { FilesFilter } from "./files-filter";
 import { FilesSidebarHeader } from "./files-sidebar-header";
 import { FilesSidebarRail } from "./files-sidebar-rail";
+import { FilesSidebarShell } from "./files-sidebar-shell";
 import { FlatFileGroup } from "./flat-file-group";
 
 /** The files sidebar's search box: filter by file path (today's default) or grep loaded diff content. */
@@ -129,15 +129,6 @@ export function FilesSidebar({
 		{ enabled: shortcutsEnabled },
 	);
 
-	if (collapsed) {
-		return (
-			<FilesSidebarRail
-				onExpand={() => onCollapsedChange(false)}
-				onSearch={openFilter}
-			/>
-		);
-	}
-
 	// Handlers sit on the wrapper, not the input, so focus moving to the mode
 	// dropdown inside it doesn't count as leaving. Events from that dropdown's
 	// portal bubble through React too, hence the `target` checks.
@@ -157,8 +148,8 @@ export function FilesSidebar({
 			setFilterOpen(false);
 	};
 
-	return (
-		<div className={filesSidebarClassName}>
+	const panel = (
+		<>
 			<FilesSidebarHeader
 				fileCount={files.length}
 				hideReviewed={hideReviewed}
@@ -218,7 +209,20 @@ export function FilesSidebar({
 					</ScrollArea>
 				)}
 			</div>
-		</div>
+		</>
+	);
+
+	return (
+		<FilesSidebarShell
+			collapsed={collapsed}
+			panel={panel}
+			rail={
+				<FilesSidebarRail
+					onExpand={() => onCollapsedChange(false)}
+					onSearch={openFilter}
+				/>
+			}
+		/>
 	);
 }
 
