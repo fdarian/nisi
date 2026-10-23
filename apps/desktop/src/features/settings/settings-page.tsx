@@ -2,6 +2,7 @@
 
 import { MonitorIcon, MoonIcon, SunIcon } from "lucide-react";
 import { useTheme } from "next-themes";
+import { Button } from "#/components/ui/button";
 import {
 	Select,
 	SelectContent,
@@ -9,6 +10,7 @@ import {
 	SelectTrigger,
 	SelectValue,
 } from "#/components/ui/select";
+import { Slider } from "#/components/ui/slider";
 import { ToggleGroup, ToggleGroupItem } from "#/components/ui/toggle-group";
 import type { SidecarQueryUtils } from "#/infra/backend-context";
 import { useBackendContext } from "#/infra/backend-context";
@@ -26,9 +28,15 @@ import {
 	SettingsSection,
 } from "./settings-section";
 import {
+	DEFAULT_WINDOW_GLASS_TINT,
 	isWindowGlass,
 	setWindowGlass,
+	setWindowGlassTint,
 	useWindowGlass,
+	useWindowGlassTint,
+	WINDOW_GLASS_TINT_MAX,
+	WINDOW_GLASS_TINT_MIN,
+	WINDOW_GLASS_TINT_STEP,
 	type WindowGlass,
 } from "./window-glass";
 
@@ -104,6 +112,7 @@ function AppearanceSection({
 	const [diffThemeLight, setDiffThemeLight] = useDiffThemeLight(orpc);
 	const [diffThemeDark, setDiffThemeDark] = useDiffThemeDark(orpc);
 	const windowGlass = useWindowGlass();
+	const windowGlassTint = useWindowGlassTint();
 
 	return (
 		<SettingsSection title="Appearance">
@@ -154,6 +163,35 @@ function AppearanceSection({
 							))}
 						</SelectContent>
 					</Select>
+				</SettingsRow>
+			)}
+			{hasNative() && windowGlass === "tinted" && (
+				<SettingsRow
+					description="Heavier hides a busy background."
+					title="Tint strength"
+				>
+					<div className="flex items-center gap-3">
+						{windowGlassTint !== DEFAULT_WINDOW_GLASS_TINT && (
+							<Button
+								onClick={() => setWindowGlassTint(DEFAULT_WINDOW_GLASS_TINT)}
+								size="xs"
+								variant="link"
+							>
+								Reset
+							</Button>
+						)}
+						<Slider
+							aria-label="Tint strength"
+							className="w-40"
+							max={WINDOW_GLASS_TINT_MAX}
+							min={WINDOW_GLASS_TINT_MIN}
+							onValueChange={(value) => {
+								if (typeof value === "number") setWindowGlassTint(value);
+							}}
+							step={WINDOW_GLASS_TINT_STEP}
+							value={windowGlassTint}
+						/>
+					</div>
 				</SettingsRow>
 			)}
 			<SettingsRowStacked
