@@ -15,6 +15,8 @@ import type {
 	CodeViewItem,
 	CodeViewLineSelection,
 	CodeViewOptions,
+	DiffLineAnnotation,
+	LineAnnotation,
 	ThemesType,
 } from "@pierre/diffs";
 import {
@@ -281,7 +283,7 @@ type DiffCodeViewProps<Metadata> = {
 		instance: CodeViewInstance<Metadata, undefined> | undefined,
 	) => void;
 	renderAnnotation?: (
-		...args: CodeViewAnnotationArgs<Metadata>
+		annotation: LineAnnotation<Metadata> | DiffLineAnnotation<Metadata>,
 	) => React.ReactNode;
 	renderCustomHeader?: (item: CodeViewItem<Metadata>) => React.ReactNode;
 	/**
@@ -336,6 +338,17 @@ export function DiffCodeView<Metadata>({
 		},
 		[ref],
 	);
+	// CodeView types its callback as a rest of a tuple union (annotation, file, item), and TS
+	// rejects a one-parameter callback against that on arity, so adapt here once instead of at
+	// every call site.
+	const codeViewRenderAnnotation = useMemo(
+		() =>
+			renderAnnotation === undefined
+				? undefined
+				: (...args: CodeViewAnnotationArgs<Metadata>) =>
+						renderAnnotation(args[0]),
+		[renderAnnotation],
+	);
 	useLayoutEffect(() => {
 		if (onCodeViewInstanceChange === undefined || containerGeneration < 0) {
 			return;
@@ -359,7 +372,7 @@ export function DiffCodeView<Metadata>({
 				onSelectedLinesChange={onSelectedLinesChange}
 				options={options}
 				ref={codeViewRef}
-				renderAnnotation={renderAnnotation}
+				renderAnnotation={codeViewRenderAnnotation}
 				renderCustomHeader={renderCustomHeader}
 				selectedLines={selectedLines}
 			/>

@@ -15,11 +15,11 @@
  */
 import type {
 	CodeViewItem,
+	DiffLineAnnotation,
 	FileDiffMetadata,
 	LineAnnotation,
 } from "@pierre/diffs";
 import { parsePatchFiles } from "@pierre/diffs";
-import type { CodeViewAnnotationArgs } from "@pierre/diffs/react";
 import { cn } from "cn";
 import { ChevronDownIcon, ChevronRightIcon } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
@@ -275,8 +275,11 @@ export function LocationPane({
 	);
 
 	const renderAnnotation = useCallback(
-		(...args: CodeViewAnnotationArgs<ReferenceAnnotationMetadata>) => {
-			const annotation = args[0];
+		(
+			annotation:
+				| LineAnnotation<ReferenceAnnotationMetadata>
+				| DiffLineAnnotation<ReferenceAnnotationMetadata>,
+		) => {
 			return (
 				<div
 					className={cn(
