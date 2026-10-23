@@ -58,7 +58,7 @@
 		var(--_inset-start) var(--_radius),
 		var(--_inset-end) var(--_radius),
 		calc(100% - var(--_inset-start) - var(--_inset-end) - 2 * var(--_radius))
-			var(--_radius),
+		var(--_radius),
 		var(--_radius) var(--_radius),
 		var(--_radius) var(--_radius);
 }
