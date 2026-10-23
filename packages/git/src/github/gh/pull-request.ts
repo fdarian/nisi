@@ -1,4 +1,4 @@
-import { Effect, Schema } from "effect";
+import { DateTime, Effect, Schema } from "effect";
 import type { ChildProcessSpawner } from "effect/process";
 import {
 	GhNotAuthenticated,
@@ -16,6 +16,7 @@ import { type GhResult, ghResult } from "../../exec.ts";
 import type {
 	PullRequestRef,
 	PullRequestSearchResult,
+	PullRequestSearchState,
 } from "../../pull-request.ts";
 import type { RepositoryIdentity } from "../github.ts";
 import { hasSearchQualifier } from "../search-query.ts";
@@ -190,7 +191,9 @@ const toPullRequestSearchResult = (
 
 /**
  * Whether `query` already names its own state (`state:open`, `is:merged`,
- * `-is:closed`, …) — narrower than `hasSearchQualifier`, since `is:draft` or
+ * `-is:closed`, …) or filters on a state-transition date (`closed:>=…`,
+ * `-merged:…`, which only make sense against closed PRs, so an appended
+ * `is:open` would contradict them) — narrower than `hasSearchQualifier`, since `is:draft` or
  * `is:locked` don't name a state and shouldn't suppress the default
  * `--state open` the way an actual state qualifier must (forcing `--state
  * open` on top of a query that already says `is:merged` would silently AND
@@ -198,7 +201,7 @@ const toPullRequestSearchResult = (
  * phase's report).
  */
 const STATE_QUALIFIER_PATTERN =
-	/(?:^|\s)-?(?:state|is):(?:open|closed|merged)\b/i;
+	/(?:^|\s)-?(?:(?:state|is):(?:open|closed|merged)\b|(?:closed|merged):)/i;
 
 const hasStateQualifier = (query: string): boolean =>
 	STATE_QUALIFIER_PATTERN.test(query);
@@ -220,6 +223,21 @@ const SEARCH_QUERY = `query($q: String!, $n: Int!) {
   }
 }`;
 export const SEARCH_LIMIT = 30;
+
+export const RECENTLY_CLOSED_WINDOW_DAYS = 7;
+
+/** `is:closed` on GitHub includes merged PRs, which is intended. */
+const modeStateQualifiers = (
+	state: PullRequestSearchState,
+): Effect.Effect<ReadonlyArray<string>> =>
+	state === "open"
+		? Effect.succeed(["is:open"])
+		: DateTime.now.pipe(
+				Effect.map((now) => [
+					"is:closed",
+					`closed:>=${DateTime.formatIsoDate(DateTime.subtract(now, { days: RECENTLY_CLOSED_WINDOW_DAYS }))}`,
+				]),
+			);
 
 /**
  * `gh` not authenticated — confirmed live with `GH_CONFIG_DIR` pointed at an
@@ -354,8 +372,9 @@ const mergeResults = (
  *   (OR semantics), and search unscoped from author/review-requested even
  *   with an empty query. Explicit state qualifiers still take precedence.
  *
- * `is:open` is added to every branch unless the query already names its
- * own state (`hasStateQualifier`) — forcing it on top of an explicit
+ * The mode's state qualifiers (`is:open`, or `is:closed` plus a
+ * `closed:>=` cutoff for "recently closed") are added to every branch unless
+ * the query already names its own state (`hasStateQualifier`) — forcing it on top of an explicit
  * `is:merged`/`is:closed` would otherwise silently return nothing (confirmed
  * live). `sort:updated-desc` is likewise always requested, needed for
  * `mergeResults` above to produce one coherently-ordered list regardless of
@@ -372,46 +391,52 @@ export const searchPullRequests = (
 	cwd: string,
 	query: string,
 	repos: ReadonlyArray<string>,
+	state: PullRequestSearchState,
 ): Effect.Effect<
 	ReadonlyArray<PullRequestSearchResult>,
 	PullRequestSearchError,
 	ChildProcessSpawner.ChildProcessSpawner
-> => {
-	const trimmed = query.trim();
-	const stateQualifiers = hasStateQualifier(trimmed) ? [] : ["is:open"];
-	if (repos.length > 0) {
-		return searchOnce(cwd, tokenize(trimmed), [
-			...repos.map((repo) => `repo:${repo}`),
-			...stateQualifiers,
-		]).pipe(Effect.map(mergeResults));
-	}
+> =>
+	Effect.gen(function* () {
+		const trimmed = query.trim();
+		const stateQualifiers = hasStateQualifier(trimmed)
+			? []
+			: yield* modeStateQualifiers(state);
+		if (repos.length > 0) {
+			return yield* searchOnce(cwd, tokenize(trimmed), [
+				...repos.map((repo) => `repo:${repo}`),
+				...stateQualifiers,
+			]).pipe(Effect.map(mergeResults));
+		}
 
-	if (trimmed === "") {
-		return searchOnce(cwd, [], ["author:@me", ...stateQualifiers]).pipe(
-			Effect.map(mergeResults),
+		if (trimmed === "") {
+			return yield* searchOnce(
+				cwd,
+				[],
+				["author:@me", ...stateQualifiers],
+			).pipe(Effect.map(mergeResults));
+		}
+
+		const terms = tokenize(trimmed);
+
+		if (hasSearchQualifier(trimmed)) {
+			return yield* searchOnce(cwd, terms, stateQualifiers).pipe(
+				Effect.map(mergeResults),
+			);
+		}
+
+		return yield* Effect.all(
+			[
+				searchOnce(cwd, terms, ["author:@me", ...stateQualifiers]),
+				searchOnce(cwd, terms, ["review-requested:@me", ...stateQualifiers]),
+			],
+			{ concurrency: "unbounded" },
+		).pipe(
+			Effect.map(([authored, reviewRequested]) =>
+				mergeResults([...authored, ...reviewRequested]),
+			),
 		);
-	}
-
-	const terms = tokenize(trimmed);
-
-	if (hasSearchQualifier(trimmed)) {
-		return searchOnce(cwd, terms, stateQualifiers).pipe(
-			Effect.map(mergeResults),
-		);
-	}
-
-	return Effect.all(
-		[
-			searchOnce(cwd, terms, ["author:@me", ...stateQualifiers]),
-			searchOnce(cwd, terms, ["review-requested:@me", ...stateQualifiers]),
-		],
-		{ concurrency: "unbounded" },
-	).pipe(
-		Effect.map(([authored, reviewRequested]) =>
-			mergeResults([...authored, ...reviewRequested]),
-		),
-	);
-};
+	});
 
 export const repository = (
 	repoRoot: string,

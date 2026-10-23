@@ -1471,16 +1471,21 @@ export function attachRouter(
 			),
 			// Always asks `gh`; the palette matches typed text against `indexed`
 			// itself and only calls this for what the index can't answer. The blank
-			// query is the palette opening, so it also refreshes the index in the
-			// background to keep `indexed` warm.
+			// open-mode query is the palette opening, so it also refreshes the index
+			// in the background to keep `indexed` warm (the index is open-only, so
+			// closed mode never does).
 			// `process.cwd()` is fine: `gh search prs` ignores its directory.
 			search: authed.pullRequests.search.effect(function* ({ input, errors }) {
 				const github = yield* GitHub;
 				const prIndex = yield* PrIndex;
-				if (input.query.trim() === "" && input.repos.length === 0)
+				if (
+					input.state === "open" &&
+					input.query.trim() === "" &&
+					input.repos.length === 0
+				)
 					yield* prIndex.refreshKnown;
 				return yield* github
-					.search(process.cwd(), input.query, input.repos)
+					.search(process.cwd(), input.query, input.repos, input.state)
 					.pipe(
 						Effect.catchTag("GhNotAuthenticated", (cause) =>
 							Effect.fail(

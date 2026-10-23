@@ -22,7 +22,7 @@ test("palette story fixtures filter PRs by query and repository with OR semantic
 	const client = createMockSidecarClient({
 		pullRequestSearchResults: [pr, otherPr],
 	});
-	expect(await client.pullRequests.search({ query: "", repos: [] })).toEqual([
+	expect(await client.pullRequests.search({ query: "", repos: [], state: "open" })).toEqual([
 		pr,
 		otherPr,
 	]);
@@ -30,16 +30,18 @@ test("palette story fixtures filter PRs by query and repository with OR semantic
 		await client.pullRequests.search({
 			query: "FILTERS",
 			repos: ["fdarian/furl"],
+			state: "open",
 		}),
 	).toEqual([pr]);
 	expect(
 		await client.pullRequests.search({
 			query: "",
 			repos: ["fdarian/furl", "fdarian/nisi"],
+			state: "open",
 		}),
 	).toEqual([pr, otherPr]);
 	expect(
-		await client.pullRequests.search({ query: "missing", repos: [] }),
+		await client.pullRequests.search({ query: "missing", repos: [], state: "open" }),
 	).toEqual([]);
 });
 

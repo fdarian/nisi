@@ -114,6 +114,7 @@ export type {
 	GitHubTarget,
 	PullRequestRef,
 	PullRequestSearchResult,
+	PullRequestSearchState,
 	ReviewTarget,
 } from "./pull-request.ts";
 export {

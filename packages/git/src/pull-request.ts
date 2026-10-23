@@ -25,6 +25,8 @@ export type ReviewTarget = {
 	readonly github: GitHubTarget | null;
 };
 
+export type PullRequestSearchState = "open" | "closed";
+
 export type PullRequestSearchResult = {
 	readonly owner: string;
 	readonly repo: string;

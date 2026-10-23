@@ -148,6 +148,7 @@ export function OpenPullRequestPalette(
 		query,
 		props.open && needsGh && query === debouncedQuery,
 		repositoryKeys,
+		"open",
 	);
 	// `keepPreviousData` rows belong to some earlier query (often the blank
 	// recent list); showing them would let Enter open an unrelated PR, so the
