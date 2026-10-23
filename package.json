@@ -4,6 +4,7 @@
 	"license": "Apache-2.0",
 	"scripts": {
 		"format": "biome check --write",
+		"install-nightly": "pnpm -F @repo/desktop run build:dev && osascript -e 'quit app \"nisi\"' && rm -rf /Applications/nisi.app && cp -R apps/desktop/release/mac-arm64/nisi.app /Applications/nisi.app && open /Applications/nisi.app",
 		"ci:version": "changeset version"
 	},
 	"devDependencies": {
