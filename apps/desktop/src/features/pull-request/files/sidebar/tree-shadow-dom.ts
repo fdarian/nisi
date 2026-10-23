@@ -56,11 +56,77 @@ export const TREE_STICKY_BACKDROP_CSS = `
 }
 `;
 
+const ROW_SELECTOR = "button[data-item-path]";
+
 const FOLDER_ICON_STYLE_ATTRIBUTE = "data-nisi-folder-icons";
 const STATUS_COLOR_STYLE_ATTRIBUTE = "data-nisi-status-color";
 
 function escapeCSSAttributeValue(value: string): string {
 	return value.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+}
+
+function getTreeShadowRoot(treeHost: HTMLElement | null): ShadowRoot | null {
+	return treeHost?.querySelector(FILE_TREE_TAG_NAME)?.shadowRoot ?? null;
+}
+
+/**
+ * The row under `pointer`, for `useFluidHover`'s `resolveItem`. Resolves by
+ * row geometry rather than hit-testing: the tree turns off pointer events on
+ * its rows while scrolling, so hit-testing finds nothing mid-scroll and a
+ * `mousemove` during momentum scrolling would never land. Parked (focused/dragged) rows are
+ * skipped even when they contain the pointer, because they're invisible but
+ * can sit on top of a real row. Null when no row contains the pointer.
+ */
+export function resolveTreeRowAtPoint(
+	treeHost: HTMLElement | null,
+	pointer: { x: number; y: number },
+): HTMLElement | null {
+	const shadowRoot = getTreeShadowRoot(treeHost);
+	if (shadowRoot === null) return null;
+	for (const row of shadowRoot.querySelectorAll<HTMLElement>(ROW_SELECTOR)) {
+		if (row.dataset.itemParked === "true") continue;
+		const rect = row.getBoundingClientRect();
+		if (
+			pointer.y >= rect.top &&
+			pointer.y < rect.bottom &&
+			pointer.x >= rect.left &&
+			pointer.x < rect.right
+		) {
+			return row;
+		}
+	}
+	return null;
+}
+
+/** The mounted row for `path`, for `useFluidHover`'s `reacquireItem`; parked rows are skipped like in `resolveTreeRowAtPoint`. */
+export function findTreeRowByPath(
+	treeHost: HTMLElement | null,
+	path: string,
+): HTMLElement | null {
+	const shadowRoot = getTreeShadowRoot(treeHost);
+	if (shadowRoot === null) return null;
+	for (const row of shadowRoot.querySelectorAll<HTMLElement>(ROW_SELECTOR)) {
+		if (row.dataset.itemParked === "true") continue;
+		if (row.dataset.itemPath === path) return row;
+	}
+	return null;
+}
+
+/**
+ * Calls `onScroll` for scrolls inside the tree's shadow root, which never
+ * reach a `window` listener (`scroll` doesn't bubble or cross the shadow
+ * boundary). A capture listener on the root sees them without having to find
+ * the scroller. Returns null when the shadow root doesn't exist yet, so the
+ * caller can retry on the next frame.
+ */
+export function observeTreeScroll(
+	treeHost: HTMLElement | null,
+	onScroll: () => void,
+): (() => void) | null {
+	const shadowRoot = getTreeShadowRoot(treeHost);
+	if (shadowRoot === null) return null;
+	shadowRoot.addEventListener("scroll", onScroll, true);
+	return () => shadowRoot.removeEventListener("scroll", onScroll, true);
 }
 
 /**
@@ -73,8 +139,8 @@ function syncShadowStyle(
 	attribute: string,
 	css: string,
 ): boolean {
-	const shadowRoot = treeHost?.querySelector(FILE_TREE_TAG_NAME)?.shadowRoot;
-	if (!shadowRoot) return false;
+	const shadowRoot = getTreeShadowRoot(treeHost);
+	if (shadowRoot === null) return false;
 
 	const existingStyle = shadowRoot.querySelector<HTMLStyleElement>(
 		`style[${attribute}]`,
@@ -279,6 +345,48 @@ export function syncDecorationIconStyle(treeHost: HTMLElement | null): boolean {
 		DECORATION_ICON_STYLE_ATTRIBUTE,
 		buildDecorationIconCSS(),
 	);
+}
+
+const FLUID_HOVER_STYLE_ATTRIBUTE = "data-nisi-fluid-hover";
+
+/**
+ * The shared highlight (`FluidHoverHighlight`) replaces the tree's own hover
+ * fill, which the library paints both on `:hover` and on
+ * `data-item-context-hover` — set for the row under the pointer, not only for
+ * an open menu's row — so both have to go transparent or the native fill races
+ * the gliding highlight. Selected rows keep their fill.
+ * The marker's patch follows the lit row (`data-fluid-hover-active`) rather
+ * than the pointer: it would otherwise light up ahead of the gliding highlight.
+ */
+function buildFluidHoverCSS(): string {
+	return `
+[data-type="item"]:is(:hover, [data-item-context-hover="true"]):not([data-item-selected="true"]) {
+	background-color: transparent;
+	--truncate-marker-background-overlay-color: transparent;
+}
+
+[data-type="item"][data-fluid-hover-active]:not([data-item-selected="true"]) {
+	--truncate-marker-background-overlay-color: var(--trees-bg-muted);
+}
+`;
+}
+
+/** Adds the fluid-hover style when `glassShowing`, removes it otherwise. Returns false when the shadow root doesn't exist yet. */
+export function syncFluidHoverStyle(
+	treeHost: HTMLElement | null,
+	glassShowing: boolean,
+): boolean {
+	if (glassShowing) {
+		return syncShadowStyle(
+			treeHost,
+			FLUID_HOVER_STYLE_ATTRIBUTE,
+			buildFluidHoverCSS(),
+		);
+	}
+	const shadowRoot = getTreeShadowRoot(treeHost);
+	if (shadowRoot === null) return false;
+	shadowRoot.querySelector(`style[${FLUID_HOVER_STYLE_ATTRIBUTE}]`)?.remove();
+	return true;
 }
 
 const ACTION_BUTTON_STYLE_ATTRIBUTE = "data-nisi-action-button";

@@ -14,6 +14,7 @@ import {
 	useMemo,
 	useRef,
 } from "react";
+import { FluidHoverHighlight, useFluidHover } from "#/components/fluid-hover";
 import {
 	DropdownMenu,
 	DropdownMenuContent,
@@ -24,13 +25,18 @@ import type {
 	FileChange,
 	ReviewStateEntry,
 } from "#/features/pull-request/data/pr-data";
+import { useNativeGlassShowing } from "#/features/settings/window-glass";
 import { collectAncestorDirectoryPaths, comparePaths } from "#/lib/tree-paths";
 import {
 	buildStatusColorCSS,
 	buildTreeThemeStyle,
 	createRowDecorationRenderer,
+	findTreeRowByPath,
+	observeTreeScroll,
+	resolveTreeRowAtPoint,
 	syncActionButtonStyle,
 	syncDecorationIconStyle,
+	syncFluidHoverStyle,
 	syncFolderIconStyle,
 	syncScrollFadeStyle,
 	syncStatusColorStyle,
@@ -190,8 +196,41 @@ export function FileTreeView({
 	onMarkReviewed,
 	repoRoot,
 }: FileTreeViewProps): React.ReactElement {
+	const glassShowing = useNativeGlassShowing();
 	const treeHostRef = useRef<HTMLDivElement>(null);
 	const treeModel = useMemo(() => buildTreeModel(files), [files]);
+
+	// The tree keys row buttons by index, not path, so after an expand/collapse
+	// the lit button can show another file; the path is what stays the same row.
+	const hoveredPathRef = useRef<string | undefined>(undefined);
+	const resolveHoveredRow = useCallback((pointer: { x: number; y: number }) => {
+		const row = resolveTreeRowAtPoint(treeHostRef.current, pointer);
+		if (row !== null) hoveredPathRef.current = row.dataset.itemPath;
+		return row;
+	}, []);
+	const reacquireHoveredRow = useCallback(() => {
+		const path = hoveredPathRef.current;
+		if (path === undefined) return null;
+		return findTreeRowByPath(treeHostRef.current, path);
+	}, []);
+	const hover = useFluidHover<HTMLDivElement>("y", {
+		resolveItem: resolveHoveredRow,
+		reacquireItem: reacquireHoveredRow,
+	});
+	const followHover = hover.follow;
+	const onHoverMove = hover.handlers.onMouseMove;
+
+	// The context menu is portaled out of the container, but React still
+	// bubbles its mouse events here — ignore them so the highlight doesn't
+	// chase the pointer across rows hidden behind the open menu.
+	const handleMouseMove = useCallback(
+		(event: ReactMouseEvent<HTMLDivElement>) => {
+			if (!(event.target instanceof Node)) return;
+			if (!event.currentTarget.contains(event.target)) return;
+			onHoverMove(event);
+		},
+		[onHoverMove],
+	);
 
 	// Read from inside `renderRowDecoration`, which the tree captures once at
 	// construction — see `createRowDecorationRenderer`.
@@ -290,6 +329,27 @@ export function FileTreeView({
 	}, []);
 
 	useEffect(() => {
+		if (syncFluidHoverStyle(treeHostRef.current, glassShowing)) return;
+		const frame = requestAnimationFrame(() => {
+			syncFluidHoverStyle(treeHostRef.current, glassShowing);
+		});
+		return () => cancelAnimationFrame(frame);
+	}, [glassShowing]);
+
+	useEffect(() => {
+		const stop = observeTreeScroll(treeHostRef.current, followHover);
+		if (stop !== null) return stop;
+		let stopOnFrame: (() => void) | null = null;
+		const frame = requestAnimationFrame(() => {
+			stopOnFrame = observeTreeScroll(treeHostRef.current, followHover);
+		});
+		return () => {
+			cancelAnimationFrame(frame);
+			stopOnFrame?.();
+		};
+	}, [followHover]);
+
+	useEffect(() => {
 		const currentlySelected = model.getSelectedPaths();
 
 		if (selectedPath === null) {
@@ -361,16 +421,32 @@ export function FileTreeView({
 	return (
 		// biome-ignore lint/a11y/noStaticElementInteractions: propagation boundary only; the tree owns context-menu interaction and keyboard support.
 		<div
-			className="min-h-0 flex-1"
+			className="relative min-h-0 flex-1 overflow-hidden"
 			onContextMenu={(event) => event.stopPropagation()}
-			ref={treeHostRef}
+			ref={hover.containerRef}
+			{...(glassShowing
+				? {
+						onMouseEnter: hover.handlers.onMouseEnter,
+						onMouseLeave: hover.handlers.onMouseLeave,
+						onMouseMove: handleMouseMove,
+					}
+				: {})}
 		>
-			<FileTree
-				model={model}
-				onClick={handleClick}
-				renderContextMenu={renderContextMenu}
-				style={buildTreeThemeStyle()}
-			/>
+			{glassShowing && (
+				<FluidHoverHighlight
+					className="rounded-md bg-sidebar-accent"
+					hover={hover}
+				/>
+			)}
+			{/* z-10 paints the tree above the absolutely positioned highlight. */}
+			<div className="relative z-10 h-full" ref={treeHostRef}>
+				<FileTree
+					model={model}
+					onClick={handleClick}
+					renderContextMenu={renderContextMenu}
+					style={buildTreeThemeStyle()}
+				/>
+			</div>
 		</div>
 	);
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useRef } from "react";
+import { FluidHoverHighlight, useFluidHover } from "#/components/fluid-hover";
 import { Empty, EmptyDescription, EmptyTitle } from "#/components/ui/empty";
 import { ScrollArea } from "#/components/ui/scroll-area";
 import type {
@@ -8,6 +9,7 @@ import type {
 	ReviewStateEntry,
 } from "#/features/pull-request/data/pr-data";
 import type { SidebarViewMode } from "#/features/settings/settings-data";
+import { useNativeGlassShowing } from "#/features/settings/window-glass";
 import { CATEGORY_LABELS, groupFilesByCategory } from "#/lib/tree-paths";
 import { useKeyBindings } from "#/lib/use-key-bindings";
 import { filesSidebarClassName } from "../files-changed-layout";
@@ -122,21 +124,58 @@ export function FilesSidebar({
 					/>
 				) : (
 					<ScrollArea className="min-h-0 flex-1" scrollFade>
-						<div className="flex flex-col gap-1 pb-3">
-							{groups.map((group) => (
-								<FlatFileGroup
-									key={group.category}
-									files={group.files}
-									onSelectPath={onSelectPath}
-									reviewState={reviewState}
-									selectedPath={selectedPath}
-									title={CATEGORY_LABELS[group.category]}
-								/>
-							))}
-						</div>
+						<FlatFileList
+							groups={groups}
+							onSelectPath={onSelectPath}
+							reviewState={reviewState}
+							selectedPath={selectedPath}
+						/>
 					</ScrollArea>
 				)}
 			</div>
+		</div>
+	);
+}
+
+/** Owns the fluid hover so its listeners attach when the list mounts, not when the sidebar does (it starts in tree mode, with no list). */
+function FlatFileList({
+	groups,
+	reviewState,
+	selectedPath,
+	onSelectPath,
+}: {
+	groups: ReturnType<typeof groupFilesByCategory>;
+	reviewState: ReadonlyMap<string, ReviewStateEntry>;
+	selectedPath: string | null;
+	onSelectPath: (path: string) => void;
+}): React.ReactElement {
+	const glassShowing = useNativeGlassShowing();
+	const hover = useFluidHover<HTMLDivElement>("y");
+
+	return (
+		<div
+			className="relative flex flex-col gap-1 pb-3"
+			ref={hover.containerRef}
+			{...(glassShowing ? hover.handlers : {})}
+		>
+			{glassShowing && (
+				<FluidHoverHighlight
+					className="rounded-md bg-sidebar-accent"
+					hover={hover}
+				/>
+			)}
+			{groups.map((group) => (
+				<FlatFileGroup
+					key={group.category}
+					files={group.files}
+					onSelectPath={onSelectPath}
+					registerHoverItem={hover.registerItem}
+					glassShowing={glassShowing}
+					reviewState={reviewState}
+					selectedPath={selectedPath}
+					title={CATEGORY_LABELS[group.category]}
+				/>
+			))}
 		</div>
 	);
 }
