@@ -1642,11 +1642,11 @@ export function DiffPane({
 				// `<pre>` tile it completely, so a background here would only ever
 				// show as a square behind those pinned rounded corners.
 				//
-				// The card's surface is `--background` (the header's `bg-background`
+				// The card's surface is `--diff-surface` (the header's `bg-diff-surface`
 				// and `diff-view-theme.ts`'s `--diffs-*-bg`), not `bg-card`: the two
 				// are the same white in light mode but `--card` is a measurably
 				// lighter tone than `--background` in dark mode (index.css), which
-				// made every card read as a raised slab. Clipping uses `clip-path`,
+				// made every card read as a raised slab outside window glass. Clipping uses `clip-path`,
 				// not `overflow-hidden` — `overflow` (any value but `visible`) makes
 				// an element a scroll container, which becomes the containing block
 				// for any `position: sticky` descendant; `stickyHeaders: true`

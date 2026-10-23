@@ -93,6 +93,7 @@
 	--color-sidebar-accent: var(--sidebar-accent);
 	--color-sidebar: var(--sidebar);
 	--color-pane-surface: var(--pane-surface);
+	--color-diff-surface: var(--diff-surface);
 	--color-pane-surface-nested: var(--pane-surface-nested);
 	--color-code-highlight: var(--code-highlight);
 	--code-foreground: var(--code-foreground);
@@ -280,6 +281,7 @@
 	--accent: --alpha(var(--color-black) / 4%);
 	--accent-foreground: var(--color-neutral-800);
 	--background: var(--color-white);
+	--diff-surface-glass: var(--background);
 	--border: --alpha(var(--color-black) / 8%);
 	--card: var(--color-white);
 	--card-foreground: var(--color-neutral-800);
@@ -340,6 +342,11 @@
 	--background: color-mix(
 		in srgb,
 		var(--color-neutral-950) 95%,
+		var(--color-white)
+	);
+	--diff-surface-glass: color-mix(
+		in srgb,
+		var(--color-neutral-950) 88%,
 		var(--color-white)
 	);
 	--border: --alpha(var(--color-white) / 6%);
@@ -407,6 +414,10 @@
 	}
 
 	html {
+		--diff-surface: var(--background);
+	}
+
+	html {
 		--pane-surface: var(--pane-surface-opaque);
 		--pane-surface-nested: var(--pane-surface);
 		--pane-surface-backdrop: none;
@@ -422,6 +433,8 @@
 		);
 		--pane-surface-nested: transparent;
 		--pane-surface-backdrop: blur(12px);
+		/* Glass makes the review surface a brighter raised card so code stays readable over the translucent panes. Opaque on purpose. */
+		--diff-surface: var(--diff-surface-glass);
 	}
 
 	body {

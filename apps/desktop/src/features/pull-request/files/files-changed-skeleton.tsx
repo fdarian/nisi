@@ -76,7 +76,7 @@ export function FilesChangedSkeleton(
 						{[0, 1, 2].map((card) => (
 							<div
 								key={card}
-								className="overflow-hidden rounded-xl bg-background"
+								className="overflow-hidden rounded-xl bg-diff-surface"
 							>
 								<DiffFileHeader />
 								<div
