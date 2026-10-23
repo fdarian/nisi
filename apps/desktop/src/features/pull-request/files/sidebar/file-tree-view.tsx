@@ -9,8 +9,10 @@ import type {
 import { FileTree, useFileTree } from "@pierre/trees/react";
 import {
 	type MouseEvent as ReactMouseEvent,
+	type Ref,
 	useCallback,
 	useEffect,
+	useImperativeHandle,
 	useMemo,
 	useRef,
 } from "react";
@@ -52,6 +54,13 @@ type FileTreeViewProps = {
 	onMarkReviewed: (paths: readonly string[]) => void;
 	/** Joined with the row path for "Copy absolute path". */
 	repoRoot: string;
+	ref?: Ref<FileTreeViewHandle>;
+};
+
+/** `@pierre/trees` has no bulk expand/collapse, so this walks every directory handle. */
+export type FileTreeViewHandle = {
+	collapseAll: () => void;
+	expandAll: () => void;
 };
 
 type TreeModel = {
@@ -195,6 +204,7 @@ export function FileTreeView({
 	onSelectPath,
 	onMarkReviewed,
 	repoRoot,
+	ref,
 }: FileTreeViewProps): React.ReactElement {
 	const glassShowing = useNativeGlassShowing();
 	const treeHostRef = useRef<HTMLDivElement>(null);
@@ -282,6 +292,21 @@ export function FileTreeView({
 		model.resetPaths(treePaths, {
 			initialExpandedPaths: collectExpandedDirectoryPaths(model, treePaths),
 		});
+	}, [model, treePaths]);
+
+	useImperativeHandle(ref, () => {
+		const setAllExpanded = (expanded: boolean) => {
+			for (const dirPath of collectAncestorDirectoryPaths(treePaths)) {
+				const item = model.getItem(dirPath);
+				if (item === null || !isDirectoryHandle(item)) continue;
+				if (expanded) item.expand();
+				else item.collapse();
+			}
+		};
+		return {
+			collapseAll: () => setAllExpanded(false),
+			expandAll: () => setAllExpanded(true),
+		};
 	}, [model, treePaths]);
 
 	const statusColorCSS = useMemo(() => buildStatusColorCSS(files), [files]);

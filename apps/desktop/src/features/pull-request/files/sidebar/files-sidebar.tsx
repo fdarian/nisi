@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { FluidHoverHighlight, useFluidHover } from "#/components/fluid-hover";
 import { Empty, EmptyDescription, EmptyTitle } from "#/components/ui/empty";
 import { ScrollArea } from "#/components/ui/scroll-area";
@@ -13,8 +13,10 @@ import { useNativeGlassShowing } from "#/features/settings/window-glass";
 import { CATEGORY_LABELS, groupFilesByCategory } from "#/lib/tree-paths";
 import { useKeyBindings } from "#/lib/use-key-bindings";
 import { filesSidebarClassName } from "../files-changed-layout";
-import { FileTreeView } from "./file-tree-view";
+import { FileTreeView, type FileTreeViewHandle } from "./file-tree-view";
 import { FilesFilter } from "./files-filter";
+import { FilesSidebarHeader } from "./files-sidebar-header";
+import { FilesSidebarRail } from "./files-sidebar-rail";
 import { FlatFileGroup } from "./flat-file-group";
 
 /** The files sidebar's search box: filter by file path (today's default) or grep loaded diff content. */
@@ -24,6 +26,12 @@ type FilesSidebarProps = {
 	files: readonly FileChange[];
 	reviewState: ReadonlyMap<string, ReviewStateEntry>;
 	viewMode: SidebarViewMode;
+	onViewModeChange: (viewMode: SidebarViewMode) => void;
+	hideReviewed: boolean;
+	onHideReviewedChange: (hideReviewed: boolean) => void;
+	/** Persisted: the sidebar shrinks to a narrow rail rather than unmounting, so the layout beside it stays put. */
+	collapsed: boolean;
+	onCollapsedChange: (collapsed: boolean) => void;
 	selectedPath: string | null;
 	onSelectPath: (path: string) => void;
 	/** Tree view's right-click "Mark as Reviewed"/"Mark Folder as Reviewed" — a
@@ -52,6 +60,11 @@ export function FilesSidebar({
 	files,
 	reviewState,
 	viewMode,
+	onViewModeChange,
+	hideReviewed,
+	onHideReviewedChange,
+	collapsed,
+	onCollapsedChange,
 	selectedPath,
 	onSelectPath,
 	onMarkReviewed,
@@ -69,13 +82,36 @@ export function FilesSidebar({
 	const groups = useMemo(() => groupFilesByCategory(files), [files]);
 
 	const filterInputRef = useRef<HTMLInputElement>(null);
+	const treeRef = useRef<FileTreeViewHandle>(null);
+	// Initialized from the query so one surviving a tab switch stays visible.
+	const [filterOpen, setFilterOpen] = useState(filterQuery !== "");
+	// Opening mounts the input, so the focus has to wait for the render after.
+	const [focusRequested, setFocusRequested] = useState(false);
+
+	useEffect(() => {
+		if (!focusRequested || !filterOpen || collapsed) return;
+		const input = filterInputRef.current;
+		if (input === null) return;
+		setFocusRequested(false);
+		input.focus();
+		input.select();
+	}, [focusRequested, filterOpen, collapsed]);
+
+	const openFilter = () => {
+		setFilterOpen(true);
+		onCollapsedChange(false);
+		setFocusRequested(true);
+	};
+	const closeFilter = () => {
+		setFilterOpen(false);
+		onFilterQueryChange("");
+	};
 
 	useKeyBindings(
 		{
 			"mod+f": () => {
 				onSearchModeChange("files");
-				filterInputRef.current?.focus();
-				filterInputRef.current?.select();
+				openFilter();
 			},
 			// Not `mod+`-prefixed, so `useKeyBindings` only fires this while no
 			// input/textarea/select/contenteditable has focus (`isTextEntry`) —
@@ -86,23 +122,70 @@ export function FilesSidebar({
 			"/": (event) => {
 				event.preventDefault();
 				onSearchModeChange("keyword");
-				filterInputRef.current?.focus();
-				filterInputRef.current?.select();
+				openFilter();
 			},
 		},
 		{ enabled: shortcutsEnabled },
 	);
 
+	if (collapsed) {
+		return (
+			<FilesSidebarRail
+				onExpand={() => onCollapsedChange(false)}
+				onSearch={openFilter}
+			/>
+		);
+	}
+
+	// Handlers sit on the wrapper, not the input, so focus moving to the mode
+	// dropdown inside it doesn't count as leaving. Events from that dropdown's
+	// portal bubble through React too, hence the `target` checks.
+	const handleFilterKeyDown = (event: React.KeyboardEvent) => {
+		if (event.key === "Escape" && event.target === filterInputRef.current)
+			closeFilter();
+	};
+	const handleFilterBlur = (event: React.FocusEvent) => {
+		const stayedInside =
+			event.relatedTarget instanceof Node &&
+			event.currentTarget.contains(event.relatedTarget);
+		if (
+			event.target === filterInputRef.current &&
+			!stayedInside &&
+			filterQuery === ""
+		)
+			setFilterOpen(false);
+	};
+
 	return (
 		<div className={filesSidebarClassName}>
-			<FilesFilter
-				query={filterQuery}
-				mode={searchMode}
-				inputRef={filterInputRef}
-				onQueryChange={onFilterQueryChange}
-				onModeChange={onSearchModeChange}
-				onSubmit={onQuerySubmit}
+			<FilesSidebarHeader
+				fileCount={files.length}
+				hideReviewed={hideReviewed}
+				onCollapseAllFolders={() => treeRef.current?.collapseAll()}
+				onCollapseSidebar={() => onCollapsedChange(true)}
+				onExpandAllFolders={() => treeRef.current?.expandAll()}
+				onHideReviewedChange={onHideReviewedChange}
+				onSearch={openFilter}
+				onViewModeChange={onViewModeChange}
+				viewMode={viewMode}
 			/>
+			{filterOpen && (
+				// biome-ignore lint/a11y/noStaticElementInteractions: propagation boundary only; the input inside owns the interaction.
+				<div
+					className="shrink-0"
+					onBlur={handleFilterBlur}
+					onKeyDown={handleFilterKeyDown}
+				>
+					<FilesFilter
+						query={filterQuery}
+						mode={searchMode}
+						inputRef={filterInputRef}
+						onQueryChange={onFilterQueryChange}
+						onModeChange={onSearchModeChange}
+						onSubmit={onQuerySubmit}
+					/>
+				</div>
+			)}
 			<div data-files-data className="flex min-h-0 flex-1 flex-col">
 				{groups.length === 0 ? (
 					<Empty className="px-4 py-8">
@@ -115,6 +198,7 @@ export function FilesSidebar({
 					// height away and stop it windowing rows. Flat mode has no scroller
 					// of its own, so it keeps the `ScrollArea`.
 					<FileTreeView
+						ref={treeRef}
 						files={files}
 						onMarkReviewed={onMarkReviewed}
 						onSelectPath={onSelectPath}

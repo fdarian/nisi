@@ -27,6 +27,8 @@ import type { SearchMode } from "#/features/pull-request/files/sidebar/files-sid
 import { FilesSidebar } from "#/features/pull-request/files/sidebar/files-sidebar";
 import {
 	useDiffStyleMode,
+	useFilesSidebarCollapsed,
+	useHideReviewed,
 	usePreferredEditor,
 	useSidebarViewMode,
 	useWrapLines,
@@ -148,7 +150,10 @@ export function FilesChangedView({
 		[setCurrentMatchIndex],
 	);
 
-	const viewMode = useSidebarViewMode(orpc)[0];
+	const [viewMode, setViewMode] = useSidebarViewMode(orpc);
+	const [hideReviewed, setHideReviewed] = useHideReviewed(orpc);
+	const [sidebarCollapsed, setSidebarCollapsed] =
+		useFilesSidebarCollapsed(orpc);
 	const diffStyle = useDiffStyleMode(orpc)[0];
 	const wrapLines = useWrapLines(orpc)[0];
 	const [preferredEditor, setPreferredEditor] = usePreferredEditor(orpc);
@@ -523,6 +528,11 @@ export function FilesChangedView({
 					searchMode={searchMode}
 					selectedPath={selectedPath}
 					viewMode={viewMode}
+					onViewModeChange={setViewMode}
+					hideReviewed={hideReviewed}
+					onHideReviewedChange={setHideReviewed}
+					collapsed={sidebarCollapsed}
+					onCollapsedChange={setSidebarCollapsed}
 				/>
 
 				<div className={filesMainClassName}>
