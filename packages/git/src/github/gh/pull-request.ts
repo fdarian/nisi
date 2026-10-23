@@ -216,7 +216,7 @@ const toPullRequestSearchResult = (
  * phase's report).
  */
 const STATE_QUALIFIER_PATTERN =
-	/(?:^|\s)-?(?:(?:state|is):(?:open|closed|merged)\b|(?:closed|merged):)/i;
+	/(?:^|\s)-?(?:(?:state|is):(?:open|closed|merged)\b|(?:closed|merged):\S)/i;
 
 const hasStateQualifier = (query: string): boolean =>
 	STATE_QUALIFIER_PATTERN.test(query);
@@ -239,7 +239,7 @@ const SEARCH_QUERY = `query($q: String!, $n: Int!) {
 }`;
 export const SEARCH_LIMIT = 30;
 
-export const RECENTLY_CLOSED_WINDOW_DAYS = 7;
+const RECENTLY_CLOSED_WINDOW_DAYS = 7;
 
 /** `is:closed` on GitHub includes merged PRs, which is intended. */
 const modeStateQualifiers = (
@@ -413,6 +413,17 @@ export const searchPullRequests = (
 	ChildProcessSpawner.ChildProcessSpawner
 > =>
 	Effect.gen(function* () {
+		const searchScopes = (
+			terms: ReadonlyArray<string>,
+			scopes: ReadonlyArray<string>,
+			stateQualifiers: ReadonlyArray<string>,
+		) =>
+			Effect.all(
+				scopes.map((scope) =>
+					searchOnce(cwd, terms, [scope, ...stateQualifiers]),
+				),
+				{ concurrency: "unbounded" },
+			).pipe(Effect.map((perScope) => mergeResults(perScope.flat())));
 		const trimmed = query.trim();
 		const stateQualifiers = hasStateQualifier(trimmed)
 			? []
@@ -425,11 +436,11 @@ export const searchPullRequests = (
 		}
 
 		if (trimmed === "") {
-			return yield* searchOnce(
-				cwd,
+			return yield* searchScopes(
 				[],
-				["author:@me", ...stateQualifiers],
-			).pipe(Effect.map(mergeResults));
+				state === "closed" ? ["author:@me", "reviewed-by:@me"] : ["author:@me"],
+				stateQualifiers,
+			);
 		}
 
 		const terms = tokenize(trimmed);
@@ -440,16 +451,12 @@ export const searchPullRequests = (
 			);
 		}
 
-		return yield* Effect.all(
-			[
-				searchOnce(cwd, terms, ["author:@me", ...stateQualifiers]),
-				searchOnce(cwd, terms, ["review-requested:@me", ...stateQualifiers]),
-			],
-			{ concurrency: "unbounded" },
-		).pipe(
-			Effect.map(([authored, reviewRequested]) =>
-				mergeResults([...authored, ...reviewRequested]),
-			),
+		return yield* searchScopes(
+			terms,
+			state === "closed"
+				? ["author:@me", "review-requested:@me", "reviewed-by:@me"]
+				: ["author:@me", "review-requested:@me"],
+			stateQualifiers,
 		);
 	});
 

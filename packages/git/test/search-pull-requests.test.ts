@@ -203,18 +203,50 @@ describe("searchPullRequests", () => {
 		expect(q).toBe("is:pr repo:acme/widgets is:merged sort:updated-desc");
 	});
 
-	test("closed mode unions author and review-requested for a typed query", async () => {
+	test("closed mode on a blank query unions author and reviewed-by, since GitHub drops review-requested once a review is submitted", async () => {
+		const queries = await searchedQueries("", [], "closed");
+		expect([...queries].sort()).toEqual([
+			`is:pr author:@me is:closed closed:>=${CLOSED_CUTOFF} sort:updated-desc`,
+			`is:pr reviewed-by:@me is:closed closed:>=${CLOSED_CUTOFF} sort:updated-desc`,
+		]);
+		const result = await runAgainstGhStub("", [], "closed");
+		expect(result.ok).toBe(true);
+		if (!result.ok) return;
+		expect(result.results.map((r) => r.number)).toEqual([40, 30, 10]);
+	});
+
+	test("closed mode unions author, review-requested and reviewed-by for a typed query", async () => {
 		const queries = await searchedQueries("engine", [], "closed");
 		expect([...queries].sort()).toEqual([
 			`is:pr engine author:@me is:closed closed:>=${CLOSED_CUTOFF} sort:updated-desc`,
 			`is:pr engine review-requested:@me is:closed closed:>=${CLOSED_CUTOFF} sort:updated-desc`,
+			`is:pr engine reviewed-by:@me is:closed closed:>=${CLOSED_CUTOFF} sort:updated-desc`,
 		]);
+		const result = await runAgainstGhStub("engine", [], "closed");
+		expect(result.ok).toBe(true);
+		if (!result.ok) return;
+		expect(result.results.map((r) => r.number)).toEqual([40, 30, 10, 20]);
+	});
+
+	test("open mode never searches reviewed-by", async () => {
+		const queries = await searchedQueries("engine", [], "open");
+		expect(queries.some((q) => q.includes("reviewed-by:"))).toBe(false);
 	});
 
 	test("open mode adds is:open", async () => {
 		const [q] = await searchedQueries("", [], "open");
 		expect(q).toBe("is:pr author:@me is:open sort:updated-desc");
 	});
+
+	for (const typed of [
+		"repo:acme/widgets merged: bad rebase",
+		"repo:acme/widgets closed:",
+	]) {
+		test(`a state-named word without a value is free text and keeps the mode's qualifiers: ${typed}`, async () => {
+			const [q] = await searchedQueries(typed, [], "open");
+			expect(q).toBe(`is:pr ${typed} is:open sort:updated-desc`);
+		});
+	}
 
 	for (const typed of [
 		"repo:acme/widgets closed:>=2026-10-01",

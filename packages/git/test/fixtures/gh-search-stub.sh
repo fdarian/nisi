@@ -64,7 +64,7 @@ pr() {
 }
 printf '{"data":{"search":{"nodes":['
 if has "repo:acme/widgets"; then
-	if has "author:@me" || has "review-requested:@me"; then
+	if has "author:@me" || has "review-requested:@me" || has "reviewed-by:@me"; then
 		echo 'unexpected scope' >&2
 		exit 1
 	fi
@@ -77,6 +77,8 @@ elif has "review-requested:@me"; then
 	pr 20 'Review requested PR' bob 2 false UNKNOWN UNKNOWN null
 	printf ','
 	pr 30 'Shared PR' carol 5 false CONFLICTING DIRTY '{"state":"FAILURE"}'
+elif has "reviewed-by:@me"; then
+	pr 40 'Reviewed PR' dave 6 false MERGEABLE CLEAN null
 else
 	if ! has "author:@me" || { ! has "is:open" && ! has "is:closed"; }; then
 		echo 'missing default scope' >&2
