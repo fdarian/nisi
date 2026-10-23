@@ -8,7 +8,6 @@ import {
 	filesSidebarClassName,
 } from "./files-changed-layout";
 import { FilesViewedToolbar } from "./files-viewed-toolbar";
-import { FilesFilter } from "./sidebar/files-filter";
 
 const treeRows = [0, 1, 2, 2, 2, 1, 2, 2, 1, 2].map((depth, index) => ({
 	id: `row-${index}`,
@@ -46,7 +45,9 @@ export function FilesChangedSkeleton(
 			aria-label="Loading changed files"
 		>
 			<div className={filesSidebarClassName}>
-				<FilesFilter disabled query="" mode="files" />
+				<div className="flex h-9 shrink-0 items-center pr-2 pl-3" aria-hidden>
+					<Skeleton className="h-2 w-12" />
+				</div>
 				<div data-files-data className="px-2" aria-hidden>
 					{treeRows.map((row) => (
 						<div
