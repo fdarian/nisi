@@ -437,11 +437,17 @@ export function OpenPullRequestPalette(
 												}}
 												value={row}
 											>
-												<ListFilterIcon className="text-muted-foreground" />
-												Filter by
-												<Badge size="sm" variant="outline">
-													Recently closed
-												</Badge>
+												<div className="flex min-w-0 flex-1 items-center gap-2.5">
+													<ListFilterIcon className="size-3.5 shrink-0 text-muted-foreground" />
+													<div className="flex min-w-0 items-center gap-2">
+														<span className="text-muted-foreground">
+															Filter by
+														</span>
+														<span className="rounded-md bg-foreground/10 px-2 py-0.5 text-xs">
+															Recently closed
+														</span>
+													</div>
+												</div>
 											</CommandItem>
 										) : (
 											<CommandItem
