@@ -334,7 +334,7 @@ export function LocationPane({
 			 */}
 			<DiffCodeView
 				className={cn(
-					"min-h-0 w-full flex-1 overflow-auto overscroll-contain px-3 [contain:strict]",
+					"min-h-0 w-full flex-1 overflow-auto overscroll-contain [--diff-viewport-inset:calc(var(--spacing)*3)] px-(--diff-viewport-inset) diff-viewport-corners [contain:strict]",
 					"[&_diffs-container]:[clip-path:inset(0_round_var(--radius-xl))]",
 				)}
 				highlighterOptions={diffTheme.highlighterOptions}

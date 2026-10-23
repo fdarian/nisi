@@ -361,48 +361,14 @@ export function diffCardHeaderClassName(collapsed: boolean): string {
  */
 export const diffCardChromeCSS = `
 	/**
-	 * A rounded corner has to be *painted*, not cut out: everything stacked
-	 * behind a pinned header — the \`<pre>\`, whose box runs right past it, and
-	 * the host — is an opaque full-width rectangle at that scroll position, so
-	 * a corner that merely clips the header away reveals a hard square of
-	 * \`--diffs-bg\` instead of the surface the card sits on.
-	 *
-	 * \`[data-diffs-header]\` is @pierre/diffs' own wrapper around the
-	 * \`<slot>\` our header renders into: header-sized, pinned, and painted
-	 * above the \`<pre>\`. Filling it with the pane's own surface turns it into
-	 * the backdrop the header's rounded corners cut into — so they read as
-	 * corners at any scroll position, and in any state, without this having to
-	 * know whether the card is collapsed.
-	 *
-	 * \`--pane-surface-nested\` is declared in \`index.css\` and reaches here by
-	 * inheriting through the shadow boundary, the same way
-	 * \`diffViewUnsafeCSS\`'s \`--font-mono\` etc. do. Under native window
-	 * glass it is transparent (the frame behind already paints the fill), so
-	 * \`--pane-surface-backdrop\` (\`none\` otherwise) frosts the scrolled code
-	 * that would otherwise show through the corner cutouts.
-	 *
-	 * The blur applies only while the header is stuck: always-on, it would
-	 * re-composite the translucent frame behind it and paint a visible square
-	 * behind the rounded header even at rest. A container query styles
-	 * descendants, not the container, so the blur sits on the header's
-	 * \`<slot>\` (its only child, \`createFileHeaderElement.js\`), made a box
-	 * with \`display: block\` — the slotted header is block-level \`h-11\`, so
-	 * the header's height is unchanged.
+	 * Transparent, not a fill: the pinned header's rounded top corners are cut
+	 * out of everything the scroller paints by its \`diff-viewport-corners\`
+	 * mask (\`index.css\`), so nothing behind them needs painting to match.
+	 * Pierre's own \`[data-diffs-header][data-sticky]\` rule would otherwise
+	 * fill it with \`--diffs-bg\`, which shows as a white square in the corners.
 	 */
 	[data-diffs-header] {
-		background-color: var(--pane-surface-nested, var(--diffs-bg));
-		container-type: scroll-state;
-	}
-
-	[data-diffs-header] > slot {
-		display: block;
-	}
-
-	@container scroll-state(stuck: top) {
-		[data-diffs-header] > slot {
-			-webkit-backdrop-filter: var(--pane-surface-backdrop, none);
-			backdrop-filter: var(--pane-surface-backdrop, none);
-		}
+		background-color: transparent;
 	}
 
 	/**
