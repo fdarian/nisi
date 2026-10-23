@@ -352,17 +352,18 @@ export function syncDecorationIconStyle(treeHost: HTMLElement | null): boolean {
 const FLUID_HOVER_STYLE_ATTRIBUTE = "data-nisi-fluid-hover";
 
 /**
- * The shared highlight (`FluidHoverHighlight`) replaces the per-row `:hover`
- * fill, so plain hover goes transparent. The row whose context menu is open
- * stays filled: the pointer moves into the menu and the highlight stops
- * following it, but the row should stay lit. Selected rows keep their fill.
+ * The shared highlight (`FluidHoverHighlight`) replaces the tree's own hover
+ * fill, which the library paints both on `:hover` and on
+ * `data-item-context-hover` — set for the row under the pointer, not only for
+ * an open menu's row — so both have to go transparent or the native fill races
+ * the gliding highlight. Selected rows keep their fill.
  * `--truncate-marker-background-color` is pinned to the surface because the
  * truncation marker paints an opaque patch that would otherwise inherit the
  * now-transparent tree background.
  */
 function buildFluidHoverCSS(): string {
 	return `
-[data-type="item"]:hover:not([data-item-context-hover="true"]):not([data-item-selected="true"]) {
+[data-type="item"]:is(:hover, [data-item-context-hover="true"]):not([data-item-selected="true"]) {
 	background-color: transparent;
 }
 
