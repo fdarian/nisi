@@ -1,5 +1,6 @@
 "use client";
 
+import { cn } from "cn";
 import { useCallback, useMemo, useRef, useState } from "react";
 import { toastManager } from "#/components/ui/toast";
 import {
@@ -535,7 +536,10 @@ export function FilesChangedView({
 					onCollapsedChange={setSidebarCollapsed}
 				/>
 
-				<div className={filesMainClassName}>
+				{/* The sidebar owns the gap beside the diff column, so this view drops the column's start inset (the Guide reuses `filesMainClassName` and keeps it). */}
+				<div
+					className={cn(filesMainClassName, "[--diff-pane-inset-start:0px]")}
+				>
 					<FilesViewedToolbar
 						orpc={orpc}
 						counts={
@@ -571,7 +575,7 @@ export function FilesChangedView({
 						wrapLines={wrapLines}
 					/>
 					{isKeywordFilterActive && (
-						<div className="mx-3 flex shrink-0 items-center justify-center rounded-xl bg-background px-3 py-1.5 text-muted-foreground text-xs">
+						<div className="ml-(--diff-pane-inset-start,var(--spacing-diff-pane-inset)) mr-diff-pane-inset flex shrink-0 items-center justify-center rounded-xl bg-background px-3 py-1.5 text-muted-foreground text-xs">
 							{keywordMatches.length === 0 ? (
 								<span>No matches</span>
 							) : (

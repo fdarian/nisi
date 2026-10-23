@@ -109,6 +109,7 @@ export function FilesSidebar({
 
 	useKeyBindings(
 		{
+			"mod+b": () => onCollapsedChange(!collapsed),
 			"mod+f": () => {
 				onSearchModeChange("files");
 				openFilter();

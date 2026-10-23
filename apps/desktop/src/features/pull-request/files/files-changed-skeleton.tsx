@@ -1,3 +1,4 @@
+import { cn } from "cn";
 import { Skeleton } from "#/components/ui/skeleton";
 import { diffCodeViewLayout } from "#/features/diff/diff-view-theme";
 import type { SidecarQueryUtils } from "#/infra/backend-context";
@@ -45,15 +46,15 @@ export function FilesChangedSkeleton(
 			aria-label="Loading changed files"
 		>
 			<div className={filesSidebarClassName}>
-				<div className="flex h-9 shrink-0 items-center pr-2 pl-3" aria-hidden>
+				<div className="flex h-9 shrink-0 items-center pl-2" aria-hidden>
 					<Skeleton className="h-2 w-12" />
 				</div>
-				<div data-files-data className="px-2" aria-hidden>
+				<div data-files-data aria-hidden>
 					{treeRows.map((row) => (
 						<div
 							key={row.id}
 							className="flex h-7 items-center gap-2"
-							style={{ paddingLeft: 12 + row.depth * 16 }}
+							style={{ paddingLeft: 8 + row.depth * 16 }}
 						>
 							<Skeleton className="size-3.5 shrink-0" />
 							<Skeleton className="h-2" style={{ width: row.width }} />
@@ -61,13 +62,13 @@ export function FilesChangedSkeleton(
 					))}
 				</div>
 			</div>
-			<div className={filesMainClassName}>
+			<div className={cn(filesMainClassName, "[--diff-pane-inset-start:0px]")}>
 				{props.toolbarVisible !== false ? (
 					<FilesViewedToolbar orpc={props.orpc} />
 				) : (
 					<div className="h-12 shrink-0 sm:h-11" aria-hidden />
 				)}
-				<div className="min-h-0 flex-1 overflow-hidden bg-pane-surface-nested px-3">
+				<div className="min-h-0 flex-1 overflow-hidden bg-pane-surface-nested pr-diff-pane-inset">
 					<div
 						className="flex flex-col"
 						style={{ gap: diffCodeViewLayout.gap }}

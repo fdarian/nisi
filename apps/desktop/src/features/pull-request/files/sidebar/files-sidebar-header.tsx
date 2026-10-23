@@ -25,7 +25,7 @@ export function FilesSidebarHeader(props: {
 	onExpandAllFolders: () => void;
 }): React.ReactElement {
 	return (
-		<div className="flex h-9 shrink-0 items-center justify-between pr-2 pl-3">
+		<div className="flex h-9 shrink-0 items-center justify-between pl-2">
 			<span className="text-muted-foreground text-xs">
 				{props.fileCount} {props.fileCount === 1 ? "file" : "files"}
 			</span>
@@ -86,6 +86,7 @@ export function FilesSidebarHeader(props: {
 					icon={<PanelLeftCloseIcon />}
 					label="Collapse sidebar"
 					onClick={props.onCollapseSidebar}
+					shortcut="⌘B"
 				/>
 			</div>
 		</div>

@@ -27,7 +27,7 @@ export function FilesFilter(props: {
 	const localRef = useRef<HTMLInputElement>(null);
 	const inputRef = props.inputRef === undefined ? localRef : props.inputRef;
 	return (
-		<div className="px-2 pb-2">
+		<div className="pb-2">
 			<InputGroup>
 				<InputGroupAddon>
 					<SearchIcon className="size-3.5" />
