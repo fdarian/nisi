@@ -7,6 +7,7 @@ import {
 	useMesurerEnabled,
 	useToastOnRefetch,
 } from "./dev-tool-context";
+import { isReactScanEnabled, setReactScanEnabled } from "./react-scan";
 
 /** The dev-only grab-handle button, now doubling as the trigger for the devtool popover — see `dev-tool-context.tsx`. */
 export function DevToolButton(): React.ReactElement {
@@ -30,6 +31,7 @@ function DevToolOptions(): React.ReactElement {
 		<div className="flex flex-col gap-3">
 			<AgentationOption />
 			<MesurerOption />
+			<ReactScanOption />
 			{isFilesChangedActive ? (
 				<ToastOnRefetchOption />
 			) : (
@@ -70,6 +72,21 @@ function MesurerOption(): React.ReactElement {
 				checked={mesurerEnabled}
 				id={MESURER_ID}
 				onCheckedChange={setMesurerEnabled}
+			/>
+		</div>
+	);
+}
+
+const REACT_SCAN_ID = "devtool-react-scan";
+
+function ReactScanOption(): React.ReactElement {
+	return (
+		<div className="flex items-center justify-between gap-3 text-sm">
+			<label htmlFor={REACT_SCAN_ID}>React Scan</label>
+			<Switch
+				checked={isReactScanEnabled()}
+				id={REACT_SCAN_ID}
+				onCheckedChange={setReactScanEnabled}
 			/>
 		</div>
 	);

@@ -1,3 +1,5 @@
+// Must be the first import: react-scan hooks __REACT_DEVTOOLS_GLOBAL_HOOK__ before react-dom evaluates.
+import "#/features/devtools/react-scan";
 import "./index.css";
 import { QueryClient } from "@tanstack/react-query";
 import { PersistQueryClientProvider } from "@tanstack/react-query-persist-client";
