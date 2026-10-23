@@ -346,7 +346,7 @@
 	);
 	--diff-surface-glass: color-mix(
 		in srgb,
-		var(--color-neutral-950) 88%,
+		var(--color-neutral-950) 92%,
 		var(--color-white)
 	);
 	--border: --alpha(var(--color-white) / 6%);
