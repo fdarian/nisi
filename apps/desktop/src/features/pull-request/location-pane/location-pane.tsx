@@ -279,27 +279,29 @@ export function LocationPane({
 			annotation:
 				| LineAnnotation<ReferenceAnnotationMetadata>
 				| DiffLineAnnotation<ReferenceAnnotationMetadata>,
-		) => (
-			<div
-				className={cn(
-					"flex flex-col items-center gap-2 px-3 py-6 text-center text-xs",
-					annotation.metadata.type === "reviewed-empty"
-						? "text-muted-foreground"
-						: "text-destructive-foreground",
-				)}
-			>
-				<span>{annotation.metadata.message}</span>
-				{annotation.metadata.action && (
-					<button
-						className="rounded border px-1.5 py-0.5 font-medium text-foreground hover:bg-accent"
-						onClick={annotation.metadata.action.onClick}
-						type="button"
-					>
-						{annotation.metadata.action.label}
-					</button>
-				)}
-			</div>
-		),
+		) => {
+			return (
+				<div
+					className={cn(
+						"flex flex-col items-center gap-2 px-3 py-6 text-center text-xs",
+						annotation.metadata.type === "reviewed-empty"
+							? "text-muted-foreground"
+							: "text-destructive-foreground",
+					)}
+				>
+					<span>{annotation.metadata.message}</span>
+					{annotation.metadata.action && (
+						<button
+							className="rounded border px-1.5 py-0.5 font-medium text-foreground hover:bg-accent"
+							onClick={annotation.metadata.action.onClick}
+							type="button"
+						>
+							{annotation.metadata.action.label}
+						</button>
+					)}
+				</div>
+			);
+		},
 		[],
 	);
 

@@ -11,7 +11,6 @@ The command runs in the repo root, streams its output, exits with the command's 
 ## Which commands
 
 Record the repo's standard check commands: whatever its package scripts, CI config, or AGENTS.md / CLAUDE.md say a change must pass (type check, lint, tests, build). If the default test script doesn't cover the tests you touched or added (a different package, a filtered run, a separate runner), record an explicit command that does, for example `nisi guide check "Parser tests" -- "cd packages/parser && bun test"`. A green default script that never ran your tests vouches for nothing.
-
 - **The command** is either an argv after `--` (`nisi guide check "Type check" -- pnpm turbo run check:type`; run directly) or one quoted shell line for `cd` and `&&`: `nisi guide check "Desktop tests" -- "cd apps/desktop && bun test"`. The title is always one argument, so quote it.
 - **No app needed.** Unlike `validate` and `render`, `check` never talks to the sidecar.
 - **Read-only commands only.** `nisi guide check` warns, without stopping, when the command looks like it writes (`--write`, `--fix`, `-w`, `format`): a check that rewrites files records a pass for code it just changed.

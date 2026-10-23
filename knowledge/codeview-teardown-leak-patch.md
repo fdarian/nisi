@@ -1,4 +1,5 @@
 ---
+
 type: Decision
 title: The @pierre/diffs CodeView teardown leak patch
 description: cleanAllRenderedItems() only released items inside the last virtualization window, so items scrolled out of view before a tab closed stayed pinned to the worker-pool singleton forever.
@@ -6,14 +7,15 @@ tags: [frontend, performance, pierre, patches]
 status: stable
 generated: { by: claude-code/claude-sonnet-5, at: 2026-08-10T00:00:00Z }
 sources:
-  - id: verify
-    resource: verifying-frontend-changes.md
-    title: Verifying a frontend change
+- id: verify
+  resource: verifying-frontend-changes.md
+  title: Verifying a frontend change
+
 ---
 
 # Why the patch exists
 
-`CodeView.cleanAllRenderedItems()` (`patches/@pierre%2Fdiffs@1.5.2.patch`) only walked
+`CodeView.cleanAllRenderedItems()` (`patches/@pierre%2Fdiffs@1.6.1.patch`) only walked
 `this.renderState.firstIndex..lastIndex` — the last virtualization window — before `reset()` wiped
 that bookkeeping. Any item scrolled out of view before teardown was skipped, so its
 `VirtualizedFile`/`VirtualizedFileDiff` stayed subscribed to the worker-pool singleton's
@@ -22,9 +24,9 @@ diff text. `reconcileItems()` already swept the full `this.items` array on updat
 never matched it. The patch makes `cleanAllRenderedItems()` do the same full sweep, and also clears
 the `window.__INSTANCE` debug hook in `cleanUp()` so it stops pinning the last-mounted `CodeView`.
 
-Upstream 1.5.2 still hasn't fixed either half: `cleanAllRenderedItems()` is still the same
+Upstream 1.6.1 still hasn't fixed either half: `cleanAllRenderedItems()` is still the same
 `firstIndex..lastIndex` early-return loop, and `cleanUp()`'s teardown path still never clears
-`window.__INSTANCE`. The patch remains necessary in 1.5.2. The `__INSTANCE` clear sits before
+`window.__INSTANCE`. The patch remains necessary in 1.6.1. The `__INSTANCE` clear sits before
 `cleanUp()` rethrows a caught `reset()` failure, so it still runs when `reset()` throws.
 
 # What's still open
@@ -33,7 +35,7 @@ Measured against 1.3.6 with the [CDP heap-retention protocol](verifying-frontend
 orphaned `themeSubscribers` at zero open tabs went from 11 to 1, and heap retention after closing all
 tabs went from 78% of what opening the tabs had added down to ~45%. Both numbers are non-zero — one
 subscriber still survives teardown, and the residual ~45% retention hasn't been traced to a cause.
-These numbers haven't been re-measured against 1.5.2; the next investigation should start there
+These numbers haven't been re-measured against 1.6.1; the next investigation should start there
 rather than assume this patch closed the leak completely.
 
 [^verify]: Verifying a frontend change

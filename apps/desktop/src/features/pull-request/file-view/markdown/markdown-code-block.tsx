@@ -88,12 +88,15 @@ export function MarkdownCodeBlock(
 					langs: [language],
 					themes: [lightTheme, darkTheme],
 				});
-				const html = highlighter.codeToHtml(source, {
-					defaultColor: false,
-					lang: language,
-					tabindex: false,
-					themes: { dark: darkTheme, light: lightTheme },
-				});
+				// @pierre/diffs 1.6 always stamps tabindex="0" on the <pre> and dropped the shiki
+				// `tabindex: false` option; strip it so static code blocks stay out of the tab order.
+				const html = highlighter
+					.codeToHtml(source, {
+						defaultColor: false,
+						lang: language,
+						themes: { dark: darkTheme, light: lightTheme },
+					})
+					.replace(' tabindex="0"', "");
 
 				if (!cancellation.cancelled) {
 					setHighlightState({ html, key: highlightKey, status: "ready" });

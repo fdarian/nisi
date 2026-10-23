@@ -9,7 +9,6 @@ unlike `sidecar/walkthrough`, nothing here restricts one either (see `sessions.t
 a structured document validated turn by turn, so there's no coverage loop, no persistence, and no
 reattach/pub-sub: `http.ts`'s `chat.send` handler drives one turn directly against the request's
 own connection.
-
 - `context.ts` — `resolveChatPromptContext`: `sessionId` → the live, worktree-relocation-healed
   `repoRoot` (`Store.resolveSessionRepoRoot`) plus enough of the review session (`baseRef`/`headRef`/
   `pr`) to name in the system prompt. Throws `ChatSessionNotFound` for an unknown `sessionId`, same
@@ -27,7 +26,7 @@ own connection.
   or that thread's harness subprocess/sandbox leaks for the rest of the sidecar's lifetime.
   `http.ts`'s `sessions.close` handler calls `closeChatThreadsForSession` the same way it already
   stops `walkthrough`'s live session. A thread's `pending` field is the in-flight construction
-  *promise*, not the resolved session, so two `chat.send` calls racing on a brand-new thread both
+  _promise_, not the resolved session, so two `chat.send` calls racing on a brand-new thread both
   await the same construction instead of each starting (and leaking) their own sandbox. The three
   module-level `getOrCreateChatSession`/`closeChatThread`/`closeChatThreadsForSession` exports are
   the promise-returning bridge `chat.send`'s plain `async function*` handler calls — it can't
@@ -38,9 +37,9 @@ own connection.
   design (`packages/sidecar-api/src/chat.ts`'s doc), no stored fallback to reattach to.
 - `stream.ts` — `streamChatTurn`: runs one turn and forwards it as AI SDK's own `UIMessageChunk`
   stream — no hand-rolled `fullStream` projection the way `walkthrough/generate.ts`'s turn loop has
-  one. Calls the *standalone* `toUIMessageStream({ stream, tools })` helper from `ai`, not
+  one. Calls the _standalone_ `toUIMessageStream({ stream, tools })` helper from `ai`, not
   `result`'s own (deprecated) instance method of the same name: the instance method always turns
-  *every* `fullStream` `"error"` part into a visible chunk, including `sidecar/harness`'s
+  _every_ `fullStream` `"error"` part into a visible chunk, including `sidecar/harness`'s
   `describeStreamError`-classified meaningless ones, and `onError` can't suppress a chunk, only its
   message. `filterMeaninglessStreamErrors` drops that part first, on the raw `TextStreamPart`
   stream, before AI SDK ever sees it. See the function's own doc for which of

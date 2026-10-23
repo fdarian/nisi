@@ -4,7 +4,6 @@ Domain-agnostic harness-adapter plumbing: which CLI backs each `HarnessId`, whet
 which models it offers, how to build a live `HarnessV1` adapter, and how to sandbox one against a
 review session's worktree. Every feature that drives `@ai-sdk/harness/agent`'s `HarnessAgent`
 against a review session imports from this directory rather than reaching into another feature's.
-
 - `harness-bin.ts` — `HARNESS_CLI_BIN`, the one map of harness → CLI binary name + env override var
   (`claude`/`codex`/`opencode`; Pi has no entry, see `availability.ts`). Single source of truth both
   `model-discovery.ts` (spawning it) and `availability.ts` (checking it's present) resolve through
@@ -57,7 +56,7 @@ against a review session imports from this directory rather than reaching into a
   throwing. `filterMeaninglessStreamErrors` reuses the same judgment (`describeStreamError(error)
   === undefined`) for a different job: dropping a meaningless `error` part from a `TextStreamPart`
   stream entirely, for a caller — `sidecar/chat`'s `stream.ts` — that hands the stream to AI SDK's
-  `toUIMessageStream`, which turns *every* `error` part into a visible chunk unconditionally and
+  `toUIMessageStream`, which turns _every_ `error` part into a visible chunk unconditionally and
   offers no way to suppress one via its `onError` option (that only controls the chunk's message
   text).
 

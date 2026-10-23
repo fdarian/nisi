@@ -4,9 +4,8 @@ Implements `packages/sidecar-api`'s contract. Pure wiring — the actual git/per
 lives in `@repo/git`, `@repo/review`, `@repo/walkthrough`, and `@repo/harness-local`; this directory
 composes them and translates between domain errors and oRPC error codes. See root `AGENTS.md` → "The
 seam" for the port/token handshake this boots into.
-
 - `index.ts` — boot, in two layers with different lifetimes. `EarlyLayer` (`LoggingLive` + Bun
-  platform services) wraps the *whole* program, so even the first "starting up" log line reaches
+  platform services) wraps the _whole_ program, so even the first "starting up" log line reaches
   the rotating file logger. `MainLayer` (`Store` + `WalkthroughStore` + `SettingsStore` +
   `SqliteDb`) is built only after the sidecar claim — deliberately at that nested point instead
   of around the whole program, so `SqliteDb`'s connection (and Drizzle's migrations) can't open
@@ -23,7 +22,7 @@ seam" for the port/token handshake this boots into.
   — and why gating `MainLayer` behind it is what makes that guarantee extend to `app.db` too: two
   cold boots racing on Drizzle's `CREATE TABLE IF NOT EXISTS` migration step is the same class of
   bug one layer down, not a separate one. `@repo/db`'s `busy_timeout`/WAL pragmas (`client.ts`) are
-  the belt-and-suspenders for every *other* concurrent opener of `app.db` (a stray script, a future
+  the belt-and-suspenders for every _other_ concurrent opener of `app.db` (a stray script, a future
   reader) that `acquireSidecar` doesn't cover, since it only ever governs `sidecar.json`.
   `acquireSidecar`'s own doc comment (`deskkit/sidecar`) covers its mechanism in full — atomic `wx`
   create, liveness-checked recovery from a dead owner, and a same-port takeover that skips the
@@ -223,8 +222,8 @@ seam" for the port/token handshake this boots into.
 - `events.ts` — in-memory pub/sub for `events.subscribe`, ported from rheya's sidecar verbatim. oRPC's
   `.effect()` can't return a live async iterator (it resolves the generator via `runPromise`), so
   `events.subscribe` uses the lower-level `.handler(async function* ...)` instead, bridging this
-   module's callback-style `subscribe` into a pull loop woken by a `wake` closure. `walkthrough.generate`
-   uses the same `.handler()` escape hatch, for the same reason.
+  module's callback-style `subscribe` into a pull loop woken by a `wake` closure. `walkthrough.generate`
+  uses the same `.handler()` escape hatch, for the same reason.
 - `open-requests.ts` — process-lifetime pending/terminal open requests and an independent native
   activation backlog. The frontend acknowledges a resolved tab after selecting it (or dismisses a
   failure); the Electron main process acknowledges activation after focusing the window. Each backlog replays independently
@@ -238,7 +237,7 @@ seam" for the port/token handshake this boots into.
   `includeUncommitted` is in the patch). It keeps one live check per open session that is in
   `SessionWatch` or watched by the Guide tab, in a module-level `Map` (same in-memory-state shape as
   `events.ts`'s subscriber `Set`), restarting a check when the setting flips or its worktree moved. A
-  check only decides *when* `checkSessionForChanges` runs: on `ref-watch.ts`'s events with
+  check only decides _when_ `checkSessionForChanges` runs: on `ref-watch.ts`'s events with
   `includeUncommitted` off, or every `POLL_INTERVAL` when that setting is on, the repo layout isn't
   watchable, or the watcher errors. `checkSessionForChanges` stays the single comparator: it diffs the
   session's `@repo/git` change signature against the previous one (module-level `Map`) and emits
@@ -248,7 +247,7 @@ seam" for the port/token handshake this boots into.
   `@repo/git`'s `status`/hashing outright and, when `ref-state.ts` can vouch for the repo layout,
   reads HEAD's movement from `.git/HEAD`/branch ref/`packed-refs` content instead of spawning `git
   rev-parse`; on hashes each dirty path's content. The stored signature carries the mode it was read
-  under alongside the signature itself: a mode flip changes the signature's *shape* for a reason
+  under alongside the signature itself: a mode flip changes the signature's _shape_ for a reason
   unrelated to the repo, so a check that lands right after the user toggles the setting re-baselines
   silently instead of emitting a spurious `session-files-changed` — the frontend already refetches on
   that toggle on its own (folded into its query key). `checkSessionForChanges` resolves `repoRoot` via
@@ -267,16 +266,16 @@ seam" for the port/token handshake this boots into.
   own AGENTS.md.
 - `code-index/state.ts` — the `codeIndex.*` handlers' process-lifetime state, backed by
   `@repo/code-lsp`'s TypeScript 7 native LSP client rather than a prebuilt index. (A SCIP-index-based
-	implementation of this same feature lives on branch `claude/nisi-implementation-cfea93`, for
-	comparison.) `CodeLspPool` is a `Context.Service` wrapping one reference-counted map of live
-	`tsc --lsp --stdio` processes, keyed by the exact worktree root already resolved by
-	`Store.resolveSessionRepoRoot` and capacity-bounded by evicting only idle entries
-	(`MAX_LIVE_LSP_SERVERS`) — part of `index.ts`'s `MainLayer`, so every server dies with the sidecar
-	the same way every other `Effect.acquireRelease` resource does. Each occurrence or references
-	operation holds a scoped lease for its entire LSP request sequence; a full pool of leased servers
-	waits for a lease to release before admitting another root. The pool keeps two roots live: a fully
-	opened root reached roughly 773 MiB RSS in the repository spike, so two allows concurrent reviews
-	without accepting an unbounded multi-gigabyte process set.
+  implementation of this same feature lives on branch `claude/nisi-implementation-cfea93`, for
+  comparison.) `CodeLspPool` is a `Context.Service` wrapping one reference-counted map of live
+  `tsc --lsp --stdio` processes, keyed by the exact worktree root already resolved by
+  `Store.resolveSessionRepoRoot` and capacity-bounded by evicting only idle entries
+  (`MAX_LIVE_LSP_SERVERS`) — part of `index.ts`'s `MainLayer`, so every server dies with the sidecar
+  the same way every other `Effect.acquireRelease` resource does. Each occurrence or references
+  operation holds a scoped lease for its entire LSP request sequence; a full pool of leased servers
+  waits for a lease to release before admitting another root. The pool keeps two roots live: a fully
+  opened root reached roughly 773 MiB RSS in the repository spike, so two allows concurrent reviews
+  without accepting an unbounded multi-gigabyte process set.
   `fileOccurrences`/`references` acquire a root lease lazily and send the current file through
   `@repo/code-lsp`'s `openDocument` before querying. That `didOpen`/full-change signal makes project
   loading deterministic across packages as files are visited; there is no separate build, index, or
@@ -293,7 +292,7 @@ seam" for the port/token handshake this boots into.
   against the installed version — brew itself, not GitHub's release API, since a release can ship
   ahead of the tap. Every brew invocation sets `HOMEBREW_NO_AUTO_UPDATE=1` except the explicit
   `brew update` calls (`homebrew.ts`'s `refreshTap`, and the restart script below) — that env var only
-  suppresses brew's *implicit* auto-update ahead of `install`/`upgrade`/`fetch`, not an explicit
+  suppresses brew's _implicit_ auto-update ahead of `install`/`upgrade`/`fetch`, not an explicit
   `update` command, so `refreshTap` still forces a fresh read of the third-party
   `fdarian/homebrew-tap` clone; `download` runs it right before `brew fetch --cask nisi`, aborting to
   `failed` if the refresh itself fails rather than fetching against a stale tap. `restart-helper.ts`
@@ -314,7 +313,7 @@ seam" for the port/token handshake this boots into.
   and `WalkthroughStore.layer` both need `SqliteDb` (`@repo/db`'s shared connection) and
   `FileSystem`/`ChildProcessSpawner` (via `@repo/review`'s `ReviewStore` and, per-call, `@repo/git`'s
   functions), but oRPC handlers and the walkthrough generation loop also reach some of those services
-  *directly* — plain `provide` would satisfy each layer's own construction-time requirement without
+  _directly_ — plain `provide` would satisfy each layer's own construction-time requirement without
   re-exposing the service for those per-call requirements. Same gotcha documented in
   `packages/review/AGENTS.md`, one layer up, now applied one more time for `ReviewStore` itself
   (`store.ts`'s `Store.layer`) and for `SqliteDb` (shared by both `Store` and `WalkthroughStore`).

@@ -1,6 +1,6 @@
 # @repo/walkthrough
 
-Everything about *what* the walkthrough agent is asked and whether its answer is acceptable — the
+Everything about _what_ the walkthrough agent is asked and whether its answer is acceptable — the
 brief it's given, the markdown document format its answer is written in and the schema that format
 decodes to, the tools it reads and writes through, and the reference validation that turns a broken
 answer into feedback instead of an exception (coverage rides alongside as informational data, never
@@ -10,7 +10,6 @@ SQLite, no process spawning, no network. Depends on `@repo/git` for the diff mod
 already-fetched data (a patch string, a line count) rather than reading files or shelling out.
 Feeds `packages/sidecar-api`'s `walkthrough` contract; consumed by the sidecar together with
 `@repo/harness-local` (the actual agent transport — this package doesn't know it exists).
-
 - `schema.ts` — `Walkthrough`/`Section`/`ReferenceBlock`/`Location` (Effect Schema), plus
   `walkthroughJsonSchema`, generated via `Schema.toJsonSchemaDocument` — never hand-written, so
   the system prompt's schema and the decoder can't drift apart. This is the in-memory/wire/DB
@@ -53,7 +52,7 @@ Feeds `packages/sidecar-api`'s `walkthrough` contract; consumed by the sidecar t
   subpath so the sidecar can import it without pulling in this package's agent/validation
   surface. Schema-only, no I/O — the actual store (open connection, read/write rows) lives in
   `apps/desktop/sidecar`, not here, per this package's no-I/O rule; `db:generate` (mirroring
-  `@repo/review`'s) still lives in this package because the *migrations* are this domain's,
+  `@repo/review`'s) still lives in this package because the _migrations_ are this domain's,
   even though the runtime connection (`@repo/db`'s `SqliteDb`) is shared. The generated bundle
   is exported too, as inert data, via `./db-migrations` (`.gen/migrations.gen.ts`) — the sidecar
   passes it to `@repo/db`'s `applyEmbeddedMigrations` itself, since even calling that is I/O this
@@ -101,7 +100,7 @@ Feeds `packages/sidecar-api`'s `walkthrough` contract; consumed by the sidecar t
   `Schema.toStandardSchemaV1`'s output has no `~standard.jsonSchema` extension, and AI SDK's
   `asSchema()` only derives a JSON Schema from a bare Standard Schema for the `zod` vendor — every
   other vendor needs that extension or gets treated as schema-less. Adapters that must advertise a
-  tool's shape to an *external* process (Claude Code, OpenCode — both drive the model through MCP)
+  tool's shape to an _external_ process (Claude Code, OpenCode — both drive the model through MCP)
   silently got an empty schema this way; confirmed live, the model called `write` with no arguments
   at all, having never seen `content` was a parameter. Codex's adapter doesn't register tools over
   MCP, so it worked either way — don't let that fool you into thinking the bare bridge is sufficient.

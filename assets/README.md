@@ -6,12 +6,12 @@ settled side stays quiet, the open side is the only thing asking for attention �
 argument of the tool. It's a letterform rather than a pictogram because the accent had to be a mass,
 not a detail; a dot marker is under one device pixel at 16px, a stem is not.
 
-| File | Use |
-| --- | --- |
-| `logo.svg` | The mark. Body is `currentColor`, accent is fixed orange. |
-| `logo-mono.svg` | Same geometry, entirely `currentColor` — for one-colour contexts. |
-| `icon.svg` | App icon: the mark on a graphite superellipse, drawn to the macOS grid (824 in a 1024 canvas). |
-| `icon-1024.png` | Render of `icon.svg`, and the master `icon.icns` is generated from. |
+| File            | Use                                                                                            |
+| --------------- | ---------------------------------------------------------------------------------------------- |
+| `logo.svg`      | The mark. Body is `currentColor`, accent is fixed orange.                                      |
+| `logo-mono.svg` | Same geometry, entirely `currentColor` — for one-colour contexts.                              |
+| `icon.svg`      | App icon: the mark on a graphite superellipse, drawn to the macOS grid (824 in a 1024 canvas). |
+| `icon-1024.png` | Render of `icon.svg`, and the master `icon.icns` is generated from.                            |
 
 The packaged app's icon is `apps/desktop/build/icon.icns` (read by `electron-builder.yml`). Regenerate it
 after changing `icon.svg`:

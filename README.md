@@ -8,27 +8,26 @@
 
 **What’s unique about nisi**:
 - <details><summary> Re-review only what changed since you last looked. — Every other tool resets 400 lines of a reviewed file when you only added one nit. nisi snapshots your review and diffs from there.</summary>
-   
-   https://github.com/user-attachments/assets/8f14be35-15bf-4a83-9e25-9d5bc8caacd0
+
+  https://github.com/user-attachments/assets/8f14be35-15bf-4a83-9e25-9d5bc8caacd0
 
    </details> 
 - <details><summary> [Soon] Generated walkthrough — Understand changes, not files. Walkthrough will group related changes (per-hunks not just file) so the diff arrives explained and in reading order, every claim linked to the lines it's about.</summary>
 
-
    > This feature is still unstable, you can enable it in the settings
-   
-   https://github.com/user-attachments/assets/4ca1be20-891a-4f62-8f2b-9c9468c80e76
+
+  https://github.com/user-attachments/assets/4ca1be20-891a-4f62-8f2b-9c9468c80e76
 
   </details>
 
 **With the essentials**:
 - <details><summary> Open with CLI — Run `nisi` anywhere in your repo to **review PR or compare diffs</summary>
-   
-   https://github.com/user-attachments/assets/1c0d96ec-0e86-4086-bf3a-70a0b5cb1ca3
+
+  https://github.com/user-attachments/assets/1c0d96ec-0e86-4086-bf3a-70a0b5cb1ca3
 
   </details>
 - **Fast, and fully local** — Built with [Electron](https://www.electronjs.org/), `gh`, and SQLite
-- *[Soon]* **Bring your own harness** — Use your existing agents and subscription
+- _[Soon]_ **Bring your own harness** — Use your existing agents and subscription
 
 More on [features section](#features)
 
@@ -54,6 +53,7 @@ Apple Silicon only, for now — the release build is arm64.
    nisi shells out to `gh` to find the PR for your branch, and opening one fails without it.
 
 ## Usage
+
 The recommended way to use nisi is to use the CLI:
 ```sh
 nisi
@@ -82,27 +82,27 @@ environment variable, when set, takes precedence.
 ## Features
 
 - Handy, vim-like, keymaps:
-   - <details><summary>j/k to navigate between files;  r to mark reviewed, u to undo last reviewed</summary>
-     
-     https://github.com/user-attachments/assets/a48f47ca-7b33-45e6-903a-1c1536480035
-   
+  - <details><summary>j/k to navigate between files;  r to mark reviewed, u to undo last reviewed</summary>
+
+    https://github.com/user-attachments/assets/a48f47ca-7b33-45e6-903a-1c1536480035
+
     </details>
-    
-   - ⌘+[ / ⌘+] to go back/forward through your file focus history, browser-style
-    
-   - <details><summary> / to search keyword and ⌘+f for files. n/N to focus on the next/previous match</summary> 
-     
-     https://github.com/user-attachments/assets/e740fe41-a73b-423d-9ab3-a3369390f278
-   
+  - ⌘+[ / ⌘+] to go back/forward through your file focus history, browser-style
+
+  - <details><summary> / to search keyword and ⌘+f for files. n/N to focus on the next/previous match</summary> 
+
+    https://github.com/user-attachments/assets/e740fe41-a73b-423d-9ab3-a3369390f278
+
     </details>
-    
+
 - <details><summary>Include uncommitted changes, see new diffs in real-time</summary>
-   
-   https://github.com/user-attachments/assets/1192bbe0-eee3-4260-8d48-ba12ce9ff3df
-  
+
+  https://github.com/user-attachments/assets/1192bbe0-eee3-4260-8d48-ba12ce9ff3df
+
    </details>
 
 ## Acknowledgements
+
 - [pierre diffs](https://diffs.com/) for awesome diff library to make this happen
 - [codiff](https://github.com/nkzw-tech/codiff) and [Linear](https://linear.app/docs/diffs) for leading this movement
 

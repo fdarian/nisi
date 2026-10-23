@@ -94,7 +94,7 @@ keeps two roots live; see the sidecar state comment for the memory rationale.
   caller could do differently) if it ever disagrees.
 - **A position that isn't on an identifier snaps to the nearest one later on the same line rather than
   answering empty.** Only query positions that came from a `semanticTokensFull` token. Genuinely
-  out-of-range positions and syntax-broken files *do* answer cleanly (`references` on nowhere gives
+  out-of-range positions and syntax-broken files _do_ answer cleanly (`references` on nowhere gives
   `[]`; `hover` on unresolvable code can give `null`) — nothing here treats that as an error.
 - **Open documents are the project-loading signal.** `semanticTokensFull` can read a nested file from
   disk without an open notification, but cross-project `references` only sees project trees tsgo has

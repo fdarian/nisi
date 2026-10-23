@@ -1,4 +1,5 @@
 ---
+
 type: Playbook
 title: Verifying a frontend change
 description: How to prove a UI fix actually landed, and why a Shadow DOM assertion fails open.
@@ -6,9 +7,10 @@ tags: [frontend, testing, verification, pierre]
 status: stable
 generated: { by: claude-code/claude-opus-5, at: 2026-07-30T04:19:29Z }
 sources:
-  - id: browser-harness
-    resource: ../apps/desktop/AGENTS.md
-    title: Browser dev harness (apps/desktop/AGENTS.md)
+- id: browser-harness
+  resource: ../apps/desktop/AGENTS.md
+  title: Browser dev harness (apps/desktop/AGENTS.md)
+
 ---
 
 # Browser verification is available, and it is the default
@@ -46,7 +48,6 @@ misalignment. Absence is only evidence once you have shown the probe can detect 
 `performance.memory.usedJSHeapSize` read without forcing a GC first is noise — V8 collects lazily, so
 a reading taken right after closing tabs mixes live retention with garbage not yet swept. Two agents
 independently burned time rediscovering this before landing on a protocol that holds:
-
 - Launch a dedicated Chrome with `--remote-debugging-port` and `--js-flags=--expose-gc`, driven over
   CDP from Bun — not the app's own dev-harness tab, so nothing else shares the process.
 - Call `HeapProfiler.collectGarbage` **twice** before every reading. One pass is not reliable; V8 can

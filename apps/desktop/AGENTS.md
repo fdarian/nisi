@@ -54,6 +54,7 @@ Three parts, one seam:
   token events carry no item/path field of their own to key a per-file occurrence lookup off.
 
 ## The seam
+
 The sidecar binds a port and mints a token, then claims and publishes `{ port, token }` to
 `sidecar.json` in one atomic act — `deskkit/sidecar`'s `acquireSidecar`, wired up in
 `sidecar/index.ts` — in the app-data dir — macOS `~/Library/Application Support/com.nisi.desktop/`
@@ -84,7 +85,6 @@ polling rather than surfacing a hard error — the correctness-critical counterp
 `scripts/dev.ts` and the CLI's `handoff.ts` (`packages/cli`) poll `sidecar.json` through
 `deskkit/sidecar`'s `awaitSidecarHandshake`/`readSidecarJson` — the same package `sidecar/index.ts`
 claims and publishes it with, so both ends of the handshake share one dependency.
-
 - **Dev**: `bun dev` runs `scripts/dev.ts`, a [devsess](https://devsess.fdarian.com/) orchestrator
   (see below) that races the sidecar (`scripts/watch-sidecar.ts`, which restarts a fresh `sidecar/index.ts` process when a file in its import graph changes) against the
   frontend (`Effect.raceAll` — any of them exiting kills the others, via each process's Effect `Scope`).
@@ -114,6 +114,7 @@ claims and publishes it with, so both ends of the handshake share one dependency
   recovers from that on the next boot.
 
 ## The Electron shell
+
 `electron/` is the main process and preload; `electron-builder.yml` packages it. The renderer (`src/`)
 reaches native features only through `window.nisi`, typed by `NativeApi` in `electron/native-api.ts`
 and implemented twice: `preload.ts` (`contextBridge`, one `ipcRenderer` call per method) and the
@@ -121,7 +122,6 @@ and implemented twice: `preload.ts` (`contextBridge`, one `ipcRenderer` call per
 means touching all three. The renderer runs with `contextIsolation` and `sandbox` on, `nodeIntegration`
 off; `renderer-window.ts` denies navigation and `window.open` and routes http(s) targets to
 `shell.openExternal`.
-
 - `main.ts` — lifecycle, window, IPC registration, sidecar spawn (packaged only), `open-url` deep links
   (buffered until the renderer calls `takePendingDeepLinks`; no `requestSingleInstanceLock`, since the
   sidecar lock owns single-instance and a dev instance must coexist with prod).
@@ -173,13 +173,14 @@ Shell gotchas:
   pnpm skips unapproved build scripts, and that script is what downloads the Electron binary. Keep it.
 
 ## Dev/prod isolation
+
 `bun dev` windows show the current Git branch in a reserved footer (`src/shell/dev-branch.tsx`); `build:dev` shows `Build <short commit>` there. `import.meta.env.DEV` excludes it from regular production builds.
 
 Dev and prod both resolve their data dir (`sidecar.json` + `app.db`, see [The seam](#the-seam))
 from `NISI_DATA_DIR`, else `data_dir` in `~/.config/nisi/config.toml`, else the same default —
 `~/Library/Application Support/com.nisi.desktop/`. The Electron main process (`electron/data-dir.ts`) and
 the sidecar side (`@repo/db/paths`) apply identical rules, and the main process hands the resolved dir to
-the sidecar it spawns. A `data_dir` in config.toml is a global override that applies to prod *and*
+the sidecar it spawns. A `data_dir` in config.toml is a global override that applies to prod _and_
 to any dev process whose `NISI_DATA_DIR` is unset; `bun dev` always sets the env var, so it wins.
 With neither set, left alone, that means a `bun dev` sidecar and the production app's sidecar
 fight over the same `sidecar.json` and the same SQLite file, and whichever wrote `sidecar.json`
@@ -203,7 +204,7 @@ Since prod keeps the untouched default (unless you set `data_dir` in config.toml
 There's no flag or auto-detection for this by design (see [The seam](#the-seam) for why
 `packages/cli` doesn't get special-cased here) — and note the override only works this way because
 you set it yourself: devsess sets `NISI_DATA_DIR` only for the subprocesses `dev.ts` itself spawns
-(`runManagedSubprocess` merges `env` into *that child's* environment), never for a separate shell
+(`runManagedSubprocess` merges `env` into _that child's_ environment), never for a separate shell
 you happen to have open. There's no direnv-style magic where opening a terminal "inside" a session
 picks it up automatically.
 
@@ -213,7 +214,7 @@ it; setting `NISI_APP_PATH` (or `NISI_MEASUREMENT_INSTANCE=1`) opts back into th
 sidecar also re-publishes its own `sidecar.json` within ~5s if something deletes it
 (`sidecar/index.ts`'s `keepHandshakePublished`).
 
-Going the other way — a dev sidecar against the *real* app-data dir instead of a session's —
+Going the other way — a dev sidecar against the _real_ app-data dir instead of a session's —
 is `bun dev --prod-data-dir`. Safe to run even while the packaged app is open: it resolves the
 same data dir prod resolves, and `deskkit/sidecar`'s `acquireSidecar` health-checks
 any existing owner and refuses to boot (loudly) rather than splitting the data dir between two
@@ -288,6 +289,7 @@ Two rules if anything else might be working in this checkout at the same time:
   switch moves it out from under everyone. Isolate through `NISI_DATA_DIR` and scratch repos.
 
 ## Storybook
+
 `pnpm run storybook` (port 6006, pinned by `-p` in the script) renders components against fixture
 data instead of a live sidecar — no `bun dev`, no agent CLI run. The `storybook` entry in
 `.claude/launch.json` runs the same server on an `autoPort`-assigned `$PORT` instead of 6006 — that
@@ -301,6 +303,7 @@ over the same file crash the build). `.storybook/mock-orpc.ts`'s `createMockOrpc
 fixture PR lives at `src/features/pull-request/walkthrough/walkthrough.fixture.ts`.
 
 ## Non-obvious decisions
+
 - `tsconfig.json` (the frontend one) is hand-rolled, not `extends: "@total-typescript/tsconfig/..."`
   like `tsconfig.sidecar.json`/`tsconfig.scripts.json` are. The shared preset doesn't set `jsx` or path
   aliases and Vite doesn't use `tsc` to build anyway — this file is purely for editor/type-checking, so
@@ -325,6 +328,7 @@ fixture PR lives at `src/features/pull-request/walkthrough/walkthrough.fixture.t
   whenever a component renders against it again.
 
 ## Gotchas
+
 - `bun dev:vite` is vite-only — no Electron preload, so `window.nisi.getBackend` is missing and the app can't connect. Useful only for
   checking the page renders, not the real connection.
 - `bun run sidecar` runs the sidecar standalone (useful for curl-testing `packages/sidecar-api`'s

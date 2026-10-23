@@ -16,6 +16,22 @@
 						"noSvgWithoutTitle": "off",
 						"noStaticElementInteractions": "off",
 						"useSemanticElements": "off"
+					},
+					"correctness": {
+						"noComponentHookFactories": "off"
+					}
+				}
+			}
+		},
+		{
+			// The rule flags any capitalized key holding a function, so Effect's
+			// `catchTags` handler maps (keyed by error tag) all trip it. The sidecar
+			// has no React.
+			"includes": ["sidecar/**"],
+			"linter": {
+				"rules": {
+					"correctness": {
+						"noComponentHookFactories": "off"
 					}
 				}
 			}

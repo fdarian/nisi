@@ -21,6 +21,7 @@ import type {
 } from "@pierre/diffs";
 import {
 	CodeView,
+	type CodeViewAnnotationArgs,
 	type CodeViewHandle,
 	useWorkerPool,
 	type WorkerInitializationRenderOptions,
@@ -337,6 +338,17 @@ export function DiffCodeView<Metadata>({
 		},
 		[ref],
 	);
+	// CodeView types its callback as a rest of a tuple union (annotation, file, item), and TS
+	// rejects a one-parameter callback against that on arity, so adapt here once instead of at
+	// every call site.
+	const codeViewRenderAnnotation = useMemo(
+		() =>
+			renderAnnotation === undefined
+				? undefined
+				: (...args: CodeViewAnnotationArgs<Metadata>) =>
+						renderAnnotation(args[0]),
+		[renderAnnotation],
+	);
 	useLayoutEffect(() => {
 		if (onCodeViewInstanceChange === undefined || containerGeneration < 0) {
 			return;
@@ -360,7 +372,7 @@ export function DiffCodeView<Metadata>({
 				onSelectedLinesChange={onSelectedLinesChange}
 				options={options}
 				ref={codeViewRef}
-				renderAnnotation={renderAnnotation}
+				renderAnnotation={codeViewRenderAnnotation}
 				renderCustomHeader={renderCustomHeader}
 				selectedLines={selectedLines}
 			/>

@@ -1,4 +1,5 @@
 ---
+
 type: Decision
 title: Why the walkthrough runs on HarnessAgent, not the four CLIs' own SDKs
 description: Driving Claude Code / Codex / OpenCode / Pi directly is the obvious approach and the wrong one.
@@ -6,9 +7,10 @@ tags: [walkthrough, harness, architecture]
 status: stable
 generated: { by: claude-code/claude-opus-5, at: 2026-07-30T04:19:29Z }
 sources:
-  - id: harness-local
-    resource: ../packages/harness-local/AGENTS.md
-    title: packages/harness-local
+- id: harness-local
+  resource: ../packages/harness-local/AGENTS.md
+  title: packages/harness-local
+
 ---
 
 Walkthrough generation goes through AI SDK's `HarnessAgent` plus a local sandbox provider
@@ -26,16 +28,15 @@ workaround for a bug we don't control, in the one adapter that most needs it.
 # What that choice costs
 
 Worth knowing, because both surprise people:
-
 - **The adapters install their own pinned copy of each CLI** rather than exec'ing the user's global
   binary, and there's no config to redirect it. Idempotent via a recipe-hash marker, and because
   this runs on real persistent disk rather than an ephemeral VM, it installs once rather than per
-  session. The user's *credentials* stay theirs — the process runs as them, against their
+  session. The user's _credentials_ stay theirs — the process runs as them, against their
   `~/.claude`, `~/.codex`, and so on.
 - **No adapter exposes an `isAvailable` API.** `HarnessInfo.available` is a live binary-presence
   check via `@repo/bin-resolver`, kept sharply distinct from `enabled` (the settings toggle, a user
   declaration). A harness can be enabled but unavailable, or available but not enabled. Neither
-  predicts whether a session will *authenticate* — that's still only discovered by catching
+  predicts whether a session will _authenticate_ — that's still only discovered by catching
   `createSession()` failures.
 
 # Why the shipped sandbox providers don't work either

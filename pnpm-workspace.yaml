@@ -7,7 +7,7 @@ catalog:
   "@effect/sql-sqlite-bun": 4.0.5
   tsrs: 0.18.0-ts7.1.0-dev.20260929
 allowBuilds:
-  '@google/genai': true
+  "@google/genai": true
   electron: true
   electron-winstaller: false
   esbuild: true
@@ -52,8 +52,8 @@ packageExtensions:
     optionalDependencies:
       "@shikijs/themes": "4.4.3"
 patchedDependencies:
-  "@ai-sdk/harness@1.0.152": patches/@ai-sdk%2Fharness@1.0.152.patch
-  "@ai-sdk/harness-claude-code@1.0.156": patches/@ai-sdk%2Fharness-claude-code@1.0.156.patch
-  "@ai-sdk/harness-codex@1.0.154": patches/@ai-sdk%2Fharness-codex@1.0.154.patch
-  "@ai-sdk/harness-opencode@1.0.154": patches/@ai-sdk%2Fharness-opencode@1.0.154.patch
-  "@pierre/diffs@1.5.2": patches/@pierre%2Fdiffs@1.5.2.patch
+  "@ai-sdk/harness@1.0.158": patches/@ai-sdk%2Fharness@1.0.158.patch
+  "@ai-sdk/harness-claude-code@1.0.162": patches/@ai-sdk%2Fharness-claude-code@1.0.162.patch
+  "@ai-sdk/harness-codex@1.0.160": patches/@ai-sdk%2Fharness-codex@1.0.160.patch
+  "@ai-sdk/harness-opencode@1.0.160": patches/@ai-sdk%2Fharness-opencode@1.0.160.patch
+  "@pierre/diffs@1.6.1": patches/@pierre%2Fdiffs@1.6.1.patch
