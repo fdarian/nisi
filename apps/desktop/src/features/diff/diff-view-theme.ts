@@ -376,10 +376,14 @@ export const diffCardChromeCSS = `
 	 *
 	 * \`--pane-surface\` is declared by \`app-shell.tsx\` (\`INSET_PANE_CLASS\`)
 	 * and reaches here by inheriting through the shadow boundary, the same way
-	 * \`diffViewUnsafeCSS\`'s \`--font-mono\` etc. do.
+	 * \`diffViewUnsafeCSS\`'s \`--font-mono\` etc. do. Under native window
+	 * glass it is translucent, so \`--pane-surface-backdrop\` (\`none\` otherwise)
+	 * frosts the scrolled code showing through the corner cutouts.
 	 */
 	[data-diffs-header] {
 		background-color: var(--pane-surface, var(--diffs-bg));
+		-webkit-backdrop-filter: var(--pane-surface-backdrop, none);
+		backdrop-filter: var(--pane-surface-backdrop, none);
 	}
 
 	/**

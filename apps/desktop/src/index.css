@@ -255,7 +255,7 @@
 		var(--color-black)
 	);
 	--tertiary: var(--color-neutral-400);
-	--pane-surface: var(--color-neutral-50);
+	--pane-surface-opaque: var(--color-neutral-50);
 	--popover: var(--color-white);
 	--popover-foreground: var(--color-neutral-800);
 	--primary: var(--color-neutral-800);
@@ -321,7 +321,7 @@
 		var(--color-white)
 	);
 	--tertiary: var(--color-neutral-600);
-	--pane-surface: color-mix(
+	--pane-surface-opaque: color-mix(
 		in srgb,
 		var(--color-neutral-950) 97%,
 		var(--color-white)
@@ -368,8 +368,20 @@
 		--frame-surface: var(--sidebar);
 	}
 
+	html {
+		--pane-surface: var(--pane-surface-opaque);
+		--pane-surface-backdrop: none;
+	}
+
 	html[data-native-glass] {
 		--frame-surface: transparent;
+		/* Translucent so the glass shows through the inner frame; anything sticky over scrolled content that paints `--pane-surface` must also apply `--pane-surface-backdrop` or the content shows through unblurred. */
+		--pane-surface: color-mix(
+			in oklab,
+			var(--pane-surface-opaque) 55%,
+			transparent
+		);
+		--pane-surface-backdrop: blur(12px);
 	}
 
 	body {
