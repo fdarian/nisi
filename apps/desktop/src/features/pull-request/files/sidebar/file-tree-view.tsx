@@ -378,14 +378,14 @@ export function FileTreeView({
 		}
 
 		model.getItem(selectedPath)?.select();
-		model.scrollToPath(selectedPath, { offset: "center" });
+		model.scrollToPath(selectedPath, { offset: "nearest" });
 	}, [model, selectedPath]);
 
 	// The effect above already scrolls when the selection changes, but
 	// re-clicking the *already*-selected file leaves that state unchanged, so
-	// the effect never re-fires and the row silently doesn't re-scroll into
-	// view. Scrolling imperatively here, on every click, covers that case too —
-	// redundant with the effect on a genuine selection change, but
+	// the effect never re-fires, so the click has to scroll the row itself. With
+	// "nearest" that only brings a partly clipped row fully into view; a visible
+	// row stays put. Redundant with the effect on a genuine selection change, but
 	// `scrollToPath` is idempotent, so there's no harm in both firing.
 	const handleClick = useCallback(
 		(event: ReactMouseEvent<HTMLElement>) => {
@@ -398,7 +398,7 @@ export function FileTreeView({
 				// flattened chain's row, whose path is the terminal directory.
 				if (!treeModel.filePaths.has(path)) return;
 				onSelectPath(path);
-				model.scrollToPath(path, { offset: "center" });
+				model.scrollToPath(path, { offset: "nearest" });
 				return;
 			}
 		},
