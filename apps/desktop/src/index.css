@@ -378,7 +378,11 @@
 
 	/* On body only: body, the app shell, the sidebar and the dev branch bar all paint `--frame-surface` and overlap, so a translucent value in the variable would stack. */
 	html[data-native-glass="tinted"] body {
-		background-color: color-mix(in oklab, var(--sidebar) var(--glass-tint), transparent);
+		background-color: color-mix(
+			in oklab,
+			var(--sidebar) var(--glass-tint),
+			transparent
+		);
 	}
 
 	code,
