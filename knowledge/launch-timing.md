@@ -1,5 +1,4 @@
 ---
-
 type: Measurement
 title: CLI-to-paint launch timing
 description: How to measure CLI-to-landing-tab paint, read the milestones, and compare with the native dev baseline.

@@ -1,5 +1,4 @@
 ---
-
 type: Measurement
 title: Where Electron startup time and memory go
 description: Cold-start critical path and sustained memory by process for the Electron build, the baseline to beat when squeezing either.

@@ -1,5 +1,4 @@
 ---
-
 type: Reference
 title: What breaks only in the compiled binary
 description: The five ways the packaged sidecar behaves differently from `bun run`, and the rule that follows.
@@ -7,18 +6,16 @@ tags: [sidecar, bun, packaging, verification, macos, codesigning]
 status: stable
 generated: { by: claude-code/claude-opus-5, at: 2026-07-30T04:19:29Z }
 sources:
-- id: path-rule
-  resource: ../packages/harness-local/AGENTS.md
-  title: PATH widening (packages/harness-local/AGENTS.md)
-- id: migrations
-  resource: ../packages/db/AGENTS.md
-  title: applyEmbeddedMigrations (packages/db/AGENTS.md)
-- id: entitlements
-  resource: ../apps/desktop/build/entitlements.plist
-  title: entitlements.plist (apps/desktop/build/)
-
+  - id: path-rule
+    resource: ../packages/harness-local/AGENTS.md
+    title: PATH widening (packages/harness-local/AGENTS.md)
+  - id: migrations
+    resource: ../packages/db/AGENTS.md
+    title: applyEmbeddedMigrations (packages/db/AGENTS.md)
+  - id: entitlements
+    resource: ../apps/desktop/build/entitlements.plist
+    title: entitlements.plist (apps/desktop/build/)
 ---
-
 The `.app` ships the sidecar as a `bun build --compile` binary. `bun dev` hides a whole class of bug
 here, and every instance below cost real debugging time because dev looked fine.
 

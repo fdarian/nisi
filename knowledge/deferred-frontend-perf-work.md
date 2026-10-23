@@ -1,5 +1,4 @@
 ---
-
 type: Decision
 title: Deferred frontend perf work
 description: Known Files Changed wins not taken, and one open symptom not yet bisected — with the reason each is still open.
@@ -7,15 +6,13 @@ tags: [frontend, performance, pierre, deferred]
 status: stable
 generated: { by: human:farreldarian, at: 2026-08-15T00:00:00Z }
 sources:
-- id: budget
-  resource: frontend-performance-budget.md
-  title: Files Changed performance budget
-- id: set-viewed
-  resource: ../apps/desktop/src/features/pull-request/data/pr-data.ts
-  title: useSetFileViewed
-
+  - id: budget
+    resource: frontend-performance-budget.md
+    title: Files Changed performance budget
+  - id: set-viewed
+    resource: ../apps/desktop/src/features/pull-request/data/pr-data.ts
+    title: useSetFileViewed
 ---
-
 The first two were found while fixing the measured regressions in the
 [performance budget](frontend-performance-budget.md).[^budget] Neither was taken, because
 each trades against correctness in a way that needs its own verification pass rather than a

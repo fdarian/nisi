@@ -1,5 +1,4 @@
 ---
-
 type: Budget
 title: Files Changed performance budget
 description: What scrolling and interaction should cost in Files Changed, measured at 221 changed files.
@@ -9,17 +8,15 @@ generated: { by: claude-code/claude-opus-5, at: 2026-07-30T04:19:29Z }
 verified: { by: process:cdp-trace, at: 2026-07-29T00:00:00Z }
 stale_after: 2027-01-30
 sources:
-- id: one-tree
-  resource: ../apps/desktop/src/features/pull-request/files/sidebar/file-tree-view.tsx
-  title: "commit 3e1490d — render the files sidebar as one virtualized tree"
-  last_modified: 2026-07-29
-- id: parse-once
-  resource: ../apps/desktop/src/features/pull-request/files/diff-pane.tsx
-  title: "commit 4ddd2fb — parse each file's diff once, not once per file per keystroke"
-  last_modified: 2026-07-29
-
+  - id: one-tree
+    resource: ../apps/desktop/src/features/pull-request/files/sidebar/file-tree-view.tsx
+    title: "commit 3e1490d — render the files sidebar as one virtualized tree"
+    last_modified: 2026-07-29
+  - id: parse-once
+    resource: ../apps/desktop/src/features/pull-request/files/diff-pane.tsx
+    title: "commit 4ddd2fb — parse each file's diff once, not once per file per keystroke"
+    last_modified: 2026-07-29
 ---
-
 Reference numbers for a session with **221 changed files**. They exist so "the sidebar feels laggy"
 can be checked rather than argued about. Both sets are post-fix; the pre-fix column is what a
 regression would look like.

@@ -1,5 +1,4 @@
 ---
-
 name: create-pr
 description: Create a pull request for the current branch in this repo, including the changeset. Use whenever asked to open/create a PR here, or to add a changeset.
 ---

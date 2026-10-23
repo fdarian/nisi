@@ -1,5 +1,4 @@
 ---
-
 name: debug-nisi
 description: Debug the running nisi app when it misbehaves — stale state (e.g. a stale merge button or PR status), a wrong or outdated diff, a stuck or empty UI, a session that won't open or refresh — or whenever asked to inspect, diagnose, or debug the live sidecar. Read-only; never drive the app.
 ---

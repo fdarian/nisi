@@ -1,5 +1,4 @@
 ---
-
 name: demo-nisi
 description: Launch the real nisi desktop app against a fully fake backend for demos — a dummy open PR, unpushed-commits dialog, push, then merge, with no GitHub, git or disk access. Also how to extend the demo.
 disable-model-invocation: true
