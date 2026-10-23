@@ -20,13 +20,15 @@ import type {
  * scroll, so sizing the host to fit every row renders every row and makes
  * each scroll frame proportional to the file count.
  */
-export function buildTreeThemeStyle(): CSSProperties {
+export function buildTreeThemeStyle(glassShowing: boolean): CSSProperties {
 	return {
 		"--trees-fg-override": "var(--sidebar-foreground)",
 		"--trees-fg-muted-override": "var(--muted-foreground)",
-		// Transparent so the fluid hover highlight, which sits behind the tree,
+		// Transparent under glass so the fluid hover highlight, which sits behind the tree,
 		// shows through; the sidebar already paints `--pane-surface-nested` behind it.
-		"--trees-bg-override": "transparent",
+		"--trees-bg-override": glassShowing
+			? "transparent"
+			: "var(--pane-surface-nested)",
 		"--trees-bg-muted-override": "var(--sidebar-accent)",
 		"--trees-border-color-override": "var(--sidebar-border)",
 		"--trees-accent-override": "var(--primary)",
@@ -46,11 +48,11 @@ export function buildTreeThemeStyle(): CSSProperties {
 }
 
 /**
- * Stuck folder rows are painted over scrolled ones. The tree's `--trees-bg` is
- * transparent (so the fluid hover highlight shows through), so the overlay takes
- * the sidebar's `--pane-surface-nested` fill explicitly, plus the same backdrop
- * blur as the diff's sticky header so rows don't show through under glass, where
- * that fill is transparent. Passed as the tree's `unsafeCSS` option.
+ * Stuck folder rows are painted over scrolled ones. Under glass the tree's
+ * `--trees-bg` is transparent (so the fluid hover highlight shows through), so
+ * the overlay takes the sidebar's `--pane-surface-nested` fill explicitly, plus
+ * the same backdrop blur as the diff's sticky header so rows don't show through
+ * where that fill is itself transparent. Passed as the tree's `unsafeCSS` option.
  */
 export const TREE_STICKY_BACKDROP_CSS = `
 [data-file-tree-sticky-overlay-content] {
@@ -383,12 +385,22 @@ function buildFluidHoverCSS(): string {
 `;
 }
 
-export function syncFluidHoverStyle(treeHost: HTMLElement | null): boolean {
-	return syncShadowStyle(
-		treeHost,
-		FLUID_HOVER_STYLE_ATTRIBUTE,
-		buildFluidHoverCSS(),
-	);
+/** Adds the fluid-hover style when `glassShowing`, removes it otherwise. Returns false when the shadow root doesn't exist yet. */
+export function syncFluidHoverStyle(
+	treeHost: HTMLElement | null,
+	glassShowing: boolean,
+): boolean {
+	if (glassShowing) {
+		return syncShadowStyle(
+			treeHost,
+			FLUID_HOVER_STYLE_ATTRIBUTE,
+			buildFluidHoverCSS(),
+		);
+	}
+	const shadowRoot = getTreeShadowRoot(treeHost);
+	if (shadowRoot === null) return false;
+	shadowRoot.querySelector(`style[${FLUID_HOVER_STYLE_ATTRIBUTE}]`)?.remove();
+	return true;
 }
 
 const ACTION_BUTTON_STYLE_ATTRIBUTE = "data-nisi-action-button";

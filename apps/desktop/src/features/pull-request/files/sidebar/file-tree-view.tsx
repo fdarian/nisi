@@ -25,6 +25,7 @@ import type {
 	FileChange,
 	ReviewStateEntry,
 } from "#/features/pull-request/data/pr-data";
+import { useNativeGlassShowing } from "#/features/settings/window-glass";
 import { collectAncestorDirectoryPaths, comparePaths } from "#/lib/tree-paths";
 import {
 	buildStatusColorCSS,
@@ -195,6 +196,7 @@ export function FileTreeView({
 	onMarkReviewed,
 	repoRoot,
 }: FileTreeViewProps): React.ReactElement {
+	const glassShowing = useNativeGlassShowing();
 	const treeHostRef = useRef<HTMLDivElement>(null);
 	const treeModel = useMemo(() => buildTreeModel(files), [files]);
 
@@ -327,12 +329,12 @@ export function FileTreeView({
 	}, []);
 
 	useEffect(() => {
-		if (syncFluidHoverStyle(treeHostRef.current)) return;
+		if (syncFluidHoverStyle(treeHostRef.current, glassShowing)) return;
 		const frame = requestAnimationFrame(() => {
-			syncFluidHoverStyle(treeHostRef.current);
+			syncFluidHoverStyle(treeHostRef.current, glassShowing);
 		});
 		return () => cancelAnimationFrame(frame);
-	}, []);
+	}, [glassShowing]);
 
 	useEffect(() => {
 		const stop = observeTreeScroll(treeHostRef.current, followHover);
@@ -421,22 +423,28 @@ export function FileTreeView({
 		<div
 			className="relative min-h-0 flex-1 overflow-hidden"
 			onContextMenu={(event) => event.stopPropagation()}
-			onMouseEnter={hover.handlers.onMouseEnter}
-			onMouseLeave={hover.handlers.onMouseLeave}
-			onMouseMove={handleMouseMove}
 			ref={hover.containerRef}
+			{...(glassShowing
+				? {
+						onMouseEnter: hover.handlers.onMouseEnter,
+						onMouseLeave: hover.handlers.onMouseLeave,
+						onMouseMove: handleMouseMove,
+					}
+				: {})}
 		>
-			<FluidHoverHighlight
-				className="rounded-md bg-sidebar-accent"
-				hover={hover}
-			/>
+			{glassShowing && (
+				<FluidHoverHighlight
+					className="rounded-md bg-sidebar-accent"
+					hover={hover}
+				/>
+			)}
 			{/* z-10 paints the tree above the absolutely positioned highlight. */}
 			<div className="relative z-10 h-full" ref={treeHostRef}>
 				<FileTree
 					model={model}
 					onClick={handleClick}
 					renderContextMenu={renderContextMenu}
-					style={buildTreeThemeStyle()}
+					style={buildTreeThemeStyle(glassShowing)}
 				/>
 			</div>
 		</div>

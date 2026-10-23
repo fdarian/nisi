@@ -9,6 +9,7 @@ import type {
 	ReviewStateEntry,
 } from "#/features/pull-request/data/pr-data";
 import type { SidebarViewMode } from "#/features/settings/settings-data";
+import { useNativeGlassShowing } from "#/features/settings/window-glass";
 import { CATEGORY_LABELS, groupFilesByCategory } from "#/lib/tree-paths";
 import { useKeyBindings } from "#/lib/use-key-bindings";
 import { filesSidebarClassName } from "../files-changed-layout";
@@ -148,24 +149,28 @@ function FlatFileList({
 	selectedPath: string | null;
 	onSelectPath: (path: string) => void;
 }): React.ReactElement {
+	const glassShowing = useNativeGlassShowing();
 	const hover = useFluidHover<HTMLDivElement>("y");
 
 	return (
 		<div
 			className="relative flex flex-col gap-1 pb-3"
 			ref={hover.containerRef}
-			{...hover.handlers}
+			{...(glassShowing ? hover.handlers : {})}
 		>
-			<FluidHoverHighlight
-				className="rounded-md bg-sidebar-accent"
-				hover={hover}
-			/>
+			{glassShowing && (
+				<FluidHoverHighlight
+					className="rounded-md bg-sidebar-accent"
+					hover={hover}
+				/>
+			)}
 			{groups.map((group) => (
 				<FlatFileGroup
 					key={group.category}
 					files={group.files}
 					onSelectPath={onSelectPath}
 					registerHoverItem={hover.registerItem}
+					glassShowing={glassShowing}
 					reviewState={reviewState}
 					selectedPath={selectedPath}
 					title={CATEGORY_LABELS[group.category]}
