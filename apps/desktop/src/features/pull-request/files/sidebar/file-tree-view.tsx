@@ -29,6 +29,7 @@ import {
 	buildStatusColorCSS,
 	buildTreeThemeStyle,
 	createRowDecorationRenderer,
+	TREE_STICKY_BACKDROP_CSS,
 	syncActionButtonStyle,
 	syncDecorationIconStyle,
 	syncFolderIconStyle,
@@ -221,6 +222,7 @@ export function FileTreeView({
 		initialExpansion: "open",
 		paths: treeModel.treePaths,
 		renderRowDecoration,
+		unsafeCSS: TREE_STICKY_BACKDROP_CSS,
 		sort: (left, right) => comparePaths(left.path, right.path),
 	});
 

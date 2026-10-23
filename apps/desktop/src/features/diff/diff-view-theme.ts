@@ -374,14 +374,15 @@ export const diffCardChromeCSS = `
 	 * corners at any scroll position, and in any state, without this having to
 	 * know whether the card is collapsed.
 	 *
-	 * \`--pane-surface\` is declared by \`app-shell.tsx\` (\`INSET_PANE_CLASS\`)
-	 * and reaches here by inheriting through the shadow boundary, the same way
+	 * \`--pane-surface-nested\` is declared in \`index.css\` and reaches here by
+	 * inheriting through the shadow boundary, the same way
 	 * \`diffViewUnsafeCSS\`'s \`--font-mono\` etc. do. Under native window
-	 * glass it is translucent, so \`--pane-surface-backdrop\` (\`none\` otherwise)
-	 * frosts the scrolled code showing through the corner cutouts.
+	 * glass it is transparent (the frame behind already paints the fill), so
+	 * \`--pane-surface-backdrop\` (\`none\` otherwise) frosts the scrolled code
+	 * that would otherwise show through the corner cutouts while stuck.
 	 */
 	[data-diffs-header] {
-		background-color: var(--pane-surface, var(--diffs-bg));
+		background-color: var(--pane-surface-nested, var(--diffs-bg));
 		-webkit-backdrop-filter: var(--pane-surface-backdrop, none);
 		backdrop-filter: var(--pane-surface-backdrop, none);
 	}

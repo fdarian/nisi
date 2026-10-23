@@ -56,6 +56,7 @@
 	--color-sidebar-accent: var(--sidebar-accent);
 	--color-sidebar: var(--sidebar);
 	--color-pane-surface: var(--pane-surface);
+	--color-pane-surface-nested: var(--pane-surface-nested);
 	--color-code-highlight: var(--code-highlight);
 	--code-foreground: var(--code-foreground);
 	--color-code: var(--code);
@@ -370,17 +371,19 @@
 
 	html {
 		--pane-surface: var(--pane-surface-opaque);
+		--pane-surface-nested: var(--pane-surface);
 		--pane-surface-backdrop: none;
 	}
 
 	html[data-native-glass] {
 		--frame-surface: transparent;
-		/* Translucent so the glass shows through the inner frame; anything sticky over scrolled content that paints `--pane-surface` must also apply `--pane-surface-backdrop` or the content shows through unblurred. */
+		/* Translucent so the glass shows through the inner frame. Surfaces that only match the frame they sit in use `--pane-surface-nested` instead: the frame already paints the fill, so repainting a translucent one would stack into a visibly different patch. Nested surfaces that occlude scrolled content (sticky headers) must also apply `--pane-surface-backdrop`, or the content shows through unblurred. */
 		--pane-surface: color-mix(
 			in oklab,
 			var(--pane-surface-opaque) 55%,
 			transparent
 		);
+		--pane-surface-nested: transparent;
 		--pane-surface-backdrop: blur(12px);
 	}
 

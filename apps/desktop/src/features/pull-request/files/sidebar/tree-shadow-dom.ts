@@ -24,7 +24,7 @@ export function buildTreeThemeStyle(): CSSProperties {
 	return {
 		"--trees-fg-override": "var(--sidebar-foreground)",
 		"--trees-fg-muted-override": "var(--muted-foreground)",
-		"--trees-bg-override": "var(--pane-surface)",
+		"--trees-bg-override": "var(--pane-surface-nested)",
 		"--trees-bg-muted-override": "var(--sidebar-accent)",
 		"--trees-border-color-override": "var(--sidebar-border)",
 		"--trees-accent-override": "var(--primary)",
@@ -42,6 +42,19 @@ export function buildTreeThemeStyle(): CSSProperties {
 		height: "100%",
 	} as CSSProperties;
 }
+
+/**
+ * The tree paints stuck folder rows over scrolled ones with a `--trees-bg`
+ * fill (`--pane-surface-nested`, transparent under native glass), so the
+ * overlay needs the same backdrop blur as the diff's sticky header or rows
+ * show through it. Passed as the tree's `unsafeCSS` option.
+ */
+export const TREE_STICKY_BACKDROP_CSS = `
+[data-file-tree-sticky-overlay-content] {
+	-webkit-backdrop-filter: var(--pane-surface-backdrop, none);
+	backdrop-filter: var(--pane-surface-backdrop, none);
+}
+`;
 
 const FOLDER_ICON_STYLE_ATTRIBUTE = "data-nisi-folder-icons";
 const STATUS_COLOR_STYLE_ATTRIBUTE = "data-nisi-status-color";
