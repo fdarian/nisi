@@ -182,7 +182,7 @@ export function OpenPullRequestPalette(
 				: localMatches;
 	const resultRows: readonly PaletteRow[] =
 		!recentlyClosed && offersRecentlyClosedFilter(query)
-			? [RECENTLY_CLOSED_FILTER_ROW, ...results]
+			? [...results, RECENTLY_CLOSED_FILTER_ROW]
 			: results;
 	const searchError = isBlank ? recent.error : needsGh ? search.error : null;
 	const searchErrorMessage = friendlySearchError(searchError);
@@ -264,6 +264,17 @@ export function OpenPullRequestPalette(
 		!recentlyClosed && !collapsed && query.trim() !== ""
 			? [...resultRows, SHOW_RECENTLY_CLOSED_ROW]
 			: resultRows;
+	const emptyMessage =
+		searchErrorMessage ??
+		(recentlyClosed
+			? "No pull requests closed in the last 7 days."
+			: "No pull requests found.");
+	// The action rows keep the list non-empty, so `CommandEmpty` never renders
+	// for them; this line says what it would have, once the search settles or fails.
+	const showStatusLine =
+		results.length === 0 &&
+		rows.length > 0 &&
+		(searchErrorMessage !== null || !isLoading);
 
 	// The moved-repository dialog stands in for the palette rather than
 	// stacking on top of it; confirming re-opens the PR, whose `onOpened` above
@@ -426,13 +437,13 @@ export function OpenPullRequestPalette(
 								{!collapsed && (
 									<>
 										<Separator />
-										<CommandEmpty>
-											{searchErrorMessage ??
-												(recentlyClosed
-													? "No pull requests closed in the last 7 days."
-													: "No pull requests found.")}
-										</CommandEmpty>
+										<CommandEmpty>{emptyMessage}</CommandEmpty>
 									</>
+								)}
+								{showStatusLine && (
+									<p className="px-2 pt-4 pb-2 text-center text-base text-muted-foreground sm:text-sm">
+										{emptyMessage}
+									</p>
 								)}
 								<CommandList>
 									{(row: PaletteRow) => {

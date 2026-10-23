@@ -121,7 +121,7 @@ export function useIndexedPullRequests(
 }
 
 /**
- * Live `gh`-backed search behind TanStack Query, keyed on `query` and `repos` — a repeat
+ * Live `gh`-backed search behind TanStack Query, keyed on `query`, `repos` and `state` — a repeat
  * of a query already seen this session (retyping after a backspace, opening
  * the palette again with the same search) resolves from cache for free
  * rather than re-asking GitHub. `placeholderData: keepPreviousData` is what
