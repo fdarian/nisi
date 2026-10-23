@@ -175,6 +175,9 @@ export const RecentlyClosed: Story = {
 			canvasElement.ownerDocument.body,
 		).findByPlaceholderText("Open pull requests…");
 		await userEvent.click(input);
-		await userEvent.keyboard("{Meta>}{Shift>}c{/Shift}{/Meta}");
+		await userEvent.keyboard("closed");
+		await userEvent.click(
+			await within(canvasElement.ownerDocument.body).findByText("Filter by"),
+		);
 	},
 };

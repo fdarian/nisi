@@ -1,7 +1,7 @@
 "use client";
 
 import { hasSearchQualifier } from "@repo/git/search-query";
-import { XIcon } from "lucide-react";
+import { ListFilterIcon, XIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { FetchingIndicator } from "#/components/fetching-indicator";
 import { Avatar, AvatarFallback, AvatarImage } from "#/components/ui/avatar";
@@ -43,6 +43,7 @@ import { PrStatusIcon } from "#/features/pull-request/pr-status-icon";
 import type { SidecarQueryUtils } from "#/infra/backend-context";
 import { filterIndexedPullRequests } from "./filter-indexed-pull-requests";
 import { paletteRepositories, repositoryKey } from "./palette-repositories";
+import { offersRecentlyClosedFilter } from "./recently-closed-filter";
 
 /**
  * Debounce for the `gh` fallback search only; filtering the open-PR index
@@ -76,6 +77,15 @@ type OpenPullRequestPaletteProps = {
 	/** Resolves a matching already-open tab before asking the sidecar to create/reuse a session. */
 	findExistingSessionId: (params: OpenPullRequestParams) => string | undefined;
 };
+
+// A list entry beside the PR rows; the object is its own `value`, so it can't
+// collide with a PR row.
+const RECENTLY_CLOSED_FILTER_ROW = { filter: "recently-closed" } as const;
+
+type PaletteRow =
+	| PullRequestSearchResult
+	| IndexedPullRequest
+	| typeof RECENTLY_CLOSED_FILTER_ROW;
 
 function authorInitials(author: string): string {
 	return author.slice(0, 2).toUpperCase();
@@ -166,6 +176,10 @@ export function OpenPullRequestPalette(
 					? []
 					: search.results
 				: localMatches;
+	const rows: readonly PaletteRow[] =
+		!recentlyClosed && offersRecentlyClosedFilter(query)
+			? [RECENTLY_CLOSED_FILTER_ROW, ...results]
+			: results;
 	const searchError = isBlank ? recent.error : needsGh ? search.error : null;
 	const searchErrorMessage = friendlySearchError(searchError);
 	// Local filtering is instant, so only the `gh` path loads. A pending
@@ -237,7 +251,7 @@ export function OpenPullRequestPalette(
 	const collapsed =
 		!pickingRepository &&
 		isLoading &&
-		results.length === 0 &&
+		rows.length === 0 &&
 		searchErrorMessage === null &&
 		footerMessage === null;
 
@@ -266,15 +280,6 @@ export function OpenPullRequestPalette(
 							event.preventDefault();
 							event.stopPropagation();
 							setPickingRepository(false);
-						} else if (
-							!pickingRepository &&
-							event.metaKey &&
-							event.shiftKey &&
-							event.code === "KeyC"
-						) {
-							event.preventDefault();
-							event.stopPropagation();
-							setRecentlyClosed((current) => !current);
 						}
 					}}
 				>
@@ -336,7 +341,7 @@ export function OpenPullRequestPalette(
 							<Command
 								key="pull-requests"
 								filter={null}
-								items={results}
+								items={rows}
 								onValueChange={setQuery}
 								value={query}
 							>
@@ -420,23 +425,42 @@ export function OpenPullRequestPalette(
 									</>
 								)}
 								<CommandList>
-									{(pr: PullRequestSearchResult | IndexedPullRequest) => (
-										<CommandItem
-											key={`${pr.owner}/${pr.repo}#${pr.number}`}
-											onClick={() => handleSelect(pr)}
-											value={pr}
-										>
-											<PullRequestRow
-												isOpening={
-													openPr.isPending &&
-													openPr.pendingParams?.owner === pr.owner &&
-													openPr.pendingParams?.repo === pr.repo &&
-													openPr.pendingParams?.number === pr.number
-												}
-												pr={pr}
-											/>
-										</CommandItem>
-									)}
+									{(row: PaletteRow) =>
+										"filter" in row ? (
+											<CommandItem
+												key="filter-recently-closed"
+												onClick={() => {
+													setRecentlyClosed(true);
+													setQuery("");
+													setDebouncedQuery("");
+													inputRef.current?.focus();
+												}}
+												value={row}
+											>
+												<ListFilterIcon className="text-muted-foreground" />
+												Filter by
+												<Badge size="sm" variant="outline">
+													Recently closed
+												</Badge>
+											</CommandItem>
+										) : (
+											<CommandItem
+												key={`${row.owner}/${row.repo}#${row.number}`}
+												onClick={() => handleSelect(row)}
+												value={row}
+											>
+												<PullRequestRow
+													isOpening={
+														openPr.isPending &&
+														openPr.pendingParams?.owner === row.owner &&
+														openPr.pendingParams?.repo === row.repo &&
+														openPr.pendingParams?.number === row.number
+													}
+													pr={row}
+												/>
+											</CommandItem>
+										)
+									}
 								</CommandList>
 							</Command>
 						)}
@@ -452,15 +476,8 @@ export function OpenPullRequestPalette(
 									{footerMessage}
 								</span>
 							)}
-							<span className="ml-auto flex items-center gap-4">
-								{!pickingRepository && (
-									<span className="flex items-center gap-1.5">
-										<Kbd>⌘⇧C</Kbd> Recently closed
-									</span>
-								)}
-								<span className="flex items-center gap-1.5">
-									<Kbd>⌘P</Kbd> Filter Project
-								</span>
+							<span className="ml-auto flex items-center gap-1.5">
+								<Kbd>⌘P</Kbd> Filter Project
 							</span>
 						</CommandFooter>
 					)}
