@@ -26,7 +26,7 @@
 	--spacing-diff-pane-inset: calc(var(--spacing) * 3);
 }
 
-/* A pinned diff-card header's rounded top corners sit over the card's opaque code scrolled behind them, and nothing painted behind the corners can match a translucent frame. So the scroller's top edge is masked instead: the two corner shapes (outside each corner's arc, within the header's radius) are cut out of everything it paints, while the mask stays fixed to the viewport as content scrolls. Set `--diff-viewport-inset` to the scroller's horizontal padding if it isn't `--spacing-diff-pane-inset`. */
+/* A pinned diff-card header's rounded top corners sit over the card's opaque code scrolled behind them, and nothing painted behind the corners can match a translucent frame. So the scroller's top edge is masked instead: the two corner shapes (outside each corner's arc, within the header's radius) are cut out of everything it paints, while the mask stays fixed to the viewport as content scrolls. Set `--diff-viewport-inset` to the scroller's horizontal padding if it isn't `--spacing-diff-pane-inset`. The mask's soft edge sits just inside the arc so the header's anti-aliased edge pixels don't let the code behind bleed through as a fringe. */
 @utility diff-viewport-corners {
 	--_inset: var(--diff-viewport-inset, var(--spacing-diff-pane-inset));
 	--_radius: var(--radius-xl);
@@ -36,13 +36,13 @@
 		linear-gradient(#000 0 0), linear-gradient(#000 0 0),
 		radial-gradient(
 			circle at 100% 100%,
-			#000 var(--_radius),
-			transparent calc(var(--_radius) + 0.5px)
+			#000 calc(var(--_radius) - 0.5px),
+			transparent var(--_radius)
 		),
 		radial-gradient(
 			circle at 0 100%,
-			#000 var(--_radius),
-			transparent calc(var(--_radius) + 0.5px)
+			#000 calc(var(--_radius) - 0.5px),
+			transparent var(--_radius)
 		);
 	mask-position:
 		0 var(--_radius),
