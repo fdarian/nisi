@@ -1,5 +1,6 @@
 import { cn } from "cn";
 import { FileIcon } from "lucide-react";
+import type { RefCallback } from "react";
 import type {
 	FileChange,
 	ReviewState,
@@ -14,6 +15,7 @@ type FlatFileGroupProps = {
 	reviewState: ReadonlyMap<string, ReviewStateEntry>;
 	selectedPath: string | null;
 	onSelectPath: (path: string) => void;
+	registerHoverItem: RefCallback<HTMLElement>;
 };
 
 /** Flat mode has no library to lean on — `@pierre/trees` has no flat option — so this is a plain, hand-rolled list mirroring the same row language as the tree (muted-viewed, orange-dot-changed, click-to-select). */
@@ -23,6 +25,7 @@ export function FlatFileGroup({
 	reviewState,
 	selectedPath,
 	onSelectPath,
+	registerHoverItem,
 }: FlatFileGroupProps): React.ReactElement {
 	return (
 		<div>
@@ -35,6 +38,7 @@ export function FlatFileGroup({
 						reviewState={reviewState.get(file.path)?.status ?? "unreviewed"}
 						selected={file.path === selectedPath}
 						onSelectPath={onSelectPath}
+						registerHoverItem={registerHoverItem}
 					/>
 				))}
 			</ul>
@@ -47,11 +51,13 @@ function FlatFileRow({
 	reviewState,
 	selected,
 	onSelectPath,
+	registerHoverItem,
 }: {
 	file: FileChange;
 	reviewState: ReviewState;
 	selected: boolean;
 	onSelectPath: (path: string) => void;
+	registerHoverItem: RefCallback<HTMLElement>;
 }): React.ReactElement {
 	const { dirname, basename } = splitPath(file.path);
 	const viewed = reviewState === "viewed";
@@ -60,13 +66,13 @@ function FlatFileRow({
 		<li>
 			<button
 				className={cn(
-					"flex w-full min-w-0 items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm",
-					"hover:bg-sidebar-accent",
+					"relative flex w-full min-w-0 items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm",
 					selected && "bg-sidebar-accent text-sidebar-accent-foreground",
 					viewed && "text-muted-foreground",
 				)}
 				data-item-path={file.path}
 				onClick={() => onSelectPath(file.path)}
+				ref={registerHoverItem}
 				type="button"
 			>
 				<FileIcon
