@@ -1,7 +1,7 @@
 "use client";
 
 import { hasSearchQualifier } from "@repo/git/search-query";
-import { XIcon } from "lucide-react";
+import { GitBranchIcon, XIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { FetchingIndicator } from "#/components/fetching-indicator";
 import { Avatar, AvatarFallback, AvatarImage } from "#/components/ui/avatar";
@@ -41,7 +41,11 @@ import {
 } from "#/features/pull-request/pr-status";
 import { PrStatusIcon } from "#/features/pull-request/pr-status-icon";
 import type { SidecarQueryUtils } from "#/infra/backend-context";
-import { filterIndexedPullRequests } from "./filter-indexed-pull-requests";
+import {
+	type BranchMatchRange,
+	branchMatchRanges,
+	filterIndexedPullRequests,
+} from "./filter-indexed-pull-requests";
 import { paletteRepositories, repositoryKey } from "./palette-repositories";
 
 /**
@@ -399,6 +403,7 @@ export function OpenPullRequestPalette(
 													openPr.pendingParams?.number === pr.number
 												}
 												pr={pr}
+												query={query}
 											/>
 										</CommandItem>
 									)}
@@ -453,13 +458,48 @@ function rowStatus(pr: PullRequestSearchResult | IndexedPullRequest) {
 	});
 }
 
+function MatchedBranch({
+	branch,
+	ranges,
+}: {
+	branch: string;
+	ranges: readonly BranchMatchRange[];
+}): React.ReactElement {
+	const parts: React.ReactNode[] = [];
+	let cursor = 0;
+	for (const range of ranges) {
+		if (range.start > cursor) parts.push(branch.slice(cursor, range.start));
+		parts.push(
+			<mark
+				key={range.start}
+				className="bg-transparent font-medium text-foreground"
+			>
+				{branch.slice(range.start, range.end)}
+			</mark>,
+		);
+		cursor = range.end;
+	}
+	if (cursor < branch.length) parts.push(branch.slice(cursor));
+	return (
+		<>
+			<span aria-hidden>·</span>
+			<GitBranchIcon className="size-3 shrink-0" />
+			<span className="truncate font-mono">{parts}</span>
+		</>
+	);
+}
+
 function PullRequestRow({
 	pr,
+	query,
 	isOpening,
 }: {
 	pr: PullRequestSearchResult | IndexedPullRequest;
+	query: string;
 	isOpening: boolean;
 }): React.ReactElement {
+	const branchRanges =
+		"headRefName" in pr ? branchMatchRanges(pr.headRefName, query) : [];
 	return (
 		<div className="flex min-w-0 flex-1 items-center gap-2.5">
 			<PrStatusIcon status={rowStatus(pr)} />
@@ -475,8 +515,13 @@ function PullRequestRow({
 						</Badge>
 					)}
 				</div>
-				<div className="truncate text-muted-foreground text-xs">
-					{pr.owner}/{pr.repo}
+				<div className="flex min-w-0 items-center gap-1 text-muted-foreground text-xs">
+					<span className="shrink-0">
+						{pr.owner}/{pr.repo}
+					</span>
+					{"headRefName" in pr && branchRanges.length > 0 && (
+						<MatchedBranch branch={pr.headRefName} ranges={branchRanges} />
+					)}
 				</div>
 			</div>
 			{isOpening ? (

@@ -6,6 +6,7 @@ import {
 	useQueryClient,
 } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
+import { userEvent, within } from "storybook/test";
 import { Button } from "#/components/ui/button";
 import type {
 	PullRequestRepository,
@@ -139,3 +140,14 @@ export default meta;
 
 type Story = StoryObj<typeof meta>;
 export const Default: Story = {};
+
+/** The mock index gives each row a `<author>/<repo>-<number>` branch; this query matches only that, so the row shows the branch with the hit emphasised. */
+export const BranchOnlyMatch: Story = {
+	play: async () => {
+		// The dialog renders in a portal, outside the story canvas.
+		const input = await within(document.body).findByPlaceholderText(
+			"Open pull requests…",
+		);
+		await userEvent.type(input, "furl-42");
+	},
+};

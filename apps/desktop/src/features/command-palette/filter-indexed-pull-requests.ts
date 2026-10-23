@@ -22,6 +22,14 @@ function parseTerm(text: string): Term {
 	};
 }
 
+function parseTerms(query: string): Term[] {
+	return query
+		.toLowerCase()
+		.split(/\s+/)
+		.filter((text) => text.length > 0)
+		.map(parseTerm);
+}
+
 function namesNumber(term: Term, number: number): boolean {
 	return term.digits !== null && Number(term.digits) === number;
 }
@@ -58,11 +66,7 @@ export function filterIndexedPullRequests(
 	query: string,
 	repos: readonly string[],
 ): IndexedPullRequest[] {
-	const terms = query
-		.toLowerCase()
-		.split(/\s+/)
-		.filter((text) => text.length > 0)
-		.map(parseTerm);
+	const terms = parseTerms(query);
 	const repoFilter = new Set(repos.map((repo) => repo.toLowerCase()));
 	if (terms.length === 0 && repoFilter.size === 0) return [];
 
@@ -93,4 +97,41 @@ export function filterIndexedPullRequests(
 		)
 		.slice(0, RESULT_LIMIT)
 		.map((entry) => entry.pr);
+}
+
+export type BranchMatchRange = { start: number; end: number };
+
+/**
+ * Where the query's terms hit `headRefName`, as sorted, non-overlapping
+ * `[start, end)` ranges. Empty means the branch didn't match. `#123` terms name
+ * the PR number only, so they never hit the branch.
+ */
+export function branchMatchRanges(
+	headRefName: string,
+	query: string,
+): BranchMatchRange[] {
+	const branch = headRefName.toLowerCase();
+	const ranges: BranchMatchRange[] = [];
+	for (const term of parseTerms(query)) {
+		if (term.numberOnly) continue;
+		const needle = term.digits === null ? term.text : term.digits;
+		for (
+			let start = branch.indexOf(needle);
+			start !== -1;
+			start = branch.indexOf(needle, start + 1)
+		) {
+			ranges.push({ start, end: start + needle.length });
+		}
+	}
+	ranges.sort((a, b) => a.start - b.start);
+	const merged: BranchMatchRange[] = [];
+	for (const range of ranges) {
+		const last = merged[merged.length - 1];
+		if (last !== undefined && range.start <= last.end) {
+			last.end = Math.max(last.end, range.end);
+		} else {
+			merged.push({ start: range.start, end: range.end });
+		}
+	}
+	return merged;
 }

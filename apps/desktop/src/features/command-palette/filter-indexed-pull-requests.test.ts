@@ -1,6 +1,9 @@
 import { expect, test } from "bun:test";
 import type { IndexedPullRequest } from "#/features/pull-request/data/pull-requests-data";
-import { filterIndexedPullRequests } from "./filter-indexed-pull-requests";
+import {
+	branchMatchRanges,
+	filterIndexedPullRequests,
+} from "./filter-indexed-pull-requests";
 
 const pr = (
 	number: number,
@@ -119,4 +122,52 @@ test("results are sorted by updatedAt desc across repos and capped at 30", () =>
 		Array.from({ length: 30 }, (_, i) => 40 - i),
 	);
 	expect(results[0]).toMatchObject({ repo: "b", number: 40 });
+});
+
+test("branchMatchRanges returns where a term hits the branch", () => {
+	expect(branchMatchRanges("fix/login-crash", "login")).toEqual([
+		{ start: 4, end: 9 },
+	]);
+});
+
+test("branchMatchRanges is empty when the branch doesn't match", () => {
+	expect(branchMatchRanges("fix/login-crash", "signup")).toEqual([]);
+	expect(branchMatchRanges("fix/login-crash", "")).toEqual([]);
+});
+
+test("branchMatchRanges collects every occurrence of every term", () => {
+	expect(branchMatchRanges("fix/fix-login", "login fix")).toEqual([
+		{ start: 0, end: 3 },
+		{ start: 4, end: 7 },
+		{ start: 8, end: 13 },
+	]);
+});
+
+test("branchMatchRanges merges overlapping and adjacent ranges", () => {
+	expect(branchMatchRanges("abcdef", "abc cde")).toEqual([
+		{ start: 0, end: 5 },
+	]);
+	expect(branchMatchRanges("abcdef", "abc def")).toEqual([
+		{ start: 0, end: 6 },
+	]);
+	expect(branchMatchRanges("aaaa", "aa")).toEqual([{ start: 0, end: 4 }]);
+});
+
+test("branchMatchRanges ignores #123 terms", () => {
+	expect(branchMatchRanges("fix/123-login", "#123")).toEqual([]);
+	expect(branchMatchRanges("fix/123-login", "#123 login")).toEqual([
+		{ start: 8, end: 13 },
+	]);
+});
+
+test("branchMatchRanges hits bare digits as text", () => {
+	expect(branchMatchRanges("fix/123-login", "123")).toEqual([
+		{ start: 4, end: 7 },
+	]);
+});
+
+test("branchMatchRanges is case-insensitive and indexes the original branch", () => {
+	expect(branchMatchRanges("Fix/LOGIN", "LoGiN")).toEqual([
+		{ start: 4, end: 9 },
+	]);
 });
