@@ -102,12 +102,19 @@ describe("resolveReviewTarget", () => {
 								}),
 							pullRequest: () =>
 								Effect.succeed({
-									number: 42,
-									title: "Feature",
-									baseRef: "main",
-									headRef: "feature",
-									isCrossRepository: false,
-									authorLogin: "fdarian",
+									ref: {
+										number: 42,
+										title: "Feature",
+										baseRef: "main",
+										headRef: "feature",
+										isCrossRepository: false,
+										authorLogin: "fdarian",
+									},
+									facts: {
+										state: "OPEN" as const,
+										headSha: "a".repeat(40),
+										baseSha: "b".repeat(40),
+									},
 								}),
 						}),
 					);

@@ -121,7 +121,7 @@ export function useIndexedPullRequests(
 }
 
 /**
- * Live `gh`-backed search behind TanStack Query, keyed on `query` and `repos` — a repeat
+ * Live `gh`-backed search behind TanStack Query, keyed on `query`, `repos` and `state` — a repeat
  * of a query already seen this session (retyping after a backspace, opening
  * the palette again with the same search) resolves from cache for free
  * rather than re-asking GitHub. `placeholderData: keepPreviousData` is what
@@ -136,6 +136,7 @@ export function useSearchPullRequests(
 	query: string,
 	enabled: boolean,
 	repos: readonly string[],
+	state: "open" | "closed",
 ): {
 	results: readonly PullRequestSearchResult[];
 	isSearching: boolean;
@@ -145,7 +146,7 @@ export function useSearchPullRequests(
 } {
 	const search = useQuery({
 		...orpc.pullRequests.search.queryOptions({
-			input: { query, repos: [...repos] },
+			input: { query, repos: [...repos], state },
 			enabled,
 		}),
 		placeholderData: keepPreviousData,
@@ -163,7 +164,11 @@ export function useSearchPullRequests(
  * with `#/infra/query-persistence.ts`, whose persistence filter matches this
  * exact query key — change it here and both follow.
  */
-export const RECENT_PULL_REQUESTS_INPUT = { query: "", repos: [] };
+export const RECENT_PULL_REQUESTS_INPUT = {
+	query: "",
+	repos: [],
+	state: "open" as const,
+};
 
 export function useRecentPullRequests(
 	orpc: SidecarQueryUtils,
@@ -174,6 +179,7 @@ export function useRecentPullRequests(
 		RECENT_PULL_REQUESTS_INPUT.query,
 		enabled,
 		RECENT_PULL_REQUESTS_INPUT.repos,
+		RECENT_PULL_REQUESTS_INPUT.state,
 	);
 }
 

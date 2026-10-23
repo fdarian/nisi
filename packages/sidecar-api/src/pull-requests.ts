@@ -488,6 +488,7 @@ export const pullRequestsContract = {
 			Schema.Struct({
 				query: Schema.String,
 				repos: Schema.Array(Schema.String),
+				state: Schema.Literals(["open", "closed"]),
 			}),
 		)
 		.output(Schema.Array(PullRequestSearchResult))

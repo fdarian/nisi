@@ -104,9 +104,11 @@ seam" for the port/token handshake this boots into.
   `Store`'s in-memory `pullRequestFacts` cache (head, base and state), fed by the `mergeStatus`
   watch in `http.ts` via `Store.recordPullRequestStatus` (which also emits `session-files-changed`
   when a new reading changes what the session diffs — `session-diff-source-changed`, which the
-  frontend refetches outright, for the first reading since it corrects a diff computed without it;
-  `session-files-changed`, which only offers Refresh, for later ones); until it's populated the
-  worktree is trusted. `http.ts` forks the call so a remote fetch never delays the status stream. A nisi PR worktree's
+  frontend refetches outright, for the first reading of an unseeded PR since it corrects a diff
+  computed without it; `session-files-changed`, which only offers Refresh, for later ones).
+  `openPullRequestSession` seeds the cache (silently, never over a watch reading) from the
+  `gh pr view` it already ran, so a merged PR's first diff is pinned before any watch reading; a PR
+  opened from the PR index has no entry, and until it's populated the worktree is trusted. `http.ts` forks the call so a remote fetch never delays the status stream. A nisi PR worktree's
   `headRef` need not resolve locally (nisi checks the PR out onto its own `nisi/pr-<n>/<headRef>`
   branch), so it's never passed to git for a PR session. A plain branch session compares `headRef`
   against `resolveCurrentBranch` fresh on every call rather than once at open time, so it drifts in

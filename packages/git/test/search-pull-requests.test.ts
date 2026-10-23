@@ -1,4 +1,6 @@
 import { describe, expect, test } from "bun:test";
+import { mkdtempSync, readFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { PullRequestSearchResult } from "../src/pull-request.ts";
@@ -14,6 +16,24 @@ type RunnerResult =
 	  }
 	| { readonly ok: false; readonly tag: string };
 
+const NOW_ISO = "2026-10-23T12:00:00Z";
+const CLOSED_CUTOFF = "2026-10-16";
+
+/** Every `q=` string `gh` was called with, one per search issued. */
+const searchedQueries = async (
+	query: string,
+	repos: readonly string[],
+	state: "open" | "closed",
+): Promise<ReadonlyArray<string>> => {
+	const queryLog = join(
+		mkdtempSync(join(tmpdir(), "nisi-search-")),
+		"queries.log",
+	);
+	const result = await runAgainstGhStub(query, repos, state, queryLog);
+	expect(result.ok).toBe(true);
+	return readFileSync(queryLog, "utf8").trim().split("\n");
+};
+
 /**
  * Runs `searchPullRequests` in a fresh `bun` process with `gh` pointed at
  * `fixtures/gh-search-stub.sh` — see `search-pull-requests-runner.ts` for why
@@ -22,16 +42,23 @@ type RunnerResult =
 const runAgainstGhStub = async (
 	query: string,
 	repos: readonly string[] = [],
+	state: "open" | "closed" = "open",
+	queryLog?: string,
 ): Promise<RunnerResult> => {
-	const proc = Bun.spawn(["bun", "run", RUNNER, testDir, query, ...repos], {
-		env: {
-			...process.env,
-			NISI_GH_BIN: GH_STUB,
-			NISI_EXPECT_SEARCH_REPOS: repos.join(" "),
+	const proc = Bun.spawn(
+		["bun", "run", RUNNER, testDir, query, state, ...repos],
+		{
+			env: {
+				...process.env,
+				NISI_GH_BIN: GH_STUB,
+				NISI_EXPECT_SEARCH_REPOS: repos.join(" "),
+				NISI_NOW_ISO: NOW_ISO,
+				...(queryLog === undefined ? {} : { NISI_GH_QUERY_LOG: queryLog }),
+			},
+			stdout: "pipe",
+			stderr: "pipe",
 		},
-		stdout: "pipe",
-		stderr: "pipe",
-	});
+	);
 	const [stdout, stderr, exitCode] = await Promise.all([
 		new Response(proc.stdout).text(),
 		new Response(proc.stderr).text(),
@@ -152,4 +179,82 @@ describe("searchPullRequests", () => {
 		if (result.ok) return;
 		expect(result.tag).toBe("GitHubSearchUnreachable");
 	});
+
+	test("closed mode on a blank query: author:@me, is:closed and a closed:>= cutoff 7 days back, no is:open", async () => {
+		const [q] = await searchedQueries("", [], "closed");
+		expect(q).toBe(
+			`is:pr author:@me is:closed closed:>=${CLOSED_CUTOFF} sort:updated-desc`,
+		);
+	});
+
+	test("closed mode with a repository chip keeps the repo scope", async () => {
+		const [q] = await searchedQueries("", ["acme/widgets"], "closed");
+		expect(q).toBe(
+			`is:pr repo:acme/widgets is:closed closed:>=${CLOSED_CUTOFF} sort:updated-desc`,
+		);
+	});
+
+	test("closed mode with a typed explicit state qualifier adds neither is:closed nor closed:>=", async () => {
+		const [q] = await searchedQueries(
+			"repo:acme/widgets is:merged",
+			[],
+			"closed",
+		);
+		expect(q).toBe("is:pr repo:acme/widgets is:merged sort:updated-desc");
+	});
+
+	test("closed mode on a blank query unions author and reviewed-by, since GitHub drops review-requested once a review is submitted", async () => {
+		const queries = await searchedQueries("", [], "closed");
+		expect([...queries].sort()).toEqual([
+			`is:pr author:@me is:closed closed:>=${CLOSED_CUTOFF} sort:updated-desc`,
+			`is:pr reviewed-by:@me is:closed closed:>=${CLOSED_CUTOFF} sort:updated-desc`,
+		]);
+		const result = await runAgainstGhStub("", [], "closed");
+		expect(result.ok).toBe(true);
+		if (!result.ok) return;
+		expect(result.results.map((r) => r.number)).toEqual([40, 30, 10]);
+	});
+
+	test("closed mode unions author, review-requested and reviewed-by for a typed query", async () => {
+		const queries = await searchedQueries("engine", [], "closed");
+		expect([...queries].sort()).toEqual([
+			`is:pr engine author:@me is:closed closed:>=${CLOSED_CUTOFF} sort:updated-desc`,
+			`is:pr engine review-requested:@me is:closed closed:>=${CLOSED_CUTOFF} sort:updated-desc`,
+			`is:pr engine reviewed-by:@me is:closed closed:>=${CLOSED_CUTOFF} sort:updated-desc`,
+		]);
+		const result = await runAgainstGhStub("engine", [], "closed");
+		expect(result.ok).toBe(true);
+		if (!result.ok) return;
+		expect(result.results.map((r) => r.number)).toEqual([40, 30, 10, 20]);
+	});
+
+	test("open mode never searches reviewed-by", async () => {
+		const queries = await searchedQueries("engine", [], "open");
+		expect(queries.some((q) => q.includes("reviewed-by:"))).toBe(false);
+	});
+
+	test("open mode adds is:open", async () => {
+		const [q] = await searchedQueries("", [], "open");
+		expect(q).toBe("is:pr author:@me is:open sort:updated-desc");
+	});
+
+	for (const typed of [
+		"repo:acme/widgets merged: bad rebase",
+		"repo:acme/widgets closed:",
+	]) {
+		test(`a state-named word without a value is free text and keeps the mode's qualifiers: ${typed}`, async () => {
+			const [q] = await searchedQueries(typed, [], "open");
+			expect(q).toBe(`is:pr ${typed} is:open sort:updated-desc`);
+		});
+	}
+
+	for (const typed of [
+		"repo:acme/widgets closed:>=2026-10-01",
+		"repo:acme/widgets -merged:<2026-10-01",
+	]) {
+		test(`a typed date qualifier in open mode no longer gets is:open: ${typed}`, async () => {
+			const [q] = await searchedQueries(typed, [], "open");
+			expect(q).toBe(`is:pr ${typed} sort:updated-desc`);
+		});
+	}
 });

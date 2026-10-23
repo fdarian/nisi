@@ -5,6 +5,11 @@ if [[ "$1" != "api" || "$2" != "graphql" ]]; then
 	exit 1
 fi
 joined=" $* "
+if [[ -n "${NISI_GH_QUERY_LOG:-}" ]]; then
+	for arg in "$@"; do
+		[[ "$arg" == q=* ]] && echo "${arg#q=}" >>"$NISI_GH_QUERY_LOG"
+	done
+fi
 has() { [[ "$joined" == *"$1"* ]]; }
 if has "TRIGGER_AUTH_FAIL"; then
 	echo "gh auth login" >&2
@@ -39,8 +44,8 @@ for repo in ${NISI_EXPECT_SEARCH_REPOS:-}; do
 		echo "missing repository qualifier: $repo" >&2
 		exit 1
 	fi
-	if ! has "is:merged" && ! has "is:open"; then
-		echo 'missing open qualifier' >&2
+	if ! has "is:merged" && ! has "is:open" && ! has "is:closed"; then
+		echo 'missing state qualifier' >&2
 		exit 1
 	fi
 done
@@ -49,8 +54,8 @@ if has "repo:acme/tools"; then
 		echo 'missing repeated repo qualifier' >&2
 		exit 1
 	fi
-	if ! has "is:merged" && ! has "is:open"; then
-		echo 'missing open qualifier' >&2
+	if ! has "is:merged" && ! has "is:open" && ! has "is:closed"; then
+		echo 'missing state qualifier' >&2
 		exit 1
 	fi
 fi
@@ -59,7 +64,7 @@ pr() {
 }
 printf '{"data":{"search":{"nodes":['
 if has "repo:acme/widgets"; then
-	if has "author:@me" || has "review-requested:@me"; then
+	if has "author:@me" || has "review-requested:@me" || has "reviewed-by:@me"; then
 		echo 'unexpected scope' >&2
 		exit 1
 	fi
@@ -72,8 +77,10 @@ elif has "review-requested:@me"; then
 	pr 20 'Review requested PR' bob 2 false UNKNOWN UNKNOWN null
 	printf ','
 	pr 30 'Shared PR' carol 5 false CONFLICTING DIRTY '{"state":"FAILURE"}'
+elif has "reviewed-by:@me"; then
+	pr 40 'Reviewed PR' dave 6 false MERGEABLE CLEAN null
 else
-	if ! has "author:@me" || ! has "is:open"; then
+	if ! has "author:@me" || { ! has "is:open" && ! has "is:closed"; }; then
 		echo 'missing default scope' >&2
 		exit 1
 	fi

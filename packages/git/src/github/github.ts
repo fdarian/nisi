@@ -21,6 +21,8 @@ import type {
 import type {
 	PullRequestRef,
 	PullRequestSearchResult,
+	PullRequestSearchState,
+	ViewedPullRequest,
 } from "../pull-request.ts";
 import type {
 	ActionsJob,
@@ -95,7 +97,7 @@ export type GitHubShape = {
 		repoRoot: string,
 		number?: number,
 	) => Effect.Effect<
-		PullRequestRef | null,
+		ViewedPullRequest | null,
 		PullRequestNotFound | GhOutputDecodeError | GitHubUnreachable
 	>;
 	pullRequestState: (
@@ -130,6 +132,7 @@ export type GitHubShape = {
 		cwd: string,
 		query: string,
 		repos: ReadonlyArray<string>,
+		state: PullRequestSearchState,
 	) => Effect.Effect<
 		ReadonlyArray<PullRequestSearchResult>,
 		PullRequestSearchError

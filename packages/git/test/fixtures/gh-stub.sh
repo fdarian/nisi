@@ -14,12 +14,12 @@ fi
 if [[ "$1" == "pr" && "$2" == "view" ]]; then
 	# By-number: `["pr","view","<n>","--json",...]` — third arg is the number.
 	if [[ "$3" == "42" ]]; then
-		echo '{"number":42,"title":"Add widgets","baseRefName":"main","headRefName":"feature-42","isCrossRepository":false,"author":{"login":"fdarian"}}'
+		echo '{"number":42,"title":"Add widgets","baseRefName":"main","headRefName":"feature-42","isCrossRepository":false,"author":{"login":"fdarian"},"state":"OPEN","headRefOid":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","baseRefOid":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}'
 		exit 0
 	fi
 	# Branch-based: `["pr","view","--json",...]` — no number, third arg is `--json`.
 	if [[ "$3" == "--json" ]]; then
-		echo '{"number":7,"title":"Branch PR","baseRefName":"main","headRefName":"feature-7","isCrossRepository":false,"author":null}'
+		echo '{"number":7,"title":"Branch PR","baseRefName":"main","headRefName":"feature-7","isCrossRepository":false,"author":null,"state":"OPEN","headRefOid":"cccccccccccccccccccccccccccccccccccccccc","baseRefOid":"dddddddddddddddddddddddddddddddddddddddd"}'
 		exit 0
 	fi
 	echo "GraphQL: Could not resolve to a PullRequest with the number of $3." >&2
