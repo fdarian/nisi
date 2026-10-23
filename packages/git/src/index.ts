@@ -116,6 +116,7 @@ export type {
 	PullRequestSearchResult,
 	PullRequestSearchState,
 	ReviewTarget,
+	ViewedPullRequest,
 } from "./pull-request.ts";
 export {
 	resolveReviewTarget,

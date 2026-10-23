@@ -453,12 +453,35 @@ export class Store extends Context.Service<Store>()("Store", {
 		};
 		/**
 		 * Each PR's head commit, base commit and state as last reported by the
-		 * merge-status watch, in memory only. Empty until a watch has read it, in
-		 * which case `resolveDiffHead` keeps trusting the worktree and
-		 * `resolveDiffBase` keeps the live base. Lost on restart, which just
-		 * means the next watch reading repopulates it.
+		 * merge-status watch, in memory only. Opening a PR through `gh pr view`
+		 * seeds it too; a PR opened any other way (the PR index, a restored tab)
+		 * has no entry until a watch has read it, in which case `resolveDiffHead`
+		 * keeps trusting the worktree and `resolveDiffBase` keeps the live base.
+		 * Lost on restart, which just means the next watch reading repopulates it.
 		 */
 		const pullRequestFacts = new Map<string, PullRequestFacts>();
+		/**
+		 * Keys in {@link pullRequestFacts} that came from {@link seedPullRequestFacts}
+		 * and haven't yet been confirmed by a watch reading.
+		 */
+		const seededPullRequestKeys = new Set<string>();
+
+		/**
+		 * Records what `gh pr view` reported while opening a PR, so the session's
+		 * first diff already knows a merged PR's pinned base instead of waiting for
+		 * the merge-status watch. Never overwrites a watch reading and emits no
+		 * events: nothing has been displayed yet, and an identical watch reading
+		 * is a no-op in {@link recordPullRequestStatus}.
+		 */
+		const seedPullRequestFacts = (
+			pr: PullRequestIdentity,
+			facts: PullRequestFacts,
+		) => {
+			const key = pullRequestKey(pr);
+			if (pullRequestFacts.has(key)) return;
+			pullRequestFacts.set(key, facts);
+			seededPullRequestKeys.add(key);
+		};
 
 		/**
 		 * The head commit each session is currently displaying, in memory only.
@@ -784,14 +807,18 @@ export class Store extends Context.Service<Store>()("Store", {
 									requested.repoRoot,
 									requested.number,
 								);
-								if (pr === null || pr.number !== requested.number)
+								if (pr === null || pr.ref.number !== requested.number)
 									return yield* new PullRequestNotFound({
 										repoRoot: requested.repoRoot,
 										number: requested.number,
 										reason:
 											"GitHub returned no pull request during index revalidation",
 									});
-								return resolvedPullRequest(requested.owner, requested.repo, pr);
+								return resolvedPullRequest(
+									requested.owner,
+									requested.repo,
+									pr.ref,
+								);
 							});
 				if (latestOpens.get(validation.repoRoot) !== validation.generation)
 					return undefined;
@@ -1048,11 +1075,15 @@ export class Store extends Context.Service<Store>()("Store", {
 					input.repo,
 					input.number,
 				);
-				const pr =
+				const viewed =
 					cached === undefined
 						? yield* github.pullRequest(repoRoot, input.number)
+						: undefined;
+				const pr =
+					cached === undefined
+						? viewed?.ref
 						: { ...cached.pr, authorLogin: cached.pr.author };
-				if (pr === null || pr.number !== input.number) {
+				if (pr === undefined || pr.number !== input.number) {
 					return yield* new PullRequestNotFound({
 						repoRoot,
 						number: input.number,
@@ -1064,6 +1095,11 @@ export class Store extends Context.Service<Store>()("Store", {
 					cached?.repository.repo ?? input.repo,
 					pr,
 				);
+				if (viewed)
+					seedPullRequestFacts(resolved.pr, {
+						...viewed.facts,
+						baseRef: viewed.ref.baseRef,
+					});
 				const reused = yield* retargetMatchingBranchSession(
 					repoRoot,
 					sessions,
@@ -1546,6 +1582,14 @@ export class Store extends Context.Service<Store>()("Store", {
 			Effect.gen(function* () {
 				const key = pullRequestKey(pr);
 				const previous = pullRequestFacts.get(key);
+				// A seed skips the persist below when the reading matches it, and
+				// the session was created without a `prState`.
+				if (seededPullRequestKeys.delete(key))
+					yield* persistPullRequestState(pr, facts.state).pipe(
+						Effect.catchCause((cause) =>
+							Effect.logWarning("Could not persist the PR state", { cause }),
+						),
+					);
 				if (
 					previous?.headSha === facts.headSha &&
 					previous.baseSha === facts.baseSha &&
@@ -1603,9 +1647,10 @@ export class Store extends Context.Service<Store>()("Store", {
 							before.headRef === after.headRef
 						)
 							return;
-						// The very first reading corrects a diff computed without it
-						// (e.g. an empty one for a merged PR); a later one is a new
-						// change the user may be mid-read of, so it only offers Refresh.
+						// The very first reading of a PR that wasn't seeded at open
+						// corrects a diff computed without it (e.g. an empty one for a
+						// merged PR); a later one is a new change the user may be
+						// mid-read of, so it only offers Refresh.
 						if (previous === undefined) pinnedHeadShas.delete(session.id);
 						emit({
 							type:

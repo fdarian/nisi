@@ -17,6 +17,7 @@ import type {
 	PullRequestRef,
 	PullRequestSearchResult,
 	PullRequestSearchState,
+	ViewedPullRequest,
 } from "../../pull-request.ts";
 import type { RepositoryIdentity } from "../github.ts";
 import { hasSearchQualifier } from "../search-query.ts";
@@ -34,6 +35,9 @@ const PrView = Schema.Struct({
 	headRefName: Schema.String,
 	isCrossRepository: Schema.Boolean,
 	author: Schema.NullOr(Schema.Struct({ login: Schema.String })),
+	state: Schema.Literals(["OPEN", "CLOSED", "MERGED"]),
+	headRefOid: Schema.String,
+	baseRefOid: Schema.String,
 });
 
 const decodeRepoView = (command: string, raw: string) =>
@@ -77,7 +81,7 @@ const isNoGitHubRepo = (stderr: string) =>
 	NO_GITHUB_REPO_MARKERS.some((marker) => stderr.includes(marker));
 
 const PR_VIEW_JSON_FIELDS =
-	"number,title,baseRefName,headRefName,isCrossRepository,author";
+	"number,title,baseRefName,headRefName,isCrossRepository,author,state,headRefOid,baseRefOid";
 
 const toPullRequestRef = (
 	view: Schema.Schema.Type<typeof PrView>,
@@ -88,6 +92,17 @@ const toPullRequestRef = (
 	headRef: view.headRefName,
 	isCrossRepository: view.isCrossRepository,
 	authorLogin: authorLoginOf(view.author),
+});
+
+const toViewedPullRequest = (
+	view: Schema.Schema.Type<typeof PrView>,
+): ViewedPullRequest => ({
+	ref: toPullRequestRef(view),
+	facts: {
+		state: view.state,
+		headSha: view.headRefOid,
+		baseSha: view.baseRefOid,
+	},
 });
 
 export const SearchPrItem = Schema.Struct({
@@ -500,7 +515,9 @@ export const pullRequest = (repoRoot: string, number?: number) =>
 				reason: result.stderr.trim(),
 			});
 		}
-		return toPullRequestRef(yield* decodePrView("gh pr view", result.stdout));
+		return toViewedPullRequest(
+			yield* decodePrView("gh pr view", result.stdout),
+		);
 	});
 
 export const headRef = (repoRoot: string, number: number) =>

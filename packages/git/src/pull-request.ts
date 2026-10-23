@@ -12,6 +12,16 @@ export type PullRequestRef = {
 	readonly authorLogin: string;
 };
 
+/** What GitHub reported about a PR at the moment it was read, alongside its {@link PullRequestRef}. */
+export type ViewedPullRequest = {
+	readonly ref: PullRequestRef;
+	readonly facts: {
+		readonly state: "OPEN" | "CLOSED" | "MERGED";
+		readonly headSha: string;
+		readonly baseSha: string;
+	};
+};
+
 /** The repo's GitHub identity plus the PR open for the current branch, when GitHub knows this repo at all. */
 export type GitHubTarget = {
 	readonly owner: string;
@@ -94,7 +104,11 @@ const resolveTarget = (repoRoot: string, number?: number) =>
 				: identity.defaultBranch;
 		return {
 			defaultBranch,
-			github: { owner: identity.owner, repo: identity.repo, pr: pr.success },
+			github: {
+				owner: identity.owner,
+				repo: identity.repo,
+				pr: pr.success === null ? null : pr.success.ref,
+			},
 		} satisfies ReviewTarget;
 	});
 
