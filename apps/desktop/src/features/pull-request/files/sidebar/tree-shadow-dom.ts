@@ -359,12 +359,19 @@ const FLUID_HOVER_STYLE_ATTRIBUTE = "data-nisi-fluid-hover";
  * the gliding highlight. Selected rows keep their fill.
  * `--truncate-marker-background-color` is pinned to the surface because the
  * truncation marker paints an opaque patch that would otherwise inherit the
- * now-transparent tree background.
+ * now-transparent tree background. The marker's patch follows the lit row
+ * (`data-fluid-hover-active`) rather than the pointer, for the same reason: it
+ * would otherwise light up ahead of the gliding highlight.
  */
 function buildFluidHoverCSS(): string {
 	return `
 [data-type="item"]:is(:hover, [data-item-context-hover="true"]):not([data-item-selected="true"]) {
 	background-color: transparent;
+	--truncate-marker-background-overlay-color: transparent;
+}
+
+[data-type="item"][data-fluid-hover-active]:not([data-item-selected="true"]) {
+	--truncate-marker-background-overlay-color: var(--trees-bg-muted);
 }
 
 :host,
