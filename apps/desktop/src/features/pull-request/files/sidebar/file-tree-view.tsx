@@ -30,6 +30,7 @@ import {
 	buildStatusColorCSS,
 	buildTreeThemeStyle,
 	createRowDecorationRenderer,
+	findTreeRowByPath,
 	observeTreeScroll,
 	resolveTreeRowAtPoint,
 	syncActionButtonStyle,
@@ -197,15 +198,24 @@ export function FileTreeView({
 	const treeHostRef = useRef<HTMLDivElement>(null);
 	const treeModel = useMemo(() => buildTreeModel(files), [files]);
 
-	const resolveHoveredRow = useCallback(
-		(pointer: { x: number; y: number }) =>
-			resolveTreeRowAtPoint(treeHostRef.current, pointer),
-		[],
-	);
+	// The tree keys row buttons by index, not path, so after an expand/collapse
+	// the lit button can show another file; the path is what stays the same row.
+	const hoveredPathRef = useRef<string | undefined>(undefined);
+	const resolveHoveredRow = useCallback((pointer: { x: number; y: number }) => {
+		const row = resolveTreeRowAtPoint(treeHostRef.current, pointer);
+		if (row !== null) hoveredPathRef.current = row.dataset.itemPath;
+		return row;
+	}, []);
+	const reacquireHoveredRow = useCallback(() => {
+		const path = hoveredPathRef.current;
+		if (path === undefined) return null;
+		return findTreeRowByPath(treeHostRef.current, path);
+	}, []);
 	const hover = useFluidHover<HTMLDivElement>("y", {
 		resolveItem: resolveHoveredRow,
+		reacquireItem: reacquireHoveredRow,
 	});
-	const refreshHover = hover.refresh;
+	const followHover = hover.follow;
 	const onHoverMove = hover.handlers.onMouseMove;
 
 	// The context menu is portaled out of the container, but React still
@@ -325,17 +335,17 @@ export function FileTreeView({
 	}, []);
 
 	useEffect(() => {
-		const stop = observeTreeScroll(treeHostRef.current, refreshHover);
+		const stop = observeTreeScroll(treeHostRef.current, followHover);
 		if (stop !== null) return stop;
 		let stopOnFrame: (() => void) | null = null;
 		const frame = requestAnimationFrame(() => {
-			stopOnFrame = observeTreeScroll(treeHostRef.current, refreshHover);
+			stopOnFrame = observeTreeScroll(treeHostRef.current, followHover);
 		});
 		return () => {
 			cancelAnimationFrame(frame);
 			stopOnFrame?.();
 		};
-	}, [refreshHover]);
+	}, [followHover]);
 
 	useEffect(() => {
 		const currentlySelected = model.getSelectedPaths();

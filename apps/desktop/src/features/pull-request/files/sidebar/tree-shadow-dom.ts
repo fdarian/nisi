@@ -74,8 +74,8 @@ function getTreeShadowRoot(treeHost: HTMLElement | null): ShadowRoot | null {
 /**
  * The row under `pointer`, for `useFluidHover`'s `resolveItem`. Resolves by
  * row geometry rather than hit-testing: the tree turns off pointer events on
- * its rows while scrolling, so hit-testing finds nothing mid-scroll and the
- * highlight would stay where it was. Parked (focused/dragged) rows are
+ * its rows while scrolling, so hit-testing finds nothing mid-scroll and a
+ * `mousemove` during momentum scrolling would never land. Parked (focused/dragged) rows are
  * skipped even when they contain the pointer, because they're invisible but
  * can sit on top of a real row. Null when no row contains the pointer.
  */
@@ -96,6 +96,20 @@ export function resolveTreeRowAtPoint(
 		) {
 			return row;
 		}
+	}
+	return null;
+}
+
+/** The mounted row for `path`, for `useFluidHover`'s `reacquireItem`; parked rows are skipped like in `resolveTreeRowAtPoint`. */
+export function findTreeRowByPath(
+	treeHost: HTMLElement | null,
+	path: string,
+): HTMLElement | null {
+	const shadowRoot = getTreeShadowRoot(treeHost);
+	if (shadowRoot === null) return null;
+	for (const row of shadowRoot.querySelectorAll<HTMLElement>(ROW_SELECTOR)) {
+		if (row.dataset.itemParked === "true") continue;
+		if (row.dataset.itemPath === path) return row;
 	}
 	return null;
 }

@@ -9,6 +9,7 @@ import {
 	useRef,
 	useState,
 } from "react";
+import { flushSync } from "react-dom";
 
 /**
  * Fluid hover (https://www.fluidfunctionalism.com/docs/fluid-hover): one
@@ -20,7 +21,7 @@ import {
 
 type Rect = { left: number; top: number; width: number; height: number };
 
-type Active = { element: HTMLElement; rect: Rect };
+type Active = { element: HTMLElement; rect: Rect; scrolled: boolean };
 
 type FluidHover<T extends HTMLElement> = {
 	containerRef: RefObject<T | null>;
@@ -31,9 +32,15 @@ type FluidHover<T extends HTMLElement> = {
 	};
 	/** Ref callback for each hoverable item; items may mount in any order. */
 	registerItem: RefCallback<HTMLElement>;
-	/** Re-picks from the last pointer position, for events the hook can't see (e.g. a scroll inside a shadow root). */
-	refresh: () => void;
+	/**
+	 * Re-measures the lit item without re-picking, so the highlight rides the
+	 * content while it scrolls. For scrolls the hook can't see (e.g. inside a
+	 * shadow root). Hides the highlight if the item is gone.
+	 */
+	follow: () => void;
 	rect: Rect | null;
+	/** The rect changed because the content scrolled; the highlight must track it without easing. */
+	scrolled: boolean;
 	/** Steps on each pointer entry so the highlight fades in at the new item instead of sliding from the last one. */
 	session: number;
 };
@@ -94,6 +101,12 @@ type Pointer = { x: number; y: number };
 type FluidHoverOptions = {
 	/** Replaces the registry lookup for items the hook can't register as refs. Must be stable; returning null keeps the current item. */
 	resolveItem?: (pointer: Pointer) => HTMLElement | null;
+	/**
+	 * Re-finds the lit item while following a scroll, for hosts that recycle
+	 * item elements across content so `previous` may now show something else.
+	 * Must be stable; null means the item is gone.
+	 */
+	reacquireItem?: (previous: HTMLElement) => HTMLElement | null;
 };
 
 /** `containerRef` must sit on a `relative` element that contains every registered item. */
@@ -102,9 +115,11 @@ export function useFluidHover<T extends HTMLElement>(
 	options?: FluidHoverOptions,
 ): FluidHover<T> {
 	const resolveItem = options?.resolveItem;
+	const reacquireItem = options?.reacquireItem;
 	const containerRef = useRef<T | null>(null);
 	const itemsRef = useRef(new Set<HTMLElement>());
 	const frameRef = useRef<number | null>(null);
+	const followFrameRef = useRef<number | null>(null);
 	const pointerRef = useRef<Pointer | null>(null);
 	const sessionPendingRef = useRef(false);
 	const activeElementRef = useRef<HTMLElement | null>(null);
@@ -112,9 +127,14 @@ export function useFluidHover<T extends HTMLElement>(
 	const [session, setSession] = useState(0);
 
 	const cancelFrame = useCallback(() => {
-		if (frameRef.current === null) return;
-		cancelAnimationFrame(frameRef.current);
-		frameRef.current = null;
+		if (frameRef.current !== null) {
+			cancelAnimationFrame(frameRef.current);
+			frameRef.current = null;
+		}
+		if (followFrameRef.current !== null) {
+			cancelAnimationFrame(followFrameRef.current);
+			followFrameRef.current = null;
+		}
 	}, []);
 
 	const pick = useCallback(() => {
@@ -138,11 +158,46 @@ export function useFluidHover<T extends HTMLElement>(
 			current.element === element &&
 			sameRect(current.rect, rect)
 				? current
-				: { element, rect },
+				: { element, rect, scrolled: false },
 		);
 	}, [axis, resolveItem]);
 
-	/** Re-picks from the last pointer position, which a layout shift or scroll can leave under a different item without a `mousemove`. */
+	const followScroll = useCallback(() => {
+		followFrameRef.current = null;
+		const container = containerRef.current;
+		const previous = activeElementRef.current;
+		if (container === null || previous === null) return;
+		const element =
+			reacquireItem === undefined
+				? previous.isConnected
+					? previous
+					: null
+				: reacquireItem(previous);
+		activeElementRef.current = element;
+		// Sync, so the highlight commits in the same frame as the scrolled content instead of trailing it.
+		flushSync(() => {
+			if (element === null) {
+				setActive(null);
+				return;
+			}
+			const rect = measure(element, container);
+			setActive((current) =>
+				current !== null &&
+				current.element === element &&
+				sameRect(current.rect, rect)
+					? current
+					: { element, rect, scrolled: true },
+			);
+		});
+	}, [reacquireItem]);
+
+	/** A pick already pending measures the item itself, so a follow would only race it. */
+	const follow = useCallback(() => {
+		if (frameRef.current !== null || followFrameRef.current !== null) return;
+		followFrameRef.current = requestAnimationFrame(followScroll);
+	}, [followScroll]);
+
+	/** Re-picks from the last pointer position, which a layout shift can leave under a different item without a `mousemove`. */
 	const schedulePick = useCallback(() => {
 		cancelFrame();
 		frameRef.current = requestAnimationFrame(pick);
@@ -189,12 +244,12 @@ export function useFluidHover<T extends HTMLElement>(
 		const observer = new ResizeObserver(schedulePick);
 		observer.observe(container);
 		// Capture: scroll events don't bubble, and the scroller is an ancestor of the container.
-		window.addEventListener("scroll", schedulePick, true);
+		window.addEventListener("scroll", follow, true);
 		return () => {
 			observer.disconnect();
-			window.removeEventListener("scroll", schedulePick, true);
+			window.removeEventListener("scroll", follow, true);
 		};
-	}, [schedulePick]);
+	}, [schedulePick, follow]);
 
 	const activeElement = active === null ? null : active.element;
 	useEffect(() => {
@@ -209,8 +264,9 @@ export function useFluidHover<T extends HTMLElement>(
 		containerRef,
 		handlers: { onMouseEnter, onMouseLeave, onMouseMove },
 		registerItem,
-		refresh: schedulePick,
+		follow,
 		rect: active === null ? null : active.rect,
+		scrolled: active === null ? false : active.scrolled,
 		session,
 	};
 }
@@ -220,7 +276,7 @@ const MOVE_SPRING = { type: "spring", duration: 0.08, bounce: 0 } as const;
 export function FluidHoverHighlight(props: {
 	className?: string;
 	hidden?: boolean;
-	hover: Pick<FluidHover<HTMLElement>, "rect" | "session">;
+	hover: Pick<FluidHover<HTMLElement>, "rect" | "scrolled" | "session">;
 }): React.ReactElement {
 	const reducedMotion = useReducedMotion();
 	const rect = props.hidden ? null : props.hover.rect;
@@ -250,6 +306,10 @@ export function FluidHoverHighlight(props: {
 					key={props.hover.session}
 					transition={{
 						...(reducedMotion ? { duration: 0 } : MOVE_SPRING),
+						...(props.hover.scrolled && {
+							x: { duration: 0 },
+							y: { duration: 0 },
+						}),
 						opacity: { duration: 0.08 },
 					}}
 				/>
