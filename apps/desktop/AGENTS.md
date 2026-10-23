@@ -129,6 +129,14 @@ off; `renderer-window.ts` denies navigation and `window.open` and routes http(s)
   (`NISI_DATA_DIR`, else `config.toml`'s `data_dir`, else the macOS default). Electron's own Chromium
   state goes under `<data dir>/electron` (`userData`), so dev and prod never contend for a profile lock.
 - `activation.ts` / `window-activation.ts` — the CLI activation stream and raising the window.
+- `liquid-glass.ts` — the main window is always `transparent`; the Settings > General "Window glass" choice
+  (`off`/`regular`/`tinted`, in `localStorage` via `settings/window-glass.ts`). Native glass is only on/off:
+  `NativeApi.setWindowGlass(enabled)` adds an untinted `NSGlassEffectView` (`electron-liquid-glass`, macOS 26+;
+  `vibrancy` before that). The addon can't remove its view, so `off` is the renderer painting `--frame-surface`
+  opaque: the frame (body, app shell, settings sidebar, tab strip's inactive tabs) is transparent only under
+  `html[data-native-glass]`, which the renderer sets to the kind from `setWindowGlass`'s result (absent for the
+  About window). The `tinted` wash is CSS on `body` keyed off `data-native-glass="tinted"`, because a native
+  `tintColor` amplifies the wallpaper. `setThemeSource` pins `nativeTheme` to the app theme so glass matches it.
 - `menu.ts` — the app menu, built from scratch. ⌘W is "Close Tab": it closes the About window
   (`about-window.ts`) when that is focused, otherwise sends `close-tab` to the main window and the
   frontend decides. ⌘⇧W ("Close Window") closes whichever window is focused. ⌘, sends `open-settings`.
@@ -152,6 +160,9 @@ Shell gotchas:
 - **`dist-electron/package.json` (`{"type":"commonjs"}`) is load-bearing**: `build:electron` writes it. This
   package is `"type": "module"`, so without it Node would load the CJS `main.js`/`preload.js` as ESM, and
   `bundleDir()` resolves the directory through that file.
+- **`electron-liquid-glass` is `--external` in `build:electron` and shipped through `electron-builder.yml`'s `files`
+  (plus `node-gyp-build`) with `asarUnpack: **/*.node`**: it loads its prebuilt `.node` by path at runtime, so
+  bundling it into `main.js` or leaving the `.node` inside the asar breaks the glass.
 - **Ad-hoc signing needs `com.apple.security.cs.disable-library-validation` as well as `allow-jit`**
   (`build/entitlements.plist`): without the former the hardened runtime refuses to load Electron's own
   frameworks under an ad-hoc identity; `allow-jit` is for the bun-compiled binaries.

@@ -12,6 +12,7 @@ import {
 import { ToggleGroup, ToggleGroupItem } from "#/components/ui/toggle-group";
 import type { SidecarQueryUtils } from "#/infra/backend-context";
 import { useBackendContext } from "#/infra/backend-context";
+import { hasNative } from "#/infra/native";
 import { useAvailableEditors } from "#/infra/use-available-editors";
 import { DiffThemeColumn } from "./diff-theme-picker";
 import {
@@ -24,6 +25,12 @@ import {
 	SettingsRowHeader,
 	SettingsSection,
 } from "./settings-section";
+import {
+	isWindowGlass,
+	setWindowGlass,
+	useWindowGlass,
+	type WindowGlass,
+} from "./window-glass";
 
 export function SettingsPage(): React.ReactElement | null {
 	const backend = useBackendContext();
@@ -76,6 +83,13 @@ type ThemePreference = (typeof THEME_PREFERENCES)[number];
 const isThemePreference = (value: string): value is ThemePreference =>
 	(THEME_PREFERENCES as readonly string[]).includes(value);
 
+const WINDOW_GLASS_ITEMS: ReadonlyArray<{ value: WindowGlass; label: string }> =
+	[
+		{ value: "off", label: "Off" },
+		{ value: "regular", label: "Regular" },
+		{ value: "tinted", label: "Tinted" },
+	];
+
 /** Sentinel `Select` value for "no preferred editor chosen" — `preferredEditor` itself stores `null` for that state, but Base UI's `Select` needs a concrete item value to render as selected. */
 const NO_PREFERRED_EDITOR = "none";
 
@@ -89,6 +103,7 @@ function AppearanceSection({
 	const { editors, loadEditors } = useAvailableEditors();
 	const [diffThemeLight, setDiffThemeLight] = useDiffThemeLight(orpc);
 	const [diffThemeDark, setDiffThemeDark] = useDiffThemeDark(orpc);
+	const windowGlass = useWindowGlass();
 
 	return (
 		<SettingsSection title="Appearance">
@@ -116,6 +131,31 @@ function AppearanceSection({
 					</ToggleGroupItem>
 				</ToggleGroup>
 			</SettingsRow>
+			{hasNative() && (
+				<SettingsRow
+					description="See-through window frame; real Liquid Glass needs macOS 26."
+					title="Window glass"
+				>
+					<Select
+						items={WINDOW_GLASS_ITEMS}
+						onValueChange={(value: string | null) => {
+							if (value !== null && isWindowGlass(value)) setWindowGlass(value);
+						}}
+						value={windowGlass}
+					>
+						<SelectTrigger className="w-40" size="sm">
+							<SelectValue />
+						</SelectTrigger>
+						<SelectContent>
+							{WINDOW_GLASS_ITEMS.map((item) => (
+								<SelectItem key={item.value} value={item.value}>
+									{item.label}
+								</SelectItem>
+							))}
+						</SelectContent>
+					</Select>
+				</SettingsRow>
+			)}
 			<SettingsRowStacked
 				description="Syntax colors for the diff view — one theme per appearance."
 				title="Diff theme"

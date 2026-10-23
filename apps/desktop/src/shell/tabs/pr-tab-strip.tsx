@@ -332,6 +332,7 @@ function sessionLabel(session: Session): string {
 const PR_TAB_CLASS = cn(
 	"group relative flex min-w-32 max-w-56 shrink select-none items-center gap-1.5 self-end rounded-md px-2.5 py-1.5 text-muted-foreground text-xs outline-none",
 	"bg-pane-surface hover:bg-background hover:text-foreground",
+	"in-data-[native-glass]:bg-transparent in-data-[native-glass]:hover:bg-sidebar-accent",
 	"data-active:before:pointer-events-none data-active:before:absolute data-active:before:inset-0 data-active:before:rounded-[calc(var(--radius-md)-1px)] data-active:before:shadow-[0_1px_--theme(--color-black/4%)] dark:data-active:before:shadow-[0_-1px_--theme(--color-white/6%)]",
 	"data-active:bg-background data-active:text-foreground data-active:bg-clip-padding data-active:shadow-xs/5",
 	"focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",

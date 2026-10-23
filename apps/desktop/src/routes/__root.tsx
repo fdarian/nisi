@@ -5,7 +5,8 @@ import {
 } from "@tanstack/react-router";
 import { Agentation } from "agentation";
 import { Mesurer } from "mesurer";
-import { ThemeProvider } from "next-themes";
+import { ThemeProvider, useTheme } from "next-themes";
+import { useEffect } from "react";
 import { ToastProvider } from "#/components/ui/toast";
 import {
 	DevToolProvider,
@@ -16,6 +17,7 @@ import { DiffWorkerPrewarm } from "#/features/diff/viewer/diff-code-view";
 import { ScheduledMergeNotifications } from "#/features/pull-request/merge/scheduled-merge-notifications";
 import { useSettingsShortcut } from "#/features/settings/use-settings-shortcut";
 import { BackendProvider, useBackendContext } from "#/infra/backend-context";
+import { hasNative, native } from "#/infra/native";
 import { SidecarEventsProvider } from "#/infra/sidecar-events";
 import { AppShell } from "#/shell/app-shell";
 import { AppViewActiveContext } from "#/shell/app-view-context";
@@ -32,6 +34,7 @@ function RootLayout() {
 
 	return (
 		<ThemeProvider attribute="class" defaultTheme="system" enableSystem>
+			<NativeThemeSync />
 			<DevToolProvider>
 				<ToastProvider>
 					<BackendProvider>
@@ -41,6 +44,20 @@ function RootLayout() {
 			</DevToolProvider>
 		</ThemeProvider>
 	);
+}
+
+/** Glass renders in the native appearance, so it has to track the app's pinned theme rather than the system's. */
+function NativeThemeSync(): null {
+	const themeState = useTheme();
+	const theme = themeState.theme;
+	useEffect(() => {
+		if (!hasNative() || theme === undefined) return;
+		if (theme !== "light" && theme !== "dark" && theme !== "system") {
+			throw new Error(`unexpected theme: ${theme}`);
+		}
+		void native().setThemeSource(theme);
+	}, [theme]);
+	return null;
 }
 
 function ConnectedEvents() {

@@ -150,7 +150,7 @@ function ShellFrame({
 	return useRender({
 		render,
 		props: {
-			className: "flex h-screen flex-col bg-sidebar",
+			className: "flex h-screen flex-col bg-(--frame-surface)",
 			children: (
 				<>
 					{titleBar}

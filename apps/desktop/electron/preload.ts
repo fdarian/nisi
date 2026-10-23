@@ -13,6 +13,9 @@ const api = {
 	homeDir: () => ipcRenderer.invoke("nisi:homeDir"),
 	exit: () => ipcRenderer.invoke("nisi:exit"),
 	closeWindow: () => ipcRenderer.send("nisi:closeWindow"),
+	setWindowGlass: (enabled) =>
+		ipcRenderer.invoke("nisi:setWindowGlass", enabled),
+	setThemeSource: (source) => ipcRenderer.invoke("nisi:setThemeSource", source),
 	onMenu: (event, listener) => {
 		const handler = (_ipcEvent: unknown, received: MenuEvent) => {
 			if (received === event) {
