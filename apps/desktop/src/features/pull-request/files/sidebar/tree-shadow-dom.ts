@@ -59,7 +59,6 @@ export const TREE_STICKY_BACKDROP_CSS = `
 `;
 
 const ROW_SELECTOR = "button[data-item-path]";
-const CONTEXT_MENU_ANCHOR_SELECTOR = '[data-type="context-menu-anchor"]';
 
 const FOLDER_ICON_STYLE_ATTRIBUTE = "data-nisi-folder-icons";
 const STATUS_COLOR_STYLE_ATTRIBUTE = "data-nisi-status-color";
@@ -73,10 +72,12 @@ function getTreeShadowRoot(treeHost: HTMLElement | null): ShadowRoot | null {
 }
 
 /**
- * The row under `pointer`, for `useFluidHover`'s `resolveItem`. Null — keep
- * the current row — when the pointer is over the "…" overlay or over no row.
- * Uses `elementsFromPoint` rather than the topmost hit because a parked
- * (focused/dragged) row is invisible but can sit on top of a real one.
+ * The row under `pointer`, for `useFluidHover`'s `resolveItem`. Resolves by
+ * row geometry rather than hit-testing: the tree turns off pointer events on
+ * its rows while scrolling, so hit-testing finds nothing mid-scroll and the
+ * highlight would stay where it was. Parked (focused/dragged) rows are
+ * skipped even when they contain the pointer, because they're invisible but
+ * can sit on top of a real row. Null when no row contains the pointer.
  */
 export function resolveTreeRowAtPoint(
 	treeHost: HTMLElement | null,
@@ -84,10 +85,17 @@ export function resolveTreeRowAtPoint(
 ): HTMLElement | null {
 	const shadowRoot = getTreeShadowRoot(treeHost);
 	if (shadowRoot === null) return null;
-	for (const element of shadowRoot.elementsFromPoint(pointer.x, pointer.y)) {
-		if (element.closest(CONTEXT_MENU_ANCHOR_SELECTOR) !== null) return null;
-		const row = element.closest<HTMLElement>(ROW_SELECTOR);
-		if (row !== null && row.dataset.itemParked !== "true") return row;
+	for (const row of shadowRoot.querySelectorAll<HTMLElement>(ROW_SELECTOR)) {
+		if (row.dataset.itemParked === "true") continue;
+		const rect = row.getBoundingClientRect();
+		if (
+			pointer.y >= rect.top &&
+			pointer.y < rect.bottom &&
+			pointer.x >= rect.left &&
+			pointer.x < rect.right
+		) {
+			return row;
+		}
 	}
 	return null;
 }
