@@ -355,18 +355,14 @@ const FLUID_HOVER_STYLE_ATTRIBUTE = "data-nisi-fluid-hover";
  * `data-item-context-hover` — set for the row under the pointer, not only for
  * an open menu's row — so both have to go transparent or the native fill races
  * the gliding highlight. Selected rows keep their fill.
- * The marker's patch follows the lit row (`data-fluid-hover-active`) rather
- * than the pointer: it would otherwise light up ahead of the gliding highlight.
+ * The truncation marker stays transparent too: the highlight already shows
+ * through it, and any overlay there doubles the tint.
  */
 function buildFluidHoverCSS(): string {
 	return `
 [data-type="item"]:is(:hover, [data-item-context-hover="true"]):not([data-item-selected="true"]) {
 	background-color: transparent;
 	--truncate-marker-background-overlay-color: transparent;
-}
-
-[data-type="item"][data-fluid-hover-active]:not([data-item-selected="true"]) {
-	--truncate-marker-background-overlay-color: var(--trees-bg-muted);
 }
 `;
 }
