@@ -319,9 +319,9 @@ export function diffSearchHighlightCSS(names: {
  * row single-line (`truncate` on the path, `items-center`) so 44px is safe
  * to hard-code rather than measure.
  *
- * `bg-diff-surface`, not `bg-card`: the whole card tracks one surface —
- * `--background`, except under window glass where `--diff-surface` lifts it
- * to a brighter raised card (index.css) — so the header, the diff body under it
+ * `bg-background`, not `bg-card`: the whole card tracks the surrounding
+ * panel's tone — `--card` is measurably lighter than `--background` in dark
+ * mode (index.css) — so the header, the diff body under it
  * (`diffViewUnsafeCSS`'s `--diffs-*-bg`) and, for Files Changed, the
  * `<diffs-container>` behind it (`diff-pane.tsx`) all resolve to the same
  * surface, and `border` reads as a seam drawn on it rather than a change of
@@ -336,7 +336,7 @@ export function diffSearchHighlightCSS(names: {
  */
 export function diffCardHeaderClassName(collapsed: boolean): string {
 	return cn(
-		"h-11 border bg-diff-surface",
+		"h-11 border bg-background",
 		collapsed ? "rounded-xl" : "rounded-t-xl",
 	);
 }
@@ -410,17 +410,19 @@ export const diffViewUnsafeCSS = `
 		--diffs-font-size: 12.5px;
 		--diffs-line-height: ${DIFF_CODE_LINE_HEIGHT}px;
 		/**
-		 * Intentionally \`--diff-surface\`, not \`--code\` (which tracks
-		 * \`--card\` — see index.css). \`--code\` is what the pierre theme
-		 * background var is *named* for, but using it here made every file's
-		 * diff body render on a different surface than the card header and the
-		 * Files Changed toolbar (\`--card\` vs \`--background\` diverge in dark
-		 * mode). \`--diff-surface\` is \`--background\` normally and a brighter
-		 * raised tone under window glass, so the review surface stays one tone
-		 * that reads as a card over the translucent panes.
+		 * Intentionally the panel's own \`--background\`, not \`--code\` (which
+		 * tracks \`--card\` — see index.css). \`--code\` is what the pierre
+		 * theme background var is *named* for, but using it here made every
+		 * file's diff body render on a visibly different surface than the
+		 * Files Changed pane around it (\`--card\` vs \`--background\` diverge in
+		 * dark mode — \`--card\` is a touch lighter). The \`<diffs-container>\`
+		 * itself (\`diff-pane.tsx\`'s \`[&_diffs-container]\` classes) and the
+		 * header (\`diff-file-header.tsx\`) track \`--background\` for the same
+		 * reason; the card reads as a card through its border and shadow, not
+		 * through a distinct surface tone.
 		 */
-		--diffs-light-bg: var(--diff-surface);
-		--diffs-dark-bg: var(--diff-surface);
+		--diffs-light-bg: var(--background);
+		--diffs-dark-bg: var(--background);
 		--diffs-bg-selection-override: color-mix(in srgb, var(--color-blue-500) 30%, transparent);
 		--diffs-bg-selection-number-override: color-mix(in srgb, var(--color-blue-500) 42%, transparent);
 	}

@@ -578,7 +578,7 @@ export function FilesChangedView({
 						wrapLines={wrapLines}
 					/>
 					{isKeywordFilterActive && (
-						<div className="ml-(--diff-pane-inset-start,var(--spacing-diff-pane-inset)) mr-diff-pane-inset flex shrink-0 items-center justify-center rounded-xl bg-diff-surface px-3 py-1.5 text-muted-foreground text-xs">
+						<div className="ml-(--diff-pane-inset-start,var(--spacing-diff-pane-inset)) mr-diff-pane-inset flex shrink-0 items-center justify-center rounded-xl bg-background px-3 py-1.5 text-muted-foreground text-xs">
 							{keywordMatches.length === 0 ? (
 								<span>No matches</span>
 							) : (
