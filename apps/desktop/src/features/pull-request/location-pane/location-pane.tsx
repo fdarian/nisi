@@ -15,11 +15,11 @@
  */
 import type {
 	CodeViewItem,
-	DiffLineAnnotation,
 	FileDiffMetadata,
 	LineAnnotation,
 } from "@pierre/diffs";
 import { parsePatchFiles } from "@pierre/diffs";
+import type { CodeViewAnnotationArgs } from "@pierre/diffs/react";
 import { cn } from "cn";
 import { ChevronDownIcon, ChevronRightIcon } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
@@ -275,31 +275,30 @@ export function LocationPane({
 	);
 
 	const renderAnnotation = useCallback(
-		(
-			annotation:
-				| LineAnnotation<ReferenceAnnotationMetadata>
-				| DiffLineAnnotation<ReferenceAnnotationMetadata>,
-		) => (
-			<div
-				className={cn(
-					"flex flex-col items-center gap-2 px-3 py-6 text-center text-xs",
-					annotation.metadata.type === "reviewed-empty"
-						? "text-muted-foreground"
-						: "text-destructive-foreground",
-				)}
-			>
-				<span>{annotation.metadata.message}</span>
-				{annotation.metadata.action && (
-					<button
-						className="rounded border px-1.5 py-0.5 font-medium text-foreground hover:bg-accent"
-						onClick={annotation.metadata.action.onClick}
-						type="button"
-					>
-						{annotation.metadata.action.label}
-					</button>
-				)}
-			</div>
-		),
+		(...args: CodeViewAnnotationArgs<ReferenceAnnotationMetadata>) => {
+			const annotation = args[0];
+			return (
+				<div
+					className={cn(
+						"flex flex-col items-center gap-2 px-3 py-6 text-center text-xs",
+						annotation.metadata.type === "reviewed-empty"
+							? "text-muted-foreground"
+							: "text-destructive-foreground",
+					)}
+				>
+					<span>{annotation.metadata.message}</span>
+					{annotation.metadata.action && (
+						<button
+							className="rounded border px-1.5 py-0.5 font-medium text-foreground hover:bg-accent"
+							onClick={annotation.metadata.action.onClick}
+							type="button"
+						>
+							{annotation.metadata.action.label}
+						</button>
+					)}
+				</div>
+			);
+		},
 		[],
 	);
 

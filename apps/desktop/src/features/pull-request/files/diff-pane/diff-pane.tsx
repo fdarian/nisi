@@ -11,7 +11,10 @@ import type {
 	LineAnnotation,
 } from "@pierre/diffs";
 import { parsePatchFiles } from "@pierre/diffs";
-import type { CodeViewHandle } from "@pierre/diffs/react";
+import type {
+	CodeViewAnnotationArgs,
+	CodeViewHandle,
+} from "@pierre/diffs/react";
 import { cn } from "cn";
 import { CheckCheckIcon, FileIcon } from "lucide-react";
 import {
@@ -1094,12 +1097,8 @@ export function DiffPane({
 	);
 
 	const renderAnnotation = useCallback(
-		(
-			annotation:
-				| LineAnnotation<DiffAnnotationMetadata>
-				| DiffLineAnnotation<DiffAnnotationMetadata>,
-		) => {
-			const metadata = annotation.metadata;
+		(...args: CodeViewAnnotationArgs<DiffAnnotationMetadata>) => {
+			const metadata = args[0].metadata;
 			if (metadata.type === "binary") {
 				return (
 					<div className="px-3 py-6 text-center text-muted-foreground text-xs">

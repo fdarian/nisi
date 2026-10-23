@@ -485,7 +485,7 @@
 	--tw-prose-invert-td-borders: var(--border);
 }
 
-.markdown-document .markdown-code-block .shiki {
+.markdown-document .markdown-code-block .diffs {
 	min-width: max-content;
 	margin: 0;
 	overflow: visible;
@@ -509,7 +509,7 @@
 	white-space: pre;
 }
 
-.markdown-document .markdown-code-block .shiki code {
+.markdown-document .markdown-code-block .diffs code {
 	display: block;
 	min-width: max-content;
 	font-family: inherit;
@@ -520,15 +520,15 @@
 	color: inherit;
 }
 
-.markdown-document .markdown-code-block .shiki span {
+.markdown-document .markdown-code-block .diffs span {
 	color: var(--shiki-light, var(--code-foreground));
 }
 
-.dark .markdown-document .markdown-code-block .shiki {
+.dark .markdown-document .markdown-code-block .diffs {
 	background-color: var(--shiki-dark-bg, var(--code));
 	color: var(--shiki-dark, var(--code-foreground));
 }
 
-.dark .markdown-document .markdown-code-block .shiki span {
+.dark .markdown-document .markdown-code-block .diffs span {
 	color: var(--shiki-dark, var(--code-foreground));
 }

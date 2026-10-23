@@ -15,12 +15,11 @@ import type {
 	CodeViewItem,
 	CodeViewLineSelection,
 	CodeViewOptions,
-	DiffLineAnnotation,
-	LineAnnotation,
 	ThemesType,
 } from "@pierre/diffs";
 import {
 	CodeView,
+	type CodeViewAnnotationArgs,
 	type CodeViewHandle,
 	useWorkerPool,
 	type WorkerInitializationRenderOptions,
@@ -282,7 +281,7 @@ type DiffCodeViewProps<Metadata> = {
 		instance: CodeViewInstance<Metadata, undefined> | undefined,
 	) => void;
 	renderAnnotation?: (
-		annotation: LineAnnotation<Metadata> | DiffLineAnnotation<Metadata>,
+		...args: CodeViewAnnotationArgs<Metadata>
 	) => React.ReactNode;
 	renderCustomHeader?: (item: CodeViewItem<Metadata>) => React.ReactNode;
 	/**
