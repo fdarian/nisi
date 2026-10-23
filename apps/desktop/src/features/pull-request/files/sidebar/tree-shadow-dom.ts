@@ -20,15 +20,11 @@ import type {
  * scroll, so sizing the host to fit every row renders every row and makes
  * each scroll frame proportional to the file count.
  */
-export function buildTreeThemeStyle(glassShowing: boolean): CSSProperties {
+export function buildTreeThemeStyle(): CSSProperties {
 	return {
 		"--trees-fg-override": "var(--sidebar-foreground)",
 		"--trees-fg-muted-override": "var(--muted-foreground)",
-		// Transparent under glass so the fluid hover highlight, which sits behind the tree,
-		// shows through; the sidebar already paints `--pane-surface-nested` behind it.
-		"--trees-bg-override": glassShowing
-			? "transparent"
-			: "var(--pane-surface-nested)",
+		"--trees-bg-override": "var(--pane-surface-nested)",
 		"--trees-bg-muted-override": "var(--sidebar-accent)",
 		"--trees-border-color-override": "var(--sidebar-border)",
 		"--trees-accent-override": "var(--primary)",
@@ -48,15 +44,13 @@ export function buildTreeThemeStyle(glassShowing: boolean): CSSProperties {
 }
 
 /**
- * Stuck folder rows are painted over scrolled ones. Under glass the tree's
- * `--trees-bg` is transparent (so the fluid hover highlight shows through), so
- * the overlay takes the sidebar's `--pane-surface-nested` fill explicitly, plus
- * the same backdrop blur as the diff's sticky header so rows don't show through
- * where that fill is itself transparent. Passed as the tree's `unsafeCSS` option.
+ * The tree paints stuck folder rows over scrolled ones with a `--trees-bg`
+ * fill (`--pane-surface-nested`, transparent under native glass), so the
+ * overlay needs the same backdrop blur as the diff's sticky header or rows
+ * show through it. Passed as the tree's `unsafeCSS` option.
  */
 export const TREE_STICKY_BACKDROP_CSS = `
 [data-file-tree-sticky-overlay-content] {
-	background-color: var(--pane-surface-nested);
 	-webkit-backdrop-filter: var(--pane-surface-backdrop, none);
 	backdrop-filter: var(--pane-surface-backdrop, none);
 }
@@ -361,11 +355,8 @@ const FLUID_HOVER_STYLE_ATTRIBUTE = "data-nisi-fluid-hover";
  * `data-item-context-hover` — set for the row under the pointer, not only for
  * an open menu's row — so both have to go transparent or the native fill races
  * the gliding highlight. Selected rows keep their fill.
- * `--truncate-marker-background-color` is pinned to `--pane-surface-nested` because the
- * truncation marker paints an opaque patch that would otherwise inherit the
- * now-transparent tree background. The marker's patch follows the lit row
- * (`data-fluid-hover-active`) rather than the pointer, for the same reason: it
- * would otherwise light up ahead of the gliding highlight.
+ * The marker's patch follows the lit row (`data-fluid-hover-active`) rather
+ * than the pointer: it would otherwise light up ahead of the gliding highlight.
  */
 function buildFluidHoverCSS(): string {
 	return `
@@ -376,11 +367,6 @@ function buildFluidHoverCSS(): string {
 
 [data-type="item"][data-fluid-hover-active]:not([data-item-selected="true"]) {
 	--truncate-marker-background-overlay-color: var(--trees-bg-muted);
-}
-
-:host,
-[data-type="item"] {
-	--truncate-marker-background-color: var(--pane-surface-nested);
 }
 `;
 }

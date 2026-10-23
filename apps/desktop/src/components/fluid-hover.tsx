@@ -243,6 +243,7 @@ export function useFluidHover<T extends HTMLElement>(
 
 	/** A pick already pending measures the item itself, so a follow would only race it. */
 	const follow = useCallback(() => {
+		if (activeElementRef.current === null) return;
 		if (frameRef.current !== null || followFrameRef.current !== null) return;
 		followFrameRef.current = requestAnimationFrame(followScroll);
 	}, [followScroll]);

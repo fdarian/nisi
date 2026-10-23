@@ -444,7 +444,7 @@ export function FileTreeView({
 					model={model}
 					onClick={handleClick}
 					renderContextMenu={renderContextMenu}
-					style={buildTreeThemeStyle(glassShowing)}
+					style={buildTreeThemeStyle()}
 				/>
 			</div>
 		</div>
