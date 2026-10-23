@@ -364,8 +364,25 @@
 		@apply border-border outline-ring/50;
 	}
 
+	html {
+		--frame-surface: var(--sidebar);
+	}
+
+	html[data-native-glass] {
+		--frame-surface: transparent;
+	}
+
 	body {
-		@apply bg-sidebar text-foreground fixed flex flex-col h-screen w-screen overflow-hidden antialiased;
+		@apply bg-(--frame-surface) text-foreground fixed flex flex-col h-screen w-screen overflow-hidden antialiased;
+	}
+
+	/* On body only: body, the app shell, the sidebar and the dev branch bar all paint `--frame-surface` and overlap, so a translucent value in the variable would stack. */
+	html[data-native-glass="tinted"] body {
+		background-color: color-mix(
+			in oklab,
+			var(--sidebar) var(--glass-tint),
+			transparent
+		);
 	}
 
 	code,

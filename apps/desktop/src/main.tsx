@@ -4,6 +4,7 @@ import { PersistQueryClientProvider } from "@tanstack/react-query-persist-client
 import { createRouter, RouterProvider } from "@tanstack/react-router";
 import React from "react";
 import ReactDOM from "react-dom/client";
+import { restoreWindowGlass } from "#/features/settings/window-glass";
 import { captureWebToken } from "#/infra/backend";
 import { frontendBootMark } from "#/infra/launch-trace";
 import { persistOptions } from "#/infra/query-persistence";
@@ -11,6 +12,8 @@ import { startDeepLinkListener } from "#/shell/deep-link/deep-link-store";
 import { routeTree } from "./routeTree.gen";
 
 frontendBootMark("frontend.main");
+
+restoreWindowGlass();
 
 // Boot-once, before anything renders — a `nisi://` link can arrive before
 // the webview exists or React mounts. See `deep-link-store.ts`'s doc

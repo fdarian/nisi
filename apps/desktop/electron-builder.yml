@@ -4,13 +4,18 @@ npmRebuild: false
 directories:
   output: release
 # main.ts and preload.ts are bundled with bun and the renderer is Vite output, so the asar needs
-# no node_modules. The sidecar and CLI are standalone compiled binaries shipped via extraFiles.
+# no node_modules beyond electron-liquid-glass, which loads its prebuilt .node by path (and
+# node-gyp-build, which finds it). The sidecar and CLI are standalone compiled binaries shipped via extraFiles.
 files:
   - package.json
   - dist/**
   - dist-electron/**
   - "!**/*.map"
   - "!node_modules"
+  - node_modules/electron-liquid-glass/**
+  - node_modules/node-gyp-build/**
+asarUnpack:
+  - "**/*.node"
 # The sidecar serves this copy to a plain browser; `dist/**` above stays for the `app://` protocol.
 extraResources:
   - from: dist

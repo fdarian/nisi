@@ -38,6 +38,8 @@ const REPOSITORIES_NATIVE_STUB: NativeApi = {
 	homeDir: async () => STORY_HOME_DIR,
 	exit: unstubbed("exit"),
 	closeWindow: unstubbed("closeWindow"),
+	setWindowGlass: unstubbed("setWindowGlass"),
+	setThemeSource: unstubbed("setThemeSource"),
 	onMenu: unstubbed("onMenu"),
 	takePendingDeepLinks: unstubbed("takePendingDeepLinks"),
 	onDeepLink: unstubbed("onDeepLink"),

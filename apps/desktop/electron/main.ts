@@ -7,6 +7,7 @@ import {
 	dialog,
 	ipcMain,
 	Notification,
+	nativeTheme,
 	shell,
 } from "electron";
 import { watchActivation } from "./activation";
@@ -15,13 +16,14 @@ import { createBackendResolver } from "./backend";
 import { resolveDataDirOverride } from "./data-dir";
 import { listAvailableEditors, openInEditor } from "./editors";
 import { isOpenUrlAllowed } from "./external-url";
+import { glassWindowOptions, setWindowGlass } from "./liquid-glass";
 import {
 	applyMeasurementSwitches,
 	verifyMeasurementSwitches,
 } from "./measurement";
 import { isMeasurementInstance } from "./measurement-instance";
 import { installAppMenu } from "./menu";
-import type { MenuEvent } from "./native-api";
+import type { MenuEvent, ThemeSource } from "./native-api";
 import {
 	guardExternalNavigation,
 	rendererOrigin,
@@ -118,6 +120,8 @@ function createMainWindow(): BrowserWindow {
 		titleBarStyle: "hidden",
 		// Centers the 14px lights in the 44px title strip, over `TrafficLightSpace` in pr-tab-strip.tsx.
 		trafficLightPosition: { x: 12, y: 15 },
+		// The renderer opts its frame into transparency via `data-native-glass` (see `main.tsx`).
+		...glassWindowOptions(),
 		show: !measurement,
 		webPreferences: secureWebPreferences,
 	});
@@ -199,6 +203,16 @@ function registerIpc(
 	});
 	ipcMain.on("nisi:closeWindow", (event) => {
 		BrowserWindow.fromWebContents(event.sender)?.close();
+	});
+	ipcMain.handle("nisi:setWindowGlass", (event, enabled: boolean) => {
+		const sender = BrowserWindow.fromWebContents(event.sender);
+		if (sender === null || sender !== mainWindow) {
+			return false;
+		}
+		return setWindowGlass(sender, enabled);
+	});
+	ipcMain.handle("nisi:setThemeSource", (_event, source: ThemeSource) => {
+		nativeTheme.themeSource = source;
 	});
 	ipcMain.handle("nisi:takePendingDeepLinks", () => {
 		deepLinksTaken = true;
