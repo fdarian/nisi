@@ -24,8 +24,8 @@ const CONTEXT_ROW_CLASS =
  */
 export function PrHeaderShell(props: PrHeaderShellProps): React.ReactElement {
 	return (
-		<div className="flex items-center gap-3 border-b py-2 pr-6 pl-4">
-			<div className="flex min-w-0 flex-1 flex-col gap-0.5 py-1">
+		<div className="flex items-center gap-3 border-b py-4 pr-6 pl-4">
+			<div className="flex min-w-0 flex-1 flex-col gap-1.5">
 				<div className="flex min-w-0 items-baseline gap-2">
 					<h1 className="truncate font-heading font-semibold text-base">
 						{props.title}
