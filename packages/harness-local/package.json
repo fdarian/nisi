@@ -13,7 +13,7 @@
 	},
 	"dependencies": {
 		"@ai-sdk/harness": "1.0.158",
-		"@ai-sdk/provider-utils": "5.0.65",
+		"@ai-sdk/provider-utils": "5.0.64",
 		"@repo/bin-resolver": "workspace:*"
 	},
 	"devDependencies": {
@@ -21,7 +21,7 @@
 		"@total-typescript/tsconfig": "1.0.4",
 		"@types/bun": "1.4.3",
 		"@types/ws": "^8.18.2",
-		"ai": "7.0.148",
+		"ai": "7.0.147",
 		"tsrs": "catalog:",
 		"typescript": "7.0.2",
 		"ws": "^8.22.0",
