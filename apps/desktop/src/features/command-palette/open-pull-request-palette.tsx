@@ -180,15 +180,10 @@ export function OpenPullRequestPalette(
 					? []
 					: search.results
 				: localMatches;
-	const rows: readonly PaletteRow[] = recentlyClosed
-		? results
-		: [
-				...(offersRecentlyClosedFilter(query)
-					? [RECENTLY_CLOSED_FILTER_ROW]
-					: []),
-				...results,
-				...(query.trim() !== "" ? [SHOW_RECENTLY_CLOSED_ROW] : []),
-			];
+	const resultRows: readonly PaletteRow[] =
+		!recentlyClosed && offersRecentlyClosedFilter(query)
+			? [RECENTLY_CLOSED_FILTER_ROW, ...results]
+			: results;
 	const searchError = isBlank ? recent.error : needsGh ? search.error : null;
 	const searchErrorMessage = friendlySearchError(searchError);
 	// Local filtering is instant, so only the `gh` path loads. A pending
@@ -260,9 +255,15 @@ export function OpenPullRequestPalette(
 	const collapsed =
 		!pickingRepository &&
 		isLoading &&
-		rows.length === 0 &&
+		resultRows.length === 0 &&
 		searchErrorMessage === null &&
 		footerMessage === null;
+	// Held back while collapsed so the first load shows only the input; it
+	// appears once the search settles, even to an empty answer.
+	const rows: readonly PaletteRow[] =
+		!recentlyClosed && !collapsed && query.trim() !== ""
+			? [...resultRows, SHOW_RECENTLY_CLOSED_ROW]
+			: resultRows;
 
 	// The moved-repository dialog stands in for the palette rather than
 	// stacking on top of it; confirming re-opens the PR, whose `onOpened` above
