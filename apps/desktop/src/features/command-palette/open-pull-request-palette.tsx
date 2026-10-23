@@ -114,33 +114,38 @@ export function OpenPullRequestPalette(
 	const [debouncedQuery, setDebouncedQuery] = useState("");
 	const [pickingRepository, setPickingRepository] = useState(false);
 	const [repositoryQuery, setRepositoryQuery] = useState("");
+	const [recentlyClosed, setRecentlyClosed] = useState(false);
 	const inputRef = useRef<HTMLInputElement>(null);
 
 	const indexedRows = useIndexedPullRequests(props.orpc);
 	const recent = useRecentPullRequests(props.orpc, props.open);
 	const repositoryKeys = props.repositories.map(repositoryKey);
-	// Blank and unscoped is the recent-PRs list; anything else is a search.
-	const isBlank = query.trim() === "" && props.repositories.length === 0;
+	// Blank and unscoped is the recent-PRs list; anything else is a search. The
+	// recent list is open PRs only, so the closed filter always searches.
+	const isBlank =
+		!recentlyClosed && query.trim() === "" && props.repositories.length === 0;
 	const localMatches =
-		isBlank || indexedRows === undefined
+		isBlank || recentlyClosed || indexedRows === undefined
 			? []
 			: filterIndexedPullRequests(indexedRows, query, repositoryKeys);
 	// The index can only answer what it holds: GitHub qualifiers are `gh`
 	// syntax, and a chip for a repo with no indexed rows may just not be
 	// indexed (yet). Anything else it found nothing for is left to `gh` too —
-	// the PR may be one the index doesn't cover.
+	// the PR may be one the index doesn't cover. It holds open PRs only, so it
+	// can never answer the recently-closed filter.
 	const needsGh =
-		!isBlank &&
-		(localMatches.length === 0 ||
-			hasSearchQualifier(query) ||
-			indexedRows === undefined ||
-			props.repositories.some((chip) =>
-				indexedRows.every(
-					(row) =>
-						repositoryKey(row).toLowerCase() !==
-						repositoryKey(chip).toLowerCase(),
-				),
-			));
+		recentlyClosed ||
+		(!isBlank &&
+			(localMatches.length === 0 ||
+				hasSearchQualifier(query) ||
+				indexedRows === undefined ||
+				props.repositories.some((chip) =>
+					indexedRows.every(
+						(row) =>
+							repositoryKey(row).toLowerCase() !==
+							repositoryKey(chip).toLowerCase(),
+					),
+				)));
 	// Keyed on `query` itself, not the debounced copy: the request only fires
 	// once they agree, and until then a cached answer for the exact query shows.
 	const search = useSearchPullRequests(
@@ -148,7 +153,7 @@ export function OpenPullRequestPalette(
 		query,
 		props.open && needsGh && query === debouncedQuery,
 		repositoryKeys,
-		"open",
+		recentlyClosed ? "closed" : "open",
 	);
 	// `keepPreviousData` rows belong to some earlier query (often the blank
 	// recent list); showing them would let Enter open an unrelated PR, so the
@@ -198,6 +203,7 @@ export function OpenPullRequestPalette(
 		setDebouncedQuery("");
 		setPickingRepository(props.opensOnRepositoryPicker);
 		setRepositoryQuery("");
+		setRecentlyClosed(false);
 		openPr.reset();
 	}, [props.open]);
 
@@ -260,6 +266,15 @@ export function OpenPullRequestPalette(
 							event.preventDefault();
 							event.stopPropagation();
 							setPickingRepository(false);
+						} else if (
+							!pickingRepository &&
+							event.metaKey &&
+							event.shiftKey &&
+							event.code === "KeyC"
+						) {
+							event.preventDefault();
+							event.stopPropagation();
+							setRecentlyClosed((current) => !current);
 						}
 					}}
 				>
@@ -329,7 +344,7 @@ export function OpenPullRequestPalette(
 									ref={inputRef}
 									placeholder="Open pull requests…"
 									startContent={
-										props.repositories.length > 0 ? (
+										props.repositories.length > 0 || recentlyClosed ? (
 											<div className="flex shrink-0 items-center gap-1">
 												{/* ComboboxChip requires a Combobox root; mirror its styling inside this Autocomplete instead. */}
 												{props.repositories.map((repository) => (
@@ -360,16 +375,32 @@ export function OpenPullRequestPalette(
 														</button>
 													</span>
 												))}
+												{recentlyClosed && (
+													<span className="group flex items-center rounded-[calc(var(--radius-md)-1px)] bg-accent px-2 py-1 font-medium text-accent-foreground text-xs">
+														Recently closed
+														<button
+															type="button"
+															aria-label="Remove Recently closed filter"
+															className="w-0 shrink-0 cursor-pointer overflow-hidden opacity-0 outline-none group-hover:ms-1 group-hover:w-3.5 group-hover:opacity-80 group-focus-within:ms-1 group-focus-within:w-3.5 group-focus-within:opacity-80 hover:opacity-100 focus-visible:opacity-100"
+															onClick={() => {
+																setRecentlyClosed(false);
+																inputRef.current?.focus();
+															}}
+														>
+															<XIcon className="size-3.5" />
+														</button>
+													</span>
+												)}
 											</div>
 										) : undefined
 									}
 									endContent={isLoading ? <FetchingIndicator /> : undefined}
 									onKeyDown={(event) => {
-										if (
-											event.key === "Backspace" &&
-											query === "" &&
-											props.repositories.length > 0
-										) {
+										if (event.key !== "Backspace" || query !== "") return;
+										if (recentlyClosed) {
+											event.preventDefault();
+											setRecentlyClosed(false);
+										} else if (props.repositories.length > 0) {
 											event.preventDefault();
 											props.onRepositoriesChange(
 												props.repositories.slice(0, -1),
@@ -381,7 +412,10 @@ export function OpenPullRequestPalette(
 									<>
 										<Separator />
 										<CommandEmpty>
-											{searchErrorMessage ?? "No pull requests found."}
+											{searchErrorMessage ??
+												(recentlyClosed
+													? "No pull requests closed in the last 7 days."
+													: "No pull requests found.")}
 										</CommandEmpty>
 									</>
 								)}
@@ -418,8 +452,15 @@ export function OpenPullRequestPalette(
 									{footerMessage}
 								</span>
 							)}
-							<span className="ml-auto flex items-center gap-1.5">
-								<Kbd>⌘P</Kbd> Filter Project
+							<span className="ml-auto flex items-center gap-4">
+								{!pickingRepository && (
+									<span className="flex items-center gap-1.5">
+										<Kbd>⌘⇧C</Kbd> Recently closed
+									</span>
+								)}
+								<span className="flex items-center gap-1.5">
+									<Kbd>⌘P</Kbd> Filter Project
+								</span>
 							</span>
 						</CommandFooter>
 					)}

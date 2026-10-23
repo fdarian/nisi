@@ -22,10 +22,9 @@ test("palette story fixtures filter PRs by query and repository with OR semantic
 	const client = createMockSidecarClient({
 		pullRequestSearchResults: [pr, otherPr],
 	});
-	expect(await client.pullRequests.search({ query: "", repos: [], state: "open" })).toEqual([
-		pr,
-		otherPr,
-	]);
+	expect(
+		await client.pullRequests.search({ query: "", repos: [], state: "open" }),
+	).toEqual([pr, otherPr]);
 	expect(
 		await client.pullRequests.search({
 			query: "FILTERS",
@@ -41,7 +40,11 @@ test("palette story fixtures filter PRs by query and repository with OR semantic
 		}),
 	).toEqual([pr, otherPr]);
 	expect(
-		await client.pullRequests.search({ query: "missing", repos: [], state: "open" }),
+		await client.pullRequests.search({
+			query: "missing",
+			repos: [],
+			state: "open",
+		}),
 	).toEqual([]);
 });
 
@@ -75,4 +78,18 @@ test("palette story returns the configured saved repository identities", async (
 		pullRequestRepositories: repositories,
 	});
 	expect(await client.pullRequests.repositories()).toEqual(repositories);
+});
+
+test("palette story search returns open rows for the open state and closed or merged rows for the closed state", async () => {
+	const closed = { ...pr, number: 7, state: "CLOSED" as const };
+	const merged = { ...pr, number: 8, state: "MERGED" as const };
+	const client = createMockSidecarClient({
+		pullRequestSearchResults: [pr, closed, merged],
+	});
+	expect(
+		await client.pullRequests.search({ query: "", repos: [], state: "open" }),
+	).toEqual([pr]);
+	expect(
+		await client.pullRequests.search({ query: "", repos: [], state: "closed" }),
+	).toEqual([closed, merged]);
 });

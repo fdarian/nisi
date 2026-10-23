@@ -6,6 +6,7 @@ import {
 	useQueryClient,
 } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
+import { userEvent, within } from "storybook/test";
 import { Button } from "#/components/ui/button";
 import type {
 	PullRequestRepository,
@@ -42,6 +43,34 @@ const RESULTS: PullRequestSearchResult[] = [
 		state: "OPEN",
 		mergeable: "UNKNOWN",
 		mergeStateStatus: "DRAFT",
+		rollupState: null,
+	},
+	{
+		owner: "fdarian",
+		repo: "furl",
+		number: 38,
+		title: "Persist repository chips across palette opens",
+		author: "fdarian",
+		updatedAt: "2026-09-28T12:00:00Z",
+		url: "https://github.com/fdarian/furl/pull/38",
+		isDraft: false,
+		state: "MERGED",
+		mergeable: "UNKNOWN",
+		mergeStateStatus: "UNKNOWN",
+		rollupState: "SUCCESS",
+	},
+	{
+		owner: "fdarian",
+		repo: "nisi",
+		number: 12,
+		title: "Try a sticky file header",
+		author: "fdarian",
+		updatedAt: "2026-09-27T12:00:00Z",
+		url: "https://github.com/fdarian/nisi/pull/12",
+		isDraft: false,
+		state: "CLOSED",
+		mergeable: "UNKNOWN",
+		mergeStateStatus: "UNKNOWN",
 		rollupState: null,
 	},
 ];
@@ -139,3 +168,13 @@ export default meta;
 
 type Story = StoryObj<typeof meta>;
 export const Default: Story = {};
+
+export const RecentlyClosed: Story = {
+	play: async ({ canvasElement }) => {
+		const input = await within(
+			canvasElement.ownerDocument.body,
+		).findByPlaceholderText("Open pull requests…");
+		await userEvent.click(input);
+		await userEvent.keyboard("{Meta>}{Shift>}c{/Shift}{/Meta}");
+	},
+};
