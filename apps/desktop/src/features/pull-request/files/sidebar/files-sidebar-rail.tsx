@@ -6,19 +6,25 @@ export function FilesSidebarRail(props: {
 	onSearch: () => void;
 }): React.ReactElement {
 	return (
-		<div className="flex h-full w-full flex-col gap-1 px-diff-pane-inset py-2">
-			<SidebarIconButton
-				icon={<PanelLeftOpenIcon />}
-				label="Expand sidebar"
-				onClick={props.onExpand}
-				shortcut="⌘B"
-			/>
-			<SidebarIconButton
-				icon={<SearchIcon />}
-				label="Filter files"
-				onClick={props.onSearch}
-				shortcut="⌘F"
-			/>
+		<div className="flex h-full w-full flex-col px-diff-pane-inset">
+			{/* Same row geometry as the panel header, so the Expand and Collapse icons share a y. */}
+			<div className="flex h-9 shrink-0 items-center">
+				<SidebarIconButton
+					handoffAnchor
+					icon={<PanelLeftOpenIcon />}
+					label="Expand sidebar"
+					onClick={props.onExpand}
+					shortcut="⌘B"
+				/>
+			</div>
+			<div className="-mt-0.5">
+				<SidebarIconButton
+					icon={<SearchIcon />}
+					label="Filter files"
+					onClick={props.onSearch}
+					shortcut="⌘F"
+				/>
+			</div>
 		</div>
 	);
 }

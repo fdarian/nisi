@@ -1,4 +1,5 @@
 import { EllipsisIcon, PanelLeftCloseIcon, SearchIcon } from "lucide-react";
+import { type MotionValue, motion } from "motion/react";
 import { Button } from "#/components/ui/button";
 import {
 	DropdownMenu,
@@ -23,13 +24,18 @@ export function FilesSidebarHeader(props: {
 	onCollapseSidebar: () => void;
 	onCollapseAllFolders: () => void;
 	onExpandAllFolders: () => void;
+	/** Driven by the shell so these icons vanish the instant the rail's take over. */
+	iconsOpacity: MotionValue<number>;
 }): React.ReactElement {
 	return (
 		<div className="flex h-9 shrink-0 items-center justify-between pl-1.5">
 			<span className="text-muted-foreground text-xs">
 				{props.fileCount} {props.fileCount === 1 ? "file" : "files"}
 			</span>
-			<div className="flex items-center gap-0.5">
+			<motion.div
+				className="flex items-center gap-0.5"
+				style={{ opacity: props.iconsOpacity }}
+			>
 				<SidebarIconButton
 					icon={<SearchIcon />}
 					keepFocus
@@ -84,11 +90,12 @@ export function FilesSidebarHeader(props: {
 				</DropdownMenu>
 				<SidebarIconButton
 					icon={<PanelLeftCloseIcon />}
+					handoffAnchor
 					label="Collapse sidebar"
 					onClick={props.onCollapseSidebar}
 					shortcut="⌘B"
 				/>
-			</div>
+			</motion.div>
 		</div>
 	);
 }

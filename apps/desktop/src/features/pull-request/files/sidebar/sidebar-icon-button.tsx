@@ -27,11 +27,14 @@ export function SidebarIconButton(props: {
 	onClick: () => void;
 	/** Set on a button that moves focus into an input, so the press doesn't first blur that input. */
 	keepFocus?: boolean;
+	/** Marks the button `FilesSidebarShell` aligns the panel and the rail on while they swap. */
+	handoffAnchor?: boolean;
 }): React.ReactElement {
 	return (
 		<SidebarTooltip label={props.label} shortcut={props.shortcut}>
 			<Button
 				aria-label={props.label}
+				data-handoff-anchor={props.handoffAnchor === true ? "" : undefined}
 				onClick={props.onClick}
 				onMouseDown={
 					props.keepFocus === true

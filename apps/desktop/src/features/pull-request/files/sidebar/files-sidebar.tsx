@@ -1,5 +1,6 @@
 "use client";
 
+import type { MotionValue } from "motion/react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { FluidHoverHighlight, useFluidHover } from "#/components/fluid-hover";
 import { Empty, EmptyDescription, EmptyTitle } from "#/components/ui/empty";
@@ -148,9 +149,10 @@ export function FilesSidebar({
 			setFilterOpen(false);
 	};
 
-	const panel = (
+	const panel = (iconsOpacity: MotionValue<number>) => (
 		<>
 			<FilesSidebarHeader
+				iconsOpacity={iconsOpacity}
 				fileCount={files.length}
 				hideReviewed={hideReviewed}
 				onCollapseAllFolders={() => treeRef.current?.collapseAll()}
