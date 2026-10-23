@@ -1155,6 +1155,82 @@ describe("Store — a PR session after the PR is merged", () => {
 		});
 	});
 
+	test("opening a PR overwrites an OPEN reading recorded earlier, so a since-merged PR's first diff is pinned", async () => {
+		await withTestRepoAndDataDir(async (repoRoot, dataDir) => {
+			const root = await realpath(repoRoot);
+			const parent = await mkdtemp(join(tmpdir(), "nisi-open-stale-facts-"));
+			try {
+				await sh(root, [
+					"remote",
+					"add",
+					"origin",
+					"https://github.com/acme/widgets.git",
+				]);
+				await sh(root, [
+					"config",
+					`url.${root}.insteadOf`,
+					"https://github.com/acme/widgets.git",
+				]);
+				await sh(root, ["checkout", "-q", "-b", "pr"]);
+				await Bun.write(join(root, "a.ts"), "pr change\n");
+				await sh(root, ["commit", "-q", "-am", "pr a"]);
+				const head = await shOut(root, ["rev-parse", "HEAD"]);
+				await sh(root, ["update-ref", "refs/pull/9/head", head]);
+				const mainBefore = await shOut(root, ["rev-parse", "main"]);
+				const baseSha = await mergeIntoMain(root, parent, "merge commit", [
+					head,
+				]);
+
+				await Effect.runPromise(
+					Effect.gen(function* () {
+						const store = yield* Store;
+						const settings = yield* SettingsStore;
+						yield* settings.setRepoPath("acme", "widgets", root);
+						const pr = { owner: "acme", repo: "widgets", number: 9 };
+						// A watch read the PR as open while no session for it was open.
+						yield* store.recordPullRequestStatus(
+							pr,
+							prFacts(head, mainBefore, "OPEN"),
+						);
+						const opened = yield* store.openPullRequestSession(pr);
+						expect(opened.status).toBe("opened");
+						if (opened.status !== "opened") return;
+						const files = yield* store.listChangedFiles(
+							opened.outcome.session.id,
+							false,
+						);
+						expect(files.map((file) => file.path)).toEqual(["a.ts"]);
+					}).pipe(
+						Effect.scoped,
+						Effect.provide(
+							makeTestLayer(dataDir, {
+								...mockGitHub,
+								pullRequest: () =>
+									Effect.succeed({
+										ref: {
+											number: 9,
+											title: "A PR",
+											baseRef: "main",
+											headRef: "pr",
+											isCrossRepository: false,
+											authorLogin: "fdarian",
+										},
+										facts: {
+											state: "MERGED",
+											headSha: head,
+											baseSha,
+										},
+									}),
+							}),
+						),
+					),
+				);
+			} finally {
+				await rm(parent, { recursive: true, force: true });
+			}
+		});
+	});
+
 	test("an open PR keeps the live base even after main moves", async () => {
 		await withTestRepoAndDataDir(async (repoRoot, dataDir) => {
 			const root = await realpath(repoRoot);
@@ -1801,6 +1877,12 @@ describe("Store.openPullRequestSession — reuses open review sessions", () => {
 								source === null
 									? null
 									: yield* reviewStore.getFileReviewState(source.id, "a.ts");
+							const diffSourceChanged: string[] = [];
+							const unsubscribe = subscribe((event) => {
+								if (event.type === "session-diff-source-changed")
+									diffSourceChanged.push(event.sessionId);
+							});
+							yield* Effect.addFinalizer(() => Effect.sync(unsubscribe));
 							const opened = yield* store.openPullRequestSession({
 								owner: "acme",
 								repo: "widgets",
@@ -1817,10 +1899,13 @@ describe("Store.openPullRequestSession — reuses open review sessions", () => {
 								expect(
 									yield* reviewStore.getFileReviewState(source.id, "a.ts"),
 								).toEqual(before);
+								// Its branch-view head pin must not outlive the retarget.
+								expect(diffSourceChanged).toEqual([source.id]);
 							} else {
 								expect(opened.outcome.kind).toBe("opened");
 								expect(opened.outcome.session.id).not.toBe(source?.id);
 								expect(opened.outcome.session.repoRoot).not.toBe(sibling);
+								expect(diffSourceChanged).toEqual([]);
 								expect(
 									yield* reviewStore.getFileReviewState(
 										opened.outcome.session.id,
@@ -1833,6 +1918,7 @@ describe("Store.openPullRequestSession — reuses open review sessions", () => {
 									).toBeNull();
 							}
 						}).pipe(
+							Effect.scoped,
 							Effect.provide(
 								makeTestLayer(dataDir, {
 									...mockGitHub,

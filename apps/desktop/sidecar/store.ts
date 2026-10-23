@@ -463,17 +463,17 @@ export class Store extends Context.Service<Store>()("Store", {
 		/**
 		 * Records what `gh pr view` reported while opening a PR, so the session's
 		 * first diff already knows a merged PR's pinned base instead of waiting for
-		 * the merge-status watch. Never overwrites a watch reading and emits no
-		 * events: nothing has been displayed yet, and an identical watch reading
-		 * is a no-op in {@link recordPullRequestStatus}.
+		 * the merge-status watch. Always overwrites: opening an already-open PR
+		 * returns before reaching here, so no session has read the entry yet and
+		 * whatever a watch recorded earlier in this run may be stale (the PR merged
+		 * since). Emits no events: nothing has been displayed yet, and an identical
+		 * watch reading is a no-op in {@link recordPullRequestStatus}.
 		 */
 		const seedPullRequestFacts = (
 			pr: PullRequestIdentity,
 			facts: PullRequestFacts,
 		) => {
-			const key = pullRequestKey(pr);
-			if (pullRequestFacts.has(key)) return;
-			pullRequestFacts.set(key, facts);
+			pullRequestFacts.set(pullRequestKey(pr), facts);
 		};
 
 		/**
@@ -1109,11 +1109,19 @@ export class Store extends Context.Service<Store>()("Store", {
 					kind: "specificPullRequest" as const,
 					number: input.number,
 				};
-				if (reused !== null)
+				if (reused !== null) {
 					yield* Effect.annotateCurrentSpan({
 						worktree: "retargeted",
 						worktreePath: reused.session.repoRoot,
 					});
+					// The branch session's pinned head predates the PR's facts, and the
+					// seeded first watch reading no longer clears it.
+					pinnedHeadShas.delete(reused.session.id);
+					emit({
+						type: "session-diff-source-changed",
+						sessionId: reused.session.id,
+					});
+				}
 				const outcome =
 					reused === null
 						? yield* Effect.gen(function* () {
