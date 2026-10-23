@@ -27,7 +27,7 @@ export function FilesFilter(props: {
 	const localRef = useRef<HTMLInputElement>(null);
 	const inputRef = props.inputRef === undefined ? localRef : props.inputRef;
 	return (
-		<div className="p-2">
+		<div className="pb-2">
 			<InputGroup>
 				<InputGroupAddon>
 					<SearchIcon className="size-3.5" />
@@ -79,7 +79,7 @@ export function FilesFilter(props: {
 						>
 							<SlidersHorizontalIcon aria-hidden="true" />
 						</DropdownMenuTrigger>
-						<DropdownMenuContent align="end">
+						<DropdownMenuContent align="end" finalFocus={inputRef}>
 							<DropdownMenuRadioGroup
 								onValueChange={(value) => {
 									if (value === "files" || value === "keyword")

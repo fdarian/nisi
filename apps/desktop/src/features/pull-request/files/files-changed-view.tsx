@@ -1,5 +1,6 @@
 "use client";
 
+import { cn } from "cn";
 import { useCallback, useMemo, useRef, useState } from "react";
 import { toastManager } from "#/components/ui/toast";
 import {
@@ -27,6 +28,8 @@ import type { SearchMode } from "#/features/pull-request/files/sidebar/files-sid
 import { FilesSidebar } from "#/features/pull-request/files/sidebar/files-sidebar";
 import {
 	useDiffStyleMode,
+	useFilesSidebarCollapsed,
+	useHideReviewed,
 	usePreferredEditor,
 	useSidebarViewMode,
 	useWrapLines,
@@ -148,7 +151,10 @@ export function FilesChangedView({
 		[setCurrentMatchIndex],
 	);
 
-	const viewMode = useSidebarViewMode(orpc)[0];
+	const [viewMode, setViewMode] = useSidebarViewMode(orpc);
+	const [hideReviewed, setHideReviewed] = useHideReviewed(orpc);
+	const [sidebarCollapsed, setSidebarCollapsed] =
+		useFilesSidebarCollapsed(orpc);
 	const diffStyle = useDiffStyleMode(orpc)[0];
 	const wrapLines = useWrapLines(orpc)[0];
 	const [preferredEditor, setPreferredEditor] = usePreferredEditor(orpc);
@@ -526,9 +532,17 @@ export function FilesChangedView({
 					searchMode={searchMode}
 					selectedPath={selectedPath}
 					viewMode={viewMode}
+					onViewModeChange={setViewMode}
+					hideReviewed={hideReviewed}
+					onHideReviewedChange={setHideReviewed}
+					collapsed={sidebarCollapsed}
+					onCollapsedChange={setSidebarCollapsed}
 				/>
 
-				<div className={filesMainClassName}>
+				{/* The sidebar owns the gap beside the diff column, so this view drops the column's start inset (the Guide reuses `filesMainClassName` and keeps it). */}
+				<div
+					className={cn(filesMainClassName, "[--diff-pane-inset-start:0px]")}
+				>
 					<FilesViewedToolbar
 						orpc={orpc}
 						counts={
@@ -564,7 +578,7 @@ export function FilesChangedView({
 						wrapLines={wrapLines}
 					/>
 					{isKeywordFilterActive && (
-						<div className="mx-3 flex shrink-0 items-center justify-center rounded-xl bg-background px-3 py-1.5 text-muted-foreground text-xs">
+						<div className="ml-(--diff-pane-inset-start,var(--spacing-diff-pane-inset)) mr-diff-pane-inset flex shrink-0 items-center justify-center rounded-xl bg-background px-3 py-1.5 text-muted-foreground text-xs">
 							{keywordMatches.length === 0 ? (
 								<span>No matches</span>
 							) : (

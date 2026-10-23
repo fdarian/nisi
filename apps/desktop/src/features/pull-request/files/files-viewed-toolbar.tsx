@@ -11,18 +11,13 @@ import {
 	DropdownMenu,
 	DropdownMenuCheckboxItem,
 	DropdownMenuContent,
-	DropdownMenuRadioGroup,
-	DropdownMenuRadioItem,
-	DropdownMenuSeparator,
 	DropdownMenuTrigger,
 } from "#/components/ui/menu";
 import { Skeleton } from "#/components/ui/skeleton";
 import { ToggleGroup, ToggleGroupItem } from "#/components/ui/toggle-group";
 import {
 	useDiffStyleMode,
-	useHideReviewed,
 	useIncludeUncommitted,
-	useSidebarViewMode,
 	useWrapLines,
 } from "#/features/settings/settings-data";
 import type { SidecarQueryUtils } from "#/infra/backend-context";
@@ -36,12 +31,8 @@ export function FilesViewedToolbar(props: {
 	onRefresh?: () => void;
 	/** Adds a close button at the right end — set where the bar sits over a dismissible pane (the Guide's) rather than the Files Changed tab. */
 	onClose?: () => void;
-	/** The Tree/Flat radio configures the files sidebar, which a pane without one has no use for. Defaults on. */
-	showSidebarOptions?: boolean;
 }): React.ReactElement {
 	const diffStyle = useDiffStyleMode(props.orpc);
-	const viewMode = useSidebarViewMode(props.orpc);
-	const hideReviewed = useHideReviewed(props.orpc);
 	const includeUncommitted = useIncludeUncommitted(props.orpc);
 	const wrapLines = useWrapLines(props.orpc);
 	const loading = props.counts === undefined;
@@ -82,37 +73,12 @@ export function FilesViewedToolbar(props: {
 				<DropdownMenu>
 					<DropdownMenuTrigger
 						disabled={loading}
-						aria-label="Files sidebar display options"
+						aria-label="Diff display options"
 						className={buttonVariants({ variant: "ghost", size: "icon-sm" })}
 					>
 						<SlidersHorizontalIcon />
 					</DropdownMenuTrigger>
 					<DropdownMenuContent align="end">
-						{props.showSidebarOptions !== false && (
-							<>
-								<DropdownMenuRadioGroup
-									value={viewMode[0]}
-									onValueChange={(value) => {
-										if (value === "tree" || value === "flat")
-											viewMode[1](value);
-									}}
-								>
-									<DropdownMenuRadioItem closeOnClick value="tree">
-										Tree
-									</DropdownMenuRadioItem>
-									<DropdownMenuRadioItem closeOnClick value="flat">
-										Flat
-									</DropdownMenuRadioItem>
-								</DropdownMenuRadioGroup>
-								<DropdownMenuSeparator />
-							</>
-						)}
-						<DropdownMenuCheckboxItem
-							checked={hideReviewed[0]}
-							onCheckedChange={hideReviewed[1]}
-						>
-							Hide reviewed
-						</DropdownMenuCheckboxItem>
 						<DropdownMenuCheckboxItem
 							checked={wrapLines[0]}
 							onCheckedChange={wrapLines[1]}

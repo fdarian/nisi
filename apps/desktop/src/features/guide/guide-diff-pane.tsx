@@ -97,7 +97,6 @@ export function GuideDiffPane(props: {
 				counts={{ total: paneFiles.length, viewed: data.viewedCount }}
 				onClose={props.onClose}
 				orpc={props.orpc}
-				showSidebarOptions={false}
 			/>
 			<DiffPane
 				allFilesReviewed={data.allFilesReviewed}

@@ -49,6 +49,9 @@ import m0014 from "../drizzle/20261004083353_jazzy_susan_delgado/migration.sql" 
 import m0015 from "../drizzle/20261019123627_slimy_skaar/migration.sql" with {
 	type: "text",
 };
+import m0016 from "../drizzle/20261023072716_cultured_tempest/migration.sql" with {
+	type: "text",
+};
 
 export default {
 	migrations: [
@@ -68,5 +71,6 @@ export default {
 		{ name: "20261001003544_keen_spot", sql: m0013 },
 		{ name: "20261004083353_jazzy_susan_delgado", sql: m0014 },
 		{ name: "20261019123627_slimy_skaar", sql: m0015 },
+		{ name: "20261023072716_cultured_tempest", sql: m0016 },
 	],
 };

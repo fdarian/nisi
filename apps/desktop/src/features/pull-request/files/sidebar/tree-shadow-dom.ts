@@ -34,6 +34,9 @@ export function buildTreeThemeStyle(): CSSProperties {
 		"--trees-focus-ring-color-override": "var(--ring)",
 		"--trees-selected-focused-border-color-override": "transparent",
 		"--trees-border-radius-override": "var(--radius-md)",
+		// The sidebar container owns the horizontal gutter, so rows and the hover highlight span its content box exactly.
+		"--trees-padding-inline-override": "0px",
+		"--trees-item-margin-x-override": "0px",
 		// The lane only reserves row width so a long filename truncates before
 		// running under the "…" trigger — the trigger itself is an overlay, not
 		// a lane child, so this has to cover its box *and* its inset (see

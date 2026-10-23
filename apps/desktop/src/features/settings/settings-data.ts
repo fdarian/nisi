@@ -32,6 +32,8 @@ export type Settings = {
 	preferredEditor: string | null;
 	/** When true, files already marked reviewed are hidden from the files sidebar and the Files Changed list. */
 	hideReviewed: boolean;
+	/** When true, the files sidebar is collapsed to its header. */
+	filesSidebarCollapsed: boolean;
 	/**
 	 * When true, uncommitted working-tree changes should be included alongside
 	 * the PR's diff. Sourced by `#/features/pull-request/data/pr-data.ts`'s `useFileChanges`/
@@ -77,6 +79,7 @@ const DEFAULT_SETTINGS: Settings = {
 	diffStyleMode: "unified",
 	preferredEditor: null,
 	hideReviewed: false,
+	filesSidebarCollapsed: false,
 	includeUncommitted: false,
 	walkthroughEnabled: false,
 	notificationsEnabled: false,
@@ -224,6 +227,21 @@ export function useHideReviewed(
 	);
 
 	return [settings.hideReviewed, setHideReviewed];
+}
+
+/** "Files sidebar collapsed" preference — see `@repo/settings`'s `filesSidebarCollapsed`. */
+export function useFilesSidebarCollapsed(
+	orpc: SidecarQueryUtils,
+): [boolean, (filesSidebarCollapsed: boolean) => void] {
+	const { settings } = useSettings(orpc);
+	const update = useUpdateSettings(orpc);
+
+	const setFilesSidebarCollapsed = useCallback(
+		(filesSidebarCollapsed: boolean) => update({ filesSidebarCollapsed }),
+		[update],
+	);
+
+	return [settings.filesSidebarCollapsed, setFilesSidebarCollapsed];
 }
 
 /** "Wrap lines" preference for the diff pane — see `@repo/settings`'s `wrapLines`. */

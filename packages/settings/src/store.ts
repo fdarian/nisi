@@ -39,6 +39,8 @@ export type Settings = {
 	readonly preferredEditor: string | null;
 	/** When true, files already marked reviewed are hidden from the files sidebar and the Files Changed list. */
 	readonly hideReviewed: boolean;
+	/** When true, the files sidebar is collapsed to its header. */
+	readonly filesSidebarCollapsed: boolean;
 	/**
 	 * When true, uncommitted working-tree changes should be included alongside
 	 * the PR's diff. Read server-side by `apps/desktop/sidecar/http.ts`'s
@@ -94,6 +96,7 @@ export const DEFAULT_SETTINGS: Settings = {
 	diffStyleMode: "unified",
 	preferredEditor: null,
 	hideReviewed: false,
+	filesSidebarCollapsed: false,
 	includeUncommitted: false,
 	walkthroughEnabled: false,
 	notificationsEnabled: false,
@@ -116,6 +119,7 @@ const toSettings = (row: SettingsRow): Settings => ({
 	diffStyleMode: row.diffStyleMode as DiffStyleMode,
 	preferredEditor: row.preferredEditor,
 	hideReviewed: row.hideReviewed,
+	filesSidebarCollapsed: row.filesSidebarCollapsed,
 	includeUncommitted: row.includeUncommitted,
 	walkthroughEnabled: row.walkthroughEnabled,
 	notificationsEnabled: row.notificationsEnabled,
@@ -183,6 +187,7 @@ export class SettingsStore extends Context.Service<SettingsStore>()(
 						diffStyleMode: next.diffStyleMode,
 						preferredEditor: next.preferredEditor,
 						hideReviewed: next.hideReviewed,
+						filesSidebarCollapsed: next.filesSidebarCollapsed,
 						includeUncommitted: next.includeUncommitted,
 						walkthroughEnabled: next.walkthroughEnabled,
 						notificationsEnabled: next.notificationsEnabled,

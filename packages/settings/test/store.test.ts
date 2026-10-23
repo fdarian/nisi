@@ -212,6 +212,22 @@ describe("SettingsStore", () => {
 		});
 	});
 
+	test("update() round-trips filesSidebarCollapsed through get() without clobbering other fields", async () => {
+		await withTempDataDir(async (dataDir) => {
+			const result = await run(
+				dataDir,
+				Effect.gen(function* () {
+					const store = yield* SettingsStore;
+					yield* store.update({ sidebarViewMode: "flat" });
+					yield* store.update({ filesSidebarCollapsed: true });
+					return yield* store.get();
+				}),
+			);
+			expect(result.filesSidebarCollapsed).toBe(true);
+			expect(result.sidebarViewMode).toBe("flat");
+		});
+	});
+
 	test("update() round-trips the last-used chat model pair through get()", async () => {
 		await withTempDataDir(async (dataDir) => {
 			const result = await run(

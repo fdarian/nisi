@@ -26,9 +26,11 @@
 	--spacing-diff-pane-inset: calc(var(--spacing) * 3);
 }
 
-/* A pinned diff-card header's rounded top corners sit over the card's opaque code scrolled behind them, and nothing painted behind the corners can match a translucent frame. So the scroller's top edge is masked instead: the two corner shapes (outside each corner's arc, within the header's radius) are cut out of everything it paints, while the mask stays fixed to the viewport as content scrolls. Set `--diff-viewport-inset` to the scroller's horizontal padding if it isn't `--spacing-diff-pane-inset`. The mask's soft edge sits just inside the arc so the header's anti-aliased edge pixels don't let the code behind bleed through as a fringe. */
+/* A pinned diff-card header's rounded top corners sit over the card's opaque code scrolled behind them, and nothing painted behind the corners can match a translucent frame. So the scroller's top edge is masked instead: the two corner shapes (outside each corner's arc, within the header's radius) are cut out of everything it paints, while the mask stays fixed to the viewport as content scrolls. Set `--diff-viewport-inset` to the scroller's horizontal padding if it isn't `--spacing-diff-pane-inset`; an ancestor can set `--diff-pane-inset-start` to override only the left side (the files view zeroes it because the sidebar owns that gap). The mask's soft edge sits just inside the arc so the header's anti-aliased edge pixels don't let the code behind bleed through as a fringe. */
 @utility diff-viewport-corners {
 	--_inset: var(--diff-viewport-inset, var(--spacing-diff-pane-inset));
+	--_inset-start: var(--diff-pane-inset-start, var(--_inset));
+	--_inset-end: var(--_inset);
 	--_radius: var(--radius-xl);
 	mask-repeat: no-repeat;
 	mask-image:
@@ -48,14 +50,15 @@
 		0 var(--_radius),
 		0 0,
 		right 0 top 0,
-		calc(var(--_inset) + var(--_radius)) 0,
-		var(--_inset) 0,
-		right var(--_inset) top 0;
+		calc(var(--_inset-start) + var(--_radius)) 0,
+		var(--_inset-start) 0,
+		right var(--_inset-end) top 0;
 	mask-size:
 		100% 100%,
-		var(--_inset) var(--_radius),
-		var(--_inset) var(--_radius),
-		calc(100% - 2 * (var(--_inset) + var(--_radius))) var(--_radius),
+		var(--_inset-start) var(--_radius),
+		var(--_inset-end) var(--_radius),
+		calc(100% - var(--_inset-start) - var(--_inset-end) - 2 * var(--_radius))
+		var(--_radius),
 		var(--_radius) var(--_radius),
 		var(--_radius) var(--_radius);
 }

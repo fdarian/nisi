@@ -181,6 +181,7 @@ const toWireSettings = (settings: {
 	readonly diffStyleMode: WireSettings["diffStyleMode"];
 	readonly preferredEditor: WireSettings["preferredEditor"];
 	readonly hideReviewed: WireSettings["hideReviewed"];
+	readonly filesSidebarCollapsed: WireSettings["filesSidebarCollapsed"];
 	readonly includeUncommitted: WireSettings["includeUncommitted"];
 	readonly walkthroughEnabled: WireSettings["walkthroughEnabled"];
 	readonly notificationsEnabled: WireSettings["notificationsEnabled"];
@@ -201,6 +202,7 @@ const toWireSettings = (settings: {
 	diffStyleMode: settings.diffStyleMode,
 	preferredEditor: settings.preferredEditor,
 	hideReviewed: settings.hideReviewed,
+	filesSidebarCollapsed: settings.filesSidebarCollapsed,
 	includeUncommitted: settings.includeUncommitted,
 	walkthroughEnabled: settings.walkthroughEnabled,
 	notificationsEnabled: settings.notificationsEnabled,
