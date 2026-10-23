@@ -26,6 +26,40 @@
 	--spacing-diff-pane-inset: calc(var(--spacing) * 3);
 }
 
+/* A pinned diff-card header's rounded top corners sit over the card's opaque code scrolled behind them, and nothing painted behind the corners can match a translucent frame. So the scroller's top edge is masked instead: the two corner shapes (outside each corner's arc, within the header's radius) are cut out of everything it paints, while the mask stays fixed to the viewport as content scrolls. Set `--diff-viewport-inset` to the scroller's horizontal padding if it isn't `--spacing-diff-pane-inset`. The mask's soft edge sits just inside the arc so the header's anti-aliased edge pixels don't let the code behind bleed through as a fringe. */
+@utility diff-viewport-corners {
+	--_inset: var(--diff-viewport-inset, var(--spacing-diff-pane-inset));
+	--_radius: var(--radius-xl);
+	mask-repeat: no-repeat;
+	mask-image:
+		linear-gradient(#000 0 0), linear-gradient(#000 0 0),
+		linear-gradient(#000 0 0), linear-gradient(#000 0 0),
+		radial-gradient(
+			circle at 100% 100%,
+			#000 calc(var(--_radius) - 0.5px),
+			transparent var(--_radius)
+		),
+		radial-gradient(
+			circle at 0 100%,
+			#000 calc(var(--_radius) - 0.5px),
+			transparent var(--_radius)
+		);
+	mask-position:
+		0 var(--_radius),
+		0 0,
+		right 0 top 0,
+		calc(var(--_inset) + var(--_radius)) 0,
+		var(--_inset) 0,
+		right var(--_inset) top 0;
+	mask-size:
+		100% 100%,
+		var(--_inset) var(--_radius),
+		var(--_inset) var(--_radius),
+		calc(100% - 2 * (var(--_inset) + var(--_radius))) var(--_radius),
+		var(--_radius) var(--_radius),
+		var(--_radius) var(--_radius);
+}
+
 /* One cycle for the whole fetching indicator — see `@keyframes dot-loader`. */
 :root {
 	--fetching-cycle: 2.4s;
@@ -56,6 +90,7 @@
 	--color-sidebar-accent: var(--sidebar-accent);
 	--color-sidebar: var(--sidebar);
 	--color-pane-surface: var(--pane-surface);
+	--color-pane-surface-nested: var(--pane-surface-nested);
 	--color-code-highlight: var(--code-highlight);
 	--code-foreground: var(--code-foreground);
 	--color-code: var(--code);
@@ -255,7 +290,7 @@
 		var(--color-black)
 	);
 	--tertiary: var(--color-neutral-400);
-	--pane-surface: var(--color-neutral-50);
+	--pane-surface-opaque: var(--color-neutral-50);
 	--popover: var(--color-white);
 	--popover-foreground: var(--color-neutral-800);
 	--primary: var(--color-neutral-800);
@@ -321,7 +356,7 @@
 		var(--color-white)
 	);
 	--tertiary: var(--color-neutral-600);
-	--pane-surface: color-mix(
+	--pane-surface-opaque: color-mix(
 		in srgb,
 		var(--color-neutral-950) 97%,
 		var(--color-white)
@@ -368,8 +403,22 @@
 		--frame-surface: var(--sidebar);
 	}
 
+	html {
+		--pane-surface: var(--pane-surface-opaque);
+		--pane-surface-nested: var(--pane-surface);
+		--pane-surface-backdrop: none;
+	}
+
 	html[data-native-glass] {
 		--frame-surface: transparent;
+		/* Translucent so the glass shows through the inner frame. Surfaces that only match the frame they sit in use `--pane-surface-nested` instead: the frame already paints the fill, so repainting a translucent one would stack into a visibly different patch. Nested surfaces that occlude scrolled content (sticky headers) must also apply `--pane-surface-backdrop`, or the content shows through unblurred. */
+		--pane-surface: color-mix(
+			in oklab,
+			var(--pane-surface-opaque) 55%,
+			transparent
+		);
+		--pane-surface-nested: transparent;
+		--pane-surface-backdrop: blur(12px);
 	}
 
 	body {

@@ -66,7 +66,7 @@ export function FilesChangedSkeleton(
 				) : (
 					<div className="h-12 shrink-0 sm:h-11" aria-hidden />
 				)}
-				<div className="min-h-0 flex-1 overflow-hidden bg-pane-surface px-3">
+				<div className="min-h-0 flex-1 overflow-hidden bg-pane-surface-nested px-3">
 					<div
 						className="flex flex-col"
 						style={{ gap: diffCodeViewLayout.gap }}

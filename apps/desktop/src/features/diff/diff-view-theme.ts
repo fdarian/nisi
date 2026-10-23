@@ -361,25 +361,14 @@ export function diffCardHeaderClassName(collapsed: boolean): string {
  */
 export const diffCardChromeCSS = `
 	/**
-	 * A rounded corner has to be *painted*, not cut out: everything stacked
-	 * behind a pinned header — the \`<pre>\`, whose box runs right past it, and
-	 * the host — is an opaque full-width rectangle at that scroll position, so
-	 * a corner that merely clips the header away reveals a hard square of
-	 * \`--diffs-bg\` instead of the surface the card sits on.
-	 *
-	 * \`[data-diffs-header]\` is @pierre/diffs' own wrapper around the
-	 * \`<slot>\` our header renders into: header-sized, pinned, and painted
-	 * above the \`<pre>\`. Filling it with the pane's own surface turns it into
-	 * the backdrop the header's rounded corners cut into — so they read as
-	 * corners at any scroll position, and in any state, without this having to
-	 * know whether the card is collapsed.
-	 *
-	 * \`--pane-surface\` is declared by \`app-shell.tsx\` (\`INSET_PANE_CLASS\`)
-	 * and reaches here by inheriting through the shadow boundary, the same way
-	 * \`diffViewUnsafeCSS\`'s \`--font-mono\` etc. do.
+	 * Transparent, not a fill: the pinned header's rounded top corners are cut
+	 * out of everything the scroller paints by its \`diff-viewport-corners\`
+	 * mask (\`index.css\`), so nothing behind them needs painting to match.
+	 * Pierre's own \`[data-diffs-header][data-sticky]\` rule would otherwise
+	 * fill it with \`--diffs-bg\`, which shows as a white square in the corners.
 	 */
 	[data-diffs-header] {
-		background-color: var(--pane-surface, var(--diffs-bg));
+		background-color: transparent;
 	}
 
 	/**

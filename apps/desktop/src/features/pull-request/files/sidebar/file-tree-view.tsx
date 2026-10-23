@@ -34,6 +34,7 @@ import {
 	syncFolderIconStyle,
 	syncScrollFadeStyle,
 	syncStatusColorStyle,
+	TREE_STICKY_BACKDROP_CSS,
 } from "./tree-shadow-dom";
 
 type FileTreeViewProps = {
@@ -221,6 +222,7 @@ export function FileTreeView({
 		initialExpansion: "open",
 		paths: treeModel.treePaths,
 		renderRowDecoration,
+		unsafeCSS: TREE_STICKY_BACKDROP_CSS,
 		sort: (left, right) => comparePaths(left.path, right.path),
 	});
 
