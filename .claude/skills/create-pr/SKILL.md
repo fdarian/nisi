@@ -1,4 +1,5 @@
 ---
+
 name: create-pr
 description: Create a pull request for the current branch in this repo, including the changeset. Use whenever asked to open/create a PR here, or to add a changeset.
 ---
@@ -27,18 +28,21 @@ a rewrite of the feature, it probably belongs; if it describes this particular b
 **Skip the changeset entirely** for docs, tests, CI, and internal refactors with no behavior change.
 
 ### Good
+
 ```md
 ---
-"@repo/desktop": patch
----
+
+## "@repo/desktop": patch
 
 Ticking Reviewed no longer snapshots the wrong branch's content when the session's head isn't the
 checked-out branch.
 ```
 
 ### Bad
+
 ```md
 ---
+
 "@repo/walkthrough": patch
 "@repo/desktop": patch
 ---
@@ -51,10 +55,11 @@ here is what gives it its own bump and changelog section. The body also describe
 implementation, not what a nisi user sees.
 
 ### Bad
+
 ```md
 ---
-"@repo/desktop": minor
----
+
+## "@repo/desktop": minor
 
 Add self-update for the Homebrew-cask install: the app checks the tap hourly and shows a pill in the
 tab strip to download and restart into the new version.
@@ -75,10 +80,9 @@ it tight — existing PRs run long; don't. Don't repeat the changeset text verba
 3. Write the PR body to `/tmp/<slug>.md`, then push and open the PR. Title as a plain, capitalized
    sentence describing the change (`Support nisi diff <base>..<head> for two arbitrary branches`) —
    most merged PRs here skip a `feat:`/`fix:` prefix entirely.
+
    ```sh
    git push -u origin $(git branch --show-current)
    gh pr create --title "<title>" --body-file /tmp/<slug>.md
    ```
 4. Return the PR URL.
-
-

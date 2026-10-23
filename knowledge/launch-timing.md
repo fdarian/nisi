@@ -1,4 +1,5 @@
 ---
+
 type: Measurement
 title: CLI-to-paint launch timing
 description: How to measure CLI-to-landing-tab paint, read the milestones, and compare with the native dev baseline.
@@ -68,7 +69,6 @@ To measure native dev instead, stop the built measurement instance, start `bun d
 checkout, then run the same default command from another terminal. No environment override is needed.
 Keep browser frontends disconnected for a native-only measurement: two frontends can both receive
 the request, making the terminal paint mark ambiguous.
-
 - `--rebuild` requires `--cold` or `--new-pr` and rebuilds even when the bundle exists. A stale bundle without
   instrumentation fails with this hint; a dev instance without instrumentation needs a restart.
 - Cold means new app and sidecar processes, not cleared filesystem, GitHub, or review-session caches.
@@ -87,7 +87,6 @@ The first run after a fresh build is slower (first launch of new binaries); `--d
 from the summary. Runs that stay in the output are still listed under `runs` in `--json`.
 
 The text report prints, across the counted runs:
-
 - every milestone of the single-run report as median / min / max / n (`n` is the number of runs that observed it);
 - with `--memory`, physical footprint median / min / max per group and for the totals with and without the sidecar;
 - with `--soak`, the per-phase table with medians across runs, then whole-run figures per run reduced to median / min / max:
@@ -110,13 +109,13 @@ With `--json` and `--memory` the output is `{ "records": [...], "memory": {...} 
 A single `--memory` snapshot says little about the app under real use. `--soak` (requires `--cold` and `--deeplink`) samples memory every `--soak-interval <ms>` (default 2000) for the whole run, using the same sampler,
 process set and grouping as `--memory`, while a scripted workload runs:
 
-| Phase | What happens |
-|-------|--------------|
-| `open` | Cold launch and the `--deeplink` PR, through to `trace.done` |
-| `idle-1` | Idle for `--soak-idle <ms>` (default 60000) |
-| `scroll-1` | `scroll-files-changed` on the open PR |
-| `extra-tabs` | For each `--soak-prs <url,url,...>` (same repository): open it through the traced deep-link path, then `scroll-files-changed` |
-| `after-close` | `close-other-tabs`, then idle `--soak-idle` again |
+| Phase         | What happens                                                                                                                  |
+| ------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `open`        | Cold launch and the `--deeplink` PR, through to `trace.done`                                                                  |
+| `idle-1`      | Idle for `--soak-idle <ms>` (default 60000)                                                                                   |
+| `scroll-1`    | `scroll-files-changed` on the open PR                                                                                         |
+| `extra-tabs`  | For each `--soak-prs <url,url,...>` (same repository): open it through the traced deep-link path, then `scroll-files-changed` |
+| `after-close` | `close-other-tabs`, then idle `--soak-idle` again                                                                             |
 
 The workload is driven from inside the frontend, so the script needs no browser automation. It calls
 the measurement-gated `diagnostics.runWorkloadStep`, which emits a `measurement-workload` event on the sidecar stream
@@ -210,18 +209,18 @@ at most 15 leaf subprocess/RPC spans. Parallel spans overlap, so do not add thei
 estimate the critical path. Sidecar boot records are buffered only until the first traced open;
 later warm measurements of the same process do not contain boot milestones.
 
-| Milestone | Meaning |
-|-----------|---------|
-| `cli.app.launch.end` | The app-launch command returned; not proof of visible content. Absent on a warm handoff. |
-| `sidecar.router.ready` | The sidecar router is ready; a negative offset identifies a warm sidecar. |
-| `sidecar.activation.acked` | Native activation acknowledged show/unminimize/focus; proxy for window shown, not a compositor timestamp. |
-| `pending-panel.painted` | The frontend's pending-open panel reached its animation-frame mark. |
-| `files.loading.painted` / `overview.loading.painted` | The landing tab's loading state reached its animation-frame mark; cached opens may skip it. |
-| `files.list.painted` | The resolved Files Changed list reached its animation-frame mark; terminal only when no files changed. |
-| `files.first-diff.painted` | A rendered diff host is connected and has positive height on an animation frame. |
-| `overview.content.painted` | Overview content reached its animation-frame mark. |
-| `tab.content.painted { tab }` | The actual landing tab reached its terminal content mark. |
-| `trace.done` | Frontend trace collection finished after the terminal mark. |
+| Milestone                                            | Meaning                                                                                                   |
+| ---------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| `cli.app.launch.end`                                 | The app-launch command returned; not proof of visible content. Absent on a warm handoff.                  |
+| `sidecar.router.ready`                               | The sidecar router is ready; a negative offset identifies a warm sidecar.                                 |
+| `sidecar.activation.acked`                           | Native activation acknowledged show/unminimize/focus; proxy for window shown, not a compositor timestamp. |
+| `pending-panel.painted`                              | The frontend's pending-open panel reached its animation-frame mark.                                       |
+| `files.loading.painted` / `overview.loading.painted` | The landing tab's loading state reached its animation-frame mark; cached opens may skip it.               |
+| `files.list.painted`                                 | The resolved Files Changed list reached its animation-frame mark; terminal only when no files changed.    |
+| `files.first-diff.painted`                           | A rendered diff host is connected and has positive height on an animation frame.                          |
+| `overview.content.painted`                           | Overview content reached its animation-frame mark.                                                        |
+| `tab.content.painted { tab }`                        | The actual landing tab reached its terminal content mark.                                                 |
+| `trace.done`                                         | Frontend trace collection finished after the terminal mark.                                               |
 
 `Complete` requires both `tab.content.painted` and `trace.done`. Missing milestones are reported as
 `not observed`, not zero. The script waits up to 60 seconds; a timeout is an incomplete measurement.
@@ -249,14 +248,14 @@ Single native-only run, taken on the Tauri/CEF shell, on launch-trace branch rev
 (`fdarian/nisi`, Version Packages). The browser frontend was closed; Vite's connected frontend was
 the native `nisi Helper`. This is a reference measurement, not a repeated-trial budget.
 
-| Milestone | CLI offset |
-|-----------|------------|
-| Native activation acknowledged | 331.8ms |
-| Pending panel | 509.7ms |
-| Files Changed loading | 2995.4ms |
-| Files Changed list | 3705.6ms |
-| First diff / landing-tab content | 4173.7ms |
-| Trace done | 4193.2ms |
+| Milestone                        | CLI offset |
+| -------------------------------- | ---------- |
+| Native activation acknowledged   | 331.8ms    |
+| Pending panel                    | 509.7ms    |
+| Files Changed loading            | 2995.4ms   |
+| Files Changed list               | 3705.6ms   |
+| First diff / landing-tab content | 4173.7ms   |
+| Trace done                       | 4193.2ms   |
 
 About **4.2s to the first diff**. `sessions.open` took **2.6s**, dominated by parallel
 `gh pr view` (**1.5s**) and `gh repo view` (**1.1s**), followed by base-ref `git fetch` (**0.9s**).

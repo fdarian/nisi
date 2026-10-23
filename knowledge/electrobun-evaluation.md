@@ -1,4 +1,5 @@
 ---
+
 type: Measurement
 title: Electrobun (CEF and WebKit) evaluated against Electron
 description: Why the desktop shell stays on Electron — startup, snapshot and sustained memory, and size of Electrobun 2.0.2 with CEF or WKWebView, measured against Electron 44.
@@ -31,11 +32,11 @@ identical across shells, at about 115 MiB at rest and up to about 190 MiB under 
 
 ## Size
 
-| | Electron | Electrobun CEF | Electrobun WebKit |
-|---|---|---|---|
-| Installed `.app` | 461 MB | 544 MB | 241 MB |
-| DMG | 198 MB | 181 MB | 74 MB |
-| Engine | Chromium 152 | Chromium 147 (CEF) | System WebKit |
+|                  | Electron     | Electrobun CEF     | Electrobun WebKit |
+| ---------------- | ------------ | ------------------ | ----------------- |
+| Installed `.app` | 461 MB       | 544 MB             | 241 MB            |
+| DMG              | 198 MB       | 181 MB             | 74 MB             |
+| Engine           | Chromium 152 | Chromium 147 (CEF) | System WebKit     |
 
 All three bundles include about 158 MB of compiled `sidecar` and `nisi-cli` binaries.
 
@@ -44,12 +45,11 @@ All three bundles include about 158 MB of compiled `sidecar` and `nisi-cli` bina
 These are medians of 14 cold runs per shell, alternating between the shells, with deep-link mode
 opening fdarian/nisi#173. Each time is measured from the moment the CLI launches the app.
 
-| Milestone | Electron | Electrobun CEF |
-|---|---|---|
-| Renderer navigation start | 443 ms | 1056 ms |
-| First app paint (`files.loading.painted`) | 2769 ms | 3222 ms |
-| PR diff painted (`tab.content.painted`) | 4205 ms | 4922 ms |
-
+| Milestone                                 | Electron | Electrobun CEF |
+| ----------------------------------------- | -------- | -------------- |
+| Renderer navigation start                 | 443 ms   | 1056 ms        |
+| First app paint (`files.loading.painted`) | 2769 ms  | 3222 ms        |
+| PR diff painted (`tab.content.painted`)   | 4205 ms  | 4922 ms        |
 - **Electron is steady.** Across its last 9 runs, first paint stayed between 2650 and 2780 ms.
 - **Electrobun CEF is bimodal.** Its best runs beat Electron by about 350 ms, because its Bun main
   process spawns the sidecar earlier. Its typical runs lose by 0.5 to 1 s, and the cause wasn't
@@ -59,12 +59,12 @@ opening fdarian/nisi#173. Each time is measured from the moment the CLI launches
 
 ## Snapshot memory (5 s after the diff paints)
 
-| | Electron | Electrobun CEF | Electrobun WebKit (1 run) |
-|---|---|---|---|
-| Total | 330 MiB | 385 MiB | 397 MiB |
-| Renderer | 183 MiB | 220 MiB | 297 MiB |
-| Main process | 55 MiB | 75 MiB | 49 MiB |
-| GPU | 84 MiB | 75 MiB | 33 MiB |
+|              | Electron | Electrobun CEF | Electrobun WebKit (1 run) |
+| ------------ | -------- | -------------- | ------------------------- |
+| Total        | 330 MiB  | 385 MiB        | 397 MiB                   |
+| Renderer     | 183 MiB  | 220 MiB        | 297 MiB                   |
+| Main process | 55 MiB   | 75 MiB         | 49 MiB                    |
+| GPU          | 84 MiB   | 75 MiB         | 33 MiB                    |
 
 WebKit's lighter GPU and main processes were outweighed by its WebContent process.
 
@@ -82,16 +82,16 @@ driven from inside the frontend:
 The table gives medians: Electron n=2, CEF n=3. One Electron run timed out opening a soak PR, and
 the cause wasn't diagnosed.
 
-| | Electron | Electrobun CEF | Δ |
-|---|---|---|---|
-| Time-weighted average | 658 MiB | 805 MiB | +22% |
-| Peak | 943 MiB | 1144 MiB | +21% |
-| After scrolling #158 | 730 MiB | 853 MiB | +17% |
-| With 4 PR tabs open | 833 MiB | 1065 MiB | +28% |
-| After closing tabs and idling for 60 s | 695 MiB | 713 MiB | ≈ |
-| Renderer average | 482 MiB | 578 MiB | +20% |
-| Main process average | 46 MiB | 89 MiB | +93% |
-| GPU average / peak | 122 / 291 MiB | 121 / 283 MiB | ≈ |
+|                                        | Electron      | Electrobun CEF | Δ    |
+| -------------------------------------- | ------------- | -------------- | ---- |
+| Time-weighted average                  | 658 MiB       | 805 MiB        | +22% |
+| Peak                                   | 943 MiB       | 1144 MiB       | +21% |
+| After scrolling #158                   | 730 MiB       | 853 MiB        | +17% |
+| With 4 PR tabs open                    | 833 MiB       | 1065 MiB       | +28% |
+| After closing tabs and idling for 60 s | 695 MiB       | 713 MiB        | ≈    |
+| Renderer average                       | 482 MiB       | 578 MiB        | +20% |
+| Main process average                   | 46 MiB        | 89 MiB         | +93% |
+| GPU average / peak                     | 122 / 291 MiB | 121 / 283 MiB  | ≈    |
 
 Most of the gap is in the renderer, which is Chromium 147 under CEF's Chrome runtime against
 Electron's Chromium 152. The rest is in Electrobun's `launcher` + `bun` main process pair.

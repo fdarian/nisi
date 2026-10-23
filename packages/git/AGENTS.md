@@ -10,7 +10,6 @@ sidecar. The CLI adapter owns GitHub command construction, decoding, and failure
 and replaying, reference-counted per-PR sources. `github/gh/attention.ts` declares the
 `PullRequestAttention` input the adapter needs; the sidecar supplies it. The `GitHub` service
 exposes both one-shot reads and watch streams, so consumers never need to schedule GitHub reads.
-
 - `exec.ts` — the only place that spawns processes. `git`/`gh` helpers plus a strict (fails on
   non-zero exit) and lenient (reports exit code, for "ran and said no" cases like no PR) variant.
 - `repo.ts` — repo root / current branch / merge-base / HEAD sha / local default branch, pure
@@ -99,7 +98,7 @@ exposes both one-shot reads and watch streams, so consumers never need to schedu
   call at all rather than needing to know the rename ahead of time. Caught by a real test
   (`test/patch.test.ts`) — don't reintroduce a single-path pathspec on a rename-sensitive call.
 - **`effect/process`'s barrel re-exports namespaces, not classes.** `ChildProcessSpawner`
-  imported from `effect/process` is the *module*; the service tag is
+  imported from `effect/process` is the _module_; the service tag is
   `ChildProcessSpawner.ChildProcessSpawner`.
 - **`Effect.catchAll` doesn't exist in this Effect version** — use `Effect.orElseSucceed` (or
   `catchTag`/`catchCause` for narrower cases).
@@ -109,7 +108,7 @@ exposes both one-shot reads and watch streams, so consumers never need to schedu
 - Binary detection unions two signals: a NUL byte in decoded content, and the patch matching
   `Binary files ... differ` anchored to line start — either can be the only one available
   depending on which path (bulk metadata vs. single-file fetch) computed it.
-- `diffContents` writes loose objects into the *caller's* repo (`hash-object -w`) — `git diff` on a
+- `diffContents` writes loose objects into the _caller's_ repo (`hash-object -w`) — `git diff` on a
   bare object id can only read content that actually exists in the odb. Content-addressed, so
   re-diffing the same pair (the common case) never grows the odb past one object per distinct
   content seen, but it does mean this can't run against a repo you don't want written to.

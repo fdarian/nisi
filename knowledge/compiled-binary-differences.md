@@ -1,4 +1,5 @@
 ---
+
 type: Reference
 title: What breaks only in the compiled binary
 description: The five ways the packaged sidecar behaves differently from `bun run`, and the rule that follows.
@@ -6,15 +7,16 @@ tags: [sidecar, bun, packaging, verification, macos, codesigning]
 status: stable
 generated: { by: claude-code/claude-opus-5, at: 2026-07-30T04:19:29Z }
 sources:
-  - id: path-rule
-    resource: ../packages/harness-local/AGENTS.md
-    title: PATH widening (packages/harness-local/AGENTS.md)
-  - id: migrations
-    resource: ../packages/db/AGENTS.md
-    title: applyEmbeddedMigrations (packages/db/AGENTS.md)
-  - id: entitlements
-    resource: ../apps/desktop/build/entitlements.plist
-    title: entitlements.plist (apps/desktop/build/)
+- id: path-rule
+  resource: ../packages/harness-local/AGENTS.md
+  title: PATH widening (packages/harness-local/AGENTS.md)
+- id: migrations
+  resource: ../packages/db/AGENTS.md
+  title: applyEmbeddedMigrations (packages/db/AGENTS.md)
+- id: entitlements
+  resource: ../apps/desktop/build/entitlements.plist
+  title: entitlements.plist (apps/desktop/build/)
+
 ---
 
 The `.app` ships the sidecar as a `bun build --compile` binary. `bun dev` hides a whole class of bug
@@ -32,7 +34,7 @@ libsql, whose native addon has no way into the binary.
 **There is no source tree at runtime.** Migrations are embedded as text imports rather than read
 from a `drizzle/` folder that won't exist.[^migrations]
 
-**Only *static* asset specifiers get embedded.** `new URL(`./bridge/${name}`, import.meta.url)` is
+**Only _static_ asset specifiers get embedded.** `new URL(`./bridge/${name}`, import.meta.url)` is
 invisible to the compiler, yet `import.meta.url` is still rewritten to a virtual `/$bunfs/...` path
 — so the computed path resolves to nothing and fails as `ENOENT: /$bunfs/bridge/package.json`.
 `import x from "./f" with { type: "text" }` is inlined as a string literal and survives. This is what

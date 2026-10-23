@@ -8,7 +8,6 @@ is invisible to the packaged sidecar — `git`, `gh`, the harness CLIs, and the 
 bridge runs on, all of which resolve fine from a dev terminal. No dependencies and no Effect:
 plain synchronous filesystem checks, since the callers are a `spawn` env object, module-level
 constants and sidecar handlers alike, with no shared boundary to put a service at.
-
 - `src/resolve-bin.ts` — `resolveBin` (absolute path for spawning one known binary, falling back
   to the bare name so the OS's own "command not found" reports the failure), `checkBinAvailability`
   (same order, but reports genuine absence — this is what `available` means in the harness list),
@@ -22,7 +21,6 @@ constants and sidecar handlers alike, with no shared boundary to put a service a
 ## Who pays for the probe
 
 The shell subprocess is the only expensive step here, and callers reach it unevenly on purpose:
-
 - `resolveBin`/`checkBinAvailability` probe **only when `PATH` and the well-known dirs both miss**.
   In dev — a terminal-launched sidecar, whose `PATH` already has everything — it never runs at all.
 - `resolvedPath()` always probes: there's no "not found" signal to trigger on when the caller
@@ -30,13 +28,13 @@ The shell subprocess is the only expensive step here, and callers reach it uneve
   the caller, and has to keep calling it **per invocation** rather than capturing a module-level
   constant, or a refresh can never take effect for the life of the process.
 - `refreshLoginShellPath()` is wired into `walkthrough.refreshHarnesses`
-  (`apps/desktop/sidecar/http.ts`) — the only thing that makes a CLI installed *while nisi is
-  running* visible. It reaches every per-call consumer, but not `@repo/git`'s `GIT_BIN`/`GH_BIN`,
+  (`apps/desktop/sidecar/http.ts`) — the only thing that makes a CLI installed _while nisi is
+  running_ visible. It reaches every per-call consumer, but not `@repo/git`'s `GIT_BIN`/`GH_BIN`,
   which resolve once at module load and stay pinned.
 
 `HarnessInfo.available` is live for a different reason: `sidecar/harness/availability.ts`
 never caches `checkBinAvailability` at all (unlike the model lists next to it), so every
-`listHarnesses` call re-checks the disk. The refresh above only drops the *probe's* memo.
+`listHarnesses` call re-checks the disk. The refresh above only drops the _probe's_ memo.
 
 ## Gotchas
 

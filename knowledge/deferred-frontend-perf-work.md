@@ -1,4 +1,5 @@
 ---
+
 type: Decision
 title: Deferred frontend perf work
 description: Known Files Changed wins not taken, and one open symptom not yet bisected — with the reason each is still open.
@@ -6,12 +7,13 @@ tags: [frontend, performance, pierre, deferred]
 status: stable
 generated: { by: human:farreldarian, at: 2026-08-15T00:00:00Z }
 sources:
-  - id: budget
-    resource: frontend-performance-budget.md
-    title: Files Changed performance budget
-  - id: set-viewed
-    resource: ../apps/desktop/src/features/pull-request/data/pr-data.ts
-    title: useSetFileViewed
+- id: budget
+  resource: frontend-performance-budget.md
+  title: Files Changed performance budget
+- id: set-viewed
+  resource: ../apps/desktop/src/features/pull-request/data/pr-data.ts
+  title: useSetFileViewed
+
 ---
 
 The first two were found while fixing the measured regressions in the
@@ -30,7 +32,7 @@ on every recompute. `@pierre/diffs` compares options shallowly — `const forceR
 comparison fails and every visible item force-renders, even when nothing about it changed.
 
 Routing these through a ref would hold their identity stable. The catch: `itemMetadata` is also how
-the Reviewed checkbox learns its own state, so stabilizing the identity changes *when* a checkbox
+the Reviewed checkbox learns its own state, so stabilizing the identity changes _when_ a checkbox
 update propagates. Getting this wrong makes a checkbox render stale — quieter and worse than the
 render cost it saves. Needs a deliberate test of the tick → re-render path, not just a frame-time
 measurement.
@@ -53,7 +55,7 @@ why it wasn't done as part of a perf pass.
 
 `@pierre/diffs`' `SlotPortals` (`dist/react/CodeView.js`) memoizes its portal-children list on
 `itemKeys` — every rendered item's `id:version:type`, concatenated. One card entering or leaving
-the virtualized window changes that string, so the memo rebuilds portal children for *every*
+the virtualized window changes that string, so the memo rebuilds portal children for _every_
 visible card, not just the one that changed — and it happens inside `onSnapshotChange`'s
 `flushSync`, synchronously, mid-scroll-frame.
 

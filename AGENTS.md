@@ -7,6 +7,7 @@ PR, every claim linked to a set of line ranges). Both are built; see `README.md`
 `apps/desktop/AGENTS.md` for how the pieces fit together.
 
 ## Stack
+
 - **pnpm** for package management (`pnpm install`, `pnpm add <pkg>` from inside the target package,
   `enableGlobalVirtualStore: true` in `pnpm-workspace.yaml`) — never hand-edit `package.json`
   dependency fields. **Bun** is the runtime (`bun run ...`, `bun test`, `bun build --compile`).
@@ -21,9 +22,9 @@ PR, every claim linked to a set of line ranges). Both are built; see `README.md`
   tasks; those are run per-app directly).
 
 ## Layout
+
 Workspaces declared in `pnpm-workspace.yaml` (`packages/*`, `apps/*`). Each has its own `AGENTS.md`
 with the detail — this is only the map.
-
 - `apps/desktop` — Electron shell + Bun/Effect sidecar + React frontend.
 - `apps/extension` — Chrome extension that hands a directly-arrived-at GitHub PR page to the app
   via a `nisi://` deep link.
@@ -73,9 +74,11 @@ slow (roughly 13–28s) while nisi installs a pinned copy of it; every run after
 `packages/harness-local/AGENTS.md`.
 
 ## Deeper notes
+
 - [knowledge/](knowledge/index.md) — measurements, testing protocol, and open decisions that fit no single file.
 
 ## Gotchas
+
 - Add deps with `pnpm add <pkg>` (run from inside the package directory) — never hand-edit
   `package.json`.
 - Pre-1.0 packages are pinned to exact versions, not `^` ranges — bump them deliberately. `effect`,

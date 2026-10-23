@@ -4,7 +4,6 @@ Persistence (sessions, per-file reviewed state, content-addressed blob store) pl
 reconciliation engine, now covering both Phase 2's whole-file review and Phase 3's range-scoped review.
 `bun:sqlite` + Drizzle, data dir shared with the sidecar's own handshake file (`NISI_DATA_DIR`, same
 default as `apps/desktop/sidecar`). Feeds `packages/sidecar-api`'s `review`/`diff` contracts.
-
 - `src/store.ts` — `ReviewStore`, the public service. Sessions (open/list/close/get/`updateRepoRoot` —
   the last one repoints an open session onto a worktree's new location once the sidecar's
   `resolveLiveRepoRoot` has confirmed, via `@repo/git`'s `revalidateWorktreePath`, that it moved
@@ -21,7 +20,7 @@ default as `apps/desktop/sidecar`). Feeds `packages/sidecar-api`'s `review`/`dif
   to whichever claim currently covers it (most-recently-ticked wins on overlap — see `ReviewSource`).
   Whole-file review is the degenerate case of a claim ranging over the entire file (`ranges: null`), not
   a separate code path — one reconciliation algorithm for both. Depends on `@repo/git`'s
-  `diffContents` for the actual diffing — this package owns the reconciliation *algorithm*, git owns
+  `diffContents` for the actual diffing — this package owns the reconciliation _algorithm_, git owns
   diffing as a primitive. Also returns `reviewedBaseline` — the synthetic "before" file for a genuine
   `reviewedBaseline → head` diff (`null` when `claims` is empty), built by walking the same
   `base → head` alignment and pulling every still-`"reviewed"` span back to head's text. Reuses
@@ -39,7 +38,7 @@ default as `apps/desktop/sidecar`). Feeds `packages/sidecar-api`'s `review`/`dif
   `review_range_claims` (range claims, one row per session+path+blockId — additive, not unified into
   `reviewed_files`, since a file can carry several simultaneous block claims where the whole-file toggle
   is a single mutable slot; see its own doc comment for why storage stayed split while the
-  *reconciliation* did unify).
+  _reconciliation_ did unify).
 - `src/db/client.ts` — `runMigrations`, a thin wrapper around `deskkit/sqlite`'s
   `applyEmbeddedMigrations` that re-maps its failure to this package's own `ReviewStoreError`. The
   connection itself (`SqliteDb`) lives in `@repo/db`; the store's own queries map their own
@@ -54,7 +53,7 @@ for why review's tables and the walkthrough store's tables share one `app.db` fi
 ## Non-obvious decisions
 
 - **`sessionKey` is one derived text column, not a composite unique index.** `sessions.open` is
-  idempotent per *working tree* + PR — `${repoRoot}#pr${n}`, or `${repoRoot}#branch${headRef}#base${baseRef}`
+  idempotent per _working tree_ + PR — `${repoRoot}#pr${n}`, or `${repoRoot}#branch${headRef}#base${baseRef}`
   when there's no PR. The base is part of the no-PR key, not just the branch: `nisi diff <base>`
   (`packages/cli`) can review the same branch against different bases, and those are distinct
   reviews with distinct reviewed snapshots, not one session two bases would silently repoint.
@@ -92,7 +91,7 @@ for why review's tables and the walkthrough store's tables share one `app.db` fi
 - **Reconciliation is one algorithm, storage stayed two tables.** Range claims weren't folded into
   `reviewed_files` even though `reconcile()` treats a whole-file review as just a claim ranging over
   the entire file — the two have different mutation semantics (one mutable slot per file vs. several
-  simultaneous claims per file from different blocks), and unifying the *storage* would mean either a
+  simultaneous claims per file from different blocks), and unifying the _storage_ would mean either a
   nullable-blockId composite key (SQLite treats `NULL` as distinct in unique indexes, same footgun
   `sessionKey` above sidesteps) or conditional validation on which fields matter. Unifying only the
   reconciliation math avoided both without losing the "one code path" goal.

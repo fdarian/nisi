@@ -10,7 +10,6 @@ zsh completion script for the whole tree. `nisi guide check|validate|render` aut
 sidecar's `diagnostics.snapshot` (never launches the app, exits non-zero when no sidecar answers). See `apps/desktop/AGENTS.md`'s "The seam" section for
 the handoff design this implements, and `packages/sidecar-api/src/sessions.ts`'s `OpenSessionTarget` for
 the wire shape this grammar maps to.
-
 - `src/index.ts` — the `Command` tree (Effect CLI, `effect/cli`): `nisi` with `pr`/`diff`/
   `completion` as subcommands (`Command.withSubcommands`), `pr`/`diff` sharing one
   `run(pathArg, target)` that does the actual argument parsing, terminal reporting, and repo-root

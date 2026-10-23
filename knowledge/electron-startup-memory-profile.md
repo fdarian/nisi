@@ -1,4 +1,5 @@
 ---
+
 type: Measurement
 title: Where Electron startup time and memory go
 description: Cold-start critical path and sustained memory by process for the Electron build, the baseline to beat when squeezing either.
@@ -21,18 +22,18 @@ bun scripts/measure-launch --cold --runs 10 --discard-first --deeplink https://g
 ```
 Times are milliseconds since the CLI's `open`.
 
-| ms | Milestone | Gap | What fills it |
-|---|---|---|---|
-| 416 | `frontend.navigation-start` | 416 | Electron boot, window creation |
-| 596 | `frontend.main` | 180 | Renderer parses and runs the bundle |
-| 805 | `sidecar.boot` (start) | — | Sidecar spawned from `whenReady`; its `sidecar.boot` span opens |
+| ms   | Milestone                       | Gap      | What fills it                                                                         |
+| ---- | ------------------------------- | -------- | ------------------------------------------------------------------------------------- |
+| 416  | `frontend.navigation-start`     | 416      | Electron boot, window creation                                                        |
+| 596  | `frontend.main`                 | 180      | Renderer parses and runs the bundle                                                   |
+| 805  | `sidecar.boot` (start)          | —        | Sidecar spawned from `whenReady`; its `sidecar.boot` span opens                       |
 | 1769 | `sidecar.services.init` (start) | **~960** | Inside the boot span, before the HTTP bind. Not profiled yet. The largest single gap. |
-| 1828 | `sidecar.boot` (end) | 60 | SQLite open, migrations, router attach |
-| 2128 | `frontend.backend.resolved` | **~300** | `electron/backend.ts` polling `sidecar.json` and health-checking it |
-| 2691 | `frontend.events.connected` | **~560** | Event stream connect, after the backend resolved |
-| 2726 | `files.loading.painted` | 35 | First app paint |
-| 3556 | `pull-requests.open.resolved` | ~830 | GitHub plus worktree work for the PR (not shell-bound) |
-| 4169 | `tab.content.painted` | ~610 | Diff fetch, parse and first diff paint |
+| 1828 | `sidecar.boot` (end)            | 60       | SQLite open, migrations, router attach                                                |
+| 2128 | `frontend.backend.resolved`     | **~300** | `electron/backend.ts` polling `sidecar.json` and health-checking it                   |
+| 2691 | `frontend.events.connected`     | **~560** | Event stream connect, after the backend resolved                                      |
+| 2726 | `files.loading.painted`         | 35       | First app paint                                                                       |
+| 3556 | `pull-requests.open.resolved`   | ~830     | GitHub plus worktree work for the PR (not shell-bound)                                |
+| 4169 | `tab.content.painted`           | ~610     | Diff fetch, parse and first diff paint                                                |
 
 The window shows app content at about 2.7 s, and nearly all of it is spent waiting on the sidecar.
 The renderer is ready at about 0.6 s. Leads, all unverified:
@@ -49,12 +50,12 @@ These are medians of 2 soak runs (`--soak`, see [launch-timing.md](launch-timing
 fdarian/nisi#158 (211 files) opened and scrolled end to end, then #155, #138 and #134 opened and
 scrolled, then tabs closed. Footprint is in MiB with the sidecar excluded.
 
-| Phase | Total end | Renderer peak / end |
-|---|---|---|
-| Idle after opening #158 | 277 | 162 / 142 |
-| After scrolling #158 | 730 | 558 / 545 |
-| 4 PR tabs open | 833 | 650 / 644 |
-| After closing tabs and idling for 60 s | 695 | 659 / 570 |
+| Phase                                  | Total end | Renderer peak / end |
+| -------------------------------------- | --------- | ------------------- |
+| Idle after opening #158                | 277       | 162 / 142           |
+| After scrolling #158                   | 730       | 558 / 545           |
+| 4 PR tabs open                         | 833       | 650 / 644           |
+| After closing tabs and idling for 60 s | 695       | 659 / 570           |
 
 Across the whole run:
 - **Time-weighted average:** 658 MiB, with a peak of 943 MiB.

@@ -3,14 +3,13 @@
 `HarnessV1SandboxProvider` for AI SDK's `HarnessAgent` (`@ai-sdk/harness`), implemented over
 `node:child_process` + `node:fs` instead of a virtual filesystem or a remote sandbox. This package
 exists because the two shipped providers — `@ai-sdk/sandbox-vercel` (remote-only) and
-`@ai-sdk/sandbox-just-bash` (a JS-reimplemented bash over an *in-memory* filesystem, despite the
+`@ai-sdk/sandbox-just-bash` (a JS-reimplemented bash over an _in-memory_ filesystem, despite the
 name) — can't run a coding CLI against the user's actual git worktree. This package's sessions
 operate directly on real disk, so `writeTextFile`, `run`, `spawn`, etc. do exactly what they say.
 
 Template: `@ai-sdk/sandbox-just-bash`'s own source (`node_modules/.bun/@ai-sdk+sandbox-just-bash@*/…/src/`,
 ~250 lines across three files) implements the identical interface over its virtual FS — this
 package mirrors its structure and swaps in real primitives.
-
 - `src/local-sandbox-session.ts` — `LocalSandboxSession`, the plain `Experimental_SandboxSession`:
   file I/O via `node:fs/promises`, `run`/`spawn` via `node:child_process.spawn('/bin/bash', ['-c', command])`.
   This is what `restricted()` hands back — no infra members.
@@ -19,7 +18,7 @@ package mirrors its structure and swaps in real primitives.
   kills processes this session `spawn`ed and releases its leased port; it never touches the
   directory itself, since that directory is the user's real worktree, not disposable sandbox state.
 - `src/local-sandbox-provider.ts` — `LocalSandboxProvider`/`createLocalSandbox`. One instance per
-  `defaultWorkingDirectory` (the target repo's *parent* — see "Reaching the real worktree" below).
+  `defaultWorkingDirectory` (the target repo's _parent_ — see "Reaching the real worktree" below).
 - `src/port.ts` — `allocatePort`/`releasePort`: finds a free loopback port and leases it from an
   in-process registry so two sessions racing `createSession()` never get handed the same number.
 - `src/sandbox-process.ts` — wraps a `ChildProcess` as `Experimental_SandboxProcess`
@@ -51,7 +50,7 @@ internal boundary to put Effect at; contorting it in would just add ceremony aro
   changes against the compiled sidecar under a bare
   `PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin`, never against `bun dev`.
 - **`resumeSession` is intentionally omitted**, same as `just-bash`. A resumed session would need
-  to reattach to a *live* bridge process (the WebSocket the adapter dials still has to be
+  to reattach to a _live_ bridge process (the WebSocket the adapter dials still has to be
   answered by something), but this package's spawned processes are ordinary children of the host
   process — they exit when it does. Reattaching to `sessionId`'s old directory would produce a
   session object whose port nothing is listening on, which fails confusingly deep inside the
@@ -63,7 +62,7 @@ internal boundary to put Effect at; contorting it in would just add ceremony aro
   by `allocatePort` — nothing to replace. Matches `just-bash`'s reasoning for the same omissions.
 - **`getPortUrl`/`getPortEndpoint` ignore whether the port is actually bound to anything.** Both
   always resolve to `${protocol}://127.0.0.1:<port>` — `getPortEndpoint` just wraps `getPortUrl`'s
-  result in `{ url }` — this package only reserves the *number*; the bridge adapter's
+  result in `{ url }` — this package only reserves the _number_; the bridge adapter's
   own spawned process (via `spawn()`) is what binds it.
 - **`run`/`spawn` unconditionally inject pnpm's `dangerouslyAllowAllBuilds` env override** (all
   three spellings — see `PNPM_BUILD_APPROVAL_ENV` in `local-sandbox-session.ts`). pnpm ≥10 blocks
@@ -93,7 +92,6 @@ two can't be resolved independently: the framework composes them as
 `sandbox-bootstrap.ts`), and `workDir` must stay relative — an absolute one throws
 `HarnessAgent: \`sandboxConfig.workDir\` must be relative` (`harness-agent.ts`, validated in both
 the constructor and per `createSession`).
-
 - **`in-place`** — `defaultWorkingDirectory` is the repo's own parent, `workDir` its folder name;
   the framework's own `mkdir -p` then no-ops on the already-existing directory. Used only by
   **pi**: it has no bootstrap recipe at all (no `getBootstrap`, no `BOOTSTRAP_DIR`, no pkg-manager
@@ -113,7 +111,7 @@ the constructor and per `createSession`).
   `--store-dir` makes pnpm try to purge and relink `node_modules`, which a GUI-launched sidecar has
   no TTY to confirm through (`ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY`).
   `apps/desktop/sidecar/harness/sandbox.ts`'s `resolveSandboxSettings` picks the mode per harness
-  and resolves the scratch root to a fixed `~/.nisi/harness-sandbox` — deliberately *not* `getDataDirConfig()`'s
+  and resolves the scratch root to a fixed `~/.nisi/harness-sandbox` — deliberately _not_ `getDataDirConfig()`'s
   `NISI_DATA_DIR`-derived app-data dir, since `scripts/dev.ts` points that at a per-worktree
   session dir inside the nisi checkout, i.e. inside a pnpm workspace. `~/.nisi` is outside any
   checkout regardless of `NISI_DATA_DIR`, and shared across dev/prod/every repo on purpose: it
@@ -139,7 +137,7 @@ the constructor and per `createSession`).
     `@anthropic-ai/claude-code` and its deps, plus the CLI's own install step) vs. **~0.3–0.8s
     warm** (marker present, bootstrap is a single file read). The frontend must surface progress
     for the cold path specifically — a bare spinner reads as hung at 13–28s — and should be able
-    to say *why* it's slow (first-time CLI install) rather than just that it is.
+    to say _why_ it's slow (first-time CLI install) rather than just that it is.
 - **`sandboxSession.ports` must be non-empty before the claude-code adapter starts** — it reads
   `ports[0]` as the bridge port (`resolveBridgePort` in `claude-code-harness.ts`) and throws
   `HarnessCapabilityUnsupportedError` if empty. `LocalSandboxProvider.createSession` allocates one

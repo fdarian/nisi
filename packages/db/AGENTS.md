@@ -8,7 +8,6 @@ the walkthrough store's in `packages/walkthrough/src/db/schema.ts`), each
 with its own `drizzle-kit generate` and its own embedded migration bundle —
 this package only knows how to open one connection, not what any bundle
 contains or how to apply one (that's `deskkit/sqlite`'s job now, see below).
-
 - `src/client.ts` — `SqliteDb`, the one shared connection + Drizzle client for
   the whole sidecar process (`getAppDbPath`'s `app.db`, in the data dir),
   built on `deskkit/sqlite`'s `layerSqliteClient` (an `@effect/sql-sqlite-bun`
@@ -90,14 +89,14 @@ its own store's construction (see `packages/review/src/db/client.ts`,
   `@effect/sql-sqlite-bun@4.0.0-beta.107` (and `drizzle-orm/effect-sqlite-bun`, transitively) declare
   as their peer requirement.** `pnpm peers check` reports this as an unmet peer — expected, not a bug
   to fix by bumping `effect` further. `deskkit` (an unpinned `github:fdarian/deskkit` dependency) has
-  its *own* `effect@4.0.0-beta.102` pin baked into its package.json; bumping this repo's `effect` past
+  its _own_ `effect@4.0.0-beta.102` pin baked into its package.json; bumping this repo's `effect` past
   that makes TypeScript see two structurally-incompatible `Effect` module instances and `deskkit/sqlite`
   itself stops typechecking (see its `client.ts`). Matches the shape of the syne repo's own
   `apps/desktop/package.json` (same deskkit commit, same `effect@4.0.0-beta.102` pin, same
   `@effect/sql-sqlite-bun@4.0.0-beta.107` addition) — re-check that reference before changing this.
 - Effect Layers are memoized by reference within one layer graph — composing
   `SqliteDb.layer` into two different domain layers (`ReviewStore.layer` and
-  the walkthrough store's layer) only opens the connection once, *as long as*
+  the walkthrough store's layer) only opens the connection once, _as long as_
   both reference the same `SqliteDb.layer` value rather than each building
   their own `Layer.effect(SqliteDb, SqliteDb.make)`.
 - `bun run db:generate` failing with `Please install latest version of

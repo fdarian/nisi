@@ -1,4 +1,5 @@
 ---
+
 type: Convention
 title: Harness models for test generations
 description: Name the cheapest capable model when a verification run has to generate a walkthrough.
@@ -11,11 +12,11 @@ Walkthrough generation runs a real coding agent against a real repo for several 
 coverage validator alone retries up to 4 times before giving up. A run whose only purpose is to
 confirm that a spinner appears or a bridge boots should not bill a frontier model.
 
-| Harness | Model to use |
-|---|---|
-| `opencode` | `deepseek v4 flash free` |
-| `pi` | `deepseek v4 flash free` |
-| `claude-code` | `haiku` |
+| Harness       | Model to use             |
+| ------------- | ------------------------ |
+| `opencode`    | `deepseek v4 flash free` |
+| `pi`          | `deepseek v4 flash free` |
+| `claude-code` | `haiku`                  |
 
 This governs **testing only**. It says nothing about what a real user-facing generation should
 default to.

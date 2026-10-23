@@ -3,7 +3,6 @@
 Contract-first oRPC v2 contract for the desktop sidecar's wire API — the single source of truth shared
 by the sidecar (implementer, [`@repo/desktop`](../../apps/desktop/AGENTS.md)) and its frontend client.
 Git/review procedures sit alongside `health.check`.
-
 - `health.ts`, `sessions.ts`, `diff.ts`, `review.ts`, `events.ts`, `walkthrough.ts`, `chat.ts`,
   `settings.ts`, `code-index.ts` — schema + procedure contract per domain
   (`packages/sidecar-api/src/<domain>.ts`), each just types — no git/SQLite/agent logic lives here,
@@ -40,6 +39,7 @@ Git/review procedures sit alongside `health.check`.
   appends each event to `data` (`.liveOptions()` would replace it).
 
 ## Gotchas
+
 - `effect` here is the `beta` dist-tag (`4.0.0-beta.x`) — `latest` on npm is still v3. Pinned exact,
   not `^`.
 - `oc.input()`/`oc.output()` accept an Effect `Schema` directly (that's what the extension imports
@@ -62,14 +62,14 @@ Git/review procedures sit alongside `health.check`.
   shape, scoped to one block's claim on a set of ranges within one file) and `diff.ts`'s `ReviewRange`
   gained `reviewedVia: ReviewSource | null` — `{kind: "file"}` or `{kind: "range", blockId,
   blockLabel}`, attributing each surviving range to the claim currently covering it. `FileContentReview`
-  is now populated whenever a file has *any* active claim, not only once it's been whole-file-ticked.
+  is now populated whenever a file has _any_ active claim, not only once it's been whole-file-ticked.
   `ranges` itself now only feeds the walkthrough reference pane's per-file reviewed/partial/unreviewed
   checkbox (`apps/desktop/src/features/pull-request/walkthrough/reference-pane.tsx`) — the diff pane stopped
   reading it once `baselineKind` shipped, below.
 - `FileContentReview` gained `baselineKind: "base" | "reviewed"`, telling the diff pane which file
   `FileContent.patch`/`oldContent` are actually diffed against. `"reviewed"` means the sidecar
   substituted `@repo/review`'s synthesized `reviewedBaseline` for the usual merge-base content before
-  computing the patch — so an *empty* patch under `"reviewed"` means "nothing new since your last
+  computing the patch — so an _empty_ patch under `"reviewed"` means "nothing new since your last
   pass," not "nothing changed in the PR." Always `"base"` for a size-gated file even with an active
   claim, since reconciliation needs content the size gate withheld.
 - `HarnessInfo` carries `enabled` and live binary `available`/`binaryPath` only. The

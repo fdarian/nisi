@@ -1,10 +1,9 @@
 # @repo/settings
 
-Persistent app-level preferences the *sidecar itself* needs to read — as opposed to view-only
+Persistent app-level preferences the _sidecar itself_ needs to read — as opposed to view-only
 state, which stays in the frontend's `localStorage` the way `next-themes` already keeps theme.
 `bun:sqlite` + Drizzle, data dir shared with the sidecar's own handshake file and every other
 domain package's tables (`NISI_DATA_DIR`, same default as `@repo/review`/`@repo/db`).
-
 - `src/store.ts` — `SettingsStore`, the public service. One singleton row; `get()` returns
   `DEFAULT_SETTINGS` when the row doesn't exist yet, `update()` merges a partial patch over the
   current row (reading it first) so untouched fields survive, then inserts the row on first
@@ -28,7 +27,7 @@ domain package's tables (`NISI_DATA_DIR`, same default as `@repo/review`/`@repo/
 `@repo/walkthrough`'s actual `WalkthroughStore` (the I/O half) lives in
 `apps/desktop/sidecar/walkthrough/store.ts`, not in that package — because `@repo/walkthrough`
 has real pure logic (coverage validation, buffer, prompt building) that has to stay testable
-without SQLite. Settings has no such pure half: the whole of its logic *is* the I/O. So it
+without SQLite. Settings has no such pure half: the whole of its logic _is_ the I/O. So it
 follows `@repo/review`'s shape instead — a self-contained package with its own `bun test` suite
 — since `apps/desktop/sidecar` has no test setup of its own, and this store needs one (defaults
 on first read, round-trip update, partial update not clobbering other fields).

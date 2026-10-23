@@ -1,4 +1,5 @@
 ---
+
 type: Decision
 title: The @pierre/diffs CodeView stale pendingScrollTarget patch
 description: capturePendingLayoutAnchor() suppresses scroll anchoring for the whole duration of any in-flight smooth scrollTo(); if the app removes that scroll's own target item mid-flight, the guard never lifts and scrollTop collapses to 0 instead of compensating.
@@ -6,9 +7,10 @@ tags: [frontend, diff-pane, pierre, patches, scroll]
 status: stable
 generated: { by: claude-code/claude-sonnet-5, at: 2026-08-23T00:00:00Z }
 sources:
-  - id: verify
-    resource: verifying-frontend-changes.md
-    title: Verifying a frontend change
+- id: verify
+  resource: verifying-frontend-changes.md
+  title: Verifying a frontend change
+
 ---
 
 # Why the patch exists
@@ -17,11 +19,11 @@ sources:
 appear in the controlled list, then calls `capturePendingLayoutAnchor()` so the next render can hold
 the viewport steady across the shrink. `capturePendingLayoutAnchor` early-returns whenever
 `this.pendingScrollTarget != null` — correct while an in-flight `scrollTo()` still targets a
-*surviving* item, since capturing a competing anchor would fight the programmatic scroll. It's wrong
+_surviving_ item, since capturing a competing anchor would fight the programmatic scroll. It's wrong
 when the pending target **is** the item being removed: nisi's `scrollToPath`
 (`apps/desktop/src/features/pull-request/files/diff-pane.tsx`) fires a smooth `scrollTo({type:"item", id,
 align:"start", ...})` on every `selectedPath` change, including a plain sidebar click. With "Hide
-Reviewed" on, clicking a file and immediately ticking *that same file's* Reviewed checkbox — a totally
+Reviewed" on, clicking a file and immediately ticking _that same file's_ Reviewed checkbox — a totally
 ordinary sequence, not a race the user has to work for — starts that scroll and then removes its own
 target before the animation settles. `resolveScrollTargetTop` can't resolve an id that's no longer in
 `idToItem`, so the pending target can never complete on its own, and the anchor guard it's blocking
@@ -41,7 +43,6 @@ Measured directly against the patched `CodeView` instance (`window.__INSTANCE`, 
 patch's debug hook) via the [browser verification harness](verifying-frontend-changes.md), driving
 `scrollTo`/`computeRenderRangeAndEmit` frames manually since this environment's backgrounded tab
 never fires `requestAnimationFrame` on its own:
-
 - **Tick-while-scrolling-to-self** (the bug's actual trigger): start a smooth `scrollTo` targeting an
   item, then — before any render frame runs — tick that same item's Reviewed checkbox.
   `pendingScrollTarget` is `undefined` by the next check (cleared), `scrollTop` moved from 17628 to
@@ -63,7 +64,7 @@ an off-by-one.
 
 # What's still open
 
-A *surviving* pending target isn't stale the same way: `resolveScrollTargetTop` re-reads the item's
+A _surviving_ pending target isn't stale the same way: `resolveScrollTargetTop` re-reads the item's
 live `.top` every frame from the same mutated item record `reconcileItems` just relaid out (items
 matched by id keep their object identity across a reconcile), and `recomputeLayout` always runs
 earlier in `computeRenderRangeAndEmit` than the target-resolution step. So a surviving target's

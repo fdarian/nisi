@@ -19,7 +19,6 @@ every one of them. `dist/` is the load-unpacked target — point Chrome (or `--l
 there's no watch mode. `Bun.build` strips types without checking them, so `bun run check:type`
 (`tsrs --noEmit` with `@types/chrome`) is a separate step. No `#/*` alias: relative imports
 (`../modules/direct-arrival.js`) stay short enough without one.
-
 - `modules/direct-arrival.ts` — `isDirectArrival`, the hand-off decision. Pure (no `chrome.*`
   calls), so it's `bun test`-able without a browser (`modules/direct-arrival.test.ts`);
   `entries/background.ts` is its only caller.
@@ -63,7 +62,7 @@ there's no watch mode. `Bun.build` strips types without checking them, so `bun r
   user to confirm success once instead of detecting it; don't reach for a timer or a focus/blur
   heuristic here instead — that's the exact failure mode the interstitial exists to avoid.
 - `chrome.tabs.update`/`window.location` navigations to an unregistered scheme are, per Chrome's
-  `ExternalProtocolHandler`, attributed to the *initiating* origin for its "always allow" memory —
+  `ExternalProtocolHandler`, attributed to the _initiating_ origin for its "always allow" memory —
   both a `chrome.tabs.update` call from the service worker and a same-origin `window.location`
   assignment from an extension page attribute to `chrome-extension://<id>`, not to whatever the
   tab happened to be showing before.

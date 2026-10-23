@@ -1,4 +1,5 @@
 ---
+
 name: guide
 description: Write the reviewer's guide for the changes you just made, as a live page in nisi's Guide tab, instead of recapping them in chat. Use after finishing a change a human will review, when asked for a guide, overview or walkthrough of your work, or when editing an existing .nisi/guide/guide.mdx.
 ---
@@ -21,7 +22,6 @@ so it stays out of your commits, and never commit it.
 
 The app draws the title (the PR's own) and an "On this page" list built from your `##` headings, so
 write no `# h1`. Use these sections in this order, and drop one that doesn't apply:
-
 1. `## Overview`: one lead sentence saying what changed and why it matters (two when a user-visible
    consequence needs its own clause), then `<Areas>`: the change grouped into parts. Add a `<Sequence>`
    before it only when the change is about ordering or timing. With no screenshots, end the Overview with
@@ -109,9 +109,8 @@ The repository page renders from local data, then streams in each PR's state.
 ## Reference
 
 Print these only when you need them; they are not repeated here. `nisi skills get guide --full` prints all of them.
-
 - `nisi skills get guide --ref components.md`: every kit component with its props, and the rules for custom components. Print when you use anything beyond `Areas`, `Ref`, `Note`, `Checks` and `NeedsYou`.
-- `nisi skills get guide --ref sequence.md`: when a `Sequence` earns its place (ordering, timing, request flow), when to skip it, and a worked example. Print when the change is about *when* things happen.
+- `nisi skills get guide --ref sequence.md`: when a `Sequence` earns its place (ordering, timing, request flow), when to skip it, and a worked example. Print when the change is about _when_ things happen.
 - `nisi skills get guide --ref screenshots.md`: when to take screenshots and when to skip them, `Shot`, `Tour`, `Pin`, `BeforeAfter`, capturing, catching delayed states, and placing pins. Print before taking any screenshot.
 - `nisi skills get guide --ref preview.md`: the `nisi guide render` flags (`--expand`, `--text`, `--theme`), what to look for in the images, and its limits. Print the first time you preview, or when an image looks wrong.
 - `nisi skills get guide --ref checks.md`: which commands to record, `nisi guide check` usage, uncommitted work, `Skipped`. Print when a check is long-running, needs a `cd`, or you aren't sure what to record.

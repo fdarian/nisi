@@ -1,4 +1,5 @@
 ---
+
 type: Decision
 title: The @pierre/diffs CodeView teardown leak patch
 description: cleanAllRenderedItems() only released items inside the last virtualization window, so items scrolled out of view before a tab closed stayed pinned to the worker-pool singleton forever.
@@ -6,9 +7,10 @@ tags: [frontend, performance, pierre, patches]
 status: stable
 generated: { by: claude-code/claude-sonnet-5, at: 2026-08-10T00:00:00Z }
 sources:
-  - id: verify
-    resource: verifying-frontend-changes.md
-    title: Verifying a frontend change
+- id: verify
+  resource: verifying-frontend-changes.md
+  title: Verifying a frontend change
+
 ---
 
 # Why the patch exists

@@ -1,4 +1,5 @@
 ---
+
 name: demo-nisi
 description: Launch the real nisi desktop app against a fully fake backend for demos — a dummy open PR, unpushed-commits dialog, push, then merge, with no GitHub, git or disk access. Also how to extend the demo.
 disable-model-invocation: true
@@ -18,7 +19,6 @@ thing to a plain browser tab, which is how an agent can verify it.
 ## The scripted flow
 
 One open PR, `acme/widgets` #42 "Add a widget registry", two changed files, passing CI, two unpushed commits.
-
 1. **Squash and merge** opens the unpushed-commits dialog.
 2. Click the push row: a simulated `git push` log streams, then the primary button becomes **Merge**.
 3. **Merge**: after ~0.8s the header reads **Merged**.

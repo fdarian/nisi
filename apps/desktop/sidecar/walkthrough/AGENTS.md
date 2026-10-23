@@ -7,7 +7,6 @@ those two packages does I/O or knows about the other — this directory is where
 Harness-adapter plumbing that isn't walkthrough-specific (which CLI backs a harness, model
 discovery, sandbox mode, read-only tool gating) lives one level up in
 [sidecar/harness](../harness/AGENTS.md), shared by every caller that drives a `HarnessAgent`.
-
 - `store.ts` — `WalkthroughStore`, persistence for generated walkthroughs (one row per session,
   regenerating overwrites) plus their derived coverage gaps (`uncoveredFiles` — path and the
   uncovered line ranges per file, so the frontend can open the diff pane on exactly the hunks the
@@ -59,10 +58,10 @@ discovery, sandbox mode, read-only tool gating) lives one level up in
   collide with no adapter's builtins, and `generate.ts` passes `sidecar/harness`'s
   `FILE_MUTATING_BUILTINS` as `inactiveTools` to switch the adapters' own file writers off.
   Overriding `write`/`edit` by key collision was the old design and failed both ways — Pi hung
-  forever on it, Claude Code drifted to its *builtin* `Write` on a large context blob and left a
+  forever on it, Claude Code drifted to its _builtin_ `Write` on a large context blob and left a
   stray `walkthrough.json` in the user's repo. `read`/`grep`/`glob`/`bash` stay active so the agent
   can explore the worktree itself — the point of the brief `@repo/walkthrough`'s `buildOverview`
-  hands it, not a fallback. `generate.ts` feeds one name pair to *both* `createWalkthroughTools` and
+  hands it, not a fallback. `generate.ts` feeds one name pair to _both_ `createWalkthroughTools` and
   `buildSystemPrompt` — registering one set while telling the model another is the failure mode to
   watch for.
 - **Regenerate is the same `generate` call, not a separate procedure.** The sidecar decides what
@@ -71,13 +70,13 @@ discovery, sandbox mode, read-only tool gating) lives one level up in
   start) — see `live-sessions.ts`.
 - **Session-not-found is thrown, not yielded.** `generateWalkthrough` throws
   `GenerateSessionNotFound` for an unknown `sessionId` so `http.ts` can map it to the contract's
-  declared `NOT_FOUND`, matching `diff.files`/`diff.fileContents`'s precedent. Every other failure —  a git
+  declared `NOT_FOUND`, matching `diff.files`/`diff.fileContents`'s precedent. Every other failure — a git
   error, a harness/sandbox crash, a validation loop that never converges — yields an in-band
   `{ type: "failed" }` event instead, so the stream ends cleanly rather than dropping the connection.
 - **`gatherGenerationContext` fetches every non-binary file's content with `force: true`**,
   bypassing `@repo/git`'s load-on-demand size tier — reference validation needs every changed
   file's real line count, not just the ones under 1MB, to tell a real `Location` from an
-  out-of-range one. A file still past the *patch-only* tier (2MB) has no `newContent` even with
+  out-of-range one. A file still past the _patch-only_ tier (2MB) has no `newContent` even with
   `force`, and is simply omitted from `ChangedFileFacts` rather than faked with a zero line count —
   `@repo/walkthrough`'s own documented exemption for files with no head content.
 - **`generate` reattaches instead of erroring when a generation is already running for the
