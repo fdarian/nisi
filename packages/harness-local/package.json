@@ -12,16 +12,16 @@
 		"test": "bun test"
 	},
 	"dependencies": {
-		"@ai-sdk/harness": "1.0.152",
-		"@ai-sdk/provider-utils": "5.0.60",
+		"@ai-sdk/harness": "1.0.159",
+		"@ai-sdk/provider-utils": "5.0.65",
 		"@repo/bin-resolver": "workspace:*"
 	},
 	"devDependencies": {
-		"@ai-sdk/harness-claude-code": "1.0.156",
+		"@ai-sdk/harness-claude-code": "1.0.163",
 		"@total-typescript/tsconfig": "1.0.4",
 		"@types/bun": "1.4.3",
 		"@types/ws": "^8.18.2",
-		"ai": "7.0.141",
+		"ai": "7.0.148",
 		"tsrs": "catalog:",
 		"typescript": "7.0.2",
 		"ws": "^8.22.0",

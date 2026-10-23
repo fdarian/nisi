@@ -22,7 +22,7 @@ index fc140dd..3bdcfad 100644
  const harnessV1RawPartSchema = z.object({
  	type: z.literal("raw"),
 diff --git a/dist/utils/index.js b/dist/utils/index.js
-index 703ea26..08263c7 100644
+index bad6269..3485853 100644
 --- a/dist/utils/index.js
 +++ b/dist/utils/index.js
 @@ -1509,7 +1509,17 @@ const harnessV1CompactionPartSchema = z.object({
