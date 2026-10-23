@@ -1,14 +1,15 @@
 diff --git a/dist/index.js b/dist/index.js
-index 13e9e3c..62a24a9 100644
+index 25fa866..5920bf3 100644
 --- a/dist/index.js
 +++ b/dist/index.js
-@@ -9,11 +9,22 @@ import { spawn } from "node:child_process";
- import { chmod, mkdir, readFile, realpath, rename, writeFile } from "node:fs/promises";
+@@ -9,12 +9,24 @@ import { readFileSync } from "node:fs";
  import { homedir } from "node:os";
- //#region src/codex-bootstrap.ts
+ import { chmod, mkdir, readFile, rename, writeFile } from "node:fs/promises";
+ //#region src/claude-code-bootstrap.ts
 -const readBridgeAsset = createReadBridgeAsset({
 -	"package.json": new URL("./bridge/package.json", import.meta.url),
 -	"pnpm-lock.yaml": new URL("./bridge/pnpm-lock.yaml", import.meta.url),
+-	"pnpm-workspace.yaml": new URL("./bridge/pnpm-workspace.yaml", import.meta.url),
 -	"index.mjs": new URL("./bridge/index.mjs", import.meta.url)
 -});
 +// nisi patch: upstream resolves these files at runtime through
@@ -20,13 +21,15 @@ index 13e9e3c..62a24a9 100644
 +// being embedded in nisi's compiled sidecar. See knowledge/compiled-binary-differences.md.
 +import bridgePackageJsonText from "./bridge/package.json" with { type: "text" };
 +import bridgePnpmLockText from "./bridge/pnpm-lock.yaml" with { type: "text" };
++import bridgePnpmWorkspaceText from "./bridge/pnpm-workspace.yaml" with { type: "text" };
 +import bridgeIndexMjsText from "./bridge/index.mjs" with { type: "text" };
 +const bridgeAssets = {
 +	"package.json": bridgePackageJsonText,
 +	"pnpm-lock.yaml": bridgePnpmLockText,
++	"pnpm-workspace.yaml": bridgePnpmWorkspaceText,
 +	"index.mjs": bridgeIndexMjsText,
 +};
 +const readBridgeAsset = async (name) => bridgeAssets[name];
- const CODEX_BOOTSTRAP_DIR = ".harness-bootstrap/codex";
+ const CLAUDE_CODE_BOOTSTRAP_DIR = ".harness-bootstrap/claude-code";
  let cachedBootstrap;
- async function getCodexBootstrap() {
+ async function getClaudeCodeBootstrap() {
