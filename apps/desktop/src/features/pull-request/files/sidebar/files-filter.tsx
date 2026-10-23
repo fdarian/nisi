@@ -79,7 +79,7 @@ export function FilesFilter(props: {
 						>
 							<SlidersHorizontalIcon aria-hidden="true" />
 						</DropdownMenuTrigger>
-						<DropdownMenuContent align="end">
+						<DropdownMenuContent align="end" finalFocus={inputRef}>
 							<DropdownMenuRadioGroup
 								onValueChange={(value) => {
 									if (value === "files" || value === "keyword")

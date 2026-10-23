@@ -57,6 +57,10 @@ export function InputGroupAddon({
 			data-slot="input-group-addon"
 			onMouseDown={(e: React.MouseEvent<HTMLDivElement>) => {
 				const target = e.target as HTMLElement;
+				// React bubbles portaled events (e.g. a menu popup rendered from an
+				// addon) through the fiber tree, so DOM containment is the only way
+				// to tell the addon's own surface from someone else's.
+				if (!e.currentTarget.contains(target)) return;
 				const isInteractive = target.closest(
 					"button, a, input, select, textarea, [role='button'], [role='combobox'], [role='listbox'], [data-slot='select-trigger']",
 				);
