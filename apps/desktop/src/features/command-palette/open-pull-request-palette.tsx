@@ -78,14 +78,18 @@ type OpenPullRequestPaletteProps = {
 	findExistingSessionId: (params: OpenPullRequestParams) => string | undefined;
 };
 
-// A list entry beside the PR rows; the object is its own `value`, so it can't
-// collide with a PR row.
-const RECENTLY_CLOSED_FILTER_ROW = { filter: "recently-closed" } as const;
+// List entries beside the PR rows; each object is its own `value`, so none can
+// collide with a PR row or each other.
+const RECENTLY_CLOSED_FILTER_ROW = {
+	action: "filter-recently-closed",
+} as const;
+const SHOW_RECENTLY_CLOSED_ROW = { action: "show-recently-closed" } as const;
 
 type PaletteRow =
 	| PullRequestSearchResult
 	| IndexedPullRequest
-	| typeof RECENTLY_CLOSED_FILTER_ROW;
+	| typeof RECENTLY_CLOSED_FILTER_ROW
+	| typeof SHOW_RECENTLY_CLOSED_ROW;
 
 function authorInitials(author: string): string {
 	return author.slice(0, 2).toUpperCase();
@@ -176,10 +180,15 @@ export function OpenPullRequestPalette(
 					? []
 					: search.results
 				: localMatches;
-	const rows: readonly PaletteRow[] =
-		!recentlyClosed && offersRecentlyClosedFilter(query)
-			? [RECENTLY_CLOSED_FILTER_ROW, ...results]
-			: results;
+	const rows: readonly PaletteRow[] = recentlyClosed
+		? results
+		: [
+				...(offersRecentlyClosedFilter(query)
+					? [RECENTLY_CLOSED_FILTER_ROW]
+					: []),
+				...results,
+				...(query.trim() !== "" ? [SHOW_RECENTLY_CLOSED_ROW] : []),
+			];
 	const searchError = isBlank ? recent.error : needsGh ? search.error : null;
 	const searchErrorMessage = friendlySearchError(searchError);
 	// Local filtering is instant, so only the `gh` path loads. A pending
@@ -425,31 +434,48 @@ export function OpenPullRequestPalette(
 									</>
 								)}
 								<CommandList>
-									{(row: PaletteRow) =>
-										"filter" in row ? (
-											<CommandItem
-												key="filter-recently-closed"
-												onClick={() => {
-													setRecentlyClosed(true);
-													setQuery("");
-													setDebouncedQuery("");
-													inputRef.current?.focus();
-												}}
-												value={row}
-											>
-												<div className="flex min-w-0 flex-1 items-center gap-2.5">
-													<ListFilterIcon className="size-3.5 shrink-0 text-muted-foreground" />
-													<div className="flex min-w-0 items-center gap-2">
-														<span className="text-muted-foreground">
-															Filter by
-														</span>
-														<span className="rounded-md bg-foreground/10 px-2 py-0.5 text-xs">
-															Recently closed
-														</span>
+									{(row: PaletteRow) => {
+										if ("action" in row) {
+											return row.action === "filter-recently-closed" ? (
+												<CommandItem
+													key={row.action}
+													onClick={() => {
+														setRecentlyClosed(true);
+														setQuery("");
+														setDebouncedQuery("");
+														inputRef.current?.focus();
+													}}
+													value={row}
+												>
+													<div className="flex min-w-0 flex-1 items-center gap-2.5">
+														<ListFilterIcon className="size-3.5 shrink-0 text-muted-foreground" />
+														<div className="flex min-w-0 items-center gap-2">
+															<span className="text-muted-foreground">
+																Filter by
+															</span>
+															<span className="rounded-md bg-foreground/10 px-2 py-0.5 text-xs">
+																Recently closed
+															</span>
+														</div>
 													</div>
-												</div>
-											</CommandItem>
-										) : (
+												</CommandItem>
+											) : (
+												<CommandItem
+													key={row.action}
+													onClick={() => {
+														setRecentlyClosed(true);
+														inputRef.current?.focus();
+													}}
+													value={row}
+												>
+													<div className="flex min-w-0 flex-1 items-center gap-2.5">
+														<ListFilterIcon className="size-3.5 shrink-0 text-muted-foreground" />
+														<span>Show recently closed</span>
+													</div>
+												</CommandItem>
+											);
+										}
+										return (
 											<CommandItem
 												key={`${row.owner}/${row.repo}#${row.number}`}
 												onClick={() => handleSelect(row)}
@@ -465,8 +491,8 @@ export function OpenPullRequestPalette(
 													pr={row}
 												/>
 											</CommandItem>
-										)
-									}
+										);
+									}}
 								</CommandList>
 							</Command>
 						)}
