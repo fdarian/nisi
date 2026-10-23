@@ -482,6 +482,7 @@ export function FilesChangedView({
 			r: () => handleToggleReviewed(1),
 			// Mirrors `r` exactly — same toggle, same undo-stack push — but walks
 			// `queryFilteredFiles` backward instead of forward.
+			// biome-ignore lint/correctness/noComponentHookFactories: key binding handler, not a component
 			R: () => handleToggleReviewed(-1),
 			u: handleUndo,
 			"o e": handleOpenInPreferredEditor,
@@ -490,6 +491,7 @@ export function FilesChangedView({
 			// only meaningful once the input's been blurred (Enter, or a click
 			// elsewhere). Both wrap; a no-op with zero matches.
 			n: () => navigateMatch(1),
+			// biome-ignore lint/correctness/noComponentHookFactories: key binding handler, not a component
 			N: () => navigateMatch(-1),
 			// The filter input's own `onKeyDown` (`FilesSidebar`) already
 			// preventDefaults and blurs on the *first* Escape while it's
@@ -499,6 +501,7 @@ export function FilesChangedView({
 			// has left the input; a no-op when the query's already empty
 			// keeps it from interfering with something else's Escape
 			// handler (e.g. a Base UI popover) once there's nothing to clear.
+			// biome-ignore lint/correctness/noComponentHookFactories: key binding handler, not a component
 			Escape: () => {
 				if (filterQuery !== "") handleFilterQueryChange("");
 			},

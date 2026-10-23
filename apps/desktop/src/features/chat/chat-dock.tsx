@@ -81,7 +81,10 @@ export function ChatDock({
 	// that same first Escape: its target is still the composer's
 	// contenteditable at that point.
 	useKeyBindings(
-		{ Escape: () => dock.setPopupOpen(false) },
+		{
+			// biome-ignore lint/correctness/noComponentHookFactories: key binding handler, not a component
+			Escape: () => dock.setPopupOpen(false),
+		},
 		{ enabled: popupOpen },
 	);
 

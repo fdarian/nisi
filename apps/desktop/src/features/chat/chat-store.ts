@@ -297,7 +297,7 @@ function createChatStore(): StoreApi<ChatStore> {
 						(thread) => thread.id === session.activeThreadId,
 					);
 					const step = direction === "next" ? 1 : -1;
-					const baseIndex = currentIndex < 0 ? 0 : currentIndex;
+					const baseIndex = Math.max(0, currentIndex);
 					const nextIndex =
 						(baseIndex + step + session.threads.length) %
 						session.threads.length;
