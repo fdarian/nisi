@@ -8,8 +8,8 @@
  * already imported `exec.ts` with the real binary.
  */
 import { Cause, Clock, Effect, Exit } from "effect";
-import type { PullRequestSearchState } from "../../src/pull-request.ts";
 import { GitHub } from "../../src/github/github.ts";
+import type { PullRequestSearchState } from "../../src/pull-request.ts";
 import { GitHubTestLayer } from "./github-layer.ts";
 
 const [cwd, query, state] = process.argv.slice(2);
