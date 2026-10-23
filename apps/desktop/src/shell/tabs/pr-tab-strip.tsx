@@ -32,7 +32,8 @@ import {
 	PlusIcon,
 	XIcon,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { type RefCallback, useMemo, useState } from "react";
+import { FluidHoverHighlight, useFluidHover } from "#/components/fluid-hover";
 import { Button } from "#/components/ui/button";
 import {
 	ContextMenu,
@@ -61,6 +62,7 @@ import {
 	type PrStatus,
 } from "#/features/pull-request/pr-status";
 import { PrStatusIcon } from "#/features/pull-request/pr-status-icon";
+import { useNativeGlassShowing } from "#/features/settings/window-glass";
 import type { SidecarQueryUtils } from "#/infra/backend-context";
 import { hasNative } from "#/infra/native";
 import { BackgroundTasksIndicator } from "#/shell/background-tasks/background-tasks-indicator";
@@ -143,6 +145,8 @@ export function PrTabStrip({
 }: PrTabStripProps): React.ReactElement {
 	const [devToolVisible, setDevToolVisible] = useDevToolVisible();
 	const [draggingId, setDraggingId] = useState<string | null>(null);
+	const glassShowing = useNativeGlassShowing();
+	const hover = useFluidHover<HTMLDivElement>("x");
 	const sessionIds = useMemo(
 		() => sessions.map((session) => session.id),
 		[sessions],
@@ -223,7 +227,18 @@ export function PrTabStrip({
 							clampContentMinWidth={false}
 							scrollFade
 						>
-							<TabsPrimitive.List className="flex w-max items-center gap-1 py-2">
+							<TabsPrimitive.List
+								className="relative flex w-max items-center gap-1 py-2"
+								ref={hover.containerRef}
+								{...(glassShowing ? hover.handlers : {})}
+							>
+								{glassShowing && (
+									<FluidHoverHighlight
+										className="rounded-md bg-sidebar-accent"
+										hidden={draggingId !== null}
+										hover={hover}
+									/>
+								)}
 								{sessions.map((session) => (
 									<PrTab
 										checkGenerationRunning={checkGenerationRunning}
@@ -235,12 +250,14 @@ export function PrTabStrip({
 										onCloseOthers={() => onCloseOtherSessions(session.id)}
 										onSuspend={() => onSuspendTab(session.id)}
 										orpc={orpc}
+										registerHoverItem={hover.registerItem}
 										session={session}
 									/>
 								))}
 								{pendingOpenTab != null && (
 									<TabsPrimitive.Tab
 										className={PR_TAB_CLASS}
+										ref={hover.registerItem}
 										value={pendingOpenTabValue(pendingOpenTab)}
 									>
 										{pendingOpenTab.status === "opening" ? (
@@ -332,7 +349,7 @@ function sessionLabel(session: Session): string {
 const PR_TAB_CLASS = cn(
 	"group relative flex min-w-32 max-w-56 shrink select-none items-center gap-1.5 self-end rounded-md px-2.5 py-1.5 text-muted-foreground text-xs outline-none",
 	"bg-pane-surface hover:bg-background hover:text-foreground",
-	"in-data-[native-glass]:bg-transparent in-data-[native-glass]:hover:bg-sidebar-accent",
+	"in-data-[native-glass]:bg-transparent in-data-[native-glass]:hover:bg-transparent",
 	"data-active:before:pointer-events-none data-active:before:absolute data-active:before:inset-0 data-active:before:rounded-[calc(var(--radius-md)-1px)] data-active:before:shadow-[0_1px_--theme(--color-black/4%)] dark:data-active:before:shadow-[0_-1px_--theme(--color-white/6%)]",
 	"data-active:bg-background data-active:text-foreground data-active:bg-clip-padding data-active:shadow-xs/5",
 	"focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
@@ -421,6 +438,7 @@ function PrTab({
 	onSuspend,
 	checkGenerationRunning,
 	orpc,
+	registerHoverItem,
 }: {
 	session: Session;
 	isActive: boolean;
@@ -432,6 +450,8 @@ function PrTab({
 	checkGenerationRunning: (sessionId: string) => Promise<boolean>;
 	/** Threaded through only for `PrTabStatusIcon` — nothing else in this tab talks to the sidecar. */
 	orpc: SidecarQueryUtils;
+	/** Joins the strip's fluid hover list; only the glass look draws the highlight. */
+	registerHoverItem: RefCallback<HTMLElement>;
 }): React.ReactElement {
 	const sortable = useSortable({
 		id: session.id,
@@ -475,6 +495,7 @@ function PrTab({
 					<TabsPrimitive.Tab
 						className={PR_TAB_CLASS}
 						nativeButton={false}
+						ref={registerHoverItem}
 						render={<div />}
 						value={session.id}
 					>
@@ -557,7 +578,7 @@ function PrTabPreview({
 		<div
 			className={cn(
 				PR_TAB_CLASS,
-				"app-no-drag bg-background text-foreground shadow-xs/5",
+				"app-no-drag bg-background text-foreground shadow-xs/5 in-data-[native-glass]:bg-background in-data-[native-glass]:hover:bg-background",
 			)}
 		>
 			<PrTabIcon

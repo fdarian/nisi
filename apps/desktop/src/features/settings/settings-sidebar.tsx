@@ -8,6 +8,8 @@ import {
 	GlobeIcon,
 	SettingsIcon,
 } from "lucide-react";
+import type { RefCallback } from "react";
+import { FluidHoverHighlight, useFluidHover } from "#/components/fluid-hover";
 import {
 	Sidebar,
 	SidebarContent,
@@ -22,10 +24,17 @@ import {
 import type { SidecarQueryUtils } from "#/infra/backend-context";
 import { useBackendContext } from "#/infra/backend-context";
 import { useSettings } from "./settings-data";
+import { useNativeGlassShowing } from "./window-glass";
 
 export function SettingsSidebar(): React.ReactElement {
 	const pathname = useLocation({ select: (location) => location.pathname });
 	const backend = useBackendContext();
+	const glassShowing = useNativeGlassShowing();
+	const hover = useFluidHover<HTMLUListElement>("y");
+	// Glass draws the fluid highlight instead of each button's own hover fill; the lit active button drops its fill so the two don't stack.
+	const buttonClassName = glassShowing
+		? "hover:bg-transparent group-data-[fluid-hover-active]/menu-item:data-[active=true]:bg-transparent"
+		: undefined;
 	return (
 		<Sidebar variant="inset">
 			<SidebarHeader className="app-drag h-10 justify-center pl-[78px]">
@@ -41,9 +50,20 @@ export function SettingsSidebar(): React.ReactElement {
 				<SidebarGroup>
 					<SidebarGroupLabel>Preferences</SidebarGroupLabel>
 					<SidebarGroupContent>
-						<SidebarMenu>
-							<SidebarMenuItem>
+						<SidebarMenu
+							className="relative"
+							ref={hover.containerRef}
+							{...(glassShowing ? hover.handlers : {})}
+						>
+							{glassShowing && (
+								<FluidHoverHighlight
+									className="rounded-lg bg-sidebar-accent"
+									hover={hover}
+								/>
+							)}
+							<SidebarMenuItem ref={hover.registerItem}>
 								<SidebarMenuButton
+									className={buttonClassName}
 									isActive={
 										pathname === "/settings" || pathname === "/settings/"
 									}
@@ -55,8 +75,9 @@ export function SettingsSidebar(): React.ReactElement {
 									General
 								</SidebarMenuButton>
 							</SidebarMenuItem>
-							<SidebarMenuItem>
+							<SidebarMenuItem ref={hover.registerItem}>
 								<SidebarMenuButton
+									className={buttonClassName}
 									isActive={pathname === "/settings/notifications"}
 									render={<Link to="/settings/notifications" />}
 								>
@@ -64,8 +85,9 @@ export function SettingsSidebar(): React.ReactElement {
 									Notifications
 								</SidebarMenuButton>
 							</SidebarMenuItem>
-							<SidebarMenuItem>
+							<SidebarMenuItem ref={hover.registerItem}>
 								<SidebarMenuButton
+									className={buttonClassName}
 									isActive={pathname === "/settings/feature-flags"}
 									render={<Link to="/settings/feature-flags" />}
 								>
@@ -73,8 +95,9 @@ export function SettingsSidebar(): React.ReactElement {
 									Feature Flags
 								</SidebarMenuButton>
 							</SidebarMenuItem>
-							<SidebarMenuItem>
+							<SidebarMenuItem ref={hover.registerItem}>
 								<SidebarMenuButton
+									className={buttonClassName}
 									isActive={pathname === "/settings/agents"}
 									render={<Link to="/settings/agents" />}
 								>
@@ -83,10 +106,16 @@ export function SettingsSidebar(): React.ReactElement {
 								</SidebarMenuButton>
 							</SidebarMenuItem>
 							{backend.status === "ready" && (
-								<PublicAccessEntry orpc={backend.orpc} pathname={pathname} />
+								<PublicAccessEntry
+									buttonClassName={buttonClassName}
+									orpc={backend.orpc}
+									pathname={pathname}
+									registerHoverItem={hover.registerItem}
+								/>
 							)}
-							<SidebarMenuItem>
+							<SidebarMenuItem ref={hover.registerItem}>
 								<SidebarMenuButton
+									className={buttonClassName}
 									isActive={pathname.startsWith("/settings/repositories")}
 									render={<Link to="/settings/repositories" />}
 								>
@@ -103,14 +132,17 @@ export function SettingsSidebar(): React.ReactElement {
 }
 
 function PublicAccessEntry(props: {
+	buttonClassName: string | undefined;
 	orpc: SidecarQueryUtils;
 	pathname: string;
+	registerHoverItem: RefCallback<HTMLElement>;
 }): React.ReactElement | null {
 	const settings = useSettings(props.orpc).settings;
 	if (!settings.publicAccessFeatureEnabled) return null;
 	return (
-		<SidebarMenuItem>
+		<SidebarMenuItem ref={props.registerHoverItem}>
 			<SidebarMenuButton
+				className={props.buttonClassName}
 				isActive={props.pathname === "/settings/public-access"}
 				render={<Link to="/settings/public-access" />}
 			>

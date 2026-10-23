@@ -19,6 +19,7 @@ export const DEFAULT_WINDOW_GLASS_TINT = 70;
 
 const listeners = new Set<() => void>();
 const tintListeners = new Set<() => void>();
+const showingListeners = new Set<() => void>();
 
 export const isWindowGlass = (value: string): value is WindowGlass =>
 	(WINDOW_GLASS_KINDS as readonly string[]).includes(value);
@@ -70,6 +71,9 @@ async function applyWindowGlass(kind: WindowGlass) {
 		} else {
 			delete document.documentElement.dataset.nativeGlass;
 		}
+		for (const listener of showingListeners) {
+			listener();
+		}
 	} catch (error) {
 		toastManager.add({
 			type: "error",
@@ -101,6 +105,21 @@ export function useWindowGlass(): WindowGlass {
 			listeners.delete(listener);
 		};
 	}, readWindowGlass);
+}
+
+function subscribeNativeGlassShowing(listener: () => void) {
+	showingListeners.add(listener);
+	return () => {
+		showingListeners.delete(listener);
+	};
+}
+
+/** Whether glass is actually behind the frame (`data-native-glass` is set), not just chosen; false without the native shell. */
+export function useNativeGlassShowing(): boolean {
+	return useSyncExternalStore(
+		subscribeNativeGlassShowing,
+		() => document.documentElement.dataset.nativeGlass !== undefined,
+	);
 }
 
 export function setWindowGlassTint(tint: number) {
