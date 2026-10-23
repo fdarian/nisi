@@ -461,12 +461,6 @@ export class Store extends Context.Service<Store>()("Store", {
 		 */
 		const pullRequestFacts = new Map<string, PullRequestFacts>();
 		/**
-		 * Keys in {@link pullRequestFacts} that came from {@link seedPullRequestFacts}
-		 * and haven't yet been confirmed by a watch reading.
-		 */
-		const seededPullRequestKeys = new Set<string>();
-
-		/**
 		 * Records what `gh pr view` reported while opening a PR, so the session's
 		 * first diff already knows a merged PR's pinned base instead of waiting for
 		 * the merge-status watch. Never overwrites a watch reading and emits no
@@ -480,7 +474,6 @@ export class Store extends Context.Service<Store>()("Store", {
 			const key = pullRequestKey(pr);
 			if (pullRequestFacts.has(key)) return;
 			pullRequestFacts.set(key, facts);
-			seededPullRequestKeys.add(key);
 		};
 
 		/**
@@ -1145,6 +1138,14 @@ export class Store extends Context.Service<Store>()("Store", {
 								).pipe(Effect.withSpan("pull-request.session.open"));
 							})
 						: reused;
+				// The seed makes the watch's first reading a no-op, so the state it
+				// would have persisted is persisted here, once the session row exists.
+				if (viewed)
+					yield* persistPullRequestState(resolved.pr, viewed.facts.state).pipe(
+						Effect.catchCause((cause) =>
+							Effect.logWarning("Could not persist the PR state", { cause }),
+						),
+					);
 				if (cached !== undefined) {
 					const generation = {};
 					latestOpens.set(outcome.session.repoRoot, generation);
@@ -1582,14 +1583,6 @@ export class Store extends Context.Service<Store>()("Store", {
 			Effect.gen(function* () {
 				const key = pullRequestKey(pr);
 				const previous = pullRequestFacts.get(key);
-				// A seed skips the persist below when the reading matches it, and
-				// the session was created without a `prState`.
-				if (seededPullRequestKeys.delete(key))
-					yield* persistPullRequestState(pr, facts.state).pipe(
-						Effect.catchCause((cause) =>
-							Effect.logWarning("Could not persist the PR state", { cause }),
-						),
-					);
 				if (
 					previous?.headSha === facts.headSha &&
 					previous.baseSha === facts.baseSha &&

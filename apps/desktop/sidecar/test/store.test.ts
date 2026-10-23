@@ -1102,6 +1102,14 @@ describe("Store — a PR session after the PR is merged", () => {
 						expect(opened.status).toBe("opened");
 						if (opened.status !== "opened") return;
 						const session = opened.outcome.session;
+						const recorded =
+							yield* (yield* ReviewStore).listPullRequestSessions({
+								owner: "acme",
+								repo: "widgets",
+							});
+						expect(
+							recorded.find((entry) => entry.id === session.id)?.prState,
+						).toBe("merged");
 
 						const files = yield* store.listChangedFiles(session.id, false);
 						expect(files.map((file) => file.path)).toEqual(["a.ts"]);
