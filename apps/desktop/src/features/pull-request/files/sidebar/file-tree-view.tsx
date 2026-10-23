@@ -29,12 +29,12 @@ import {
 	buildStatusColorCSS,
 	buildTreeThemeStyle,
 	createRowDecorationRenderer,
-	TREE_STICKY_BACKDROP_CSS,
 	syncActionButtonStyle,
 	syncDecorationIconStyle,
 	syncFolderIconStyle,
 	syncScrollFadeStyle,
 	syncStatusColorStyle,
+	TREE_STICKY_BACKDROP_CSS,
 } from "./tree-shadow-dom";
 
 type FileTreeViewProps = {
