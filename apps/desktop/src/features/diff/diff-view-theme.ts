@@ -379,12 +379,30 @@ export const diffCardChromeCSS = `
 	 * \`diffViewUnsafeCSS\`'s \`--font-mono\` etc. do. Under native window
 	 * glass it is transparent (the frame behind already paints the fill), so
 	 * \`--pane-surface-backdrop\` (\`none\` otherwise) frosts the scrolled code
-	 * that would otherwise show through the corner cutouts while stuck.
+	 * that would otherwise show through the corner cutouts.
+	 *
+	 * The blur applies only while the header is stuck: always-on, it would
+	 * re-composite the translucent frame behind it and paint a visible square
+	 * behind the rounded header even at rest. A container query styles
+	 * descendants, not the container, so the blur sits on the header's
+	 * \`<slot>\` (its only child, \`createFileHeaderElement.js\`), made a box
+	 * with \`display: block\` — the slotted header is block-level \`h-11\`, so
+	 * the header's height is unchanged.
 	 */
 	[data-diffs-header] {
 		background-color: var(--pane-surface-nested, var(--diffs-bg));
-		-webkit-backdrop-filter: var(--pane-surface-backdrop, none);
-		backdrop-filter: var(--pane-surface-backdrop, none);
+		container-type: scroll-state;
+	}
+
+	[data-diffs-header] > slot {
+		display: block;
+	}
+
+	@container scroll-state(stuck: top) {
+		[data-diffs-header] > slot {
+			-webkit-backdrop-filter: var(--pane-surface-backdrop, none);
+			backdrop-filter: var(--pane-surface-backdrop, none);
+		}
 	}
 
 	/**
