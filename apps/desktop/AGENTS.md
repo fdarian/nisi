@@ -19,7 +19,7 @@ Three parts, one seam:
   `/settings` (Phase 4, `Cmd/Ctrl+,`), each wired to the live sidecar contract through `src/features/pull-request/data/pr-data.ts`
   / `src/features/settings/settings-data.ts` (oRPC + TanStack Query via `backend-context.tsx`). `settings-data.ts` is
   the one place that reads/writes `@repo/settings`-backed prefs (`sidebarViewMode`, `diffStyleMode`,
-  `preferredEditor`, `hideReviewed`, `includeUncommitted`, `enabledHarnesses` for the settings page's
+  `preferredEditor`, `hideReviewed`, `filesSidebarCollapsed`, `includeUncommitted`, `enabledHarnesses` for the settings page's
   checkboxes) — theme is the one exception, staying in
   `localStorage` via `next-themes` (wired in `routes/__root.tsx`) since nothing server-side reads it.
   `/settings/repositories` (`src/features/settings/repositories/`) lists known repositories and, per repo, its

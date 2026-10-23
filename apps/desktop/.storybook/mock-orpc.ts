@@ -58,6 +58,7 @@ const DEFAULT_SETTINGS: Settings = {
 	diffStyleMode: "unified",
 	preferredEditor: null,
 	hideReviewed: false,
+	filesSidebarCollapsed: false,
 	includeUncommitted: false,
 	// Stories exercise the walkthrough tab/harness panels, which are gated on
 	// this setting — on by default here so existing stories don't need to

@@ -50,6 +50,7 @@ export const Settings = Schema.Struct({
 	 */
 	preferredEditor: Schema.NullOr(Schema.String),
 	hideReviewed: Schema.Boolean,
+	filesSidebarCollapsed: Schema.Boolean,
 	includeUncommitted: Schema.Boolean,
 	/** Gates the entire walkthrough feature — see `@repo/settings`'s `Settings.walkthroughEnabled`. */
 	walkthroughEnabled: Schema.Boolean,
@@ -91,6 +92,7 @@ export const SettingsUpdate = Schema.Struct({
 	diffStyleMode: Schema.optional(DiffStyleMode),
 	preferredEditor: Schema.optional(Schema.NullOr(Schema.String)),
 	hideReviewed: Schema.optional(Schema.Boolean),
+	filesSidebarCollapsed: Schema.optional(Schema.Boolean),
 	includeUncommitted: Schema.optional(Schema.Boolean),
 	walkthroughEnabled: Schema.optional(Schema.Boolean),
 	notificationsEnabled: Schema.optional(Schema.Boolean),
