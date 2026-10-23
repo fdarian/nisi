@@ -17,7 +17,7 @@ import type { DiffMatch } from "#/features/diff/diff-search";
  * split or otherwise touch them, which sidesteps both problems that come
  * with wrapping: reconciling raw character offsets against tokens that
  * split mid-match, and re-doing that surgery every time a virtualized row
- * is recycled. The bundled Chromium 152 supports the Highlight API.
+ * is recycled. The bundled Chromium 156 supports the Highlight API.
  */
 
 /**

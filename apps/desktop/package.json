@@ -112,7 +112,7 @@
 		"agentation": "github:fdarian/agentation#path:package&f19e8ff",
 		"babel-plugin-react-compiler": "^1.0.0",
 		"drizzle-kit": "1.0.0-rc.5-5935859",
-		"electron": "^44.7.2",
+		"electron": "^45.0.0",
 		"electron-builder": "^26.15.3",
 		"mesurer": "0.2.7",
 		"smol-toml": "^1.9.1",
