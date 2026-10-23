@@ -8,8 +8,8 @@ import {
 	useEffect,
 	useRef,
 	useState,
+	useSyncExternalStore,
 } from "react";
-import { flushSync } from "react-dom";
 
 /**
  * Fluid hover (https://www.fluidfunctionalism.com/docs/fluid-hover): one
@@ -21,7 +21,19 @@ import { flushSync } from "react-dom";
 
 type Rect = { left: number; top: number; width: number; height: number };
 
-type Active = { element: HTMLElement; rect: Rect; scrolled: boolean };
+type Highlight = {
+	rect: Rect | null;
+	/** The rect changed because the content scrolled; the highlight must track it without easing. */
+	scrolled: boolean;
+	/** Steps on each pointer entry so the highlight fades in at the new item instead of sliding from the last one. */
+	session: number;
+};
+
+/** What `FluidHoverHighlight` subscribes to; hover changes re-render it, never the hook's host. */
+type HighlightSource = {
+	subscribe: (listener: () => void) => () => void;
+	getSnapshot: () => Highlight;
+};
 
 type FluidHover<T extends HTMLElement> = {
 	containerRef: RefObject<T | null>;
@@ -38,11 +50,7 @@ type FluidHover<T extends HTMLElement> = {
 	 * shadow root). Hides the highlight if the item is gone.
 	 */
 	follow: () => void;
-	rect: Rect | null;
-	/** The rect changed because the content scrolled; the highlight must track it without easing. */
-	scrolled: boolean;
-	/** Steps on each pointer entry so the highlight fades in at the new item instead of sliding from the last one. */
-	session: number;
+	highlight: HighlightSource;
 };
 
 function measure(element: HTMLElement, container: HTMLElement): Rect {
@@ -98,6 +106,61 @@ const ACTIVE_ATTR = "data-fluid-hover-active";
 
 type Pointer = { x: number; y: number };
 
+function createHighlightStore() {
+	let snapshot: Highlight = { rect: null, scrolled: false, session: 0 };
+	let lit: HTMLElement | null = null;
+	const listeners = new Set<() => void>();
+
+	const publish = (next: Highlight) => {
+		snapshot = next;
+		for (const listener of listeners) listener();
+	};
+
+	const light = (element: HTMLElement | null) => {
+		if (lit === element) return;
+		lit?.removeAttribute(ACTIVE_ATTR);
+		element?.setAttribute(ACTIVE_ATTR, "");
+		lit = element;
+	};
+
+	const source: HighlightSource = {
+		subscribe: (listener) => {
+			listeners.add(listener);
+			return () => {
+				listeners.delete(listener);
+			};
+		},
+		getSnapshot: () => snapshot,
+	};
+
+	return {
+		source,
+		show: (
+			element: HTMLElement,
+			rect: Rect,
+			options: { scrolled: boolean; newSession: boolean },
+		) => {
+			const unchanged =
+				!options.newSession &&
+				lit === element &&
+				snapshot.rect !== null &&
+				sameRect(snapshot.rect, rect);
+			if (unchanged) return;
+			light(element);
+			publish({
+				rect,
+				scrolled: options.scrolled,
+				session: snapshot.session + (options.newSession ? 1 : 0),
+			});
+		},
+		hide: () => {
+			light(null);
+			if (snapshot.rect === null) return;
+			publish({ rect: null, scrolled: false, session: snapshot.session });
+		},
+	};
+}
+
 type FluidHoverOptions = {
 	/** Replaces the registry lookup for items the hook can't register as refs. Must be stable; returning null keeps the current item. */
 	resolveItem?: (pointer: Pointer) => HTMLElement | null;
@@ -123,8 +186,7 @@ export function useFluidHover<T extends HTMLElement>(
 	const pointerRef = useRef<Pointer | null>(null);
 	const sessionPendingRef = useRef(false);
 	const activeElementRef = useRef<HTMLElement | null>(null);
-	const [active, setActive] = useState<Active | null>(null);
-	const [session, setSession] = useState(0);
+	const [store] = useState(createHighlightStore);
 
 	const cancelFrame = useCallback(() => {
 		if (frameRef.current !== null) {
@@ -147,20 +209,15 @@ export function useFluidHover<T extends HTMLElement>(
 				? pickNearest(itemsRef.current, axis, pointer)
 				: resolveItem(pointer);
 		if (element === null) return;
-		if (sessionPendingRef.current && element !== activeElementRef.current) {
-			sessionPendingRef.current = false;
-			setSession((current) => current + 1);
-		}
+		const newSession =
+			sessionPendingRef.current && element !== activeElementRef.current;
+		if (newSession) sessionPendingRef.current = false;
 		activeElementRef.current = element;
-		const rect = measure(element, container);
-		setActive((current) =>
-			current !== null &&
-			current.element === element &&
-			sameRect(current.rect, rect)
-				? current
-				: { element, rect, scrolled: false },
-		);
-	}, [axis, resolveItem]);
+		store.show(element, measure(element, container), {
+			scrolled: false,
+			newSession,
+		});
+	}, [axis, resolveItem, store]);
 
 	const followScroll = useCallback(() => {
 		followFrameRef.current = null;
@@ -174,22 +231,15 @@ export function useFluidHover<T extends HTMLElement>(
 					: null
 				: reacquireItem(previous);
 		activeElementRef.current = element;
-		// Sync, so the highlight commits in the same frame as the scrolled content instead of trailing it.
-		flushSync(() => {
-			if (element === null) {
-				setActive(null);
-				return;
-			}
-			const rect = measure(element, container);
-			setActive((current) =>
-				current !== null &&
-				current.element === element &&
-				sameRect(current.rect, rect)
-					? current
-					: { element, rect, scrolled: true },
-			);
+		if (element === null) {
+			store.hide();
+			return;
+		}
+		store.show(element, measure(element, container), {
+			scrolled: true,
+			newSession: false,
 		});
-	}, [reacquireItem]);
+	}, [reacquireItem, store]);
 
 	/** A pick already pending measures the item itself, so a follow would only race it. */
 	const follow = useCallback(() => {
@@ -211,12 +261,12 @@ export function useFluidHover<T extends HTMLElement>(
 				itemsRef.current.delete(element);
 				if (activeElementRef.current === element) {
 					activeElementRef.current = null;
-					setActive(null);
+					store.hide();
 					schedulePick();
 				}
 			};
 		},
-		[schedulePick],
+		[schedulePick, store],
 	);
 
 	const onMouseMove = useCallback(
@@ -235,8 +285,8 @@ export function useFluidHover<T extends HTMLElement>(
 		cancelFrame();
 		pointerRef.current = null;
 		activeElementRef.current = null;
-		setActive(null);
-	}, [cancelFrame]);
+		store.hide();
+	}, [cancelFrame, store]);
 
 	useEffect(() => {
 		const container = containerRef.current;
@@ -251,23 +301,15 @@ export function useFluidHover<T extends HTMLElement>(
 		};
 	}, [schedulePick, follow]);
 
-	const activeElement = active === null ? null : active.element;
-	useEffect(() => {
-		if (activeElement === null) return;
-		activeElement.setAttribute(ACTIVE_ATTR, "");
-		return () => activeElement.removeAttribute(ACTIVE_ATTR);
-	}, [activeElement]);
-
 	useEffect(() => cancelFrame, [cancelFrame]);
+	useEffect(() => store.hide, [store]);
 
 	return {
 		containerRef,
 		handlers: { onMouseEnter, onMouseLeave, onMouseMove },
 		registerItem,
 		follow,
-		rect: active === null ? null : active.rect,
-		scrolled: active === null ? false : active.scrolled,
-		session,
+		highlight: store.source,
 	};
 }
 
@@ -276,10 +318,14 @@ const MOVE_SPRING = { type: "spring", duration: 0.08, bounce: 0 } as const;
 export function FluidHoverHighlight(props: {
 	className?: string;
 	hidden?: boolean;
-	hover: Pick<FluidHover<HTMLElement>, "rect" | "scrolled" | "session">;
+	hover: Pick<FluidHover<HTMLElement>, "highlight">;
 }): React.ReactElement {
 	const reducedMotion = useReducedMotion();
-	const rect = props.hidden ? null : props.hover.rect;
+	const highlight = useSyncExternalStore(
+		props.hover.highlight.subscribe,
+		props.hover.highlight.getSnapshot,
+	);
+	const rect = props.hidden ? null : highlight.rect;
 	return (
 		<AnimatePresence>
 			{rect !== null && (
@@ -303,10 +349,10 @@ export function FluidHoverHighlight(props: {
 						width: rect.width,
 						height: rect.height,
 					}}
-					key={props.hover.session}
+					key={highlight.session}
 					transition={{
 						...(reducedMotion ? { duration: 0 } : MOVE_SPRING),
-						...(props.hover.scrolled && {
+						...(highlight.scrolled && {
 							x: { duration: 0 },
 							y: { duration: 0 },
 						}),
