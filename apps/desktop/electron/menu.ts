@@ -101,7 +101,10 @@ export function installAppMenu(actions: MenuActions) {
 				{ role: "selectAll" },
 			],
 		},
-		{ label: "View", submenu: [{ role: "togglefullscreen" }] },
+		{
+			label: "View",
+			submenu: [{ role: "togglefullscreen" }, { role: "toggleDevTools" }],
+		},
 		{
 			label: "Window",
 			role: "window",
