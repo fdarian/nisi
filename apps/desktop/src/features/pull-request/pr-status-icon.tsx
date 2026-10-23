@@ -3,6 +3,7 @@ import {
 	GitMergeConflictIcon,
 	GitMergeIcon,
 	GitPullRequestArrowIcon,
+	GitPullRequestClosedIcon,
 	GitPullRequestDraftIcon,
 } from "lucide-react";
 import type { PrStatus } from "./pr-status";
@@ -18,6 +19,12 @@ export function PrStatusIcon({
 	switch (status) {
 		case "merged":
 			return <GitMergeIcon className={cn(iconClass, "text-merged")} />;
+		case "closed":
+			return (
+				<GitPullRequestClosedIcon
+					className={cn(iconClass, "text-destructive")}
+				/>
+			);
 		case "conflicts":
 			return (
 				<GitMergeConflictIcon className={cn(iconClass, "text-destructive")} />
