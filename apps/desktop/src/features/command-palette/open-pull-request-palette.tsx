@@ -1,7 +1,7 @@
 "use client";
 
 import { hasSearchQualifier } from "@repo/git/search-query";
-import { ListFilterIcon, SearchIcon, XIcon } from "lucide-react";
+import { HistoryIcon, ListFilterIcon, SearchIcon, XIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { FetchingIndicator } from "#/components/fetching-indicator";
 import { Avatar, AvatarFallback, AvatarImage } from "#/components/ui/avatar";
@@ -26,6 +26,7 @@ import {
 	githubAvatarUrl,
 	type IndexedPullRequest,
 	type OpenPullRequestParams,
+	type PullRequestClosedWindow,
 	type PullRequestRepository,
 	type PullRequestSearchResult,
 	useIndexedPullRequests,
@@ -85,13 +86,40 @@ const RECENTLY_CLOSED_FILTER_ROW = {
 	action: "filter-recently-closed",
 } as const;
 const SHOW_RECENTLY_CLOSED_ROW = { action: "show-recently-closed" } as const;
+const SHOW_MORE_CLOSED_ROW = { action: "show-more-closed" } as const;
 const SEARCH_GITHUB_ROW = { action: "search-github" } as const;
+
+/** Per closed window: its chip label, its name in the "Show more" hint of the window before it, its empty message, and the next step of "Show more". */
+const CLOSED_WINDOWS = {
+	week: {
+		chip: "Recently closed",
+		hint: "Last 7 days",
+		empty: "No pull requests closed in the last 7 days.",
+		wider: "month",
+	},
+	month: {
+		chip: "Closed · 30 days",
+		hint: "Last 30 days",
+		empty: "No pull requests closed in the last 30 days.",
+		wider: "all",
+	},
+	all: {
+		chip: "Closed · any time",
+		hint: "Any time",
+		empty: "No closed pull requests found.",
+		wider: "all",
+	},
+} satisfies Record<
+	PullRequestClosedWindow,
+	{ chip: string; hint: string; empty: string; wider: PullRequestClosedWindow }
+>;
 
 type PaletteRow =
 	| PullRequestSearchResult
 	| IndexedPullRequest
 	| typeof RECENTLY_CLOSED_FILTER_ROW
 	| typeof SHOW_RECENTLY_CLOSED_ROW
+	| typeof SHOW_MORE_CLOSED_ROW
 	| typeof SEARCH_GITHUB_ROW;
 
 function authorInitials(author: string): string {
@@ -133,6 +161,9 @@ export function OpenPullRequestPalette(
 	const [repositoryQuery, setRepositoryQuery] = useState("");
 	const [debouncedRepositoryQuery, setDebouncedRepositoryQuery] = useState("");
 	const [recentlyClosed, setRecentlyClosed] = useState(false);
+	// Part of the recently-closed mode, so typing never resets it; only leaving the mode does.
+	const [closedWindow, setClosedWindow] =
+		useState<PullRequestClosedWindow>("week");
 	// Set by the "Search GitHub" row; applies to the query it was picked for only.
 	const [searchingGitHub, setSearchingGitHub] = useState(false);
 	const inputRef = useRef<HTMLInputElement>(null);
@@ -175,6 +206,7 @@ export function OpenPullRequestPalette(
 		props.open && needsGh && query === debouncedQuery,
 		repositoryKeys,
 		recentlyClosed ? "closed" : "open",
+		closedWindow,
 	);
 	// `keepPreviousData` rows belong to some earlier query (often the blank
 	// recent list); showing them would let Enter open an unrelated PR, so the
@@ -271,6 +303,7 @@ export function OpenPullRequestPalette(
 		setRepositoryQuery("");
 		setDebouncedRepositoryQuery("");
 		setRecentlyClosed(false);
+		setClosedWindow("week");
 		setSearchingGitHub(false);
 		openPr.reset();
 	}, [props.open]);
@@ -324,6 +357,8 @@ export function OpenPullRequestPalette(
 		!recentlyClosed &&
 		!needsGh &&
 		!collapsed;
+	const offersShowMoreClosed =
+		recentlyClosed && closedWindow !== "all" && !collapsed;
 	const rows: readonly PaletteRow[] =
 		!recentlyClosed && !collapsed && query.trim() !== ""
 			? [
@@ -331,12 +366,18 @@ export function OpenPullRequestPalette(
 					...(offersSearchGitHub ? [SEARCH_GITHUB_ROW] : []),
 					SHOW_RECENTLY_CLOSED_ROW,
 				]
-			: resultRows;
+			: offersShowMoreClosed
+				? [...resultRows, SHOW_MORE_CLOSED_ROW]
+				: resultRows;
 	const emptyMessage =
 		searchErrorMessage ??
 		(recentlyClosed
-			? "No pull requests closed in the last 7 days."
+			? CLOSED_WINDOWS[closedWindow].empty
 			: "No pull requests found.");
+	const exitRecentlyClosed = () => {
+		setRecentlyClosed(false);
+		setClosedWindow("week");
+	};
 	// The action rows keep the list non-empty, so `CommandEmpty` never renders
 	// for them; this line says what it would have, once the search settles or fails.
 	const showStatusLine =
@@ -476,13 +517,13 @@ export function OpenPullRequestPalette(
 												))}
 												{recentlyClosed && (
 													<span className="group flex items-center rounded-[calc(var(--radius-md)-1px)] bg-accent px-2 py-1 font-medium text-accent-foreground text-xs">
-														Recently closed
+														{CLOSED_WINDOWS[closedWindow].chip}
 														<button
 															type="button"
 															aria-label="Remove Recently closed filter"
 															className="w-0 shrink-0 cursor-pointer overflow-hidden opacity-0 outline-none group-hover:ms-1 group-hover:w-3.5 group-hover:opacity-80 group-focus-within:ms-1 group-focus-within:w-3.5 group-focus-within:opacity-80 hover:opacity-100 focus-visible:opacity-100"
 															onClick={() => {
-																setRecentlyClosed(false);
+																exitRecentlyClosed();
 																inputRef.current?.focus();
 															}}
 														>
@@ -498,7 +539,7 @@ export function OpenPullRequestPalette(
 										if (event.key !== "Backspace" || query !== "") return;
 										if (recentlyClosed) {
 											event.preventDefault();
-											setRecentlyClosed(false);
+											exitRecentlyClosed();
 										} else if (props.repositories.length > 0) {
 											event.preventDefault();
 											props.onRepositoriesChange(
@@ -557,6 +598,26 @@ export function OpenPullRequestPalette(
 														<SearchIcon className="size-3.5 shrink-0 text-muted-foreground" />
 														<span>Search GitHub</span>
 													</div>
+												</CommandItem>
+											) : row.action === "show-more-closed" ? (
+												<CommandItem
+													key={row.action}
+													onClick={() => {
+														setClosedWindow(CLOSED_WINDOWS[closedWindow].wider);
+														inputRef.current?.focus();
+													}}
+													value={row}
+												>
+													<div className="flex min-w-0 flex-1 items-center gap-2.5">
+														<HistoryIcon className="size-3.5 shrink-0 text-muted-foreground" />
+														<span>Show more</span>
+													</div>
+													<span className="shrink-0 text-muted-foreground text-xs">
+														{
+															CLOSED_WINDOWS[CLOSED_WINDOWS[closedWindow].wider]
+																.hint
+														}
+													</span>
 												</CommandItem>
 											) : (
 												<CommandItem
