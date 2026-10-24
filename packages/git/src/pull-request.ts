@@ -37,6 +37,9 @@ export type ReviewTarget = {
 
 export type PullRequestSearchState = "open" | "closed";
 
+/** How far back `closed` searches reach: the last 7 days, the last 30 days, or no limit. */
+export type PullRequestClosedWindow = "week" | "month" | "all";
+
 export type PullRequestSearchResult = {
 	readonly owner: string;
 	readonly repo: string;

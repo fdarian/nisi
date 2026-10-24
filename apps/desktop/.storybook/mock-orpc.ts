@@ -444,6 +444,7 @@ export function createMockSidecarClient(
 			ciJob: neverSettles,
 			rerunCiJob: neverSettles,
 			repositories: async () => data.pullRequestRepositories ?? [],
+			searchRepositories: async () => [],
 			search: async (input) => {
 				searchCalls += 1;
 				if (

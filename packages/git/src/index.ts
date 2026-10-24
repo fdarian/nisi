@@ -112,6 +112,7 @@ export { parseChangedRuns } from "./hunks.ts";
 export { readIndexHead } from "./index-head.ts";
 export type {
 	GitHubTarget,
+	PullRequestClosedWindow,
 	PullRequestRef,
 	PullRequestSearchResult,
 	PullRequestSearchState,

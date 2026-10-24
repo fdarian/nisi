@@ -1485,7 +1485,13 @@ export function attachRouter(
 				)
 					yield* prIndex.refreshKnown;
 				return yield* github
-					.search(process.cwd(), input.query, input.repos, input.state)
+					.search(
+						process.cwd(),
+						input.query,
+						input.repos,
+						input.state,
+						input.closedWindow ?? "week",
+					)
 					.pipe(
 						Effect.catchTag("GhNotAuthenticated", (cause) =>
 							Effect.fail(
@@ -1517,6 +1523,44 @@ export function attachRouter(
 						),
 					);
 			}),
+			searchRepositories: authed.pullRequests.searchRepositories.effect(
+				function* ({ input, errors }) {
+					if (input.query.trim() === "") return [];
+					const github = yield* GitHub;
+					return yield* github
+						.searchRepositories(process.cwd(), input.query)
+						.pipe(
+							Effect.catchTag("GhNotAuthenticated", (cause) =>
+								Effect.fail(
+									errors.GH_NOT_AUTHENTICATED({
+										message: `gh is not authenticated: ${cause.reason}`,
+									}),
+								),
+							),
+							Effect.catchTag("GhRateLimited", (cause) =>
+								Effect.fail(
+									errors.TOO_MANY_REQUESTS({
+										message: `GitHub's search API is rate-limited right now: ${cause.reason}`,
+									}),
+								),
+							),
+							Effect.catchTag("GitHubSearchUnreachable", (cause) =>
+								Effect.fail(
+									errors.SERVICE_UNAVAILABLE({
+										message: `could not reach GitHub: ${cause.reason}`,
+									}),
+								),
+							),
+							Effect.catchTag("GhOutputDecodeError", (cause) =>
+								Effect.fail(
+									errors.SERVICE_UNAVAILABLE({
+										message: `gh returned output nisi couldn't parse (${cause.command})`,
+									}),
+								),
+							),
+						);
+				},
+			),
 			indexed: authed.pullRequests.indexed.effect(function* ({ errors }) {
 				const prIndex = yield* PrIndex;
 				return yield* prIndex.indexed.pipe(

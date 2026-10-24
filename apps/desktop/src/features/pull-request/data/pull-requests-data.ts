@@ -48,6 +48,9 @@ export type PullRequestSearchResult = {
 	rollupState: "EXPECTED" | "ERROR" | "FAILURE" | "PENDING" | "SUCCESS" | null;
 };
 
+/** How far back a closed search reaches — mirrors `PullRequestClosedWindow` (`packages/sidecar-api/src/pull-requests.ts`). */
+export type PullRequestClosedWindow = "week" | "month" | "all";
+
 /** `pullRequests.indexed`'s row: a search row without CI or mergeability, plus the head branch, which the palette matches on but never shows. */
 export type IndexedPullRequest = Omit<
 	PullRequestSearchResult,
@@ -121,7 +124,7 @@ export function useIndexedPullRequests(
 }
 
 /**
- * Live `gh`-backed search behind TanStack Query, keyed on `query`, `repos` and `state` — a repeat
+ * Live `gh`-backed search behind TanStack Query, keyed on `query`, `repos`, `state` and (closed mode only) `closedWindow` — a repeat
  * of a query already seen this session (retyping after a backspace, opening
  * the palette again with the same search) resolves from cache for free
  * rather than re-asking GitHub. `placeholderData: keepPreviousData` is what
@@ -137,6 +140,7 @@ export function useSearchPullRequests(
 	enabled: boolean,
 	repos: readonly string[],
 	state: "open" | "closed",
+	closedWindow: PullRequestClosedWindow,
 ): {
 	results: readonly PullRequestSearchResult[];
 	isSearching: boolean;
@@ -146,7 +150,11 @@ export function useSearchPullRequests(
 } {
 	const search = useQuery({
 		...orpc.pullRequests.search.queryOptions({
-			input: { query, repos: [...repos], state },
+			// Left out of the open-mode input so the persisted blank open-recent key is unchanged.
+			input:
+				state === "closed"
+					? { query, repos: [...repos], state, closedWindow }
+					: { query, repos: [...repos], state },
 			enabled,
 		}),
 		placeholderData: keepPreviousData,
@@ -180,6 +188,7 @@ export function useRecentPullRequests(
 		enabled,
 		RECENT_PULL_REQUESTS_INPUT.repos,
 		RECENT_PULL_REQUESTS_INPUT.state,
+		"week",
 	);
 }
 
@@ -190,6 +199,38 @@ export function usePullRequestRepositories(
 	enabled: boolean,
 ) {
 	return useQuery(orpc.pullRequests.repositories.queryOptions({ enabled }));
+}
+
+/**
+ * GitHub-wide repository search for the palette's repository picker. Same
+ * `keepPreviousData` stale-while-revalidate shape as `useSearchPullRequests`;
+ * deliberately not persisted (`#/infra/query-persistence.ts` only keeps the
+ * recent-PR query).
+ */
+export function useSearchRepositories(
+	orpc: SidecarQueryUtils,
+	query: string,
+	enabled: boolean,
+): {
+	results: readonly PullRequestRepository[];
+	isSearching: boolean;
+	/** `results` belong to an earlier query (`keepPreviousData`), not the one asked for. */
+	isPlaceholderData: boolean;
+	error: unknown;
+} {
+	const search = useQuery({
+		...orpc.pullRequests.searchRepositories.queryOptions({
+			input: { query },
+			enabled,
+		}),
+		placeholderData: keepPreviousData,
+	});
+	return {
+		results: search.data ?? [],
+		isSearching: search.isFetching,
+		isPlaceholderData: search.isPlaceholderData,
+		error: search.error,
+	};
 }
 
 /**

@@ -19,6 +19,7 @@ import type {
 	WorkflowApprovalForbidden,
 } from "../errors.ts";
 import type {
+	PullRequestClosedWindow,
 	PullRequestRef,
 	PullRequestSearchResult,
 	PullRequestSearchState,
@@ -133,8 +134,16 @@ export type GitHubShape = {
 		query: string,
 		repos: ReadonlyArray<string>,
 		state: PullRequestSearchState,
+		closedWindow: PullRequestClosedWindow,
 	) => Effect.Effect<
 		ReadonlyArray<PullRequestSearchResult>,
+		PullRequestSearchError
+	>;
+	searchRepositories: (
+		cwd: string,
+		query: string,
+	) => Effect.Effect<
+		ReadonlyArray<{ readonly owner: string; readonly repo: string }>,
 		PullRequestSearchError
 	>;
 	checks: (

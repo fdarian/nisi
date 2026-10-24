@@ -66,6 +66,7 @@ const githubWith = (
 	pullRequestStates: unused,
 	headRef: unused,
 	search: unused,
+	searchRepositories: unused,
 	checks: unused,
 	checksSnapshot: unused,
 	approveWorkflowRuns: unused,

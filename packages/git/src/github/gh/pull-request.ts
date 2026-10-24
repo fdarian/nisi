@@ -14,6 +14,7 @@ import {
 } from "../../errors.ts";
 import { type GhResult, ghResult } from "../../exec.ts";
 import type {
+	PullRequestClosedWindow,
 	PullRequestRef,
 	PullRequestSearchResult,
 	PullRequestSearchState,
@@ -239,20 +240,28 @@ const SEARCH_QUERY = `query($q: String!, $n: Int!) {
 }`;
 export const SEARCH_LIMIT = 30;
 
-const RECENTLY_CLOSED_WINDOW_DAYS = 7;
+/** `null` is "any time": no `closed:>=` cutoff at all. */
+const CLOSED_WINDOW_DAYS: Record<PullRequestClosedWindow, number | null> = {
+	week: 7,
+	month: 30,
+	all: null,
+};
 
 /** `is:closed` on GitHub includes merged PRs, which is intended. */
 const modeStateQualifiers = (
 	state: PullRequestSearchState,
-): Effect.Effect<ReadonlyArray<string>> =>
-	state === "open"
-		? Effect.succeed(["is:open"])
-		: DateTime.now.pipe(
-				Effect.map((now) => [
-					"is:closed",
-					`closed:>=${DateTime.formatIsoDate(DateTime.subtract(now, { days: RECENTLY_CLOSED_WINDOW_DAYS }))}`,
-				]),
-			);
+	closedWindow: PullRequestClosedWindow,
+): Effect.Effect<ReadonlyArray<string>> => {
+	if (state === "open") return Effect.succeed(["is:open"]);
+	const days = CLOSED_WINDOW_DAYS[closedWindow];
+	if (days === null) return Effect.succeed(["is:closed"]);
+	return DateTime.now.pipe(
+		Effect.map((now) => [
+			"is:closed",
+			`closed:>=${DateTime.formatIsoDate(DateTime.subtract(now, { days }))}`,
+		]),
+	);
+};
 
 /**
  * `gh` not authenticated — confirmed live with `GH_CONFIG_DIR` pointed at an
@@ -297,25 +306,21 @@ const classifySearchFailure = (result: GhResult): PullRequestSearchError => {
 	});
 };
 
-const searchOnce = (
+/**
+ * One `gh api graphql` search call, returning raw stdout. Shared with
+ * `repository-search.ts` so both searches classify failures identically.
+ * `variables` are the extra `-f`/`-F` args after the `query=` field.
+ */
+export const runGraphqlSearch = (
 	cwd: string,
-	terms: ReadonlyArray<string>,
-	qualifiers: ReadonlyArray<string>,
+	query: string,
+	variables: ReadonlyArray<string>,
 ): Effect.Effect<
-	ReadonlyArray<PullRequestSearchResult>,
+	string,
 	PullRequestSearchError,
 	ChildProcessSpawner.ChildProcessSpawner
 > =>
-	ghResult(cwd, [
-		"api",
-		"graphql",
-		"-f",
-		`query=${SEARCH_QUERY}`,
-		"-f",
-		`q=${["is:pr", ...terms, ...qualifiers, "sort:updated-desc"].join(" ")}`,
-		"-F",
-		`n=${SEARCH_LIMIT}`,
-	]).pipe(
+	ghResult(cwd, ["api", "graphql", "-f", `query=${query}`, ...variables]).pipe(
 		// `gh` never started at all (missing binary, permissions) — the one
 		// failure that isn't an exit code to classify, same as every other `gh`
 		// caller in this module.
@@ -328,15 +333,32 @@ const searchOnce = (
 		),
 		Effect.flatMap((result) =>
 			result.exitCode === 0
-				? decodeSearchPrList("gh api graphql", result.stdout).pipe(
-						Effect.flatMap((response) =>
-							Effect.forEach(
-								response.data.search.nodes.filter((item) => item !== null),
-								toPullRequestSearchResult,
-							),
-						),
-					)
+				? Effect.succeed(result.stdout)
 				: Effect.fail(classifySearchFailure(result)),
+		),
+	);
+
+const searchOnce = (
+	cwd: string,
+	terms: ReadonlyArray<string>,
+	qualifiers: ReadonlyArray<string>,
+): Effect.Effect<
+	ReadonlyArray<PullRequestSearchResult>,
+	PullRequestSearchError,
+	ChildProcessSpawner.ChildProcessSpawner
+> =>
+	runGraphqlSearch(cwd, SEARCH_QUERY, [
+		"-f",
+		`q=${["is:pr", ...terms, ...qualifiers, "sort:updated-desc"].join(" ")}`,
+		"-F",
+		`n=${SEARCH_LIMIT}`,
+	]).pipe(
+		Effect.flatMap((stdout) => decodeSearchPrList("gh api graphql", stdout)),
+		Effect.flatMap((response) =>
+			Effect.forEach(
+				response.data.search.nodes.filter((item) => item !== null),
+				toPullRequestSearchResult,
+			),
 		),
 	);
 
@@ -388,7 +410,8 @@ const mergeResults = (
  *   with an empty query. Explicit state qualifiers still take precedence.
  *
  * The mode's state qualifiers (`is:open`, or `is:closed` plus a
- * `closed:>=` cutoff for "recently closed") are added to every branch unless
+ * `closed:>=` cutoff for "recently closed", sized by `closedWindow`: 7 days,
+ * 30 days, or no cutoff) are added to every branch unless
  * the query already names its own state (`hasStateQualifier`) — forcing it on top of an explicit
  * `is:merged`/`is:closed` would otherwise silently return nothing (confirmed
  * live). `sort:updated-desc` is likewise always requested, needed for
@@ -407,6 +430,7 @@ export const searchPullRequests = (
 	query: string,
 	repos: ReadonlyArray<string>,
 	state: PullRequestSearchState,
+	closedWindow: PullRequestClosedWindow,
 ): Effect.Effect<
 	ReadonlyArray<PullRequestSearchResult>,
 	PullRequestSearchError,
@@ -427,7 +451,7 @@ export const searchPullRequests = (
 		const trimmed = query.trim();
 		const stateQualifiers = hasStateQualifier(trimmed)
 			? []
-			: yield* modeStateQualifiers(state);
+			: yield* modeStateQualifiers(state, closedWindow);
 		if (repos.length > 0) {
 			return yield* searchOnce(cwd, tokenize(trimmed), [
 				...repos.map((repo) => `repo:${repo}`),
