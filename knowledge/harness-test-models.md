@@ -1,5 +1,4 @@
 ---
-
 type: Convention
 title: Harness models for test generations
 description: Name the cheapest capable model when a verification run has to generate a walkthrough.

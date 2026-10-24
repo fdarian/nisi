@@ -1,5 +1,4 @@
 ---
-
 type: Constraint
 title: Content invisible in the base → head diff can't be shown, even reviewed
 description: A line added then reverted away lives only in a review snapshot, never in base or head, so no diff between real file states can render it.
@@ -7,12 +6,10 @@ tags: [review, reconciliation, tracked-changes, diff-pane]
 generated: { by: claude-code/claude-opus-5, at: 2026-08-01T05:48:15Z }
 verified: { by: claude-code/claude-sonnet-5, at: 2026-08-08 }
 sources:
-- id: reconcile
-  resource: ../packages/review/src/reconcile.ts
-  title: reconcile(), synthesizeReviewedBaseline()
-
+  - id: reconcile
+    resource: ../packages/review/src/reconcile.ts
+    title: reconcile(), synthesizeReviewedBaseline()
 ---
-
 The diff pane now renders a genuine `reviewedBaseline → head` diff (`@repo/review`'s `reconcile()`
 synthesizes `reviewedBaseline`; `apps/desktop/sidecar/store.ts`'s `readFileContents` substitutes it
 for `base` when computing the patch) — reviewed-and-unchanged content is ordinary context, not an

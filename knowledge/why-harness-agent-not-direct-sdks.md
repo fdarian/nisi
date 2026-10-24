@@ -1,5 +1,4 @@
 ---
-
 type: Decision
 title: Why the walkthrough runs on HarnessAgent, not the four CLIs' own SDKs
 description: Driving Claude Code / Codex / OpenCode / Pi directly is the obvious approach and the wrong one.
@@ -7,12 +6,10 @@ tags: [walkthrough, harness, architecture]
 status: stable
 generated: { by: claude-code/claude-opus-5, at: 2026-07-30T04:19:29Z }
 sources:
-- id: harness-local
-  resource: ../packages/harness-local/AGENTS.md
-  title: packages/harness-local
-
+  - id: harness-local
+    resource: ../packages/harness-local/AGENTS.md
+    title: packages/harness-local
 ---
-
 Walkthrough generation goes through AI SDK's `HarnessAgent` plus a local sandbox provider
 ([packages/harness-local](../packages/harness-local/AGENTS.md)),[^harness-local] rather than talking
 to each CLI's own SDK. The direct route looks simpler and costs more.

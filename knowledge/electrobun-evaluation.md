@@ -1,5 +1,4 @@
 ---
-
 type: Measurement
 title: Electrobun (CEF and WebKit) evaluated against Electron
 description: Why the desktop shell stays on Electron — startup, snapshot and sustained memory, and size of Electrobun 2.0.2 with CEF or WKWebView, measured against Electron 44.

@@ -1,5 +1,4 @@
 ---
-
 type: Playbook
 title: Verifying a frontend change
 description: How to prove a UI fix actually landed, and why a Shadow DOM assertion fails open.
@@ -7,12 +6,10 @@ tags: [frontend, testing, verification, pierre]
 status: stable
 generated: { by: claude-code/claude-opus-5, at: 2026-07-30T04:19:29Z }
 sources:
-- id: browser-harness
-  resource: ../apps/desktop/AGENTS.md
-  title: Browser dev harness (apps/desktop/AGENTS.md)
-
+  - id: browser-harness
+    resource: ../apps/desktop/AGENTS.md
+    title: Browser dev harness (apps/desktop/AGENTS.md)
 ---
-
 # Browser verification is available, and it is the default
 
 `getBackend()` has a dev-only `VITE_DEV_BACKEND_PORT` / `VITE_DEV_BACKEND_TOKEN` escape hatch, so a

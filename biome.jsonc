@@ -18,6 +18,14 @@
 			"tailwindDirectives": true
 		}
 	},
+	"markdown": {
+		"formatter": {
+			"enabled": false
+		},
+		"linter": {
+			"enabled": false
+		}
+	},
 	"linter": {
 		"enabled": true,
 		"rules": {

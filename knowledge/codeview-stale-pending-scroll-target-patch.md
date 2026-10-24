@@ -1,5 +1,4 @@
 ---
-
 type: Decision
 title: The @pierre/diffs CodeView stale pendingScrollTarget patch
 description: capturePendingLayoutAnchor() suppresses scroll anchoring for the whole duration of any in-flight smooth scrollTo(); if the app removes that scroll's own target item mid-flight, the guard never lifts and scrollTop collapses to 0 instead of compensating.
@@ -7,12 +6,10 @@ tags: [frontend, diff-pane, pierre, patches, scroll]
 status: stable
 generated: { by: claude-code/claude-sonnet-5, at: 2026-08-23T00:00:00Z }
 sources:
-- id: verify
-  resource: verifying-frontend-changes.md
-  title: Verifying a frontend change
-
+  - id: verify
+    resource: verifying-frontend-changes.md
+    title: Verifying a frontend change
 ---
-
 # Why the patch exists
 
 `CodeView.reconcileItems()` (`patches/@pierre%2Fdiffs@1.6.1.patch`) removes items whose ids no longer
