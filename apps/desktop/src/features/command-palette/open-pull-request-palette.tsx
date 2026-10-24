@@ -1,7 +1,13 @@
 "use client";
 
 import { hasSearchQualifier } from "@repo/git/search-query";
-import { HistoryIcon, ListFilterIcon, SearchIcon, XIcon } from "lucide-react";
+import {
+	GitBranchIcon,
+	HistoryIcon,
+	ListFilterIcon,
+	SearchIcon,
+	XIcon,
+} from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { FetchingIndicator } from "#/components/fetching-indicator";
 import { Avatar, AvatarFallback, AvatarImage } from "#/components/ui/avatar";
@@ -43,7 +49,11 @@ import {
 } from "#/features/pull-request/pr-status";
 import { PrStatusIcon } from "#/features/pull-request/pr-status-icon";
 import type { SidecarQueryUtils } from "#/infra/backend-context";
-import { filterIndexedPullRequests } from "./filter-indexed-pull-requests";
+import {
+	type BranchMatchRange,
+	branchMatchRanges,
+	filterIndexedPullRequests,
+} from "./filter-indexed-pull-requests";
 import { paletteRepositories, repositoryKey } from "./palette-repositories";
 import { offersRecentlyClosedFilter } from "./recently-closed-filter";
 
@@ -649,6 +659,7 @@ export function OpenPullRequestPalette(
 														openPr.pendingParams?.number === row.number
 													}
 													pr={row}
+													query={query}
 												/>
 											</CommandItem>
 										);
@@ -704,38 +715,77 @@ function rowStatus(pr: PullRequestSearchResult | IndexedPullRequest) {
 	});
 }
 
-function PullRequestRow({
-	pr,
-	isOpening,
-}: {
+function MatchedBranch(props: {
+	branch: string;
+	ranges: readonly BranchMatchRange[];
+}): React.ReactElement {
+	const parts: React.ReactNode[] = [];
+	let cursor = 0;
+	for (const range of props.ranges) {
+		if (range.start > cursor)
+			parts.push(props.branch.slice(cursor, range.start));
+		parts.push(
+			<mark
+				key={range.start}
+				className="bg-transparent font-medium text-foreground"
+			>
+				{props.branch.slice(range.start, range.end)}
+			</mark>,
+		);
+		cursor = range.end;
+	}
+	if (cursor < props.branch.length) parts.push(props.branch.slice(cursor));
+	return (
+		<>
+			<span aria-hidden>·</span>
+			<GitBranchIcon className="size-3 shrink-0" />
+			<span className="truncate font-mono">{parts}</span>
+		</>
+	);
+}
+
+function PullRequestRow(props: {
 	pr: PullRequestSearchResult | IndexedPullRequest;
+	query: string;
 	isOpening: boolean;
 }): React.ReactElement {
+	const branchRanges =
+		"headRefName" in props.pr
+			? branchMatchRanges(props.pr.headRefName, props.query)
+			: [];
 	return (
 		<div className="flex min-w-0 flex-1 items-center gap-2.5">
-			<PrStatusIcon status={rowStatus(pr)} />
+			<PrStatusIcon status={rowStatus(props.pr)} />
 			<div className="min-w-0 flex-1">
 				<div className="flex min-w-0 items-center gap-1.5">
 					<span className="min-w-0 truncate">
-						<span className="text-muted-foreground">#{pr.number}</span>{" "}
-						{pr.title}
+						<span className="text-muted-foreground">#{props.pr.number}</span>{" "}
+						{props.pr.title}
 					</span>
-					{pr.isDraft && (
+					{props.pr.isDraft && (
 						<Badge className="shrink-0" size="sm" variant="outline">
 							Draft
 						</Badge>
 					)}
 				</div>
-				<div className="truncate text-muted-foreground text-xs">
-					{pr.owner}/{pr.repo}
+				<div className="flex min-w-0 items-center gap-1 text-muted-foreground text-xs">
+					<span className="shrink-0">
+						{props.pr.owner}/{props.pr.repo}
+					</span>
+					{"headRefName" in props.pr && branchRanges.length > 0 && (
+						<MatchedBranch
+							branch={props.pr.headRefName}
+							ranges={branchRanges}
+						/>
+					)}
 				</div>
 			</div>
-			{isOpening ? (
+			{props.isOpening ? (
 				<Spinner className="size-4 shrink-0 text-muted-foreground" />
 			) : (
 				<Avatar className="size-6 shrink-0 text-[10px]">
-					<AvatarImage alt="" src={githubAvatarUrl(pr.author)} />
-					<AvatarFallback>{authorInitials(pr.author)}</AvatarFallback>
+					<AvatarImage alt="" src={githubAvatarUrl(props.pr.author)} />
+					<AvatarFallback>{authorInitials(props.pr.author)}</AvatarFallback>
 				</Avatar>
 			)}
 		</div>

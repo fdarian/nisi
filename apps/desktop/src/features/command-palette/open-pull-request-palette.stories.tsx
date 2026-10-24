@@ -169,6 +169,17 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 export const Default: Story = {};
 
+/** The mock index gives each row a `<author>/<repo>-<number>` branch; this query matches only that, so the row shows the branch with the hit emphasised. */
+export const BranchOnlyMatch: Story = {
+	play: async () => {
+		// The dialog renders in a portal, outside the story canvas.
+		const input = await within(document.body).findByPlaceholderText(
+			"Open pull requests…",
+		);
+		await userEvent.type(input, "furl-42");
+	},
+};
+
 export const RecentlyClosed: Story = {
 	play: async ({ canvasElement }) => {
 		const input = await within(
