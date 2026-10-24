@@ -45,6 +45,34 @@ const RESULTS: PullRequestSearchResult[] = [
 		mergeStateStatus: "DRAFT",
 		rollupState: null,
 	},
+	{
+		owner: "fdarian",
+		repo: "furl",
+		number: 38,
+		title: "Persist repository chips across palette opens",
+		author: "fdarian",
+		updatedAt: "2026-09-28T12:00:00Z",
+		url: "https://github.com/fdarian/furl/pull/38",
+		isDraft: false,
+		state: "MERGED",
+		mergeable: "UNKNOWN",
+		mergeStateStatus: "UNKNOWN",
+		rollupState: "SUCCESS",
+	},
+	{
+		owner: "fdarian",
+		repo: "nisi",
+		number: 12,
+		title: "Try a sticky file header",
+		author: "fdarian",
+		updatedAt: "2026-09-27T12:00:00Z",
+		url: "https://github.com/fdarian/nisi/pull/12",
+		isDraft: false,
+		state: "CLOSED",
+		mergeable: "UNKNOWN",
+		mergeStateStatus: "UNKNOWN",
+		rollupState: null,
+	},
 ];
 
 type SearchState = "loading" | "loaded" | "revalidating";
@@ -149,5 +177,18 @@ export const BranchOnlyMatch: Story = {
 			"Open pull requests…",
 		);
 		await userEvent.type(input, "furl-42");
+	},
+};
+
+export const RecentlyClosed: Story = {
+	play: async ({ canvasElement }) => {
+		const input = await within(
+			canvasElement.ownerDocument.body,
+		).findByPlaceholderText("Open pull requests…");
+		await userEvent.click(input);
+		await userEvent.keyboard("closed");
+		await userEvent.click(
+			await within(canvasElement.ownerDocument.body).findByText("Filter by"),
+		);
 	},
 };

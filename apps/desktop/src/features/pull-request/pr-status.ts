@@ -1,5 +1,6 @@
 export type PrStatus =
 	| "merged"
+	| "closed"
 	| "conflicts"
 	| "draft"
 	| "ci-running"
@@ -16,6 +17,7 @@ type PrStatusInput = {
 
 export function derivePrStatus(input: PrStatusInput): PrStatus {
 	if (input.state === "MERGED") return "merged";
+	if (input.state === "CLOSED") return "closed";
 	if (input.mergeable === "CONFLICTING" || input.mergeStateStatus === "DIRTY")
 		return "conflicts";
 	if (input.isDraft === true) return "draft";

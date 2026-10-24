@@ -60,6 +60,7 @@ const mockGitHub = (overrides: Partial<GitHubShape>): GitHubShape => ({
 	pullRequestStates: unused,
 	headRef: unused,
 	search: unused,
+	searchRepositories: unused,
 	checks: () => Effect.succeed([{ name: "Tests", status: "passing" }]),
 	checksSnapshot: () =>
 		Effect.succeed({

@@ -9,6 +9,8 @@ import {
 	GitHub,
 	type GitHubShape,
 	PullRequestNotFound,
+	type PullRequestRef,
+	type ViewedPullRequest,
 } from "@repo/git";
 import { type ChangedRun, parseChangedRuns } from "@repo/git/hunks";
 import { ReviewStore } from "@repo/review";
@@ -77,6 +79,12 @@ const makeTestRepo = async (): Promise<string> => {
 };
 
 /** Same composition as `packages/review/test/fixtures.ts`'s `makeTestLayer`, one layer up — `Store.layer` already pulls in `ReviewStore.layer` via `provideMerge`, so this only has to add what `Store.make` needs beyond that: `SqliteDb` and `NISI_DATA_DIR`. */
+/** A just-opened PR as `gh pr view` reports it, for tests that don't care about the facts. */
+const viewedPullRequest = (ref: PullRequestRef): ViewedPullRequest => ({
+	ref,
+	facts: { state: "OPEN", headSha: "0".repeat(40), baseSha: "1".repeat(40) },
+});
+
 const mockGitHub: GitHubShape = {
 	listOpenPullRequests: () =>
 		Effect.succeed({
@@ -89,18 +97,21 @@ const mockGitHub: GitHubShape = {
 	repository: () =>
 		Effect.succeed({ owner: "acme", repo: "widgets", defaultBranch: "main" }),
 	pullRequest: () =>
-		Effect.succeed({
-			number: 42,
-			title: "Add widgets",
-			baseRef: "main",
-			headRef: "main",
-			isCrossRepository: false,
-			authorLogin: "fdarian",
-		}),
+		Effect.succeed(
+			viewedPullRequest({
+				number: 42,
+				title: "Add widgets",
+				baseRef: "main",
+				headRef: "main",
+				isCrossRepository: false,
+				authorLogin: "fdarian",
+			}),
+		),
 	pullRequestState: () => Effect.die(new Error("unused mock GitHub method")),
 	pullRequestStates: () => Effect.die(new Error("unused mock GitHub method")),
 	headRef: () => Effect.succeed("main"),
 	search: () => Effect.die(new Error("unused mock GitHub method")),
+	searchRepositories: () => Effect.die(new Error("unused mock GitHub method")),
 	checks: () => Effect.die(new Error("unused mock GitHub method")),
 	checksSnapshot: () => Effect.die(new Error("unused mock GitHub method")),
 	approveWorkflowRuns: () => Effect.die(new Error("unused mock GitHub method")),
@@ -266,14 +277,14 @@ test("index disagreement upserts the correct PR's existing row without transferr
 				Effect.succeed(
 					state.noPr
 						? null
-						: {
+						: viewedPullRequest({
 								number: state.number,
 								title: "Current PR",
 								baseRef: "main",
 								headRef: "main",
 								isCrossRepository: false,
 								authorLogin: "fdarian",
-							},
+							}),
 				),
 		};
 		await Effect.runPromise(
@@ -1054,6 +1065,173 @@ describe("Store — a PR session after the PR is merged", () => {
 		});
 	});
 
+	test("opening a merged PR pins its diff before any merge-status reading", async () => {
+		await withTestRepoAndDataDir(async (repoRoot, dataDir) => {
+			const root = await realpath(repoRoot);
+			const parent = await mkdtemp(join(tmpdir(), "nisi-open-merged-"));
+			try {
+				await sh(root, [
+					"remote",
+					"add",
+					"origin",
+					"https://github.com/acme/widgets.git",
+				]);
+				await sh(root, [
+					"config",
+					`url.${root}.insteadOf`,
+					"https://github.com/acme/widgets.git",
+				]);
+				await sh(root, ["checkout", "-q", "-b", "pr"]);
+				await Bun.write(join(root, "a.ts"), "pr change\n");
+				await sh(root, ["commit", "-q", "-am", "pr a"]);
+				const head = await shOut(root, ["rev-parse", "HEAD"]);
+				await sh(root, ["update-ref", "refs/pull/9/head", head]);
+				const baseSha = await mergeIntoMain(root, parent, "merge commit", [
+					head,
+				]);
+
+				await Effect.runPromise(
+					Effect.gen(function* () {
+						const store = yield* Store;
+						const settings = yield* SettingsStore;
+						yield* settings.setRepoPath("acme", "widgets", root);
+						const opened = yield* store.openPullRequestSession({
+							owner: "acme",
+							repo: "widgets",
+							number: 9,
+						});
+						expect(opened.status).toBe("opened");
+						if (opened.status !== "opened") return;
+						const session = opened.outcome.session;
+						const recorded =
+							yield* (yield* ReviewStore).listPullRequestSessions({
+								owner: "acme",
+								repo: "widgets",
+							});
+						expect(
+							recorded.find((entry) => entry.id === session.id)?.prState,
+						).toBe("merged");
+
+						const files = yield* store.listChangedFiles(session.id, false);
+						expect(files.map((file) => file.path)).toEqual(["a.ts"]);
+
+						const events: string[] = [];
+						const unsubscribe = subscribe((event) => {
+							if (
+								event.type === "session-files-changed" ||
+								event.type === "session-diff-source-changed"
+							)
+								events.push(event.type);
+						});
+						yield* Effect.addFinalizer(() => Effect.sync(unsubscribe));
+						yield* store.recordPullRequestStatus(
+							{ owner: "acme", repo: "widgets", number: 9 },
+							prFacts(head, baseSha, "MERGED"),
+						);
+						expect(events).toEqual([]);
+					}).pipe(
+						Effect.scoped,
+						Effect.provide(
+							makeTestLayer(dataDir, {
+								...mockGitHub,
+								pullRequest: () =>
+									Effect.succeed({
+										ref: {
+											number: 9,
+											title: "A PR",
+											baseRef: "main",
+											headRef: "pr",
+											isCrossRepository: false,
+											authorLogin: "fdarian",
+										},
+										facts: { state: "MERGED", headSha: head, baseSha },
+									}),
+							}),
+						),
+					),
+				);
+			} finally {
+				await rm(parent, { recursive: true, force: true });
+			}
+		});
+	});
+
+	test("opening a PR overwrites an OPEN reading recorded earlier, so a since-merged PR's first diff is pinned", async () => {
+		await withTestRepoAndDataDir(async (repoRoot, dataDir) => {
+			const root = await realpath(repoRoot);
+			const parent = await mkdtemp(join(tmpdir(), "nisi-open-stale-facts-"));
+			try {
+				await sh(root, [
+					"remote",
+					"add",
+					"origin",
+					"https://github.com/acme/widgets.git",
+				]);
+				await sh(root, [
+					"config",
+					`url.${root}.insteadOf`,
+					"https://github.com/acme/widgets.git",
+				]);
+				await sh(root, ["checkout", "-q", "-b", "pr"]);
+				await Bun.write(join(root, "a.ts"), "pr change\n");
+				await sh(root, ["commit", "-q", "-am", "pr a"]);
+				const head = await shOut(root, ["rev-parse", "HEAD"]);
+				await sh(root, ["update-ref", "refs/pull/9/head", head]);
+				const mainBefore = await shOut(root, ["rev-parse", "main"]);
+				const baseSha = await mergeIntoMain(root, parent, "merge commit", [
+					head,
+				]);
+
+				await Effect.runPromise(
+					Effect.gen(function* () {
+						const store = yield* Store;
+						const settings = yield* SettingsStore;
+						yield* settings.setRepoPath("acme", "widgets", root);
+						const pr = { owner: "acme", repo: "widgets", number: 9 };
+						// A watch read the PR as open while no session for it was open.
+						yield* store.recordPullRequestStatus(
+							pr,
+							prFacts(head, mainBefore, "OPEN"),
+						);
+						const opened = yield* store.openPullRequestSession(pr);
+						expect(opened.status).toBe("opened");
+						if (opened.status !== "opened") return;
+						const files = yield* store.listChangedFiles(
+							opened.outcome.session.id,
+							false,
+						);
+						expect(files.map((file) => file.path)).toEqual(["a.ts"]);
+					}).pipe(
+						Effect.scoped,
+						Effect.provide(
+							makeTestLayer(dataDir, {
+								...mockGitHub,
+								pullRequest: () =>
+									Effect.succeed({
+										ref: {
+											number: 9,
+											title: "A PR",
+											baseRef: "main",
+											headRef: "pr",
+											isCrossRepository: false,
+											authorLogin: "fdarian",
+										},
+										facts: {
+											state: "MERGED",
+											headSha: head,
+											baseSha,
+										},
+									}),
+							}),
+						),
+					),
+				);
+			} finally {
+				await rm(parent, { recursive: true, force: true });
+			}
+		});
+	});
+
 	test("an open PR keeps the live base even after main moves", async () => {
 		await withTestRepoAndDataDir(async (repoRoot, dataDir) => {
 			const root = await realpath(repoRoot);
@@ -1541,14 +1719,14 @@ describe("Store.openPullRequestSession — reuses open review sessions", () => {
 											expect(root).toBe(repoRoot);
 											expect(number).toBe(42);
 											calls.pr++;
-											return {
+											return viewedPullRequest({
 												number: 42,
 												title: "Fresh",
 												baseRef: "main",
 												headRef: changedHead ? "feature" : "main",
 												isCrossRepository: false,
 												authorLogin: "fdarian",
-											};
+											});
 										}),
 								},
 								index,
@@ -1700,6 +1878,12 @@ describe("Store.openPullRequestSession — reuses open review sessions", () => {
 								source === null
 									? null
 									: yield* reviewStore.getFileReviewState(source.id, "a.ts");
+							const diffSourceChanged: string[] = [];
+							const unsubscribe = subscribe((event) => {
+								if (event.type === "session-diff-source-changed")
+									diffSourceChanged.push(event.sessionId);
+							});
+							yield* Effect.addFinalizer(() => Effect.sync(unsubscribe));
 							const opened = yield* store.openPullRequestSession({
 								owner: "acme",
 								repo: "widgets",
@@ -1716,10 +1900,13 @@ describe("Store.openPullRequestSession — reuses open review sessions", () => {
 								expect(
 									yield* reviewStore.getFileReviewState(source.id, "a.ts"),
 								).toEqual(before);
+								// Its branch-view head pin must not outlive the retarget.
+								expect(diffSourceChanged).toEqual([source.id]);
 							} else {
 								expect(opened.outcome.kind).toBe("opened");
 								expect(opened.outcome.session.id).not.toBe(source?.id);
 								expect(opened.outcome.session.repoRoot).not.toBe(sibling);
+								expect(diffSourceChanged).toEqual([]);
 								expect(
 									yield* reviewStore.getFileReviewState(
 										opened.outcome.session.id,
@@ -1732,6 +1919,7 @@ describe("Store.openPullRequestSession — reuses open review sessions", () => {
 									).toBeNull();
 							}
 						}).pipe(
+							Effect.scoped,
 							Effect.provide(
 								makeTestLayer(dataDir, {
 									...mockGitHub,
@@ -1742,14 +1930,14 @@ describe("Store.openPullRequestSession — reuses open review sessions", () => {
 									pullRequest: () =>
 										Effect.sync(() => {
 											reads.pr++;
-											return {
+											return viewedPullRequest({
 												number: 42,
 												title: "Add widgets",
 												baseRef: "main",
 												headRef: "feature",
 												isCrossRepository: scenario === "fork",
 												authorLogin: "fdarian",
-											};
+											});
 										}),
 									headRef: () =>
 										Effect.die(new Error("must reuse the fetched PR head")),

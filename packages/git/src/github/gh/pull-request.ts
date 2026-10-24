@@ -1,4 +1,4 @@
-import { Effect, Schema } from "effect";
+import { DateTime, Effect, Schema } from "effect";
 import type { ChildProcessSpawner } from "effect/process";
 import {
 	GhNotAuthenticated,
@@ -14,8 +14,11 @@ import {
 } from "../../errors.ts";
 import { type GhResult, ghResult } from "../../exec.ts";
 import type {
+	PullRequestClosedWindow,
 	PullRequestRef,
 	PullRequestSearchResult,
+	PullRequestSearchState,
+	ViewedPullRequest,
 } from "../../pull-request.ts";
 import type { RepositoryIdentity } from "../github.ts";
 import { hasSearchQualifier } from "../search-query.ts";
@@ -33,6 +36,9 @@ const PrView = Schema.Struct({
 	headRefName: Schema.String,
 	isCrossRepository: Schema.Boolean,
 	author: Schema.NullOr(Schema.Struct({ login: Schema.String })),
+	state: Schema.Literals(["OPEN", "CLOSED", "MERGED"]),
+	headRefOid: Schema.String,
+	baseRefOid: Schema.String,
 });
 
 const decodeRepoView = (command: string, raw: string) =>
@@ -76,7 +82,7 @@ const isNoGitHubRepo = (stderr: string) =>
 	NO_GITHUB_REPO_MARKERS.some((marker) => stderr.includes(marker));
 
 const PR_VIEW_JSON_FIELDS =
-	"number,title,baseRefName,headRefName,isCrossRepository,author";
+	"number,title,baseRefName,headRefName,isCrossRepository,author,state,headRefOid,baseRefOid";
 
 const toPullRequestRef = (
 	view: Schema.Schema.Type<typeof PrView>,
@@ -87,6 +93,17 @@ const toPullRequestRef = (
 	headRef: view.headRefName,
 	isCrossRepository: view.isCrossRepository,
 	authorLogin: authorLoginOf(view.author),
+});
+
+const toViewedPullRequest = (
+	view: Schema.Schema.Type<typeof PrView>,
+): ViewedPullRequest => ({
+	ref: toPullRequestRef(view),
+	facts: {
+		state: view.state,
+		headSha: view.headRefOid,
+		baseSha: view.baseRefOid,
+	},
 });
 
 export const SearchPrItem = Schema.Struct({
@@ -190,7 +207,9 @@ const toPullRequestSearchResult = (
 
 /**
  * Whether `query` already names its own state (`state:open`, `is:merged`,
- * `-is:closed`, …) — narrower than `hasSearchQualifier`, since `is:draft` or
+ * `-is:closed`, …) or filters on a state-transition date (`closed:>=…`,
+ * `-merged:…`, which only make sense against closed PRs, so an appended
+ * `is:open` would contradict them) — narrower than `hasSearchQualifier`, since `is:draft` or
  * `is:locked` don't name a state and shouldn't suppress the default
  * `--state open` the way an actual state qualifier must (forcing `--state
  * open` on top of a query that already says `is:merged` would silently AND
@@ -198,7 +217,7 @@ const toPullRequestSearchResult = (
  * phase's report).
  */
 const STATE_QUALIFIER_PATTERN =
-	/(?:^|\s)-?(?:state|is):(?:open|closed|merged)\b/i;
+	/(?:^|\s)-?(?:(?:state|is):(?:open|closed|merged)\b|(?:closed|merged):\S)/i;
 
 const hasStateQualifier = (query: string): boolean =>
 	STATE_QUALIFIER_PATTERN.test(query);
@@ -220,6 +239,29 @@ const SEARCH_QUERY = `query($q: String!, $n: Int!) {
   }
 }`;
 export const SEARCH_LIMIT = 30;
+
+/** `null` is "any time": no `closed:>=` cutoff at all. */
+const CLOSED_WINDOW_DAYS: Record<PullRequestClosedWindow, number | null> = {
+	week: 7,
+	month: 30,
+	all: null,
+};
+
+/** `is:closed` on GitHub includes merged PRs, which is intended. */
+const modeStateQualifiers = (
+	state: PullRequestSearchState,
+	closedWindow: PullRequestClosedWindow,
+): Effect.Effect<ReadonlyArray<string>> => {
+	if (state === "open") return Effect.succeed(["is:open"]);
+	const days = CLOSED_WINDOW_DAYS[closedWindow];
+	if (days === null) return Effect.succeed(["is:closed"]);
+	return DateTime.now.pipe(
+		Effect.map((now) => [
+			"is:closed",
+			`closed:>=${DateTime.formatIsoDate(DateTime.subtract(now, { days }))}`,
+		]),
+	);
+};
 
 /**
  * `gh` not authenticated — confirmed live with `GH_CONFIG_DIR` pointed at an
@@ -264,25 +306,21 @@ const classifySearchFailure = (result: GhResult): PullRequestSearchError => {
 	});
 };
 
-const searchOnce = (
+/**
+ * One `gh api graphql` search call, returning raw stdout. Shared with
+ * `repository-search.ts` so both searches classify failures identically.
+ * `variables` are the extra `-f`/`-F` args after the `query=` field.
+ */
+export const runGraphqlSearch = (
 	cwd: string,
-	terms: ReadonlyArray<string>,
-	qualifiers: ReadonlyArray<string>,
+	query: string,
+	variables: ReadonlyArray<string>,
 ): Effect.Effect<
-	ReadonlyArray<PullRequestSearchResult>,
+	string,
 	PullRequestSearchError,
 	ChildProcessSpawner.ChildProcessSpawner
 > =>
-	ghResult(cwd, [
-		"api",
-		"graphql",
-		"-f",
-		`query=${SEARCH_QUERY}`,
-		"-f",
-		`q=${["is:pr", ...terms, ...qualifiers, "sort:updated-desc"].join(" ")}`,
-		"-F",
-		`n=${SEARCH_LIMIT}`,
-	]).pipe(
+	ghResult(cwd, ["api", "graphql", "-f", `query=${query}`, ...variables]).pipe(
 		// `gh` never started at all (missing binary, permissions) — the one
 		// failure that isn't an exit code to classify, same as every other `gh`
 		// caller in this module.
@@ -295,15 +333,32 @@ const searchOnce = (
 		),
 		Effect.flatMap((result) =>
 			result.exitCode === 0
-				? decodeSearchPrList("gh api graphql", result.stdout).pipe(
-						Effect.flatMap((response) =>
-							Effect.forEach(
-								response.data.search.nodes.filter((item) => item !== null),
-								toPullRequestSearchResult,
-							),
-						),
-					)
+				? Effect.succeed(result.stdout)
 				: Effect.fail(classifySearchFailure(result)),
+		),
+	);
+
+const searchOnce = (
+	cwd: string,
+	terms: ReadonlyArray<string>,
+	qualifiers: ReadonlyArray<string>,
+): Effect.Effect<
+	ReadonlyArray<PullRequestSearchResult>,
+	PullRequestSearchError,
+	ChildProcessSpawner.ChildProcessSpawner
+> =>
+	runGraphqlSearch(cwd, SEARCH_QUERY, [
+		"-f",
+		`q=${["is:pr", ...terms, ...qualifiers, "sort:updated-desc"].join(" ")}`,
+		"-F",
+		`n=${SEARCH_LIMIT}`,
+	]).pipe(
+		Effect.flatMap((stdout) => decodeSearchPrList("gh api graphql", stdout)),
+		Effect.flatMap((response) =>
+			Effect.forEach(
+				response.data.search.nodes.filter((item) => item !== null),
+				toPullRequestSearchResult,
+			),
 		),
 	);
 
@@ -354,8 +409,10 @@ const mergeResults = (
  *   (OR semantics), and search unscoped from author/review-requested even
  *   with an empty query. Explicit state qualifiers still take precedence.
  *
- * `is:open` is added to every branch unless the query already names its
- * own state (`hasStateQualifier`) — forcing it on top of an explicit
+ * The mode's state qualifiers (`is:open`, or `is:closed` plus a
+ * `closed:>=` cutoff for "recently closed", sized by `closedWindow`: 7 days,
+ * 30 days, or no cutoff) are added to every branch unless
+ * the query already names its own state (`hasStateQualifier`) — forcing it on top of an explicit
  * `is:merged`/`is:closed` would otherwise silently return nothing (confirmed
  * live). `sort:updated-desc` is likewise always requested, needed for
  * `mergeResults` above to produce one coherently-ordered list regardless of
@@ -372,46 +429,60 @@ export const searchPullRequests = (
 	cwd: string,
 	query: string,
 	repos: ReadonlyArray<string>,
+	state: PullRequestSearchState,
+	closedWindow: PullRequestClosedWindow,
 ): Effect.Effect<
 	ReadonlyArray<PullRequestSearchResult>,
 	PullRequestSearchError,
 	ChildProcessSpawner.ChildProcessSpawner
-> => {
-	const trimmed = query.trim();
-	const stateQualifiers = hasStateQualifier(trimmed) ? [] : ["is:open"];
-	if (repos.length > 0) {
-		return searchOnce(cwd, tokenize(trimmed), [
-			...repos.map((repo) => `repo:${repo}`),
-			...stateQualifiers,
-		]).pipe(Effect.map(mergeResults));
-	}
+> =>
+	Effect.gen(function* () {
+		const searchScopes = (
+			terms: ReadonlyArray<string>,
+			scopes: ReadonlyArray<string>,
+			stateQualifiers: ReadonlyArray<string>,
+		) =>
+			Effect.all(
+				scopes.map((scope) =>
+					searchOnce(cwd, terms, [scope, ...stateQualifiers]),
+				),
+				{ concurrency: "unbounded" },
+			).pipe(Effect.map((perScope) => mergeResults(perScope.flat())));
+		const trimmed = query.trim();
+		const stateQualifiers = hasStateQualifier(trimmed)
+			? []
+			: yield* modeStateQualifiers(state, closedWindow);
+		if (repos.length > 0) {
+			return yield* searchOnce(cwd, tokenize(trimmed), [
+				...repos.map((repo) => `repo:${repo}`),
+				...stateQualifiers,
+			]).pipe(Effect.map(mergeResults));
+		}
 
-	if (trimmed === "") {
-		return searchOnce(cwd, [], ["author:@me", ...stateQualifiers]).pipe(
-			Effect.map(mergeResults),
+		if (trimmed === "") {
+			return yield* searchScopes(
+				[],
+				state === "closed" ? ["author:@me", "reviewed-by:@me"] : ["author:@me"],
+				stateQualifiers,
+			);
+		}
+
+		const terms = tokenize(trimmed);
+
+		if (hasSearchQualifier(trimmed)) {
+			return yield* searchOnce(cwd, terms, stateQualifiers).pipe(
+				Effect.map(mergeResults),
+			);
+		}
+
+		return yield* searchScopes(
+			terms,
+			state === "closed"
+				? ["author:@me", "review-requested:@me", "reviewed-by:@me"]
+				: ["author:@me", "review-requested:@me"],
+			stateQualifiers,
 		);
-	}
-
-	const terms = tokenize(trimmed);
-
-	if (hasSearchQualifier(trimmed)) {
-		return searchOnce(cwd, terms, stateQualifiers).pipe(
-			Effect.map(mergeResults),
-		);
-	}
-
-	return Effect.all(
-		[
-			searchOnce(cwd, terms, ["author:@me", ...stateQualifiers]),
-			searchOnce(cwd, terms, ["review-requested:@me", ...stateQualifiers]),
-		],
-		{ concurrency: "unbounded" },
-	).pipe(
-		Effect.map(([authored, reviewRequested]) =>
-			mergeResults([...authored, ...reviewRequested]),
-		),
-	);
-};
+	});
 
 export const repository = (
 	repoRoot: string,
@@ -475,7 +546,9 @@ export const pullRequest = (repoRoot: string, number?: number) =>
 				reason: result.stderr.trim(),
 			});
 		}
-		return toPullRequestRef(yield* decodePrView("gh pr view", result.stdout));
+		return toViewedPullRequest(
+			yield* decodePrView("gh pr view", result.stdout),
+		);
 	});
 
 export const headRef = (repoRoot: string, number: number) =>

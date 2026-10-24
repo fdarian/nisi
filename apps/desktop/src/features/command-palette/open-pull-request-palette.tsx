@@ -1,7 +1,13 @@
 "use client";
 
 import { hasSearchQualifier } from "@repo/git/search-query";
-import { GitBranchIcon, XIcon } from "lucide-react";
+import {
+	GitBranchIcon,
+	HistoryIcon,
+	ListFilterIcon,
+	SearchIcon,
+	XIcon,
+} from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { FetchingIndicator } from "#/components/fetching-indicator";
 import { Avatar, AvatarFallback, AvatarImage } from "#/components/ui/avatar";
@@ -26,6 +32,7 @@ import {
 	githubAvatarUrl,
 	type IndexedPullRequest,
 	type OpenPullRequestParams,
+	type PullRequestClosedWindow,
 	type PullRequestRepository,
 	type PullRequestSearchResult,
 	useIndexedPullRequests,
@@ -33,6 +40,7 @@ import {
 	usePullRequestRepositories,
 	useRecentPullRequests,
 	useSearchPullRequests,
+	useSearchRepositories,
 } from "#/features/pull-request/data/pull-requests-data";
 import { OriginMovedDialog } from "#/features/pull-request/open/origin-moved-dialog";
 import {
@@ -47,6 +55,7 @@ import {
 	filterIndexedPullRequests,
 } from "./filter-indexed-pull-requests";
 import { paletteRepositories, repositoryKey } from "./palette-repositories";
+import { offersRecentlyClosedFilter } from "./recently-closed-filter";
 
 /**
  * Debounce for the `gh` fallback search only; filtering the open-PR index
@@ -80,6 +89,48 @@ type OpenPullRequestPaletteProps = {
 	/** Resolves a matching already-open tab before asking the sidecar to create/reuse a session. */
 	findExistingSessionId: (params: OpenPullRequestParams) => string | undefined;
 };
+
+// List entries beside the PR rows; each object is its own `value`, so none can
+// collide with a PR row or each other.
+const RECENTLY_CLOSED_FILTER_ROW = {
+	action: "filter-recently-closed",
+} as const;
+const SHOW_RECENTLY_CLOSED_ROW = { action: "show-recently-closed" } as const;
+const SHOW_MORE_CLOSED_ROW = { action: "show-more-closed" } as const;
+const SEARCH_GITHUB_ROW = { action: "search-github" } as const;
+
+/** Per closed window: its chip label, its name in the "Show more" hint of the window before it, its empty message, and the next step of "Show more". */
+const CLOSED_WINDOWS = {
+	week: {
+		chip: "Recently closed",
+		hint: "Last 7 days",
+		empty: "No pull requests closed in the last 7 days.",
+		wider: "month",
+	},
+	month: {
+		chip: "Closed · 30 days",
+		hint: "Last 30 days",
+		empty: "No pull requests closed in the last 30 days.",
+		wider: "all",
+	},
+	all: {
+		chip: "Closed · any time",
+		hint: "Any time",
+		empty: "No closed pull requests found.",
+		wider: "all",
+	},
+} satisfies Record<
+	PullRequestClosedWindow,
+	{ chip: string; hint: string; empty: string; wider: PullRequestClosedWindow }
+>;
+
+type PaletteRow =
+	| PullRequestSearchResult
+	| IndexedPullRequest
+	| typeof RECENTLY_CLOSED_FILTER_ROW
+	| typeof SHOW_RECENTLY_CLOSED_ROW
+	| typeof SHOW_MORE_CLOSED_ROW
+	| typeof SEARCH_GITHUB_ROW;
 
 function authorInitials(author: string): string {
 	return author.slice(0, 2).toUpperCase();
@@ -118,33 +169,45 @@ export function OpenPullRequestPalette(
 	const [debouncedQuery, setDebouncedQuery] = useState("");
 	const [pickingRepository, setPickingRepository] = useState(false);
 	const [repositoryQuery, setRepositoryQuery] = useState("");
+	const [debouncedRepositoryQuery, setDebouncedRepositoryQuery] = useState("");
+	const [recentlyClosed, setRecentlyClosed] = useState(false);
+	// Part of the recently-closed mode, so typing never resets it; only leaving the mode does.
+	const [closedWindow, setClosedWindow] =
+		useState<PullRequestClosedWindow>("week");
+	// Set by the "Search GitHub" row; applies to the query it was picked for only.
+	const [searchingGitHub, setSearchingGitHub] = useState(false);
 	const inputRef = useRef<HTMLInputElement>(null);
 
 	const indexedRows = useIndexedPullRequests(props.orpc);
 	const recent = useRecentPullRequests(props.orpc, props.open);
 	const repositoryKeys = props.repositories.map(repositoryKey);
-	// Blank and unscoped is the recent-PRs list; anything else is a search.
-	const isBlank = query.trim() === "" && props.repositories.length === 0;
+	// Blank and unscoped is the recent-PRs list; anything else is a search. The
+	// recent list is open PRs only, so the closed filter always searches.
+	const isBlank =
+		!recentlyClosed && query.trim() === "" && props.repositories.length === 0;
 	const localMatches =
-		isBlank || indexedRows === undefined
+		isBlank || recentlyClosed || indexedRows === undefined
 			? []
 			: filterIndexedPullRequests(indexedRows, query, repositoryKeys);
 	// The index can only answer what it holds: GitHub qualifiers are `gh`
 	// syntax, and a chip for a repo with no indexed rows may just not be
 	// indexed (yet). Anything else it found nothing for is left to `gh` too —
-	// the PR may be one the index doesn't cover.
-	const needsGh =
-		!isBlank &&
-		(localMatches.length === 0 ||
-			hasSearchQualifier(query) ||
-			indexedRows === undefined ||
-			props.repositories.some((chip) =>
-				indexedRows.every(
-					(row) =>
-						repositoryKey(row).toLowerCase() !==
-						repositoryKey(chip).toLowerCase(),
-				),
-			));
+	// the PR may be one the index doesn't cover. It holds open PRs only, so it
+	// can never answer the recently-closed filter.
+	const indexCantAnswer =
+		recentlyClosed ||
+		(!isBlank &&
+			(localMatches.length === 0 ||
+				hasSearchQualifier(query) ||
+				indexedRows === undefined ||
+				props.repositories.some((chip) =>
+					indexedRows.every(
+						(row) =>
+							repositoryKey(row).toLowerCase() !==
+							repositoryKey(chip).toLowerCase(),
+					),
+				)));
+	const needsGh = indexCantAnswer || searchingGitHub;
 	// Keyed on `query` itself, not the debounced copy: the request only fires
 	// once they agree, and until then a cached answer for the exact query shows.
 	const search = useSearchPullRequests(
@@ -152,18 +215,38 @@ export function OpenPullRequestPalette(
 		query,
 		props.open && needsGh && query === debouncedQuery,
 		repositoryKeys,
+		recentlyClosed ? "closed" : "open",
+		closedWindow,
 	);
 	// `keepPreviousData` rows belong to some earlier query (often the blank
 	// recent list); showing them would let Enter open an unrelated PR, so the
 	// gh path shows nothing until its own answer lands.
+	const ghResults = search.isPlaceholderData ? [] : search.results;
+	// Live search is scoped to author/review-requested for unscoped queries, so
+	// on an explicit "Search GitHub" it adds to the index matches, never replaces them.
 	const results: readonly (PullRequestSearchResult | IndexedPullRequest)[] =
 		isBlank
 			? recent.results
-			: needsGh
-				? search.isPlaceholderData
-					? []
-					: search.results
-				: localMatches;
+			: searchingGitHub
+				? [
+						...localMatches,
+						...ghResults.filter(
+							(result) =>
+								!localMatches.some(
+									(match) =>
+										repositoryKey(match).toLowerCase() ===
+											repositoryKey(result).toLowerCase() &&
+										match.number === result.number,
+								),
+						),
+					]
+				: needsGh
+					? ghResults
+					: localMatches;
+	const resultRows: readonly PaletteRow[] =
+		!recentlyClosed && offersRecentlyClosedFilter(query)
+			? [...results, RECENTLY_CLOSED_FILTER_ROW]
+			: results;
 	const searchError = isBlank ? recent.error : needsGh ? search.error : null;
 	const searchErrorMessage = friendlySearchError(searchError);
 	// Local filtering is instant, so only the `gh` path loads. A pending
@@ -173,15 +256,42 @@ export function OpenPullRequestPalette(
 		? recent.isSearching
 		: needsGh && (search.isSearching || query !== debouncedQuery);
 	const saved = usePullRequestRepositories(props.orpc, props.open);
+	const hasRepositoryQuery = repositoryQuery.trim() !== "";
+	// Keyed on `repositoryQuery` itself, like the PR search above.
+	const remoteRepositorySearch = useSearchRepositories(
+		props.orpc,
+		repositoryQuery,
+		props.open &&
+			pickingRepository &&
+			hasRepositoryQuery &&
+			repositoryQuery === debouncedRepositoryQuery,
+	);
+	// `keepPreviousData` hits belong to an earlier query; GitHub's relevance
+	// decides what shows, so stale ones would surface unrelated repositories.
+	const remoteRepositories =
+		hasRepositoryQuery && !remoteRepositorySearch.isPlaceholderData
+			? remoteRepositorySearch.results
+			: [];
 	const repositories = paletteRepositories(
 		recent.results,
 		saved.data === undefined ? [] : saved.data,
 		props.repositories,
 		repositoryQuery,
+		remoteRepositories,
 	);
+	// The debounce window counts, so "No repositories found." never flashes
+	// before the request has even fired.
+	const isSearchingRepositories =
+		hasRepositoryQuery &&
+		(remoteRepositorySearch.isSearching ||
+			repositoryQuery !== debouncedRepositoryQuery);
+	const remoteRepositoryErrorMessage =
+		hasRepositoryQuery && repositories.length === 0
+			? friendlySearchError(remoteRepositorySearch.error)
+			: null;
 	const repositoryErrorMessage = saved.isError
 		? "Couldn't load saved repositories — try reopening the palette."
-		: friendlySearchError(recent.error);
+		: (friendlySearchError(recent.error) ?? remoteRepositoryErrorMessage);
 
 	const openPr = useOpenPullRequest(props.orpc, (sessionId) => {
 		props.onSessionOpened(sessionId);
@@ -201,6 +311,10 @@ export function OpenPullRequestPalette(
 		setDebouncedQuery("");
 		setPickingRepository(props.opensOnRepositoryPicker);
 		setRepositoryQuery("");
+		setDebouncedRepositoryQuery("");
+		setRecentlyClosed(false);
+		setClosedWindow("week");
+		setSearchingGitHub(false);
 		openPr.reset();
 	}, [props.open]);
 
@@ -215,6 +329,14 @@ export function OpenPullRequestPalette(
 		);
 		return () => clearTimeout(timer);
 	}, [query]);
+
+	useEffect(() => {
+		const timer = setTimeout(
+			() => setDebouncedRepositoryQuery(repositoryQuery),
+			SEARCH_DEBOUNCE_MS,
+		);
+		return () => clearTimeout(timer);
+	}, [repositoryQuery]);
 
 	// The open-action error takes priority in the footer — it's about the
 	// selection the user just made, more specific than a background search
@@ -234,9 +356,44 @@ export function OpenPullRequestPalette(
 	const collapsed =
 		!pickingRepository &&
 		isLoading &&
-		results.length === 0 &&
+		resultRows.length === 0 &&
 		searchErrorMessage === null &&
 		footerMessage === null;
+	// Held back while collapsed so the first load shows only the input; it
+	// appears once the search settles, even to an empty answer.
+	const offersSearchGitHub =
+		query.trim() !== "" &&
+		!isBlank &&
+		!recentlyClosed &&
+		!needsGh &&
+		!collapsed;
+	const offersShowMoreClosed =
+		recentlyClosed && closedWindow !== "all" && !collapsed;
+	const rows: readonly PaletteRow[] =
+		!recentlyClosed && !collapsed && query.trim() !== ""
+			? [
+					...resultRows,
+					...(offersSearchGitHub ? [SEARCH_GITHUB_ROW] : []),
+					SHOW_RECENTLY_CLOSED_ROW,
+				]
+			: offersShowMoreClosed
+				? [...resultRows, SHOW_MORE_CLOSED_ROW]
+				: resultRows;
+	const emptyMessage =
+		searchErrorMessage ??
+		(recentlyClosed
+			? CLOSED_WINDOWS[closedWindow].empty
+			: "No pull requests found.");
+	const exitRecentlyClosed = () => {
+		setRecentlyClosed(false);
+		setClosedWindow("week");
+	};
+	// The action rows keep the list non-empty, so `CommandEmpty` never renders
+	// for them; this line says what it would have, once the search settles or fails.
+	const showStatusLine =
+		results.length === 0 &&
+		rows.length > 0 &&
+		(searchErrorMessage !== null || !isLoading);
 
 	// The moved-repository dialog stands in for the palette rather than
 	// stacking on top of it; confirming re-opens the PR, whose `onOpened` above
@@ -292,7 +449,9 @@ export function OpenPullRequestPalette(
 										? repositoryErrorMessage
 										: saved.isPending || recent.isSearching
 											? "Loading repositories…"
-											: "No repositories found."}
+											: isSearchingRepositories
+												? "Searching GitHub…"
+												: "No repositories found."}
 								</CommandEmpty>
 								<CommandList>
 									{(repository: PullRequestRepository) => (
@@ -324,15 +483,18 @@ export function OpenPullRequestPalette(
 							<Command
 								key="pull-requests"
 								filter={null}
-								items={results}
-								onValueChange={setQuery}
+								items={rows}
+								onValueChange={(value) => {
+									setQuery(value);
+									setSearchingGitHub(false);
+								}}
 								value={query}
 							>
 								<CommandInput
 									ref={inputRef}
 									placeholder="Open pull requests…"
 									startContent={
-										props.repositories.length > 0 ? (
+										props.repositories.length > 0 || recentlyClosed ? (
 											<div className="flex shrink-0 items-center gap-1">
 												{/* ComboboxChip requires a Combobox root; mirror its styling inside this Autocomplete instead. */}
 												{props.repositories.map((repository) => (
@@ -363,16 +525,32 @@ export function OpenPullRequestPalette(
 														</button>
 													</span>
 												))}
+												{recentlyClosed && (
+													<span className="group flex items-center rounded-[calc(var(--radius-md)-1px)] bg-accent px-2 py-1 font-medium text-accent-foreground text-xs">
+														{CLOSED_WINDOWS[closedWindow].chip}
+														<button
+															type="button"
+															aria-label="Remove Recently closed filter"
+															className="w-0 shrink-0 cursor-pointer overflow-hidden opacity-0 outline-none group-hover:ms-1 group-hover:w-3.5 group-hover:opacity-80 group-focus-within:ms-1 group-focus-within:w-3.5 group-focus-within:opacity-80 hover:opacity-100 focus-visible:opacity-100"
+															onClick={() => {
+																exitRecentlyClosed();
+																inputRef.current?.focus();
+															}}
+														>
+															<XIcon className="size-3.5" />
+														</button>
+													</span>
+												)}
 											</div>
 										) : undefined
 									}
 									endContent={isLoading ? <FetchingIndicator /> : undefined}
 									onKeyDown={(event) => {
-										if (
-											event.key === "Backspace" &&
-											query === "" &&
-											props.repositories.length > 0
-										) {
+										if (event.key !== "Backspace" || query !== "") return;
+										if (recentlyClosed) {
+											event.preventDefault();
+											exitRecentlyClosed();
+										} else if (props.repositories.length > 0) {
 											event.preventDefault();
 											props.onRepositoriesChange(
 												props.repositories.slice(0, -1),
@@ -383,30 +561,109 @@ export function OpenPullRequestPalette(
 								{!collapsed && (
 									<>
 										<Separator />
-										<CommandEmpty>
-											{searchErrorMessage ?? "No pull requests found."}
-										</CommandEmpty>
+										<CommandEmpty>{emptyMessage}</CommandEmpty>
 									</>
 								)}
+								{showStatusLine && (
+									<p className="px-2 pt-4 pb-2 text-center text-base text-muted-foreground sm:text-sm">
+										{emptyMessage}
+									</p>
+								)}
 								<CommandList>
-									{(pr: PullRequestSearchResult | IndexedPullRequest) => (
-										<CommandItem
-											key={`${pr.owner}/${pr.repo}#${pr.number}`}
-											onClick={() => handleSelect(pr)}
-											value={pr}
-										>
-											<PullRequestRow
-												isOpening={
-													openPr.isPending &&
-													openPr.pendingParams?.owner === pr.owner &&
-													openPr.pendingParams?.repo === pr.repo &&
-													openPr.pendingParams?.number === pr.number
-												}
-												pr={pr}
-												query={query}
-											/>
-										</CommandItem>
-									)}
+									{(row: PaletteRow) => {
+										if ("action" in row) {
+											return row.action === "filter-recently-closed" ? (
+												<CommandItem
+													key={row.action}
+													onClick={() => {
+														setRecentlyClosed(true);
+														setQuery("");
+														setDebouncedQuery("");
+														inputRef.current?.focus();
+													}}
+													value={row}
+												>
+													<div className="flex min-w-0 flex-1 items-center gap-2.5">
+														<ListFilterIcon className="size-3.5 shrink-0 text-muted-foreground" />
+														<div className="flex min-w-0 items-center gap-2">
+															<span className="text-muted-foreground">
+																Filter by
+															</span>
+															<span className="rounded-md bg-foreground/10 px-2 py-0.5 text-xs">
+																Recently closed
+															</span>
+														</div>
+													</div>
+												</CommandItem>
+											) : row.action === "search-github" ? (
+												<CommandItem
+													key={row.action}
+													onClick={() => {
+														setSearchingGitHub(true);
+														inputRef.current?.focus();
+													}}
+													value={row}
+												>
+													<div className="flex min-w-0 flex-1 items-center gap-2.5">
+														<SearchIcon className="size-3.5 shrink-0 text-muted-foreground" />
+														<span>Search GitHub</span>
+													</div>
+												</CommandItem>
+											) : row.action === "show-more-closed" ? (
+												<CommandItem
+													key={row.action}
+													onClick={() => {
+														setClosedWindow(CLOSED_WINDOWS[closedWindow].wider);
+														inputRef.current?.focus();
+													}}
+													value={row}
+												>
+													<div className="flex min-w-0 flex-1 items-center gap-2.5">
+														<HistoryIcon className="size-3.5 shrink-0 text-muted-foreground" />
+														<span>Show more</span>
+													</div>
+													<span className="shrink-0 text-muted-foreground text-xs">
+														{
+															CLOSED_WINDOWS[CLOSED_WINDOWS[closedWindow].wider]
+																.hint
+														}
+													</span>
+												</CommandItem>
+											) : (
+												<CommandItem
+													key={row.action}
+													onClick={() => {
+														setRecentlyClosed(true);
+														inputRef.current?.focus();
+													}}
+													value={row}
+												>
+													<div className="flex min-w-0 flex-1 items-center gap-2.5">
+														<ListFilterIcon className="size-3.5 shrink-0 text-muted-foreground" />
+														<span>Show recently closed</span>
+													</div>
+												</CommandItem>
+											);
+										}
+										return (
+											<CommandItem
+												key={`${row.owner}/${row.repo}#${row.number}`}
+												onClick={() => handleSelect(row)}
+												value={row}
+											>
+												<PullRequestRow
+													isOpening={
+														openPr.isPending &&
+														openPr.pendingParams?.owner === row.owner &&
+														openPr.pendingParams?.repo === row.repo &&
+														openPr.pendingParams?.number === row.number
+													}
+													pr={row}
+													query={query}
+												/>
+											</CommandItem>
+										);
+									}}
 								</CommandList>
 							</Command>
 						)}

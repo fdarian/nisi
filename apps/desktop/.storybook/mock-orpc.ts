@@ -444,6 +444,7 @@ export function createMockSidecarClient(
 			ciJob: neverSettles,
 			rerunCiJob: neverSettles,
 			repositories: async () => data.pullRequestRepositories ?? [],
+			searchRepositories: async () => [],
 			search: async (input) => {
 				searchCalls += 1;
 				if (
@@ -453,6 +454,9 @@ export function createMockSidecarClient(
 					return neverSettles();
 				return (data.pullRequestSearchResults ?? []).filter(
 					(pr) =>
+						(input.state === "open"
+							? pr.state === "OPEN"
+							: pr.state !== "OPEN") &&
 						(input.repos.length === 0 ||
 							input.repos.includes(`${pr.owner}/${pr.repo}`)) &&
 						pr.title.toLowerCase().includes(input.query.toLowerCase()),

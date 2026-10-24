@@ -19,8 +19,11 @@ import type {
 	WorkflowApprovalForbidden,
 } from "../errors.ts";
 import type {
+	PullRequestClosedWindow,
 	PullRequestRef,
 	PullRequestSearchResult,
+	PullRequestSearchState,
+	ViewedPullRequest,
 } from "../pull-request.ts";
 import type {
 	ActionsJob,
@@ -95,7 +98,7 @@ export type GitHubShape = {
 		repoRoot: string,
 		number?: number,
 	) => Effect.Effect<
-		PullRequestRef | null,
+		ViewedPullRequest | null,
 		PullRequestNotFound | GhOutputDecodeError | GitHubUnreachable
 	>;
 	pullRequestState: (
@@ -130,8 +133,17 @@ export type GitHubShape = {
 		cwd: string,
 		query: string,
 		repos: ReadonlyArray<string>,
+		state: PullRequestSearchState,
+		closedWindow: PullRequestClosedWindow,
 	) => Effect.Effect<
 		ReadonlyArray<PullRequestSearchResult>,
+		PullRequestSearchError
+	>;
+	searchRepositories: (
+		cwd: string,
+		query: string,
+	) => Effect.Effect<
+		ReadonlyArray<{ readonly owner: string; readonly repo: string }>,
 		PullRequestSearchError
 	>;
 	checks: (

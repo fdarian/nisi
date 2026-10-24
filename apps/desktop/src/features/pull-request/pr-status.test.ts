@@ -34,6 +34,16 @@ describe("derivePrStatus", () => {
 			"conflicts",
 		);
 	});
+	test("closed outranks conflicts, draft and CI", () =>
+		expect(
+			derivePrStatus({
+				...ready,
+				state: "CLOSED",
+				mergeable: "CONFLICTING",
+				isDraft: true,
+				ciRunning: true,
+			}),
+		).toBe("closed"));
 	test("draft outranks CI and ready", () =>
 		expect(derivePrStatus({ ...ready, isDraft: true, ciRunning: true })).toBe(
 			"draft",
@@ -49,7 +59,7 @@ describe("derivePrStatus", () => {
 		);
 		expect(
 			derivePrStatus({ ...ready, state: "CLOSED", mergeable: "UNKNOWN" }),
-		).toBe("default");
+		).toBe("closed");
 	});
 });
 
