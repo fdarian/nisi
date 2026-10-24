@@ -113,6 +113,16 @@ export const RepoPathMapping = Schema.Struct({
 });
 export type RepoPathMapping = Schema.Schema.Type<typeof RepoPathMapping>;
 
+/** Mirrors `@repo/git`'s `PullRequestClosedWindow` — how far back a `closed` search reaches. */
+export const PullRequestClosedWindow = Schema.Literals([
+	"week",
+	"month",
+	"all",
+]);
+export type PullRequestClosedWindow = Schema.Schema.Type<
+	typeof PullRequestClosedWindow
+>;
+
 /** Mirrors `@repo/git`'s `MergeMethod` — the merge strategy GitHub's own PR UI offers, in its own ordering (Merge → Squash → Rebase). */
 export const MergeMethod = Schema.Literals(["merge", "squash", "rebase"]);
 export type MergeMethod = Schema.Schema.Type<typeof MergeMethod>;
@@ -499,6 +509,8 @@ export const pullRequestsContract = {
 				query: Schema.String,
 				repos: Schema.Array(Schema.String),
 				state: Schema.Literals(["open", "closed"]),
+				// Only meaningful with `state: "closed"`; absent means "week".
+				closedWindow: Schema.optional(PullRequestClosedWindow),
 			}),
 		)
 		.output(Schema.Array(PullRequestSearchResult))

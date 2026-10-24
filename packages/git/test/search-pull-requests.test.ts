@@ -18,18 +18,26 @@ type RunnerResult =
 
 const NOW_ISO = "2026-10-23T12:00:00Z";
 const CLOSED_CUTOFF = "2026-10-16";
+const CLOSED_MONTH_CUTOFF = "2026-09-23";
 
 /** Every `q=` string `gh` was called with, one per search issued. */
 const searchedQueries = async (
 	query: string,
 	repos: readonly string[],
 	state: "open" | "closed",
+	closedWindow: "week" | "month" | "all" = "week",
 ): Promise<ReadonlyArray<string>> => {
 	const queryLog = join(
 		mkdtempSync(join(tmpdir(), "nisi-search-")),
 		"queries.log",
 	);
-	const result = await runAgainstGhStub(query, repos, state, queryLog);
+	const result = await runAgainstGhStub(
+		query,
+		repos,
+		state,
+		queryLog,
+		closedWindow,
+	);
 	expect(result.ok).toBe(true);
 	return readFileSync(queryLog, "utf8").trim().split("\n");
 };
@@ -44,9 +52,10 @@ const runAgainstGhStub = async (
 	repos: readonly string[] = [],
 	state: "open" | "closed" = "open",
 	queryLog?: string,
+	closedWindow: "week" | "month" | "all" = "week",
 ): Promise<RunnerResult> => {
 	const proc = Bun.spawn(
-		["bun", "run", RUNNER, testDir, query, state, ...repos],
+		["bun", "run", RUNNER, testDir, query, state, closedWindow, ...repos],
 		{
 			env: {
 				...process.env,
@@ -185,6 +194,27 @@ describe("searchPullRequests", () => {
 		expect(q).toBe(
 			`is:pr author:@me is:closed closed:>=${CLOSED_CUTOFF} sort:updated-desc`,
 		);
+	});
+
+	test("closed mode with the month window cuts off 30 days back", async () => {
+		const [q] = await searchedQueries("", [], "closed", "month");
+		expect(q).toBe(
+			`is:pr author:@me is:closed closed:>=${CLOSED_MONTH_CUTOFF} sort:updated-desc`,
+		);
+	});
+
+	test("closed mode with the all window drops the closed:>= cutoff but stays is:closed", async () => {
+		const queries = await searchedQueries("engine", [], "closed", "all");
+		expect([...queries].sort()).toEqual([
+			"is:pr engine author:@me is:closed sort:updated-desc",
+			"is:pr engine review-requested:@me is:closed sort:updated-desc",
+			"is:pr engine reviewed-by:@me is:closed sort:updated-desc",
+		]);
+	});
+
+	test("open mode ignores the closed window", async () => {
+		const [q] = await searchedQueries("", [], "open", "all");
+		expect(q).toBe("is:pr author:@me is:open sort:updated-desc");
 	});
 
 	test("closed mode with a repository chip keeps the repo scope", async () => {

@@ -19,6 +19,24 @@ test("search requires repository filters alongside the query", async () => {
 	).toBeDefined();
 });
 
+test("search accepts an optional closed window and rejects unknown ones", async () => {
+	const schema = contract.pullRequests.search["~orpc"].inputSchemas[0];
+	expect(schema).toBeDefined();
+	if (schema === undefined) return;
+	const input = { query: "", repos: [], state: "closed" };
+	for (const closedWindow of ["week", "month", "all"]) {
+		const withWindow = { ...input, closedWindow };
+		expect(await schema["~standard"].validate(withWindow)).toEqual({
+			value: withWindow,
+		});
+	}
+	expect(await schema["~standard"].validate(input)).toEqual({ value: input });
+	expect(
+		(await schema["~standard"].validate({ ...input, closedWindow: "year" }))
+			.issues,
+	).toBeDefined();
+});
+
 test("repositories exposes identities without local paths", async () => {
 	const schema = contract.pullRequests.repositories["~orpc"].outputSchemas[0];
 	expect(schema).toBeDefined();

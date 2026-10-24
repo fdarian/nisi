@@ -120,8 +120,8 @@ export const GhGitHub = {
 				pullRequestStates: (cwd, owner, repo) =>
 					provide(fetchPullRequestStates(cwd, owner, repo)),
 				headRef: (repoRoot, number) => provide(headRef(repoRoot, number)),
-				search: (cwd, query, repos, state) =>
-					provide(searchPullRequests(cwd, query, repos, state)),
+				search: (cwd, query, repos, state, closedWindow) =>
+					provide(searchPullRequests(cwd, query, repos, state, closedWindow)),
 				searchRepositories: (cwd, query) =>
 					provide(searchRepositories(cwd, query)),
 				checks: (input) => provide(fetchPullRequestChecks(input)),

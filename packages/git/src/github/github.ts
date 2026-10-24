@@ -21,6 +21,7 @@ import type {
 import type {
 	PullRequestRef,
 	PullRequestSearchResult,
+	PullRequestClosedWindow,
 	PullRequestSearchState,
 	ViewedPullRequest,
 } from "../pull-request.ts";
@@ -133,6 +134,7 @@ export type GitHubShape = {
 		query: string,
 		repos: ReadonlyArray<string>,
 		state: PullRequestSearchState,
+		closedWindow: PullRequestClosedWindow,
 	) => Effect.Effect<
 		ReadonlyArray<PullRequestSearchResult>,
 		PullRequestSearchError

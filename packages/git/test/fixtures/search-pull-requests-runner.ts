@@ -9,19 +9,32 @@
  */
 import { Cause, Clock, Effect, Exit } from "effect";
 import { GitHub } from "../../src/github/github.ts";
-import type { PullRequestSearchState } from "../../src/pull-request.ts";
+import type {
+	PullRequestClosedWindow,
+	PullRequestSearchState,
+} from "../../src/pull-request.ts";
 import { GitHubTestLayer } from "./github-layer.ts";
 
-const [cwd, query, state] = process.argv.slice(2);
+const [cwd, query, state, closedWindow] = process.argv.slice(2);
 if (cwd === undefined || query === undefined) {
 	throw new Error(
-		"usage: search-pull-requests-runner.ts <cwd> <query> <open|closed> [repo...]",
+		"usage: search-pull-requests-runner.ts <cwd> <query> <open|closed> <week|month|all> [repo...]",
 	);
 }
 if (state !== "open" && state !== "closed") {
 	throw new Error(`state must be open or closed, got ${state}`);
 }
 const searchState: PullRequestSearchState = state;
+if (
+	closedWindow !== "week" &&
+	closedWindow !== "month" &&
+	closedWindow !== "all"
+) {
+	throw new Error(
+		`closed window must be week, month or all, got ${closedWindow}`,
+	);
+}
+const searchClosedWindow: PullRequestClosedWindow = closedWindow;
 
 const nowIso = process.env.NISI_NOW_ISO;
 const withFixedNow = <A, E, R>(
@@ -46,7 +59,13 @@ const withFixedNow = <A, E, R>(
 
 const search = Effect.gen(function* () {
 	const github = yield* GitHub;
-	return yield* github.search(cwd, query, process.argv.slice(5), searchState);
+	return yield* github.search(
+		cwd,
+		query,
+		process.argv.slice(6),
+		searchState,
+		searchClosedWindow,
+	);
 });
 
 const exit = await Effect.runPromise(

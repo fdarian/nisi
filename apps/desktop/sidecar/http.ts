@@ -1485,7 +1485,13 @@ export function attachRouter(
 				)
 					yield* prIndex.refreshKnown;
 				return yield* github
-					.search(process.cwd(), input.query, input.repos, input.state)
+					.search(
+						process.cwd(),
+						input.query,
+						input.repos,
+						input.state,
+						input.closedWindow ?? "week",
+					)
 					.pipe(
 						Effect.catchTag("GhNotAuthenticated", (cause) =>
 							Effect.fail(
