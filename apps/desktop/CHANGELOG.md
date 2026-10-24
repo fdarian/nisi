@@ -1,5 +1,35 @@
 # @repo/desktop
 
+## 0.7.0
+
+### Minor Changes
+
+- 743e296: Cmd+P opens the open pull request palette directly on the repository picker, so you can filter projects without going through Cmd+T first.
+- acdcbab: The files sidebar header is compact and can collapse to a slim rail, and its search filter now opens on demand instead of sitting open above the list. The Tree/Flat and Hide reviewed options moved from the diff toolbar's menu into the sidebar.
+- d84465f: The Filter Project picker in the open pull request palette can search GitHub for repositories by name.
+- 51afa28: On macOS the window uses the system's liquid glass material behind the app chrome, so the window background shows through where the app has no opaque surface.
+- 96e7778: The open pull request palette matches your search against head branch names too, and shows the matched branch on each row.
+- 2ce3b6d: You can now open nisi from any browser, such as your phone, through a private link (experimental, behind a feature flag).
+- e4eae3c: The open pull request palette can filter to pull requests closed in the last 7 days: type "closed" or "merged", or pick the Recently closed row, and closed PRs show with a closed icon.
+- d84465f: The open pull request palette's Recently closed filter has a Show more row that widens the window to the last 30 days, then to any time.
+
+### Patch Changes
+
+- 2cd5af4: The chat panel's minimize button hides the popup, and its X button closes the chat. The minimize-to-strip collapse is gone.
+- 52c6eec: The chat panel stays inside the window when its saved size is larger than the window, and resizing it past the window edge no longer saves a size that doesn't fit.
+- 32640dc: Update to Electron 45, @pierre/diffs 1.6.1, and the latest AI SDK harness, pi, and TanStack releases.
+- 300da3b: With window glass on, the files sidebar, in both tree and flat view, now shares one hover highlight that glides between rows instead of each row lighting up on its own.
+- b0b57d2: With window glass on, the PR tabs and the settings sidebar share one hover highlight that glides between items instead of each item lighting up on its own.
+- 55bfed4: A session keeps showing the diff it had loaded until you click Refresh, so a push or a worktree commit no longer changes the files under you mid-review.
+- 300da3b: The shared hover highlight now stays on its item while a list scrolls, moving with the content, and only jumps to another item when the pointer moves.
+- 6750cc4: The PR header shows the PR author and its base and head branches on a meta row, and a branch review shows its base branch there too.
+- 231f5f6: The PR header is now two rows: the PR number sits muted after the title, and the repository leads the author/branch line underneath instead of a separate breadcrumb row.
+- dda4ba4: The sidecar no longer re-reads every watched session's git state every 2 seconds: it now reacts to changes in the repo's HEAD and branch refs, and only polls when uncommitted changes are included or the repo can't be watched.
+- 03dfa95: Opening a PR from a repository that was renamed or transferred on GitHub now offers to update your clone's stale `origin` instead of refusing to open it.
+- c4f610e: Long repository and session lists in settings scroll with the page instead of squashing their rows to fit the window.
+- edef555: An open PR in a stack now diffs against its new base once the PR beneath it merges, instead of showing the merged parent's changes.
+- 7653114: The inner frame and the pinned diff file header now show the window's liquid glass through them, and the header no longer paints a square behind its rounded corners.
+
 ## 0.6.1
 
 ### Patch Changes
