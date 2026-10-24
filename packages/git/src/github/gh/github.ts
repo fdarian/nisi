@@ -19,6 +19,7 @@ import {
 	mergePullRequest,
 	mergeStackPullRequest,
 } from "./merge.ts";
+import { searchRepositories } from "./repository-search.ts";
 import { listOpenPullRequests } from "./open-pull-requests.ts";
 import { fetchPullRequestOverview } from "./overview.ts";
 import {
@@ -121,6 +122,8 @@ export const GhGitHub = {
 				headRef: (repoRoot, number) => provide(headRef(repoRoot, number)),
 				search: (cwd, query, repos, state) =>
 					provide(searchPullRequests(cwd, query, repos, state)),
+				searchRepositories: (cwd, query) =>
+					provide(searchRepositories(cwd, query)),
 				checks: (input) => provide(fetchPullRequestChecks(input)),
 				checksSnapshot: (input) =>
 					provide(fetchPullRequestChecksSnapshot(input)),

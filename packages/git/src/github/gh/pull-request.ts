@@ -297,25 +297,21 @@ const classifySearchFailure = (result: GhResult): PullRequestSearchError => {
 	});
 };
 
-const searchOnce = (
+/**
+ * One `gh api graphql` search call, returning raw stdout. Shared with
+ * `repository-search.ts` so both searches classify failures identically.
+ * `variables` are the extra `-f`/`-F` args after the `query=` field.
+ */
+export const runGraphqlSearch = (
 	cwd: string,
-	terms: ReadonlyArray<string>,
-	qualifiers: ReadonlyArray<string>,
+	query: string,
+	variables: ReadonlyArray<string>,
 ): Effect.Effect<
-	ReadonlyArray<PullRequestSearchResult>,
+	string,
 	PullRequestSearchError,
 	ChildProcessSpawner.ChildProcessSpawner
 > =>
-	ghResult(cwd, [
-		"api",
-		"graphql",
-		"-f",
-		`query=${SEARCH_QUERY}`,
-		"-f",
-		`q=${["is:pr", ...terms, ...qualifiers, "sort:updated-desc"].join(" ")}`,
-		"-F",
-		`n=${SEARCH_LIMIT}`,
-	]).pipe(
+	ghResult(cwd, ["api", "graphql", "-f", `query=${query}`, ...variables]).pipe(
 		// `gh` never started at all (missing binary, permissions) — the one
 		// failure that isn't an exit code to classify, same as every other `gh`
 		// caller in this module.
@@ -328,15 +324,32 @@ const searchOnce = (
 		),
 		Effect.flatMap((result) =>
 			result.exitCode === 0
-				? decodeSearchPrList("gh api graphql", result.stdout).pipe(
-						Effect.flatMap((response) =>
-							Effect.forEach(
-								response.data.search.nodes.filter((item) => item !== null),
-								toPullRequestSearchResult,
-							),
-						),
-					)
+				? Effect.succeed(result.stdout)
 				: Effect.fail(classifySearchFailure(result)),
+		),
+	);
+
+const searchOnce = (
+	cwd: string,
+	terms: ReadonlyArray<string>,
+	qualifiers: ReadonlyArray<string>,
+): Effect.Effect<
+	ReadonlyArray<PullRequestSearchResult>,
+	PullRequestSearchError,
+	ChildProcessSpawner.ChildProcessSpawner
+> =>
+	runGraphqlSearch(cwd, SEARCH_QUERY, [
+		"-f",
+		`q=${["is:pr", ...terms, ...qualifiers, "sort:updated-desc"].join(" ")}`,
+		"-F",
+		`n=${SEARCH_LIMIT}`,
+	]).pipe(
+		Effect.flatMap((stdout) => decodeSearchPrList("gh api graphql", stdout)),
+		Effect.flatMap((response) =>
+			Effect.forEach(
+				response.data.search.nodes.filter((item) => item !== null),
+				toPullRequestSearchResult,
+			),
 		),
 	);
 

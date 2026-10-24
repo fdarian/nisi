@@ -366,7 +366,15 @@ const RerunCiJobInput = Schema.Struct({
 	runId: Schema.Number,
 });
 
+const RepositoryRefs = Schema.Array(
+	Schema.Struct({ owner: Schema.String, repo: Schema.String }),
+);
+
 /**
+ * `searchRepositories` asks GitHub live for repositories by name (the
+ * "Filter Project" picker's source for repos not saved locally) and shares
+ * `search`'s three error codes and their mapping.
+ *
  * `search` asks GitHub live via `@repo/git`'s `searchPullRequests` — no
  * local index or cache, so every call is a real GraphQL search round trip.
  * See that function's own doc for the empty-query/typed-query/qualifier-
@@ -476,13 +484,15 @@ export const pullRequestsContract = {
 			TOO_MANY_REQUESTS: {},
 			SERVICE_UNAVAILABLE: {},
 		}),
-	repositories: oc
-		.output(
-			Schema.Array(
-				Schema.Struct({ owner: Schema.String, repo: Schema.String }),
-			),
-		)
-		.errors({ SERVICE_UNAVAILABLE: {} }),
+	repositories: oc.output(RepositoryRefs).errors({ SERVICE_UNAVAILABLE: {} }),
+	searchRepositories: oc
+		.input(Schema.Struct({ query: Schema.String }))
+		.output(RepositoryRefs)
+		.errors({
+			GH_NOT_AUTHENTICATED: {},
+			TOO_MANY_REQUESTS: {},
+			SERVICE_UNAVAILABLE: {},
+		}),
 	search: oc
 		.input(
 			Schema.Struct({

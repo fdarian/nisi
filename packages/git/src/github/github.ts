@@ -137,6 +137,13 @@ export type GitHubShape = {
 		ReadonlyArray<PullRequestSearchResult>,
 		PullRequestSearchError
 	>;
+	searchRepositories: (
+		cwd: string,
+		query: string,
+	) => Effect.Effect<
+		ReadonlyArray<{ readonly owner: string; readonly repo: string }>,
+		PullRequestSearchError
+	>;
 	checks: (
 		input: FetchPullRequestChecksInput,
 	) => Effect.Effect<
