@@ -33,6 +33,7 @@ import {
 	usePullRequestRepositories,
 	useRecentPullRequests,
 	useSearchPullRequests,
+	useSearchRepositories,
 } from "#/features/pull-request/data/pull-requests-data";
 import { OriginMovedDialog } from "#/features/pull-request/open/origin-moved-dialog";
 import {
@@ -130,6 +131,7 @@ export function OpenPullRequestPalette(
 	const [debouncedQuery, setDebouncedQuery] = useState("");
 	const [pickingRepository, setPickingRepository] = useState(false);
 	const [repositoryQuery, setRepositoryQuery] = useState("");
+	const [debouncedRepositoryQuery, setDebouncedRepositoryQuery] = useState("");
 	const [recentlyClosed, setRecentlyClosed] = useState(false);
 	// Set by the "Search GitHub" row; applies to the query it was picked for only.
 	const [searchingGitHub, setSearchingGitHub] = useState(false);
@@ -212,15 +214,42 @@ export function OpenPullRequestPalette(
 		? recent.isSearching
 		: needsGh && (search.isSearching || query !== debouncedQuery);
 	const saved = usePullRequestRepositories(props.orpc, props.open);
+	const hasRepositoryQuery = repositoryQuery.trim() !== "";
+	// Keyed on `repositoryQuery` itself, like the PR search above.
+	const remoteRepositorySearch = useSearchRepositories(
+		props.orpc,
+		repositoryQuery,
+		props.open &&
+			pickingRepository &&
+			hasRepositoryQuery &&
+			repositoryQuery === debouncedRepositoryQuery,
+	);
+	// `keepPreviousData` hits belong to an earlier query; GitHub's relevance
+	// decides what shows, so stale ones would surface unrelated repositories.
+	const remoteRepositories =
+		hasRepositoryQuery && !remoteRepositorySearch.isPlaceholderData
+			? remoteRepositorySearch.results
+			: [];
 	const repositories = paletteRepositories(
 		recent.results,
 		saved.data === undefined ? [] : saved.data,
 		props.repositories,
 		repositoryQuery,
+		remoteRepositories,
 	);
+	// The debounce window counts, so "No repositories found." never flashes
+	// before the request has even fired.
+	const isSearchingRepositories =
+		hasRepositoryQuery &&
+		(remoteRepositorySearch.isSearching ||
+			repositoryQuery !== debouncedRepositoryQuery);
+	const remoteRepositoryErrorMessage =
+		hasRepositoryQuery && repositories.length === 0
+			? friendlySearchError(remoteRepositorySearch.error)
+			: null;
 	const repositoryErrorMessage = saved.isError
 		? "Couldn't load saved repositories — try reopening the palette."
-		: friendlySearchError(recent.error);
+		: (friendlySearchError(recent.error) ?? remoteRepositoryErrorMessage);
 
 	const openPr = useOpenPullRequest(props.orpc, (sessionId) => {
 		props.onSessionOpened(sessionId);
@@ -240,6 +269,7 @@ export function OpenPullRequestPalette(
 		setDebouncedQuery("");
 		setPickingRepository(props.opensOnRepositoryPicker);
 		setRepositoryQuery("");
+		setDebouncedRepositoryQuery("");
 		setRecentlyClosed(false);
 		setSearchingGitHub(false);
 		openPr.reset();
@@ -256,6 +286,14 @@ export function OpenPullRequestPalette(
 		);
 		return () => clearTimeout(timer);
 	}, [query]);
+
+	useEffect(() => {
+		const timer = setTimeout(
+			() => setDebouncedRepositoryQuery(repositoryQuery),
+			SEARCH_DEBOUNCE_MS,
+		);
+		return () => clearTimeout(timer);
+	}, [repositoryQuery]);
 
 	// The open-action error takes priority in the footer — it's about the
 	// selection the user just made, more specific than a background search
@@ -360,7 +398,9 @@ export function OpenPullRequestPalette(
 										? repositoryErrorMessage
 										: saved.isPending || recent.isSearching
 											? "Loading repositories…"
-											: "No repositories found."}
+											: isSearchingRepositories
+												? "Searching GitHub…"
+												: "No repositories found."}
 								</CommandEmpty>
 								<CommandList>
 									{(repository: PullRequestRepository) => (
