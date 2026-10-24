@@ -1,14 +1,13 @@
 "use client";
 
 /**
- * The floating popup: header (title, minimize/expand/close), the active
+ * The floating popup: header (title, minimize/close), the active
  * thread's message list, and the composer. Fixed-position, anchored
  * bottom-right above the strip — same overlay placement precedent as the
  * toast viewport (`#/components/ui/toast.tsx`'s `Toast.Viewport`, also
  * `fixed` + a bottom-right corner). `AnimatePresence`'s mount/unmount lives
  * one level up, in `chat-dock.tsx`; this component only owns the popup's
- * own open→closed transition and the separate collapse/expand of its body
- * when minimized.
+ * own open→closed transition.
  *
  * `useChat({ chat })` (`@ai-sdk/react`), not a bespoke message/status
  * reducer — `messages`/`status`/`sendMessage`/`stop` all come straight off
@@ -20,13 +19,8 @@
 import { useChat } from "@ai-sdk/react";
 import { useQuery } from "@tanstack/react-query";
 import type { ChatStatus, UIMessage } from "ai";
-import {
-	ArrowDownIcon,
-	ChevronDownIcon,
-	ChevronUpIcon,
-	XIcon,
-} from "lucide-react";
-import { AnimatePresence, motion } from "motion/react";
+import { ArrowDownIcon, MinusIcon, XIcon } from "lucide-react";
+import { motion } from "motion/react";
 import { ShimmerText } from "#/components/shimmer-text";
 import { Button } from "#/components/ui/button";
 import { ScrollArea } from "#/components/ui/scroll-area";
@@ -37,7 +31,6 @@ import {
 	useChatActiveThreadId,
 	useChatComposerFocusRequest,
 	useChatDockActions,
-	useChatPopupMinimized,
 	useChatThreads,
 } from "#/features/chat/chat-store";
 import { useLastChatModel } from "#/features/settings/settings-data";
@@ -160,7 +153,6 @@ function ChatPanelBody({
 	orpc: SidecarQueryUtils;
 	thread: ChatThreadMeta;
 }): React.ReactElement {
-	const minimized = useChatPopupMinimized(sessionId);
 	const composerFocusRequest = useChatComposerFocusRequest(sessionId);
 	const dock = useChatDockActions(sessionId, orpc);
 	const panelSize = useChatPanelSize();
@@ -190,7 +182,6 @@ function ChatPanelBody({
 			transition={{ duration: 0.15, ease: "easeOut" }}
 		>
 			<ChatPanelResizeHandles
-				minimized={minimized}
 				onCornerPointerDown={panelSize.onCornerPointerDown}
 				onLeftEdgePointerDown={panelSize.onLeftEdgePointerDown}
 				onTopEdgePointerDown={panelSize.onTopEdgePointerDown}
@@ -199,81 +190,70 @@ function ChatPanelBody({
 				<span className="truncate font-medium text-sm">{title}</span>
 				<div className="flex shrink-0 items-center gap-1">
 					<Button
-						aria-label={minimized ? "Expand" : "Minimize"}
-						onClick={() => dock.setPopupMinimized(!minimized)}
-						size="icon-xs"
-						title={minimized ? "Expand" : "Minimize"}
-						variant="ghost"
-					>
-						{minimized ? <ChevronUpIcon /> : <ChevronDownIcon />}
-					</Button>
-					<Button
-						aria-label="Close"
+						aria-label="Minimize"
 						onClick={() => dock.setPopupOpen(false)}
 						size="icon-xs"
-						title="Close"
+						title="Minimize"
+						variant="ghost"
+					>
+						<MinusIcon />
+					</Button>
+					<Button
+						aria-label="Close chat"
+						onClick={() => dock.closeThread(thread.id)}
+						size="icon-xs"
+						title="Close chat"
 						variant="ghost"
 					>
 						<XIcon />
 					</Button>
 				</div>
 			</div>
-			<AnimatePresence initial={false}>
-				{!minimized && (
-					<motion.div
-						animate={{ height: "auto" }}
-						className="flex min-h-0 flex-col overflow-hidden"
-						exit={{ height: 0 }}
-						initial={{ height: 0 }}
-						key="body"
-						transition={{ duration: 0.15, ease: "easeOut" }}
-					>
-						<ScrollArea
-							ref={panelSize.messageListRef}
-							scrollFade
-							style={{ height: panelSize.height }}
-						>
-							<MessageList
-								messages={messages}
-								repoRoot={repoRootQuery.data}
-								status={status}
-							/>
-						</ScrollArea>
-						{status === "error" && error !== undefined && (
-							<p className="border-t px-3 py-2 text-destructive-foreground text-xs">
-								{error.message}
-							</p>
-						)}
-						<ChatComposer
-							focusRequest={composerFocusRequest}
-							key={thread.id}
-							onClearReferences={() => dock.clearReferences(thread.id)}
-							onRemoveReference={(reference) =>
-								dock.removeReference(thread.id, reference)
-							}
-							onSend={(text, harness, model) => {
-								// Only the send that actually locks the thread's
-								// harness/model in is "the user sent with this" —
-								// every later send in the same thread reuses the
-								// already-locked pair, so re-persisting it would
-								// just be a redundant write of the same value.
-								if (thread.harness === null) {
-									setLastChatModel({ harness, modelId: model });
-								}
-								dock.lockThreadHarness(thread.id, harness, model);
-								scroll.scrollToEnd();
-								void sendMessage({ text }, { body: { harness, model } });
-							}}
-							onStop={() => void stop()}
-							orpc={orpc}
-							references={thread.references}
-							status={status}
-							threadHarness={thread.harness}
-							threadModel={thread.model}
-						/>
-					</motion.div>
+			<div className="flex min-h-0 flex-col overflow-hidden">
+				<ScrollArea
+					ref={panelSize.messageListRef}
+					scrollFade
+					style={{ height: panelSize.height }}
+				>
+					<MessageList
+						messages={messages}
+						repoRoot={repoRootQuery.data}
+						status={status}
+					/>
+				</ScrollArea>
+				{status === "error" && error !== undefined && (
+					<p className="border-t px-3 py-2 text-destructive-foreground text-xs">
+						{error.message}
+					</p>
 				)}
-			</AnimatePresence>
+				<ChatComposer
+					focusRequest={composerFocusRequest}
+					key={thread.id}
+					onClearReferences={() => dock.clearReferences(thread.id)}
+					onRemoveReference={(reference) =>
+						dock.removeReference(thread.id, reference)
+					}
+					onSend={(text, harness, model) => {
+						// Only the send that actually locks the thread's
+						// harness/model in is "the user sent with this" —
+						// every later send in the same thread reuses the
+						// already-locked pair, so re-persisting it would
+						// just be a redundant write of the same value.
+						if (thread.harness === null) {
+							setLastChatModel({ harness, modelId: model });
+						}
+						dock.lockThreadHarness(thread.id, harness, model);
+						scroll.scrollToEnd();
+						void sendMessage({ text }, { body: { harness, model } });
+					}}
+					onStop={() => void stop()}
+					orpc={orpc}
+					references={thread.references}
+					status={status}
+					threadHarness={thread.harness}
+					threadModel={thread.model}
+				/>
+			</div>
 		</motion.div>
 	);
 }

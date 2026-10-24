@@ -182,7 +182,6 @@ export function useChatPanelSize(): ChatPanelSize {
 }
 
 type ChatPanelResizeHandlesProps = {
-	minimized: boolean;
 	onLeftEdgePointerDown: (event: React.PointerEvent<HTMLDivElement>) => void;
 	onTopEdgePointerDown: (event: React.PointerEvent<HTMLDivElement>) => void;
 	onCornerPointerDown: (event: React.PointerEvent<HTMLDivElement>) => void;
@@ -193,13 +192,9 @@ type ChatPanelResizeHandlesProps = {
  * plus their shared corner — no grip or border, the cursor change alone is
  * the affordance. The corner square sits at a higher z-index than the two
  * strips so it wins the small area where all three overlap, rather than
- * whichever strip happens to paint last. Minimized collapses the panel to
- * just its header, where a height drag would have nothing to resize, so
- * only the left edge (width) renders then — width still applies and
- * persists for when the panel reopens.
+ * whichever strip happens to paint last.
  */
 export function ChatPanelResizeHandles({
-	minimized,
 	onLeftEdgePointerDown,
 	onTopEdgePointerDown,
 	onCornerPointerDown,
@@ -210,18 +205,14 @@ export function ChatPanelResizeHandles({
 				className="absolute inset-y-0 left-0 z-10 w-1.5 cursor-ew-resize"
 				onPointerDown={onLeftEdgePointerDown}
 			/>
-			{!minimized && (
-				<>
-					<div
-						className="absolute inset-x-0 top-0 z-10 h-1.5 cursor-ns-resize"
-						onPointerDown={onTopEdgePointerDown}
-					/>
-					<div
-						className="absolute top-0 left-0 z-20 size-3.5 cursor-nwse-resize"
-						onPointerDown={onCornerPointerDown}
-					/>
-				</>
-			)}
+			<div
+				className="absolute inset-x-0 top-0 z-10 h-1.5 cursor-ns-resize"
+				onPointerDown={onTopEdgePointerDown}
+			/>
+			<div
+				className="absolute top-0 left-0 z-20 size-3.5 cursor-nwse-resize"
+				onPointerDown={onCornerPointerDown}
+			/>
 		</>
 	);
 }

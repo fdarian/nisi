@@ -29,12 +29,12 @@ export type ChatScroll = {
 /**
  * Pins a message list to its bottom while the user hasn't scrolled away, and
  * remembers each thread's position across thread switches and popup
- * minimize/expand.
+ * close/reopen.
  *
  * Everything hangs off a callback ref rather than an effect so setup runs in
  * the commit phase, before paint (no visible jump to the bottom), and so it
  * also re-runs when the viewport remounts, which it does on every
- * minimize/expand.
+ * popup close/reopen.
  *
  * Programmatic vs user scrolls: we only ever scroll *down* (to the bottom), and
  * content growth never moves `scrollTop` at all. So a scroll event that moves

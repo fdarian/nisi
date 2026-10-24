@@ -18,7 +18,6 @@ import { TabsPrimitive } from "#/components/ui/tabs";
 import { ChatDock } from "#/features/chat/chat-dock";
 import {
 	ChatProvider,
-	useChatPopupMinimized,
 	useChatPopupOpen,
 	useClearChatSession,
 	useCycleActiveThread,
@@ -396,22 +395,16 @@ function AppShellReady({
 	// The active session's chat popup gets first refusal on ⌘⇧]/⌘⇧[ — see
 	// `useTabShortcuts`'s `onChatThreadShortcut` doc comment.
 	const activeChatPopupOpen = useChatPopupOpen(selectedSessionId);
-	const activeChatPopupMinimized = useChatPopupMinimized(selectedSessionId);
 	const cycleActiveThread = useCycleActiveThread();
 	const cycleFileTab = useCycleFileTab();
 	const handleChatThreadShortcut = useCallback(
 		(direction: "next" | "previous"): boolean => {
 			if (selectedSessionId === null) return false;
-			if (!activeChatPopupOpen || activeChatPopupMinimized) return false;
+			if (!activeChatPopupOpen) return false;
 			cycleActiveThread(selectedSessionId, direction);
 			return true;
 		},
-		[
-			selectedSessionId,
-			activeChatPopupOpen,
-			activeChatPopupMinimized,
-			cycleActiveThread,
-		],
+		[selectedSessionId, activeChatPopupOpen, cycleActiveThread],
 	);
 	const handleFullFileTabShortcut = useCallback(
 		(direction: "next" | "previous"): boolean => {
