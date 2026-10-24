@@ -1,7 +1,7 @@
 "use client";
 
 import { hasSearchQualifier } from "@repo/git/search-query";
-import { ListFilterIcon, XIcon } from "lucide-react";
+import { ListFilterIcon, SearchIcon, XIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { FetchingIndicator } from "#/components/fetching-indicator";
 import { Avatar, AvatarFallback, AvatarImage } from "#/components/ui/avatar";
@@ -84,12 +84,14 @@ const RECENTLY_CLOSED_FILTER_ROW = {
 	action: "filter-recently-closed",
 } as const;
 const SHOW_RECENTLY_CLOSED_ROW = { action: "show-recently-closed" } as const;
+const SEARCH_GITHUB_ROW = { action: "search-github" } as const;
 
 type PaletteRow =
 	| PullRequestSearchResult
 	| IndexedPullRequest
 	| typeof RECENTLY_CLOSED_FILTER_ROW
-	| typeof SHOW_RECENTLY_CLOSED_ROW;
+	| typeof SHOW_RECENTLY_CLOSED_ROW
+	| typeof SEARCH_GITHUB_ROW;
 
 function authorInitials(author: string): string {
 	return author.slice(0, 2).toUpperCase();
@@ -129,6 +131,8 @@ export function OpenPullRequestPalette(
 	const [pickingRepository, setPickingRepository] = useState(false);
 	const [repositoryQuery, setRepositoryQuery] = useState("");
 	const [recentlyClosed, setRecentlyClosed] = useState(false);
+	// Set by the "Search GitHub" row; applies to the query it was picked for only.
+	const [searchingGitHub, setSearchingGitHub] = useState(false);
 	const inputRef = useRef<HTMLInputElement>(null);
 
 	const indexedRows = useIndexedPullRequests(props.orpc);
@@ -147,7 +151,7 @@ export function OpenPullRequestPalette(
 	// indexed (yet). Anything else it found nothing for is left to `gh` too —
 	// the PR may be one the index doesn't cover. It holds open PRs only, so it
 	// can never answer the recently-closed filter.
-	const needsGh =
+	const indexCantAnswer =
 		recentlyClosed ||
 		(!isBlank &&
 			(localMatches.length === 0 ||
@@ -160,6 +164,7 @@ export function OpenPullRequestPalette(
 							repositoryKey(chip).toLowerCase(),
 					),
 				)));
+	const needsGh = indexCantAnswer || searchingGitHub;
 	// Keyed on `query` itself, not the debounced copy: the request only fires
 	// once they agree, and until then a cached answer for the exact query shows.
 	const search = useSearchPullRequests(
@@ -172,14 +177,28 @@ export function OpenPullRequestPalette(
 	// `keepPreviousData` rows belong to some earlier query (often the blank
 	// recent list); showing them would let Enter open an unrelated PR, so the
 	// gh path shows nothing until its own answer lands.
+	const ghResults = search.isPlaceholderData ? [] : search.results;
+	// Live search is scoped to author/review-requested for unscoped queries, so
+	// on an explicit "Search GitHub" it adds to the index matches, never replaces them.
 	const results: readonly (PullRequestSearchResult | IndexedPullRequest)[] =
 		isBlank
 			? recent.results
-			: needsGh
-				? search.isPlaceholderData
-					? []
-					: search.results
-				: localMatches;
+			: searchingGitHub
+				? [
+						...localMatches,
+						...ghResults.filter(
+							(result) =>
+								!localMatches.some(
+									(match) =>
+										repositoryKey(match).toLowerCase() ===
+											repositoryKey(result).toLowerCase() &&
+										match.number === result.number,
+								),
+						),
+					]
+				: needsGh
+					? ghResults
+					: localMatches;
 	const resultRows: readonly PaletteRow[] =
 		!recentlyClosed && offersRecentlyClosedFilter(query)
 			? [...results, RECENTLY_CLOSED_FILTER_ROW]
@@ -222,6 +241,7 @@ export function OpenPullRequestPalette(
 		setPickingRepository(props.opensOnRepositoryPicker);
 		setRepositoryQuery("");
 		setRecentlyClosed(false);
+		setSearchingGitHub(false);
 		openPr.reset();
 	}, [props.open]);
 
@@ -260,9 +280,19 @@ export function OpenPullRequestPalette(
 		footerMessage === null;
 	// Held back while collapsed so the first load shows only the input; it
 	// appears once the search settles, even to an empty answer.
+	const offersSearchGitHub =
+		query.trim() !== "" &&
+		!isBlank &&
+		!recentlyClosed &&
+		!needsGh &&
+		!collapsed;
 	const rows: readonly PaletteRow[] =
 		!recentlyClosed && !collapsed && query.trim() !== ""
-			? [...resultRows, SHOW_RECENTLY_CLOSED_ROW]
+			? [
+					...resultRows,
+					...(offersSearchGitHub ? [SEARCH_GITHUB_ROW] : []),
+					SHOW_RECENTLY_CLOSED_ROW,
+				]
 			: resultRows;
 	const emptyMessage =
 		searchErrorMessage ??
@@ -363,7 +393,10 @@ export function OpenPullRequestPalette(
 								key="pull-requests"
 								filter={null}
 								items={rows}
-								onValueChange={setQuery}
+								onValueChange={(value) => {
+									setQuery(value);
+									setSearchingGitHub(false);
+								}}
 								value={query}
 							>
 								<CommandInput
@@ -469,6 +502,20 @@ export function OpenPullRequestPalette(
 																Recently closed
 															</span>
 														</div>
+													</div>
+												</CommandItem>
+											) : row.action === "search-github" ? (
+												<CommandItem
+													key={row.action}
+													onClick={() => {
+														setSearchingGitHub(true);
+														inputRef.current?.focus();
+													}}
+													value={row}
+												>
+													<div className="flex min-w-0 flex-1 items-center gap-2.5">
+														<SearchIcon className="size-3.5 shrink-0 text-muted-foreground" />
+														<span>Search GitHub</span>
 													</div>
 												</CommandItem>
 											) : (
