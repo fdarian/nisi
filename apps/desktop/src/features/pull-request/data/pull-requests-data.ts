@@ -193,6 +193,38 @@ export function usePullRequestRepositories(
 }
 
 /**
+ * GitHub-wide repository search for the palette's repository picker. Same
+ * `keepPreviousData` stale-while-revalidate shape as `useSearchPullRequests`;
+ * deliberately not persisted (`#/infra/query-persistence.ts` only keeps the
+ * recent-PR query).
+ */
+export function useSearchRepositories(
+	orpc: SidecarQueryUtils,
+	query: string,
+	enabled: boolean,
+): {
+	results: readonly PullRequestRepository[];
+	isSearching: boolean;
+	/** `results` belong to an earlier query (`keepPreviousData`), not the one asked for. */
+	isPlaceholderData: boolean;
+	error: unknown;
+} {
+	const search = useQuery({
+		...orpc.pullRequests.searchRepositories.queryOptions({
+			input: { query },
+			enabled,
+		}),
+		placeholderData: keepPreviousData,
+	});
+	return {
+		results: search.data ?? [],
+		isSearching: search.isFetching,
+		isPlaceholderData: search.isPlaceholderData,
+		error: search.error,
+	};
+}
+
+/**
  * `search`'s three contract errors each mean something genuinely different
  * to act on — collapsing them into one "search failed" would lose that.
  * `null` for anything undeclared (network down, sidecar crash): there's no
