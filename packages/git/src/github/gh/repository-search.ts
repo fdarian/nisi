@@ -32,11 +32,11 @@ const RepositorySearchResponse = Schema.Struct({
 export const repositorySearchQuery = (input: string): string => {
 	const trimmed = input.trim();
 	const slash = trimmed.indexOf("/");
-	if (slash === -1) {
-		return `${trimmed} in:name fork:true`;
-	}
-	const owner = trimmed.slice(0, slash);
+	const owner = slash === -1 ? "" : trimmed.slice(0, slash);
 	const name = trimmed.slice(slash + 1);
+	if (owner === "") {
+		return `${name} in:name fork:true`;
+	}
 	return [
 		`user:${owner}`,
 		...(name === "" ? [] : [`${name} in:name`]),

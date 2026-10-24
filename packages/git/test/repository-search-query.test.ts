@@ -19,4 +19,8 @@ describe("repositorySearchQuery", () => {
 	test("owner/ with no name lists the owner's repositories", () => {
 		expect(repositorySearchQuery("fdarian/")).toBe("user:fdarian fork:true");
 	});
+
+	test("a leading slash with no owner falls back to a plain name query", () => {
+		expect(repositorySearchQuery("/foo")).toBe("foo in:name fork:true");
+	});
 });
