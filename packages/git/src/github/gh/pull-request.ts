@@ -14,9 +14,9 @@ import {
 } from "../../errors.ts";
 import { type GhResult, ghResult } from "../../exec.ts";
 import type {
+	PullRequestClosedWindow,
 	PullRequestRef,
 	PullRequestSearchResult,
-	PullRequestClosedWindow,
 	PullRequestSearchState,
 	ViewedPullRequest,
 } from "../../pull-request.ts";

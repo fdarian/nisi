@@ -19,9 +19,9 @@ import type {
 	WorkflowApprovalForbidden,
 } from "../errors.ts";
 import type {
+	PullRequestClosedWindow,
 	PullRequestRef,
 	PullRequestSearchResult,
-	PullRequestClosedWindow,
 	PullRequestSearchState,
 	ViewedPullRequest,
 } from "../pull-request.ts";

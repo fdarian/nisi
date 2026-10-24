@@ -19,7 +19,6 @@ import {
 	mergePullRequest,
 	mergeStackPullRequest,
 } from "./merge.ts";
-import { searchRepositories } from "./repository-search.ts";
 import { listOpenPullRequests } from "./open-pull-requests.ts";
 import { fetchPullRequestOverview } from "./overview.ts";
 import {
@@ -30,6 +29,7 @@ import {
 	repository,
 	searchPullRequests,
 } from "./pull-request.ts";
+import { searchRepositories } from "./repository-search.ts";
 import { createPullRequestStack, fetchPullRequestStack } from "./stack.ts";
 import { fetchPullRequestStackSuggestion } from "./stack-suggestion.ts";
 import {
