@@ -21,7 +21,7 @@
 		"@total-typescript/tsconfig": "1.0.4",
 		"@types/bun": "1.4.3",
 		"@types/ws": "^8.18.2",
-		"ai": "7.0.147",
+		"ai": "7.0.152",
 		"tsrs": "catalog:",
 		"typescript": "7.0.2",
 		"ws": "^8.22.0",

@@ -16,10 +16,9 @@
 		"db:studio": "bun -b drizzle-kit studio"
 	},
 	"dependencies": {
-		"@ai-sdk/provider": "4.0.31",
+		"@ai-sdk/provider": "4.0.33",
 		"@ai-sdk/provider-utils": "5.0.67",
 		"@repo/git": "workspace:*",
-		"ai": "7.0.147",
 		"deskkit": "github:fdarian/deskkit",
 		"drizzle-orm": "1.0.0-rc.5-5935859",
 		"effect": "catalog:"
@@ -27,6 +26,7 @@
 	"devDependencies": {
 		"@total-typescript/tsconfig": "1.0.4",
 		"@types/bun": "1.4.3",
+		"ai": "7.0.152",
 		"drizzle-kit": "1.0.0-rc.5-5935859",
 		"tsrs": "catalog:",
 		"typescript": "7.0.2"
