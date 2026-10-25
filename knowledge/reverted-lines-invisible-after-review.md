@@ -10,6 +10,7 @@ sources:
     resource: ../packages/review/src/reconcile.ts
     title: reconcile(), synthesizeReviewedBaseline()
 ---
+
 The diff pane now renders a genuine `reviewedBaseline → head` diff (`@repo/review`'s `reconcile()`
 synthesizes `reviewedBaseline`; `apps/desktop/sidecar/store.ts`'s `readFileContents` substitutes it
 for `base` when computing the patch) — reviewed-and-unchanged content is ordinary context, not an

@@ -16,6 +16,7 @@ sources:
     resource: ../apps/desktop/build/entitlements.plist
     title: entitlements.plist (apps/desktop/build/)
 ---
+
 The `.app` ships the sidecar as a `bun build --compile` binary. `bun dev` hides a whole class of bug
 here, and every instance below cost real debugging time because dev looked fine.
 

@@ -10,6 +10,7 @@ sources:
     resource: ../apps/desktop/AGENTS.md
     title: Browser dev harness (apps/desktop/AGENTS.md)
 ---
+
 # Browser verification is available, and it is the default
 
 `getBackend()` has a dev-only `VITE_DEV_BACKEND_PORT` / `VITE_DEV_BACKEND_TOKEN` escape hatch, so a

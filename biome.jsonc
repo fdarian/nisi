@@ -19,11 +19,8 @@
 		}
 	},
 	"markdown": {
-		"formatter": {
-			"enabled": false
-		},
-		"linter": {
-			"enabled": false
+		"parser": {
+			"frontmatter": true
 		}
 	},
 	"linter": {

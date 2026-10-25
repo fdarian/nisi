@@ -10,6 +10,7 @@ sources:
     resource: verifying-frontend-changes.md
     title: Verifying a frontend change
 ---
+
 # Why the patch exists
 
 `CodeView.cleanAllRenderedItems()` (`patches/@pierre%2Fdiffs@1.6.1.patch`) only walked

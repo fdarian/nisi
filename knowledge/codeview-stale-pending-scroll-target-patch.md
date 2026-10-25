@@ -10,6 +10,7 @@ sources:
     resource: verifying-frontend-changes.md
     title: Verifying a frontend change
 ---
+
 # Why the patch exists
 
 `CodeView.reconcileItems()` (`patches/@pierre%2Fdiffs@1.6.1.patch`) removes items whose ids no longer

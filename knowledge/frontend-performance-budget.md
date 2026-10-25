@@ -17,6 +17,7 @@ sources:
     title: "commit 4ddd2fb — parse each file's diff once, not once per file per keystroke"
     last_modified: 2026-07-29
 ---
+
 Reference numbers for a session with **221 changed files**. They exist so "the sidebar feels laggy"
 can be checked rather than argued about. Both sets are post-fix; the pre-fix column is what a
 regression would look like.

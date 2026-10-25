@@ -13,6 +13,7 @@ sources:
     resource: ../apps/desktop/src/features/pull-request/data/pr-data.ts
     title: useSetFileViewed
 ---
+
 The first two were found while fixing the measured regressions in the
 [performance budget](frontend-performance-budget.md).[^budget] Neither was taken, because
 each trades against correctness in a way that needs its own verification pass rather than a

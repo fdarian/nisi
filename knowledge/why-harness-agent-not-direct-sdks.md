@@ -10,6 +10,7 @@ sources:
     resource: ../packages/harness-local/AGENTS.md
     title: packages/harness-local
 ---
+
 Walkthrough generation goes through AI SDK's `HarnessAgent` plus a local sandbox provider
 ([packages/harness-local](../packages/harness-local/AGENTS.md)),[^harness-local] rather than talking
 to each CLI's own SDK. The direct route looks simpler and costs more.
