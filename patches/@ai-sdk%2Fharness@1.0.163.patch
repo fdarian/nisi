@@ -1,8 +1,8 @@
 diff --git a/dist/index.js b/dist/index.js
-index fc140dd..3bdcfad 100644
+index 94d1944..b1f1910 100644
 --- a/dist/index.js
 +++ b/dist/index.js
-@@ -325,7 +325,17 @@ const harnessV1CompactionPartSchema = z.object({
+@@ -326,7 +326,17 @@ const harnessV1CompactionPartSchema = z.object({
  });
  const harnessV1ErrorPartSchema = z.object({
  	type: z.literal("error"),
@@ -22,10 +22,10 @@ index fc140dd..3bdcfad 100644
  const harnessV1RawPartSchema = z.object({
  	type: z.literal("raw"),
 diff --git a/dist/utils/index.js b/dist/utils/index.js
-index bad6269..3485853 100644
+index 29850cb..28d7342 100644
 --- a/dist/utils/index.js
 +++ b/dist/utils/index.js
-@@ -1509,7 +1509,17 @@ const harnessV1CompactionPartSchema = z.object({
+@@ -1510,7 +1510,17 @@ const harnessV1CompactionPartSchema = z.object({
  });
  const harnessV1ErrorPartSchema = z.object({
  	type: z.literal("error"),

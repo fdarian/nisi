@@ -17,7 +17,7 @@
 	},
 	"dependencies": {
 		"@ai-sdk/provider": "4.0.31",
-		"@ai-sdk/provider-utils": "5.0.64",
+		"@ai-sdk/provider-utils": "5.0.67",
 		"@repo/git": "workspace:*",
 		"ai": "7.0.147",
 		"deskkit": "github:fdarian/deskkit",
