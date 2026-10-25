@@ -1,6 +1,5 @@
 import { DevToolsTelemetry } from "@ai-sdk/devtools";
 import { HarnessAgent } from "@ai-sdk/harness/agent";
-import { createLocalSandbox } from "@repo/harness-local";
 import type {
 	GenerateEvent,
 	HarnessId,
@@ -21,7 +20,10 @@ import type { Context } from "effect";
 import { Cause, Effect, Result, Schema } from "effect";
 import { createHarnessAgentTarget } from "../harness/harnesses.ts";
 import { FILE_MUTATING_BUILTINS } from "../harness/inactive-tools.ts";
-import { resolveSandboxSettings } from "../harness/sandbox.ts";
+import {
+	createHarnessSandboxSession,
+	HARNESS_SANDBOX_CONFIG,
+} from "../harness/sandbox.ts";
 import { describeStreamError } from "../harness/stream-errors.ts";
 import type { AppServices } from "../services.ts";
 import { type GenerationContext, gatherGenerationContext } from "./context.ts";
@@ -166,20 +168,18 @@ const startFreshSession = async (
 ): Promise<{
 	readonly agent: LiveWalkthroughSession["agent"];
 	readonly session: LiveWalkthroughSession["session"];
+	readonly sandboxSession: LiveWalkthroughSession["sandboxSession"];
 	readonly buffer: LiveWalkthroughSession["buffer"];
 }> => {
 	const buffer = createBuffer();
-	const sandbox = createLocalSandbox(
-		resolveSandboxSettings(input.harness, repoRoot),
-	);
+	const sandboxSession = await createHarnessSandboxSession(repoRoot);
 	// The same pair feeds both the harness (which registers these keys) and the
 	// prompt (which tells the model what to call) — they must never diverge.
 	const toolNames = WALKTHROUGH_TOOL_NAMES;
 	const walkthroughTools = createWalkthroughTools(buffer, toolNames);
 	const agent = new HarnessAgent({
 		...createHarnessAgentTarget(input.harness, input.model),
-		sandbox: sandbox.provider,
-		sandboxConfig: { workDir: sandbox.workDir },
+		sandboxConfig: HARNESS_SANDBOX_CONFIG,
 		tools: {
 			[toolNames.write]: walkthroughTools.write,
 			[toolNames.edit]: walkthroughTools.edit,
@@ -189,8 +189,13 @@ const startFreshSession = async (
 		instructions: buildSystemPrompt(toolNames),
 		telemetry: {},
 	});
-	const session = await agent.createSession();
-	return { agent, session, buffer };
+	try {
+		const session = await agent.createSession({ sandboxSession });
+		return { agent, session, sandboxSession, buffer };
+	} catch (error) {
+		await sandboxSession.destroy();
+		throw error;
+	}
 };
 
 const runEffect = <A, E>(
@@ -307,6 +312,7 @@ export async function* generateWalkthrough(
 
 	let agent: LiveWalkthroughSession["agent"];
 	let session: LiveWalkthroughSession["session"];
+	let sandboxSession: LiveWalkthroughSession["sandboxSession"];
 	let buffer: LiveWalkthroughSession["buffer"];
 	let turnPrompt: string;
 
@@ -343,8 +349,12 @@ export async function* generateWalkthrough(
 			}),
 			mainContext,
 		);
+		// A live session that exists but didn't match (different harness/model)
+		// is about to be replaced in the map; stop it first or its sandbox
+		// session would be orphaned.
+		await stopLiveSession(input.sessionId);
 		try {
-			({ agent, session, buffer } = await startFreshSession(
+			({ agent, session, sandboxSession, buffer } = await startFreshSession(
 				input,
 				context.repoRoot,
 			));
@@ -380,6 +390,7 @@ export async function* generateWalkthrough(
 			model: input.model,
 			agent,
 			session,
+			sandboxSession,
 			buffer,
 		});
 

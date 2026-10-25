@@ -4,19 +4,21 @@ import { Effect } from "effect";
 /**
  * `sessions.ts`'s `startChatSession` constructs a real `@ai-sdk/harness/agent`
  * `HarnessAgent` and calls its `createSession()` — against a real harness
- * that's a CLI subprocess bootstrap (13-28s cold, per `@repo/harness-local`'s
- * AGENTS.md) or a real network call, neither of which belongs in a unit
+ * that's a CLI subprocess bootstrap (13-28s cold) or a real network call,
+ * neither of which belongs in a unit
  * test. `HarnessAgent` is mocked at the module boundary so every test below
  * exercises `ChatSessions`'s own bookkeeping — the `threadId -> sessionId`
  * tracking and the `sessionId -> Set<threadId>` reverse index
  * `closeChatThreadsForSession` walks — against a fake session whose `stop()`
  * is directly observable, instead of a real one.
  *
- * `@repo/harness-local`'s `createLocalSandbox` is left real: it only builds
- * plain config objects (`{ provider, workDir }`); the real I/O lives behind
- * `provider.createSession()`, which the fake `HarnessAgent` below never
- * calls.
+ * `harness/sandbox.ts` is mocked too: `createHarnessSandboxSession` does real
+ * I/O (a `mkdir` under the user's `~/.nisi`, port allocation), which a unit
+ * test must never touch. It hands back a fake sandbox session whose
+ * `destroy()` is observable, so the lifetime assertions below can check it
+ * runs after the agent session's `stop()`.
  */
+const callOrder: string[] = [];
 let nextCreateSessionShouldFail = false;
 let nextCreateSessionShouldWait = false;
 let resolvePendingCreateSession:
@@ -25,8 +27,19 @@ let resolvePendingCreateSession:
 let rejectPendingCreateSession: ((error: Error) => void) | undefined;
 
 class FakeHarnessAgentSession {
-	readonly stop = mock(async () => ({}) as never);
+	readonly stop = mock(async () => {
+		callOrder.push("stop");
+		return {} as never;
+	});
 }
+
+class FakeSandboxSession {
+	readonly destroy = mock(async () => {
+		callOrder.push("destroy");
+	});
+}
+
+let createdSandboxSessions: FakeSandboxSession[] = [];
 
 class FakeHarnessAgent {
 	readonly lastSession = new FakeHarnessAgentSession();
@@ -34,7 +47,11 @@ class FakeHarnessAgent {
 	constructor(settings: Record<string, unknown>) {
 		this.settings = settings;
 	}
-	async createSession(): Promise<FakeHarnessAgentSession> {
+	lastSandboxSession: unknown;
+	async createSession(options: {
+		sandboxSession: unknown;
+	}): Promise<FakeHarnessAgentSession> {
+		this.lastSandboxSession = options.sandboxSession;
 		if (nextCreateSessionShouldFail) {
 			throw new Error("simulated createSession failure");
 		}
@@ -52,6 +69,17 @@ mock.module("@ai-sdk/harness/agent", () => ({
 	HarnessAgent: FakeHarnessAgent,
 }));
 
+mock.module("../../harness/sandbox.ts", () => ({
+	HARNESS_SANDBOX_CONFIG: { workDir: "." },
+	createHarnessSandboxSession: async () => {
+		const sandboxSession = new FakeSandboxSession();
+		createdSandboxSessions.push(sandboxSession);
+		return sandboxSession;
+	},
+}));
+
+import type { ChatThreadCloseFailure } from "../sessions.ts";
+
 const { ChatSessions } = await import("../sessions.ts");
 
 let counter = 0;
@@ -67,6 +95,10 @@ const paramsFor = (sessionId: string, threadId: string) => ({
 	instructions: "test instructions",
 });
 
+/** `createSession` is only reached after the (async) sandbox session is created, so a test that parks it must let that settle before reaching for its resolver/rejecter. */
+const flushPendingCreateSession = (): Promise<void> =>
+	new Promise((resolve) => setTimeout(resolve, 0));
+
 const reportFailure = (_failure: unknown): void => {};
 
 /**
@@ -81,6 +113,8 @@ beforeEach(() => {
 	nextCreateSessionShouldWait = false;
 	resolvePendingCreateSession = undefined;
 	rejectPendingCreateSession = undefined;
+	callOrder.length = 0;
+	createdSandboxSessions = [];
 	chatSessions = Effect.runSync(ChatSessions.make);
 });
 
@@ -108,6 +142,7 @@ describe("getOrCreateChatSession", () => {
 		const params = paramsFor(uniqueId("session"), uniqueId("thread"));
 		nextCreateSessionShouldWait = true;
 		const pending = chatSessions.getOrCreateChatSession(params);
+		await flushPendingCreateSession();
 		const reject = rejectPendingCreateSession;
 		if (reject === undefined)
 			throw new Error("fake session did not expose rejection");
@@ -159,6 +194,69 @@ describe("getOrCreateChatSession", () => {
 	});
 });
 
+describe("sandbox session lifetime", () => {
+	test("creates the agent session against the sandbox session instead of a sandbox provider", async () => {
+		const live = await chatSessions.getOrCreateChatSession(
+			paramsFor(uniqueId("session"), uniqueId("thread")),
+		);
+
+		const fakeAgent = live.agent as unknown as FakeHarnessAgent;
+		expect(createdSandboxSessions).toHaveLength(1);
+		expect(live.sandboxSession).toBe(createdSandboxSessions[0] as never);
+		expect(fakeAgent.lastSandboxSession).toBe(createdSandboxSessions[0]);
+		expect(fakeAgent.settings.sandbox).toBeUndefined();
+		expect(fakeAgent.settings.sandboxConfig).toEqual({ workDir: "." });
+	});
+
+	test("closing a thread destroys the sandbox session after stopping the agent session", async () => {
+		const threadId = uniqueId("thread");
+		await chatSessions.getOrCreateChatSession(
+			paramsFor(uniqueId("session"), threadId),
+		);
+
+		await chatSessions.closeChatThread(threadId, reportFailure);
+
+		expect(callOrder).toEqual(["stop", "destroy"]);
+		expect(createdSandboxSessions[0]?.destroy).toHaveBeenCalledTimes(1);
+	});
+
+	test("still destroys the sandbox session when stop() throws, and reports the failure", async () => {
+		const threadId = uniqueId("thread");
+		const live = await chatSessions.getOrCreateChatSession(
+			paramsFor(uniqueId("session"), threadId),
+		);
+		(
+			live.session as unknown as FakeHarnessAgentSession
+		).stop.mockImplementationOnce(async () => {
+			throw new Error("stop failed");
+		});
+		const failures: ChatThreadCloseFailure[] = [];
+
+		await chatSessions.closeChatThread(
+			threadId,
+			(failure: ChatThreadCloseFailure) => {
+				failures.push(failure);
+			},
+		);
+
+		expect(failures).toHaveLength(1);
+		expect(createdSandboxSessions[0]?.destroy).toHaveBeenCalledTimes(1);
+	});
+
+	test("destroys the sandbox session when createSession throws", async () => {
+		nextCreateSessionShouldFail = true;
+
+		await expect(
+			chatSessions.getOrCreateChatSession(
+				paramsFor(uniqueId("session"), uniqueId("thread")),
+			),
+		).rejects.toThrow("simulated createSession failure");
+
+		expect(createdSandboxSessions).toHaveLength(1);
+		expect(createdSandboxSessions[0]?.destroy).toHaveBeenCalledTimes(1);
+	});
+});
+
 describe("closeChatThreadsForSession", () => {
 	test("stops every thread scoped to the session and leaves other sessions' threads alone", async () => {
 		const sessionId = uniqueId("session");
@@ -182,6 +280,9 @@ describe("closeChatThreadsForSession", () => {
 		expect(liveA.session.stop).toHaveBeenCalledTimes(1);
 		expect(liveB.session.stop).toHaveBeenCalledTimes(1);
 		expect(liveOther.session.stop).not.toHaveBeenCalled();
+		expect(liveA.sandboxSession.destroy).toHaveBeenCalledTimes(1);
+		expect(liveB.sandboxSession.destroy).toHaveBeenCalledTimes(1);
+		expect(liveOther.sandboxSession.destroy).not.toHaveBeenCalled();
 
 		// The session was disposed, not just marked — a later call for the same
 		// threadId must construct a fresh one rather than handing back the
@@ -223,6 +324,7 @@ describe("closeChatThreadsForSession", () => {
 		const pending = chatSessions.getOrCreateChatSession(
 			paramsFor(sessionId, threadId),
 		);
+		await flushPendingCreateSession();
 		const resolve = resolvePendingCreateSession;
 		if (resolve === undefined) {
 			throw new Error("fake createSession did not expose its resolver");
@@ -245,6 +347,7 @@ describe("closeChatThreadsForSession", () => {
 			setTimeout(resolveNextTick, 0),
 		);
 		expect(lateSession.stop).toHaveBeenCalledTimes(1);
+		expect(createdSandboxSessions[0]?.destroy).toHaveBeenCalledTimes(1);
 	});
 });
 

@@ -1,9 +1,13 @@
 import { HarnessAgent, type HarnessAgentSession } from "@ai-sdk/harness/agent";
-import { createLocalSandbox } from "@repo/harness-local";
 import type { HarnessId } from "@repo/sidecar-api";
 import { Context, Effect, Layer } from "effect";
 import { createHarnessAgentTarget } from "../harness/harnesses.ts";
-import { resolveSandboxSettings } from "../harness/sandbox.ts";
+import {
+	createHarnessSandboxSession,
+	HARNESS_SANDBOX_CONFIG,
+	type HarnessSandboxSession,
+} from "../harness/sandbox.ts";
+import { stopHarnessSession } from "../harness/stop-session.ts";
 import type { AppServices } from "../services.ts";
 
 /**
@@ -18,6 +22,8 @@ export type LiveChatSession = {
 	// biome-ignore lint/suspicious/noExplicitAny: the agent's tool-set/runtime-context type params aren't known statically here — this map only ever calls the untyped agent.stream()/session lifecycle surface, never anything that needs them.
 	readonly agent: HarnessAgent<any, any>;
 	readonly session: HarnessAgentSession;
+	/** Owned by this entry: destroyed (via `stopHarnessSession`) after `session` stops, on every path that drops the thread. */
+	readonly sandboxSession: HarnessSandboxSession;
 };
 
 /**
@@ -58,9 +64,7 @@ export type ChatSessionParams = {
 const startChatSession = async (
 	params: ChatSessionParams,
 ): Promise<LiveChatSession> => {
-	const sandbox = createLocalSandbox(
-		resolveSandboxSettings(params.harness, params.repoRoot),
-	);
+	const sandboxSession = await createHarnessSandboxSession(params.repoRoot);
 	// No `inactiveTools` — chat gets every adapter builtin (write, edit, bash,
 	// all of it). Unlike `walkthrough/generate.ts`, which passes
 	// `sidecar/harness`'s `FILE_MUTATING_BUILTINS` to keep a walkthrough from
@@ -69,13 +73,23 @@ const startChatSession = async (
 	// do things, not just look.
 	const agent = new HarnessAgent({
 		...createHarnessAgentTarget(params.harness, params.model),
-		sandbox: sandbox.provider,
-		sandboxConfig: { workDir: sandbox.workDir },
+		sandboxConfig: HARNESS_SANDBOX_CONFIG,
 		instructions: params.instructions,
 		telemetry: {},
 	});
-	const session = await agent.createSession();
-	return { harness: params.harness, model: params.model, agent, session };
+	try {
+		const session = await agent.createSession({ sandboxSession });
+		return {
+			harness: params.harness,
+			model: params.model,
+			agent,
+			session,
+			sandboxSession,
+		};
+	} catch (error) {
+		await sandboxSession.destroy();
+		throw error;
+	}
 };
 
 /**
@@ -158,8 +172,8 @@ export class ChatSessions extends Context.Service<ChatSessions>()(
 			};
 
 			/**
-			 * Stops the underlying harness session (releasing its sandbox/port/
-			 * processes) and forgets it — called on `chat.closeThread` and, for
+			 * Stops the underlying harness session and destroys its sandbox session
+			 * (releasing the port/processes) and forgets it — called on `chat.closeThread` and, for
 			 * every thread scoped to a review session, on `sessions.close`
 			 * (`closeChatThreadsForSession` below). A no-op when nothing's live for
 			 * `threadId`. Bookkeeping is removed before awaiting construction, so a
@@ -175,7 +189,7 @@ export class ChatSessions extends Context.Service<ChatSessions>()(
 				liveThreads.delete(threadId);
 				untrackThread(entry.sessionId, threadId);
 				await entry.pending
-					.then((live) => live.session.stop())
+					.then((live) => stopHarnessSession(live))
 					.catch((error) => {
 						reportFailure({
 							sessionId: entry.sessionId,

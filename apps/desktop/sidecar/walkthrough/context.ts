@@ -31,7 +31,7 @@ import { Store } from "../store.ts";
  * branches mid-session), or a PR session whose worktree no longer holds the
  * PR's head (`pullRequestNumber` is set — Claude Code reuses worktrees).
  * The walkthrough harness runs a real coding agent directly against
- * `repoRoot`'s worktree (`@repo/harness-local`), not against the diff
+ * `repoRoot`'s worktree (`ai-sandbox-local`), not against the diff
  * content this module gathers, so the agent would narrate files that don't
  * match the diff it was briefed on. Refused outright rather than silently
  * generating a walkthrough that describes one diff while the agent read
