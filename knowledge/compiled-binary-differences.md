@@ -36,7 +36,7 @@ from a `drizzle/` folder that won't exist.[^migrations]
 invisible to the compiler, yet `import.meta.url` is still rewritten to a virtual `/$bunfs/...` path
 — so the computed path resolves to nothing and fails as `ENOENT: /$bunfs/bridge/package.json`.
 `import x from "./f" with { type: "text" }` is inlined as a string literal and survives. This is what
-three of the five `@ai-sdk/harness*` patches do.
+the `claude-code`, `codex` and `opencode` adapter patches do (the fourth patch, on `@ai-sdk/harness` itself, makes the `error` stream part's `error` field optional).
 
 Same class, different library: `@earendil-works/pi-ai` loads its OAuth flows through a computed
 `import()` (`dist/auth/oauth/load.js`), so the compiled sidecar has no source tree to resolve them
@@ -84,10 +84,17 @@ hand-roll the oRPC wire format over raw `curl`.
 
 # The patches are load-bearing and silent
 
-All five `@ai-sdk/harness*` patches are pinned to exact versions and registered in
+All four `@ai-sdk/harness*` patches are pinned to exact versions and registered in
 `pnpm-workspace.yaml` (not `package.json` — pnpm 10+ ignores that key there without warning). A
 version bump drops them with no error: the build succeeds and the failure shows up at runtime, in
 the packaged app. **Re-verify a compiled build whenever a harness package is bumped.**
+
+The three adapter patches also add `dist/bridge/pnpm-lock.yaml`, copied verbatim from the last adapter
+release that shipped it (claude-code 1.0.162, codex 1.0.160, opencode 1.0.160). Upstream published later
+versions without that file (vercel/ai#23829, fix in vercel/ai#23852), so the first `createSession`
+fails with `ENOENT`. Each bump must first check that `dist/bridge/package.json` is byte-identical to
+the copied lockfile's release, or the lockfile no longer matches. Drop this part of the patches once a
+fixed adapter release is out.
 
 [^path-rule]: PATH widening (packages/harness-local/AGENTS.md)
 [^migrations]: applyEmbeddedMigrations (packages/db/AGENTS.md)
