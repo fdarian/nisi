@@ -38,12 +38,17 @@ against a review session imports from this directory rather than reaching into a
 - `models.ts` — `getHarnessModels`, the per-harness `walkthrough.models`/`refreshModels` path.
   Checks binary presence first, then calls `HarnessModelCache` with the corresponding discovery
   function. A missing CLI returns unavailable even if a previous model list is cached.
-- `sandbox.ts` — `resolveSandboxSettings`: picks `@repo/harness-local`'s `LocalSandboxSettings` mode
-  (`"in-place"` vs `"relocated"`) per harness for a given `repoRoot`, and the fixed
-  `~/.nisi/harness-sandbox` scratch root relocated mode uses — see `@repo/harness-local`'s own
-  AGENTS.md ("Two sandbox modes") for why claude-code/codex/opencode need relocating and Pi doesn't.
-  Every caller that constructs a `HarnessAgent` against a review session's worktree goes through this
-  rather than re-deriving the mode itself.
+- `sandbox.ts` — `createHarnessSandboxSession(repoRoot)`, the one place an
+  [`ai-sandbox-local`](https://ai-sandbox-local.fdarian.com) sandbox session is built, plus
+  `HARNESS_SANDBOX_CONFIG` (`{ workDir: "." }`: the agent works directly in the repo rather than a
+  fresh subdirectory). Every caller that constructs a `HarnessAgent` against a review session's
+  worktree (`chat/sessions.ts`, `walkthrough/generate.ts`) passes that config to the agent, then
+  `agent.createSession({ sandboxSession })`. See "The sandbox" below.
+- `stop-session.ts` — `stopHarnessSession`: `session.stop()` then `sandboxSession.destroy()`, the
+  latter in a `finally` so a failed stop can't leak the sandbox's leased port or spawned processes.
+  Every path that drops a live harness session (walkthrough's `live-sessions.ts`, chat's
+  `sessions.ts`) tears down through it. A caller whose `createSession` fails destroys the sandbox
+  session itself.
 - `inactive-tools.ts` — `FILE_MUTATING_BUILTINS`: each adapter's builtin tools that write to the
   filesystem, fed to `HarnessAgent`'s `inactiveTools` so an agent stays read-only against the user's
   real worktree. `bash` is deliberately left active in every case — an agent needs it to explore, and
@@ -59,6 +64,24 @@ against a review session imports from this directory rather than reaching into a
   `toUIMessageStream`, which turns _every_ `error` part into a visible chunk unconditionally and
   offers no way to suppress one via its `onError` option (that only controls the chunk's message
   text).
+
+## The sandbox
+
+`ai-sandbox-local` runs the agent's CLI as the user, on the real worktree, with no isolation —
+read-only-ness comes only from `inactive-tools.ts`. It has no `resumeSession` (spawned processes die
+with the sidecar), which is why live sessions are in-process only.
+- **`HOME` is `~/.nisi/harness-home`**, not the user's. The adapters keep their pinned CLI installs
+  under `$HOME/.ai-sdk-harness`, so one stable path keeps the install warm across dev, prod, and every
+  repo: the first run per harness takes roughly 13–28s, later ones are warm. It is deliberately not
+  `NISI_DATA_DIR`-derived — `scripts/dev.ts` points that inside the nisi checkout, i.e. inside a pnpm
+  workspace, and an install there makes pnpm try to relink `node_modules` and abort with
+  `ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY` (a GUI-launched sidecar has no TTY to confirm on). The
+  trade-off: the agent doesn't see the user's dotfiles (`~/.gitconfig`, `~/.ssh`); the adapters
+  forward the CLI logins they need.
+- **`PATH` is `resolvedPath()`, snapshotted when the sandbox session is created.** A Finder-launched
+  `.app` has a bare `PATH`, and the adapters spawn `node` for their bridges. A session created after
+  `walkthrough.refreshHarnesses` picks up the refreshed value; live walkthrough sessions and chat
+  threads keep the `PATH` they started with.
 
 ## Gotchas
 

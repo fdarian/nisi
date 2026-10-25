@@ -32,7 +32,6 @@ with the detail — this is only the map.
 - `packages/git` — PR/diff detection and file classification. Pure, no SQLite, no oRPC.
 - `packages/review` — session/review persistence + the base/reviewed/head reconciliation engine.
 - `packages/walkthrough` — walkthrough schema, tools, prompt, and coverage validation. I/O-free.
-- `packages/harness-local` — `HarnessV1SandboxProvider` over real disk, so an agent runs against the user's worktree.
 - `packages/db` — shared SQLite connection + embedded migrations. Read its migration gotcha before adding one.
 - `packages/settings` — persistent app preferences the sidecar reads.
 - `packages/cli` — the `nisi` command; detects the PR and hands off to the app.
@@ -71,7 +70,7 @@ The walkthrough drives a real coding agent CLI (Claude Code, Codex, OpenCode, or
 own worktree, not a remote sandbox. Enable a harness in Settings (`Cmd+,`) and authenticate that
 CLI yourself first — nisi doesn't install the agent's own credentials. The first run per harness is
 slow (roughly 13–28s) while nisi installs a pinned copy of it; every run after that is warm. See
-`packages/harness-local/AGENTS.md`.
+`apps/desktop/sidecar/harness/AGENTS.md`.
 
 ## Deeper notes
 

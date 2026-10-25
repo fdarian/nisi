@@ -1,11 +1,11 @@
 # sidecar/walkthrough
 
 The Phase 3 wiring layer: turns `@repo/walkthrough`'s pure schema/validation/prompt functions and
-`@repo/harness-local`'s sandbox provider into the sidecar's `walkthrough.get` /
-`walkthrough.activeGeneration` / `walkthrough.generate` procedures. Neither of
-those two packages does I/O or knows about the other — this directory is where they actually meet.
+a `HarnessAgent` running on an `ai-sandbox-local` sandbox into the sidecar's `walkthrough.get` /
+`walkthrough.activeGeneration` / `walkthrough.generate` procedures. `@repo/walkthrough` does no I/O
+and doesn't know the agent exists — this directory is where they actually meet.
 Harness-adapter plumbing that isn't walkthrough-specific (which CLI backs a harness, model
-discovery, sandbox mode, read-only tool gating) lives one level up in
+discovery, the sandbox session, read-only tool gating) lives one level up in
 [sidecar/harness](../harness/AGENTS.md), shared by every caller that drives a `HarnessAgent`.
 - `store.ts` — `WalkthroughStore`, persistence for generated walkthroughs (one row per session,
   regenerating overwrites) plus their derived coverage gaps (`uncoveredFiles` — path and the
@@ -30,12 +30,13 @@ discovery, sandbox mode, read-only tool gating) lives one level up in
   PR session whose worktree no longer holds the PR's head (`pullRequestNumber` is set; a merged PR is
   fine only while `HEAD` is exactly the PR head) — because the
   harness runs a real coding agent directly against that worktree on disk
-  (`@repo/harness-local`), so it would explore files that don't match the diff it was briefed on.
+  (`ai-sandbox-local`), so it would explore files that don't match the diff it was briefed on.
   `generate.ts`'s `resolveContext` turns this into a specific `failed` event rather than the
   generic "could not read this session's diff" every other context failure collapses into.
 - `live-sessions.ts` — the in-process `Map<sessionId, LiveWalkthroughSession>` a successful
   `generate` populates, so a regenerate can continue the same harness-agent conversation instead of
-  starting cold. Gone on sidecar restart by design (`@repo/harness-local` omits `resumeSession` —
+  starting cold. Each entry owns its sandbox session and tears both down via `stopHarnessSession`.
+  Gone on sidecar restart by design (`ai-sandbox-local` omits `resumeSession` —
   cross-process resume isn't recoverable, so this doesn't pretend otherwise).
 - `generation-log.ts` — `beginGeneration`/`recordGenerationEvent`/`attachToGeneration`/`getGeneration`,
   the in-process `Map<sessionId, …>` retaining one generation's full `GenerateEvent` history per
