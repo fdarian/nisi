@@ -48,7 +48,7 @@ for them at runtime.
 
 **`PATH` is narrower.** `bun run` prepends its own node-shim directory to a child's `PATH`; the
 compiled binary does not. OpenCode's bridge died with `exit code 127 — /bin/bash: node: command not
-found` for exactly this reason, and only ever under the compiled binary. The sidecar now hands the
+found` for exactly this reason, and only ever under the compiled binary. The sidecar hands the
 agent's sandbox an explicit `PATH` (`resolvedPath()`);[^path-rule] to reproduce the failure or verify
 a change, run the compiled `Contents/MacOS/sidecar` under a bare
 `PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin`, never `bun dev`.
