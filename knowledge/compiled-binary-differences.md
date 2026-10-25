@@ -7,8 +7,8 @@ status: stable
 generated: { by: claude-code/claude-opus-5, at: 2026-07-30T04:19:29Z }
 sources:
   - id: path-rule
-    resource: ../packages/harness-local/AGENTS.md
-    title: PATH widening (packages/harness-local/AGENTS.md)
+    resource: ../apps/desktop/sidecar/harness/AGENTS.md
+    title: Sandbox PATH (apps/desktop/sidecar/harness/AGENTS.md)
   - id: migrations
     resource: ../packages/db/AGENTS.md
     title: applyEmbeddedMigrations (packages/db/AGENTS.md)
@@ -48,9 +48,10 @@ for them at runtime.
 
 **`PATH` is narrower.** `bun run` prepends its own node-shim directory to a child's `PATH`; the
 compiled binary does not. OpenCode's bridge died with `exit code 127 — /bin/bash: node: command not
-found` for exactly this reason, and only ever under the compiled binary. The bare-`PATH`
-reproduction recipe is in
-[packages/harness-local/AGENTS.md](../packages/harness-local/AGENTS.md).[^path-rule]
+found` for exactly this reason, and only ever under the compiled binary. The sidecar now hands the
+agent's sandbox an explicit `PATH` (`resolvedPath()`);[^path-rule] to reproduce the failure or verify
+a change, run the compiled `Contents/MacOS/sidecar` under a bare
+`PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin`, never `bun dev`.
 
 **The packaged `.app`'s hardened runtime grants nothing unless an entitlements file says so.** Different mechanism than the
 other four — this one is macOS code signing, not `bun build --compile`'s embedding rules — but the
@@ -96,6 +97,6 @@ fails with `ENOENT`. Each bump must first check that `dist/bridge/package.json` 
 the copied lockfile's release, or the lockfile no longer matches. Drop this part of the patches once a
 fixed adapter release is out.
 
-[^path-rule]: PATH widening (packages/harness-local/AGENTS.md)
+[^path-rule]: Sandbox PATH (apps/desktop/sidecar/harness/AGENTS.md)
 [^migrations]: applyEmbeddedMigrations (packages/db/AGENTS.md)
 [^entitlements]: entitlements.plist (apps/desktop/build/)
