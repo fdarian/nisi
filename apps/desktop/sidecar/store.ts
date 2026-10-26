@@ -323,7 +323,7 @@ const toWireSession = (session: ReviewSession): Session => ({
  * the caller's actual checkout can change for as long as the session stays
  * open. Every git call against a session — every read
  * (`listChangedFiles`/`readFileContents`) and every write
- * (`setFileViewed`/`setRangeViewed`) alike — must re-derive whether the
+ * (`setFilesViewed`/`setRangeViewed`) alike — must re-derive whether the
  * worktree is still trustworthy rather than assume this function's answer
  * still holds; see `diff-head.ts`'s `resolveDiffHead` and this file's
  * `resolveSessionDiffHead`.
@@ -1300,7 +1300,7 @@ export class Store extends Context.Service<Store>()("Store", {
 		 * own committed tree (`@repo/git`'s `readFileContentsAtRef`, one
 		 * batched `cat-file --batch` call over every path). This is the one
 		 * gate every caller needing "what does this path look like right now"
-		 * goes through — `setFileViewed`/`setRangeViewed`'s snapshot writes and
+		 * goes through — `setFilesViewed`/`setRangeViewed`'s snapshot writes and
 		 * `attachReviewState`/`readFileContents`'s changed-since-review reads
 		 * alike — so a ticked file's snapshot and its later comparison can
 		 * never disagree about which universe "current" means. They used to:
@@ -1420,7 +1420,7 @@ export class Store extends Context.Service<Store>()("Store", {
 		 * file on every tick regardless of review state). Takes `diffHead` and
 		 * the raw `includeUncommitted` setting rather than an already-gated
 		 * flag — `readCurrentHashes` derives the effective gate itself, so this
-		 * can never disagree with whatever `setFileViewed`/`setRangeViewed`
+		 * can never disagree with whatever `setFilesViewed`/`setRangeViewed`
 		 * used to write the snapshot being compared against.
 		 */
 		const attachReviewState = (
@@ -2024,9 +2024,9 @@ export class Store extends Context.Service<Store>()("Store", {
 		 * any path in the repo — a walkthrough reference into a file outside
 		 * the diff, or "View full file" from Files Changed. Reuses
 		 * `readCurrentContent` instead, the same "what does this path look
-		 * like right now" gate `setFileViewed`'s snapshot write uses:
+		 * like right now" gate `setFilesViewed`'s snapshot write uses:
 		 * worktree bytes when `includeUncommitted` (read fresh from
-		 * `SettingsStore`, same reasoning as `setFileViewed` — this call
+		 * `SettingsStore`, same reasoning as `setFilesViewed` — this call
 		 * carries no per-request flag of its own) and the session is
 		 * worktree-eligible, else `diffHead.headRef`'s own committed tree.
 		 *
@@ -2117,10 +2117,16 @@ export class Store extends Context.Service<Store>()("Store", {
 		 * genuine read failure (permissions, a directory in the file's place)
 		 * propagates instead of collapsing into either.
 		 */
-		const setFileViewed = (sessionId: string, path: string, viewed: boolean) =>
+		const setFilesViewed = (
+			sessionId: string,
+			paths: readonly string[],
+			viewed: boolean,
+		) =>
 			Effect.gen(function* () {
 				if (!viewed) {
-					yield* reviewStore.markFileUnviewed(sessionId, path);
+					for (const path of paths) {
+						yield* reviewStore.markFileUnviewed(sessionId, path);
+					}
 					return;
 				}
 				const session = yield* reviewStore.getSession(sessionId);
@@ -2131,13 +2137,15 @@ export class Store extends Context.Service<Store>()("Store", {
 					repoRoot,
 					diffHead,
 					settings.includeUncommitted,
-					[path],
+					paths,
 				);
-				yield* reviewStore.markFileViewed(
-					sessionId,
-					path,
-					Option.fromNullishOr(currentContent.get(path)),
-				);
+				for (const path of paths) {
+					yield* reviewStore.markFileViewed(
+						sessionId,
+						path,
+						Option.fromNullishOr(currentContent.get(path)),
+					);
+				}
 			});
 
 		/**
@@ -2208,7 +2216,7 @@ export class Store extends Context.Service<Store>()("Store", {
 
 		/**
 		 * Ticks (or unticks) one walkthrough reference block's claim — same
-		 * "snapshot the whole file at tick time" discipline as `setFileViewed`,
+		 * "snapshot the whole file at tick time" discipline as `setFilesViewed`,
 		 * just additive (a block's claim coexists with every other block's claim
 		 * and the whole-file toggle) rather than a single per-file slot.
 		 *
@@ -2289,7 +2297,7 @@ export class Store extends Context.Service<Store>()("Store", {
 				const contentOption = Option.fromNullishOr(currentContent.get(path));
 				// `review_range_claims.snapshotHash` is `NOT NULL` (unlike
 				// `reviewed_files`', which now distinguishes absence via `NULL` —
-				// see `setFileViewed`) — relaxing that needs a full SQLite table
+				// see `setFilesViewed`) — relaxing that needs a full SQLite table
 				// rebuild (see `packages/review/AGENTS.md`), not worth it for this
 				// case. Absence deliberately maps to empty content here, the same
 				// "missing content at any state is `\"\"`" convention
@@ -2326,7 +2334,7 @@ export class Store extends Context.Service<Store>()("Store", {
 					// Preserves absence through to `markFileViewed` (unlike
 					// `rangeContent` above) so an auto-tick of the whole-file claim
 					// gets the same `NULL`-snapshot encoding a direct
-					// `setFileViewed` tick would.
+					// `setFilesViewed` tick would.
 					yield* reviewStore.markFileViewed(sessionId, path, contentOption);
 				}
 			});
@@ -2366,7 +2374,7 @@ export class Store extends Context.Service<Store>()("Store", {
 			readFileContents,
 			readFileViewerContent,
 			readHeadTexts,
-			setFileViewed,
+			setFilesViewed,
 			setRangeViewed,
 		};
 	}),

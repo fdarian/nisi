@@ -11,7 +11,7 @@ sources:
     title: Files Changed performance budget
   - id: set-viewed
     resource: ../apps/desktop/src/features/pull-request/data/pr-data.ts
-    title: useSetFileViewed
+    title: useSetFilesViewed
 ---
 
 The first two were found while fixing the measured regressions in the
@@ -93,4 +93,4 @@ still unconfirmed for this candidate.
 some or all of the WKWebView-specific flicker; neither has been bisected.
 
 [^budget]: Files Changed performance budget
-[^set-viewed]: useSetFileViewed
+[^set-viewed]: useSetFilesViewed

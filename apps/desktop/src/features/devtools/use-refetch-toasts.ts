@@ -26,7 +26,7 @@ const toastId = (label: string): string => `devtool-refetch-${label}`;
  * transitions (the `"fetch"` action flips `fetchStatus` to `"fetching"`;
  * `"success"`/`"error"` flip it back), matched against each watched query via
  * `matchQuery` — the same partial `queryKey`-prefix matching
- * `useSetFileViewed`/`useLiveFileChanges` (`pr-data.ts`) already rely on for
+ * `useSetFilesViewed`/`useLiveFileChanges` (`pr-data.ts`) already rely on for
  * `invalidateQueries`, so a query that's part of any active chunk/variant of
  * `diff.files`/`diff.fileContents` for this session is picked up regardless
  * of its other input fields (`includeUncommitted`, per-chunk `paths`, …).

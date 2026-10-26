@@ -114,7 +114,7 @@ seam" for the port/token handshake this boots into.
   against `resolveCurrentBranch` fresh on every call rather than once at open time, so it drifts in
   and out of eligibility as the caller checks different branches out — this is what lets a session
   self-heal, but also what makes every read (`listChangedFiles`/`readFileContents`) and write
-  (`setFileViewed`/`setRangeViewed`) path in `store.ts` need to consult it independently, on every
+  (`setFilesViewed`/`setRangeViewed`) path in `store.ts` need to consult it independently, on every
   call, rather than trusting a value resolved elsewhere. Also owns `InvalidHeadRef`/`validateHeadRef`
   — `resolveSessionTarget`'s explicit-`headRef` validation, mirroring `store.ts`'s own
   `InvalidBaseRef`. `pinDiffHead` holds a session on the commit it is displaying: `Store` keeps a
@@ -135,7 +135,7 @@ seam" for the port/token handshake this boots into.
   empty diff again).
   Open and closed PRs, and anything not yet cached, keep the session's `baseRef`.
 - `store.ts` — `Store`, the service `http.ts`'s git/review handlers depend on. One method per contract
-  procedure (`openSession`, `listChangedFiles`, `setFileViewed`, `setRangeViewed`, ...), each composing
+  procedure (`openSession`, `listChangedFiles`, `setFilesViewed`, `setRangeViewed`, ...), each composing
   `@repo/review`'s `ReviewStore` with `@repo/git`'s functions. `Session` here is the wire shape — a
   discriminated `target` (`{kind: "pr", ...}` or `{kind: "branch", baseRef, headRef}`, mirroring
   `packages/sidecar-api`'s `SessionTarget`) rather than a nullable `pr`, since a branch session still
@@ -155,7 +155,7 @@ seam" for the port/token handshake this boots into.
   `NoPullRequest` when `resolveReviewTarget` finds none open — the one selector that doesn't
   degrade to a branch diff on its own.
   Every method that touches a session's files — `listChangedFiles`/`readFileContents` (read) and
-  `setFileViewed`/`setRangeViewed` (write) alike — resolves `diff-head.ts`'s `resolveDiffHead` via
+  `setFilesViewed`/`setRangeViewed` (write) alike — resolves `diff-head.ts`'s `resolveDiffHead` via
   the local `resolveSessionDiffHead` adapter before doing anything else, and gates on its result the
   same way: `includeUncommitted` only applies when `worktreeEligible`, and every `@repo/git` call
   (or, on the write side, `readCurrentBlobContent`'s worktree-vs-`readFileContentsAtRef` choice)
@@ -181,7 +181,7 @@ seam" for the port/token handshake this boots into.
   active claim, or the content is size-gated — reconciliation needs the full content a size gate
   withheld.
   Every method that shells out against a session's files (`listChangedFiles`, `readFileContents`,
-  `setFileViewed`, `setRangeViewed`) resolves `repoRoot` through `resolveLiveRepoRoot` rather than
+  `setFilesViewed`, `setRangeViewed`) resolves `repoRoot` through `resolveLiveRepoRoot` rather than
   trusting the persisted `ReviewSession.repoRoot` directly — a `git worktree move`, or an external
   tool (`wt`/worktrunk) relocating a worktree nisi created, otherwise leaves every git spawn against
   that session `ENOENT`ing forever. See `@repo/git`'s `revalidateWorktreePath` for the mechanism

@@ -103,7 +103,7 @@ const ensurePullRequestHeadCommit = (
  * Decides {@link DiffHead} for a session — the single place that answers
  * "which ref is this session's head right now, and is the worktree safe to
  * overlay on it." Shared by every read (`listChangedFiles`/`readFileContents`)
- * and write (`setFileViewed`/`setRangeViewed`) path in `store.ts` that
+ * and write (`setFilesViewed`/`setRangeViewed`) path in `store.ts` that
  * touches a session's files, so the two can never disagree about which
  * commit "head" means at a given moment — before this was split out, only
  * the read paths consulted it, which is exactly how a write could silently
