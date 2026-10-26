@@ -7,8 +7,8 @@ status: stable
 generated: { by: claude-code/claude-opus-5, at: 2026-07-30T04:19:29Z }
 sources:
   - id: path-rule
-    resource: ../packages/harness-local/AGENTS.md
-    title: PATH widening (packages/harness-local/AGENTS.md)
+    resource: ../apps/desktop/sidecar/harness/AGENTS.md
+    title: Sandbox PATH (apps/desktop/sidecar/harness/AGENTS.md)
   - id: migrations
     resource: ../packages/db/AGENTS.md
     title: applyEmbeddedMigrations (packages/db/AGENTS.md)
@@ -36,7 +36,7 @@ from a `drizzle/` folder that won't exist.[^migrations]
 invisible to the compiler, yet `import.meta.url` is still rewritten to a virtual `/$bunfs/...` path
 — so the computed path resolves to nothing and fails as `ENOENT: /$bunfs/bridge/package.json`.
 `import x from "./f" with { type: "text" }` is inlined as a string literal and survives. This is what
-three of the five `@ai-sdk/harness*` patches do.
+the `claude-code`, `codex` and `opencode` adapter patches do (the fourth patch, on `@ai-sdk/harness` itself, makes the `error` stream part's `error` field optional).
 
 Same class, different library: `@earendil-works/pi-ai` loads its OAuth flows through a computed
 `import()` (`dist/auth/oauth/load.js`), so the compiled sidecar has no source tree to resolve them
@@ -48,9 +48,10 @@ for them at runtime.
 
 **`PATH` is narrower.** `bun run` prepends its own node-shim directory to a child's `PATH`; the
 compiled binary does not. OpenCode's bridge died with `exit code 127 — /bin/bash: node: command not
-found` for exactly this reason, and only ever under the compiled binary. The bare-`PATH`
-reproduction recipe is in
-[packages/harness-local/AGENTS.md](../packages/harness-local/AGENTS.md).[^path-rule]
+found` for exactly this reason, and only ever under the compiled binary. The sidecar hands the
+agent's sandbox an explicit `PATH` (`resolvedPath()`);[^path-rule] to reproduce the failure or verify
+a change, run the compiled `Contents/MacOS/sidecar` under a bare
+`PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin`, never `bun dev`.
 
 **The packaged `.app`'s hardened runtime grants nothing unless an entitlements file says so.** Different mechanism than the
 other four — this one is macOS code signing, not `bun build --compile`'s embedding rules — but the
@@ -84,11 +85,18 @@ hand-roll the oRPC wire format over raw `curl`.
 
 # The patches are load-bearing and silent
 
-All five `@ai-sdk/harness*` patches are pinned to exact versions and registered in
+All four `@ai-sdk/harness*` patches are pinned to exact versions and registered in
 `pnpm-workspace.yaml` (not `package.json` — pnpm 10+ ignores that key there without warning). A
 version bump drops them with no error: the build succeeds and the failure shows up at runtime, in
 the packaged app. **Re-verify a compiled build whenever a harness package is bumped.**
 
-[^path-rule]: PATH widening (packages/harness-local/AGENTS.md)
+The three adapter patches also add `dist/bridge/pnpm-lock.yaml`, copied verbatim from the last adapter
+release that shipped it (claude-code 1.0.162, codex 1.0.160, opencode 1.0.160). Upstream published later
+versions without that file (vercel/ai#23829, fix in vercel/ai#23852), so the first `createSession`
+fails with `ENOENT`. Each bump must first check that `dist/bridge/package.json` is byte-identical to
+the copied lockfile's release, or the lockfile no longer matches. Drop this part of the patches once a
+fixed adapter release is out.
+
+[^path-rule]: Sandbox PATH (apps/desktop/sidecar/harness/AGENTS.md)
 [^migrations]: applyEmbeddedMigrations (packages/db/AGENTS.md)
 [^entitlements]: entitlements.plist (apps/desktop/build/)

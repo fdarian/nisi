@@ -2,7 +2,7 @@ import { eventIterator, oc } from "@orpc/contract";
 import { Schema } from "effect";
 
 /**
- * The four adapters `@repo/harness-local` can drive. `harnesses` always
+ * The four adapters the sidecar can drive through `ai-sandbox-local`. `harnesses` always
  * reports all four regardless of whether each is currently `available` (see
  * `HarnessInfo`) — the onboarding picker and the settings page both need
  * every harness as a row, not a filtered list.
@@ -139,7 +139,7 @@ export type StoredWalkthrough = Schema.Schema.Type<typeof StoredWalkthrough>;
 
 /**
  * Progress events for `generate`'s stream. Cold start alone is ~13-28s
- * before the agent says anything (see `@repo/harness-local`'s AGENTS.md), so
+ * before the agent says anything (the first run installs a pinned copy of the CLI), so
  * these need to carry enough for the UI to show real progress rather than a
  * bare spinner — which turn, which tool, why a retry is happening.
  */

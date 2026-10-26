@@ -6,13 +6,13 @@ tags: [walkthrough, harness, architecture]
 status: stable
 generated: { by: claude-code/claude-opus-5, at: 2026-07-30T04:19:29Z }
 sources:
-  - id: harness-local
-    resource: ../packages/harness-local/AGENTS.md
-    title: packages/harness-local
+  - id: sandbox
+    resource: ../apps/desktop/sidecar/harness/AGENTS.md
+    title: The sandbox (apps/desktop/sidecar/harness/AGENTS.md)
 ---
 
-Walkthrough generation goes through AI SDK's `HarnessAgent` plus a local sandbox provider
-([packages/harness-local](../packages/harness-local/AGENTS.md)),[^harness-local] rather than talking
+Walkthrough generation goes through AI SDK's `HarnessAgent` plus `ai-sandbox-local`, a sandbox
+over the real worktree ([sidecar/harness](../apps/desktop/sidecar/harness/AGENTS.md)),[^sandbox] rather than talking
 to each CLI's own SDK. The direct route looks simpler and costs more.
 
 # Why not direct
@@ -29,8 +29,9 @@ Worth knowing, because both surprise people:
 - **The adapters install their own pinned copy of each CLI** rather than exec'ing the user's global
   binary, and there's no config to redirect it. Idempotent via a recipe-hash marker, and because
   this runs on real persistent disk rather than an ephemeral VM, it installs once rather than per
-  session. The user's _credentials_ stay theirs — the process runs as them, against their
-  `~/.claude`, `~/.codex`, and so on.
+  session. The user's _credentials_ stay theirs — the process runs as them, but under a sandbox
+  `HOME` (`~/.nisi/harness-home`), so only the CLI logins the adapters forward carry over; dotfiles
+  like `~/.gitconfig` are not visible to the agent.
 - **No adapter exposes an `isAvailable` API.** `HarnessInfo.available` is a live binary-presence
   check via `@repo/bin-resolver`, kept sharply distinct from `enabled` (the settings toggle, a user
   declaration). A harness can be enabled but unavailable, or available but not enabled. Neither
@@ -42,6 +43,6 @@ Worth knowing, because both surprise people:
 `HarnessAgent`'s Claude Code / Codex / OpenCode adapters are sandbox-bridge adapters, and the only
 providers Vercel ships are their remote sandbox and `just-bash` — which, despite the name, is a
 JS-reimplemented bash over an **in-memory** virtual filesystem. Both would have the agent describing
-a worktree it can't actually read. That's the gap `@repo/harness-local` fills.
+a worktree it can't actually read. That's the gap `ai-sandbox-local` fills.
 
-[^harness-local]: packages/harness-local
+[^sandbox]: The sandbox (apps/desktop/sidecar/harness/AGENTS.md)

@@ -1,7 +1,8 @@
 # sidecar
 
 Implements `packages/sidecar-api`'s contract. Pure wiring — the actual git/persistence/agent logic
-lives in `@repo/git`, `@repo/review`, `@repo/walkthrough`, and `@repo/harness-local`; this directory
+lives in `@repo/git`, `@repo/review`, and `@repo/walkthrough`, plus `ai-sandbox-local` for running agents on
+the worktree (see [harness](harness/AGENTS.md)); this directory
 composes them and translates between domain errors and oRPC error codes. See root `AGENTS.md` → "The
 seam" for the port/token handshake this boots into.
 - `index.ts` — boot, in two layers with different lifetimes. `EarlyLayer` (`LoggingLive` + Bun

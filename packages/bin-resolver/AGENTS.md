@@ -24,9 +24,10 @@ The shell subprocess is the only expensive step here, and callers reach it uneve
 - `resolveBin`/`checkBinAvailability` probe **only when `PATH` and the well-known dirs both miss**.
   In dev — a terminal-launched sidecar, whose `PATH` already has everything — it never runs at all.
 - `resolvedPath()` always probes: there's no "not found" signal to trigger on when the caller
-  won't say which binaries its shell string will reach for. `@repo/harness-local`'s `spawnEnv` is
-  the caller, and has to keep calling it **per invocation** rather than capturing a module-level
-  constant, or a refresh can never take effect for the life of the process.
+  won't say which binaries its shell string will reach for. The sidecar's
+  `harness/sandbox.ts` is the caller (the agent's sandbox `PATH`), and calls it **per sandbox
+  session** rather than capturing a module-level constant, or a refresh can never take effect for
+  the life of the process.
 - `refreshLoginShellPath()` is wired into `walkthrough.refreshHarnesses`
   (`apps/desktop/sidecar/http.ts`) — the only thing that makes a CLI installed _while nisi is
   running_ visible. It reaches every per-call consumer, but not `@repo/git`'s `GIT_BIN`/`GH_BIN`,
@@ -47,5 +48,5 @@ never caches `checkBinAvailability` at all (unlike the model lists next to it), 
   sidecar resolves `node` even under an otherwise bare `PATH` while the `bun build --compile`
   binary the `.app` ships does not — this package's entire failure mode is invisible in dev.
   [knowledge/compiled-binary-differences.md](../../knowledge/compiled-binary-differences.md) covers
-  the rest of that class; `@repo/harness-local`'s AGENTS.md has the bare-`PATH` reproduction recipe
-  to verify a change against the compiled sidecar.
+  the rest of that class, including the bare-`PATH` recipe to verify a change against the compiled
+  sidecar.

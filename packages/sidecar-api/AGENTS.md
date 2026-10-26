@@ -6,7 +6,7 @@ Git/review procedures sit alongside `health.check`.
 - `health.ts`, `sessions.ts`, `diff.ts`, `review.ts`, `events.ts`, `walkthrough.ts`, `chat.ts`,
   `settings.ts`, `code-index.ts` — schema + procedure contract per domain
   (`packages/sidecar-api/src/<domain>.ts`), each just types — no git/SQLite/agent logic lives here,
-  that's `@repo/git`/`@repo/review`/`@repo/walkthrough`/`@repo/harness-local`/`@repo/settings`/`@repo/code-lsp`,
+  that's `@repo/git`/`@repo/review`/`@repo/walkthrough`/`@repo/settings`/`@repo/code-lsp`,
   consumed only by the sidecar's implementation. `walkthrough.ts` redeclares `@repo/walkthrough`'s
   `Location`/`ReferenceBlock`/`Section`/`Walkthrough` rather than importing them, same as
   `diff.ts` mirrors `@repo/git`'s `FileChange` — this package stays dependency-free from every
