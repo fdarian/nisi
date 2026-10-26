@@ -6,12 +6,14 @@ export const reviewContract = {
 	 * Writes the file's content snapshot immediately at tick time, regardless
 	 * of whether anything reads it yet — so reconciliation can consume
 	 * existing snapshots without ever needing a migration to backfill them.
+	 * One call covers a batch of paths (e.g. a folder tick), so the client
+	 * issues a single write instead of one per file.
 	 */
 	setViewed: oc
 		.input(
 			Schema.Struct({
 				sessionId: Schema.String,
-				path: Schema.String,
+				paths: Schema.Array(Schema.String),
 				viewed: Schema.Boolean,
 			}),
 		)
@@ -27,7 +29,7 @@ export const reviewContract = {
 	 * one unit, matching how the reference pane groups them into a single
 	 * checkbox per block+path. `blockLabel`/`ranges` are ignored when
 	 * `viewed` is `false` (unticking only needs `blockId` to find the claim),
-	 * same asymmetry as `setViewed`'s `path` needing no content on unview.
+	 * same asymmetry as `setViewed`'s `paths` needing no content on unview.
 	 */
 	setRangeViewed: oc
 		.input(

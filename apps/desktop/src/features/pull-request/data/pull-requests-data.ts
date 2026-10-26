@@ -387,7 +387,7 @@ async function resolvePullRequestOpen(
  * `onOpened` is wired as the mutation's own `onSuccess` (hook-level, not a
  * per-call one passed to `.mutate()`) purely so the palette's call site stays
  * a plain `open(params)` — there's no `useMutationState` overlay elsewhere
- * reading this mutation's pending status, so unlike `useSetFileViewed`
+ * reading this mutation's pending status, so unlike `useSetFilesViewed`
  * (`#/features/pull-request/data/pr-data.ts`) there's no timing subtlety riding on the split, just
  * fewer arguments to thread through. Only fires for the `"opened"` outcome —
  * a cancelled folder picker resolves the mutation successfully but leaves

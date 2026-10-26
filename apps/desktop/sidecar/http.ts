@@ -292,7 +292,7 @@ const repoPathFailure = <Bad, Unavailable>(
 /**
  * `diff.files`/`diff.fileContents`/`review.setViewed`/`review.setRangeViewed`
  * all read the working tree (`@repo/git`'s `readWorktreeBlobContent`,
- * transitively via `store.ts`'s `readCurrentHashes`/`setFileViewed`/
+ * transitively via `store.ts`'s `readCurrentHashes`/`setFilesViewed`/
  * `setRangeViewed`), where absence is already handled as a value — anything
  * that reaches here is a genuine failure (permissions, a directory in the
  * file's place, ...), so it's an `INTERNAL_SERVER_ERROR` the same way a
@@ -303,7 +303,7 @@ const formatWorktreeReadFailed = (cause: WorktreeReadFailed): string =>
 
 /**
  * `store.ts`'s `resolveLiveRepoRoot` (behind `listChangedFiles`/
- * `readFileContents`/`setFileViewed`/`setRangeViewed`) already tried the
+ * `readFileContents`/`setFilesViewed`/`setRangeViewed`) already tried the
  * self-heal path — `@repo/git`'s `revalidateWorktreePath` found nothing
  * checked out on this session's branch in its known main clone either, so
  * the worktree is genuinely gone (`git worktree remove`), not just moved.
@@ -1026,7 +1026,7 @@ export function attachRouter(
 			setViewed: authed.review.setViewed.effect(function* ({ input, errors }) {
 				const store = yield* Store;
 				yield* store
-					.setFileViewed(input.sessionId, input.path, input.viewed)
+					.setFilesViewed(input.sessionId, input.paths, input.viewed)
 					.pipe(
 						Effect.catchTag("SessionNotFound", () =>
 							Effect.fail(

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useCallback, useMemo } from "react";
 import { Tabs, TabsContent } from "#/components/ui/tabs";
 import { useDevToolScope } from "#/features/devtools/dev-tool-context";
 import { useRefetchToasts } from "#/features/devtools/use-refetch-toasts";
@@ -17,7 +17,7 @@ import {
 	usePullRequestAttention,
 	useReviewState,
 	useSessionWatch,
-	useSetFileViewed,
+	useSetFilesViewed,
 } from "#/features/pull-request/data/pr-data";
 import type { OpenPullRequestParams } from "#/features/pull-request/data/pull-requests-data";
 import {
@@ -76,7 +76,11 @@ export function PrView({
 	const isLoading = fileChanges.isLoading;
 	const error = fileChanges.error;
 	const reviewState = useReviewState(orpc, files);
-	const setViewed = useSetFileViewed(orpc, session.id);
+	const setFilesViewed = useSetFilesViewed(orpc, session.id);
+	const setViewed = useCallback(
+		(path: string, viewed: boolean) => setFilesViewed([path], viewed),
+		[setFilesViewed],
+	);
 	const {
 		hasPendingChanges,
 		isRefreshing: isRefreshingBase,
@@ -218,6 +222,7 @@ export function PrView({
 							reviewState={reviewState}
 							session={session}
 							setViewed={setViewed}
+							setFilesViewed={setFilesViewed}
 							shortcutsEnabled={isSelectedTab}
 							isVisible={isFilesChangedVisible}
 						/>

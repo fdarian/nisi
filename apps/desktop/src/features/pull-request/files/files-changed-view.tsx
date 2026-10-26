@@ -58,6 +58,8 @@ type FilesChangedViewProps = {
 	files: readonly FileChange[];
 	reviewState: ReadonlyMap<string, ReviewStateEntry>;
 	setViewed: (path: string, viewed: boolean) => void;
+	/** One write for the whole batch — a per-path loop of `setViewed` calls would fire a mutation per file. */
+	setFilesViewed: (paths: readonly string[], viewed: boolean) => void;
 	/** Opens a path in a whole-file viewer tab — threaded down to `DiffPane`'s per-file "…" menu. */
 	onOpenFile: (path: string) => void;
 	hasPendingChanges: boolean;
@@ -76,6 +78,7 @@ export function FilesChangedView({
 	files,
 	reviewState,
 	setViewed,
+	setFilesViewed,
 	onOpenFile,
 	hasPendingChanges,
 	onRefresh,
@@ -397,9 +400,9 @@ export function FilesChangedView({
 	// `r`'s toggle, so there's no single prior state to restore.
 	const handleMarkReviewed = useCallback(
 		(paths: readonly string[]) => {
-			for (const path of paths) setViewed(path, true);
+			setFilesViewed(paths, true);
 		},
-		[setViewed],
+		[setFilesViewed],
 	);
 
 	// The diff pane's scroll-driven focus report (`DiffPane`'s

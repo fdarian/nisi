@@ -488,7 +488,7 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 /**
  * `invalidateQueries`' `predicate`, meant to be combined with a `queryKey`
  * filter that already narrows to one session's `diff.fileContents` queries
- * (see `useSetFileViewed`/`useSetRangeViewed` below) — true when that
+ * (see `useSetFilesViewed`/`useSetRangeViewed` below) — true when that
  * query's own recorded request actually covered `path`, so a single file's
  * review-state change refetches only the one chunk it landed in instead of
  * every chunk for the session.
@@ -529,7 +529,7 @@ const queryCoveredPath = (query: Query, path: string): boolean => {
 };
 
 /** The part of a pending `review.setViewed` call we're willing to predict — see `useReviewState`. */
-type PendingFileViewed = { path: string; viewed: boolean };
+type PendingFilesViewed = { paths: readonly string[]; viewed: boolean };
 
 /**
  * Derives the sidebar/pane's three-value `ReviewState` map from
@@ -541,7 +541,7 @@ type PendingFileViewed = { path: string; viewed: boolean };
  * server-only: a pending call only ever predicts `"viewed"`/`"unreviewed"`,
  * never `"changed-after-review"`, since `changedSinceReview` comes from a
  * snapshot hash we don't have until the server responds (see the doc comment
- * on `useSetFileViewed` for why nothing beyond the boolean is honest to
+ * on `useSetFilesViewed` for why nothing beyond the boolean is honest to
  * predict). The overlay is read via `useMutationState`'s `status: "pending"`
  * filter, so it self-clears the instant a call settles either way — success
  * lands through the invalidation below, failure just reverts to whatever
@@ -559,13 +559,13 @@ export function useReviewState(
 	);
 	const pendingViewedCalls = useMutationState({
 		filters: { mutationKey: pendingMutationKey, status: "pending" },
-		select: (mutation) => mutation.state.variables as PendingFileViewed,
+		select: (mutation) => mutation.state.variables as PendingFilesViewed,
 	});
 
 	return useMemo(() => {
 		const pendingByPath = new Map<string, boolean>();
 		for (const call of pendingViewedCalls) {
-			pendingByPath.set(call.path, call.viewed);
+			for (const path of call.paths) pendingByPath.set(path, call.viewed);
 		}
 
 		const map = new Map<string, ReviewStateEntry>();
@@ -591,11 +591,12 @@ export function useReviewState(
 /**
  * `review.setViewed`, refetching the two queries its snapshot write
  * invalidates on success: `diff.files` (the sidebar's mute + orange dot) and
- * this file's `diff.fileContents` chunk (the pane's collapse ranges).
+ * the `diff.fileContents` chunks covering the written paths (the pane's
+ * collapse ranges). One call covers every path in a batch (a folder tick).
  * `diff.fileContents` is batched (`useFileContents`), so there's no
  * single-path cache entry to target directly — `queryCoveredPath` narrows
- * the session-wide `diff.fileContents` match down to just the one chunk
- * that actually requested `path`, so ticking one file's checkbox costs one
+ * the session-wide `diff.fileContents` match down to just the chunks
+ * that actually requested one of `paths`, so ticking one file's checkbox costs one
  * chunk's refetch regardless of how many files/chunks the PR has, not the
  * whole session's worth (contrast `useLiveFileChanges` below, which
  * deliberately *does* refetch every chunk — a real worktree change could
@@ -612,8 +613,8 @@ export function useReviewState(
  * `onSuccess` returns the invalidations' promises rather than firing them off
  * — TanStack Query keeps a mutation `"pending"` until a promise returned from
  * `onSuccess` settles, so `useReviewState`'s overlay (matched on that same
- * `"pending"` status) stays live until `diff.files`/this file's
- * `diff.fileContents` chunk have actually refetched, not just until the
+ * `"pending"` status) stays live until `diff.files`/the covered
+ * `diff.fileContents` chunks have actually refetched, not just until the
  * write itself resolved. Dropping the overlay any earlier would open a
  * window where it's cleared but the fresh server data hasn't landed yet —
  * the checkbox would render the stale pre-click value for a frame before the
@@ -634,7 +635,7 @@ export function useReviewState(
  * harness (`apps/desktop/CLAUDE.md`): a call-level `onSuccess` shows the
  * overlay clearing (`pending=[]`) within ~5ms of the write resolving, while
  * `diff.files` still holds the pre-click value for another ~150ms. Moving
- * this back to `.mutate()`'s call site — e.g. to read `path` from the closure
+ * this back to `.mutate()`'s call site — e.g. to read `paths` from the closure
  * again instead of `variables` — type-checks fine and no test catches it;
  * it just silently reopens that ~150ms window.
  *
@@ -646,14 +647,24 @@ export function useReviewState(
  * user feedback for a failure that would otherwise be silent (`NOT_FOUND` or
  * `INTERNAL_SERVER_ERROR` alike — both are `ORPCError`s, so `.message`
  * covers either without discriminating on the tag).
+ *
+ * `scope` serializes this session's ticks. Unscoped, two overlapping calls
+ * would each invalidate `diff.files` while the other's refetch is in flight;
+ * `invalidateQueries` cancels an in-flight refetch by default and swallows
+ * the cancellation, so the earlier call's `onSuccess` would resolve early,
+ * drop its overlay, and leave the cache holding pre-write data — the file
+ * would flicker back until a later refetch landed. A queued scoped mutation
+ * is already `"pending"`, so its overlay holds while it waits, and each
+ * call's refetch finishes before the next write starts.
  */
-export function useSetFileViewed(
+export function useSetFilesViewed(
 	orpc: SidecarQueryUtils,
 	sessionId: string,
-): (path: string, viewed: boolean) => void {
+): (paths: readonly string[], viewed: boolean) => void {
 	const queryClient = useQueryClient();
 	const mutation = useMutation({
 		...orpc.review.setViewed.mutationOptions(),
+		scope: { id: `review.setViewed:${sessionId}` },
 		onSuccess: (_data, variables) =>
 			Promise.all([
 				queryClient.invalidateQueries({
@@ -661,12 +672,17 @@ export function useSetFileViewed(
 				}),
 				queryClient.invalidateQueries({
 					queryKey: orpc.diff.fileContents.key({ input: { sessionId } }),
-					predicate: (query) => queryCoveredPath(query, variables.path),
+					predicate: (query) =>
+						variables.paths.some((path) => queryCoveredPath(query, path)),
 				}),
 			]),
 		onError: (error, variables) => {
 			toastManager.add({
-				title: `Failed to update review state for ${variables.path}`,
+				title: `Failed to update review state for ${
+					variables.paths.length === 1
+						? variables.paths[0]
+						: `${variables.paths.length} files`
+				}`,
 				description: error instanceof Error ? error.message : String(error),
 				type: "error",
 			});
@@ -674,8 +690,8 @@ export function useSetFileViewed(
 	});
 
 	return useCallback(
-		(path: string, viewed: boolean) => {
-			mutation.mutate({ sessionId, path, viewed });
+		(paths: readonly string[], viewed: boolean) => {
+			mutation.mutate({ sessionId, paths, viewed });
 		},
 		[mutation, sessionId],
 	);
@@ -720,7 +736,7 @@ export function useOptimisticRangeBaselines(
 
 /**
  * `review.setRangeViewed` — one walkthrough reference block's claim on a set
- * of ranges within one file. Same invalidation shape as `useSetFileViewed`,
+ * of ranges within one file. Same invalidation shape as `useSetFilesViewed`,
  * narrowed to `params.path`'s own `diff.fileContents` chunk via
  * `queryCoveredPath`: the reference pane's own query and the Files Changed
  * diff pane's are the same batched cache entries (both key off `sessionId`
@@ -810,7 +826,7 @@ export type LiveFileChanges = {
  * session on its old head until `diff.refresh`. Nothing refetches on window
  * focus or tab switch: the diff only changes when the user clicks Refresh.
  * Deliberately session-wide (every `diff.fileContents` chunk, not just one
- * path's via `queryCoveredPath` the way `useSetFileViewed`/`useSetRangeViewed`
+ * path's via `queryCoveredPath` the way `useSetFilesViewed`/`useSetRangeViewed`
  * narrow it) — unlike those two, this event doesn't say *which* file moved,
  * only that *something* did (the poller's mtime/size signal, not a diff), so
  * there's no single path to scope the invalidation to. After fetching, invalidates

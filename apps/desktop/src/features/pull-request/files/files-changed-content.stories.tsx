@@ -1,12 +1,12 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { Button } from "#/components/ui/button";
 import {
 	type FileChange,
 	type FileContent,
 	useFileChanges,
 	useReviewState,
-	useSetFileViewed,
+	useSetFilesViewed,
 } from "#/features/pull-request/data/pr-data";
 import { FIXTURE_SESSION } from "#/features/pull-request/walkthrough/walkthrough.fixture";
 import { StoryQueryBoundary } from "../../../../.storybook/decorators";
@@ -99,7 +99,11 @@ function Pane(props: {
 	);
 	const changes = useFileChanges(orpc, FIXTURE_SESSION.id);
 	const reviewState = useReviewState(orpc, changes.files);
-	const setViewed = useSetFileViewed(orpc, FIXTURE_SESSION.id);
+	const setFilesViewed = useSetFilesViewed(orpc, FIXTURE_SESSION.id);
+	const setViewed = useCallback(
+		(path: string, viewed: boolean) => setFilesViewed([path], viewed),
+		[setFilesViewed],
+	);
 	return (
 		<FilesChangedContent
 			orpc={orpc}
@@ -107,6 +111,7 @@ function Pane(props: {
 			files={changes.files}
 			reviewState={reviewState}
 			setViewed={setViewed}
+			setFilesViewed={setFilesViewed}
 			isLoading={props.state === "loading" || changes.isLoading}
 			error={changes.error}
 			hasPendingChanges={false}

@@ -436,7 +436,7 @@ test("base refresh drops upstream-only files without changing head or remaining 
 							(file) => file.path,
 						),
 					).toEqual(["a.ts", "merged.ts"]);
-					yield* store.setFileViewed(session.id, "a.ts", true);
+					yield* store.setFilesViewed(session.id, ["a.ts"], true);
 					const reviewed = yield* reviewStore.getFileReviewState(
 						session.id,
 						"a.ts",
@@ -648,7 +648,7 @@ describe("Store — a PR session's worktree that moved on to another commit", ()
 					expect(yield* paths(false)).toEqual(["a.ts", "b.ts"]);
 
 					// Snapshot taken from the worktree bytes (includeUncommitted on).
-					yield* store.setFileViewed(session.id, "a.ts", true);
+					yield* store.setFilesViewed(session.id, ["a.ts"], true);
 
 					const events: string[] = [];
 					const unsubscribe = subscribe((event) => {
@@ -894,7 +894,7 @@ describe("Store — a PR session after the PR is merged", () => {
 								prFacts(head, mainBefore, "OPEN"),
 							);
 							expect(yield* paths).toEqual(["a.ts", "b.ts"]);
-							yield* store.setFileViewed(session.id, "a.ts", true);
+							yield* store.setFilesViewed(session.id, ["a.ts"], true);
 
 							const baseSha = yield* Effect.promise(() =>
 								mergeIntoMain(root, parent, kind, [first, head]),
@@ -2166,7 +2166,7 @@ test("a post-review edit to the same line removes the reviewed version, not the 
 						baseRef: "main",
 					}),
 				);
-				yield* store.setFileViewed(opened.id, "a.ts", true);
+				yield* store.setFilesViewed(opened.id, ["a.ts"], true);
 				return opened;
 			}).pipe(Effect.provide(makeTestLayer(dataDir))),
 		);
@@ -2234,7 +2234,7 @@ test("a walkthrough claim and a whole-file tick both produce the empty reviewed 
 					[{ startLine: 2, endLine: 2 }],
 					false,
 				);
-				yield* store.setFileViewed(session.id, "a.ts", true);
+				yield* store.setFilesViewed(session.id, ["a.ts"], true);
 				const wholeFile = yield* store.readFileContents(
 					session.id,
 					[{ path: "a.ts", force: false }],
@@ -2345,7 +2345,7 @@ describe("Store.openSession — branch target with an explicit headRef (two arbi
 
 /**
  * Regression coverage for the corruption `resolveDiffHead`
- * (`apps/desktop/sidecar/diff-head.ts`) exists to prevent: `setFileViewed`/
+ * (`apps/desktop/sidecar/diff-head.ts`) exists to prevent: `setFilesViewed`/
  * `setRangeViewed` used to read `readWorktreeBlobContent` unconditionally,
  * so a session whose head wasn't what `repoRoot` actually had checked out —
  * an explicit `<base>..<head>` session, or an ordinary session the caller
@@ -2353,7 +2353,7 @@ describe("Store.openSession — branch target with an explicit headRef (two arbi
  * snapshot the wrong branch's content on tick.
  */
 describe("Store — tracked-changes writes never snapshot the wrong branch's content", () => {
-	test("setFileViewed on an explicit non-checkout head snapshots headRef's content, not the live checkout", async () => {
+	test("setFilesViewed on an explicit non-checkout head snapshots headRef's content, not the live checkout", async () => {
 		await withTestRepoAndDataDir(async (repoRoot, dataDir) => {
 			await sh(repoRoot, ["checkout", "-q", "-b", "feature"]);
 			await Bun.write(join(repoRoot, "a.ts"), "feature content\n");
@@ -2380,7 +2380,7 @@ describe("Store — tracked-changes writes never snapshot the wrong branch's con
 							headRef: "feature",
 						}),
 					);
-					yield* store.setFileViewed(session.id, "a.ts", true);
+					yield* store.setFilesViewed(session.id, ["a.ts"], true);
 					const state = yield* reviewStore.getFileReviewState(
 						session.id,
 						"a.ts",
@@ -2397,7 +2397,7 @@ describe("Store — tracked-changes writes never snapshot the wrong branch's con
 		});
 	});
 
-	test("setFileViewed on an ordinary session snapshots headRef's content once the caller checks a different branch out mid-session", async () => {
+	test("setFilesViewed on an ordinary session snapshots headRef's content once the caller checks a different branch out mid-session", async () => {
 		await withTestRepoAndDataDir(async (repoRoot, dataDir) => {
 			await sh(repoRoot, ["checkout", "-q", "-b", "feature"]);
 			await Bun.write(join(repoRoot, "a.ts"), "feature content\n");
@@ -2431,7 +2431,7 @@ describe("Store — tracked-changes writes never snapshot the wrong branch's con
 				Effect.gen(function* () {
 					const store = yield* Store;
 					const reviewStore = yield* ReviewStore;
-					yield* store.setFileViewed(sessionId, "a.ts", true);
+					yield* store.setFilesViewed(sessionId, ["a.ts"], true);
 					const state = yield* reviewStore.getFileReviewState(
 						sessionId,
 						"a.ts",
@@ -2538,7 +2538,7 @@ describe("Store — tracked-changes writes never snapshot the wrong branch's con
 	});
 });
 
-describe("Store.setFileViewed — a committed symlink", () => {
+describe("Store.setFilesViewed — a committed symlink", () => {
 	test("stays reviewed on the next read instead of immediately reporting changedSinceReview", async () => {
 		await withTestRepoAndDataDir(async (repoRoot, dataDir) => {
 			// `link.txt` is added on a feature branch cut from `main` — needed so
@@ -2558,7 +2558,7 @@ describe("Store.setFileViewed — a committed symlink", () => {
 							kind: "branch",
 						}),
 					);
-					yield* store.setFileViewed(session.id, "link.txt", true);
+					yield* store.setFilesViewed(session.id, ["link.txt"], true);
 					return yield* store.listChangedFiles(session.id, false);
 				}).pipe(Effect.provide(makeTestLayer(dataDir))),
 			);
@@ -2570,7 +2570,42 @@ describe("Store.setFileViewed — a committed symlink", () => {
 	});
 });
 
-describe("Store.setFileViewed — working-tree read failures", () => {
+describe("Store.setFilesViewed — a batch of paths", () => {
+	test("ticks and unticks every path in one call", async () => {
+		await withTestRepoAndDataDir(async (repoRoot, dataDir) => {
+			await sh(repoRoot, ["checkout", "-q", "-b", "feature"]);
+			await Bun.write(join(repoRoot, "a.ts"), "a\n");
+			await Bun.write(join(repoRoot, "b.ts"), "b\n");
+			await sh(repoRoot, ["add", "-A"]);
+			await sh(repoRoot, ["commit", "-q", "-m", "add files"]);
+
+			const result = await Effect.runPromise(
+				Effect.gen(function* () {
+					const store = yield* Store;
+					const session = yield* openedSession(
+						store.openSession(repoRoot, { kind: "branch" }),
+					);
+					yield* store.setFilesViewed(session.id, ["a.ts", "b.ts"], true);
+					const ticked = yield* store.listChangedFiles(session.id, false);
+					yield* store.setFilesViewed(session.id, ["a.ts", "b.ts"], false);
+					const unticked = yield* store.listChangedFiles(session.id, false);
+					return { ticked, unticked };
+				}).pipe(Effect.provide(makeTestLayer(dataDir))),
+			);
+
+			expect(result.ticked.map((file) => file.review?.viewed)).toEqual([
+				true,
+				true,
+			]);
+			expect(result.unticked.map((file) => file.review?.viewed)).toEqual([
+				undefined,
+				undefined,
+			]);
+		});
+	});
+});
+
+describe("Store.setFilesViewed — working-tree read failures", () => {
 	/**
 	 * Puts `a.ts` in the session's diff (changed between `main` and a
 	 * `feature` branch checked out on top of it) without touching what's
@@ -2609,7 +2644,7 @@ describe("Store.setFileViewed — working-tree read failures", () => {
 						}),
 					);
 
-					yield* store.setFileViewed(session.id, "a.ts", true);
+					yield* store.setFilesViewed(session.id, ["a.ts"], true);
 
 					const state = yield* reviewStore.getFileReviewState(
 						session.id,
@@ -2656,7 +2691,7 @@ describe("Store.setFileViewed — working-tree read failures", () => {
 					);
 
 					const outcome = yield* store
-						.setFileViewed(session.id, "a.ts", true)
+						.setFilesViewed(session.id, ["a.ts"], true)
 						.pipe(Effect.result);
 					const state = yield* reviewStore.getFileReviewState(
 						session.id,
@@ -2676,7 +2711,7 @@ describe("Store.setFileViewed — working-tree read failures", () => {
 
 /**
  * Regression coverage for the bug `readCurrentContent`'s consolidation
- * (`apps/desktop/sidecar/store.ts`) fixed: `setFileViewed`/`setRangeViewed`
+ * (`apps/desktop/sidecar/store.ts`) fixed: `setFilesViewed`/`setRangeViewed`
  * used to snapshot via a helper that read the worktree whenever the session
  * was worktree-eligible, regardless of the `includeUncommitted` setting,
  * while `listChangedFiles`'s `attachReviewState` only read the worktree when
@@ -2691,7 +2726,7 @@ describe("Store.setFileViewed — working-tree read failures", () => {
  * standing in `hashContent(new Uint8Array())` for it — a real hash that
  * could never equal a real snapshot.
  */
-describe("Store — setFileViewed and listChangedFiles agree on 'current content'", () => {
+describe("Store — setFilesViewed and listChangedFiles agree on 'current content'", () => {
 	test("reviewed-then-still-deleted: stays unchanged in committed-only mode even with a stray untracked file at that path", async () => {
 		await withTestRepoAndDataDir(async (repoRoot, dataDir) => {
 			await sh(repoRoot, ["checkout", "-q", "-b", "feature"]);
@@ -2715,7 +2750,7 @@ describe("Store — setFileViewed and listChangedFiles agree on 'current content
 						}),
 					);
 
-					yield* store.setFileViewed(session.id, "a.ts", true);
+					yield* store.setFilesViewed(session.id, ["a.ts"], true);
 
 					const state = yield* reviewStore.getFileReviewState(
 						session.id,
@@ -2757,7 +2792,7 @@ describe("Store — setFileViewed and listChangedFiles agree on 'current content
 						}),
 					);
 
-					yield* store.setFileViewed(session.id, "a.ts", true);
+					yield* store.setFilesViewed(session.id, ["a.ts"], true);
 
 					const state = yield* reviewStore.getFileReviewState(
 						session.id,
@@ -2803,7 +2838,7 @@ describe("Store — setFileViewed and listChangedFiles agree on 'current content
 							baseRef: "main",
 						}),
 					);
-					yield* store.setFileViewed(session.id, "a.ts", true);
+					yield* store.setFilesViewed(session.id, ["a.ts"], true);
 					return session.id;
 				}).pipe(Effect.provide(makeTestLayer(dataDir))),
 			);
@@ -2843,7 +2878,7 @@ describe("Store — setFileViewed and listChangedFiles agree on 'current content
 							baseRef: "main",
 						}),
 					);
-					yield* store.setFileViewed(session.id, "a.ts", true);
+					yield* store.setFilesViewed(session.id, ["a.ts"], true);
 					return session.id;
 				}).pipe(Effect.provide(makeTestLayer(dataDir))),
 			);
