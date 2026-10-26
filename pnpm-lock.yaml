@@ -367,8 +367,8 @@ importers:
         specifier: ^1.170.45
         version: 1.170.45(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
       ai-sandbox-local:
-        specifier: 0.1.0
-        version: 0.1.0(@ai-sdk/harness@1.0.163(patch_hash=bfa6e769e875cfd74e2c343d89ac0de224afc1618ae5e125c3d04a6472351661)(ws@8.21.0)(zod@4.6.7))(@ai-sdk/provider-utils@5.0.67(zod@4.6.7))
+        specifier: 0.1.1
+        version: 0.1.1(@ai-sdk/harness@1.0.163(patch_hash=bfa6e769e875cfd74e2c343d89ac0de224afc1618ae5e125c3d04a6472351661)(ws@8.21.0)(zod@4.6.7))(@ai-sdk/provider-utils@5.0.67(zod@4.6.7))
       anser:
         specifier: ^2.3.5
         version: 2.3.5
@@ -5729,10 +5729,10 @@ packages:
       vite:
         optional: true
 
-  ai-sandbox-local@0.1.0:
+  ai-sandbox-local@0.1.1:
     resolution:
       {
-        integrity: sha512-X66lnnFff8kBE/OKEFj70ZFB7htOLRBa/aePsu+HQIxJEZaXIIZr4Q68GHsbVc/HM9lz7eCkA/lkV3kglOMCRQ==,
+        integrity: sha512-K1JJJCpLzMINUWQjSQlEa+z7m0x4xxLbPnbXfIpj8qJAGd2YJlO5rEaPLSPkmDSIAFLB5+yNvzFNsAJkk+aYdA==,
       }
     engines: { node: ">=22" }
     peerDependencies:
@@ -14395,7 +14395,7 @@ snapshots:
       react-dom: 19.3.1(react@19.3.1)
       vite: 8.3.5(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(yaml@2.9.0)
 
-  ai-sandbox-local@0.1.0(@ai-sdk/harness@1.0.163(patch_hash=bfa6e769e875cfd74e2c343d89ac0de224afc1618ae5e125c3d04a6472351661)(ws@8.21.0)(zod@4.6.7))(@ai-sdk/provider-utils@5.0.67(zod@4.6.7)):
+  ai-sandbox-local@0.1.1(@ai-sdk/harness@1.0.163(patch_hash=bfa6e769e875cfd74e2c343d89ac0de224afc1618ae5e125c3d04a6472351661)(ws@8.21.0)(zod@4.6.7))(@ai-sdk/provider-utils@5.0.67(zod@4.6.7)):
     dependencies:
       "@ai-sdk/harness": 1.0.163(patch_hash=bfa6e769e875cfd74e2c343d89ac0de224afc1618ae5e125c3d04a6472351661)(ws@8.21.0)(zod@4.6.7)
       "@ai-sdk/provider-utils": 5.0.67(zod@4.6.7)
