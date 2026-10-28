@@ -131,9 +131,7 @@ function ShellFrame({
 			children: (
 				<>
 					{titleBar}
-					<InsetPane className="my-0">
-						{children}
-					</InsetPane>
+					<InsetPane className="my-0">{children}</InsetPane>
 					<div className="relative flex min-h-2 items-center">
 						<DevFooter />
 						<div className="grow" />
