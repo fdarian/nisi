@@ -11,8 +11,7 @@
  * that matters — a thread's `Chat` instance (and any turn it's mid-stream
  * on) must survive that kind of incidental re-render.
  *
- * `mx-2` mirrors `FramePanel`'s own `m-2` (`app-shell.tsx`'s
- * `INSET_PANE_CLASS`) so the strip's left/right edges line up with the
+ * `mx-2` mirrors `InsetPane`'s own `m-2` (`components/inset-pane.tsx`) so the strip's left/right edges line up with the
  * card's rather than running full-bleed to the window edge past its rounded
  * corners — a plain sibling with its own margin, not a child of
  * `FramePanel`, is enough to read as "part of the surface" once it shares

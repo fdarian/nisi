@@ -37,7 +37,7 @@ function StatefulWalkthroughView({
 }): React.ReactElement {
 	const [selection, setSelection] = useState(initialSelection);
 	return (
-		// `bg-pane-surface text-foreground` mirrors `AppShell`'s `INSET_PANE_CLASS`
+		// `bg-pane-surface text-foreground` mirrors `InsetPane`
 		// — the real app never renders `WalkthroughView` directly against `body`
 		// (`bg-neutral-100`, unthemed), always inside that themed surface. Without
 		// it, dark mode renders `text-foreground`'s near-white text on the body's

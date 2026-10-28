@@ -135,7 +135,7 @@ off; `renderer-window.ts` denies navigation and `window.open` and routes http(s)
   `NativeApi.setWindowGlass(enabled)` adds an untinted `NSGlassEffectView` (`electron-liquid-glass`, macOS 26+;
   `vibrancy` before that). The addon can't remove its view, so `off` is the renderer painting `--frame-surface`
   opaque: the frame (body, app shell, settings sidebar, tab strip's inactive tabs) is transparent, and the inner
-  `--pane-surface` panel 55% translucent (surfaces nested in it use `--pane-surface-nested`, transparent; sticky overlays add `--pane-surface-backdrop` blur), only under
+  `--pane-surface` panel (`components/inset-pane.tsx`, shared by the PR tabs and the settings page) translucent (surfaces nested in it use `--pane-surface-nested`, transparent; sticky overlays add `--pane-surface-backdrop` blur), only under
   `html[data-native-glass]`, which the renderer sets from `setWindowGlass`'s result (absent for the
   About window). The frame's wash is CSS on `body` keyed off `data-native-glass`, because a native
   `tintColor` amplifies the wallpaper. `setThemeSource` pins `nativeTheme` to the app theme so glass matches it.

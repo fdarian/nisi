@@ -34,9 +34,14 @@ export type GlassTranslucency = Record<GlassTheme, ThemeGlass>;
 /** The inner pane has always been more opaque than the frame around it, and dark glass reads too see-through at the light ratio; the offsets keep the single knob from flattening that. */
 const PANE_OFFSET: Record<GlassTheme, number> = { light: 15, dark: -5 };
 
+const DEFAULT_TRANSLUCENCY_PER_THEME: ThemeGlass = {
+	translucency: DEFAULT_GLASS_TRANSLUCENCY,
+	custom: null,
+};
+
 const DEFAULT_TRANSLUCENCY: GlassTranslucency = {
-	light: { translucency: DEFAULT_GLASS_TRANSLUCENCY, custom: null },
-	dark: { translucency: DEFAULT_GLASS_TRANSLUCENCY, custom: null },
+	light: DEFAULT_TRANSLUCENCY_PER_THEME,
+	dark: DEFAULT_TRANSLUCENCY_PER_THEME,
 };
 
 const enabledListeners = new Set<() => void>();
@@ -241,9 +246,12 @@ export function setGlassLayer(
 	}));
 }
 
-export function resetGlassLayers(scope: GlassScope) {
-	updateTranslucency(scope, (_theme, glass) => ({ ...glass, custom: null }));
+export function resetGlass(scope: GlassScope) {
+	updateTranslucency(scope, () => DEFAULT_TRANSLUCENCY_PER_THEME);
 }
+
+export const isGlassModified = (glass: ThemeGlass) =>
+	glass.custom !== null || glass.translucency !== DEFAULT_GLASS_TRANSLUCENCY;
 
 export function useGlassTranslucency(): GlassTranslucency {
 	return useSyncExternalStore((listener) => {

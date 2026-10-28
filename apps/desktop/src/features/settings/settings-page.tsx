@@ -41,7 +41,8 @@ import {
 	GLASS_TRANSLUCENCY_STEP,
 	type GlassLayer,
 	type GlassScope,
-	resetGlassLayers,
+	isGlassModified,
+	resetGlass,
 	resolveGlassLayers,
 	setGlassLayer,
 	setGlassTranslucency,
@@ -246,6 +247,9 @@ function WindowGlassAdvanced(): React.ReactElement {
 	const isCustom = scopedThemes.some(
 		(theme) => translucency[theme].custom !== null,
 	);
+	const isModified = scopedThemes.some((theme) =>
+		isGlassModified(translucency[theme]),
+	);
 
 	return (
 		<CollapsiblePanel>
@@ -269,9 +273,9 @@ function WindowGlassAdvanced(): React.ReactElement {
 					onChange={(value) => setGlassTranslucency(scope, value)}
 					title="Translucency"
 					trailing={
-						isCustom && (
+						isModified && (
 							<Button
-								onClick={() => resetGlassLayers(scope)}
+								onClick={() => resetGlass(scope)}
 								size="xs"
 								variant="link"
 							>
