@@ -175,7 +175,7 @@ function ChatPanelBody({
 	return (
 		<motion.div
 			animate={{ opacity: 1, scale: 1, y: 0 }}
-			className="fixed right-4 bottom-14 z-50 flex max-h-[calc(100vh-4.5rem)] max-w-[calc(100vw-2rem)] flex-col overflow-hidden rounded-xl border bg-popover text-popover-foreground shadow-lg/10"
+			className="fixed right-4 bottom-14 z-50 flex max-h-[calc(100vh-4.5rem)] max-w-[calc(100vw-2rem)] flex-col overflow-hidden rounded-xl border bg-(--pane-surface-opaque) text-foreground shadow-lg/10"
 			exit={{ opacity: 0, scale: 0.96, y: 8 }}
 			initial={{ opacity: 0, scale: 0.96, y: 8 }}
 			style={{ width: panelSize.width }}
@@ -233,7 +233,7 @@ function ChatPanelBody({
 					onRemoveReference={(reference) =>
 						dock.removeReference(thread.id, reference)
 					}
-					onSend={(text, harness, model) => {
+					onSend={(text, harness, model, effort) => {
 						// Only the send that actually locks the thread's
 						// harness/model in is "the user sent with this" —
 						// every later send in the same thread reuses the
@@ -242,14 +242,15 @@ function ChatPanelBody({
 						if (thread.harness === null) {
 							setLastChatModel({ harness, modelId: model });
 						}
-						dock.lockThreadHarness(thread.id, harness, model);
+						dock.lockThreadHarness(thread.id, harness, model, effort);
 						scroll.scrollToEnd();
-						void sendMessage({ text }, { body: { harness, model } });
+						void sendMessage({ text }, { body: { harness, model, effort } });
 					}}
 					onStop={() => void stop()}
 					orpc={orpc}
 					references={thread.references}
 					status={status}
+					threadEffort={thread.effort}
 					threadHarness={thread.harness}
 					threadModel={thread.model}
 				/>

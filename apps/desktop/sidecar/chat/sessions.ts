@@ -1,5 +1,5 @@
 import { HarnessAgent, type HarnessAgentSession } from "@ai-sdk/harness/agent";
-import type { HarnessId } from "@repo/sidecar-api";
+import type { ChatEffort, HarnessId } from "@repo/sidecar-api";
 import { Context, Effect, Layer } from "effect";
 import { createHarnessAgentTarget } from "../harness/harnesses.ts";
 import {
@@ -57,6 +57,7 @@ export type ChatSessionParams = {
 	readonly threadId: string;
 	readonly harness: HarnessId;
 	readonly model: string | undefined;
+	readonly effort: ChatEffort | undefined;
 	readonly repoRoot: string;
 	readonly instructions: string;
 };
@@ -72,7 +73,7 @@ const startChatSession = async (
 	// conversation with the coding agent — the point is that it can actually
 	// do things, not just look.
 	const agent = new HarnessAgent({
-		...createHarnessAgentTarget(params.harness, params.model),
+		...createHarnessAgentTarget(params.harness, params.model, params.effort),
 		sandboxConfig: HARNESS_SANDBOX_CONFIG,
 		instructions: params.instructions,
 		telemetry: {},

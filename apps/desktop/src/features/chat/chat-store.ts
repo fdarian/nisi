@@ -26,6 +26,7 @@
  * (server-side too, see `chatContract.send`'s doc) for every one after.
  */
 import { Chat } from "@ai-sdk/react";
+import type { ChatEffort } from "@repo/sidecar-api";
 import type { UIMessage } from "ai";
 import {
 	createContext,
@@ -55,6 +56,8 @@ export type ChatThreadMeta = {
 	 */
 	harness: HarnessId | null;
 	model: string | undefined;
+	/** Locked in alongside `harness`/`model` so the composer can keep showing it once the picker is read-only. */
+	effort: ChatEffort | undefined;
 	/**
 	 * Selections attached via "Ask" (the diff's `DiffSelectionPopover`, or a
 	 * prose excerpt) and removable with the composer's chip `x` button —
@@ -208,6 +211,7 @@ type ChatStore = {
 		threadId: string,
 		harness: HarnessId,
 		model: string | undefined,
+		effort: ChatEffort | undefined,
 	) => void;
 	/** Appends `reference` to the thread's chips, unless an equal one (see `chatReferencesEqual`) is already attached. */
 	attachReference: (
@@ -246,6 +250,7 @@ function createChatStore(): StoreApi<ChatStore> {
 						id: threadId,
 						harness: null,
 						model: undefined,
+						effort: undefined,
 						references: [],
 					};
 					return {
@@ -306,12 +311,14 @@ function createChatStore(): StoreApi<ChatStore> {
 					popupOpen: open,
 				})),
 			})),
-		lockThreadHarness: (sessionId, threadId, harness, model) =>
+		lockThreadHarness: (sessionId, threadId, harness, model, effort) =>
 			set((state) => ({
 				sessions: withSession(state.sessions, sessionId, (session) => ({
 					...session,
 					threads: mapThread(session.threads, threadId, (thread) =>
-						thread.harness === null ? { ...thread, harness, model } : thread,
+						thread.harness === null
+							? { ...thread, harness, model, effort }
+							: thread,
 					),
 				})),
 			})),
@@ -507,6 +514,7 @@ export function useChatDockActions(
 		threadId: string,
 		harness: HarnessId,
 		model: string | undefined,
+		effort: ChatEffort | undefined,
 	) => void;
 	/**
 	 * Attaches `reference` to the session's active thread, opening the
@@ -582,8 +590,12 @@ export function useChatDockActions(
 		[setPopupOpenAction, sessionId],
 	);
 	const lockThreadHarness = useCallback(
-		(threadId: string, harness: HarnessId, model: string | undefined) =>
-			lockThreadHarnessAction(sessionId, threadId, harness, model),
+		(
+			threadId: string,
+			harness: HarnessId,
+			model: string | undefined,
+			effort: ChatEffort | undefined,
+		) => lockThreadHarnessAction(sessionId, threadId, harness, model, effort),
 		[lockThreadHarnessAction, sessionId],
 	);
 	const askWithReference = useCallback(

@@ -1320,6 +1320,7 @@ export function attachRouter(
 						threadId: input.threadId,
 						harness: input.harness,
 						model: input.model,
+						effort: input.effort,
 						repoRoot: promptContext.repoRoot,
 						instructions: buildChatInstructions(promptContext),
 					},

@@ -14,7 +14,7 @@ import { registerBunOAuthFlows } from "@earendil-works/pi-ai/bun-oauth";
 // already pulls `@earendil-works/pi-coding-agent` into the boot path, so
 // reaching for its `getAgentDir` costs nothing extra here.
 import { getAgentDir } from "@earendil-works/pi-coding-agent";
-import type { HarnessId, HarnessInfo } from "@repo/sidecar-api";
+import type { ChatEffort, HarnessId, HarnessInfo } from "@repo/sidecar-api";
 import { checkHarnessAvailability } from "./availability.ts";
 
 registerBunOAuthFlows();
@@ -60,12 +60,13 @@ export type HarnessAgentTarget = {
 export const createHarnessAgentTarget = (
 	harness: HarnessId,
 	model: string | undefined,
+	effort?: ChatEffort,
 ): HarnessAgentTarget => {
 	switch (harness) {
 		case "claude-code":
-			return { harness: createClaudeCode(), model };
+			return { harness: createClaudeCode({ effort }), model };
 		case "codex":
-			return { harness: createCodex(), model };
+			return { harness: createCodex({ reasoningEffort: effort }), model };
 		case "opencode": {
 			if (model === undefined)
 				return { harness: createOpenCode(), model: undefined };
@@ -85,7 +86,10 @@ export const createHarnessAgentTarget = (
 			// `discoverPiModels` had just listed it as available, because
 			// discovery reads Pi's real store and execution read a different,
 			// empty one. Same directory for both is what keeps that list honest.
-			return { harness: createPi({ agentDir: getAgentDir() }), model };
+			return {
+				harness: createPi({ agentDir: getAgentDir(), thinkingLevel: effort }),
+				model,
+			};
 		}
 	}
 };

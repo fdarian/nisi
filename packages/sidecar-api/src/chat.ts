@@ -16,6 +16,16 @@ import { HarnessId } from "./walkthrough.ts";
  */
 export const ChatStreamChunk = Schema.Unknown;
 
+/** Reasoning effort a chat thread's first turn asks its harness for; OpenCode has no equivalent knob and ignores it. */
+export const ChatEffort = Schema.Literals([
+	"low",
+	"medium",
+	"high",
+	"xhigh",
+	"max",
+]);
+export type ChatEffort = Schema.Schema.Type<typeof ChatEffort>;
+
 export const chatContract = {
 	/**
 	 * Sends one user message on `threadId`'s conversation and streams the
@@ -24,7 +34,7 @@ export const chatContract = {
 	 * worktree, with its full builtin tool set — the same conversation you'd
 	 * get from a standalone `claude`/`codex`/`opencode` session, not a
 	 * restricted one; every later `send` for the same thread reuses it, so
-	 * multi-turn context carries across messages — `harness`/`model` only
+	 * multi-turn context carries across messages — `harness`/`model`/`effort` only
 	 * matter for that first call and are ignored once a thread's session is
 	 * live, same as `walkthrough.generate`'s reattach. Threads are in-memory
 	 * only: gone on sidecar restart, same posture as `walkthrough`'s live
@@ -38,6 +48,7 @@ export const chatContract = {
 				message: Schema.String,
 				harness: HarnessId,
 				model: Schema.optional(Schema.String),
+				effort: Schema.optional(ChatEffort),
 			}),
 		)
 		.output(eventIterator(Schema.toStandardSchemaV1(ChatStreamChunk)))

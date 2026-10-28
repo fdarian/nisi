@@ -24,6 +24,7 @@ import { ContentEditable } from "@lexical/react/LexicalContentEditable";
 import { LexicalErrorBoundary } from "@lexical/react/LexicalErrorBoundary";
 import { OnChangePlugin } from "@lexical/react/LexicalOnChangePlugin";
 import { PlainTextPlugin } from "@lexical/react/LexicalPlainTextPlugin";
+import type { ChatEffort } from "@repo/sidecar-api";
 import { Link } from "@tanstack/react-router";
 import type { ChatStatus } from "ai";
 import { cn } from "cn";
@@ -34,14 +35,17 @@ import {
 	KEY_ENTER_COMMAND,
 	KEY_ESCAPE_COMMAND,
 } from "lexical";
-import { ArrowUpIcon, SquareIcon, XIcon } from "lucide-react";
+import { CornerDownLeftIcon, SquareIcon, XIcon } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import {
 	HarnessModelCombobox,
 	type ModelSelection,
+	selectionLabel,
 } from "#/components/harness-model-combobox";
 import { Badge } from "#/components/ui/badge";
 import { Button, buttonVariants } from "#/components/ui/button";
+import { ButtonGroup } from "#/components/ui/group";
+import { Kbd } from "#/components/ui/kbd";
 import {
 	type HarnessId,
 	useHarnesses,
@@ -49,6 +53,13 @@ import {
 } from "#/features/pull-request/walkthrough/walkthrough-data";
 import { useLastChatModel } from "#/features/settings/settings-data";
 import type { SidecarQueryUtils } from "#/infra/backend-context";
+import { isBareKeyBound, isTextEntry } from "#/lib/use-key-bindings";
+import { useAppViewActive } from "#/shell/app-view-context";
+import {
+	ChatEffortPicker,
+	DEFAULT_CHAT_EFFORT,
+	effortLabel,
+} from "./chat-effort-picker";
 import {
 	type ChatReference,
 	composeOutgoingMessage,
@@ -60,6 +71,7 @@ type ChatComposerProps = {
 	/** `null` until the thread's first message locks it in — see `chat-store.ts`'s `ChatThreadMeta` doc. */
 	threadHarness: HarnessId | null;
 	threadModel: string | undefined;
+	threadEffort: ChatEffort | undefined;
 	/** From `useChat({ chat })` — `"submitted"`/`"streaming"` both count as busy for this composer's own send/stop toggle, same as the old `thread.status === "streaming"` check covered both phases at once. */
 	status: ChatStatus;
 	orpc: SidecarQueryUtils;
@@ -69,7 +81,12 @@ type ChatComposerProps = {
 	focusRequest: number;
 	onRemoveReference: (reference: ChatReference) => void;
 	onClearReferences: () => void;
-	onSend: (text: string, harness: HarnessId, model: string | undefined) => void;
+	onSend: (
+		text: string,
+		harness: HarnessId,
+		model: string | undefined,
+		effort: ChatEffort | undefined,
+	) => void;
 	onStop: () => void;
 };
 
@@ -130,6 +147,7 @@ export function ChatComposer(props: ChatComposerProps): React.ReactElement {
 function ComposerBody({
 	threadHarness,
 	threadModel,
+	threadEffort,
 	status,
 	orpc,
 	references,
@@ -140,15 +158,24 @@ function ComposerBody({
 	onStop,
 }: ChatComposerProps): React.ReactElement {
 	const [editor] = useLexicalComposerContext();
+	const appViewActive = useAppViewActive();
 	const [hasText, setHasText] = useState(false);
 	const [selection, setSelection] = useState<ModelSelection | null>(null);
+	const [effort, setEffort] = useState<ChatEffort>(DEFAULT_CHAT_EFFORT);
+	const [modelOpen, setModelOpen] = useState(false);
+	const [effortOpen, setEffortOpen] = useState(false);
 	const { harnesses, isLoading: harnessesLoading } = useHarnesses(orpc);
 	const needsPicker = threadHarness === null;
 	const {
 		modelsByHarness,
 		isLoading: modelsLoading,
 		loadingHarnesses,
-	} = useHarnessModels(orpc, needsPicker ? harnesses : []);
+	} = useHarnessModels(
+		orpc,
+		needsPicker
+			? harnesses
+			: harnesses.filter((harness) => harness.id === threadHarness),
+	);
 	const [lastChatModel] = useLastChatModel(orpc);
 
 	// Takes the caret on mount (opening the popup,
@@ -204,7 +231,19 @@ function ComposerBody({
 		const harness = threadHarness ?? selection?.harness ?? null;
 		if (harness === null) return;
 		const model = needsPicker ? selection?.modelId : threadModel;
-		onSend(composeOutgoingMessage(references, text), harness, model);
+		// The server only honors these on a thread's first send — or when it has
+		// to rebuild the session — so locked threads re-send their locked values.
+		const sentEffort = needsPicker
+			? harness === "opencode"
+				? undefined
+				: effort
+			: threadEffort;
+		onSend(
+			composeOutgoingMessage(references, text),
+			harness,
+			model,
+			sentEffort,
+		);
 		if (references.length > 0) onClearReferences();
 		editor.update(() => {
 			const root = $getRoot();
@@ -220,6 +259,8 @@ function ComposerBody({
 		threadHarness,
 		threadModel,
 		selection,
+		effort,
+		threadEffort,
 		references,
 		onSend,
 		onClearReferences,
@@ -254,20 +295,188 @@ function ComposerBody({
 		);
 	}, [editor]);
 
+	// One picker at a time: opening either closes the other.
+	const changeModelOpen = (open: boolean) => {
+		setModelOpen(open);
+		if (open) setEffortOpen(false);
+	};
+	const changeEffortOpen = (open: boolean) => {
+		setEffortOpen(open);
+		if (open) setModelOpen(false);
+	};
+
+	const showsEffort = selection !== null && selection.harness !== "opencode";
+	const lockedModelLabel =
+		threadHarness === null
+			? null
+			: (selectionLabel(harnesses, modelsByHarness, {
+					harness: threadHarness,
+					modelId: threadModel,
+				}) ??
+				threadModel ??
+				threadHarness);
+	const showsControls = needsPicker && hasEnabledHarness;
+
+	useEffect(() => {
+		if (!appViewActive || !showsControls) return;
+		const handleKeyDown = (event: KeyboardEvent) => {
+			if (!event.metaKey || !event.shiftKey || event.altKey || event.ctrlKey) {
+				return;
+			}
+			const key = event.key.toLowerCase();
+			if (key === "i") {
+				event.preventDefault();
+				setEffortOpen(false);
+				setModelOpen(true);
+			} else if (key === "e" && showsEffort) {
+				event.preventDefault();
+				setModelOpen(false);
+				setEffortOpen(true);
+			}
+		};
+		window.addEventListener("keydown", handleKeyDown);
+		return () => window.removeEventListener("keydown", handleKeyDown);
+	}, [appViewActive, showsControls, showsEffort]);
+
+	// Typing anywhere while the popup is open lands in the composer, unless
+	// the key belongs to a shortcut or a text field already has focus.
+	useEffect(() => {
+		if (!appViewActive) return;
+		const handleKeyDown = (event: KeyboardEvent) => {
+			if (event.defaultPrevented || event.isComposing) return;
+			if (event.metaKey || event.ctrlKey || event.altKey) return;
+			// Space activates whatever button has focus.
+			if (event.key.length !== 1 || event.key === " ") return;
+			if (isTextEntry(event.target) || isBareKeyBound(event.key)) return;
+			editor.focus();
+		};
+		window.addEventListener("keydown", handleKeyDown);
+		return () => window.removeEventListener("keydown", handleKeyDown);
+	}, [appViewActive, editor]);
+
 	const canSubmit = hasText && (threadHarness !== null || selection !== null);
 
 	return (
-		<div className="flex flex-col gap-2 border-t p-2">
-			{needsPicker &&
-				(hasEnabledHarness ? (
-					<HarnessModelCombobox
-						harnesses={harnesses}
-						modelsByHarness={modelsByHarness}
-						isLoading={harnessesLoading || modelsLoading}
-						loadingHarnesses={loadingHarnesses}
-						onChange={setSelection}
-						value={selection}
+		<div className="flex flex-col gap-2 p-2">
+			{references.length > 0 && (
+				<div className="flex flex-wrap gap-1">
+					{references.map((reference) => (
+						<ReferenceChip
+							key={formatChatReferenceForAgent(reference)}
+							onRemove={() => onRemoveReference(reference)}
+							reference={reference}
+						/>
+					))}
+				</div>
+			)}
+			<div className="flex items-end gap-2 rounded-lg border border-input bg-popover px-2.5 dark:bg-input/32 py-1.5 shadow-xs/5">
+				<div className="relative min-h-8 min-w-0 flex-1">
+					<PlainTextPlugin
+						ErrorBoundary={LexicalErrorBoundary}
+						contentEditable={
+							<ContentEditable
+								aria-placeholder="Ask a quick question..."
+								// `safe center` keeps one line vertically centered with the
+								// send button, and only lets the text move once it grows
+								// past the min height.
+								className="flex max-h-40 min-h-8 w-full resize-none flex-col overflow-y-auto text-sm leading-5 outline-none"
+								style={{ justifyContent: "safe center" }}
+								data-chat-composer=""
+								placeholder={
+									<div className="pointer-events-none absolute inset-0 flex items-center text-muted-foreground text-sm leading-5">
+										Ask a quick question...
+									</div>
+								}
+							/>
+						}
 					/>
+					<OnChangePlugin
+						onChange={(editorState) =>
+							editorState.read(() => {
+								setHasText($getRoot().getTextContent().trim().length > 0);
+							})
+						}
+					/>
+				</div>
+				<div className="flex h-8 shrink-0 items-center">
+					{isBusy ? (
+						<Button
+							aria-label="Stop"
+							onClick={onStop}
+							size="icon-sm"
+							variant="ghost"
+						>
+							<SquareIcon className="size-3 fill-current" />
+						</Button>
+					) : (
+						<Button
+							aria-label="Send"
+							disabled={!canSubmit}
+							onClick={submit}
+							size="icon-sm"
+							variant="ghost"
+						>
+							<CornerDownLeftIcon />
+						</Button>
+					)}
+				</div>
+			</div>
+			<div className="flex items-center justify-end">
+				{!needsPicker ? (
+					<ButtonGroup>
+						<Button
+							className="disabled:opacity-100"
+							disabled
+							size="xs"
+							type="button"
+							variant="ghost"
+						>
+							{lockedModelLabel}
+						</Button>
+						{threadEffort !== undefined && (
+							<Button
+								className="text-muted-foreground disabled:opacity-100"
+								disabled
+								size="xs"
+								type="button"
+								variant="ghost"
+							>
+								{effortLabel(threadEffort)}
+							</Button>
+						)}
+					</ButtonGroup>
+				) : hasEnabledHarness ? (
+					<ButtonGroup>
+						<HarnessModelCombobox
+							harnesses={harnesses}
+							isLoading={harnessesLoading || modelsLoading}
+							loadingHarnesses={loadingHarnesses}
+							modelsByHarness={modelsByHarness}
+							onChange={setSelection}
+							onOpenChange={changeModelOpen}
+							open={modelOpen}
+							trigger={
+								<Button size="xs" type="button" variant="ghost">
+									{selectionLabel(harnesses, modelsByHarness, selection) ??
+										"Select model"}
+								</Button>
+							}
+							triggerTooltip={
+								<>
+									Model <Kbd>⇧⌘I</Kbd>
+								</>
+							}
+							value={selection}
+						/>
+						{showsEffort && (
+							<ChatEffortPicker
+								onChange={setEffort}
+								onOpenChange={changeEffortOpen}
+								open={effortOpen}
+								value={effort}
+							/>
+						)}
+					</ButtonGroup>
 				) : (
 					<p className="text-muted-foreground text-xs">
 						No harnesses enabled —{" "}
@@ -282,61 +491,6 @@ function ComposerBody({
 						</Link>
 						.
 					</p>
-				))}
-			{references.length > 0 && (
-				<div className="flex flex-wrap gap-1">
-					{references.map((reference) => (
-						<ReferenceChip
-							key={formatChatReferenceForAgent(reference)}
-							onRemove={() => onRemoveReference(reference)}
-							reference={reference}
-						/>
-					))}
-				</div>
-			)}
-			<div className="flex items-end gap-2 rounded-lg border border-input bg-background px-2.5 py-1.5 shadow-xs/5 transition-shadow focus-within:border-ring focus-within:ring-[3px] focus-within:ring-ring/24">
-				<div className="relative min-h-8 flex-1">
-					<PlainTextPlugin
-						ErrorBoundary={LexicalErrorBoundary}
-						contentEditable={
-							<ContentEditable
-								aria-placeholder="Ask about this PR…"
-								className="max-h-40 min-h-8 resize-none overflow-y-auto text-sm outline-none"
-								data-chat-composer=""
-								placeholder={
-									<div className="pointer-events-none absolute top-0 left-0 text-muted-foreground text-sm">
-										Ask about this PR…
-									</div>
-								}
-							/>
-						}
-					/>
-					<OnChangePlugin
-						onChange={(editorState) =>
-							editorState.read(() => {
-								setHasText($getRoot().getTextContent().trim().length > 0);
-							})
-						}
-					/>
-				</div>
-				{isBusy ? (
-					<Button
-						aria-label="Stop"
-						onClick={onStop}
-						size="icon-sm"
-						variant="outline"
-					>
-						<SquareIcon />
-					</Button>
-				) : (
-					<Button
-						aria-label="Send"
-						disabled={!canSubmit}
-						onClick={submit}
-						size="icon-sm"
-					>
-						<ArrowUpIcon />
-					</Button>
 				)}
 			</div>
 		</div>
