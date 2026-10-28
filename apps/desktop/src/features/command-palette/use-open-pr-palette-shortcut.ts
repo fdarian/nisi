@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { isModPressed } from "#/lib/use-key-bindings";
 import { useAppViewActive } from "#/shell/app-view-context";
 
 /**
@@ -10,7 +11,9 @@ import { useAppViewActive } from "#/shell/app-view-context";
  * picker, the chord the palette itself uses for "Filter Project". Confirmed against Electron's default macOS menu and this
  * app's own override of it (see use-tab-shortcuts.ts's doc comment for why
  * Cmd+W needs a real menu item instead) — neither claims Cmd+T, so AppKit
- * never intercepts either chord before the page sees it.
+ * never intercepts either chord before the page sees it. `isModPressed`, not
+ * `metaKey || ctrlKey`: on mac, Ctrl+P/N are list-navigation keys and must not
+ * open the palette.
  */
 export function useOpenPrPaletteShortcut(
 	onOpen: () => void,
@@ -22,8 +25,7 @@ export function useOpenPrPaletteShortcut(
 		const handleKeyDown = (event: KeyboardEvent) => {
 			const key = event.key.toLowerCase();
 			if (key !== "t" && key !== "p") return;
-			if (!(event.metaKey || event.ctrlKey) || event.altKey || event.shiftKey)
-				return;
+			if (!isModPressed(event) || event.altKey || event.shiftKey) return;
 			event.preventDefault();
 			if (key === "t") onOpen();
 			else onOpenRepositoryPicker();

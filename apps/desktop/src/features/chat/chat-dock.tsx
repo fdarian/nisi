@@ -23,6 +23,10 @@ import { PlusIcon } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { useCallback } from "react";
 import { Button } from "#/components/ui/button";
+import {
+	useHarnesses,
+	useHarnessModels,
+} from "#/features/pull-request/walkthrough/walkthrough-data";
 import type { SidecarQueryUtils } from "#/infra/backend-context";
 import { spring } from "#/lib/springs";
 import { useKeyBindings } from "#/lib/use-key-bindings";
@@ -49,6 +53,12 @@ export function ChatDock({
 	const activeThreadId = useChatActiveThreadId(sessionId);
 	const popupOpen = useChatPopupOpen(sessionId);
 	const dock = useChatDockActions(sessionId, orpc);
+
+	// Warms the composer's model picker: the composer mounts with the popup,
+	// so fetching there leaves the picker on "Loading models…" for a fresh
+	// popup. These share the composer's query keys, so it finds them cached.
+	const harnessList = useHarnesses(orpc);
+	useHarnessModels(orpc, harnessList.harnesses);
 
 	// ⌘J: no threads yet starts the first one (which opens the popup on it
 	// as a side effect of `openNewThread`). With threads and the popup

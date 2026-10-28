@@ -72,6 +72,7 @@ function StreamingChatTab(): React.ReactElement {
 				id: THREAD_ID,
 				harness: null,
 				model: undefined,
+				effort: undefined,
 				references: [],
 			}}
 		/>

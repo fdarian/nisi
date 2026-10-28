@@ -21,6 +21,7 @@
  * (in-memory only, gone on sidecar restart or a closed PR tab), so there's
  * nothing to resume, matching the contract's own doc comment.
  */
+import type { ChatEffort } from "@repo/sidecar-api";
 import type { ChatTransport, UIMessage, UIMessageChunk } from "ai";
 import { isTextUIPart } from "ai";
 import type { HarnessId } from "#/features/pull-request/walkthrough/walkthrough-data";
@@ -35,6 +36,7 @@ import type { SidecarQueryUtils } from "#/infra/backend-context";
 export type ChatSendBody = {
 	readonly harness: HarnessId;
 	readonly model: string | undefined;
+	readonly effort: ChatEffort | undefined;
 };
 
 function isChatSendBody(body: object | undefined): body is ChatSendBody {
@@ -58,7 +60,7 @@ export function createOrpcChatTransport(
 		async sendMessages({ messages, abortSignal, body }) {
 			if (!isChatSendBody(body)) {
 				throw new Error(
-					"chat transport: sendMessage's options.body must carry { harness, model } — see chat-panel.tsx's onSend",
+					"chat transport: sendMessage's options.body must carry { harness, model, effort } — see chat-panel.tsx's onSend",
 				);
 			}
 			const lastMessage = messages[messages.length - 1];
@@ -75,6 +77,7 @@ export function createOrpcChatTransport(
 					message: messageText(lastMessage),
 					harness: body.harness,
 					model: body.model,
+					effort: body.effort,
 				},
 				{ signal: abortSignal },
 			);

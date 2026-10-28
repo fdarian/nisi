@@ -10,6 +10,19 @@ const LEADER_TIMEOUT_MS = 1000;
 
 export type KeyBindings = Record<string, (event: KeyboardEvent) => void>;
 
+/** Bindings of every currently-enabled `useKeyBindings` caller, so something outside the hook can tell whether a bare key is spoken for. */
+const activeBindings = new Set<{ current: KeyBindings }>();
+
+/** Whether any enabled `useKeyBindings` caller binds `key` as a bare key, or as a step of a leader sequence. */
+export function isBareKeyBound(key: string): boolean {
+	for (const bindings of activeBindings) {
+		for (const binding of Object.keys(bindings.current)) {
+			if (binding.split(" ").some((step) => step === key)) return true;
+		}
+	}
+	return false;
+}
+
 type UseKeyBindingsOptions = {
 	/** Mounts/unmounts the listener without the caller needing to conditionally call the hook. Defaults to `true`. */
 	enabled?: boolean;
@@ -61,6 +74,7 @@ export function useKeyBindings(
 
 	useEffect(() => {
 		if (!enabled) return;
+		activeBindings.add(bindingsRef);
 
 		const resetPending = () => {
 			pendingStepsRef.current = [];
@@ -114,6 +128,7 @@ export function useKeyBindings(
 		window.addEventListener("keydown", handleKeyDown);
 		return () => {
 			window.removeEventListener("keydown", handleKeyDown);
+			activeBindings.delete(bindingsRef);
 			resetPending();
 		};
 	}, [enabled]);
@@ -142,12 +157,12 @@ function matchesBinding(binding: string, event: KeyboardEvent): boolean {
 }
 
 /** metaKey (⌘) on mac, ctrlKey everywhere else — same split `use-tab-shortcuts.ts` relies on for its own chords. */
-function isModPressed(event: KeyboardEvent): boolean {
+export function isModPressed(event: KeyboardEvent): boolean {
 	const isMac = navigator.platform.toUpperCase().includes("MAC");
 	return isMac ? event.metaKey : event.ctrlKey;
 }
 
-function isTextEntry(target: EventTarget | null): boolean {
+export function isTextEntry(target: EventTarget | null): boolean {
 	if (!(target instanceof HTMLElement)) return false;
 	return target.isContentEditable || TEXT_ENTRY_TAGS.has(target.tagName);
 }

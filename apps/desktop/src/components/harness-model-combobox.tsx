@@ -1,7 +1,12 @@
 "use client";
 
 /** Shared walkthrough/chat model picker. Groups keep headers out of filtering and keyboard navigation; search matches tokens across harness and model details. */
-import { type KeyboardEvent as ReactKeyboardEvent, useMemo } from "react";
+import {
+	type ReactElement,
+	type KeyboardEvent as ReactKeyboardEvent,
+	type ReactNode,
+	useMemo,
+} from "react";
 import {
 	matchesModelQuery,
 	type SearchableModelOption,
@@ -15,7 +20,9 @@ import {
 	ComboboxItem,
 	ComboboxList,
 	ComboboxPopup,
+	ComboboxTrigger,
 } from "#/components/ui/combobox";
+import { Tooltip, TooltipPopup, TooltipTrigger } from "#/components/ui/tooltip";
 import type {
 	HarnessId,
 	HarnessInfo,
@@ -62,6 +69,23 @@ function handleModelPickerKeyDown(
 	);
 }
 
+/** What a model trigger should read: the model's label, else its harness's when only the harness was picked, else `null` before any choice. */
+export function selectionLabel(
+	harnesses: readonly HarnessInfo[],
+	modelsByHarness: Partial<Record<HarnessId, HarnessModels>>,
+	value: ModelSelection | null,
+): string | null {
+	if (value === null) return null;
+	if (value.modelId !== undefined) {
+		const model = modelsByHarness[value.harness]?.models.find(
+			(candidate) => candidate.id === value.modelId,
+		);
+		if (model !== undefined) return model.label;
+	}
+	const harness = harnesses.find((candidate) => candidate.id === value.harness);
+	return harness === undefined ? null : harness.label;
+}
+
 type HarnessModelComboboxProps = {
 	harnesses: readonly HarnessInfo[];
 	modelsByHarness: Partial<Record<HarnessId, HarnessModels>>;
@@ -69,6 +93,12 @@ type HarnessModelComboboxProps = {
 	loadingHarnesses?: readonly HarnessId[];
 	value: ModelSelection | null;
 	onChange: (value: ModelSelection) => void;
+	/** Swaps the inline input for this element as the popup's opener, with the search input moved inside the popup. */
+	trigger?: ReactElement;
+	/** Shown on hover/focus of `trigger`; only meaningful alongside it. */
+	triggerTooltip?: ReactNode;
+	open?: boolean;
+	onOpenChange?: (open: boolean) => void;
 };
 
 /** Only enabled harnesses get a model group — `HarnessInfo.enabled` already reflects `@repo/settings`'s `enabledHarnesses` server-side, so there's no separate id set to thread through. */
@@ -79,6 +109,10 @@ export function HarnessModelCombobox({
 	loadingHarnesses = [],
 	value,
 	onChange,
+	trigger,
+	triggerTooltip,
+	open,
+	onOpenChange,
 }: HarnessModelComboboxProps): React.ReactElement {
 	const groups = useMemo<readonly ModelOptionGroup[]>(() => {
 		const result: ModelOptionGroup[] = [];
@@ -117,17 +151,46 @@ export function HarnessModelCombobox({
 		<Combobox<ModelOption>
 			filter={matchesModelQuery}
 			items={groups}
+			onOpenChange={onOpenChange}
 			onValueChange={(option) => {
 				if (option === null) return;
 				onChange({ harness: option.harness, modelId: option.modelId });
 			}}
+			open={open}
 			value={selectedOption}
 		>
-			<ComboboxInput
-				onKeyDown={handleModelPickerKeyDown}
-				placeholder="Choose a model…"
-			/>
-			<ComboboxPopup>
+			{trigger === undefined ? (
+				<ComboboxInput
+					onKeyDown={handleModelPickerKeyDown}
+					placeholder="Choose a model…"
+				/>
+			) : (
+				<Tooltip>
+					<TooltipTrigger render={<ComboboxTrigger render={trigger} />} />
+					<TooltipPopup>{triggerTooltip}</TooltipPopup>
+				</Tooltip>
+			)}
+			<ComboboxPopup
+				{...(trigger === undefined
+					? {}
+					: {
+							side: "top" as const,
+							align: "end" as const,
+							className: "w-64",
+							// Mounting the popup on first open cost ~150ms; paying it up front
+							// makes the shortcut feel instant.
+							portalProps: { keepMounted: true },
+						})}
+			>
+				{trigger !== undefined && (
+					<div className="p-1">
+						<ComboboxInput
+							onKeyDown={handleModelPickerKeyDown}
+							placeholder="Choose a model…"
+							showTrigger={false}
+						/>
+					</div>
+				)}
 				{loadingHarnesses.length > 0 && (
 					<p className="px-2 py-1 text-muted-foreground text-xs" role="status">
 						Loading{" "}
@@ -148,8 +211,14 @@ export function HarnessModelCombobox({
 								{group.label}
 							</ComboboxGroupLabel>
 							{group.items.map((option) => (
-								<ComboboxItem key={option.value} value={option}>
-									{option.label}
+								<ComboboxItem
+									className="grid-cols-[1rem_minmax(0,1fr)]"
+									key={option.value}
+									value={option}
+								>
+									<span className="block truncate" title={option.label}>
+										{option.label}
+									</span>
 								</ComboboxItem>
 							))}
 						</ComboboxGroup>
