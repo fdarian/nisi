@@ -23,6 +23,7 @@ export function useOpenPrPaletteShortcut(
 	useEffect(() => {
 		if (!appViewActive) return;
 		const handleKeyDown = (event: KeyboardEvent) => {
+			if (event.defaultPrevented) return;
 			const key = event.key.toLowerCase();
 			if (key !== "t" && key !== "p") return;
 			if (!isModPressed(event) || event.altKey || event.shiftKey) return;

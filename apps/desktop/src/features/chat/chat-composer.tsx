@@ -54,6 +54,7 @@ import {
 import { useLastChatModel } from "#/features/settings/settings-data";
 import type { SidecarQueryUtils } from "#/infra/backend-context";
 import { isBareKeyBound, isTextEntry } from "#/lib/use-key-bindings";
+import { useAppViewActive } from "#/shell/app-view-context";
 import {
 	ChatEffortPicker,
 	DEFAULT_CHAT_EFFORT,
@@ -157,6 +158,7 @@ function ComposerBody({
 	onStop,
 }: ChatComposerProps): React.ReactElement {
 	const [editor] = useLexicalComposerContext();
+	const appViewActive = useAppViewActive();
 	const [hasText, setHasText] = useState(false);
 	const [selection, setSelection] = useState<ModelSelection | null>(null);
 	const [effort, setEffort] = useState<ChatEffort>(DEFAULT_CHAT_EFFORT);
@@ -229,11 +231,18 @@ function ComposerBody({
 		const harness = threadHarness ?? selection?.harness ?? null;
 		if (harness === null) return;
 		const model = needsPicker ? selection?.modelId : threadModel;
+		// The server only honors these on a thread's first send — or when it has
+		// to rebuild the session — so locked threads re-send their locked values.
+		const sentEffort = needsPicker
+			? harness === "opencode"
+				? undefined
+				: effort
+			: threadEffort;
 		onSend(
 			composeOutgoingMessage(references, text),
 			harness,
 			model,
-			needsPicker && harness !== "opencode" ? effort : undefined,
+			sentEffort,
 		);
 		if (references.length > 0) onClearReferences();
 		editor.update(() => {
@@ -251,6 +260,7 @@ function ComposerBody({
 		threadModel,
 		selection,
 		effort,
+		threadEffort,
 		references,
 		onSend,
 		onClearReferences,
@@ -308,7 +318,7 @@ function ComposerBody({
 	const showsControls = needsPicker && hasEnabledHarness;
 
 	useEffect(() => {
-		if (!showsControls) return;
+		if (!appViewActive || !showsControls) return;
 		const handleKeyDown = (event: KeyboardEvent) => {
 			if (!event.metaKey || !event.shiftKey || event.altKey || event.ctrlKey) {
 				return;
@@ -326,11 +336,12 @@ function ComposerBody({
 		};
 		window.addEventListener("keydown", handleKeyDown);
 		return () => window.removeEventListener("keydown", handleKeyDown);
-	}, [showsControls, showsEffort]);
+	}, [appViewActive, showsControls, showsEffort]);
 
 	// Typing anywhere while the popup is open lands in the composer, unless
 	// the key belongs to a shortcut or a text field already has focus.
 	useEffect(() => {
+		if (!appViewActive) return;
 		const handleKeyDown = (event: KeyboardEvent) => {
 			if (event.defaultPrevented || event.isComposing) return;
 			if (event.metaKey || event.ctrlKey || event.altKey) return;
@@ -341,7 +352,7 @@ function ComposerBody({
 		};
 		window.addEventListener("keydown", handleKeyDown);
 		return () => window.removeEventListener("keydown", handleKeyDown);
-	}, [editor]);
+	}, [appViewActive, editor]);
 
 	const canSubmit = hasText && (threadHarness !== null || selection !== null);
 
