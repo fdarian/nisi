@@ -1,8 +1,14 @@
 "use client";
 
-import { MonitorIcon, MoonIcon, SunIcon } from "lucide-react";
+import { ChevronRightIcon, MonitorIcon, MoonIcon, SunIcon } from "lucide-react";
 import { useTheme } from "next-themes";
+import { useState } from "react";
 import { Button } from "#/components/ui/button";
+import {
+	Collapsible,
+	CollapsiblePanel,
+	CollapsibleTrigger,
+} from "#/components/ui/collapsible";
 import {
 	Select,
 	SelectContent,
@@ -11,6 +17,8 @@ import {
 	SelectValue,
 } from "#/components/ui/select";
 import { Slider } from "#/components/ui/slider";
+import { Switch } from "#/components/ui/switch";
+import { Tabs, TabsList, TabsTab } from "#/components/ui/tabs";
 import { ToggleGroup, ToggleGroupItem } from "#/components/ui/toggle-group";
 import type { SidecarQueryUtils } from "#/infra/backend-context";
 import { useBackendContext } from "#/infra/backend-context";
@@ -28,16 +36,18 @@ import {
 	SettingsSection,
 } from "./settings-section";
 import {
-	DEFAULT_WINDOW_GLASS_TINT,
-	isWindowGlass,
-	setWindowGlass,
-	setWindowGlassTint,
-	useWindowGlass,
-	useWindowGlassTint,
-	WINDOW_GLASS_TINT_MAX,
-	WINDOW_GLASS_TINT_MIN,
-	WINDOW_GLASS_TINT_STEP,
-	type WindowGlass,
+	GLASS_TRANSLUCENCY_MAX,
+	GLASS_TRANSLUCENCY_MIN,
+	GLASS_TRANSLUCENCY_STEP,
+	type GlassLayer,
+	type GlassScope,
+	resetGlassLayers,
+	resolveGlassLayers,
+	setGlassLayer,
+	setGlassTranslucency,
+	setWindowGlassEnabled,
+	useGlassTranslucency,
+	useWindowGlassEnabled,
 } from "./window-glass";
 
 export function SettingsPage(): React.ReactElement | null {
@@ -91,13 +101,6 @@ type ThemePreference = (typeof THEME_PREFERENCES)[number];
 const isThemePreference = (value: string): value is ThemePreference =>
 	(THEME_PREFERENCES as readonly string[]).includes(value);
 
-const WINDOW_GLASS_ITEMS: ReadonlyArray<{ value: WindowGlass; label: string }> =
-	[
-		{ value: "off", label: "Off" },
-		{ value: "regular", label: "Regular" },
-		{ value: "tinted", label: "Tinted" },
-	];
-
 /** Sentinel `Select` value for "no preferred editor chosen" — `preferredEditor` itself stores `null` for that state, but Base UI's `Select` needs a concrete item value to render as selected. */
 const NO_PREFERRED_EDITOR = "none";
 
@@ -111,8 +114,6 @@ function AppearanceSection({
 	const { editors, loadEditors } = useAvailableEditors();
 	const [diffThemeLight, setDiffThemeLight] = useDiffThemeLight(orpc);
 	const [diffThemeDark, setDiffThemeDark] = useDiffThemeDark(orpc);
-	const windowGlass = useWindowGlass();
-	const windowGlassTint = useWindowGlassTint();
 
 	return (
 		<SettingsSection title="Appearance">
@@ -140,60 +141,7 @@ function AppearanceSection({
 					</ToggleGroupItem>
 				</ToggleGroup>
 			</SettingsRow>
-			{hasNative() && (
-				<SettingsRow
-					description="See-through window frame; real Liquid Glass needs macOS 26."
-					title="Window glass"
-				>
-					<Select
-						items={WINDOW_GLASS_ITEMS}
-						onValueChange={(value: string | null) => {
-							if (value !== null && isWindowGlass(value)) setWindowGlass(value);
-						}}
-						value={windowGlass}
-					>
-						<SelectTrigger className="w-40" size="sm">
-							<SelectValue />
-						</SelectTrigger>
-						<SelectContent>
-							{WINDOW_GLASS_ITEMS.map((item) => (
-								<SelectItem key={item.value} value={item.value}>
-									{item.label}
-								</SelectItem>
-							))}
-						</SelectContent>
-					</Select>
-				</SettingsRow>
-			)}
-			{hasNative() && windowGlass === "tinted" && (
-				<SettingsRow
-					description="Heavier hides a busy background."
-					title="Tint strength"
-				>
-					<div className="flex items-center gap-3">
-						{windowGlassTint !== DEFAULT_WINDOW_GLASS_TINT && (
-							<Button
-								onClick={() => setWindowGlassTint(DEFAULT_WINDOW_GLASS_TINT)}
-								size="xs"
-								variant="link"
-							>
-								Reset
-							</Button>
-						)}
-						<Slider
-							aria-label="Tint strength"
-							className="w-40"
-							max={WINDOW_GLASS_TINT_MAX}
-							min={WINDOW_GLASS_TINT_MIN}
-							onValueChange={(value) => {
-								if (typeof value === "number") setWindowGlassTint(value);
-							}}
-							step={WINDOW_GLASS_TINT_STEP}
-							value={windowGlassTint}
-						/>
-					</div>
-				</SettingsRow>
-			)}
+			{hasNative() && <WindowGlassGroup />}
 			<SettingsRowStacked
 				description="Syntax colors for the diff view — one theme per appearance."
 				title="Diff theme"
@@ -247,5 +195,154 @@ function AppearanceSection({
 				</Select>
 			</SettingsRow>
 		</SettingsSection>
+	);
+}
+
+const GLASS_SCOPES: ReadonlyArray<{ value: GlassScope; label: string }> = [
+	{ value: "both", label: "Both" },
+	{ value: "light", label: "Light" },
+	{ value: "dark", label: "Dark" },
+];
+
+const isGlassScope = (value: unknown): value is GlassScope =>
+	GLASS_SCOPES.some((scope) => scope.value === value);
+
+/** One group, not two rows: the switch and its advanced controls share a section, so no divider falls between them. */
+function WindowGlassGroup(): React.ReactElement {
+	const enabled = useWindowGlassEnabled();
+	return (
+		<Collapsible className="group/advanced py-3">
+			<div className="flex items-center justify-between gap-6">
+				<SettingsRowHeader title="Liquid glass" />
+				<div className="flex flex-col items-end gap-1">
+					<Switch
+						aria-label="Liquid glass"
+						checked={enabled}
+						onCheckedChange={setWindowGlassEnabled}
+					/>
+					{enabled && (
+						<CollapsibleTrigger className="inline-flex items-center gap-0.5 text-muted-foreground text-xs outline-none hover:text-foreground focus-visible:text-foreground">
+							<ChevronRightIcon className="size-3 transition-transform group-data-open/advanced:rotate-90" />
+							Advanced
+						</CollapsibleTrigger>
+					)}
+				</div>
+			</div>
+			{enabled && <WindowGlassAdvanced />}
+		</Collapsible>
+	);
+}
+
+function WindowGlassAdvanced(): React.ReactElement {
+	const [scope, setScope] = useState<GlassScope>("both");
+	const translucency = useGlassTranslucency();
+
+	// In `both`, the sliders show light's values; moving one writes it to both themes.
+	const shownTheme = scope === "dark" ? "dark" : "light";
+	const shown = translucency[shownTheme];
+	const layers = resolveGlassLayers(shownTheme, shown);
+	const scopedThemes =
+		scope === "both" ? (["light", "dark"] as const) : [scope];
+	const isCustom = scopedThemes.some(
+		(theme) => translucency[theme].custom !== null,
+	);
+
+	return (
+		<CollapsiblePanel>
+			<div className="flex flex-col gap-4 pt-3">
+				<Tabs
+					onValueChange={(value) => {
+						if (isGlassScope(value)) setScope(value);
+					}}
+					value={scope}
+				>
+					<TabsList size="sm">
+						{GLASS_SCOPES.map((item) => (
+							<TabsTab key={item.value} value={item.value}>
+								{item.label}
+							</TabsTab>
+						))}
+					</TabsList>
+				</Tabs>
+				<GlassSliderRow
+					disabled={isCustom}
+					onChange={(value) => setGlassTranslucency(scope, value)}
+					title="Translucency"
+					trailing={
+						isCustom && (
+							<Button
+								onClick={() => resetGlassLayers(scope)}
+								size="xs"
+								variant="link"
+							>
+								Reset
+							</Button>
+						)
+					}
+					value={shown.translucency}
+				/>
+				<GlassLayerRow
+					layer="frame"
+					layers={layers}
+					scope={scope}
+					title="Frame"
+				/>
+				<GlassLayerRow
+					layer="pane"
+					layers={layers}
+					scope={scope}
+					title="Panel"
+				/>
+			</div>
+		</CollapsiblePanel>
+	);
+}
+
+function GlassLayerRow(props: {
+	layer: GlassLayer;
+	layers: Record<GlassLayer, number>;
+	scope: GlassScope;
+	title: string;
+}): React.ReactElement {
+	return (
+		<GlassSliderRow
+			disabled={false}
+			onChange={(value) => setGlassLayer(props.scope, props.layer, value)}
+			title={props.title}
+			value={props.layers[props.layer]}
+		/>
+	);
+}
+
+function GlassSliderRow(props: {
+	title: string;
+	description?: string;
+	value: number;
+	disabled: boolean;
+	onChange: (value: number) => void;
+	trailing?: React.ReactNode;
+}): React.ReactElement {
+	return (
+		<SettingsRow
+			className="py-0"
+			description={props.description}
+			title={props.title}
+		>
+			<div className="flex items-center gap-3">
+				{props.trailing}
+				<Slider
+					aria-label={props.title}
+					className="w-40"
+					disabled={props.disabled}
+					max={GLASS_TRANSLUCENCY_MAX}
+					min={GLASS_TRANSLUCENCY_MIN}
+					onValueChange={(value) => {
+						if (typeof value === "number") props.onChange(value);
+					}}
+					step={GLASS_TRANSLUCENCY_STEP}
+					value={props.value}
+				/>
+			</div>
+		</SettingsRow>
 	);
 }

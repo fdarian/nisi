@@ -129,14 +129,15 @@ off; `renderer-window.ts` denies navigation and `window.open` and routes http(s)
   (`NISI_DATA_DIR`, else `config.toml`'s `data_dir`, else the macOS default). Electron's own Chromium
   state goes under `<data dir>/electron` (`userData`), so dev and prod never contend for a profile lock.
 - `activation.ts` / `window-activation.ts` — the CLI activation stream and raising the window.
-- `liquid-glass.ts` — the main window is always `transparent`; the Settings > General "Window glass" choice
-  (`off`/`regular`/`tinted`, in `localStorage` via `settings/window-glass.ts`). Native glass is only on/off:
+- `liquid-glass.ts` — the main window is always `transparent`; the Settings > General "Liquid glass" switch
+  (in `localStorage` via `settings/window-glass.ts`, with a per-theme translucency for the frame and the pane: one knob, or
+  the two layers set by hand under "Advanced"). Native glass is only on/off:
   `NativeApi.setWindowGlass(enabled)` adds an untinted `NSGlassEffectView` (`electron-liquid-glass`, macOS 26+;
   `vibrancy` before that). The addon can't remove its view, so `off` is the renderer painting `--frame-surface`
   opaque: the frame (body, app shell, settings sidebar, tab strip's inactive tabs) is transparent, and the inner
   `--pane-surface` panel 55% translucent (surfaces nested in it use `--pane-surface-nested`, transparent; sticky overlays add `--pane-surface-backdrop` blur), only under
-  `html[data-native-glass]`, which the renderer sets to the kind from `setWindowGlass`'s result (absent for the
-  About window). The `tinted` wash is CSS on `body` keyed off `data-native-glass="tinted"`, because a native
+  `html[data-native-glass]`, which the renderer sets from `setWindowGlass`'s result (absent for the
+  About window). The frame's wash is CSS on `body` keyed off `data-native-glass`, because a native
   `tintColor` amplifies the wallpaper. `setThemeSource` pins `nativeTheme` to the app theme so glass matches it.
 - `menu.ts` — the app menu, built from scratch. ⌘W is "Close Tab": it closes the About window
   (`about-window.ts`) when that is focused, otherwise sends `close-tab` to the main window and the
