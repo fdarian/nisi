@@ -4,6 +4,7 @@ import { useRender } from "@base-ui/react/use-render";
 import { cn } from "cn";
 import { AlertTriangleIcon, InboxIcon } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { InsetPane } from "#/components/inset-pane";
 import { Button } from "#/components/ui/button";
 import {
 	Empty,
@@ -12,7 +13,6 @@ import {
 	EmptyMedia,
 	EmptyTitle,
 } from "#/components/ui/empty";
-import { FramePanel } from "#/components/ui/frame";
 import { Spinner } from "#/components/ui/spinner";
 import { TabsPrimitive } from "#/components/ui/tabs";
 import { ChatDock } from "#/features/chat/chat-dock";
@@ -62,28 +62,6 @@ import { PrTabStrip, TITLE_STRIP_HEIGHT_CLASS } from "./tabs/pr-tab-strip";
 import { useTabOrder } from "./tabs/use-tab-order";
 import { useTabShortcuts } from "./tabs/use-tab-shortcuts";
 import { useTabSuspension } from "./tabs/use-tab-suspension";
-
-/**
- * Mirrors `SidebarInset`'s inset treatment (`ui/sidebar.tsx`, used as-is by
- * `SettingsPage`'s route) — `m-2 rounded-xl shadow-sm/5 bg-background` — but
- * applied directly rather than through the `Sidebar`/`SidebarProvider`
- * machinery, which assumes a collapsible left rail `AppShell` doesn't have
- * (its own `FilesSidebar` is a plain flex child, not that system). The outer
- * `bg-sidebar` on both call sites is what makes the gap read as a gap.
- *
- * Layered onto `FramePanel` (`ui/frame.tsx`, the vendored coss ui recipe)
- * rather than a plain `div` so the pane also picks up its hairline `border`
- * and refined `shadow-xs/5` edge — `p-0` overrides `FramePanel`'s own `p-5`
- * via `cn`'s `twMerge`, since this pane manages its own children's padding.
- *
- * The surface is declared as `--pane-surface` in `index.css` and consumed by
- * `bg-pane-surface` here so descendants can reach the exact tone they sit on
- * — the diff pane's cards need it to paint the corners of a pinned file
- * header, and they can't derive it, since `background` doesn't inherit
- * (`diffCardChromeCSS`).
- */
-const INSET_PANE_CLASS =
-	"m-2 flex min-h-0 flex-1 flex-col overflow-hidden bg-pane-surface p-0";
 
 /** Top-level shell: gates on the sidecar connection, then renders the multi-PR tab strip. */
 export function AppShell(): React.ReactElement {
@@ -153,9 +131,7 @@ function ShellFrame({
 			children: (
 				<>
 					{titleBar}
-					<FramePanel className={cn(INSET_PANE_CLASS, "my-0")}>
-						{children}
-					</FramePanel>
+					<InsetPane className="my-0">{children}</InsetPane>
 					<div className="relative flex min-h-2 items-center">
 						<DevFooter />
 						<div className="grow" />
