@@ -2,72 +2,158 @@ import { useSyncExternalStore } from "react";
 import { toastManager } from "#/components/ui/toast";
 import { hasNative, native } from "#/infra/native";
 
-/** The material behind the main window's frame; `off` paints the frame opaque. */
-export const WINDOW_GLASS_KINDS = ["off", "regular", "tinted"] as const;
-export type WindowGlass = (typeof WINDOW_GLASS_KINDS)[number];
-
 /** View-only like the theme, so it lives in `localStorage` rather than `@repo/settings`: nothing in the sidecar reads it. */
-const STORAGE_KEY = "nisi.windowGlass";
+const ENABLED_STORAGE_KEY = "nisi.windowGlass";
+const TRANSLUCENCY_STORAGE_KEY = "nisi.windowGlassTranslucency";
 
-const TINT_STORAGE_KEY = "nisi.windowGlassTint";
+/** Percent of the layer's fill that lets the glass through. */
+export const GLASS_TRANSLUCENCY_MIN = 5;
+export const GLASS_TRANSLUCENCY_MAX = 80;
+export const GLASS_TRANSLUCENCY_STEP = 5;
+export const DEFAULT_GLASS_TRANSLUCENCY = 30;
 
-/** Percent opacity of the `tinted` wash. */
-export const WINDOW_GLASS_TINT_MIN = 20;
-export const WINDOW_GLASS_TINT_MAX = 95;
-export const WINDOW_GLASS_TINT_STEP = 5;
-export const DEFAULT_WINDOW_GLASS_TINT = 70;
+export const GLASS_THEMES = ["light", "dark"] as const;
+export type GlassTheme = (typeof GLASS_THEMES)[number];
 
-const listeners = new Set<() => void>();
-const tintListeners = new Set<() => void>();
+/** Which themes a change lands on: `both`, or just the one the user picked. */
+export type GlassScope = "both" | GlassTheme;
+
+export type GlassLayer = "frame" | "pane";
+
+/** The two layers' translucency, once the single knob no longer drives them. */
+export type GlassLayers = Record<GlassLayer, number>;
+
+export type ThemeGlass = {
+	translucency: number;
+	/** Set once either layer is adjusted by hand; the single knob is ignored while it is. */
+	custom: GlassLayers | null;
+};
+
+export type GlassTranslucency = Record<GlassTheme, ThemeGlass>;
+
+/** The inner pane has always been more opaque than the frame around it, and dark glass reads too see-through at the light ratio; the offsets keep the single knob from flattening that. */
+const PANE_OFFSET: Record<GlassTheme, number> = { light: 15, dark: -5 };
+
+const DEFAULT_TRANSLUCENCY: GlassTranslucency = {
+	light: { translucency: DEFAULT_GLASS_TRANSLUCENCY, custom: null },
+	dark: { translucency: DEFAULT_GLASS_TRANSLUCENCY, custom: null },
+};
+
+const enabledListeners = new Set<() => void>();
+const translucencyListeners = new Set<() => void>();
 const showingListeners = new Set<() => void>();
 
-export const isWindowGlass = (value: string): value is WindowGlass =>
-	(WINDOW_GLASS_KINDS as readonly string[]).includes(value);
+const clampTranslucency = (value: number) =>
+	Math.min(GLASS_TRANSLUCENCY_MAX, Math.max(GLASS_TRANSLUCENCY_MIN, value));
 
-function readWindowGlass(): WindowGlass {
-	const stored = localStorage.getItem(STORAGE_KEY);
-	if (stored === null) {
-		return "off";
+export function resolveGlassLayers(
+	theme: GlassTheme,
+	glass: ThemeGlass,
+): GlassLayers {
+	if (glass.custom !== null) {
+		return glass.custom;
 	}
-	if (!isWindowGlass(stored)) {
-		// A kind that no longer exists (a build with a `clear` option may have stored it): drop it rather than fail boot.
-		localStorage.removeItem(STORAGE_KEY);
-		return "off";
-	}
-	return stored;
+	return {
+		frame: glass.translucency,
+		pane: clampTranslucency(glass.translucency + PANE_OFFSET[theme]),
+	};
 }
 
-function readWindowGlassTint(): number {
-	const stored = localStorage.getItem(TINT_STORAGE_KEY);
-	if (stored === null) {
-		return DEFAULT_WINDOW_GLASS_TINT;
+const isTranslucency = (value: unknown): value is number =>
+	typeof value === "number" &&
+	Number.isInteger(value) &&
+	value >= GLASS_TRANSLUCENCY_MIN &&
+	value <= GLASS_TRANSLUCENCY_MAX;
+
+function isGlassLayers(value: unknown): value is GlassLayers {
+	if (typeof value !== "object" || value === null) {
+		return false;
 	}
-	const parsed = Number(stored);
-	if (
-		!Number.isInteger(parsed) ||
-		parsed < WINDOW_GLASS_TINT_MIN ||
-		parsed > WINDOW_GLASS_TINT_MAX
-	) {
-		// Same as an unknown kind: drop it rather than fail boot.
-		localStorage.removeItem(TINT_STORAGE_KEY);
-		return DEFAULT_WINDOW_GLASS_TINT;
+	const layers = value as Record<string, unknown>;
+	return isTranslucency(layers.frame) && isTranslucency(layers.pane);
+}
+
+function isThemeGlass(value: unknown): value is ThemeGlass {
+	if (typeof value !== "object" || value === null) {
+		return false;
 	}
+	const glass = value as Record<string, unknown>;
+	return (
+		isTranslucency(glass.translucency) &&
+		(glass.custom === null || isGlassLayers(glass.custom))
+	);
+}
+
+function parseTranslucency(raw: string): GlassTranslucency | undefined {
+	let parsed: unknown;
+	try {
+		parsed = JSON.parse(raw);
+	} catch {
+		return undefined;
+	}
+	if (typeof parsed !== "object" || parsed === null) {
+		return undefined;
+	}
+	const record = parsed as Record<string, unknown>;
+	if (!isThemeGlass(record.light) || !isThemeGlass(record.dark)) {
+		return undefined;
+	}
+	return { light: record.light, dark: record.dark };
+}
+
+/** `useSyncExternalStore` needs a stable snapshot, so the parsed value is reused until the stored string changes. */
+const translucencyCache: { raw: string | null; value: GlassTranslucency } = {
+	raw: null,
+	value: DEFAULT_TRANSLUCENCY,
+};
+
+function readTranslucency(): GlassTranslucency {
+	const raw = localStorage.getItem(TRANSLUCENCY_STORAGE_KEY);
+	if (raw === translucencyCache.raw) {
+		return translucencyCache.value;
+	}
+	translucencyCache.raw = raw;
+	if (raw === null) {
+		translucencyCache.value = DEFAULT_TRANSLUCENCY;
+		return translucencyCache.value;
+	}
+	const parsed = parseTranslucency(raw);
+	if (parsed === undefined) {
+		// Same as any stale stored value: drop it rather than fail boot.
+		localStorage.removeItem(TRANSLUCENCY_STORAGE_KEY);
+		translucencyCache.raw = null;
+		translucencyCache.value = DEFAULT_TRANSLUCENCY;
+		return translucencyCache.value;
+	}
+	translucencyCache.value = parsed;
 	return parsed;
 }
 
-function applyWindowGlassTint(tint: number) {
-	document.documentElement.style.setProperty("--glass-tint", `${tint}%`);
+function readWindowGlassEnabled(): boolean {
+	// `regular` and `tinted` are the kinds an earlier build stored; both mean glass is on.
+	const stored = localStorage.getItem(ENABLED_STORAGE_KEY);
+	return stored !== null && stored !== "off";
+}
+
+/** The CSS reads these per theme (`:root` for light, `.dark` for dark), so a theme switch needs no JS. */
+function applyTranslucency(translucency: GlassTranslucency) {
+	const style = document.documentElement.style;
+	for (const theme of GLASS_THEMES) {
+		const layers = resolveGlassLayers(theme, translucency[theme]);
+		style.setProperty(`--glass-frame-${theme}`, `${100 - layers.frame}%`);
+		style.setProperty(`--glass-pane-${theme}`, `${100 - layers.pane}%`);
+	}
 }
 
 /** The frame goes transparent only once the main process confirms the glass is behind it. */
-async function applyWindowGlass(kind: WindowGlass) {
+async function applyWindowGlass(enabled: boolean) {
 	if (!hasNative()) {
 		return;
 	}
 	try {
-		const showing = await native().setWindowGlass(kind !== "off");
+		const showing = await native().setWindowGlass(enabled);
 		if (showing) {
-			document.documentElement.dataset.nativeGlass = kind;
+			document.documentElement.dataset.nativeGlass = "on";
 		} else {
 			delete document.documentElement.dataset.nativeGlass;
 		}
@@ -85,26 +171,26 @@ async function applyWindowGlass(kind: WindowGlass) {
 
 /** Call once at boot so a stored choice is in place before the first paint settles. */
 export function restoreWindowGlass() {
-	// Synchronous, and before the awaited IPC in `applyWindowGlass`: the CSS reads `--glass-tint` with no fallback, so it must exist before `data-native-glass="tinted"` can.
-	applyWindowGlassTint(readWindowGlassTint());
-	void applyWindowGlass(readWindowGlass());
+	// Synchronous, and before the awaited IPC in `applyWindowGlass`: the CSS reads these variables with no fallback, so they must exist before `data-native-glass` can.
+	applyTranslucency(readTranslucency());
+	void applyWindowGlass(readWindowGlassEnabled());
 }
 
-export function setWindowGlass(kind: WindowGlass) {
-	localStorage.setItem(STORAGE_KEY, kind);
-	for (const listener of listeners) {
+export function setWindowGlassEnabled(enabled: boolean) {
+	localStorage.setItem(ENABLED_STORAGE_KEY, enabled ? "on" : "off");
+	for (const listener of enabledListeners) {
 		listener();
 	}
-	void applyWindowGlass(kind);
+	void applyWindowGlass(enabled);
 }
 
-export function useWindowGlass(): WindowGlass {
+export function useWindowGlassEnabled(): boolean {
 	return useSyncExternalStore((listener) => {
-		listeners.add(listener);
+		enabledListeners.add(listener);
 		return () => {
-			listeners.delete(listener);
+			enabledListeners.delete(listener);
 		};
-	}, readWindowGlass);
+	}, readWindowGlassEnabled);
 }
 
 function subscribeNativeGlassShowing(listener: () => void) {
@@ -122,19 +208,48 @@ export function useNativeGlassShowing(): boolean {
 	);
 }
 
-export function setWindowGlassTint(tint: number) {
-	localStorage.setItem(TINT_STORAGE_KEY, String(tint));
-	applyWindowGlassTint(tint);
-	for (const listener of tintListeners) {
+function updateTranslucency(
+	scope: GlassScope,
+	update: (theme: GlassTheme, glass: ThemeGlass) => ThemeGlass,
+) {
+	const current = readTranslucency();
+	const next: GlassTranslucency = {
+		light: scope === "dark" ? current.light : update("light", current.light),
+		dark: scope === "light" ? current.dark : update("dark", current.dark),
+	};
+	localStorage.setItem(TRANSLUCENCY_STORAGE_KEY, JSON.stringify(next));
+	applyTranslucency(next);
+	for (const listener of translucencyListeners) {
 		listener();
 	}
 }
 
-export function useWindowGlassTint(): number {
+/** The single knob: both layers follow it. */
+export function setGlassTranslucency(scope: GlassScope, translucency: number) {
+	updateTranslucency(scope, (_theme, glass) => ({ ...glass, translucency }));
+}
+
+/** Adjusting one layer by hand freezes the other at where the knob had put it. */
+export function setGlassLayer(
+	scope: GlassScope,
+	layer: GlassLayer,
+	translucency: number,
+) {
+	updateTranslucency(scope, (theme, glass) => ({
+		...glass,
+		custom: { ...resolveGlassLayers(theme, glass), [layer]: translucency },
+	}));
+}
+
+export function resetGlassLayers(scope: GlassScope) {
+	updateTranslucency(scope, (_theme, glass) => ({ ...glass, custom: null }));
+}
+
+export function useGlassTranslucency(): GlassTranslucency {
 	return useSyncExternalStore((listener) => {
-		tintListeners.add(listener);
+		translucencyListeners.add(listener);
 		return () => {
-			tintListeners.delete(listener);
+			translucencyListeners.delete(listener);
 		};
-	}, readWindowGlassTint);
+	}, readTranslucency);
 }
