@@ -1,6 +1,7 @@
 "use client";
 
 /** Shared walkthrough/chat model picker. Groups keep headers out of filtering and keyboard navigation; search matches tokens across harness and model details. */
+import { SearchIcon } from "lucide-react";
 import {
 	type ReactElement,
 	type KeyboardEvent as ReactKeyboardEvent,
@@ -183,11 +184,13 @@ export function HarnessModelCombobox({
 						})}
 			>
 				{trigger !== undefined && (
-					<div className="p-1">
+					<div className="border-b p-1">
 						<ComboboxInput
+							className="border-transparent! bg-transparent! shadow-none before:hidden has-focus-visible:ring-0"
 							onKeyDown={handleModelPickerKeyDown}
-							placeholder="Choose a model…"
+							placeholder="Search models…"
 							showTrigger={false}
+							startAddon={<SearchIcon />}
 						/>
 					</div>
 				)}
