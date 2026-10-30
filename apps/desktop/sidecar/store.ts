@@ -959,6 +959,28 @@ export class Store extends Context.Service<Store>()("Store", {
 			});
 
 		/**
+		 * What the guide needs of a session: the live checkout and the branch it
+		 * reviews. A separate method, not a wider `resolveSessionRepoRoot`, since
+		 * that one's other callers want only the path.
+		 */
+		const resolveSessionGuideTarget = (
+			sessionId: string,
+		): Effect.Effect<
+			{ readonly repoRoot: string; readonly headRef: string },
+			| SessionNotFound
+			| ReviewStoreError
+			| GitCommandError
+			| WorktreeRelocationFailed
+			| SettingsStoreError,
+			ChildProcessSpawner.ChildProcessSpawner
+		> =>
+			Effect.gen(function* () {
+				const session = yield* reviewStore.getSession(sessionId);
+				const repoRoot = yield* resolveLiveRepoRoot(session);
+				return { repoRoot, headRef: session.headRef };
+			});
+
+		/**
 		 * The command palette's "Switch to PR" action — transforms `sessionId`'s
 		 * row from a `"branch"` target onto the PR open for its current branch,
 		 * in place (`@repo/review`'s `retargetToPullRequest`, not
@@ -2364,6 +2386,7 @@ export class Store extends Context.Service<Store>()("Store", {
 			listSessions,
 			closeSession,
 			resolveSessionRepoRoot,
+			resolveSessionGuideTarget,
 			resolveSessionDiffHead,
 			recordPullRequestStatus,
 			resolveScheduledMergeRepoRoot,

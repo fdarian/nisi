@@ -50,7 +50,7 @@ const DIFF_DEFAULT_SIZE = "46%";
 const HANDLE_HIT_SIZE = { coarse: 12, fine: 12 };
 
 /**
- * The Guide tab: `<repoRoot>/.nisi/guide/guide.mdx`, bundled by the sidecar and
+ * The Guide tab: the session branch's `guide.mdx`, bundled by the sidecar and
  * evaluated here against the app's own React and kit. Polls faster while
  * visible so an agent's edits show up within a couple of seconds.
  */

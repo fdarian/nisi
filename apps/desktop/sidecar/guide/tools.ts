@@ -3,8 +3,8 @@ import type { GuideIssue } from "@repo/sidecar-api";
 import { htmlToText } from "../../src/features/guide/guide-text";
 import { renderGuideHtml } from "../../src/features/guide/static-render";
 import { checkGuide } from "../../src/features/guide/validate";
-import { buildGuide, GUIDE_DIR } from "./build";
-import { readGuideDiff } from "./diff";
+import { buildGuide, writeValidatedSha } from "./build";
+import { git, readGuideDiff } from "./diff";
 import { appStylesheet } from "./preview-css";
 import { isScannable, scanDeclarations } from "./symbols";
 
@@ -45,14 +45,26 @@ async function declaredSymbols(
 	return scanDeclarations(present.filter((source) => source !== undefined));
 }
 
-/** What `nisi guide validate` reports: the Guide tab's own checks plus what only the author can fix. */
+/**
+ * What `nisi guide validate` reports: the Guide tab's own checks plus what only
+ * the author can fix. A guide with no error-level issue is stamped with the
+ * checkout's `HEAD` (`meta.json`), which is how the Guide tab knows the commit
+ * it was last known good for; warnings don't withhold the stamp.
+ */
 export async function validateRepoGuide(
+	guideDir: string,
 	repoRoot: string,
 	base: string | undefined,
 ): Promise<DiffSummary & { issues: GuideIssue[] }> {
 	const diff = await readGuideDiff(repoRoot, base);
-	const built = await buildGuide(repoRoot);
+	const built = await buildGuide(guideDir, repoRoot);
 	const report = withLocalStorage(() => checkGuide(built, diff.files));
+	if (report.errors.length === 0) {
+		await writeValidatedSha(
+			guideDir,
+			(await git(repoRoot, "rev-parse", "HEAD")).trim(),
+		);
+	}
 	return {
 		base: diff.base,
 		mergeBase: diff.mergeBase,
@@ -73,12 +85,13 @@ export async function validateRepoGuide(
  * render throws: the caller asked for a preview and has none to show.
  */
 export async function previewRepoGuide(
+	guideDir: string,
 	repoRoot: string,
 	base: string | undefined,
 	options: { expand: boolean; withCss: boolean },
 ): Promise<DiffSummary & { html: string; css?: string; text: string }> {
 	const diff = await readGuideDiff(repoRoot, base);
-	const built = await buildGuide(repoRoot);
+	const built = await buildGuide(guideDir, repoRoot);
 	if (built.kind === "missing") {
 		throw new Error(`There is no guide at ${built.path}.`);
 	}
@@ -104,9 +117,7 @@ export async function previewRepoGuide(
 		mergeBase: diff.mergeBase,
 		changedFiles: diff.files.length,
 		html,
-		...(options.withCss
-			? { css: await appStylesheet(join(repoRoot, GUIDE_DIR)) }
-			: {}),
+		...(options.withCss ? { css: await appStylesheet(guideDir) } : {}),
 		text: htmlToText(html),
 	};
 }

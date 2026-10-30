@@ -2,20 +2,22 @@ import { oc } from "@orpc/contract";
 import { Schema } from "effect";
 
 /**
- * The agent-authored guide for a session: `<repoRoot>/.nisi/guide/guide.mdx`,
- * bundled by the sidecar (`apps/desktop/sidecar/guide/`) into one CommonJS
+ * The agent-authored guide for a session: `guide.mdx` in the session branch's
+ * central guide folder (`<data dir>/guides/<repo key>/<branch>/`, see `@repo/git`'s
+ * `guide-folder.ts`), or in the checkout's legacy `.nisi/guide/` when the
+ * central folder has none. Bundled by the sidecar (`apps/desktop/sidecar/guide/`) into one CommonJS
  * module the frontend evaluates against its own React and guide kit. A missing
  * guide and a failed build are ordinary outcomes the Guide tab renders, not
  * RPC errors — the author is mid-edit while the tab polls this.
  *
  * `version` changes whenever the bundle's inputs do (every file under
- * `.nisi/guide/` except `checks/`), so the frontend can memoize its evaluation
+ * the guide folder except `checks/`, `.preview/` and `meta.json`), so the frontend can memoize its evaluation
  * on it across polls.
  */
 
 /**
  * One recorded command run, written by `nisi guide check` (`packages/cli/src/guide/check.ts`) to
- * `.nisi/guide/checks/<slug>.json` — change both together. Facts, not prose:
+ * `<guide folder>/checks/<slug>.json` — change both together. Facts, not prose:
  * the guide's `<Checks />` renders these, and a run whose `sha` isn't
  * `headSha` is stale.
  */
@@ -64,6 +66,8 @@ export const GuideResult = Schema.Union([
 		checks: Schema.Array(GuideCheck),
 		/** `git rev-parse HEAD` of the session's worktree, to tell stale checks from current ones. */
 		headSha: Schema.String,
+		/** The commit `nisi guide validate` last passed without errors on, from the folder's `meta.json`; null when it never has, and always for a legacy guide. Not part of `version`. */
+		validatedSha: Schema.NullOr(Schema.String),
 		/** Computed per diff, not part of `version`: a code change must not rebuild the bundle. */
 		symbols: Schema.Array(GuideSymbol),
 	}),
@@ -86,6 +90,9 @@ export type GuideIssue = Schema.Schema.Type<typeof GuideIssue>;
  * runs `nisi guide …` from a worktree that may have no session open. `base`
  * is `--base <ref>`; the sidecar resolves it (see `sidecar/guide/diff.ts`) and
  * echoes the ref it settled on, so the CLI can say what the diff was measured against.
+ * They read the central folder of the branch `repoRoot` has checked out (a
+ * detached `HEAD` is resolved through GitHub; when that is ambiguous the call
+ * fails with a message saying what to do), never the legacy `.nisi/guide/`.
  */
 export const GuideDiffInput = Schema.Struct({
 	repoRoot: Schema.String,
@@ -99,7 +106,7 @@ export const guideContract = {
 		.errors({ NOT_FOUND: {}, INTERNAL_SERVER_ERROR: {} }),
 	/**
 	 * Turns on the `guide-changed` event for a session: the sidecar then watches
-	 * its `.nisi/guide/` folder (even before it exists) and its head. `get` is
+	 * its central guide folder (even before it exists; a legacy `.nisi/guide/` is not watched) and its head. `get` is
 	 * never polled, so a client that isn't watching only learns of a change by
 	 * refetching when it starts to.
 	 */

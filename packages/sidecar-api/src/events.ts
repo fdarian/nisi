@@ -41,7 +41,7 @@ import { OpenSessionTarget, Session } from "./sessions.ts";
  * same `pullRequests.repointOrigin` fix without a picked folder.
  *
  * `guide-changed` says a session's `guide.get` result is stale: its
- * `.nisi/guide/` folder (bundle inputs or recorded checks) changed, or the
+ * central guide folder (bundle inputs, recorded checks or the validation stamp) changed, or the
  * session's head moved. Only sent for sessions the client asked for through
  * `guide.setWatching`.
  *

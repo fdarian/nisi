@@ -33,7 +33,7 @@ describe("formatChatReferenceForAgent", () => {
 		);
 	});
 
-	test("guide excerpt names the guide file", () => {
+	test("guide excerpt names the guide", () => {
 		expect(
 			formatChatReferenceForAgent({
 				...excerpt,
@@ -41,9 +41,7 @@ describe("formatChatReferenceForAgent", () => {
 				section: "Overview",
 				text: "hello",
 			}),
-		).toBe(
-			'Excerpt from the reviewer guide (.nisi/guide/guide.mdx), under "Overview":\n> hello',
-		);
+		).toBe('Excerpt from the reviewer guide, under "Overview":\n> hello');
 	});
 
 	test("no section drops the under clause", () => {

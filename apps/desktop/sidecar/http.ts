@@ -8,7 +8,10 @@ import {
 } from "@orpc/server/plugins";
 import { RPCHandler as WebSocketRPCHandler } from "@orpc/server/websocket";
 import { refreshLoginShellPath } from "@repo/bin-resolver";
+import { getDataDirConfig } from "@repo/db";
+import { getGuidesDir } from "@repo/db/paths";
 import {
+	checkoutGuideFolder,
 	fetchBranchCommits,
 	type GitCommandError,
 	GitHub,
@@ -19,6 +22,7 @@ import {
 	pushBranch,
 	type RepoPathVerificationError,
 	resolveUnpushedCommits,
+	sessionGuideFolder,
 	type WorktreeReadFailed,
 	type WorktreeRelocationFailed,
 } from "@repo/git";
@@ -72,7 +76,7 @@ import {
 	streamReady,
 	subscribe as subscribeToSidecarEvents,
 } from "./events.ts";
-import { buildGuide } from "./guide/build.ts";
+import { buildGuide, readableGuideDir } from "./guide/build.ts";
 import {
 	cachedSymbols,
 	cacheSymbols,
@@ -251,6 +255,11 @@ const formatGitCommandError = (cause: GitCommandError): string => {
 	return `git command failed (${exitDescription}) in ${cause.cwd}: ${invocation}\n${cause.stderr.trim()}`;
 };
 
+/** A data-dir misconfiguration would already have stopped the sidecar from booting, so here it is a defect. */
+const guidesDirConfig = Effect.gen(function* () {
+	return getGuidesDir(yield* getDataDirConfig());
+}).pipe(Effect.orDie);
+
 const REPO_PATH_FAILURE_TAGS = [
 	"RepoPathNotFound",
 	"RepoPathNotAGitRepo",
@@ -409,9 +418,9 @@ export function attachRouter(
 	 * concrete `ORPCError` type), so this stays exactly typed per call site
 	 * instead of widening to `unknown`.
 	 */
-	const resolveCodeIndexRepoRoot = <ENotFound, EInternal>(
+	const resolveCodeIndexRepoRoot = <A, ENotFound, EInternal>(
 		sessionEffect: Effect.Effect<
-			string,
+			A,
 			| SessionNotFound
 			| ReviewStoreError
 			| GitCommandError
@@ -447,6 +456,94 @@ export function attachRouter(
 					Effect.fail(
 						errors.INTERNAL_SERVER_ERROR({
 							message: formatWorktreeRelocationFailed(cause),
+						}),
+					),
+			}),
+		);
+
+	/**
+	 * A session's guide: the central folder of the branch it reviews (null for a
+	 * detached branch session, which names none), the folder `guide.get` reads
+	 * (the legacy one when the central folder has no guide yet), and the
+	 * checkout the guide describes.
+	 */
+	const resolveSessionGuide = <ENotFound, EInternal>(
+		sessionId: string,
+		errors: {
+			readonly NOT_FOUND: (input: { message: string }) => ENotFound;
+			readonly INTERNAL_SERVER_ERROR: (input: { message: string }) => EInternal;
+		},
+	) =>
+		Effect.gen(function* () {
+			const store = yield* Store;
+			const target = yield* resolveCodeIndexRepoRoot(
+				store.resolveSessionGuideTarget(sessionId),
+				sessionId,
+				errors,
+			);
+			const guidesDir = yield* guidesDirConfig;
+			const central = yield* sessionGuideFolder(
+				guidesDir,
+				target.repoRoot,
+				target.headRef,
+			).pipe(
+				Effect.catchTag("GitCommandError", (cause) =>
+					Effect.fail(
+						errors.INTERNAL_SERVER_ERROR({
+							message: formatGitCommandError(cause),
+						}),
+					),
+				),
+			);
+			return {
+				repoRoot: target.repoRoot,
+				central,
+				folder: yield* Effect.promise(() =>
+					readableGuideDir(central, target.repoRoot),
+				),
+			};
+		});
+
+	/** What `guide.validate`/`guide.preview` write to: the central folder of whatever branch `repoRoot` has checked out. Fails with a message saying what to do when that can't be told without guessing. */
+	const resolveCheckoutGuideFolder = <EInternal>(
+		repoRoot: string,
+		errors: {
+			readonly INTERNAL_SERVER_ERROR: (input: { message: string }) => EInternal;
+		},
+	) =>
+		guidesDirConfig.pipe(
+			Effect.flatMap((guidesDir) => checkoutGuideFolder(guidesDir, repoRoot)),
+			Effect.catchTags({
+				GuideFolderUnresolvable: (cause) =>
+					Effect.fail(errors.INTERNAL_SERVER_ERROR({ message: cause.message })),
+				GitCommandError: (cause) =>
+					Effect.fail(
+						errors.INTERNAL_SERVER_ERROR({
+							message: formatGitCommandError(cause),
+						}),
+					),
+				GhNotAuthenticated: (cause) =>
+					Effect.fail(
+						errors.INTERNAL_SERVER_ERROR({
+							message: `gh is not authenticated: ${cause.reason}`,
+						}),
+					),
+				GhRateLimited: (cause) =>
+					Effect.fail(
+						errors.INTERNAL_SERVER_ERROR({
+							message: `GitHub is rate-limiting nisi right now: ${cause.reason}`,
+						}),
+					),
+				GitHubUnreachable: (cause) =>
+					Effect.fail(
+						errors.INTERNAL_SERVER_ERROR({
+							message: `could not reach GitHub for ${cause.repoRoot}: ${cause.reason}`,
+						}),
+					),
+				GhOutputDecodeError: (cause) =>
+					Effect.fail(
+						errors.INTERNAL_SERVER_ERROR({
+							message: `gh returned output nisi couldn't parse (${cause.command})`,
 						}),
 					),
 			}),
@@ -2525,12 +2622,10 @@ export function attachRouter(
 		guide: {
 			get: authed.guide.get.effect(function* ({ input, errors }) {
 				const store = yield* Store;
-				const repoRoot = yield* resolveCodeIndexRepoRoot(
-					store.resolveSessionRepoRoot(input.sessionId),
-					input.sessionId,
-					errors,
+				const guide = yield* resolveSessionGuide(input.sessionId, errors);
+				const built = yield* Effect.promise(() =>
+					buildGuide(guide.folder, guide.repoRoot),
 				);
-				const built = yield* Effect.promise(() => buildGuide(repoRoot));
 				if (built.kind !== "ok") return built;
 				const settings = yield* (yield* SettingsStore).get();
 				const files = yield* store
@@ -2611,17 +2706,12 @@ export function attachRouter(
 					yield* syncLiveChecks();
 					return;
 				}
-				const store = yield* Store;
-				const repoRoot = yield* resolveCodeIndexRepoRoot(
-					store.resolveSessionRepoRoot(input.sessionId),
-					input.sessionId,
-					errors,
-				);
+				const guide = yield* resolveSessionGuide(input.sessionId, errors);
 				yield* Effect.try({
 					try: () =>
 						startGuideWatch(
 							input.sessionId,
-							repoRoot,
+							guide.central,
 							() => emit({ type: "guide-changed", sessionId: input.sessionId }),
 							(cause) =>
 								void runWithMainContext(
@@ -2633,7 +2723,7 @@ export function attachRouter(
 						),
 					catch: (cause) =>
 						errors.INTERNAL_SERVER_ERROR({
-							message: `couldn't watch ${repoRoot}: ${cause instanceof Error ? cause.message : String(cause)}`,
+							message: `couldn't watch ${guide.central}: ${cause instanceof Error ? cause.message : String(cause)}`,
 						}),
 				});
 				yield* syncLiveChecks();
@@ -2642,8 +2732,12 @@ export function attachRouter(
 				yield* checkSessionForChanges(input.sessionId);
 			}),
 			validate: authed.guide.validate.effect(function* ({ input, errors }) {
+				const folder = yield* resolveCheckoutGuideFolder(
+					input.repoRoot,
+					errors,
+				);
 				return yield* Effect.tryPromise({
-					try: () => validateRepoGuide(input.repoRoot, input.base),
+					try: () => validateRepoGuide(folder, input.repoRoot, input.base),
 					catch: (cause) =>
 						errors.INTERNAL_SERVER_ERROR({
 							message: cause instanceof Error ? cause.message : String(cause),
@@ -2651,9 +2745,13 @@ export function attachRouter(
 				});
 			}),
 			preview: authed.guide.preview.effect(function* ({ input, errors }) {
+				const folder = yield* resolveCheckoutGuideFolder(
+					input.repoRoot,
+					errors,
+				);
 				return yield* Effect.tryPromise({
 					try: () =>
-						previewRepoGuide(input.repoRoot, input.base, {
+						previewRepoGuide(folder, input.repoRoot, input.base, {
 							expand: input.expand,
 							withCss: input.withCss,
 						}),

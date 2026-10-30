@@ -1,104 +1,95 @@
-import { existsSync, type FSWatcher, watch } from "node:fs";
-import { join } from "node:path";
-import { GUIDE_DIR } from "./build.ts";
+import { existsSync, type FSWatcher, mkdirSync, watch } from "node:fs";
+import { basename, dirname } from "node:path";
 
 const DEBOUNCE_MS = 150;
-const NISI_DIR = ".nisi";
-const GUIDE_NAME = "guide";
 
 type FolderWatch = {
-	readonly repoRoot: string;
+	readonly folder: string | null;
 	readonly close: () => void;
 };
 
 /**
- * Calls `onChange` (debounced) when anything under `<repoRoot>/.nisi/guide/`
- * changes — including `checks/` — or when that folder, or `.nisi/` above it,
- * appears or disappears. A guide that doesn't exist yet is watched through its
- * ancestors, so the Guide tab can show up the moment an agent writes one.
+ * Calls `onChange` (debounced) when anything under the central guide `folder`
+ * changes — including `checks/` — or when the folder itself appears or
+ * disappears. The folder's parent is created up front and watched for the
+ * folder's name, so a guide that doesn't exist yet shows up the moment an
+ * agent writes one.
  *
  * macOS fs.watch is FSEvents-backed: a watcher costs no file descriptor, and the
- * repo-root one only reports direct children, so the filename filter below keeps
- * it quiet for the rest of the worktree.
+ * parent one only reports direct children, so the name filter below keeps it
+ * quiet for the sibling branches' folders.
  */
 export function watchGuideFolder(
-	repoRoot: string,
+	folder: string,
 	onChange: () => void,
 	onError: (cause: unknown) => void,
 ): FolderWatch {
-	const nisiDir = join(repoRoot, NISI_DIR);
-	const guideDir = join(repoRoot, GUIDE_DIR);
+	const parent = dirname(folder);
+	const name = basename(folder);
 	let timer: ReturnType<typeof setTimeout> | undefined;
 	let closed = false;
-	let nested: FSWatcher[] = [];
+	let inner: FSWatcher | undefined;
 
 	const notify = () => {
 		clearTimeout(timer);
 		timer = setTimeout(onChange, DEBOUNCE_MS);
 	};
 
-	const open = (
-		dir: string,
-		recursive: boolean,
-		onEvent: (name: string) => void,
-	) => {
-		// The directory can vanish between the existence check and the watch;
-		// the watcher on its parent reports that, so there is nothing to do here.
-		if (!existsSync(dir)) return undefined;
-		const watcher = watch(dir, { recursive }, (_event, name) =>
-			onEvent(name ?? ""),
-		);
-		watcher.on("error", onError);
-		return watcher;
+	const reopenInner = () => {
+		inner?.close();
+		inner = undefined;
+		// The folder can vanish between the existence check and the watch; the
+		// watcher on its parent reports that, so there is nothing to do here.
+		if (!existsSync(folder)) return;
+		inner = watch(folder, { recursive: true }, notify);
+		inner.on("error", onError);
 	};
 
-	const reopenNested = () => {
-		for (const watcher of nested) watcher.close();
-		nested = [
-			open(nisiDir, false, (name) => {
-				if (name === GUIDE_NAME) {
-					reopenNested();
-					notify();
-				}
-			}),
-			open(guideDir, true, notify),
-		].filter((watcher) => watcher !== undefined);
-	};
-
-	const root = watch(repoRoot, (_event, name) => {
-		if (name === NISI_DIR) {
-			reopenNested();
+	mkdirSync(parent, { recursive: true });
+	const outer = watch(parent, (_event, changed) => {
+		if (changed === name) {
+			reopenInner();
 			notify();
 		}
 	});
-	root.on("error", onError);
-	reopenNested();
+	outer.on("error", onError);
+	reopenInner();
 
 	return {
-		repoRoot,
+		folder,
 		close: () => {
 			if (closed) return;
 			closed = true;
 			clearTimeout(timer);
-			root.close();
-			for (const watcher of nested) watcher.close();
+			outer.close();
+			inner?.close();
 		},
 	};
 }
 
 const folderWatches = new Map<string, FolderWatch>();
 
-/** Replaces any watch already running for the session, so a worktree that moved is followed. */
+/**
+ * Replaces any watch already running for the session, so a branch that moved is
+ * followed. A null `folder` (a detached branch session, which has no central
+ * folder) still registers the session, so its head moves are reported, but
+ * watches no files.
+ */
 export function startGuideWatch(
 	sessionId: string,
-	repoRoot: string,
+	folder: string | null,
 	onChange: () => void,
 	onError: (cause: unknown) => void,
 ): void {
 	const existing = folderWatches.get(sessionId);
-	if (existing?.repoRoot === repoRoot) return;
+	if (existing !== undefined && existing.folder === folder) return;
 	existing?.close();
-	folderWatches.set(sessionId, watchGuideFolder(repoRoot, onChange, onError));
+	folderWatches.set(
+		sessionId,
+		folder === null
+			? { folder, close: () => {} }
+			: watchGuideFolder(folder, onChange, onError),
+	);
 }
 
 export function stopGuideWatch(sessionId: string): void {
