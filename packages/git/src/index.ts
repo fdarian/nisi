@@ -43,6 +43,7 @@ export {
 	type GitError,
 	GitHubSearchUnreachable,
 	GitHubUnreachable,
+	GuideFolderUnresolvable,
 	NoDefaultBranch,
 	NoMergeMethodsEnabled,
 	NoOriginRemote,
@@ -81,7 +82,7 @@ export { PullRequestAttention } from "./github/gh/attention.ts";
 export { approveWorkflowRuns } from "./github/gh/checks.ts";
 export { GhGitHub } from "./github/gh/github.ts";
 export { mergeStatusInterval } from "./github/gh/watch.ts";
-export type { GitHubShape } from "./github/github.ts";
+export type { CommitPullRequest, GitHubShape } from "./github/github.ts";
 export {
 	GitHub,
 	type OpenPullRequestIndex,
@@ -105,6 +106,7 @@ export type {
 	PullRequestStackSuggestion,
 } from "./github/models.ts";
 export { hasSearchQualifier } from "./github/search-query.ts";
+export { checkoutGuideFolder, sessionGuideFolder } from "./guide-folder.ts";
 export type { Hunk } from "./hunk.ts";
 export { parseHunks } from "./hunk.ts";
 export type { ChangedRun } from "./hunks.ts";
