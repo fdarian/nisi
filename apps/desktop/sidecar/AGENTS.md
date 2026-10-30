@@ -47,22 +47,26 @@ seam" for the port/token handshake this boots into.
   combined across sessions of the same PR. `http.ts` receives header-level focus/selection via
   `sessions.setAttention`; `live-poll.ts` marks local changes; `session-close.ts` removes entries.
   `GhGitHub.layer` consumes its `PullRequestAttention` stream to choose its polling cadence.
-- `guide/build.ts` — behind `guide.get`: bundles `<repoRoot>/.nisi/guide/guide.mdx` with `Bun.build` (MDX and
+- `guide/build.ts` — behind `guide.get`: bundles `<guide folder>/guide.mdx` with `Bun.build` (MDX and
   image plugins; React, the jsx runtimes and `@nisi/guide` stay external) into one CJS string the frontend
-  evaluates. Cached per repo on a hash of every file's path/mtime/size under `.nisi/guide/` except `checks/`,
+  evaluates. The guide folder is `<data dir>/guides/<repo>/<branch>/` (`sessionGuideFolder` in `@repo/git`), or the
+  checkout's legacy `.nisi/guide` when the central folder has no guide (`readableGuideDir`). Cached per folder on a hash
+  of every file's path/mtime/size under it except `checks/`, `.preview/` and `meta.json`,
   because every `guide-changed` event refetches it. A missing guide or failed build is a result variant, not an RPC error. `EXTERNALS`
   must match `src/features/guide/evaluate.ts`'s module map. The same call returns the runs recorded in
-  `.nisi/guide/checks/` (written by `nisi guide check`) and the worktree's head SHA, read fresh each time. It also returns
+  `<guide folder>/checks/` (written by `nisi guide check`), the worktree's head SHA, and `validatedSha` from `meta.json`
+  (stamped by `guide.validate` on a clean run), read fresh each time. It also returns
   `symbols` (`guide/symbols.ts`): names declared exactly once, at column 0, in a changed TS/JS/Rust/Go/Python file,
   with line and character span, found by a text scan of the session's head content and cached per session on the
   diff's file fingerprints. No language server is involved.
 - `guide/watch.ts` — behind `guide.setWatching`: one FSEvents watcher chain per session the frontend asked for
-  (repo root, `.nisi/`, `.nisi/guide/` recursive, so a guide that doesn't exist yet is seen appearing), debounced into
+  (the guide folder's parent, filtered to the folder's name, plus the folder recursive, so a guide that doesn't exist yet is
+  seen appearing; legacy folders are not watched), debounced into
   a `guide-changed` event. `guide.get` is never polled; the same event is also emitted by `live-poll.ts` when the
   session's head moves, and `live-poll.ts` runs a live check for guide-watched sessions as well as Files-Changed-watched ones.
   `session-close.ts` stops the watcher.
 - `guide/tools.ts` — behind `guide.validate` and `guide.preview`, which the `nisi guide validate|render` CLI
-  commands call. They key on `repoRoot`, not a session: the author may have none open. `validateRepoGuide` and
+  commands call. They key on `repoRoot`, not a session: the author may have none open, so the guide folder comes from `checkoutGuideFolder`. `validateRepoGuide` and
   `previewRepoGuide` read the diff (`guide/diff.ts`: base resolution, `git diff -U0` hunks, untracked files, the
   classifier's `generated` flag), build the guide, and run `src/features/guide/{validate,static-render,guide-text}.ts`
   — shared modules that live in the frontend tree. They type-check in `tsconfig.guide-render.json` (DOM lib, `jsx`, `#/*`;

@@ -10,7 +10,7 @@ It builds the guide exactly as the tab does and renders the real kit with real d
 
 ## PNGs (the default)
 
-One PNG per `##` section plus `full.png`, in `.nisi/guide/.preview/` (git-ignored, and not part of what the tab rebuilds on). The command prints the paths; open the images and look at them. A fresh headless Chrome with a throwaway profile takes the screenshots, so it never touches a browser you have open; set `CHROME_PATH` if it can't find one. A run takes about 8 seconds.
+One PNG per `##` section plus `full.png`, in `.preview/` inside the guide folder (`nisi guide path`; not part of what the tab rebuilds on). The command prints the paths; open the images and look at them. A fresh headless Chrome with a throwaway profile takes the screenshots, so it never touches a browser you have open; set `CHROME_PATH` if it can't find one. A run takes about 8 seconds.
 - `--expand` stacks every Tour frame, shows Before and After of each Sequence, and opens each Area's file list, so every pin and state is on the page at once. The tab shows one at a time, so use `--expand` whenever you want to check everything, and the default to see what a reader lands on.
 - `--theme dark` for dark mode. Check pin legibility and step colors in both if the change touches visuals.
 - `--width` (default 900) is the viewport; the guide's own column is at most 768px. `--scale` (default 2) is the device pixel ratio; the images come out at twice the width, which is what makes a small pin placeable. A launch or teardown failure in Chrome is retried once. The command prints the base it measured against, so check that line when the Area numbers look off; pass `--base <ref>` to change it (default: `origin/main` unless it is behind local `main`, then `main`, then `master`).

@@ -1,6 +1,6 @@
 ---
 name: guide
-description: Write the reviewer's guide for the changes you just made, as a live page in nisi's Guide tab, instead of recapping them in chat. Use after finishing a change a human will review, when asked for a guide, overview or walkthrough of your work, or when editing an existing .nisi/guide/guide.mdx.
+description: Write the reviewer's guide for the changes you just made, as a live page in nisi's Guide tab, instead of recapping them in chat. Use after finishing a change a human will review, when asked for a guide, overview or walkthrough of your work, or when editing an existing guide.mdx.
 ---
 
 # Writing a nisi guide
@@ -12,10 +12,13 @@ each save, so write it early and keep editing.
 
 ## Where
 
-`<repo root>/.nisi/guide/guide.mdx`, in the worktree you changed. Screenshots and any custom `.tsx`
-component live next to it. Import the kit from `@nisi/guide`. `.nisi/` isn't ignored by git unless the
-repo says so: add it to `.git/info/exclude` (`echo .nisi/ >> "$(git rev-parse --git-path info/exclude)"`)
-so it stays out of your commits, and never commit it.
+`$(nisi guide path)/guide.mdx`. `nisi guide path` prints the guide's folder for the branch you are on
+(creating it) and writes nothing else to stdout. Screenshots and any custom `.tsx` component live next to
+the guide. Import the kit from `@nisi/guide`. The folder is outside the repo, so there is nothing to
+exclude or commit.
+- A `.nisi/guide` left in the worktree (`nisi guide path` says so on stderr): move its files to the printed folder.
+- Detached `HEAD`: `nisi guide path` finds the PR the commit belongs to, and fails telling you to check out the branch when it can't.
+- If your sandbox blocks writing to that folder, stop and tell the user. Don't write the guide into the worktree instead.
 
 ## Shape
 
@@ -56,6 +59,9 @@ write no `# h1`. Use these sections in this order, and drop one that doesn't app
 nisi guide check "Type check and lint" -- <the repo's check command>
 nisi guide validate
 ```
+
+Run `validate` after your final commit: it records the commit the guide was validated at, and the tab
+tells the reader when the branch has moved past it.
 
 `nisi guide check` runs a command and records the result for `<Checks />`. Record the repo's standard
 check commands (from its package scripts, CI, or AGENTS.md), plus an explicit command for any tests you
