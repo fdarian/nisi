@@ -19,7 +19,7 @@ export function Skipped(_props: SkippedProps): null {
 	return null;
 }
 
-const SHORT_SHA = 7;
+export const SHORT_SHA = 7;
 
 function CheckRow(props: {
 	check: GuideCheck;
