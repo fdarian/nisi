@@ -69,8 +69,9 @@ async function pump(
 const MUTATING = /(?:^|\s)(?:--write|--fix|-w)(?:\s|$)|\bformat\b/;
 
 /**
- * Runs `command` in `repoRoot`, streams its output through, and records the
- * result as `.nisi/guide/checks/<slug>.json` for the guide's `<Checks />`.
+ * Runs `command` in the checkout `repoRoot`, streams its output through, and
+ * records the result as `<guideFolder>/checks/<slug>.json` for the guide's
+ * `<Checks />`.
  * Its shape is `GuideCheck` in `packages/sidecar-api/src/guide.ts`, which the
  * sidecar parses — change both together. Re-running with the same title
  * overwrites. Returns the command's exit code.
@@ -80,6 +81,7 @@ const MUTATING = /(?:^|\s)(?:--write|--fix|-w)(?:\s|$)|\bformat\b/;
  */
 export async function recordCheck(
 	repoRoot: string,
+	guideFolder: string,
 	title: string,
 	command: readonly string[],
 ): Promise<number> {
@@ -125,7 +127,7 @@ export async function recordCheck(
 			.map((line) => Bun.stripANSI(line))
 			.join("\n"),
 	};
-	const dir = join(repoRoot, ".nisi/guide/checks");
+	const dir = join(guideFolder, "checks");
 	await mkdir(dir, { recursive: true });
 	await writeFile(
 		join(dir, `${slug}.json`),

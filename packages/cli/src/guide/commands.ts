@@ -2,7 +2,9 @@ import path from "node:path";
 import { resolveRepoRoot } from "@repo/git/repo";
 import { Console, Effect, Option } from "effect";
 import { Argument, Command, Flag } from "effect/cli";
+import { FileSystem } from "effect/FileSystem";
 import { recordCheck } from "./check.ts";
+import { guideFolderOf } from "./folder.ts";
 import { renderPreview } from "./preview.ts";
 import { callGuideSidecar, describeGuideFailure } from "./sidecar.ts";
 
@@ -13,7 +15,7 @@ const baseFlag = Flag.String("base").pipe(
 	Flag.optional,
 );
 
-/** The repo the command was run in. Every `nisi guide` command works on `<repoRoot>/.nisi/guide`. */
+/** The repo the command was run in. Every `nisi guide` command works on that checkout's guide folder (see `guideFolderOf`). */
 const currentRepoRoot = <E>(fail: Effect.Effect<never, E>) =>
 	resolveRepoRoot(process.cwd()).pipe(
 		Effect.catchTag("NotAGitRepository", () =>
@@ -31,6 +33,34 @@ const describeBase = (diff: {
 	`base ${diff.base} (merge-base ${diff.mergeBase.slice(0, 7)}), ${diff.changedFiles} changed files`;
 
 export const guideCommand = <E>(fail: Effect.Effect<never, E>) => {
+	const guidePath = Command.make("path", {}, () =>
+		Effect.gen(function* () {
+			const repoRoot = yield* currentRepoRoot(fail);
+			const folder = yield* guideFolderOf(repoRoot, fail);
+			const fs = yield* FileSystem;
+			yield* fs
+				.makeDirectory(folder, { recursive: true })
+				.pipe(
+					Effect.catch((cause) =>
+						Console.error(`could not create ${folder}: ${cause.message}`).pipe(
+							Effect.andThen(fail),
+						),
+					),
+				);
+			const legacy = path.join(repoRoot, ".nisi/guide");
+			if (yield* fs.exists(legacy)) {
+				yield* Console.error(
+					`${legacy} holds a guide from an earlier version. Move its files into ${folder} and remove ${legacy}.`,
+				);
+			}
+			yield* Console.log(folder);
+		}),
+	).pipe(
+		Command.withDescription(
+			"Print the folder the guide goes in (guide.mdx, screenshots, components), creating it. Write the guide there: $(nisi guide path)/guide.mdx. The folder belongs to the repo and branch, not to the worktree. Needs no running app.",
+		),
+	);
+
 	const check = Command.make(
 		"check",
 		{
@@ -51,8 +81,9 @@ export const guideCommand = <E>(fail: Effect.Effect<never, E>) => {
 					return yield* fail;
 				}
 				const repoRoot = yield* currentRepoRoot(fail);
+				const guideFolder = yield* guideFolderOf(repoRoot, fail);
 				const exitCode = yield* Effect.tryPromise(() =>
-					recordCheck(repoRoot, options.title, options.command),
+					recordCheck(repoRoot, guideFolder, options.title, options.command),
 				).pipe(
 					Effect.catch((cause) =>
 						Console.error(`nisi guide check: ${String(cause.cause)}`).pipe(
@@ -64,7 +95,7 @@ export const guideCommand = <E>(fail: Effect.Effect<never, E>) => {
 			}),
 	).pipe(
 		Command.withDescription(
-			"Run a command and record the result for the guide's <Checks /> in .nisi/guide/checks/. nisi guide check \"Type check\" -- pnpm turbo run check:type. A single quoted argument after -- is a shell line (run with sh -c, for cd and &&). Exits with the command's exit code. Needs no running app.",
+			"Run a command and record the result for the guide's <Checks /> in the guide folder (nisi guide path). nisi guide check \"Type check\" -- pnpm turbo run check:type. A single quoted argument after -- is a shell line (run with sh -c, for cd and &&). Exits with the command's exit code. Needs no running app.",
 		),
 	);
 
@@ -162,9 +193,10 @@ export const guideCommand = <E>(fail: Effect.Effect<never, E>) => {
 					return yield* fail;
 				}
 				const css = preview.css;
+				const guideDir = yield* guideFolderOf(repoRoot, fail);
 				const shots = yield* Effect.tryPromise(() =>
 					renderPreview({
-						guideDir: path.join(repoRoot, ".nisi/guide"),
+						guideDir,
 						html: preview.html,
 						css,
 						theme: options.theme,
@@ -184,18 +216,18 @@ export const guideCommand = <E>(fail: Effect.Effect<never, E>) => {
 			}),
 	).pipe(
 		Command.withDescription(
-			"Preview the guide as the reader sees it: one PNG per ## section plus full.png in .nisi/guide/.preview/, taken by a freshly launched headless Chrome. Launches the app if it isn't running.",
+			"Preview the guide as the reader sees it: one PNG per ## section plus full.png in .preview/ inside the guide folder (nisi guide path), taken by a freshly launched headless Chrome. Launches the app if it isn't running.",
 		),
 	);
 
 	return Command.make("guide", {}, () =>
 		Console.error(
-			"Specify a subcommand: nisi guide check|validate|render (see nisi guide --help)",
+			"Specify a subcommand: nisi guide path|check|validate|render (see nisi guide --help)",
 		).pipe(Effect.andThen(fail)),
 	).pipe(
 		Command.withDescription(
-			"Author the walkthrough guide at .nisi/guide: record checks, validate it against the diff, preview it. On a dev build, point NISI_DATA_DIR at the dev sandbox (or run the CLI from source).",
+			"Author the walkthrough guide, kept in a folder per repo and branch (nisi guide path): record checks, validate it against the diff, preview it. On a dev build, point NISI_DATA_DIR at the dev sandbox (or run the CLI from source).",
 		),
-		Command.withSubcommands([check, validate, render]),
+		Command.withSubcommands([guidePath, check, validate, render]),
 	);
 };
