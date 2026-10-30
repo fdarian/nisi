@@ -58,11 +58,10 @@ export const sessionGuideFolder = (
 	repoRoot: string,
 	headRef: string,
 ) =>
-	headRef === DETACHED_HEAD
-		? Effect.succeed(null)
-		: repoKey(repoRoot).pipe(
-				Effect.map((key) => folderFor(guidesDir, key, headRef)),
-			);
+	Effect.gen(function* () {
+		if (headRef === DETACHED_HEAD) return null;
+		return folderFor(guidesDir, yield* repoKey(repoRoot), headRef);
+	});
 
 const unresolvable = (repoRoot: string, why: string) =>
 	new GuideFolderUnresolvable({
