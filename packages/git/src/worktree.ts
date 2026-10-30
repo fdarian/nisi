@@ -104,6 +104,12 @@ const worktreePathFor = (
 const worktreeBranchFor = (number: number, headRef: string): string =>
 	`nisi/pr-${number}/${headRef}`;
 
+const WORKTREE_BRANCH_PATTERN = /^nisi\/pr-\d+\/(.+)$/;
+
+/** Inverse of {@link worktreeBranchFor}: the PR's own head ref, or `branch` unchanged when it isn't a nisi-managed PR branch. */
+export const headRefOfWorktreeBranch = (branch: string): string =>
+	WORKTREE_BRANCH_PATTERN.exec(branch)?.[1] ?? branch;
+
 type WorktreeEntry = {
 	readonly path: string;
 	/** Short branch name (`refs/heads/` stripped), or `null` for a detached-HEAD or bare entry — those never match a branch-name lookup, by construction. */

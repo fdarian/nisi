@@ -109,6 +109,8 @@ const mockGitHub: GitHubShape = {
 		),
 	pullRequestState: () => Effect.die(new Error("unused mock GitHub method")),
 	pullRequestStates: () => Effect.die(new Error("unused mock GitHub method")),
+	pullRequestsContainingCommit: () =>
+		Effect.die(new Error("unused mock GitHub method")),
 	headRef: () => Effect.succeed("main"),
 	search: () => Effect.die(new Error("unused mock GitHub method")),
 	searchRepositories: () => Effect.die(new Error("unused mock GitHub method")),

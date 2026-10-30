@@ -1,6 +1,7 @@
 import { DateTime, Effect, Schema } from "effect";
 import type { ChildProcessSpawner } from "effect/process";
 import {
+	type CommitPullRequestsError,
 	GhNotAuthenticated,
 	GhOutputDecodeError,
 	GhRateLimited,
@@ -20,7 +21,7 @@ import type {
 	PullRequestSearchState,
 	ViewedPullRequest,
 } from "../../pull-request.ts";
-import type { RepositoryIdentity } from "../github.ts";
+import type { CommitPullRequest, RepositoryIdentity } from "../github.ts";
 import { hasSearchQualifier } from "../search-query.ts";
 
 const RepoView = Schema.Struct({
@@ -703,4 +704,66 @@ export const fetchPullRequestStates = (
 					}),
 			),
 		);
+	});
+
+const CommitPullRequestsView = Schema.Array(
+	Schema.Struct({
+		number: Schema.Number,
+		state: Schema.Literals(["open", "closed"]),
+		head: Schema.Struct({ ref: Schema.String }),
+	}),
+);
+
+/**
+ * Pull requests GitHub associates with a commit, via
+ * `commits/<sha>/pulls`. A commit GitHub has never seen (unpushed) is a 422
+ * "No commit found for SHA", which is an answer — no PR contains it — not a
+ * failure. Only the first page (30) is read; a commit in more PRs than that
+ * is ambiguous either way.
+ */
+export const fetchPullRequestsContainingCommit = (
+	cwd: string,
+	owner: string,
+	repo: string,
+	sha: string,
+): Effect.Effect<
+	ReadonlyArray<CommitPullRequest>,
+	CommitPullRequestsError | GitCommandError,
+	ChildProcessSpawner.ChildProcessSpawner
+> =>
+	Effect.gen(function* () {
+		const command = ["api", `repos/${owner}/${repo}/commits/${sha}/pulls`];
+		const result = yield* ghResult(cwd, command);
+		if (result.exitCode !== 0) {
+			if (isAuthFailure(result)) {
+				return yield* new GhNotAuthenticated({
+					reason: result.stderr.trim() || "gh is not authenticated",
+				});
+			}
+			if (isRateLimited(result.stderr)) {
+				return yield* new GhRateLimited({ reason: result.stderr.trim() });
+			}
+			if (result.stderr.includes("No commit found for SHA")) return [];
+			return yield* new GitHubUnreachable({
+				repoRoot: cwd,
+				reason: result.stderr.trim() || `gh api exited ${result.exitCode}`,
+			});
+		}
+		const pulls = yield* Schema.decodeUnknownEffect(
+			Schema.fromJsonString(CommitPullRequestsView),
+		)(result.stdout).pipe(
+			Effect.mapError(
+				(cause) =>
+					new GhOutputDecodeError({
+						command: `gh ${command.join(" ")}`,
+						raw: result.stdout,
+						cause,
+					}),
+			),
+		);
+		return pulls.map((pull) => ({
+			number: pull.number,
+			headRef: pull.head.ref,
+			state: pull.state === "open" ? "OPEN" : "CLOSED",
+		}));
 	});

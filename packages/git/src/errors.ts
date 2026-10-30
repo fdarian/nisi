@@ -402,6 +402,19 @@ export type PullRequestStatesError =
 	| GhRateLimited
 	| GitHubUnreachable;
 
+/** Every way `fetchPullRequestsContainingCommit` can fail — same shape as the whole-repository listing: no single PR to be "not found". */
+export type CommitPullRequestsError = PullRequestStatesError;
+
+/**
+ * No guide folder can be chosen without guessing — a detached `HEAD` that
+ * GitHub can't tie to exactly one open PR (or a repo with no GitHub origin to
+ * ask). `message` says what to do about it, since it's shown to the agent as-is.
+ */
+export class GuideFolderUnresolvable extends Schema.TaggedError<GuideFolderUnresolvable>()(
+	"GuideFolderUnresolvable",
+	{ repoRoot: Schema.String, message: Schema.String },
+) {}
+
 export type PullRequestMergeabilityError =
 	| GhOutputDecodeError
 	| GhNotAuthenticated
