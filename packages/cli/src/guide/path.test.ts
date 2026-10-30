@@ -37,10 +37,14 @@ const repoOnBranch = async (branch: string) => {
 	return repo;
 };
 
-const guidePath = (cwd: string, dataDir: string) => {
+const guidePath = (
+	cwd: string,
+	dataDir: string,
+	env: Record<string, string> = {},
+) => {
 	const result = Bun.spawnSync([process.execPath, entry, "guide", "path"], {
 		cwd,
-		env: { ...process.env, NISI_DATA_DIR: dataDir },
+		env: { ...process.env, NISI_DATA_DIR: dataDir, ...env },
 		stdout: "pipe",
 		stderr: "pipe",
 	});
@@ -84,5 +88,21 @@ test("a detached HEAD with no origin fails with the reason, not a stack trace", 
 	expect(result.exitCode).not.toBe(0);
 	expect(result.stdout).toBe("");
 	expect(result.stderr).toContain("HEAD is detached");
+	expect(result.stderr).not.toContain("    at ");
+});
+
+test("a GitHub lookup that can't run is printed, not a silent non-zero exit", async () => {
+	const dataDir = await temp("nisi-path-data-");
+	const repo = await repoOnBranch("main");
+	git(repo, "remote", "add", "origin", "https://github.com/acme/widgets.git");
+	git(repo, "checkout", "-q", "--detach");
+	// Emptying PATH wouldn't hide gh: the binary resolver also looks in the well-known install dirs.
+	const result = guidePath(repo, dataDir, {
+		NISI_GH_BIN: join(dataDir, "no-such-gh"),
+	});
+	expect(result.exitCode).not.toBe(0);
+	expect(result.stdout).toBe("");
+	expect(result.stderr).toContain("no-such-gh api");
+	expect(result.stderr).toContain("failed to start");
 	expect(result.stderr).not.toContain("    at ");
 });
