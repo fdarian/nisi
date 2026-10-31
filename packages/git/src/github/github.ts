@@ -1,5 +1,6 @@
 import { Context, type Effect, type Stream } from "effect";
 import type {
+	CommitPullRequestsError,
 	GhNotAuthenticated,
 	GhOutputDecodeError,
 	GitCommandError,
@@ -49,6 +50,12 @@ export type RepositoryIdentity = {
 	readonly owner: string;
 	readonly repo: string;
 	readonly defaultBranch: string | null;
+};
+
+export type CommitPullRequest = {
+	readonly number: number;
+	readonly headRef: string;
+	readonly state: "OPEN" | "CLOSED";
 };
 
 export type OpenPullRequestIndex = {
@@ -121,6 +128,16 @@ export type GitHubShape = {
 			readonly state: "OPEN" | "CLOSED" | "MERGED";
 		}>,
 		PullRequestStatesError | GitCommandError
+	>;
+	/** Pull requests GitHub lists for `sha`, merged ones as `CLOSED`. A commit GitHub doesn't know yields `[]`. */
+	pullRequestsContainingCommit: (
+		cwd: string,
+		owner: string,
+		repo: string,
+		sha: string,
+	) => Effect.Effect<
+		ReadonlyArray<CommitPullRequest>,
+		CommitPullRequestsError | GitCommandError
 	>;
 	headRef: (
 		repoRoot: string,

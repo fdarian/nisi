@@ -91,3 +91,7 @@ export const getDataDirConfig = () =>
  */
 export const getAppDbPath = (dataDir: string): string =>
 	join(dataDir, "app.db");
+
+/** Where agent-written review guides live, one folder per repo and branch (`@repo/git`'s `guide-folder.ts` picks the subfolder). */
+export const getGuidesDir = (dataDir: string): string =>
+	join(dataDir, "guides");

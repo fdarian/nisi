@@ -399,7 +399,7 @@ export function createMockSidecarClient(
 			get: async (): Promise<GuideResult> =>
 				data.guide ?? {
 					kind: "missing",
-					path: "/repo/.nisi/guide/guide.mdx",
+					path: "/guides/acme/repo/feature/guide.mdx",
 				},
 			setWatching: async () => undefined,
 			// Only the `nisi guide` CLI calls these; no story does.

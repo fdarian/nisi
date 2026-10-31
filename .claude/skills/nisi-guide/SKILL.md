@@ -1,6 +1,6 @@
 ---
 name: nisi-guide
-description: Write the reviewer's guide for the changes you just made, as a live page in nisi's Guide tab, instead of recapping them in chat. Use after finishing a change a human will review, when asked for a guide, overview or walkthrough of your work, or when editing an existing .nisi/guide/guide.mdx.
+description: Write the reviewer's guide for the changes you just made, as a live page in nisi's Guide tab, instead of recapping them in chat. Use after finishing a change a human will review, when asked for a guide, overview or walkthrough of your work, or when editing an existing guide.mdx.
 ---
 
 # nisi guide

@@ -15,6 +15,8 @@ import { checkGuide, type DiffFile, validateGuide } from "./validate";
 
 const SAMPLE = join(import.meta.dir, "sample");
 let repoRoot: string;
+/** Outside the checkout, as the central store keeps guides. */
+let guideDir: string;
 let headSha: string;
 
 async function git(cwd: string, ...args: string[]): Promise<string> {
@@ -80,7 +82,7 @@ const SAMPLE_DIFF: DiffFile[] = [
 ];
 
 async function writeCheck(slug: string, record: unknown) {
-	const dir = join(repoRoot, ".nisi/guide/checks");
+	const dir = join(guideDir, "checks");
 	await mkdir(dir, { recursive: true });
 	await writeFile(join(dir, `${slug}.json`), JSON.stringify(record));
 }
@@ -91,8 +93,8 @@ beforeAll(async () => {
 		localStorage: { getItem: () => null, setItem() {}, removeItem() {} },
 	});
 	repoRoot = await mkdtemp(join(tmpdir(), "nisi-guide-"));
-	await mkdir(join(repoRoot, ".nisi"));
-	await cp(SAMPLE, join(repoRoot, ".nisi/guide"), { recursive: true });
+	guideDir = await mkdtemp(join(tmpdir(), "nisi-guide-store-"));
+	await cp(SAMPLE, guideDir, { recursive: true });
 	await git(repoRoot, "init", "-q");
 	await git(
 		repoRoot,
@@ -127,15 +129,20 @@ beforeAll(async () => {
 	);
 });
 
-afterAll(() => rm(repoRoot, { recursive: true, force: true }));
+afterAll(() =>
+	Promise.all([
+		rm(repoRoot, { recursive: true, force: true }),
+		rm(guideDir, { recursive: true, force: true }),
+	]),
+);
 
 test("a repo without a guide reports it missing, with the path to write", async () => {
 	const empty = await mkdtemp(join(tmpdir(), "nisi-guide-empty-"));
 	try {
-		const result = await buildGuide(empty);
+		const result = await buildGuide(join(empty, "folder"), empty);
 		expect(result).toEqual({
 			kind: "missing",
-			path: join(empty, ".nisi/guide/guide.mdx"),
+			path: join(empty, "folder/guide.mdx"),
 		});
 	} finally {
 		await rm(empty, { recursive: true, force: true });
@@ -143,7 +150,7 @@ test("a repo without a guide reports it missing, with the path to write", async 
 });
 
 test("the sample guide builds, evaluates against the kit, and renders every component", async () => {
-	const result = await buildGuide(repoRoot);
+	const result = await buildGuide(guideDir, repoRoot);
 	if (result.kind !== "ok") throw new Error(JSON.stringify(result));
 	expect(result.code).toContain('require("@nisi/guide")');
 	expect(result.code).toContain("data:image/png;base64,");
@@ -235,8 +242,8 @@ test("the sample guide builds, evaluates against the kit, and renders every comp
 });
 
 test("rebuilding an unchanged guide is a cache hit; an edit bumps the version", async () => {
-	const first = await buildGuide(repoRoot);
-	const again = await buildGuide(repoRoot);
+	const first = await buildGuide(guideDir, repoRoot);
+	const again = await buildGuide(guideDir, repoRoot);
 	if (first.kind !== "ok" || again.kind !== "ok")
 		throw new Error("build failed");
 	expect(again.version).toBe(first.version);
@@ -244,20 +251,20 @@ test("rebuilding an unchanged guide is a cache hit; an edit bumps the version", 
 
 	// A recorded run is not bundle input: it must not trigger a rebuild.
 	await writeCheck("another", checkRecord({ title: "Another" }));
-	const withCheck = await buildGuide(repoRoot);
+	const withCheck = await buildGuide(guideDir, repoRoot);
 	if (withCheck.kind !== "ok") throw new Error("build failed");
 	expect(withCheck.version).toBe(first.version);
 	expect(withCheck.checks).toHaveLength(3);
 
 	// Neither is a preview from `render.ts`.
-	await mkdir(join(repoRoot, ".nisi/guide/.preview"), { recursive: true });
-	await writeFile(join(repoRoot, ".nisi/guide/.preview/full.png"), "x");
-	const withPreview = await buildGuide(repoRoot);
+	await mkdir(join(guideDir, ".preview"), { recursive: true });
+	await writeFile(join(guideDir, ".preview/full.png"), "x");
+	const withPreview = await buildGuide(guideDir, repoRoot);
 	if (withPreview.kind !== "ok") throw new Error("build failed");
 	expect(withPreview.version).toBe(first.version);
 
-	await writeFile(join(repoRoot, ".nisi/guide/extra.txt"), "changed");
-	const edited = await buildGuide(repoRoot);
+	await writeFile(join(guideDir, "extra.txt"), "changed");
+	const edited = await buildGuide(guideDir, repoRoot);
 	if (edited.kind !== "ok") throw new Error("build failed");
 	expect(edited.version).not.toBe(first.version);
 });
@@ -265,12 +272,11 @@ test("rebuilding an unchanged guide is a cache hit; an edit bumps the version", 
 test("a syntax error in the guide is an error result, not a throw", async () => {
 	const broken = await mkdtemp(join(tmpdir(), "nisi-guide-broken-"));
 	try {
-		await mkdir(join(broken, ".nisi/guide"), { recursive: true });
 		await writeFile(
-			join(broken, ".nisi/guide/guide.mdx"),
+			join(broken, "guide.mdx"),
 			"# hi\n\n<Outcome>never closed\n",
 		);
-		const result = await buildGuide(broken);
+		const result = await buildGuide(broken, broken);
 		expect(result.kind).toBe("error");
 	} finally {
 		await rm(broken, { recursive: true, force: true });
@@ -286,8 +292,7 @@ test("a guide importing an unprovided module fails at evaluation with a readable
 async function buildInline(mdx: string) {
 	const dir = await mkdtemp(join(tmpdir(), "nisi-guide-inline-"));
 	try {
-		await mkdir(join(dir, ".nisi/guide"), { recursive: true });
-		await writeFile(join(dir, ".nisi/guide/guide.mdx"), mdx);
+		await writeFile(join(dir, "guide.mdx"), mdx);
 		await git(dir, "init", "-q");
 		await git(
 			dir,
@@ -301,14 +306,14 @@ async function buildInline(mdx: string) {
 			"-m",
 			"init",
 		);
-		return await buildGuide(dir);
+		return await buildGuide(dir, dir);
 	} finally {
 		await rm(dir, { recursive: true, force: true });
 	}
 }
 
 test("validate: the sample guide is clean against its own diff, except for the stale check", async () => {
-	const result = await buildGuide(repoRoot);
+	const result = await buildGuide(guideDir, repoRoot);
 	// "Unit tests" was recorded at another commit on purpose (see beforeAll).
 	expect(validateGuide(result, SAMPLE_DIFF)).toEqual([
 		expect.stringContaining('Check "Unit tests" was recorded at 0123456'),
@@ -316,7 +321,7 @@ test("validate: the sample guide is clean against its own diff, except for the s
 });
 
 test("validate: reports a changed source file no Area covers, never a test or lockfile", async () => {
-	const result = await buildGuide(repoRoot);
+	const result = await buildGuide(guideDir, repoRoot);
 	const problems = validateGuide(result, [
 		...SAMPLE_DIFF,
 		file("packages/git/src/new-thing.ts", 5, 0, [1, 5]),
@@ -332,7 +337,7 @@ test("validate: reports a changed source file no Area covers, never a test or lo
 });
 
 test("validate: a Ref whose lines miss every hunk, or whose path isn't in the diff, is reported", async () => {
-	const result = await buildGuide(repoRoot);
+	const result = await buildGuide(guideDir, repoRoot);
 	const problems = validateGuide(
 		result,
 		SAMPLE_DIFF.filter(
@@ -415,7 +420,7 @@ test("a Sequence step in a lane it didn't declare fails the render with the lane
 });
 
 test("the static render colors Areas, and expanded shows every Tour frame and both Sequence states", async () => {
-	const result = await buildGuide(repoRoot);
+	const result = await buildGuide(guideDir, repoRoot);
 	if (result.kind !== "ok") throw new Error("build failed");
 
 	const collapsed = renderGuideHtml(result, SAMPLE_DIFF, { expanded: false });
@@ -435,7 +440,7 @@ test("the static render colors Areas, and expanded shows every Tour frame and bo
 });
 
 test("the text linearisation carries the computed values", async () => {
-	const result = await buildGuide(repoRoot);
+	const result = await buildGuide(guideDir, repoRoot);
 	if (result.kind !== "ok") throw new Error("build failed");
 	const out = htmlToText(
 		renderGuideHtml(result, SAMPLE_DIFF, { expanded: true }),

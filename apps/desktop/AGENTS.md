@@ -34,7 +34,7 @@ Three parts, one seam:
   `src/features/guide/` renders the Guide tab: `evaluate.ts` runs the sidecar's bundled guide (`new Function`; the
   renderer is served with no CSP, so eval is allowed) against the app's own React and `kit/` (the `@nisi/guide` module).
   Agents author it via `packages/cli/skills/guide/SKILL.md` (`nisi skills get guide`); `sample/` is a working guide that
-  `guide-pipeline.test.ts` builds and renders. Copy it to `<repo>/.nisi/guide/` to see it in the app.
+  `guide-pipeline.test.ts` builds and renders. Copy it into the branch's guide folder (`nisi guide path`) to see it in the app.
   The app owns the page chrome (the "On this page" list, the side pane a `Ref` opens); a guide has no
   title and starts at `## Overview`. The Overview's `Area` cards compute their stats from the session
   diff (`FileChange.hunks`, the base-to-head changed runs), matching globs and `path:lines` hunk claims with `areas.ts`, which `validate.ts` shares to find changed hunks no Area covers

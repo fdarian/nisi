@@ -19,7 +19,8 @@ const windowsWithGlassView = new WeakSet<BrowserWindow>();
 /**
  * Turns the window's glass on or off and returns whether glass is now showing. macOS before 26 has
  * no glass, so `enabled` there falls back to a `vibrancy` material; that is why `vibrancy` is never
- * set at window creation (it would override the glass view and look blurry). The view is added
+ * set at window creation (it would override the glass view and look blurry). The view uses the
+ * `sidebar` material, which diffuses the wallpaper more than the default `regular`, and is added
  * untinted: it follows the native appearance by itself, and a native `tintColor` would amplify the
  * wallpaper, so any wash is the renderer's.
  */
@@ -41,6 +42,10 @@ export function setWindowGlass(
 		if (id === -1) {
 			throw new Error("electron-liquid-glass failed to attach a glass view");
 		}
+		liquidGlass.unstable_setVariant(
+			id,
+			liquidGlass.GlassMaterialVariant.sidebar,
+		);
 		windowsWithGlassView.add(window);
 	}
 	return true;

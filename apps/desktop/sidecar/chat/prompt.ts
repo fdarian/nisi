@@ -31,7 +31,7 @@ export const buildChatInstructions = (context: ChatPromptContext): string => {
 		`You are chatting with the user about a pull request under review, working directly in the user's local git checkout at \`${context.repoRoot}\`.`,
 		`This is ${target}.`,
 		"You have your full set of tools available — read, write, edit, run commands, whatever the conversation calls for.",
-		"The user's message may start with references to what they selected. A `path#Lstart-end` line is a selection in that file's head revision in this worktree — read those lines before answering. A blockquoted \"Excerpt from …\" block is text the user selected in the PR description or in the reviewer guide (`.nisi/guide/guide.mdx`), and is what their question is about.",
+		"The user's message may start with references to what they selected. A `path#Lstart-end` line is a selection in that file's head revision in this worktree — read those lines before answering. A blockquoted \"Excerpt from …\" block is text the user selected in the PR description or in the reviewer guide, and is what their question is about.",
 		"Keep answers concise and grounded in what you actually find by exploring the repository.",
 	].join("\n\n");
 };

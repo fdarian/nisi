@@ -21,13 +21,13 @@ import settings from "./settings.png";
 </Shot>
 ```
 
-Save PNGs into `.nisi/guide/` and import them; the bundle inlines them.
+Save PNGs into the guide folder (`nisi guide path`) and import them; the bundle inlines them.
 
 ## Placing pins
 
 Pin percentages are relative to the image you import, the final cropped file, not to the screen or the original capture. So crop first and place pins after; re-cropping moves every target.
 1. Crop to the region that matters. A pin on a 400px-wide crop is far easier to place than one on a full window.
-2. Get the cropped file's size: `sips -g pixelWidth -g pixelHeight .nisi/guide/shot.png` (macOS), or `file shot.png`.
+2. Get the cropped file's size: `sips -g pixelWidth -g pixelHeight "$(nisi guide path)/shot.png"` (macOS), or `file shot.png`.
 3. Find the pixel of the thing you are pointing at (your browser tool's element bounding box, minus the crop offset).
 4. `x = px / width * 100`, `y = py / height * 100`, rounded to a whole number.
 5. Run `nisi guide render --expand` (see `preview.md`) and look at the section image: a pin sits on the edge or corner of its target, not over its text. This is your own check of the pins; it isn't required for a guide to be valid.
@@ -45,5 +45,5 @@ Capture the way you'd verify the change yourself. Whatever renders the real comp
 Stories render a component against fixture data, with no sidecar and no agent run. In `apps/desktop`:
 - Start Storybook with the `storybook` entry in `.claude/launch.json` (it runs `pnpm exec storybook dev -p $PORT --ci` on a free port; read the port from its log). `pnpm run storybook` pins port 6006 and can collide with another session's.
 - Open a story's own page, without Storybook's chrome: `http://localhost:<port>/iframe.html?id=<story-id>&viewMode=story`. The id is the story title lowercased and hyphenated, then `--` and the export name: `Settings/Repositories/List` with an exported `Default` is `settings-repositories-list--default`. Add `&globals=theme:dark` for dark mode.
-- Set the viewport first (about 1000 x 700 for a page, smaller for a component), wait for fonts and the diff worker to paint, and write scratch captures to `apps/desktop/.storybook-shots/` (git-ignored), then copy the keepers into `.nisi/guide/`.
+- Set the viewport first (about 1000 x 700 for a page, smaller for a component), wait for fonts and the diff worker to paint, and write scratch captures to `apps/desktop/.storybook-shots/` (git-ignored), then copy the keepers into the guide folder.
 - Fixture data goes through `.storybook/mock-orpc.ts`'s `createMockOrpc`. Its query fixtures are pending forever when `{ pending: true }` or omitted (`MockResult`, `neverSettles`); stories named `Loading` do exactly that, and a `runningGeneration` fixture parks the walkthrough mid-run.

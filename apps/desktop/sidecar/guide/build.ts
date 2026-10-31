@@ -6,11 +6,16 @@ import { type BuiltGuide, GuideCheck } from "@repo/sidecar-api";
 import { Schema } from "effect";
 import { git } from "./diff";
 
-export const GUIDE_DIR = ".nisi/guide";
+/** Where guides lived before the central store; `guide.get` still reads one found here. Can go once old guides age out. */
+export const LEGACY_GUIDE_DIR = ".nisi/guide";
 export const GUIDE_ENTRY = "guide.mdx";
 /** Recorded command runs (`nisi guide check`) and the previews `nisi guide render` writes. Neither is bundle input, so both stay out of `version`. */
 const CHECKS_DIR = "checks";
-const NOT_BUNDLE_INPUT = new Set([CHECKS_DIR, ".preview"]);
+/** Written by `guide.validate`; stamping a guide must not rebuild its bundle. */
+const META_FILE = "meta.json";
+const NOT_BUNDLE_INPUT = new Set([CHECKS_DIR, ".preview", META_FILE]);
+
+const GuideMeta = Schema.Struct({ validatedSha: Schema.String });
 
 /**
  * Specifiers the frontend evaluator (`src/features/guide/evaluate.ts`)
@@ -143,24 +148,70 @@ async function readChecks(guideDir: string): Promise<GuideCheck[]> {
 }
 
 /**
- * Bundles `<repoRoot>/.nisi/guide/guide.mdx` and attaches the recorded check
- * runs and the worktree's head. A failed build is an `error` result rather
- * than a throw: the author is mid-edit while the Guide tab polls, and that
- * state is exactly what the tab exists to display. The bundle is cached on its
- * inputs; checks and head are re-read every call because they change without
- * the bundle changing.
+ * The folder `guide.get` reads for a session: its central folder once that
+ * holds a guide, else the checkout's legacy one if that does, so guides written
+ * before the central store stay visible. With neither, the central folder, so
+ * the `missing` result names where a guide should go. `central` is null for a
+ * detached branch session, which names no branch.
  */
-export async function buildGuide(repoRoot: string): Promise<BuiltGuide> {
-	const guideDir = join(repoRoot, GUIDE_DIR);
+export async function readableGuideDir(
+	central: string | null,
+	repoRoot: string,
+): Promise<string> {
+	const hasGuide = (dir: string) => Bun.file(join(dir, GUIDE_ENTRY)).exists();
+	if (central !== null && (await hasGuide(central))) return central;
+	const legacy = join(repoRoot, LEGACY_GUIDE_DIR);
+	if (central === null || (await hasGuide(legacy))) return legacy;
+	return central;
+}
+
+const decodeMeta = Schema.decodeUnknownSync(GuideMeta);
+
+async function readValidatedSha(guideDir: string): Promise<string | null> {
+	const file = join(guideDir, META_FILE);
+	if (!(await Bun.file(file).exists())) return null;
+	try {
+		return decodeMeta(await Bun.file(file).json()).validatedSha;
+	} catch (cause) {
+		throw new Error(
+			`${file} isn't valid (re-run nisi guide validate): ${cause instanceof Error ? cause.message : String(cause)}`,
+		);
+	}
+}
+
+/** Records the commit a guide was validated against, for the Guide tab to compare with the checkout's head. */
+export async function writeValidatedSha(
+	guideDir: string,
+	validatedSha: string,
+): Promise<void> {
+	await Bun.write(
+		join(guideDir, META_FILE),
+		`${JSON.stringify({ validatedSha })}\n`,
+	);
+}
+
+/**
+ * Bundles `<guideDir>/guide.mdx` and attaches the recorded check runs and
+ * `repoRoot`'s head. The guide lives in its own folder, apart from the
+ * checkout it describes. A failed build is an `error` result rather than a
+ * throw: the author is mid-edit while the Guide tab polls, and that state is
+ * exactly what the tab exists to display. The bundle is cached on its inputs;
+ * checks, validation stamp and head are re-read every call because they change
+ * without the bundle changing.
+ */
+export async function buildGuide(
+	guideDir: string,
+	repoRoot: string,
+): Promise<BuiltGuide> {
 	const path = join(guideDir, GUIDE_ENTRY);
 	if (!(await Bun.file(path).exists())) return { kind: "missing", path };
 
 	try {
 		const version = await guideVersion(guideDir);
-		let bundled = cache.get(repoRoot);
+		let bundled = cache.get(guideDir);
 		if (bundled === undefined || bundled.version !== version) {
 			bundled = { version, code: await bundle(path) };
-			cache.set(repoRoot, bundled);
+			cache.set(guideDir, bundled);
 		}
 		return {
 			kind: "ok",
@@ -168,6 +219,7 @@ export async function buildGuide(repoRoot: string): Promise<BuiltGuide> {
 			version,
 			code: bundled.code,
 			checks: await readChecks(guideDir),
+			validatedSha: await readValidatedSha(guideDir),
 			headSha: (await git(repoRoot, "rev-parse", "HEAD")).trim(),
 		};
 	} catch (cause) {

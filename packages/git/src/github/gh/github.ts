@@ -24,6 +24,7 @@ import { fetchPullRequestOverview } from "./overview.ts";
 import {
 	fetchPullRequestState,
 	fetchPullRequestStates,
+	fetchPullRequestsContainingCommit,
 	headRef,
 	pullRequest,
 	repository,
@@ -119,6 +120,8 @@ export const GhGitHub = {
 					provide(fetchPullRequestState(cwd, owner, repo, number)),
 				pullRequestStates: (cwd, owner, repo) =>
 					provide(fetchPullRequestStates(cwd, owner, repo)),
+				pullRequestsContainingCommit: (cwd, owner, repo, sha) =>
+					provide(fetchPullRequestsContainingCommit(cwd, owner, repo, sha)),
 				headRef: (repoRoot, number) => provide(headRef(repoRoot, number)),
 				search: (cwd, query, repos, state, closedWindow) =>
 					provide(searchPullRequests(cwd, query, repos, state, closedWindow)),

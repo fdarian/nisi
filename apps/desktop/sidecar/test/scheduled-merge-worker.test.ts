@@ -58,6 +58,7 @@ const mockGitHub = (overrides: Partial<GitHubShape>): GitHubShape => ({
 	pullRequest: unused,
 	pullRequestState: unused,
 	pullRequestStates: unused,
+	pullRequestsContainingCommit: unused,
 	headRef: unused,
 	search: unused,
 	searchRepositories: unused,

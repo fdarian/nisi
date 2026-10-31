@@ -6,7 +6,7 @@ requires a PR and errors clearly when there is none, `nisi diff [<base>]` diffs 
 range — `<base>..<head>` or `<base>...<head>` — to diff two arbitrary refs, neither of which has to
 be the current checkout; see `src/base-argument.ts`. All three take the same optional `[<path>]`
 positional `nisi` always has (`diff` reads it second, after `<base>`). `nisi completion zsh` prints a
-zsh completion script for the whole tree. `nisi guide check|validate|render` author `.nisi/guide` (see `src/guide/` below). `nisi skills [list|get|path|stub]` prints the agent skills embedded in the binary (see `src/skills/` below). `nisi debug [--session <id>] [--json]` prints the running
+zsh completion script for the whole tree. `nisi guide path|check|validate|render` author the branch's guide (see `src/guide/` below). `nisi skills [list|get|path|stub]` prints the agent skills embedded in the binary (see `src/skills/` below). `nisi debug [--session <id>] [--json]` prints the running
 sidecar's `diagnostics.snapshot` (never launches the app, exits non-zero when no sidecar answers). See `apps/desktop/AGENTS.md`'s "The seam" section for
 the handoff design this implements, and `packages/sidecar-api/src/sessions.ts`'s `OpenSessionTarget` for
 the wire shape this grammar maps to.
@@ -40,9 +40,12 @@ the wire shape this grammar maps to.
   app that received the POST focuses its native window via the sidecar's replayable activation
   stream (`apps/desktop/electron/activation.ts`), before GitHub resolution finishes.
   This identifies the dev sandbox or production instance that actually answered.
-- `src/guide/` — `nisi guide check|validate|render`, the authoring commands for `.nisi/guide` (its authoring skill is
-  `skills/guide/SKILL.md`, printed by `nisi skills get guide`); each resolves the git toplevel of the cwd. `check.ts` runs in the CLI alone and
-  writes the `GuideCheck` record (`packages/sidecar-api/src/guide.ts`), no sidecar needed. `validate` and `render` call
+- `src/guide/` — `nisi guide path|check|validate|render`, the authoring commands for a branch's guide (its authoring skill is
+  `skills/guide/SKILL.md`, printed by `nisi skills get guide`); each resolves the git toplevel of the cwd. The guide lives in the
+  data dir, not the checkout: `folder.ts` resolves it with `checkoutGuideFolder` (`@repo/git`), providing `GhGitHub.layer` with
+  an inert `PullRequestAttention` for the detached-`HEAD` PR lookup, and turns `GuideFolderUnresolvable` into a plain failure.
+  `nisi guide path` prints that folder (stdout only, so `$(nisi guide path)` works) and creates it. `check.ts` runs the command in the
+  checkout and writes the `GuideCheck` record (`packages/sidecar-api/src/guide.ts`) into the guide folder, no sidecar needed. `validate` and `render` call
   the sidecar's `guide.validate`/`guide.preview` through `sidecar.ts`, which finds `sidecar.json` and launches the app
   when nothing answers (the `handoff.ts` seam, for any procedure). `preview.ts` owns the page shell and a fresh
   headless Chrome for the PNGs, on purpose never the sidecar. `check`'s title must be one argument: Effect CLI folds

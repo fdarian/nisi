@@ -39,7 +39,7 @@ function formatExcerptForAgent(reference: ExcerptReference): string {
 	const origin =
 		reference.source === "description"
 			? "the PR description"
-			: "the reviewer guide (.nisi/guide/guide.mdx)";
+			: "the reviewer guide";
 	const section =
 		reference.section === undefined ? "" : `, under "${reference.section}"`;
 	const quoted = reference.text

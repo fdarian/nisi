@@ -112,7 +112,7 @@ async function linguistGenerated(
  * The session's diff as the guide sees it: the base (see `resolveBaseRef`)
  * merge-based against HEAD, compared with the working tree, plus untracked
  * files that git doesn't ignore (`.gitignore`, `.git/info/exclude`). The
- * guide's own `.nisi/` is never part of it. Each file carries its stats, its
+ * `.nisi/` is never part of it (a guide kept there before guides moved to the data dir). Each file carries its stats, its
  * changed runs, and whether the sidecar's classifier would call it generated
  * (lockfiles, `*.snap`, drizzle snapshots, `@generated`, `linguist-generated`).
  */

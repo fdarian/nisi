@@ -36,6 +36,7 @@ import { GuideResizeHandle } from "./guide-resize-handle";
 import { useGuideReviews } from "./guide-reviews";
 import type { GuideTarget } from "./guide-target";
 import { GuideToc } from "./guide-toc";
+import { GuideValidationNotice } from "./guide-validation-notice";
 import type { GuideRef } from "./refs";
 import { symbolMap } from "./symbol-links";
 import { useGuide } from "./use-guide";
@@ -50,7 +51,7 @@ const DIFF_DEFAULT_SIZE = "46%";
 const HANDLE_HIT_SIZE = { coarse: 12, fine: 12 };
 
 /**
- * The Guide tab: `<repoRoot>/.nisi/guide/guide.mdx`, bundled by the sidecar and
+ * The Guide tab: the session branch's `guide.mdx`, bundled by the sidecar and
  * evaluated here against the app's own React and kit. Polls faster while
  * visible so an agent's edits show up within a couple of seconds.
  */
@@ -107,6 +108,7 @@ export function GuideView(props: {
 			files={props.files}
 			symbols={result.symbols}
 			headSha={result.headSha}
+			validatedSha={result.validatedSha}
 			onOpenFile={props.onOpenFile}
 			onSelectTarget={setTarget}
 			orpc={props.orpc}
@@ -127,6 +129,7 @@ function GuideBody(props: {
 	checks: readonly GuideCheck[];
 	symbols: readonly GuideSymbol[];
 	headSha: string;
+	validatedSha: string | null;
 	files: readonly FileChange[];
 	reviewState: ReadonlyMap<string, ReviewStateEntry>;
 	setViewed: (path: string, viewed: boolean) => void;
@@ -225,6 +228,10 @@ function GuideBody(props: {
 					ref={scroller}
 				>
 					<div className="relative mx-auto max-w-3xl">
+						<GuideValidationNotice
+							headSha={props.headSha}
+							validatedSha={props.validatedSha}
+						/>
 						<div
 							className="flex flex-col gap-3 pb-12 text-foreground text-sm leading-relaxed"
 							ref={content}

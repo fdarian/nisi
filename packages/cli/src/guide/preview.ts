@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 export type PreviewOptions = {
-	/** `<repoRoot>/.nisi/guide`; the screenshots go in its `.preview/`, which is git-ignored and outside the guide's version hash. */
+	/** The guide folder; the screenshots go in its `.preview/`, which is outside the guide's version hash. */
 	guideDir: string;
 	/** The guide's body markup and the app stylesheet to put it under, from `guide.preview`. */
 	html: string;

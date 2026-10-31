@@ -31,8 +31,8 @@ export type ThemeGlass = {
 
 export type GlassTranslucency = Record<GlassTheme, ThemeGlass>;
 
-/** The inner pane has always been more opaque than the frame around it, and dark glass reads too see-through at the light ratio; the offsets keep the single knob from flattening that. */
-const PANE_OFFSET: Record<GlassTheme, number> = { light: 15, dark: -5 };
+/** The inner pane is more opaque than the frame around it, and dark glass reads too see-through at the light ratio; the offsets keep the single knob from flattening that. Light is near-solid so the pane reads as a bright sheet on the tinted frame. */
+const PANE_OFFSET: Record<GlassTheme, number> = { light: -20, dark: -5 };
 
 const DEFAULT_TRANSLUCENCY_PER_THEME: ThemeGlass = {
 	translucency: DEFAULT_GLASS_TRANSLUCENCY,
