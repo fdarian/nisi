@@ -400,9 +400,22 @@ const REVIEWED_DECORATION_SLOT = `[data-item-section="decoration"] > span[title=
  * technique `buildFolderIconCSS` uses — `renderRowDecoration`'s text/icon
  * decoration only ever paints a plain glyph, with no construction-time
  * option for a real icon.
+ *
+ * Also pins the decoration lane at its content width. The library gives the
+ * lane `flex: 1 1 0` and the filename `flex: 0 auto`: with a basis of 0 the
+ * lane can't shrink, so once a long name fills the row it is left with no
+ * free space at all and collapses to 0px, taking the indicator with it.
+ * `flex: none` makes the name yield instead (it has `min-width: 0`, so the
+ * middle truncation still follows the width it's given), and `margin-left:
+ * auto` keeps the lane flush right, where the grow used to put it.
  */
 function buildDecorationIconCSS(): string {
 	return `
+[data-item-section="decoration"] {
+	flex: none;
+	margin-inline-start: auto;
+}
+
 ${REVIEWED_DECORATION_SLOT} {
 	position: relative;
 	display: inline-block;
