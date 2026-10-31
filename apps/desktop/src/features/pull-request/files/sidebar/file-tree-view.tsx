@@ -30,6 +30,7 @@ import type {
 import { useNativeGlassShowing } from "#/features/settings/window-glass";
 import { collectAncestorDirectoryPaths, comparePaths } from "#/lib/tree-paths";
 import {
+	buildRenameMarkerCSS,
 	buildStatusColorCSS,
 	buildTreeThemeStyle,
 	createRowDecorationRenderer,
@@ -40,6 +41,7 @@ import {
 	syncDecorationIconStyle,
 	syncFluidHoverStyle,
 	syncFolderIconStyle,
+	syncRenameMarkerStyle,
 	syncScrollFadeStyle,
 	syncStatusColorStyle,
 	TREE_STICKY_BACKDROP_CSS,
@@ -318,6 +320,16 @@ export function FileTreeView({
 		});
 		return () => cancelAnimationFrame(frame);
 	}, [statusColorCSS]);
+
+	const renameMarkerCSS = useMemo(() => buildRenameMarkerCSS(files), [files]);
+
+	useEffect(() => {
+		if (syncRenameMarkerStyle(treeHostRef.current, renameMarkerCSS)) return;
+		const frame = requestAnimationFrame(() => {
+			syncRenameMarkerStyle(treeHostRef.current, renameMarkerCSS);
+		});
+		return () => cancelAnimationFrame(frame);
+	}, [renameMarkerCSS]);
 
 	// Static CSS (no reactive deps), but the shadow root may not exist on the
 	// tree's first render — retry once on the next frame, same as above.
