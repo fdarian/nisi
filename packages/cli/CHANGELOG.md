@@ -1,5 +1,16 @@
 # @repo/cli
 
+## 0.7.0
+
+### Minor Changes
+
+- 18306aa: `nisi guide check|validate|render` author the walkthrough guide from any repo: record a check, validate the guide against the diff, and preview it as screenshots or text.
+- 18306aa: Add `nisi skills`: list, get (with `--ref` and `--full`), path and stub for the agent skills embedded in the CLI. The guide-authoring skill now lives in the CLI, and the repo's `.claude/skills/nisi-guide` is a stub that points at `nisi skills get guide`.
+
+### Patch Changes
+
+- 12b2712: `nisi debug` prints the running app's in-memory state per open session (worktree existence and HEAD, watched state, last merge status and whether it's still polled) plus recent RPC failures, flagging anything that looks stuck.
+
 ## 0.6.1
 
 ## 0.6.0
