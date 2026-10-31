@@ -6,6 +6,7 @@ import {
 	Children,
 	isValidElement,
 	type ReactNode,
+	useEffect,
 	useLayoutEffect,
 	useMemo,
 	useState,
@@ -27,9 +28,14 @@ import {
 	hunkReviewStatus,
 	shortestUniqueSuffixes,
 } from "../areas";
-import { AreaScopeProvider, useGuideContext } from "../guide-context";
+import {
+	AreaIdProvider,
+	AreaScopeProvider,
+	useGuideContext,
+} from "../guide-context";
 import type { ClaimedHunk, GuideReviews } from "../guide-reviews";
 import { parseLines } from "../refs";
+import { parseRowKey, rowKey } from "../use-guide-cursor";
 import { colorForArea } from "./area-colors";
 import { DiffStat } from "./diff-stat";
 import { FileRow, type FileRowReview, ReviewCheckbox } from "./file-row";
@@ -354,6 +360,38 @@ export function Area(props: AreaProps): React.ReactElement {
 		showAll || guide.expanded === true ? rows.length : FILE_LIST_LIMIT;
 	const hiddenCount = Math.max(0, rows.length - visibleCount);
 	const scope = stats.claimed.map((claim) => claim.file.path);
+
+	const cursor = guide.cursor;
+	const registerAreaRows = cursor?.registerAreaRows;
+	const registeredRows = `${rows.map((row) => rowKey(props.id, row)).join("\u0001")}\u0002${scope.join("\0")}`;
+	// biome-ignore lint/correctness/useExhaustiveDependencies: `registeredRows` is `rows`' and `scope`'s identity; both are fresh arrays each render
+	useLayoutEffect(() => {
+		if (registerAreaRows === undefined) return;
+		return registerAreaRows(
+			props.id,
+			rows.map((row) => ({
+				key: rowKey(props.id, row),
+				areaId: props.id,
+				ref: { path: row.path, lines: row.lines },
+				scope,
+			})),
+		);
+	}, [registerAreaRows, props.id, registeredRows]);
+
+	// Opens (and un-folds) the Area when the cursor lands on one of its rows,
+	// so `j`/`k` can walk into a collapsed card.
+	const cursorRow = cursor?.key == null ? null : parseRowKey(cursor.key);
+	const cursorPath =
+		cursorRow !== null && cursorRow.areaId === props.id ? cursorRow.path : null;
+	const cursorFolded =
+		cursorPath !== null &&
+		rows.findIndex((row) => row.path === cursorPath) >= FILE_LIST_LIMIT;
+	useEffect(() => {
+		if (cursorPath === null) return;
+		setOpen(true);
+		if (cursorFolded) setShowAll(true);
+	}, [cursorPath, cursorFolded]);
+
 	return (
 		// biome-ignore lint/a11y/noStaticElementInteractions: hover only dims other areas' Sequence steps; the card has no action of its own
 		<section
@@ -388,31 +426,33 @@ export function Area(props: AreaProps): React.ReactElement {
 					/>
 				</button>
 			</div>
-			<AreaScopeProvider value={scope}>
-				<div className="mt-2 flex flex-col gap-1.5 text-foreground/80">
-					{props.children}
-				</div>
-				{open && (
-					<ul className="m-0 mt-2.5 flex list-none flex-col gap-px border-t p-0 pt-2">
-						<AreaRows
-							rows={rows}
-							title={props.title}
-							visibleCount={visibleCount}
-						/>
-						{hiddenCount > 0 && (
-							<li>
-								<button
-									className="cursor-pointer rounded px-1.5 py-0.5 text-muted-foreground text-xs hover:bg-accent"
-									onClick={() => setShowAll(true)}
-									type="button"
-								>
-									+{hiddenCount} more
-								</button>
-							</li>
-						)}
-					</ul>
-				)}
-			</AreaScopeProvider>
+			<AreaIdProvider value={props.id}>
+				<AreaScopeProvider value={scope}>
+					<div className="mt-2 flex flex-col gap-1.5 text-foreground/80">
+						{props.children}
+					</div>
+					{open && (
+						<ul className="m-0 mt-2.5 flex list-none flex-col gap-px border-t p-0 pt-2">
+							<AreaRows
+								rows={rows}
+								title={props.title}
+								visibleCount={visibleCount}
+							/>
+							{hiddenCount > 0 && (
+								<li>
+									<button
+										className="cursor-pointer rounded px-1.5 py-0.5 text-muted-foreground text-xs hover:bg-accent"
+										onClick={() => setShowAll(true)}
+										type="button"
+									>
+										+{hiddenCount} more
+									</button>
+								</li>
+							)}
+						</ul>
+					)}
+				</AreaScopeProvider>
+			</AreaIdProvider>
 		</section>
 	);
 }

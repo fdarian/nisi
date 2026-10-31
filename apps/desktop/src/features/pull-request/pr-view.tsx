@@ -247,6 +247,7 @@ export function PrView({
 								reviewState={reviewState}
 								session={session}
 								setViewed={setViewed}
+								shortcutsEnabled={isSelectedTab}
 							/>
 						</TabsContent>
 					)}

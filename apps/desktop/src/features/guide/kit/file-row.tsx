@@ -2,11 +2,13 @@
 
 import { cn } from "cn";
 import { ChevronRightIcon } from "lucide-react";
+import { useEffect, useRef } from "react";
 import { Checkbox } from "#/components/ui/checkbox";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "#/components/ui/tooltip";
 import type { RangeReviewStatus } from "#/features/diff/review-coverage";
-import { useAreaScope, useGuideContext } from "../guide-context";
+import { useAreaId, useAreaScope, useGuideContext } from "../guide-context";
 import { sameRef } from "../refs";
+import { rowKey } from "../use-guide-cursor";
 import { DiffStat } from "./diff-stat";
 
 /** A row's Reviewed checkbox. `status` is `undefined` while a hunk row's file contents are still loading. */
@@ -58,18 +60,53 @@ export function FileRow(props: {
 		lines: props.lines,
 	});
 	const reviewed = props.review?.status === "reviewed";
+
+	const areaId = useAreaId();
+	const cursor = guide.cursor;
+	const cursorKey = cursor?.key;
+	const key =
+		areaId === undefined
+			? undefined
+			: rowKey(areaId, { path: props.path, lines: props.lines });
+	const isCursor = key !== undefined && cursorKey === key;
+	const registerRowReview = cursor?.registerRowReview;
+	const setCursorKey = cursor?.setKey;
+	const reviewRef = useRef(props.review);
+	reviewRef.current = props.review;
+	useEffect(() => {
+		if (registerRowReview === undefined || key === undefined) return;
+		return registerRowReview(key, () => reviewRef.current);
+	}, [registerRowReview, key]);
+	const rowElement = useRef<HTMLDivElement>(null);
+	const pointerOver = useRef(false);
+	useEffect(() => {
+		if (isCursor && !pointerOver.current) {
+			rowElement.current?.scrollIntoView({ block: "nearest" });
+		}
+	}, [isCursor]);
+
 	const stat = (
 		<span className="shrink-0 font-mono text-xs tabular-nums">
 			<DiffStat additions={props.additions} deletions={props.deletions} />
 		</span>
 	);
 	return (
+		// biome-ignore lint/a11y/noStaticElementInteractions: hover only moves the keyboard cursor onto this row; the row's own buttons carry the actions
 		<div
 			data-text="inline"
 			className={cn(
 				"flex w-full min-w-0 items-center gap-1 rounded-md pr-1.5 hover:bg-accent",
+				isCursor && "bg-accent",
 				selected && "bg-sky-500/10",
 			)}
+			onMouseEnter={() => {
+				pointerOver.current = true;
+				if (key !== undefined) setCursorKey?.(key);
+			}}
+			onMouseLeave={() => {
+				pointerOver.current = false;
+			}}
+			ref={rowElement}
 		>
 			<Tooltip>
 				<TooltipTrigger
