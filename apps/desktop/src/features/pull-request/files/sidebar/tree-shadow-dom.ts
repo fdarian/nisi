@@ -212,7 +212,6 @@ function isPureRename(file: FileChange): boolean {
  *
  * Only `icon` and `content` are dimmed, never the row itself, so the reviewed
  * check, the changed-after-review dot and the "…" trigger keep full strength.
- * The selected row is `[data-item-selected="true"]` on the row (not `data-ui`).
  */
 export function buildRenameMarkerCSS(files: readonly FileChange[]): string {
 	return files
