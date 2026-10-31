@@ -41,8 +41,8 @@ import {
 	syncDecorationIconStyle,
 	syncFluidHoverStyle,
 	syncFolderIconStyle,
-	syncScrollFadeStyle,
 	syncRenameMarkerStyle,
+	syncScrollFadeStyle,
 	syncStatusColorStyle,
 	TREE_STICKY_BACKDROP_CSS,
 } from "./tree-shadow-dom";
