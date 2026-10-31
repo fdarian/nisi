@@ -63,6 +63,7 @@ const ROW_SELECTOR = "button[data-item-path]";
 
 const FOLDER_ICON_STYLE_ATTRIBUTE = "data-nisi-folder-icons";
 const STATUS_COLOR_STYLE_ATTRIBUTE = "data-nisi-status-color";
+const RENAME_MARKER_STYLE_ATTRIBUTE = "data-nisi-rename-marker";
 
 function escapeCSSAttributeValue(value: string): string {
 	return value.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
@@ -185,6 +186,83 @@ export function syncStatusColorStyle(
 	return syncShadowStyle(treeHost, STATUS_COLOR_STYLE_ATTRIBUTE, css);
 }
 
+const RENAME_MARKER_COLOR = "var(--color-blue-500)";
+/** At rest a pure rename recedes; hover and selection bring it back up. */
+const PURE_RENAME_OPACITY = 0.58;
+const PURE_RENAME_ACTIVE_OPACITY = 0.82;
+
+/**
+ * A rename whose content is untouched. A binary rename is never pure: git's
+ * numstat reports `-` for any binary diff, so `diff.ts` stores 0/0 for an
+ * edited binary rename too, and 0/0 can't prove "nothing to read" there.
+ */
+function isPureRename(file: FileChange): boolean {
+	return (
+		file.status === "renamed" &&
+		!file.binary &&
+		file.additions === 0 &&
+		file.deletions === 0
+	);
+}
+
+/**
+ * CSS replacing the file-type icon of every renamed row with a blue
+ * circle-arrow — hollow for a pure rename (whose icon and name are also
+ * dimmed, restored on hover/selection), solid for one with edits.
+ *
+ * Only `icon` and `content` are dimmed, never the row itself, so the reviewed
+ * check, the changed-after-review dot and the "…" trigger keep full strength.
+ * The selected row is `[data-item-selected="true"]` on the row (not `data-ui`).
+ */
+export function buildRenameMarkerCSS(files: readonly FileChange[]): string {
+	return files
+		.filter((file) => file.status === "renamed")
+		.map((file) => {
+			const row = `[data-item-path="${escapeCSSAttributeValue(file.path)}"]`;
+			const icon = `${row} > [data-item-section="icon"]`;
+			const content = `${row} > [data-item-section="content"]`;
+			const pure = isPureRename(file);
+			const marker = `
+${icon} {
+	position: relative;
+}
+/* Kept in flow, so the slot keeps its width — only the glyph is replaced. */
+${icon} > * {
+	visibility: hidden;
+}
+${icon}::before {
+	content: "";
+	position: absolute;
+	inset: 0;
+	width: 16px;
+	height: 16px;
+	margin: auto;
+	background-color: ${RENAME_MARKER_COLOR};
+	mask-image: ${pure ? CIRCLE_ARROW_RIGHT_MASK : CIRCLE_ARROW_SOLID_MASK};
+	mask-repeat: no-repeat;
+	mask-position: center;
+	mask-size: 100% 100%;
+}`;
+			if (!pure) return marker;
+			const active = `${row}:is(:hover, [data-item-context-hover="true"], [data-item-selected="true"])`;
+			return `${marker}
+${icon}, ${content} {
+	opacity: ${PURE_RENAME_OPACITY};
+}
+${active} > [data-item-section="icon"], ${active} > [data-item-section="content"] {
+	opacity: ${PURE_RENAME_ACTIVE_OPACITY};
+}`;
+		})
+		.join("\n");
+}
+
+export function syncRenameMarkerStyle(
+	treeHost: HTMLElement | null,
+	css: string,
+): boolean {
+	return syncShadowStyle(treeHost, RENAME_MARKER_STYLE_ATTRIBUTE, css);
+}
+
 /** A lucide glyph as a `mask-image` URL — the fill comes from `currentcolor`. */
 function lucideMaskDataURI(paths: string): string {
 	const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="black" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${paths}</svg>`;
@@ -201,6 +279,15 @@ const FOLDER_OPEN_MASK = lucideMaskDataURI(
 );
 /** lucide `check` */
 const CHECK_MASK = lucideMaskDataURI('<path d="M20 6 9 17l-5-5"/>');
+
+/** lucide `circle-arrow-right` */
+const CIRCLE_ARROW_RIGHT_MASK = lucideMaskDataURI(
+	'<circle cx="12" cy="12" r="10"/><path d="M8 12h8"/><path d="m12 16 4-4-4-4"/>',
+);
+/** A solid disc with the arrow knocked out — the stroke-only helper can't draw it. */
+const CIRCLE_ARROW_SOLID_MASK = `url("data:image/svg+xml,${encodeURIComponent(
+	'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><mask id="knock"><rect width="24" height="24" fill="white"/><g fill="none" stroke="black" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 12h8"/><path d="m12 16 4-4-4-4"/></g></mask><circle cx="12" cy="12" r="11" fill="black" mask="url(#knock)"/></svg>',
+)}")`;
 
 const FOLDER_ICON_SLOT =
 	'[data-item-type="folder"] > [data-item-section="icon"]';

@@ -60,16 +60,54 @@ const FIXTURE_ROWS: readonly (readonly [
 	["src/api/projects/generated/schema.ts", "modified", "generated", 120, 98],
 ];
 
-const FIXTURE_FILES: readonly FileChange[] = FIXTURE_ROWS.map((row, index) => ({
-	path: row[0],
-	status: row[1],
-	category: row[2],
-	additions: row[3],
-	deletions: row[4],
-	fingerprint: `fixture-${index}`,
-	binary: false,
-	review: null,
-}));
+function toFileChanges(
+	rows: typeof FIXTURE_ROWS,
+	binaryPaths: ReadonlySet<string> = new Set(),
+): readonly FileChange[] {
+	return rows.map((row, index) => ({
+		path: row[0],
+		status: row[1],
+		category: row[2],
+		additions: row[3],
+		deletions: row[4],
+		fingerprint: `fixture-${index}`,
+		binary: binaryPaths.has(row[0]),
+		review: null,
+	}));
+}
+
+const FIXTURE_FILES = toFileChanges(FIXTURE_ROWS);
+
+const RENAME_LONG_PATH =
+	"src/routes/_telegram/workflows/components/telegram-unavailable-channel-notice-banner.tsx";
+const RENAME_BINARY_PATH = "src/assets/logo-mark.png";
+
+const RENAME_ROWS: typeof FIXTURE_ROWS = [
+	["src/routes/-fixtures.ts", "renamed", "implementation", 0, 0],
+	["src/routes/add-channel-dialog.tsx", "renamed", "implementation", 0, 0],
+	["src/routes/candidates-view.tsx", "renamed", "implementation", 0, 0],
+	["src/routes/channel-problems.tsx", "renamed", "implementation", 0, 0],
+	["src/routes/fold-runs.ts", "renamed", "implementation", 14, 6],
+	["src/routes/reviewed-edited-rename.ts", "renamed", "implementation", 3, 1],
+	["src/routes/changed-after-review.ts", "renamed", "implementation", 9, 2],
+	[RENAME_LONG_PATH, "renamed", "implementation", 0, 0],
+	[RENAME_BINARY_PATH, "renamed", "implementation", 0, 0],
+	["src/lib/old-helper.ts", "deleted", "implementation", 0, 21],
+	["src/lib/telegram-queries.ts", "modified", "implementation", 8, 3],
+	["src/lib/new-helper.ts", "added", "implementation", 17, 0],
+];
+
+const RENAME_FILES = toFileChanges(RENAME_ROWS, new Set([RENAME_BINARY_PATH]));
+
+const RENAME_REVIEWED: readonly string[] = [
+	"src/routes/-fixtures.ts",
+	"src/routes/reviewed-edited-rename.ts",
+	RENAME_LONG_PATH,
+];
+const RENAME_CHANGED_AFTER_REVIEW: readonly string[] = [
+	"src/routes/changed-after-review.ts",
+	"src/routes/channel-problems.tsx",
+];
 
 const INITIALLY_REVIEWED: readonly string[] = [
 	"src/api/projects/index.ts",
@@ -81,45 +119,70 @@ const INITIALLY_REVIEWED: readonly string[] = [
 
 const REPO_ROOT = "/Users/dev/code/nisi";
 
+type Scenario = {
+	files: readonly FileChange[];
+	reviewed: readonly string[];
+	changedAfterReview: readonly string[];
+};
+
+const SCENARIOS = {
+	default: {
+		files: FIXTURE_FILES,
+		reviewed: INITIALLY_REVIEWED,
+		changedAfterReview: [],
+	},
+	renames: {
+		files: RENAME_FILES,
+		reviewed: RENAME_REVIEWED,
+		changedAfterReview: RENAME_CHANGED_AFTER_REVIEW,
+	},
+} satisfies Record<string, Scenario>;
+
 type StoryProps = {
+	scenario: keyof typeof SCENARIOS;
 	initialQuery: string;
 	initialHideReviewed: boolean;
 	initialCollapsed: boolean;
 	initialViewMode: SidebarViewMode;
 };
 
-function reviewedEntries(
-	paths: ReadonlySet<string>,
+function reviewStateEntries(
+	reviewed: ReadonlySet<string>,
+	changedAfterReview: readonly string[],
 ): ReadonlyMap<string, ReviewStateEntry> {
-	return new Map(
-		Array.from(paths, (path) => [path, { status: "viewed" }] as const),
-	);
+	return new Map<string, ReviewStateEntry>([
+		...Array.from(reviewed, (path) => [path, { status: "viewed" }] as const),
+		...changedAfterReview.map(
+			(path) => [path, { status: "changed-after-review" }] as const,
+		),
+	]);
 }
 
 function Frame(props: StoryProps): React.ReactElement {
+	const scenario: Scenario = SCENARIOS[props.scenario];
 	const [collapsed, setCollapsed] = useState(props.initialCollapsed);
 	const [query, setQuery] = useState(props.initialQuery);
 	const [searchMode, setSearchMode] = useState<SearchMode>("files");
 	const [hideReviewed, setHideReviewed] = useState(props.initialHideReviewed);
 	const [viewMode, setViewMode] = useState(props.initialViewMode);
 	const [reviewedPaths, setReviewedPaths] = useState<ReadonlySet<string>>(
-		() => new Set(INITIALLY_REVIEWED),
+		() => new Set(scenario.reviewed),
 	);
 	const [selectedPath, setSelectedPath] = useState<string | null>(null);
 
 	const reviewState = useMemo(
-		() => reviewedEntries(reviewedPaths),
-		[reviewedPaths],
+		() => reviewStateEntries(reviewedPaths, scenario.changedAfterReview),
+		[reviewedPaths, scenario.changedAfterReview],
 	);
 	// Upstream of `FilesSidebar` in production (`FilesChangedView`), so the story does it too.
 	const visibleFiles = useMemo(() => {
 		const needle = query.toLowerCase();
-		return FIXTURE_FILES.filter(
+		return scenario.files.filter(
 			(file) =>
 				!(hideReviewed && reviewedPaths.has(file.path)) &&
 				file.path.toLowerCase().includes(needle),
 		);
-	}, [query, hideReviewed, reviewedPaths]);
+	}, [scenario.files, query, hideReviewed, reviewedPaths]);
 
 	return (
 		<div className="flex h-screen bg-pane-surface">
@@ -156,12 +219,14 @@ const meta = {
 	title: "Pr/FilesSidebar",
 	parameters: { layout: "fullscreen" },
 	args: {
+		scenario: "default",
 		initialQuery: "",
 		initialHideReviewed: false,
 		initialCollapsed: false,
 		initialViewMode: "tree",
 	},
 	argTypes: {
+		scenario: { control: "radio", options: Object.keys(SCENARIOS) },
 		initialViewMode: { control: "radio", options: ["tree", "flat"] },
 	},
 	// Keyed so a control change re-seeds the story-local state.
@@ -175,3 +240,5 @@ export const FilterOpen: Story = { args: { initialQuery: "project" } };
 export const HideReviewed: Story = { args: { initialHideReviewed: true } };
 export const Collapsed: Story = { args: { initialCollapsed: true } };
 export const FlatView: Story = { args: { initialViewMode: "flat" } };
+/** Pure renames dim and take a hollow marker; edited and binary renames get the solid one. */
+export const Renames: Story = { args: { scenario: "renames" } };
