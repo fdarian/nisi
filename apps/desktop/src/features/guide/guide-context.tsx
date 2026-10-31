@@ -6,6 +6,7 @@ import type { GuideFile } from "./areas";
 import type { GuideReviews } from "./guide-reviews";
 import type { GuideTarget } from "./guide-target";
 import type { GuideRef } from "./refs";
+import type { GuideCursor } from "./use-guide-cursor";
 
 /**
  * What the author-time validator learns by rendering the guide: components
@@ -48,6 +49,8 @@ type GuideContextValue = {
 	setHoveredArea: (id: string | null) => void;
 	/** Names declared exactly once in a changed file; inline code that is just such a name links to its declaration. */
 	symbols: ReadonlyMap<string, GuideSymbol>;
+	/** The keyboard/pointer cursor over Area file rows. Absent in the static preview, which has no keys to press. */
+	cursor?: GuideCursor;
 	/** The review state Area rows tick. Absent in the static preview, which shows no checkboxes. */
 	reviews?: GuideReviews;
 	/** The static preview: every Tour frame stacked, both Sequence states shown, Area file lists open. Set by `nisi guide render`, never by the app. */
@@ -65,6 +68,15 @@ const AreaScopeContext = createContext<readonly string[] | undefined>(
 
 /** Set by `Area` around its bullets and file list, so a `Ref` or row inside one can open the pane on the whole Area. */
 export const AreaScopeProvider = AreaScopeContext.Provider;
+
+const AreaIdContext = createContext<string | undefined>(undefined);
+
+/** Set by `Area` alongside its scope, so a row can tell which Area it was listed under. */
+export const AreaIdProvider = AreaIdContext.Provider;
+
+export function useAreaId(): string | undefined {
+	return useContext(AreaIdContext);
+}
 
 export function useAreaScope(): readonly string[] | undefined {
 	return useContext(AreaScopeContext);

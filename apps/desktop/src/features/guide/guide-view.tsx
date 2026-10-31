@@ -40,6 +40,7 @@ import { GuideValidationNotice } from "./guide-validation-notice";
 import type { GuideRef } from "./refs";
 import { symbolMap } from "./symbol-links";
 import { useGuide } from "./use-guide";
+import { useGuideCursor } from "./use-guide-cursor";
 
 const SPLIT_STORAGE_ID = "nisi:guide-split";
 const CONTENT_PANEL = "content";
@@ -62,6 +63,8 @@ export function GuideView(props: {
 	reviewState: ReadonlyMap<string, ReviewStateEntry>;
 	setViewed: (path: string, viewed: boolean) => void;
 	onOpenFile: (path: string) => void;
+	/** Whether this PR's tab is the selected one: every `PrView` stays mounted, so only the selected one may answer keys. */
+	shortcutsEnabled: boolean;
 }): React.ReactElement {
 	const [target, setTarget] = useState<GuideTarget | null>(null);
 	const guide = useGuide(props.orpc, props.session.id);
@@ -115,6 +118,7 @@ export function GuideView(props: {
 			reviewState={props.reviewState}
 			session={props.session}
 			setViewed={props.setViewed}
+			shortcutsEnabled={props.shortcutsEnabled}
 			target={target}
 			version={result.version}
 		/>
@@ -134,6 +138,7 @@ function GuideBody(props: {
 	reviewState: ReadonlyMap<string, ReviewStateEntry>;
 	setViewed: (path: string, viewed: boolean) => void;
 	onOpenFile: (path: string) => void;
+	shortcutsEnabled: boolean;
 	target: GuideTarget | null;
 	onSelectTarget: (target: GuideTarget | null) => void;
 }): React.ReactElement {
@@ -173,6 +178,11 @@ function GuideBody(props: {
 	});
 	const [areaOrder, setAreaOrder] = useState<readonly string[]>([]);
 	const [hoveredArea, setHoveredArea] = useState<string | null>(null);
+	const cursor = useGuideCursor({
+		areaOrder,
+		selectRef,
+		enabled: props.shortcutsEnabled,
+	});
 	const context = useMemo(
 		() => ({
 			sessionId: props.session.id,
@@ -184,6 +194,7 @@ function GuideBody(props: {
 			selectRef,
 			symbols,
 			reviews,
+			cursor,
 			areaOrder,
 			setAreaOrder,
 			hoveredArea,
@@ -199,6 +210,7 @@ function GuideBody(props: {
 			selectRef,
 			symbols,
 			reviews,
+			cursor,
 			areaOrder,
 			hoveredArea,
 		],
