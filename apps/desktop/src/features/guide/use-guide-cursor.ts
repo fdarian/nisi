@@ -15,8 +15,8 @@ type CursorRow = {
 export type GuideCursor = {
 	/** The row `r`/`u` act on: follows the pointer over a row, and `j`/`k` move it. */
 	key: string | null;
-	/** The pointer is over this row: moves the cursor onto it without scrolling it into view. */
-	pointAt: (key: string) => void;
+	/** The pointer moved over this row: puts the cursor on it, without scrolling it into view. Ignores events that carry no actual movement. */
+	pointMove: (key: string, x: number, y: number) => void;
 	/** Whether the pointer, not the keyboard, put the cursor on `key`, so the row is already where the user is looking. */
 	isPointerDriven: (key: string) => boolean;
 	/** Registered for the Area's whole life, collapsed or not, so `j`/`k` can walk into a closed Area. */
@@ -72,6 +72,19 @@ export function useGuideCursor(params: {
 		pointerKey.current = next;
 		setKey(next);
 	}, []);
+	// Browsers replay a `mousemove` at the old coordinates after a scroll or
+	// layout shift; acting on those would snap the cursor back to the pointer
+	// right after `j`/`k` moved it.
+	const lastPointer = useRef<{ x: number; y: number } | null>(null);
+	const pointMove = useCallback(
+		(next: string, x: number, y: number) => {
+			const last = lastPointer.current;
+			lastPointer.current = { x, y };
+			if (last !== null && last.x === x && last.y === y) return;
+			pointAt(next);
+		},
+		[pointAt],
+	);
 	const isPointerDriven = useCallback(
 		(candidate: string) => pointerKey.current === candidate,
 		[],
@@ -84,6 +97,7 @@ export function useGuideCursor(params: {
 		let frame: number | null = null;
 		const onWheel = (event: WheelEvent) => {
 			if (frame !== null) cancelAnimationFrame(frame);
+			lastPointer.current = { x: event.clientX, y: event.clientY };
 			frame = requestAnimationFrame(() => {
 				frame = null;
 				const row = document
@@ -192,11 +206,11 @@ export function useGuideCursor(params: {
 	return useMemo(
 		() => ({
 			key,
-			pointAt,
+			pointMove,
 			isPointerDriven,
 			registerAreaRows,
 			registerRowReview,
 		}),
-		[key, pointAt, isPointerDriven, registerAreaRows, registerRowReview],
+		[key, pointMove, isPointerDriven, registerAreaRows, registerRowReview],
 	);
 }

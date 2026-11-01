@@ -70,7 +70,7 @@ export function FileRow(props: {
 			: rowKey(areaId, { path: props.path, lines: props.lines });
 	const isCursor = key !== undefined && cursorKey === key;
 	const registerRowReview = cursor?.registerRowReview;
-	const pointAt = cursor?.pointAt;
+	const pointMove = cursor?.pointMove;
 	const isPointerDriven = cursor?.isPointerDriven;
 	const reviewRef = useRef(props.review);
 	reviewRef.current = props.review;
@@ -103,8 +103,10 @@ export function FileRow(props: {
 				selected && "bg-sky-500/10",
 				selected && isCursor && "bg-sky-500/20",
 			)}
-			onMouseEnter={() => {
-				if (key !== undefined) pointAt?.(key);
+			onMouseMove={(event) => {
+				if (key !== undefined) {
+					pointMove?.(key, event.clientX, event.clientY);
+				}
 			}}
 			ref={rowElement}
 		>
