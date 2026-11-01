@@ -32,7 +32,6 @@ import { evaluateGuide } from "./evaluate";
 import { GUIDE_COMPONENTS } from "./guide-components";
 import { GuideProvider } from "./guide-context";
 import { GuideDiffPane } from "./guide-diff-pane";
-import { GuideRefreshButton } from "./guide-refresh-button";
 import { GuideResizeHandle } from "./guide-resize-handle";
 import { useGuideReviews } from "./guide-reviews";
 import type { GuideTarget } from "./guide-target";
@@ -247,10 +246,6 @@ function GuideBody(props: {
 					ref={scroller}
 				>
 					<div className="relative mx-auto max-w-3xl">
-						<GuideRefreshButton
-							hasPendingChanges={props.hasPendingChanges}
-							onRefresh={props.onRefresh}
-						/>
 						<GuideValidationNotice
 							headSha={props.headSha}
 							validatedSha={props.validatedSha}
