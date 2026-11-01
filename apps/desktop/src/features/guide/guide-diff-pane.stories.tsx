@@ -132,6 +132,7 @@ function Split(props: { initial: GuideTarget }): React.ReactElement {
 								files={FIXTURE_FILES}
 								onClose={() => setTarget(null)}
 								onOpenFile={() => {}}
+								onPointAtPath={() => {}}
 								orpc={orpc}
 								reviewState={reviewState}
 								session={FIXTURE_SESSION}
