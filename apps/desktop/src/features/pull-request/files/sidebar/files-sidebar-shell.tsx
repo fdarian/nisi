@@ -44,11 +44,21 @@ export function FilesSidebarShell(props: {
 	// The panelX at which its Collapse button sits exactly over the rail's Expand button. Both
 	// offsets are rect differences inside their own containers, so the panel's current transform cancels out.
 	const handoffX = useMotionValue(Number.NEGATIVE_INFINITY);
+	// Re-measured on resize: a mount while hidden (zero-size rects) would otherwise leave the offset
+	// at 0, holding the rail half-visible over the open panel.
 	useLayoutEffect(() => {
-		if (panelRef.current === null || railRef.current === null) return;
-		handoffX.set(
-			anchorLeftWithin(railRef.current) - anchorLeftWithin(panelRef.current),
-		);
+		const panel = panelRef.current;
+		const rail = railRef.current;
+		if (panel === null || rail === null) return;
+		const measure = () => {
+			if (panel.offsetWidth === 0 || rail.offsetWidth === 0) return;
+			handoffX.set(anchorLeftWithin(rail) - anchorLeftWithin(panel));
+		};
+		measure();
+		const observer = new ResizeObserver(measure);
+		observer.observe(panel);
+		observer.observe(rail);
+		return () => observer.disconnect();
 	}, [handoffX]);
 
 	// Swapping on the buttons' positions, not a clock, means the two icon sets are never on screen together.
