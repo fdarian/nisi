@@ -300,6 +300,7 @@ function GuideBody(props: {
 							hasPendingChanges={props.hasPendingChanges}
 							onClose={closePane}
 							onOpenFile={props.onOpenFile}
+							onPointAtPath={cursor.pointAtPath}
 							onRefresh={props.onRefresh}
 							orpc={props.orpc}
 							reviewState={props.reviewState}

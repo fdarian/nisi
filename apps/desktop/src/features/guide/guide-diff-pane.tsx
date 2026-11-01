@@ -37,9 +37,18 @@ export function GuideDiffPane(props: {
 	hasPendingChanges?: boolean;
 	onRefresh?: () => void;
 	target: GuideTarget;
+	/** The pointer is over this file's diff: the cursor follows, so `r` acts on it. */
+	onPointAtPath: (path: string, scope: readonly string[]) => void;
 	onClose: () => void;
 }): React.ReactElement {
 	const target = props.target;
+	const onPointAtPath = props.onPointAtPath;
+	const handleVisiblePathChange = useCallback(
+		(path: string) => {
+			if (target.scope !== null) onPointAtPath(path, target.scope);
+		},
+		[target.scope, onPointAtPath],
+	);
 	const paneFiles = useMemo(() => {
 		const wanted = new Set(target.scope ?? []);
 		wanted.add(target.ref.path);
@@ -114,6 +123,7 @@ export function GuideDiffPane(props: {
 				onForceLoad={data.addForcedPath}
 				onMarkSelectionReviewed={data.markSelectionReviewed}
 				onOpenFile={props.onOpenFile}
+				onVisiblePathChange={handleVisiblePathChange}
 				onRenderedPathsChange={data.handleRenderedPathsChange}
 				optimisticBaselines={data.optimisticBaselines}
 				orpc={props.orpc}

@@ -17,6 +17,8 @@ export type GuideCursor = {
 	key: string | null;
 	/** The pointer moved over this row: puts the cursor on it, without scrolling it into view. Ignores events that carry no actual movement. */
 	pointMove: (key: string, x: number, y: number) => void;
+	/** The pointer is over `path`'s diff in the pane listing `scope`: lights that file's row, scrolling it into view in the guide. */
+	pointAtPath: (path: string, scope: readonly string[]) => void;
 	/** Whether the pointer, not the keyboard, put the cursor on `key`, so the row is already where the user is looking. */
 	isPointerDriven: (key: string) => boolean;
 	/** Registered for the Area's whole life, collapsed or not, so `j`/`k` can walk into a closed Area. */
@@ -85,6 +87,22 @@ export function useGuideCursor(params: {
 		},
 		[pointAt],
 	);
+	const areaOrderRef = useRef(params.areaOrder);
+	areaOrderRef.current = params.areaOrder;
+	// Stable on purpose: the diff pane re-attaches its pointer listeners when its report callback changes.
+	const pointAtPath = useCallback((path: string, scope: readonly string[]) => {
+		const row = areaOrderRef.current
+			.flatMap((areaId) => areaRows.current.get(areaId) ?? [])
+			.find(
+				(candidate) =>
+					candidate.ref.path === path &&
+					candidate.scope.length === scope.length &&
+					candidate.scope.every((scoped, index) => scoped === scope[index]),
+			);
+		if (row === undefined) return;
+		pointerKey.current = null;
+		setKey(row.key);
+	}, []);
 	const isPointerDriven = useCallback(
 		(candidate: string) => pointerKey.current === candidate,
 		[],
@@ -207,10 +225,18 @@ export function useGuideCursor(params: {
 		() => ({
 			key,
 			pointMove,
+			pointAtPath,
 			isPointerDriven,
 			registerAreaRows,
 			registerRowReview,
 		}),
-		[key, pointMove, isPointerDriven, registerAreaRows, registerRowReview],
+		[
+			key,
+			pointMove,
+			pointAtPath,
+			isPointerDriven,
+			registerAreaRows,
+			registerRowReview,
+		],
 	);
 }
