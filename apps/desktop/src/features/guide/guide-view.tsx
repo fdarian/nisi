@@ -32,6 +32,7 @@ import { evaluateGuide } from "./evaluate";
 import { GUIDE_COMPONENTS } from "./guide-components";
 import { GuideProvider } from "./guide-context";
 import { GuideDiffPane } from "./guide-diff-pane";
+import { GuideRefreshButton } from "./guide-refresh-button";
 import { GuideResizeHandle } from "./guide-resize-handle";
 import { useGuideReviews } from "./guide-reviews";
 import type { GuideTarget } from "./guide-target";
@@ -63,6 +64,8 @@ export function GuideView(props: {
 	reviewState: ReadonlyMap<string, ReviewStateEntry>;
 	setViewed: (path: string, viewed: boolean) => void;
 	onOpenFile: (path: string) => void;
+	hasPendingChanges: boolean;
+	onRefresh: () => void;
 	/** Whether this PR's tab is the selected one: every `PrView` stays mounted, so only the selected one may answer keys. */
 	shortcutsEnabled: boolean;
 }): React.ReactElement {
@@ -112,7 +115,9 @@ export function GuideView(props: {
 			symbols={result.symbols}
 			headSha={result.headSha}
 			validatedSha={result.validatedSha}
+			hasPendingChanges={props.hasPendingChanges}
 			onOpenFile={props.onOpenFile}
+			onRefresh={props.onRefresh}
 			onSelectTarget={setTarget}
 			orpc={props.orpc}
 			reviewState={props.reviewState}
@@ -138,6 +143,8 @@ function GuideBody(props: {
 	reviewState: ReadonlyMap<string, ReviewStateEntry>;
 	setViewed: (path: string, viewed: boolean) => void;
 	onOpenFile: (path: string) => void;
+	hasPendingChanges: boolean;
+	onRefresh: () => void;
 	shortcutsEnabled: boolean;
 	target: GuideTarget | null;
 	onSelectTarget: (target: GuideTarget | null) => void;
@@ -240,6 +247,10 @@ function GuideBody(props: {
 					ref={scroller}
 				>
 					<div className="relative mx-auto max-w-3xl">
+						<GuideRefreshButton
+							hasPendingChanges={props.hasPendingChanges}
+							onRefresh={props.onRefresh}
+						/>
 						<GuideValidationNotice
 							headSha={props.headSha}
 							validatedSha={props.validatedSha}
@@ -286,8 +297,10 @@ function GuideBody(props: {
 					>
 						<GuideDiffPane
 							files={files}
+							hasPendingChanges={props.hasPendingChanges}
 							onClose={closePane}
 							onOpenFile={props.onOpenFile}
+							onRefresh={props.onRefresh}
 							orpc={props.orpc}
 							reviewState={props.reviewState}
 							session={props.session}

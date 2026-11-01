@@ -242,7 +242,9 @@ export function PrView({
 						<TabsContent className="flex min-h-0 flex-1" value="guide">
 							<GuideView
 								files={files}
+								hasPendingChanges={hasPendingChanges}
 								onOpenFile={openFile}
+								onRefresh={refreshFileChanges}
 								orpc={orpc}
 								reviewState={reviewState}
 								session={session}

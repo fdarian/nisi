@@ -34,6 +34,8 @@ export function GuideDiffPane(props: {
 	reviewState: ReadonlyMap<string, ReviewStateEntry>;
 	setViewed: (path: string, viewed: boolean) => void;
 	onOpenFile: (path: string) => void;
+	hasPendingChanges?: boolean;
+	onRefresh?: () => void;
 	target: GuideTarget;
 	onClose: () => void;
 }): React.ReactElement {
@@ -95,7 +97,9 @@ export function GuideDiffPane(props: {
 		>
 			<FilesViewedToolbar
 				counts={{ total: paneFiles.length, viewed: data.viewedCount }}
+				hasPendingChanges={props.hasPendingChanges}
 				onClose={props.onClose}
+				onRefresh={props.onRefresh}
 				orpc={props.orpc}
 			/>
 			<DiffPane
