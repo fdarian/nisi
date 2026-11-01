@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useKeyBindings } from "#/lib/use-key-bindings";
 import type { FileRowReview } from "./kit/file-row";
 import type { GuideRef } from "./refs";
@@ -15,7 +15,10 @@ type CursorRow = {
 export type GuideCursor = {
 	/** The row `r`/`u` act on: follows the pointer over a row, and `j`/`k` move it. */
 	key: string | null;
-	setKey: (key: string) => void;
+	/** The pointer is over this row: moves the cursor onto it without scrolling it into view. */
+	pointAt: (key: string) => void;
+	/** Whether the pointer, not the keyboard, put the cursor on `key`, so the row is already where the user is looking. */
+	isPointerDriven: (key: string) => boolean;
 	/** Registered for the Area's whole life, collapsed or not, so `j`/`k` can walk into a closed Area. */
 	registerAreaRows: (areaId: string, rows: readonly CursorRow[]) => () => void;
 	/** Registered only while the row is mounted; `r`/`u` read it at keypress time so they never act on a stale checkbox state. */
@@ -63,6 +66,38 @@ export function useGuideCursor(params: {
 	const areaRows = useRef(new Map<string, readonly CursorRow[]>());
 	const rowReviews = useRef(new Map<string, () => FileRowReview | undefined>());
 	const undoStack = useRef<{ key: string; restoreViewed: boolean }[]>([]);
+	const pointerKey = useRef<string | null>(null);
+
+	const pointAt = useCallback((next: string) => {
+		pointerKey.current = next;
+		setKey(next);
+	}, []);
+	const isPointerDriven = useCallback(
+		(candidate: string) => pointerKey.current === candidate,
+		[],
+	);
+
+	// Scrolling moves rows under a still pointer without a `mouseenter`, so
+	// without this `r` would act on the row the pointer used to be over.
+	useEffect(() => {
+		if (!params.enabled) return;
+		let frame: number | null = null;
+		const onWheel = (event: WheelEvent) => {
+			if (frame !== null) cancelAnimationFrame(frame);
+			frame = requestAnimationFrame(() => {
+				frame = null;
+				const row = document
+					.elementFromPoint(event.clientX, event.clientY)
+					?.closest<HTMLElement>("[data-guide-row]");
+				if (row?.dataset.guideRow !== undefined) pointAt(row.dataset.guideRow);
+			});
+		};
+		window.addEventListener("wheel", onWheel, { passive: true });
+		return () => {
+			window.removeEventListener("wheel", onWheel);
+			if (frame !== null) cancelAnimationFrame(frame);
+		};
+	}, [params.enabled, pointAt]);
 
 	const registerAreaRows = useCallback(
 		(areaId: string, rows: readonly CursorRow[]) => {
@@ -91,6 +126,7 @@ export function useGuideCursor(params: {
 		params.areaOrder.flatMap((areaId) => areaRows.current.get(areaId) ?? []);
 
 	const focus = (row: CursorRow) => {
+		pointerKey.current = null;
 		setKey(row.key);
 		params.selectRef(row.ref, row.scope);
 	};
@@ -127,7 +163,10 @@ export function useGuideCursor(params: {
 		if (record === undefined) return;
 		const row = flatRows().find((candidate) => candidate.key === record.key);
 		if (row !== undefined) focus(row);
-		else setKey(record.key);
+		else {
+			pointerKey.current = null;
+			setKey(record.key);
+		}
 		const review = rowReviews.current.get(record.key)?.();
 		if (review === undefined) {
 			// The row's Area is collapsed: moving the cursor opens it, and the
@@ -151,7 +190,13 @@ export function useGuideCursor(params: {
 	);
 
 	return useMemo(
-		() => ({ key, setKey, registerAreaRows, registerRowReview }),
-		[key, registerAreaRows, registerRowReview],
+		() => ({
+			key,
+			pointAt,
+			isPointerDriven,
+			registerAreaRows,
+			registerRowReview,
+		}),
+		[key, pointAt, isPointerDriven, registerAreaRows, registerRowReview],
 	);
 }

@@ -70,7 +70,8 @@ export function FileRow(props: {
 			: rowKey(areaId, { path: props.path, lines: props.lines });
 	const isCursor = key !== undefined && cursorKey === key;
 	const registerRowReview = cursor?.registerRowReview;
-	const setCursorKey = cursor?.setKey;
+	const pointAt = cursor?.pointAt;
+	const isPointerDriven = cursor?.isPointerDriven;
 	const reviewRef = useRef(props.review);
 	reviewRef.current = props.review;
 	useEffect(() => {
@@ -78,12 +79,11 @@ export function FileRow(props: {
 		return registerRowReview(key, () => reviewRef.current);
 	}, [registerRowReview, key]);
 	const rowElement = useRef<HTMLDivElement>(null);
-	const pointerOver = useRef(false);
 	useEffect(() => {
-		if (isCursor && !pointerOver.current) {
+		if (isCursor && key !== undefined && !isPointerDriven?.(key)) {
 			rowElement.current?.scrollIntoView({ block: "nearest" });
 		}
-	}, [isCursor]);
+	}, [isCursor, key, isPointerDriven]);
 
 	const stat = (
 		<span className="shrink-0 font-mono text-xs tabular-nums">
@@ -94,17 +94,17 @@ export function FileRow(props: {
 		// biome-ignore lint/a11y/noStaticElementInteractions: hover only moves the keyboard cursor onto this row; the row's own buttons carry the actions
 		<div
 			data-text="inline"
+			data-guide-row={key}
 			className={cn(
-				"flex w-full min-w-0 items-center gap-1 rounded-md pr-1.5 hover:bg-accent",
+				"flex w-full min-w-0 items-center gap-1 rounded-md pr-1.5",
+				// With a cursor, it alone is lit, so the row `r` acts on is never in doubt.
+				cursor === undefined && "hover:bg-accent",
 				isCursor && "bg-accent",
 				selected && "bg-sky-500/10",
+				selected && isCursor && "bg-sky-500/20",
 			)}
 			onMouseEnter={() => {
-				pointerOver.current = true;
-				if (key !== undefined) setCursorKey?.(key);
-			}}
-			onMouseLeave={() => {
-				pointerOver.current = false;
+				if (key !== undefined) pointAt?.(key);
 			}}
 			ref={rowElement}
 		>
