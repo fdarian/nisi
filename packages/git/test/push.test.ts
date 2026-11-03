@@ -215,7 +215,7 @@ describe("pushBranch", () => {
 			"refs/heads/feature",
 			"refs/heads/main",
 		]);
-		const sameNamedOtherBranch = (
+		const localHead = (
 			await sh(fixture.repo.root, ["rev-parse", "HEAD"])
 		).trim();
 		await sh(fixture.repo.root, [
@@ -224,11 +224,7 @@ describe("pushBranch", () => {
 			"origin",
 			"HEAD:refs/heads/unrelated",
 		]);
-		await sh(fixture.bareDir, [
-			"update-ref",
-			"refs/pull/1/head",
-			sameNamedOtherBranch,
-		]);
+		await sh(fixture.bareDir, ["update-ref", "refs/pull/1/head", localHead]);
 		const refsBefore = await sh(fixture.bareDir, ["for-each-ref"]);
 
 		const events = await collect(fixture.repo.root, false, "feature");
