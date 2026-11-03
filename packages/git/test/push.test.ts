@@ -11,8 +11,8 @@ import { cleanupTestRepo, makeTestRepo, type TestRepo } from "./fixtures.ts";
 const run = <A, E>(effect: Effect.Effect<A, E, BunServices.BunServices>) =>
 	Effect.runPromise(effect.pipe(Effect.provide(BunServices.layer)));
 
-const collect = (repoRoot: string, rebase: boolean) =>
-	run(Stream.runCollect(pushBranch(repoRoot, { rebase })));
+const collect = (repoRoot: string, rebase: boolean, headRef = "main") =>
+	run(Stream.runCollect(pushBranch(repoRoot, { rebase, headRef })));
 
 const lastEvent = (events: ReadonlyArray<PushEvent>) => events.at(-1);
 
@@ -82,6 +82,18 @@ const makeFixture = async (): Promise<Fixture> => {
 	};
 };
 
+/** `resolveUnpushedCommits` against the PR head GitHub would publish for `headRef`'s branch on origin. */
+const unpushedAfter = async (fixture: Fixture, headRef: string) => {
+	await sh(fixture.bareDir, [
+		"update-ref",
+		"refs/pull/1/head",
+		`refs/heads/${headRef}`,
+	]);
+	return run(
+		resolveUnpushedCommits(fixture.repo.root, null, { number: 1, headRef }),
+	);
+};
+
 const exists = (path: string) =>
 	stat(path).then(
 		() => true,
@@ -103,28 +115,74 @@ describe("pushBranch", () => {
 		expect(lastEvent(events)).toEqual({ type: "done" });
 		expect(events.some((event) => event.type === "line")).toBe(true);
 
-		const after = await run(resolveUnpushedCommits(fixture.repo.root, null));
+		const after = await unpushedAfter(fixture, "main");
 		expect(after.ahead).toBe(0);
 	});
 
-	test("pushes to the upstream's remote branch when it differs from the local name", async () => {
+	test("pushes to the PR's head branch, ignoring an upstream of origin/main", async () => {
 		const fixture = await makeFixture();
-		await fixture.repo.git(["checkout", "-q", "-b", "feature"]);
-		await fixture.repo.git(["push", "-q", "-u", "origin", "feature:renamed"]);
+		await fixture.repo.git([
+			"checkout",
+			"-q",
+			"-b",
+			"feature",
+			"--track",
+			"origin/main",
+		]);
 		await fixture.repo.write("b.ts", "local\n");
 		await fixture.repo.commit("local");
+		const mainBefore = (
+			await sh(fixture.bareDir, ["rev-parse", "main"])
+		).trim();
 
-		const events = await collect(fixture.repo.root, false);
+		const events = await collect(fixture.repo.root, false, "feature");
 
 		expect(events[0]).toEqual({
 			type: "step",
-			command: "git push --progress origin HEAD:renamed",
+			command: "git push --progress origin HEAD:feature",
 		});
 		expect(lastEvent(events)).toEqual({ type: "done" });
-		const remoteHead = await sh(fixture.bareDir, ["rev-parse", "renamed"]);
+		const remoteHead = await sh(fixture.bareDir, ["rev-parse", "feature"]);
 		expect(remoteHead.trim()).toBe(
 			(await fixture.repo.git(["rev-parse", "HEAD"])).trim(),
 		);
+		expect((await sh(fixture.bareDir, ["rev-parse", "main"])).trim()).toBe(
+			mainBefore,
+		);
+		expect((await unpushedAfter(fixture, "feature")).ahead).toBe(0);
+	});
+
+	test("rebases onto the PR's head branch, not the upstream", async () => {
+		const fixture = await makeFixture();
+		await fixture.repo.git([
+			"checkout",
+			"-q",
+			"-b",
+			"feature",
+			"--track",
+			"origin/main",
+		]);
+		await fixture.repo.write("b.ts", "local\n");
+		await fixture.repo.commit("local");
+
+		const events = await collect(fixture.repo.root, true, "feature");
+
+		// origin has no `feature` yet, so the pull fails — the point is only the target.
+		expect(events[0]).toEqual({
+			type: "step",
+			command: "git pull --rebase --autostash origin feature",
+		});
+	});
+
+	test("refuses to push a branch other than the PR's", async () => {
+		const fixture = await makeFixture();
+		await fixture.repo.git(["checkout", "-q", "-b", "unrelated"]);
+
+		const events = await collect(fixture.repo.root, false, "feature");
+
+		expect(events).toHaveLength(1);
+		const only = events[0];
+		expect(only?.type === "failed" && only.reason).toBe("other");
 	});
 
 	test("reports rejected when the remote has moved ahead", async () => {
@@ -155,7 +213,7 @@ describe("pushBranch", () => {
 			"git push --progress origin HEAD:main",
 		]);
 		expect(lastEvent(events)).toEqual({ type: "done" });
-		const after = await run(resolveUnpushedCommits(fixture.repo.root, null));
+		const after = await unpushedAfter(fixture, "main");
 		expect(after.ahead).toBe(0);
 		expect(after.behind).toBe(0);
 		expect(await exists(join(fixture.repo.root, "c.ts"))).toBe(true);

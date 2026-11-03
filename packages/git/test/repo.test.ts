@@ -47,30 +47,184 @@ const cleanupOriginBackedRepo = async (
 	await rm(fixture.bareDir, { recursive: true, force: true });
 };
 
-describe("resolveUnpushedCommits", () => {
-	test("fails with NoRemoteRefToCompare when there's no origin and no upstream at all", async () => {
-		const repo = await makeTestRepo();
-		try {
-			await repo.write("a.ts", "hello\n");
-			await repo.commit("base");
+const PR_NUMBER = 1;
 
-			const exit = await runExit(resolveUnpushedCommits(repo.root, null));
+/**
+ * `resolveUnpushedCommits` for the checked-out branch as the PR's head
+ * branch, after pointing the bare origin's `refs/pull/1/head` at that
+ * branch on origin — what GitHub does for a PR whose head is that branch.
+ * A branch absent from origin leaves the PR ref unpublished.
+ */
+const check = async (
+	fixture: OriginBackedRepo,
+	baseRef: string | null = null,
+) => {
+	const headRef = (await fixture.repo.git(["branch", "--show-current"])).trim();
+	await publishPrHead(fixture, headRef);
+	return run(
+		resolveUnpushedCommits(fixture.repo.root, baseRef, {
+			number: PR_NUMBER,
+			headRef,
+		}),
+	);
+};
+
+/** Points the bare origin's `refs/pull/1/head` at `branch` on origin, if origin has it. */
+const publishPrHead = async (fixture: OriginBackedRepo, branch: string) => {
+	const proc = Bun.spawn(
+		[
+			"git",
+			"update-ref",
+			`refs/pull/${PR_NUMBER}/head`,
+			`refs/heads/${branch}`,
+		],
+		{ cwd: fixture.bareDir, stdout: "pipe", stderr: "pipe" },
+	);
+	await proc.exited;
+};
+
+describe("resolveUnpushedCommits", () => {
+	test("fails when the PR head ref can't be fetched from origin", async () => {
+		const fixture = await makeOriginBackedRepo();
+		try {
+			const exit = await runExit(
+				resolveUnpushedCommits(fixture.repo.root, null, {
+					number: PR_NUMBER,
+					headRef: "main",
+				}),
+			);
 			expect(exit._tag).toBe("Failure");
 		} finally {
-			await cleanupTestRepo(repo);
+			await cleanupOriginBackedRepo(fixture);
 		}
 	});
 
-	test("counts 0 via `@{upstream}` when HEAD is fully pushed", async () => {
+	test("counts 0 for a branch cut from origin/main whose commits are all on the PR head", async () => {
 		const fixture = await makeOriginBackedRepo();
 		try {
 			await fixture.repo.git([
-				"branch",
-				"--set-upstream-to=origin/main",
-				"main",
+				"checkout",
+				"-q",
+				"-b",
+				"feature",
+				"--track",
+				"origin/main",
 			]);
+			await fixture.repo.write("b.ts", "one\n");
+			await fixture.repo.commit("pr commit 1");
+			await fixture.repo.write("c.ts", "two\n");
+			await fixture.repo.commit("pr commit 2");
+			await fixture.repo.git(["push", "-q", "origin", "HEAD:feature"]);
 
-			const result = await run(resolveUnpushedCommits(fixture.repo.root, null));
+			const result = await check(fixture, "main");
+			expect(result.remoteRef).toBe("origin/feature");
+			expect(result.ahead).toBe(0);
+			expect(result.behind).toBe(0);
+			expect(result.commits).toEqual([]);
+			expect(result.origin?.count).toBe(2);
+		} finally {
+			await cleanupOriginBackedRepo(fixture);
+		}
+	});
+
+	test("counts a commit the PR head lacks, even when the upstream is origin/main", async () => {
+		const fixture = await makeOriginBackedRepo();
+		try {
+			await fixture.repo.git([
+				"checkout",
+				"-q",
+				"-b",
+				"feature",
+				"--track",
+				"origin/main",
+			]);
+			await fixture.repo.write("b.ts", "one\n");
+			await fixture.repo.commit("on the PR");
+			await fixture.repo.git(["push", "-q", "origin", "HEAD:feature"]);
+			await fixture.repo.write("c.ts", "two\n");
+			await fixture.repo.commit("not pushed");
+
+			const result = await check(fixture, "main");
+			expect(result.ahead).toBe(1);
+			expect(result.commits.map((commit) => commit.subject)).toEqual([
+				"not pushed",
+			]);
+		} finally {
+			await cleanupOriginBackedRepo(fixture);
+		}
+	});
+
+	test("compares against the PR head of a nisi worktree branch, named after headRef", async () => {
+		const fixture = await makeOriginBackedRepo();
+		try {
+			await fixture.repo.git([
+				"checkout",
+				"-q",
+				"-b",
+				"nisi/pr-1/feature",
+				"--track",
+				"origin/main",
+			]);
+			await fixture.repo.write("b.ts", "one\n");
+			await fixture.repo.commit("on the PR");
+			await fixture.repo.git(["push", "-q", "origin", "HEAD:feature"]);
+			await publishPrHead(fixture, "feature");
+
+			const result = await run(
+				resolveUnpushedCommits(fixture.repo.root, null, {
+					number: PR_NUMBER,
+					headRef: "feature",
+				}),
+			);
+			expect(result.remoteRef).toBe("origin/feature");
+			expect(result.ahead).toBe(0);
+		} finally {
+			await cleanupOriginBackedRepo(fixture);
+		}
+	});
+
+	test("fails with NotOnPullRequestBranch when the checked-out branch isn't the PR's", async () => {
+		const fixture = await makeOriginBackedRepo();
+		try {
+			await fixture.repo.git(["checkout", "-q", "-b", "other"]);
+			await publishPrHead(fixture, "main");
+
+			const exit = await runExit(
+				resolveUnpushedCommits(fixture.repo.root, null, {
+					number: PR_NUMBER,
+					headRef: "feature",
+				}),
+			);
+			expect(exit._tag).toBe("Failure");
+			expect(JSON.stringify(exit)).toContain("NotOnPullRequestBranch");
+		} finally {
+			await cleanupOriginBackedRepo(fixture);
+		}
+	});
+
+	test("fails with NotOnPullRequestBranch when HEAD is detached", async () => {
+		const fixture = await makeOriginBackedRepo();
+		try {
+			await fixture.repo.git(["checkout", "-q", "--detach"]);
+			await publishPrHead(fixture, "main");
+
+			const exit = await runExit(
+				resolveUnpushedCommits(fixture.repo.root, null, {
+					number: PR_NUMBER,
+					headRef: "main",
+				}),
+			);
+			expect(exit._tag).toBe("Failure");
+			expect(JSON.stringify(exit)).toContain("NotOnPullRequestBranch");
+		} finally {
+			await cleanupOriginBackedRepo(fixture);
+		}
+	});
+
+	test("counts 0 when HEAD is fully pushed", async () => {
+		const fixture = await makeOriginBackedRepo();
+		try {
+			const result = await check(fixture);
 			expect(result).toEqual({
 				remoteRef: "origin/main",
 				ahead: 0,
@@ -84,20 +238,15 @@ describe("resolveUnpushedCommits", () => {
 		}
 	});
 
-	test("counts commits made locally after the last push, via `@{upstream}`", async () => {
+	test("counts commits made locally after the last push", async () => {
 		const fixture = await makeOriginBackedRepo();
 		try {
-			await fixture.repo.git([
-				"branch",
-				"--set-upstream-to=origin/main",
-				"main",
-			]);
 			await fixture.repo.write("b.ts", "one\n");
 			await fixture.repo.commit("unpushed 1");
 			await fixture.repo.write("c.ts", "two\n");
 			await fixture.repo.commit("unpushed 2");
 
-			const result = await run(resolveUnpushedCommits(fixture.repo.root, null));
+			const result = await check(fixture);
 			expect(result.remoteRef).toBe("origin/main");
 			expect(result.ahead).toBe(2);
 			expect(result.behind).toBe(0);
@@ -113,22 +262,6 @@ describe("resolveUnpushedCommits", () => {
 		}
 	});
 
-	test("falls back to origin/<branch> when no `@{upstream}` is configured", async () => {
-		const fixture = await makeOriginBackedRepo();
-		try {
-			// Deliberately no `--set-upstream-to` — `git push` above didn't record
-			// one either, since it wasn't given `-u`.
-			await fixture.repo.write("b.ts", "one\n");
-			await fixture.repo.commit("unpushed");
-
-			const result = await run(resolveUnpushedCommits(fixture.repo.root, null));
-			expect(result.remoteRef).toBe("origin/main");
-			expect(result.ahead).toBe(1);
-		} finally {
-			await cleanupOriginBackedRepo(fixture);
-		}
-	});
-
 	test("reports commits only the remote has as `behind`", async () => {
 		const fixture = await makeOriginBackedRepo();
 		try {
@@ -139,7 +272,7 @@ describe("resolveUnpushedCommits", () => {
 			await fixture.repo.write("c.ts", "local\n");
 			await fixture.repo.commit("local only");
 
-			const result = await run(resolveUnpushedCommits(fixture.repo.root, null));
+			const result = await check(fixture);
 			expect(result.ahead).toBe(1);
 			expect(result.behind).toBe(1);
 			expect(result.diverged).toBe(true);
@@ -159,7 +292,7 @@ describe("resolveUnpushedCommits", () => {
 				await fixture.repo.commit(`unpushed ${index}`);
 			}
 
-			const result = await run(resolveUnpushedCommits(fixture.repo.root, null));
+			const result = await check(fixture);
 			expect(result.ahead).toBe(7);
 			expect(result.commits.map((commit) => commit.subject)).toEqual([
 				"unpushed 7",
@@ -179,7 +312,7 @@ describe("resolveUnpushedCommits", () => {
 			await fixture.repo.write("b.ts", "one\n");
 			await fixture.repo.commit('fix: handle | and "quotes" and tabs\tthere');
 
-			const result = await run(resolveUnpushedCommits(fixture.repo.root, null));
+			const result = await check(fixture);
 			expect(result.commits[0]?.subject).toBe(
 				'fix: handle | and "quotes" and tabs\tthere',
 			);
@@ -191,14 +324,10 @@ describe("resolveUnpushedCommits", () => {
 	test("origin is null when baseRef is null or origin/<baseRef> doesn't exist", async () => {
 		const fixture = await makeOriginBackedRepo();
 		try {
-			const withoutBase = await run(
-				resolveUnpushedCommits(fixture.repo.root, null),
-			);
+			const withoutBase = await check(fixture);
 			expect(withoutBase.origin).toBeNull();
 
-			const missingBase = await run(
-				resolveUnpushedCommits(fixture.repo.root, "nope"),
-			);
+			const missingBase = await check(fixture, "nope");
 			expect(missingBase.origin).toBeNull();
 		} finally {
 			await cleanupOriginBackedRepo(fixture);
@@ -217,9 +346,7 @@ describe("resolveUnpushedCommits", () => {
 			await fixture.repo.write("local.ts", "local\n");
 			await fixture.repo.commit("local only");
 
-			const result = await run(
-				resolveUnpushedCommits(fixture.repo.root, "main"),
-			);
+			const result = await check(fixture, "main");
 			expect(result.remoteRef).toBe("origin/feature");
 			expect(result.ahead).toBe(1);
 			expect(result.origin?.baseRef).toBe("main");
@@ -239,26 +366,8 @@ describe("resolveUnpushedCommits", () => {
 	test("origin is empty when the remote branch is the base itself", async () => {
 		const fixture = await makeOriginBackedRepo();
 		try {
-			const result = await run(
-				resolveUnpushedCommits(fixture.repo.root, "main"),
-			);
+			const result = await check(fixture, "main");
 			expect(result.origin).toEqual({ baseRef: "main", count: 0, commits: [] });
-		} finally {
-			await cleanupOriginBackedRepo(fixture);
-		}
-	});
-
-	test("fails with NoRemoteRefToCompare when origin exists but has no ref for this branch", async () => {
-		const fixture = await makeOriginBackedRepo();
-		try {
-			await fixture.repo.git(["checkout", "-q", "-b", "feature"]);
-			await fixture.repo.write("b.ts", "one\n");
-			await fixture.repo.commit("on feature");
-
-			const exit = await runExit(
-				resolveUnpushedCommits(fixture.repo.root, null),
-			);
-			expect(exit._tag).toBe("Failure");
 		} finally {
 			await cleanupOriginBackedRepo(fixture);
 		}
@@ -287,7 +396,7 @@ describe("resolveUnpushedCommits — remote diverged from the local branch", () 
 			await fixture.repo.write("h.ts", "three\n");
 			await fixture.repo.commit("f3");
 
-			const result = await run(resolveUnpushedCommits(fixture.repo.root, null));
+			const result = await check(fixture);
 			expect(result.remoteRef).toBe("origin/feature");
 			expect(result.ahead).toBe(2);
 			expect(result.behind).toBe(0);
@@ -309,7 +418,7 @@ describe("resolveUnpushedCommits — remote diverged from the local branch", () 
 			await fixture.repo.git(["push", "-q", "origin", "main"]);
 			await fixture.repo.git(["reset", "-q", "--hard", "HEAD~1"]);
 
-			const result = await run(resolveUnpushedCommits(fixture.repo.root, null));
+			const result = await check(fixture);
 			expect(result.ahead).toBe(0);
 			expect(result.behind).toBe(1);
 			expect(result.commits).toEqual([]);
@@ -319,7 +428,7 @@ describe("resolveUnpushedCommits — remote diverged from the local branch", () 
 		}
 	});
 
-	test("fetches the remote branch first, so a stale tracking ref doesn't report pushed commits", async () => {
+	test("refetches the PR head, so a stale local copy doesn't report pushed commits", async () => {
 		const fixture = await makeOriginBackedRepo();
 		try {
 			await fixture.repo.git(["checkout", "-q", "-b", "feature"]);
@@ -331,11 +440,11 @@ describe("resolveUnpushedCommits — remote diverged from the local branch", () 
 			await fixture.repo.git(["push", "-q", "origin", "feature"]);
 			await fixture.repo.git([
 				"update-ref",
-				"refs/remotes/origin/feature",
+				`refs/nisi/pr/${PR_NUMBER}/head`,
 				first,
 			]);
 
-			const result = await run(resolveUnpushedCommits(fixture.repo.root, null));
+			const result = await check(fixture);
 			expect(result.ahead).toBe(0);
 			expect(result.diverged).toBe(false);
 		} finally {
@@ -360,7 +469,7 @@ describe("resolveUnpushedCommits — remote diverged from the local branch", () 
 			await other.git(["rebase", "-q", "main"]);
 			await other.git(["push", "-q", "--force", "origin", "feature"]);
 
-			const result = await run(resolveUnpushedCommits(fixture.repo.root, null));
+			const result = await check(fixture);
 			expect(result.remoteRef).toBe("origin/feature");
 			expect(result.ahead).toBe(0);
 			expect(result.behind).toBe(2);
@@ -402,7 +511,7 @@ describe("resolveUnpushedCommits — remote diverged from the local branch", () 
 			await other.git(["rebase", "-q", "--onto", "main", "origin/parent"]);
 			await other.git(["push", "-q", "--force", "origin", "child"]);
 
-			const result = await run(resolveUnpushedCommits(fixture.repo.root, null));
+			const result = await check(fixture);
 			expect(result.remoteRef).toBe("origin/child");
 			expect(result.ahead).toBe(0);
 			expect(result.commits).toEqual([]);
@@ -452,7 +561,7 @@ describe("resolveUnpushedCommits — remote diverged from the local branch", () 
 			await other.git(["rebase", "-q", "--onto", "main", "origin/parent"]);
 			await other.git(["push", "-q", "--force", "origin", "child"]);
 
-			const result = await run(resolveUnpushedCommits(fixture.repo.root, null));
+			const result = await check(fixture);
 			expect(result.remoteRef).toBe("origin/child");
 			expect(result.ahead).toBe(0);
 			expect(result.commits).toEqual([]);
@@ -483,7 +592,7 @@ describe("resolveUnpushedCommits — remote diverged from the local branch", () 
 			await fixture.repo.write("g.ts", "brand new lines\n");
 			await fixture.repo.commit("local fix");
 
-			const result = await run(resolveUnpushedCommits(fixture.repo.root, null));
+			const result = await check(fixture);
 			expect(result.remoteRef).toBe("origin/feature");
 			expect(result.ahead).toBe(1);
 			expect(result.commits.map((commit) => commit.subject)).toEqual([
@@ -514,7 +623,7 @@ describe("resolveUnpushedCommits — remote diverged from the local branch", () 
 			await other.commit("x reformatted");
 			await other.git(["push", "-q", "--force", "origin", "feature"]);
 
-			const result = await run(resolveUnpushedCommits(fixture.repo.root, null));
+			const result = await check(fixture);
 			expect(result.remoteRef).toBe("origin/feature");
 			expect(result.ahead).toBe(0);
 			expect(result.commits).toEqual([]);
