@@ -62,6 +62,7 @@ const meta: Meta<typeof PrMergeButton> = {
 		repo: "widgets",
 		number: 42,
 		baseRef: "main",
+		headRef: "feature",
 		watched: true,
 		isSelectedTab: true,
 	},

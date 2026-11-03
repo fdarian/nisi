@@ -36,6 +36,8 @@ type UnpushedBranchCheck = Extract<UnpushedCheck, { status: "unpushed" }>;
 
 type UnpushedCommitsDialogProps = {
 	check: UnpushedCheck | null;
+	/** The PR's head branch on origin — the push target, shown in the suggested command. */
+	headRef: string;
 	onOpenChange: (open: boolean) => void;
 	onMergeAnyway: () => void;
 	/** Defaults to idle. Ignored unless `onPush` is given. */
@@ -437,6 +439,7 @@ function pushLabel(
 function PushButton(props: {
 	push: PushState;
 	check: UnpushedBranchCheck;
+	headRef: string;
 	onPush: (rebase: boolean) => void;
 }) {
 	const running = props.push.status === "running";
@@ -457,7 +460,9 @@ function PushButton(props: {
 				{pushLabel(props.check, props.push, rebase)}
 			</span>
 			<code className="shrink-0 font-mono text-muted-foreground text-xs">
-				{rebase ? "git pull --rebase && git push" : "git push"}
+				{rebase
+					? `git pull --rebase origin ${props.headRef} && git push origin HEAD:${props.headRef}`
+					: `git push origin HEAD:${props.headRef}`}
 			</code>
 		</button>
 	);
@@ -487,6 +492,7 @@ function PushedRow(props: {
 function SuggestedPush(props: {
 	push: PushState;
 	check: UnpushedBranchCheck;
+	headRef: string;
 	onPush: (rebase: boolean) => void;
 }) {
 	const [logToggled, setLogToggled] = useState(false);
@@ -514,7 +520,12 @@ function SuggestedPush(props: {
 						onToggleLog={() => setLogToggled((open) => !open)}
 					/>
 				) : (
-					<PushButton check={props.check} onPush={props.onPush} push={push} />
+					<PushButton
+						check={props.check}
+						headRef={props.headRef}
+						onPush={props.onPush}
+						push={push}
+					/>
 				)}
 				{push.status === "failed" && (
 					<p className="flex items-start gap-1.5 text-destructive-foreground text-xs">
@@ -543,6 +554,7 @@ function SuggestedPush(props: {
  */
 export function UnpushedCommitsDialog({
 	check,
+	headRef,
 	onOpenChange,
 	onMergeAnyway,
 	push,
@@ -601,7 +613,12 @@ export function UnpushedCommitsDialog({
 					<div className="flex min-h-0 flex-col gap-4 overflow-y-auto px-6 pb-6 *:shrink-0">
 						<CommitGraph check={check} pushed={isPushed} />
 						{onPush !== undefined && (
-							<SuggestedPush check={check} onPush={onPush} push={pushState} />
+							<SuggestedPush
+								check={check}
+								headRef={headRef}
+								onPush={onPush}
+								push={pushState}
+							/>
 						)}
 					</div>
 				)}

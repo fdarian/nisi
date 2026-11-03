@@ -124,6 +124,7 @@ function HeaderStory(props: StoryProps): React.ReactElement {
 								/>
 								<PrMergeButton
 									baseRef="main"
+									headRef="feature"
 									isSelectedTab
 									number={179}
 									orpc={ORPC}

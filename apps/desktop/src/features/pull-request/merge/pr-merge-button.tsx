@@ -53,6 +53,8 @@ type PrMergeButtonProps = {
 	number: number;
 	/** The PR's base branch — scopes the "already on origin" half of the unpushed-commits dialog. */
 	baseRef: string | null;
+	/** The PR's head branch — what the unpushed-commits check compares against and the dialog's push targets on origin. */
+	headRef: string;
 	/** This PR's tab is both the selected one and the window has focus — see `usePullRequestMergeStatus` (`pr-data.ts`). */
 	watched: boolean;
 	isSelectedTab: boolean;
@@ -209,6 +211,7 @@ export function PrMergeButton({
 	repo,
 	number,
 	baseRef,
+	headRef,
 	watched,
 	isSelectedTab,
 }: PrMergeButtonProps): React.ReactElement {
@@ -292,7 +295,10 @@ export function PrMergeButton({
 	const [verifyingPush, setVerifyingPush] = useState(false);
 	const verifyPush = async () => {
 		setVerifyingPush(true);
-		const result = await checkUnpushedCommits(repoRoot, baseRef);
+		const result = await checkUnpushedCommits(repoRoot, baseRef, {
+			number,
+			headRef,
+		});
 		setVerifyingPush(false);
 		if (result.status === "clean") return;
 		setPendingUnpushedCheck((current) =>
@@ -373,7 +379,10 @@ export function PrMergeButton({
 			autoMerge.isPending
 		)
 			return;
-		const result = await checkUnpushedCommits(repoRoot, baseRef);
+		const result = await checkUnpushedCommits(repoRoot, baseRef, {
+			number,
+			headRef,
+		});
 		if (result.status === "clean") {
 			performAction(action);
 			return;
@@ -483,6 +492,7 @@ export function PrMergeButton({
 			</Group>
 			<UnpushedCommitsDialog
 				check={pendingUnpushedCheck?.check ?? null}
+				headRef={headRef}
 				onMergeAnyway={() => {
 					if (pendingUnpushedCheck === null) return;
 					setPendingUnpushedCheck(null);
@@ -494,7 +504,9 @@ export function PrMergeButton({
 					setPendingUnpushedCheck(null);
 					pushBranch.reset();
 				}}
-				onPush={(rebase) => pushBranch.run(repoRoot, rebase)}
+				onPush={(rebase) =>
+					pushBranch.run(repoRoot, rebase, { number, headRef })
+				}
 				push={dialogPush}
 			/>
 			<MergeErrorDialog

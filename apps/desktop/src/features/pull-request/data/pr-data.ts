@@ -1573,11 +1573,11 @@ export function useOverview(
 
 /**
  * `pullRequests.unpushedCommits`'s result, collapsed to what the pre-merge
- * dialog actually branches on. `"unpushed"` is the real "some commits won't
- * be in this merge" case; `"unverifiable"` folds every failure mode
- * (`NO_REMOTE_REF` — no `@{upstream}` and no matching `origin/<branch>` to
- * diff against — and anything undeclared, like the sidecar being
- * unreachable) into one outcome, since the caller shows the same
+ * dialog actually branches on. `"clean"` also covers a checkout that isn't
+ * the PR's branch (`NOT_PR_BRANCH`), whose commits say nothing about the
+ * merge. `"unpushed"` is the real "some commits won't be in this merge" case; `"unverifiable"` folds every failure mode
+ * (anything the sidecar couldn't check, like git failing to fetch the PR
+ * head or the sidecar being unreachable) into one outcome, since the caller shows the same
  * confirmation dialog either way, just worded as "couldn't verify" instead
  * of naming a count. An unverifiable state is exactly what the user needs to
  * see before merging — silently treating it as clean would defeat the
@@ -1604,6 +1604,8 @@ export type UnpushedCommitsCheck =
 	  }
 	| { status: "unverifiable"; message: string };
 
+type PullRequestHead = { number: number; headRef: string };
+
 export type BranchCommit = {
 	sha: string;
 	subject: string;
@@ -1611,11 +1613,7 @@ export type BranchCommit = {
 	authoredAt: string;
 };
 
-/** `pullRequests.unpushedCommits`'s declared `NO_REMOTE_REF` carries no server-authored message (there's nothing to diff against, not a failure with detail) — named explicitly rather than falling through to `mergeStatusErrorMessage`'s generic copy. Anything else undeclared (sidecar unreachable) still gets that generic fallback. */
 const unpushedCommitsErrorMessage = (error: unknown): string => {
-	if (error instanceof ORPCError && error.code === "NO_REMOTE_REF") {
-		return "This branch has no remote to compare against.";
-	}
 	if (error instanceof ORPCError && typeof error.message === "string") {
 		return error.message;
 	}
@@ -1636,6 +1634,7 @@ export function useUnpushedCommitsCheck(orpc: SidecarQueryUtils): {
 	check: (
 		repoRoot: string,
 		baseRef: string | null,
+		pullRequest: PullRequestHead,
 	) => Promise<UnpushedCommitsCheck>;
 	isPending: boolean;
 } {
@@ -1647,9 +1646,14 @@ export function useUnpushedCommitsCheck(orpc: SidecarQueryUtils): {
 		async (
 			repoRoot: string,
 			baseRef: string | null,
+			pullRequest: PullRequestHead,
 		): Promise<UnpushedCommitsCheck> => {
 			try {
-				const result = await mutation.mutateAsync({ repoRoot, baseRef });
+				const result = await mutation.mutateAsync({
+					repoRoot,
+					baseRef,
+					pullRequest,
+				});
 				return result.ahead === 0
 					? { status: "clean" }
 					: {
@@ -1662,6 +1666,9 @@ export function useUnpushedCommitsCheck(orpc: SidecarQueryUtils): {
 							origin: result.origin,
 						};
 			} catch (error) {
+				if (error instanceof ORPCError && error.code === "NOT_PR_BRANCH") {
+					return { status: "clean" };
+				}
 				return {
 					status: "unverifiable",
 					message: unpushedCommitsErrorMessage(error),
@@ -1728,7 +1735,11 @@ export function usePushBranch(
 	onSucceeded: () => void,
 ): {
 	state: PushState;
-	run: (repoRoot: string, rebase: boolean) => void;
+	run: (
+		repoRoot: string,
+		rebase: boolean,
+		pullRequest: PullRequestHead,
+	) => void;
 	reset: () => void;
 } {
 	const [state, setState] = useState<PushState>({ status: "idle" });
@@ -1750,7 +1761,7 @@ export function usePushBranch(
 	}, []);
 
 	const run = useCallback(
-		(repoRoot: string, rebase: boolean) => {
+		(repoRoot: string, rebase: boolean, pullRequest: PullRequestHead) => {
 			if (controllerRef.current !== null) return;
 			const controller = new AbortController();
 			controllerRef.current = controller;
@@ -1760,7 +1771,7 @@ export function usePushBranch(
 				let terminal: PushEvent["type"] | null = null;
 				try {
 					const stream = await orpc.pullRequests.pushBranch.call(
-						{ repoRoot, rebase },
+						{ repoRoot, rebase, pullRequest },
 						{ signal: controller.signal },
 					);
 					for await (const event of stream) {

@@ -202,18 +202,24 @@ export type UnpushedBranchCommit = Schema.Schema.Type<
 	typeof UnpushedBranchCommit
 >;
 
+/** Mirrors `@repo/git`'s `PullRequestHead` — which PR's head the unpushed-commits check and push talk about. */
+const PullRequestHead = Schema.Struct({
+	number: Schema.Number,
+	headRef: Schema.String,
+});
+
 /**
  * Mirrors `@repo/git`'s `UnpushedCommits` — how the local worktree branch has
- * diverged from its remote ref (`origin/main`, or whatever `@{upstream}`
- * names; the pre-merge dialog names it rather than saying "the remote"
- * generically): `ahead` commits only local, `behind` only on the remote.
- * `commits` lists the unpushed ones newest first, capped at 5. `diverged`
- * means both sides have commits the other lacks (the remote was rebased, or
- * pushed on top of), so `ahead` and `commits` cover only the local commits
- * whose changes the remote tip lacks, not the commit-graph difference. `origin` is
- * what the remote branch holds beyond `origin/<baseRef>` (what the merge
- * will include), with the same cap; `null` when no `baseRef` was asked for
- * or `origin/<baseRef>` doesn't exist locally.
+ * diverged from the PR's head on GitHub. `remoteRef` is that head's display
+ * name (`origin/<headRef>`), which the pre-merge dialog names rather than
+ * saying "the remote" generically. `ahead` counts commits only local,
+ * `behind` only on the PR head. `commits` lists the unpushed ones newest
+ * first, capped at 5. `diverged` means both sides have commits the other
+ * lacks (the PR head was rebased, or pushed on top of), so `ahead` and
+ * `commits` cover only the local commits whose changes the PR head lacks, not
+ * the commit-graph difference. `origin` is what the PR head holds beyond
+ * `origin/<baseRef>` (what the merge will include), with the same cap; `null`
+ * when no `baseRef` was asked for or `origin/<baseRef>` doesn't exist locally.
  */
 export const UnpushedCommits = Schema.Struct({
 	remoteRef: Schema.String,
@@ -461,19 +467,21 @@ const RepositoryRefs = Schema.Array(
  * `unpushedCommits` backs the pre-merge "you have local unpushed commits"
  * check — unlike every other procedure here, it's about the *local*
  * worktree branch, not the PR itself, so its input is `repoRoot` (whatever
- * branch is actually checked out there) plus the PR's `baseRef`, which only
- * scopes the `origin` part of the result. Wraps `@repo/git`'s
- * `resolveUnpushedCommits`; `NO_REMOTE_REF` covers its "nothing to compare
- * `HEAD` against" failures — no `@{upstream}` and no matching
- * `origin/<branch>`, or a detached/non-remote-tracking branch with no push
- * target — kept distinct from
- * `SERVICE_UNAVAILABLE` (a `git` command itself failing to run) since the
- * frontend shows a different dialog for each.
+ * branch is actually checked out there), the PR's `number`/`headRef`, and its
+ * `baseRef`, which only scopes the `origin` part of the result. Wraps
+ * `@repo/git`'s `resolveUnpushedCommits`, which compares `HEAD` against the
+ * PR's head on GitHub (`refs/pull/<n>/head`), never the branch's upstream —
+ * a PR branch cut from `origin/main` tracks `origin/main`, which would make
+ * every PR commit look unpushed. `NOT_PR_BRANCH` means `repoRoot` has
+ * something else checked out (or a detached `HEAD`), so its commits say
+ * nothing about the merge and the caller proceeds without a dialog; it is
+ * kept distinct from `SERVICE_UNAVAILABLE` (a `git` command itself failing
+ * to run), which the frontend surfaces as "couldn't verify".
  *
- * `pushBranch` pushes that same local worktree branch (to its upstream, else
- * `origin/<branch>`), first rebasing onto the remote branch when `rebase` is
- * set. Failures arrive as a terminal `failed` event rather than an oRPC
- * error, so it declares none.
+ * `pushBranch` pushes that same local worktree branch to the PR's head
+ * branch on `origin` (`HEAD:<headRef>`, regardless of its upstream), first
+ * rebasing onto that branch when `rebase` is set. Failures arrive as a
+ * terminal `failed` event rather than an oRPC error, so it declares none.
  *
  * `markReady` flips a draft PR to ready for review — the adapter uses
  * `owner`/`repo`/`number` to refresh that PR's live sources after success.
@@ -780,11 +788,12 @@ export const pullRequestsContract = {
 			Schema.Struct({
 				repoRoot: Schema.String,
 				baseRef: Schema.NullOr(Schema.String),
+				pullRequest: PullRequestHead,
 			}),
 		)
 		.output(UnpushedCommits)
 		.errors({
-			NO_REMOTE_REF: {},
+			NOT_PR_BRANCH: {},
 			SERVICE_UNAVAILABLE: {},
 		}),
 	pushBranch: oc
@@ -792,6 +801,7 @@ export const pullRequestsContract = {
 			Schema.Struct({
 				repoRoot: Schema.String,
 				rebase: Schema.Boolean,
+				pullRequest: PullRequestHead,
 			}),
 		)
 		.output(eventIterator(Schema.toStandardSchemaV1(PushEvent))),
