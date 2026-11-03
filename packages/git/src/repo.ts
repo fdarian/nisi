@@ -4,12 +4,13 @@ import { resolveBaseRemote } from "./base.ts";
 import {
 	GitCommandError,
 	NoDefaultBranch,
-	NoRemoteRefToCompare,
 	NotAGitRepository,
+	NotOnPullRequestBranch,
 	PushTargetUnresolvable,
 	UnpushedCommitCountUnparseable,
 } from "./errors.ts";
 import { type GhResult, git, gitResult } from "./exec.ts";
+import { headRefOfWorktreeBranch } from "./worktree-branch.ts";
 
 /** Resolves the repository root for any path inside a git working tree. */
 export const resolveRepoRoot = (cwd: string) =>
@@ -106,43 +107,58 @@ export const originUrlOrNull = (repoRoot: string) =>
 		),
 	);
 
-/**
- * The remote ref {@link resolveUnpushedCommits} diffs `HEAD` against:
- * the branch's configured `@{upstream}` when it has one, else
- * `origin/<currentBranch>` when that ref actually exists. `null` when
- * neither resolves — a branch nisi created for a PR worktree
- * (`worktree.ts`'s `openPullRequestWorktree`) is never pushed with `-u`, so
- * `@{upstream}` is the exception rather than the rule here, but a branch
- * that also has no matching `origin/<branch>` (never pushed at all, or
- * pushed under a different name) genuinely has nothing to compare against.
- */
-const resolveComparisonRemoteRef = (repoRoot: string, currentBranch: string) =>
-	Effect.gen(function* () {
-		const upstream = yield* gitOutputOrNull(repoRoot, [
-			"rev-parse",
-			"--abbrev-ref",
-			"@{upstream}",
-		]);
-		if (upstream !== null) return upstream;
-
-		const originCandidate = `origin/${currentBranch}`;
-		return (yield* refExists(repoRoot, originCandidate))
-			? originCandidate
-			: null;
-	});
-
 export type PushTarget = {
 	readonly remote: string;
 	readonly branch: string;
 };
 
+/** The nisi-owned local ref {@link fetchPullRequestHead} keeps at GitHub's `refs/pull/<n>/head`. */
+const pullRequestHeadRef = (number: number) => `refs/nisi/pr/${number}/head`;
+
+/** Force-fetches the PR's published head (a PR's head moves on force-push) and returns the local ref it landed in. */
+const fetchPullRequestHead = (repoRoot: string, number: number) =>
+	Effect.gen(function* () {
+		const localRef = pullRequestHeadRef(number);
+		yield* git(repoRoot, [
+			"fetch",
+			"origin",
+			`+refs/pull/${number}/head:${localRef}`,
+		]);
+		return localRef;
+	});
+
+/** The sha `origin` has `refs/heads/<branch>` at, or `null` when it has no such branch. */
+const resolveOriginBranchSha = (repoRoot: string, branch: string) =>
+	Effect.gen(function* () {
+		const ref = `refs/heads/${branch}`;
+		const stdout = yield* git(repoRoot, ["ls-remote", "origin", ref]);
+		// ls-remote patterns match any ref ending in the pattern (`refs/x/refs/heads/<branch>`), so match the name exactly.
+		for (const line of stdout.split("\n")) {
+			const [sha, name] = line.split("\t");
+			if (name === ref && sha !== undefined) return sha;
+		}
+		return null;
+	});
+
 /**
- * Where `git push` should send the current branch: the remote and branch its
- * upstream (`branch.<b>.remote` / `branch.<b>.merge`) names when it has one,
- * else `origin` and the branch's own name — the same fallback
- * {@link resolveComparisonRemoteRef} compares against.
+ * Where `git push` should send the checked-out PR branch: the PR's own head
+ * branch on `origin`. Deliberately not `branch.<b>.remote` / `.merge` — a
+ * branch cut from `origin/main` tracks `origin/main`, so honoring the
+ * upstream would push the PR's commits onto the base branch. Refuses when
+ * `HEAD` is detached or isn't the PR's branch, since pushing some other
+ * branch's commits to `headRef` would overwrite the PR.
+ *
+ * Also refuses when `origin` doesn't hold the PR's branch: for a fork PR,
+ * `HEAD:<headRef>` would create a stray branch on `origin` rather than
+ * update the PR. GitHub keeps `refs/pull/<n>/head` in sync with a same-repo
+ * PR's branch, so the branch counts as the PR's only when `origin` has it at
+ * the very sha that ref (fetched fresh, as {@link resolveUnpushedCommits}
+ * does) points to.
  */
-export const resolvePushTarget = (repoRoot: string) =>
+export const resolvePushTarget = (
+	repoRoot: string,
+	pullRequest: PullRequestHead,
+) =>
 	Effect.gen(function* () {
 		const currentBranch = yield* resolveCurrentBranch(repoRoot);
 		if (currentBranch === "HEAD") {
@@ -151,29 +167,32 @@ export const resolvePushTarget = (repoRoot: string) =>
 				reason: "HEAD is detached, so there is no branch to push",
 			});
 		}
-
-		const remote = yield* gitOutputOrNull(repoRoot, [
-			"config",
-			"--get",
-			`branch.${currentBranch}.remote`,
-		]);
-		const merge = yield* gitOutputOrNull(repoRoot, [
-			"config",
-			"--get",
-			`branch.${currentBranch}.merge`,
-		]);
-		if (remote === null || merge === null) {
-			return { remote: "origin", branch: currentBranch } satisfies PushTarget;
-		}
-		if (remote === "." || !merge.startsWith("refs/heads/")) {
+		if (headRefOfWorktreeBranch(currentBranch) !== pullRequest.headRef) {
 			return yield* new PushTargetUnresolvable({
 				repoRoot,
-				reason: `${currentBranch} tracks ${merge} on "${remote}", which is not a branch on a remote`,
+				reason: `${currentBranch} is not the pull request's branch (${pullRequest.headRef}), so pushing it would overwrite ${pullRequest.headRef}`,
+			});
+		}
+
+		const prHeadRef = yield* fetchPullRequestHead(repoRoot, pullRequest.number);
+		const prHeadSha = yield* resolveHeadSha(repoRoot, prHeadRef);
+		const originSha = yield* resolveOriginBranchSha(
+			repoRoot,
+			pullRequest.headRef,
+		);
+		if (originSha !== prHeadSha) {
+			const detail =
+				originSha === null
+					? `origin has no ${pullRequest.headRef} branch`
+					: `origin's ${pullRequest.headRef} is at ${originSha.slice(0, 7)}, not the pull request's head ${prHeadSha.slice(0, 7)}`;
+			return yield* new PushTargetUnresolvable({
+				repoRoot,
+				reason: `The pull request's branch isn't on origin (${detail}), e.g. because it comes from a fork, so nisi can't push to it`,
 			});
 		}
 		return {
-			remote,
-			branch: merge.slice("refs/heads/".length),
+			remote: "origin",
+			branch: pullRequest.headRef,
 		} satisfies PushTarget;
 	});
 
@@ -189,7 +208,7 @@ export type BranchCommit = {
 	readonly authoredAt: string;
 };
 
-/** The commits already on the remote branch that the base branch doesn't have — what a merge of the pushed branch will carry. */
+/** The commits already on the PR's head that the base branch doesn't have — what a merge of the pushed branch will carry. */
 export type OriginCommits = {
 	readonly baseRef: string;
 	readonly count: number;
@@ -197,7 +216,7 @@ export type OriginCommits = {
 	readonly commits: ReadonlyArray<BranchCommit>;
 };
 
-/** How `HEAD` has diverged from the ref it should have been pushed to, plus enough commit detail to render both sides. */
+/** How `HEAD` has diverged from the PR's head on GitHub, plus enough commit detail to render both sides. */
 export type UnpushedCommits = {
 	readonly remoteRef: string;
 	/** Commits `HEAD` has that `remoteRef` doesn't. */
@@ -381,57 +400,72 @@ const resolveOriginCommits = (
 		return { baseRef, count, commits } satisfies OriginCommits;
 	});
 
+/** The PR as GitHub knows it — what {@link resolveUnpushedCommits} compares `HEAD` against. */
+export type PullRequestHead = {
+	readonly number: number;
+	readonly headRef: string;
+};
+
 /**
  * The pre-merge "you have local unpushed commits" check
  * (`apps/desktop/sidecar/http.ts`'s `unpushedCommits` handler) is built on:
- * how far `HEAD` has diverged, in commits, from the ref it should have been
- * pushed to. Resolves that ref via {@link resolveComparisonRemoteRef}, then
- * reads ahead/behind with `git rev-list --left-right --count
- * <remoteRef>...HEAD` (left = behind, right = ahead). Fails with
- * {@link NoRemoteRefToCompare} rather than returning `0` when no remote ref
- * resolves at all, since that's an unverifiable state, not "nothing to
- * push"; fails with {@link UnpushedCommitCountUnparseable} rather than
- * coercing (`Number()` on unexpected output silently produces `NaN`) when
- * the counts aren't the two plain non-negative integers that flag always
- * prints on a zero exit.
+ * how far `HEAD` has diverged, in commits, from the PR's head on GitHub,
+ * read with `git rev-list --left-right --count <prHead>...HEAD` (left =
+ * behind, right = ahead).
  *
- * Fetches the one remote branch first (via {@link resolvePushTarget}) so the
- * remote-tracking ref isn't stale; a fetch or push-target failure fails the
- * effect, since a stale comparison is worse than none. When the branches
- * diverged (`behind > 0` and a plain `ahead > 0`), `ahead`/`commits` are narrowed to the local
- * commits whose changes the remote tip lacks (see
- * {@link listCommitsMissingFromDivergedRemote}); `behind` stays the plain
- * commit-graph count.
+ * The comparison ref is `refs/pull/<n>/head`, fetched into a nisi-owned ref,
+ * and never the branch's `@{upstream}`: a PR branch cut from `origin/main`
+ * tracks `origin/main`, so against the upstream every PR commit would look
+ * unpushed even though GitHub already has it. `refs/pull/<n>/head` is the
+ * one ref GitHub publishes for every PR, fork or not (see `worktree.ts`'s
+ * `fetchPullRequestRef`). The fetch always runs first, since a stale
+ * comparison is worse than none; its failure fails the effect.
  *
- * `origin` describes what the remote branch holds beyond `baseRef`, for
- * callers that want to show what the merge will include; it needs
- * `origin/<baseRef>` to exist locally and is `null` otherwise.
+ * Fails with {@link NotOnPullRequestBranch} when `HEAD` is detached or isn't
+ * the PR's branch — commits on some other branch say nothing about what the
+ * PR will merge. Fails with {@link UnpushedCommitCountUnparseable} rather
+ * than coercing (`Number()` on unexpected output silently produces `NaN`)
+ * when the counts aren't the two plain non-negative integers that flag
+ * always prints on a zero exit.
+ *
+ * When the branches diverged (`behind > 0` and a plain `ahead > 0`),
+ * `ahead`/`commits` are narrowed to the local commits whose changes the PR
+ * head lacks (see {@link listCommitsMissingFromDivergedRemote}); `behind`
+ * stays the plain commit-graph count.
+ *
+ * `remoteRef` in the result is the display name `origin/<headRef>`, not the
+ * ref compared against. `origin` describes what the PR head holds beyond
+ * `baseRef`, for callers that want to show what the merge will include; it
+ * needs `origin/<baseRef>` to exist locally and is `null` otherwise.
  */
 export const resolveUnpushedCommits = (
 	repoRoot: string,
 	baseRef: string | null,
+	pullRequest: PullRequestHead,
 ) =>
 	Effect.gen(function* () {
 		const currentBranch = yield* resolveCurrentBranch(repoRoot);
-		const remoteRef = yield* resolveComparisonRemoteRef(
-			repoRoot,
-			currentBranch,
-		);
-		if (remoteRef === null) {
-			return yield* new NoRemoteRefToCompare({
+		if (
+			currentBranch === "HEAD" ||
+			headRefOfWorktreeBranch(currentBranch) !== pullRequest.headRef
+		) {
+			return yield* new NotOnPullRequestBranch({
 				repoRoot,
 				branch: currentBranch,
+				headRef: pullRequest.headRef,
 			});
 		}
 
-		const pushTarget = yield* resolvePushTarget(repoRoot);
-		yield* git(repoRoot, ["fetch", pushTarget.remote, pushTarget.branch]);
+		const comparisonRef = yield* fetchPullRequestHead(
+			repoRoot,
+			pullRequest.number,
+		);
 
 		const stdout = yield* git(repoRoot, [
 			"rev-list",
 			"--left-right",
 			"--count",
-			`${remoteRef}...HEAD`,
+			`${comparisonRef}...HEAD`,
 		]);
 		const counts = stdout.trim().split(/\s+/).map(parseDigits);
 		const behind = counts[0];
@@ -445,31 +479,31 @@ export const resolveUnpushedCommits = (
 		) {
 			return yield* new UnpushedCommitCountUnparseable({
 				repoRoot,
-				remoteRef,
+				remoteRef: comparisonRef,
 				raw: stdout,
 			});
 		}
 
 		const diverged = behind > 0 && graphAhead > 0;
 		const missing = diverged
-			? yield* listCommitsMissingFromDivergedRemote(repoRoot, remoteRef)
+			? yield* listCommitsMissingFromDivergedRemote(repoRoot, comparisonRef)
 			: [];
 		const ahead = diverged ? missing.length : graphAhead;
 		const commits = diverged
 			? yield* listCommitsBySha(repoRoot, missing)
-			: yield* listCommits(repoRoot, [`${remoteRef}..HEAD`]);
+			: yield* listCommits(repoRoot, [`${comparisonRef}..HEAD`]);
 
 		const origin =
 			baseRef !== null && (yield* refExists(repoRoot, `origin/${baseRef}`))
 				? yield* resolveOriginCommits(
 						repoRoot,
 						baseRef,
-						`origin/${baseRef}..${remoteRef}`,
+						`origin/${baseRef}..${comparisonRef}`,
 					)
 				: null;
 
 		return {
-			remoteRef,
+			remoteRef: `origin/${pullRequest.headRef}`,
 			ahead,
 			behind,
 			commits,

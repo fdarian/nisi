@@ -10,7 +10,7 @@ import {
 	resolveHeadSha,
 } from "./repo.ts";
 import { parseOwnerRepoFromRemoteUrl } from "./repo-path-mapping.ts";
-import { headRefOfWorktreeBranch } from "./worktree.ts";
+import { headRefOfWorktreeBranch } from "./worktree-branch.ts";
 
 const DETACHED_HEAD = "HEAD";
 

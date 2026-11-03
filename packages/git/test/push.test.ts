@@ -11,8 +11,12 @@ import { cleanupTestRepo, makeTestRepo, type TestRepo } from "./fixtures.ts";
 const run = <A, E>(effect: Effect.Effect<A, E, BunServices.BunServices>) =>
 	Effect.runPromise(effect.pipe(Effect.provide(BunServices.layer)));
 
-const collect = (repoRoot: string, rebase: boolean) =>
-	run(Stream.runCollect(pushBranch(repoRoot, { rebase })));
+const collect = (repoRoot: string, rebase: boolean, headRef = "main") =>
+	run(
+		Stream.runCollect(
+			pushBranch(repoRoot, { rebase, pullRequest: { number: 1, headRef } }),
+		),
+	);
 
 const lastEvent = (events: ReadonlyArray<PushEvent>) => events.at(-1);
 
@@ -48,6 +52,24 @@ const sh = async (cwd: string, args: ReadonlyArray<string>) => {
 	return stdout;
 };
 
+/** Points `refs/pull/1/head` at `branch`'s tip, which is how GitHub keeps a same-repo PR's head ref in sync. */
+const publishPullRequestHead = (bareDir: string, branch: string) =>
+	sh(bareDir, ["update-ref", "refs/pull/1/head", `refs/heads/${branch}`]);
+
+/** A `feature` branch checked out locally at `origin/main`, tracking it, with a local commit on top. */
+const checkoutFeatureWithLocalCommit = async (fixture: Fixture) => {
+	await fixture.repo.git([
+		"checkout",
+		"-q",
+		"-b",
+		"feature",
+		"--track",
+		"origin/main",
+	]);
+	await fixture.repo.write("b.ts", "local\n");
+	await fixture.repo.commit("local");
+};
+
 const makeFixture = async (): Promise<Fixture> => {
 	const bareDir = await mkdtemp(join(tmpdir(), "nisi-push-origin-"));
 	await sh(bareDir, ["init", "-q", "--bare", "-b", "main"]);
@@ -57,6 +79,7 @@ const makeFixture = async (): Promise<Fixture> => {
 	await repo.write("a.ts", "line 1\nline 2\nline 3\n");
 	await repo.commit("base");
 	await repo.git(["push", "-q", "origin", "main"]);
+	await publishPullRequestHead(bareDir, "main");
 
 	const otherDir = await mkdtemp(join(tmpdir(), "nisi-push-other-"));
 	await sh(otherDir, ["clone", "-q", bareDir, "clone"]);
@@ -78,8 +101,21 @@ const makeFixture = async (): Promise<Fixture> => {
 			await sh(otherRoot, ["add", "-A"]);
 			await sh(otherRoot, ["commit", "-q", "-m", message]);
 			await sh(otherRoot, ["push", "-q", "origin", "main"]);
+			await publishPullRequestHead(bareDir, "main");
 		},
 	};
+};
+
+/** `resolveUnpushedCommits` against the PR head GitHub would publish for `headRef`'s branch on origin. */
+const unpushedAfter = async (fixture: Fixture, headRef: string) => {
+	await sh(fixture.bareDir, [
+		"update-ref",
+		"refs/pull/1/head",
+		`refs/heads/${headRef}`,
+	]);
+	return run(
+		resolveUnpushedCommits(fixture.repo.root, null, { number: 1, headRef }),
+	);
 };
 
 const exists = (path: string) =>
@@ -103,28 +139,114 @@ describe("pushBranch", () => {
 		expect(lastEvent(events)).toEqual({ type: "done" });
 		expect(events.some((event) => event.type === "line")).toBe(true);
 
-		const after = await run(resolveUnpushedCommits(fixture.repo.root, null));
+		const after = await unpushedAfter(fixture, "main");
 		expect(after.ahead).toBe(0);
 	});
 
-	test("pushes to the upstream's remote branch when it differs from the local name", async () => {
+	test("pushes to the PR's head branch, ignoring an upstream of origin/main", async () => {
 		const fixture = await makeFixture();
-		await fixture.repo.git(["checkout", "-q", "-b", "feature"]);
-		await fixture.repo.git(["push", "-q", "-u", "origin", "feature:renamed"]);
-		await fixture.repo.write("b.ts", "local\n");
-		await fixture.repo.commit("local");
+		await checkoutFeatureWithLocalCommit(fixture);
+		await sh(fixture.bareDir, [
+			"update-ref",
+			"refs/heads/feature",
+			"refs/heads/main",
+		]);
+		await publishPullRequestHead(fixture.bareDir, "feature");
+		const mainBefore = (
+			await sh(fixture.bareDir, ["rev-parse", "main"])
+		).trim();
 
-		const events = await collect(fixture.repo.root, false);
+		const events = await collect(fixture.repo.root, false, "feature");
 
 		expect(events[0]).toEqual({
 			type: "step",
-			command: "git push --progress origin HEAD:renamed",
+			command: "git push --progress origin HEAD:feature",
 		});
 		expect(lastEvent(events)).toEqual({ type: "done" });
-		const remoteHead = await sh(fixture.bareDir, ["rev-parse", "renamed"]);
+		const remoteHead = await sh(fixture.bareDir, ["rev-parse", "feature"]);
 		expect(remoteHead.trim()).toBe(
 			(await fixture.repo.git(["rev-parse", "HEAD"])).trim(),
 		);
+		expect((await sh(fixture.bareDir, ["rev-parse", "main"])).trim()).toBe(
+			mainBefore,
+		);
+		expect((await unpushedAfter(fixture, "feature")).ahead).toBe(0);
+	});
+
+	test("rebases onto the PR's head branch, not the upstream", async () => {
+		const fixture = await makeFixture();
+		await checkoutFeatureWithLocalCommit(fixture);
+		await sh(fixture.bareDir, [
+			"update-ref",
+			"refs/heads/feature",
+			"refs/heads/main",
+		]);
+		await publishPullRequestHead(fixture.bareDir, "feature");
+
+		const events = await collect(fixture.repo.root, true, "feature");
+
+		expect(events[0]).toEqual({
+			type: "step",
+			command: "git pull --rebase --autostash origin feature",
+		});
+	});
+
+	test("refuses a fork PR whose branch isn't on origin, leaving origin untouched", async () => {
+		const fixture = await makeFixture();
+		await checkoutFeatureWithLocalCommit(fixture);
+		const refsBefore = await sh(fixture.bareDir, ["for-each-ref"]);
+
+		const events = await collect(fixture.repo.root, false, "feature");
+
+		expect(events).toHaveLength(1);
+		const only = events[0];
+		expect(only?.type === "failed" && only.reason).toBe("other");
+		expect(only?.type === "failed" && only.message).toContain(
+			"isn't on origin",
+		);
+		expect(await sh(fixture.bareDir, ["for-each-ref"])).toBe(refsBefore);
+	});
+
+	test("refuses when origin's branch isn't at the PR's head", async () => {
+		const fixture = await makeFixture();
+		await checkoutFeatureWithLocalCommit(fixture);
+		await sh(fixture.bareDir, [
+			"update-ref",
+			"refs/heads/feature",
+			"refs/heads/main",
+		]);
+		const localHead = (
+			await sh(fixture.repo.root, ["rev-parse", "HEAD"])
+		).trim();
+		await sh(fixture.repo.root, [
+			"push",
+			"-q",
+			"origin",
+			"HEAD:refs/heads/unrelated",
+		]);
+		await sh(fixture.bareDir, ["update-ref", "refs/pull/1/head", localHead]);
+		const refsBefore = await sh(fixture.bareDir, ["for-each-ref"]);
+
+		const events = await collect(fixture.repo.root, false, "feature");
+
+		expect(events).toHaveLength(1);
+		const only = events[0];
+		expect(only?.type === "failed" && only.reason).toBe("other");
+		expect(only?.type === "failed" && only.message).toContain(
+			"isn't on origin",
+		);
+		expect(await sh(fixture.bareDir, ["for-each-ref"])).toBe(refsBefore);
+	});
+
+	test("refuses to push a branch other than the PR's", async () => {
+		const fixture = await makeFixture();
+		await fixture.repo.git(["checkout", "-q", "-b", "unrelated"]);
+
+		const events = await collect(fixture.repo.root, false, "feature");
+
+		expect(events).toHaveLength(1);
+		const only = events[0];
+		expect(only?.type === "failed" && only.reason).toBe("other");
 	});
 
 	test("reports rejected when the remote has moved ahead", async () => {
@@ -155,7 +277,7 @@ describe("pushBranch", () => {
 			"git push --progress origin HEAD:main",
 		]);
 		expect(lastEvent(events)).toEqual({ type: "done" });
-		const after = await run(resolveUnpushedCommits(fixture.repo.root, null));
+		const after = await unpushedAfter(fixture, "main");
 		expect(after.ahead).toBe(0);
 		expect(after.behind).toBe(0);
 		expect(await exists(join(fixture.repo.root, "c.ts"))).toBe(true);

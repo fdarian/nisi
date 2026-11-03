@@ -2504,7 +2504,8 @@ export function attachRouter(
 				},
 			),
 			// The pre-merge "you have local unpushed commits" check — about the
-			// local worktree branch, not the PR; `baseRef` only scopes `origin`.
+			// local worktree branch compared against the PR's head on GitHub;
+			// `baseRef` only scopes `origin`.
 			unpushedCommits: authed.pullRequests.unpushedCommits.effect(function* ({
 				input,
 				errors,
@@ -2512,16 +2513,14 @@ export function attachRouter(
 				return yield* resolveUnpushedCommits(
 					input.repoRoot,
 					input.baseRef,
+					input.pullRequest,
 				).pipe(
-					Effect.catchTag("NoRemoteRefToCompare", (cause) =>
+					Effect.catchTag("NotOnPullRequestBranch", (cause) =>
 						Effect.fail(
-							errors.NO_REMOTE_REF({
-								message: `${cause.branch} has no configured upstream and no matching origin/${cause.branch} in ${cause.repoRoot}`,
+							errors.NOT_PR_BRANCH({
+								message: `${cause.branch} is not the pull request's branch (${cause.headRef}) in ${cause.repoRoot}`,
 							}),
 						),
-					),
-					Effect.catchTag("PushTargetUnresolvable", (cause) =>
-						Effect.fail(errors.NO_REMOTE_REF({ message: cause.reason })),
 					),
 					Effect.catchTag("GitCommandError", (cause) =>
 						Effect.fail(
@@ -2545,6 +2544,7 @@ export function attachRouter(
 					yield* streamToIterator(
 						pushBranch(request.input.repoRoot, {
 							rebase: request.input.rebase,
+							pullRequest: request.input.pullRequest,
 						}),
 						mainContext,
 						request.signal,

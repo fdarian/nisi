@@ -17,11 +17,14 @@ import {
 } from "#/features/pull-request/data/pr-data";
 import { UnpushedCommitsDialog } from "./unpushed-commits-dialog";
 
+const LOCAL_BRANCH = "claude/s3-mock-replacement-8602c4";
+
 const meta: Meta<typeof UnpushedCommitsDialog> = {
 	title: "Pr/UnpushedCommitsDialog",
 	component: UnpushedCommitsDialog,
 	parameters: { layout: "centered", controls: { disable: true } },
 	args: {
+		headRef: LOCAL_BRANCH,
 		// Logged rather than no-ops so a story can be driven end-to-end (click
 		// "Merge anyway"/"Cancel", confirm the right callback fired) without
 		// wiring up real merge state here — this component doesn't own any.
@@ -34,7 +37,6 @@ export default meta;
 
 type Story = StoryObj<typeof meta>;
 
-const LOCAL_BRANCH = "claude/s3-mock-replacement-8602c4";
 const REMOTE_REF = `origin/${LOCAL_BRANCH}`;
 
 const MINUTE = 60_000;
@@ -225,7 +227,7 @@ export const OriginTab: Story = {
 	},
 };
 
-/** `NO_REMOTE_REF` (or any other check failure) — worded as "couldn't verify" rather than naming a count. */
+/** Any check failure (e.g. the PR head couldn't be fetched) — worded as "couldn't verify" rather than naming a count. */
 export const Unverifiable: Story = {
 	args: {
 		check: {

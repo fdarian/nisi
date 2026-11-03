@@ -47,8 +47,8 @@ export {
 	NoDefaultBranch,
 	NoMergeMethodsEnabled,
 	NoOriginRemote,
-	NoRemoteRefToCompare,
 	NotAGitRepository,
+	NotOnPullRequestBranch,
 	type PullRequestChecksError,
 	type PullRequestMergeabilityError,
 	type PullRequestMergeError,
@@ -130,6 +130,7 @@ export { pushBranch } from "./push.ts";
 export type {
 	BranchCommit,
 	OriginCommits,
+	PullRequestHead,
 	UnpushedCommits,
 } from "./repo.ts";
 export {

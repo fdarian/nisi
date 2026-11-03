@@ -86,24 +86,21 @@ export class WorktreeReadFailed extends Schema.TaggedError<WorktreeReadFailed>()
 ) {}
 
 /**
- * Neither `@{upstream}` nor `origin/<branch>` resolves for the current
- * branch — `resolveUnpushedCommits` (`repo.ts`) has nothing to diff
- * `HEAD` against, so the pre-merge "unpushed commits" check
- * (`apps/desktop/sidecar/http.ts`'s `unpushedCommits` handler) has no way to
- * tell whether anything is actually unpushed. Deliberately not defaulted to
- * a count of `0` — an unverifiable state isn't "nothing to push", and the
- * frontend shows a distinct dialog for it.
+ * `HEAD` is detached or on a branch other than the PR's, so its commits say
+ * nothing about what the PR will merge — `resolveUnpushedCommits` (`repo.ts`)
+ * has nothing meaningful to report, and the pre-merge check proceeds
+ * without a dialog.
  */
-export class NoRemoteRefToCompare extends Schema.TaggedError<NoRemoteRefToCompare>()(
-	"NoRemoteRefToCompare",
-	{ repoRoot: Schema.String, branch: Schema.String },
+export class NotOnPullRequestBranch extends Schema.TaggedError<NotOnPullRequestBranch>()(
+	"NotOnPullRequestBranch",
+	{
+		repoRoot: Schema.String,
+		branch: Schema.String,
+		headRef: Schema.String,
+	},
 ) {}
 
-/**
- * There's no remote branch to push to: `HEAD` is detached, or the branch's
- * configured upstream isn't a branch on a remote (e.g. it tracks a local
- * branch).
- */
+/** There's no PR branch to push: `HEAD` is detached or isn't the PR's branch, or the PR's branch isn't on `origin` (a fork PR). */
 export class PushTargetUnresolvable extends Schema.TaggedError<PushTargetUnresolvable>()(
 	"PushTargetUnresolvable",
 	{ repoRoot: Schema.String, reason: Schema.String },
