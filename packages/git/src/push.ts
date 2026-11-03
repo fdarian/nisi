@@ -3,7 +3,11 @@ import { Effect, Stream } from "effect";
 import type { ChildProcessSpawner } from "effect/process";
 import type { GitCommandError, PushTargetUnresolvable } from "./errors.ts";
 import { git, gitStream } from "./exec.ts";
-import { pathExistsOnDisk, resolvePushTarget } from "./repo.ts";
+import {
+	type PullRequestHead,
+	pathExistsOnDisk,
+	resolvePushTarget,
+} from "./repo.ts";
 
 export type PushFailureReason = "rejected" | "rebase-conflict" | "other";
 
@@ -161,7 +165,8 @@ const pullRebaseStep = (
 /**
  * Pushes `HEAD` to the PR's head branch on `origin` (`origin HEAD:<headRef>`,
  * see {@link resolvePushTarget} for why not the upstream), optionally
- * rebasing onto that same branch first. Never fails: a git
+ * rebasing onto that same branch first. Refuses when the branch isn't on
+ * `origin` as the PR's head (a fork PR). Never fails: a git
  * failure, an unresolvable target and a spawn error all end the stream with
  * a `failed` event, so a consumer always gets a terminal event. A rebase that
  * stops on conflicts is aborted before `rebase-conflict` is reported, so the
@@ -169,10 +174,10 @@ const pullRebaseStep = (
  */
 export const pushBranch = (
 	repoRoot: string,
-	options: { readonly rebase: boolean; readonly headRef: string },
+	options: { readonly rebase: boolean; readonly pullRequest: PullRequestHead },
 ): Stream.Stream<PushEvent, never, ChildProcessSpawner.ChildProcessSpawner> =>
 	Stream.unwrap(
-		resolvePushTarget(repoRoot, options.headRef).pipe(
+		resolvePushTarget(repoRoot, options.pullRequest).pipe(
 			Effect.map((target) =>
 				options.rebase
 					? pullRebaseStep(repoRoot, target.remote, target.branch)

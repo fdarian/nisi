@@ -112,6 +112,34 @@ export type PushTarget = {
 	readonly branch: string;
 };
 
+/** The nisi-owned local ref {@link fetchPullRequestHead} keeps at GitHub's `refs/pull/<n>/head`. */
+const pullRequestHeadRef = (number: number) => `refs/nisi/pr/${number}/head`;
+
+/** Force-fetches the PR's published head (a PR's head moves on force-push) and returns the local ref it landed in. */
+const fetchPullRequestHead = (repoRoot: string, number: number) =>
+	Effect.gen(function* () {
+		const localRef = pullRequestHeadRef(number);
+		yield* git(repoRoot, [
+			"fetch",
+			"origin",
+			`+refs/pull/${number}/head:${localRef}`,
+		]);
+		return localRef;
+	});
+
+/** The sha `origin` has `refs/heads/<branch>` at, or `null` when it has no such branch. */
+const resolveOriginBranchSha = (repoRoot: string, branch: string) =>
+	Effect.gen(function* () {
+		const ref = `refs/heads/${branch}`;
+		const stdout = yield* git(repoRoot, ["ls-remote", "origin", ref]);
+		// ls-remote patterns match any ref ending in the pattern (`refs/x/refs/heads/<branch>`), so match the name exactly.
+		for (const line of stdout.split("\n")) {
+			const [sha, name] = line.split("\t");
+			if (name === ref && sha !== undefined) return sha;
+		}
+		return null;
+	});
+
 /**
  * Where `git push` should send the checked-out PR branch: the PR's own head
  * branch on `origin`. Deliberately not `branch.<b>.remote` / `.merge` — a
@@ -119,8 +147,18 @@ export type PushTarget = {
  * upstream would push the PR's commits onto the base branch. Refuses when
  * `HEAD` is detached or isn't the PR's branch, since pushing some other
  * branch's commits to `headRef` would overwrite the PR.
+ *
+ * Also refuses when `origin` doesn't hold the PR's branch: for a fork PR,
+ * `HEAD:<headRef>` would create a stray branch on `origin` rather than
+ * update the PR. GitHub keeps `refs/pull/<n>/head` in sync with a same-repo
+ * PR's branch, so the branch counts as the PR's only when `origin` has it at
+ * the very sha that ref (fetched fresh, as {@link resolveUnpushedCommits}
+ * does) points to.
  */
-export const resolvePushTarget = (repoRoot: string, headRef: string) =>
+export const resolvePushTarget = (
+	repoRoot: string,
+	pullRequest: PullRequestHead,
+) =>
 	Effect.gen(function* () {
 		const currentBranch = yield* resolveCurrentBranch(repoRoot);
 		if (currentBranch === "HEAD") {
@@ -129,13 +167,33 @@ export const resolvePushTarget = (repoRoot: string, headRef: string) =>
 				reason: "HEAD is detached, so there is no branch to push",
 			});
 		}
-		if (headRefOfWorktreeBranch(currentBranch) !== headRef) {
+		if (headRefOfWorktreeBranch(currentBranch) !== pullRequest.headRef) {
 			return yield* new PushTargetUnresolvable({
 				repoRoot,
-				reason: `${currentBranch} is not the pull request's branch (${headRef}), so pushing it would overwrite ${headRef}`,
+				reason: `${currentBranch} is not the pull request's branch (${pullRequest.headRef}), so pushing it would overwrite ${pullRequest.headRef}`,
 			});
 		}
-		return { remote: "origin", branch: headRef } satisfies PushTarget;
+
+		const prHeadRef = yield* fetchPullRequestHead(repoRoot, pullRequest.number);
+		const prHeadSha = yield* resolveHeadSha(repoRoot, prHeadRef);
+		const originSha = yield* resolveOriginBranchSha(
+			repoRoot,
+			pullRequest.headRef,
+		);
+		if (originSha !== prHeadSha) {
+			const detail =
+				originSha === null
+					? `origin has no ${pullRequest.headRef} branch`
+					: `origin's ${pullRequest.headRef} is at ${originSha.slice(0, 7)}, not the pull request's head ${prHeadSha.slice(0, 7)}`;
+			return yield* new PushTargetUnresolvable({
+				repoRoot,
+				reason: `The pull request's branch isn't on origin (${detail}), e.g. because it comes from a fork, so nisi can't push to it`,
+			});
+		}
+		return {
+			remote: "origin",
+			branch: pullRequest.headRef,
+		} satisfies PushTarget;
 	});
 
 /** How many commits of each side {@link resolveUnpushedCommits} lists in full; the counts stay exact beyond it. */
@@ -398,12 +456,10 @@ export const resolveUnpushedCommits = (
 			});
 		}
 
-		const comparisonRef = `refs/nisi/pr/${pullRequest.number}/head`;
-		yield* git(repoRoot, [
-			"fetch",
-			"origin",
-			`+refs/pull/${pullRequest.number}/head:${comparisonRef}`,
-		]);
+		const comparisonRef = yield* fetchPullRequestHead(
+			repoRoot,
+			pullRequest.number,
+		);
 
 		const stdout = yield* git(repoRoot, [
 			"rev-list",

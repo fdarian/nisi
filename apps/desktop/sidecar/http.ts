@@ -2544,7 +2544,7 @@ export function attachRouter(
 					yield* streamToIterator(
 						pushBranch(request.input.repoRoot, {
 							rebase: request.input.rebase,
-							headRef: request.input.pullRequest.headRef,
+							pullRequest: request.input.pullRequest,
 						}),
 						mainContext,
 						request.signal,

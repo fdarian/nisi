@@ -100,7 +100,7 @@ export class NotOnPullRequestBranch extends Schema.TaggedError<NotOnPullRequestB
 	},
 ) {}
 
-/** There's no PR branch to push: `HEAD` is detached, or isn't the PR's branch. */
+/** There's no PR branch to push: `HEAD` is detached or isn't the PR's branch, or the PR's branch isn't on `origin` (a fork PR). */
 export class PushTargetUnresolvable extends Schema.TaggedError<PushTargetUnresolvable>()(
 	"PushTargetUnresolvable",
 	{ repoRoot: Schema.String, reason: Schema.String },
