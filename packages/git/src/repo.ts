@@ -10,7 +10,7 @@ import {
 	UnpushedCommitCountUnparseable,
 } from "./errors.ts";
 import { type GhResult, git, gitResult } from "./exec.ts";
-import { headRefOfWorktreeBranch } from "./worktree.ts";
+import { headRefOfWorktreeBranch } from "./worktree-branch.ts";
 
 /** Resolves the repository root for any path inside a git working tree. */
 export const resolveRepoRoot = (cwd: string) =>
