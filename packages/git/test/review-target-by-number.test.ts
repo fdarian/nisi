@@ -24,6 +24,7 @@ type RunnerResult =
 			readonly ok: true;
 			readonly defaultBranch: string;
 			readonly owner: string | null;
+			readonly repo: string | null;
 			readonly prNumber: number | null;
 			readonly prTitle: string | null;
 			readonly prAuthorLogin: string | null;
@@ -38,7 +39,11 @@ type RunnerResult =
 const runAgainstGhStub = async (
 	mode: "branch" | "byNumber",
 	repoRoot: string,
-	number?: number,
+	target: {
+		readonly owner: string;
+		readonly repo: string;
+		readonly number?: number;
+	},
 ): Promise<RunnerResult> => {
 	const proc = Bun.spawn(
 		[
@@ -47,7 +52,9 @@ const runAgainstGhStub = async (
 			RUNNER,
 			mode,
 			repoRoot,
-			number === undefined ? "" : String(number),
+			target.owner,
+			target.repo,
+			target.number === undefined ? "" : String(target.number),
 		],
 		{
 			env: { ...process.env, NISI_GH_BIN: GH_STUB },
@@ -77,7 +84,11 @@ describe("resolveReviewTargetForPullRequest", () => {
 			await repo.commit("base");
 
 			const target = await run(
-				resolveReviewTargetForPullRequest(repo.root, 42),
+				resolveReviewTargetForPullRequest(repo.root, {
+					owner: "acme",
+					repo: "widgets",
+					number: 42,
+				}),
 			);
 			expect(target.github).toBeNull();
 			expect(target.defaultBranch).toBe("main");
@@ -102,13 +113,46 @@ describe("resolveReviewTargetForPullRequest", () => {
 			// branch-based `gh pr view` could never resolve it.
 			await repo.git(["checkout", "-q", "-b", "nisi/pr-42/feature"]);
 
-			const result = await runAgainstGhStub("byNumber", repo.root, 42);
+			const result = await runAgainstGhStub("byNumber", repo.root, {
+				owner: "acme",
+				repo: "widgets",
+				number: 42,
+			});
 			expect(result.ok).toBe(true);
 			if (result.ok) {
 				expect(result.owner).toBe("acme");
 				expect(result.prNumber).toBe(42);
 				expect(result.prTitle).toBe("Add widgets");
 				expect(result.prAuthorLogin).toBe("fdarian");
+				expect(result.defaultBranch).toBe("main");
+			}
+		} finally {
+			await cleanupTestRepo(repo);
+		}
+	});
+
+	test("addresses the requested repo even when gh's cwd-resolved repo is a different one", async () => {
+		const repo = await makeTestRepo();
+		try {
+			await repo.write("a.ts", "hello\n");
+			await repo.commit("base");
+			await repo.git([
+				"remote",
+				"add",
+				"origin",
+				"https://github.com/acme/widgets.git",
+			]);
+
+			const result = await runAgainstGhStub("byNumber", repo.root, {
+				owner: "acme",
+				repo: "widgets",
+				number: 42,
+			});
+			expect(result.ok).toBe(true);
+			if (result.ok) {
+				expect(result.owner).toBe("acme");
+				expect(result.repo).toBe("widgets");
+				// The cwd-resolved repo's default branch is `trunk`.
 				expect(result.defaultBranch).toBe("main");
 			}
 		} finally {
@@ -129,7 +173,11 @@ describe("resolveReviewTargetForPullRequest", () => {
 			]);
 			await repo.git(["checkout", "-q", "-b", "nisi/pr-999/feature"]);
 
-			const result = await runAgainstGhStub("byNumber", repo.root, 999);
+			const result = await runAgainstGhStub("byNumber", repo.root, {
+				owner: "acme",
+				repo: "widgets",
+				number: 999,
+			});
 			expect(result.ok).toBe(false);
 			if (!result.ok) {
 				expect(result.tag).toBe("PullRequestNotFound");
@@ -151,10 +199,16 @@ describe("resolveReviewTargetForPullRequest", () => {
 				"https://github.com/acme/widgets.git",
 			]);
 
-			const result = await runAgainstGhStub("branch", repo.root);
+			const result = await runAgainstGhStub("branch", repo.root, {
+				owner: "",
+				repo: "",
+			});
 			expect(result.ok).toBe(true);
 			if (result.ok) {
 				expect(result.prNumber).toBe(7);
+				// Cwd-resolved: the stub's bare `gh repo view` answers as upstream.
+				expect(result.owner).toBe("upstream");
+				expect(result.repo).toBe("gadgets");
 				// `author: null` is a deleted account.
 				expect(result.prAuthorLogin).toBe("ghost");
 			}

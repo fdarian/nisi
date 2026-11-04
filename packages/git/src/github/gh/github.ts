@@ -25,9 +25,10 @@ import {
 	fetchPullRequestState,
 	fetchPullRequestStates,
 	fetchPullRequestsContainingCommit,
-	headRef,
 	pullRequest,
+	pullRequestByNumber,
 	repository,
+	repositoryByName,
 	searchPullRequests,
 } from "./pull-request.ts";
 import { searchRepositories } from "./repository-search.ts";
@@ -114,15 +115,17 @@ export const GhGitHub = {
 						Effect.tap(() => kick(kicks, input)),
 					),
 				repository: (repoRoot) => provide(repository(repoRoot)),
-				pullRequest: (repoRoot, number) =>
-					provide(pullRequest(repoRoot, number)),
+				repositoryByName: (repoRoot, owner, repo) =>
+					provide(repositoryByName(repoRoot, owner, repo)),
+				pullRequest: (repoRoot) => provide(pullRequest(repoRoot)),
+				pullRequestByNumber: (repoRoot, owner, repo, number) =>
+					provide(pullRequestByNumber(repoRoot, owner, repo, number)),
 				pullRequestState: (cwd, owner, repo, number) =>
 					provide(fetchPullRequestState(cwd, owner, repo, number)),
 				pullRequestStates: (cwd, owner, repo) =>
 					provide(fetchPullRequestStates(cwd, owner, repo)),
 				pullRequestsContainingCommit: (cwd, owner, repo, sha) =>
 					provide(fetchPullRequestsContainingCommit(cwd, owner, repo, sha)),
-				headRef: (repoRoot, number) => provide(headRef(repoRoot, number)),
 				search: (cwd, query, repos, state, closedWindow) =>
 					provide(searchPullRequests(cwd, query, repos, state, closedWindow)),
 				searchRepositories: (cwd, query) =>

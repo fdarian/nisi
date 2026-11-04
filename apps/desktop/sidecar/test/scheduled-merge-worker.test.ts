@@ -55,11 +55,12 @@ const unusedStream = () => Stream.die(new Error("unused mock GitHub method"));
 const mockGitHub = (overrides: Partial<GitHubShape>): GitHubShape => ({
 	listOpenPullRequests: unused,
 	repository: unused,
+	repositoryByName: unused,
 	pullRequest: unused,
+	pullRequestByNumber: unused,
 	pullRequestState: unused,
 	pullRequestStates: unused,
 	pullRequestsContainingCommit: unused,
-	headRef: unused,
 	search: unused,
 	searchRepositories: unused,
 	checks: () => Effect.succeed([{ name: "Tests", status: "passing" }]),

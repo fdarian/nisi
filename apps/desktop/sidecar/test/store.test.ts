@@ -96,7 +96,20 @@ const mockGitHub: GitHubShape = {
 	rerunActionsJob: () => Effect.die(new Error("unused mock GitHub method")),
 	repository: () =>
 		Effect.succeed({ owner: "acme", repo: "widgets", defaultBranch: "main" }),
+	repositoryByName: () =>
+		Effect.succeed({ owner: "acme", repo: "widgets", defaultBranch: "main" }),
 	pullRequest: () =>
+		Effect.succeed(
+			viewedPullRequest({
+				number: 42,
+				title: "Add widgets",
+				baseRef: "main",
+				headRef: "main",
+				isCrossRepository: false,
+				authorLogin: "fdarian",
+			}),
+		),
+	pullRequestByNumber: () =>
 		Effect.succeed(
 			viewedPullRequest({
 				number: 42,
@@ -111,7 +124,6 @@ const mockGitHub: GitHubShape = {
 	pullRequestStates: () => Effect.die(new Error("unused mock GitHub method")),
 	pullRequestsContainingCommit: () =>
 		Effect.die(new Error("unused mock GitHub method")),
-	headRef: () => Effect.succeed("main"),
 	search: () => Effect.die(new Error("unused mock GitHub method")),
 	searchRepositories: () => Effect.die(new Error("unused mock GitHub method")),
 	checks: () => Effect.die(new Error("unused mock GitHub method")),
@@ -1136,7 +1148,7 @@ describe("Store — a PR session after the PR is merged", () => {
 						Effect.provide(
 							makeTestLayer(dataDir, {
 								...mockGitHub,
-								pullRequest: () =>
+								pullRequestByNumber: () =>
 									Effect.succeed({
 										ref: {
 											number: 9,
@@ -1208,7 +1220,7 @@ describe("Store — a PR session after the PR is merged", () => {
 						Effect.provide(
 							makeTestLayer(dataDir, {
 								...mockGitHub,
-								pullRequest: () =>
+								pullRequestByNumber: () =>
 									Effect.succeed({
 										ref: {
 											number: 9,
@@ -1716,9 +1728,11 @@ describe("Store.openPullRequestSession — reuses open review sessions", () => {
 										Effect.die(
 											new Error("deep link must not fetch repository metadata"),
 										),
-									pullRequest: (root, number) =>
+									pullRequestByNumber: (root, owner, repo, number) =>
 										Effect.sync(() => {
 											expect(root).toBe(repoRoot);
+											expect(owner).toBe("acme");
+											expect(repo).toBe("widgets");
 											expect(number).toBe(42);
 											calls.pr++;
 											return viewedPullRequest({
@@ -1739,43 +1753,39 @@ describe("Store.openPullRequestSession — reuses open review sessions", () => {
 			});
 		});
 	}
-	for (const missingResult of ["failure", "null"] as const) {
-		test(`a missing PR (${missingResult}) surfaces PullRequestNotFound without a head-ref lookup`, async () => {
-			await withTestRepoAndDataDir(async (repoRoot, dataDir) => {
-				const failure = new PullRequestNotFound({
-					repoRoot,
-					number: 42,
-					reason: "PR no longer exists",
-				});
-				const result = await Effect.runPromise(
-					Effect.gen(function* () {
-						const store = yield* Store;
-						const settings = yield* SettingsStore;
-						yield* settings.setRepoPath("acme", "widgets", repoRoot);
-						return yield* store.openPullRequestSession({
-							owner: "acme",
-							repo: "widgets",
-							number: 42,
-						});
-					}).pipe(
-						Effect.result,
-						Effect.provide(
-							makeTestLayer(dataDir, {
-								...mockGitHub,
-								pullRequest: () =>
-									missingResult === "failure" ? failure : Effect.succeed(null),
-								headRef: () => Effect.die(new Error("must not fetch head")),
-							}),
-						),
-					),
-				);
-				expect(Result.isFailure(result)).toBe(true);
-				if (!Result.isFailure(result)) return;
-				expect(result.failure._tag).toBe("PullRequestNotFound");
-				if (missingResult === "failure") expect(result.failure).toBe(failure);
+	test("a missing PR surfaces PullRequestNotFound", async () => {
+		await withTestRepoAndDataDir(async (repoRoot, dataDir) => {
+			const failure = new PullRequestNotFound({
+				repoRoot,
+				number: 42,
+				reason: "PR no longer exists",
 			});
+			const result = await Effect.runPromise(
+				Effect.gen(function* () {
+					const store = yield* Store;
+					const settings = yield* SettingsStore;
+					yield* settings.setRepoPath("acme", "widgets", repoRoot);
+					return yield* store.openPullRequestSession({
+						owner: "acme",
+						repo: "widgets",
+						number: 42,
+					});
+				}).pipe(
+					Effect.result,
+					Effect.provide(
+						makeTestLayer(dataDir, {
+							...mockGitHub,
+							pullRequestByNumber: () => failure,
+						}),
+					),
+				),
+			);
+			expect(Result.isFailure(result)).toBe(true);
+			if (!Result.isFailure(result)) return;
+			expect(result.failure._tag).toBe("PullRequestNotFound");
+			expect(result.failure).toBe(failure);
 		});
-	}
+	});
 
 	test("returns an existing PR in another root by case-insensitive identity without GitHub calls", async () => {
 		await withTestRepoAndDataDir(async (repoRoot, dataDir) => {
@@ -1811,8 +1821,8 @@ describe("Store.openPullRequestSession — reuses open review sessions", () => {
 					Effect.provide(
 						makeTestLayer(dataDir, {
 							...mockGitHub,
-							pullRequest: () => Effect.die(new Error("must not fetch PR")),
-							headRef: () => Effect.die(new Error("must not fetch head")),
+							pullRequestByNumber: () =>
+								Effect.die(new Error("must not fetch PR")),
 						}),
 					),
 				),
@@ -1929,7 +1939,7 @@ describe("Store.openPullRequestSession — reuses open review sessions", () => {
 										Effect.die(
 											new Error("known PR must not look up repository again"),
 										),
-									pullRequest: () =>
+									pullRequestByNumber: () =>
 										Effect.sync(() => {
 											reads.pr++;
 											return viewedPullRequest({
@@ -1941,8 +1951,6 @@ describe("Store.openPullRequestSession — reuses open review sessions", () => {
 												authorLogin: "fdarian",
 											});
 										}),
-									headRef: () =>
-										Effect.die(new Error("must reuse the fetched PR head")),
 								}),
 							),
 						),
