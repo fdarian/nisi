@@ -127,7 +127,7 @@ const FILE_VIEWER_MAX_BYTES = 2 * 1024 * 1024;
  * `sessions.open`'s target selector — mirrors `packages/sidecar-api`'s
  * `OpenSessionTarget`, plus one variant that never crosses the wire:
  * `"specificPullRequest"` is constructed only by `openPullRequestSession`
- * below, for a PR the caller already identified by number rather than one
+ * below, for a PR the caller already identified by `owner/repo#number` rather than one
  * `sessions.open`'s own contract input can ask for — see
  * `resolveSessionTarget`'s doc comment for why it needs its own resolution
  * path instead of reusing `"pr"`.
@@ -135,7 +135,12 @@ const FILE_VIEWER_MAX_BYTES = 2 * 1024 * 1024;
 export type OpenSessionTarget =
 	| { readonly kind: "auto" }
 	| { readonly kind: "pr" }
-	| { readonly kind: "specificPullRequest"; readonly number: number }
+	| {
+			readonly kind: "specificPullRequest";
+			readonly owner: string;
+			readonly repo: string;
+			readonly number: number;
+	  }
 	| {
 			readonly kind: "branch";
 			readonly baseRef?: string;
@@ -300,13 +305,15 @@ const toWireSession = (session: ReviewSession): Session => ({
  * - `"pr"` requires a PR *for the current branch*: `resolveReviewTarget`
  *   finding none fails with `NoPullRequest` rather than silently degrading
  *   to a branch diff the caller didn't ask for.
- * - `"specificPullRequest"` requires a PR *by number*, regardless of what's
+ * - `"specificPullRequest"` requires a PR *by `owner/repo#number`*, regardless of what's
  *   checked out — what `openPullRequestSession` below uses once it already
  *   knows which PR it's opening. Unlike `"pr"`, this doesn't derive the PR
  *   from the current branch at all: `openPullRequestWorktree` checks a PR
  *   out into a nisi-local branch (`nisi/pr-<n>/<headRef>`) that doesn't
  *   exist on `origin`, so `gh pr view` with no arguments could never
- *   resolve it. `resolveReviewTargetForPullRequest` fails outright
+ *   resolve it. It is also addressed with `--repo`: in a fork checkout whose
+ *   `gh` default is the upstream, a bare number would resolve against the
+ *   wrong repository. `resolveReviewTargetForPullRequest` fails outright
  *   (`PullRequestNotFound`) rather than degrading when the number `gh`
  *   can't resolve, since the caller explicitly picked this PR — that
  *   failure must surface, not disappear into a no-PR session.
@@ -352,7 +359,11 @@ const resolveSessionTarget = (repoRoot: string, target: OpenSessionTarget) =>
 
 		if (target.kind === "specificPullRequest") {
 			const [reviewTarget, currentBranch] = yield* Effect.all([
-				resolveReviewTargetForPullRequest(repoRoot, target.number),
+				resolveReviewTargetForPullRequest(repoRoot, {
+					owner: target.owner,
+					repo: target.repo,
+					number: target.number,
+				}),
 				resolveCurrentBranch(repoRoot),
 			]);
 			const githubPr = reviewTarget.github?.pr ?? null;
@@ -796,11 +807,13 @@ export class Store extends Context.Service<Store>()("Store", {
 							)
 						: yield* Effect.gen(function* () {
 								const github = yield* GitHub;
-								const pr = yield* github.pullRequest(
+								const pr = yield* github.pullRequestByNumber(
 									requested.repoRoot,
+									requested.owner,
+									requested.repo,
 									requested.number,
 								);
-								if (pr === null || pr.ref.number !== requested.number)
+								if (pr.ref.number !== requested.number)
 									return yield* new PullRequestNotFound({
 										repoRoot: requested.repoRoot,
 										number: requested.number,
@@ -1092,7 +1105,12 @@ export class Store extends Context.Service<Store>()("Store", {
 				);
 				const viewed =
 					cached === undefined
-						? yield* github.pullRequest(repoRoot, input.number)
+						? yield* github.pullRequestByNumber(
+								repoRoot,
+								input.owner,
+								input.repo,
+								input.number,
+							)
 						: undefined;
 				const pr =
 					cached === undefined
@@ -1129,6 +1147,8 @@ export class Store extends Context.Service<Store>()("Store", {
 				);
 				const target = {
 					kind: "specificPullRequest" as const,
+					owner: input.owner,
+					repo: input.repo,
 					number: input.number,
 				};
 				if (reused !== null) {

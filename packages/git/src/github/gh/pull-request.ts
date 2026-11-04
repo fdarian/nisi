@@ -54,14 +54,6 @@ const decodePrView = (command: string, raw: string) =>
 		catch: (cause) => new GhOutputDecodeError({ command, raw, cause }),
 	});
 
-const PrHeadRefView = Schema.Struct({ headRefName: Schema.String });
-
-const decodePrHeadRefView = (command: string, raw: string) =>
-	Effect.try({
-		try: () => Schema.decodeUnknownSync(PrHeadRefView)(JSON.parse(raw)),
-		catch: (cause) => new GhOutputDecodeError({ command, raw, cause }),
-	});
-
 /**
  * `gh` answering "there's no GitHub repository here" — an unknown host, a
  * repository that doesn't exist, or one this account can't see. Matched by
@@ -485,8 +477,9 @@ export const searchPullRequests = (
 		);
 	});
 
-export const repository = (
+const viewRepository = (
 	repoRoot: string,
+	args: ReadonlyArray<string>,
 ): Effect.Effect<
 	RepositoryIdentity | null,
 	GitHubUnreachable | GhOutputDecodeError | GitCommandError,
@@ -496,6 +489,7 @@ export const repository = (
 		const result = yield* ghResult(repoRoot, [
 			"repo",
 			"view",
+			...args,
 			"--json",
 			"owner,name,defaultBranchRef",
 		]).pipe(
@@ -523,13 +517,61 @@ export const repository = (
 		};
 	});
 
-export const pullRequest = (repoRoot: string, number?: number) =>
+/** The repository `gh` resolves from `repoRoot` — for a fork with a `gh repo set-default`, that is the upstream. */
+export const repository = (repoRoot: string) => viewRepository(repoRoot, []);
+
+/** A named repository, ignoring which one `repoRoot` resolves to. `repoRoot` only picks the `gh` config. */
+export const repositoryByName = (
+	repoRoot: string,
+	owner: string,
+	repo: string,
+) => viewRepository(repoRoot, [`${owner}/${repo}`]);
+
+/** The PR of the branch checked out in `repoRoot`, or `null` when it has none. */
+export const pullRequest = (repoRoot: string) =>
 	Effect.gen(function* () {
-		const args =
-			number === undefined
-				? ["pr", "view", "--json", PR_VIEW_JSON_FIELDS]
-				: ["pr", "view", String(number), "--json", PR_VIEW_JSON_FIELDS];
-		const result = yield* ghResult(repoRoot, args).pipe(
+		const result = yield* ghResult(repoRoot, [
+			"pr",
+			"view",
+			"--json",
+			PR_VIEW_JSON_FIELDS,
+		]).pipe(
+			Effect.catchTag(
+				"GitCommandError",
+				(cause) =>
+					new GitHubUnreachable({
+						repoRoot,
+						reason: `gh could not be run: ${cause.stderr}`,
+					}),
+			),
+		);
+		if (result.exitCode !== 0) return null;
+		return toViewedPullRequest(
+			yield* decodePrView("gh pr view", result.stdout),
+		);
+	});
+
+/**
+ * One PR addressed with `--repo`, so a fork checkout whose `gh` default
+ * points at upstream still reads the PR the caller meant. `repoRoot` only
+ * picks the `gh` config.
+ */
+export const pullRequestByNumber = (
+	repoRoot: string,
+	owner: string,
+	repo: string,
+	number: number,
+) =>
+	Effect.gen(function* () {
+		const result = yield* ghResult(repoRoot, [
+			"pr",
+			"view",
+			String(number),
+			"--repo",
+			`${owner}/${repo}`,
+			"--json",
+			PR_VIEW_JSON_FIELDS,
+		]).pipe(
 			Effect.catchTag(
 				"GitCommandError",
 				(cause) =>
@@ -540,7 +582,6 @@ export const pullRequest = (repoRoot: string, number?: number) =>
 			),
 		);
 		if (result.exitCode !== 0) {
-			if (number === undefined) return null;
 			return yield* new PullRequestNotFound({
 				repoRoot,
 				number,
@@ -550,25 +591,6 @@ export const pullRequest = (repoRoot: string, number?: number) =>
 		return toViewedPullRequest(
 			yield* decodePrView("gh pr view", result.stdout),
 		);
-	});
-
-export const headRef = (repoRoot: string, number: number) =>
-	Effect.gen(function* () {
-		const result = yield* ghResult(repoRoot, [
-			"pr",
-			"view",
-			String(number),
-			"--json",
-			"headRefName",
-		]);
-		if (result.exitCode !== 0)
-			return yield* new PullRequestNotFound({
-				repoRoot,
-				number,
-				reason: result.stderr.trim(),
-			});
-		return (yield* decodePrHeadRefView("gh pr view", result.stdout))
-			.headRefName;
 	});
 
 const PrStateView = Schema.Struct({

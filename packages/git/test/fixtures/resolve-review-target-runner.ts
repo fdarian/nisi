@@ -16,16 +16,25 @@ import {
 } from "../../src/pull-request.ts";
 import { GitHubTestLayer } from "./github-layer.ts";
 
-const [mode, repoRoot, numberArg] = process.argv.slice(2);
-if (mode === undefined || repoRoot === undefined) {
+const [mode, repoRoot, ownerArg, repoArg, numberArg] = process.argv.slice(2);
+if (
+	mode === undefined ||
+	repoRoot === undefined ||
+	ownerArg === undefined ||
+	repoArg === undefined
+) {
 	throw new Error(
-		"usage: resolve-review-target-runner.ts <mode> <repoRoot> [number]",
+		"usage: resolve-review-target-runner.ts <mode> <repoRoot> <owner> <repo> [number]",
 	);
 }
 
 const target =
 	mode === "byNumber"
-		? resolveReviewTargetForPullRequest(repoRoot, Number(numberArg))
+		? resolveReviewTargetForPullRequest(repoRoot, {
+				owner: ownerArg,
+				repo: repoArg,
+				number: Number(numberArg),
+			})
 		: resolveReviewTarget(repoRoot);
 
 const exit = await Effect.runPromise(
@@ -37,6 +46,7 @@ const result = Exit.isSuccess(exit)
 			ok: true as const,
 			defaultBranch: exit.value.defaultBranch,
 			owner: exit.value.github?.owner ?? null,
+			repo: exit.value.github?.repo ?? null,
 			prNumber: exit.value.github?.pr?.number ?? null,
 			prTitle: exit.value.github?.pr?.title ?? null,
 			prAuthorLogin: exit.value.github?.pr?.authorLogin ?? null,

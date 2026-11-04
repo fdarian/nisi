@@ -101,11 +101,28 @@ export type GitHubShape = {
 		RepositoryIdentity | null,
 		GitHubUnreachable | GhOutputDecodeError | GitCommandError
 	>;
+	repositoryByName: (
+		repoRoot: string,
+		owner: string,
+		repo: string,
+	) => Effect.Effect<
+		RepositoryIdentity | null,
+		GitHubUnreachable | GhOutputDecodeError | GitCommandError
+	>;
+	/** The PR of the branch checked out in `repoRoot`, as `gh` resolves it — `null` when there is none. */
 	pullRequest: (
 		repoRoot: string,
-		number?: number,
 	) => Effect.Effect<
 		ViewedPullRequest | null,
+		GhOutputDecodeError | GitHubUnreachable
+	>;
+	pullRequestByNumber: (
+		repoRoot: string,
+		owner: string,
+		repo: string,
+		number: number,
+	) => Effect.Effect<
+		ViewedPullRequest,
 		PullRequestNotFound | GhOutputDecodeError | GitHubUnreachable
 	>;
 	pullRequestState: (
@@ -138,13 +155,6 @@ export type GitHubShape = {
 	) => Effect.Effect<
 		ReadonlyArray<CommitPullRequest>,
 		CommitPullRequestsError | GitCommandError
-	>;
-	headRef: (
-		repoRoot: string,
-		number: number,
-	) => Effect.Effect<
-		string,
-		PullRequestNotFound | GhOutputDecodeError | GitCommandError
 	>;
 	search: (
 		cwd: string,
@@ -212,6 +222,8 @@ export type GitHubShape = {
 	) => Effect.Effect<void, PullRequestStackCreateError | GitCommandError>;
 	mergeability: (
 		repoRoot: string,
+		owner: string,
+		repo: string,
 		number: number,
 	) => Effect.Effect<
 		PullRequestMergeability,

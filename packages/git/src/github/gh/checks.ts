@@ -314,6 +314,8 @@ export const fetchPullRequestChecksSnapshot = (
 						"pr",
 						"view",
 						String(input.number),
+						"--repo",
+						`${input.owner}/${input.repo}`,
 						"--json",
 						"statusCheckRollup,headRefOid",
 					],

@@ -1,6 +1,11 @@
 import { Effect, Result } from "effect";
+import type {
+	GhOutputDecodeError,
+	GitHubUnreachable,
+	PullRequestNotFound,
+} from "./errors.ts";
 import { gitResult } from "./exec.ts";
-import { GitHub } from "./github/github.ts";
+import { GitHub, type GitHubShape } from "./github/github.ts";
 import { resolveLocalDefaultBranch } from "./repo.ts";
 
 export type PullRequestRef = {
@@ -83,16 +88,23 @@ const localOnlyTarget = (repoRoot: string) =>
 		),
 	);
 
-const resolveTarget = (repoRoot: string, number?: number) =>
+const resolveTarget = (
+	repoRoot: string,
+	lookups: (github: GitHubShape) => {
+		readonly repository: ReturnType<GitHubShape["repository"]>;
+		readonly pullRequest: Effect.Effect<
+			ViewedPullRequest | null,
+			PullRequestNotFound | GhOutputDecodeError | GitHubUnreachable
+		>;
+	},
+) =>
 	Effect.gen(function* () {
 		if (!(yield* hasAnyRemote(repoRoot)))
 			return yield* localOnlyTarget(repoRoot);
 		const github = yield* GitHub;
+		const effects = lookups(github);
 		const results = yield* Effect.all(
-			[
-				github.repository(repoRoot),
-				Effect.result(github.pullRequest(repoRoot, number)),
-			],
+			[effects.repository, Effect.result(effects.pullRequest)],
 			{ concurrency: "unbounded" },
 		);
 		const identity = results[0];
@@ -115,9 +127,28 @@ const resolveTarget = (repoRoot: string, number?: number) =>
 		} satisfies ReviewTarget;
 	});
 
+/** Detects the repository and PR from the checkout, as `gh` resolves them. */
 export const resolveReviewTarget = (repoRoot: string) =>
-	resolveTarget(repoRoot);
+	resolveTarget(repoRoot, (github) => ({
+		repository: github.repository(repoRoot),
+		pullRequest: github.pullRequest(repoRoot),
+	}));
+
+/** Addresses `owner/repo#number` explicitly, so a fork checkout's `gh` default (the upstream) can't redirect it. */
 export const resolveReviewTargetForPullRequest = (
 	repoRoot: string,
-	number: number,
-) => resolveTarget(repoRoot, number);
+	target: {
+		readonly owner: string;
+		readonly repo: string;
+		readonly number: number;
+	},
+) =>
+	resolveTarget(repoRoot, (github) => ({
+		repository: github.repositoryByName(repoRoot, target.owner, target.repo),
+		pullRequest: github.pullRequestByNumber(
+			repoRoot,
+			target.owner,
+			target.repo,
+			target.number,
+		),
+	}));

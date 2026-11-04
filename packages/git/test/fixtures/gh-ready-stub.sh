@@ -6,7 +6,8 @@
 # selects which outcome the stub returns.
 set -euo pipefail
 
-if [[ "$1" == "pr" && "$2" == "ready" ]]; then
+# The PR is addressed with `--repo acme/widgets`, never left to the cwd's gh default.
+if [[ "$1" == "pr" && "$2" == "ready" && "${4:-}" == "--repo" && "${5:-}" == "acme/widgets" ]]; then
 	case "$3" in
 	42)
 		exit 0
