@@ -4,9 +4,9 @@ set -euo pipefail
 
 if [[ "$1" == "pr" ]]; then
 	if [[ -n "${MATCH_HEAD_COMMIT:-}" ]]; then
-		[[ "$*" == "pr merge 42 --squash --match-head-commit ${MATCH_HEAD_COMMIT}" ]]
+		[[ "$*" == "pr merge 42 --repo acme/widgets --squash --match-head-commit ${MATCH_HEAD_COMMIT}" ]]
 	else
-		[[ "$*" == "pr merge 42 --squash" ]]
+		[[ "$*" == "pr merge 42 --repo acme/widgets --squash" ]]
 	fi
 	exit 0
 fi

@@ -222,6 +222,8 @@ export type GitHubShape = {
 	) => Effect.Effect<void, PullRequestStackCreateError | GitCommandError>;
 	mergeability: (
 		repoRoot: string,
+		owner: string,
+		repo: string,
 		number: number,
 	) => Effect.Effect<
 		PullRequestMergeability,

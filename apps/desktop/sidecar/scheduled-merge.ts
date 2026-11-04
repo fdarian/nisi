@@ -236,7 +236,12 @@ export class ScheduledMerges extends Context.Service<ScheduledMerges>()(
 						);
 						return;
 					}
-					const status = yield* github.mergeability(repoRoot, input.number);
+					const status = yield* github.mergeability(
+						repoRoot,
+						input.owner,
+						input.repo,
+						input.number,
+					);
 					if (status.state !== "OPEN") {
 						const decision = decideScheduledMerge(status, []);
 						if (decision.outcome === "cancelled")
@@ -326,7 +331,12 @@ export class ScheduledMerges extends Context.Service<ScheduledMerges>()(
 								const repoRoot =
 									yield* sessions.resolveScheduledMergeRepoRoot(key);
 								if (repoRoot === null) return;
-								const status = yield* github.mergeability(repoRoot, key.number);
+								const status = yield* github.mergeability(
+									repoRoot,
+									key.owner,
+									key.repo,
+									key.number,
+								);
 								if (status.state === "MERGED")
 									return yield* new AutoMergeAlreadyRan({});
 							}),

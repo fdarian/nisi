@@ -1,5 +1,5 @@
 #!/bin/sh
-if [ "$1" = "pr" ] && [ "$2" = "view" ] && [ "$5" = "statusCheckRollup,headRefOid" ]; then
+if [ "$1" = "pr" ] && [ "$2" = "view" ] && [ "$4" = "--repo" ] && [ "$5" = "acme/widgets" ] && [ "$6" = "--json" ] && [ "$7" = "statusCheckRollup,headRefOid" ]; then
 	printf '%s\n' '{"headRefOid":"abc123","statusCheckRollup":[]}'
 elif [ "$1" = "api" ] && [ "$2" = 'repos/acme/widgets/actions/runs?status=action_required&per_page=100' ]; then
 	if [ "$NISI_TEST_TRUNCATED" = "1" ]; then

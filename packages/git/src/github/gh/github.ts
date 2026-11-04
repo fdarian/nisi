@@ -72,7 +72,12 @@ export const GhGitHub = {
 					Effect.all(
 						[
 							provide(
-								fetchPullRequestMergeability(input.repoRoot, input.number),
+								fetchPullRequestMergeability(
+									input.repoRoot,
+									input.owner,
+									input.repo,
+									input.number,
+								),
 							),
 							provide(
 								fetchRepoMergeMethods(input.repoRoot, input.owner, input.repo),
@@ -157,12 +162,19 @@ export const GhGitHub = {
 							),
 						),
 					),
-				mergeability: (repoRoot, number) =>
-					provide(fetchPullRequestMergeability(repoRoot, number)),
+				mergeability: (repoRoot, owner, repo, number) =>
+					provide(fetchPullRequestMergeability(repoRoot, owner, repo, number)),
 				mergeMethods: (repoRoot, owner, repo) =>
 					provide(fetchRepoMergeMethods(repoRoot, owner, repo)),
 				merge: (repoRoot, owner, repo, number, method, matchHeadCommit) =>
-					mergePullRequest(repoRoot, number, method, matchHeadCommit).pipe(
+					mergePullRequest(
+						repoRoot,
+						owner,
+						repo,
+						number,
+						method,
+						matchHeadCommit,
+					).pipe(
 						provide,
 						Effect.tap(() => kick(kicks, { owner, repo, number })),
 					),
@@ -179,7 +191,7 @@ export const GhGitHub = {
 						Effect.tap(() => kick(kicks, { owner, repo, number })),
 					),
 				markReady: (repoRoot, owner, repo, number) =>
-					markPullRequestReady(repoRoot, number).pipe(
+					markPullRequestReady(repoRoot, owner, repo, number).pipe(
 						provide,
 						Effect.tap(() => kick(kicks, { owner, repo, number })),
 					),

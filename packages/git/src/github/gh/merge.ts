@@ -55,7 +55,7 @@ const isMergeStatusPermissionFailure = (stderr: string): boolean =>
 	MERGE_STATUS_PERMISSION_MARKERS.some((marker) => stderr.includes(marker));
 
 /**
- * `gh pr view <number> --json state,mergeable,mergeStateStatus,isDraft,headRefOid,baseRefOid,baseRefName` —
+ * `gh pr view <number> --repo <owner>/<repo> --json state,mergeable,mergeStateStatus,isDraft,headRefOid,baseRefOid,baseRefName` —
  * mergeability alone (plus `baseRefName`, which changes when GitHub retargets the PR), distinct from `pull-request.ts`'s `PrView` fields
  * (`title`/`baseRefName`/`headRefName`) since a caller polling this while
  * `mergeable` is still `"UNKNOWN"` (GitHub computes it asynchronously) has
@@ -73,6 +73,8 @@ const isMergeStatusPermissionFailure = (stderr: string): boolean =>
  */
 export const fetchPullRequestMergeability = (
 	repoRoot: string,
+	owner: string,
+	repo: string,
 	number: number,
 ): Effect.Effect<
 	PullRequestMergeability,
@@ -84,6 +86,8 @@ export const fetchPullRequestMergeability = (
 			"pr",
 			"view",
 			String(number),
+			"--repo",
+			`${owner}/${repo}`,
 			"--json",
 			"state,mergeable,mergeStateStatus,isDraft,headRefOid,baseRefOid,baseRefName",
 		]);
@@ -229,7 +233,7 @@ const isAsyncMergeNotFoundFailure = (stderr: string): boolean =>
 	/\bHTTP 404\b/i.test(stderr);
 
 /**
- * `gh pr merge <number> --merge|--squash|--rebase`. Failure is classified in
+ * `gh pr merge <number> --repo <owner>/<repo> --merge|--squash|--rebase`. Failure is classified in
  * the same auth → not-found → not-mergeable → generic order every other
  * multi-outcome `gh` caller here uses, ending in `GhMergeFailed` as the
  * catch-all so a merge attempt never silently no-ops on an unrecognized
@@ -237,6 +241,8 @@ const isAsyncMergeNotFoundFailure = (stderr: string): boolean =>
  */
 export const mergePullRequest = (
 	repoRoot: string,
+	owner: string,
+	repo: string,
 	number: number,
 	method: MergeMethod,
 	matchHeadCommit?: string,
@@ -245,7 +251,7 @@ export const mergePullRequest = (
 	PullRequestMergeError | GitCommandError,
 	ChildProcessSpawner.ChildProcessSpawner
 > =>
-	runMergeCommand(repoRoot, number, [
+	runMergeCommand(repoRoot, owner, repo, number, [
 		MERGE_METHOD_FLAG[method],
 		...(matchHeadCommit === undefined
 			? []
@@ -254,6 +260,8 @@ export const mergePullRequest = (
 
 const runMergeCommand = (
 	repoRoot: string,
+	owner: string,
+	repo: string,
 	number: number,
 	flags: readonly string[],
 ): Effect.Effect<
@@ -266,6 +274,8 @@ const runMergeCommand = (
 			"pr",
 			"merge",
 			String(number),
+			"--repo",
+			`${owner}/${repo}`,
 			...flags,
 		]);
 
@@ -489,7 +499,7 @@ export const mergeStackPullRequest = (
 };
 
 /**
- * `gh pr ready <number>` — flips a draft PR to ready for review. Failure is
+ * `gh pr ready <number> --repo <owner>/<repo>` — flips a draft PR to ready for review. Failure is
  * classified auth → not-found → generic, the same order `mergePullRequest`
  * uses minus the not-mergeable case (readiness doesn't depend on
  * mergeability), ending in `GhPullRequestReadyFailed` as the catch-all so a
@@ -497,6 +507,8 @@ export const mergeStackPullRequest = (
  */
 export const markPullRequestReady = (
 	repoRoot: string,
+	owner: string,
+	repo: string,
 	number: number,
 ): Effect.Effect<
 	void,
@@ -504,7 +516,13 @@ export const markPullRequestReady = (
 	ChildProcessSpawner.ChildProcessSpawner
 > =>
 	Effect.gen(function* () {
-		const result = yield* ghResult(repoRoot, ["pr", "ready", String(number)]);
+		const result = yield* ghResult(repoRoot, [
+			"pr",
+			"ready",
+			String(number),
+			"--repo",
+			`${owner}/${repo}`,
+		]);
 
 		if (result.exitCode === 0) return;
 

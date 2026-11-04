@@ -510,7 +510,7 @@ describe("scheduled merge worker", () => {
 	test("a failed fetch retains its schedule without killing immediate checks", async () => {
 		await run(
 			{
-				mergeability: (_root, number) =>
+				mergeability: (_root, _owner, _repo, number) =>
 					number === 42
 						? new GhRateLimited({ reason: "Try later" })
 						: Effect.succeed(clean),
