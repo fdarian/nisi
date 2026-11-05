@@ -114,3 +114,7 @@ for why review's tables and the walkthrough store's tables share one `app.db` fi
   (see `test/fixtures.ts` for overriding `NISI_DATA_DIR` per test without touching `process.env` —
   bun test doesn't strictly serialize independent `test()` bodies, so a shared env mutation is a
   real race, not just a style preference).
+
+## Notes
+
+- [Reverted lines invisible after review](./.agents/notes/reverted-lines-invisible-after-review.md) — a line added, reviewed, then reverted to match base can't render in the `reviewedBaseline → head` diff; read before touching `synthesizeReviewedBaseline`

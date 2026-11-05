@@ -1,11 +1,4 @@
----
-type: Measurement
-title: Electrobun (CEF and WebKit) evaluated against Electron
-description: Why the desktop shell stays on Electron — startup, snapshot and sustained memory, and size of Electrobun 2.0.2 with CEF or WKWebView, measured against Electron 44.
-tags: [desktop, electron, electrobun, performance, rejected-alternative]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-10-19T07:00:00Z }
-stale_after: 2027-04-19
----
+Why the desktop shell stays on Electron: startup, memory and size of Electrobun 2.0.2 (CEF and WKWebView variants) measured against Electron 44, October 2026. Re-measure before relying on it after 2027-04.
 
 In October 2026 a second desktop shell was built on Electrobun 2.0.2 and measured against
 Electron 44.7.2. It ran in two variants:
@@ -24,12 +17,12 @@ variant), and the last commit that contains everything is `0d2d7d0`.
   memory, and its page stalls whenever the window is covered, which makes it unworkable for nisi
   as built.
 
-# Results
+## Results
 
 All figures are physical footprint (`phys_footprint`) with the sidecar excluded. The sidecar is
 identical across shells, at about 115 MiB at rest and up to about 190 MiB under load.
 
-## Size
+### Size
 
 |                  | Electron     | Electrobun CEF     | Electrobun WebKit |
 | ---------------- | ------------ | ------------------ | ----------------- |
@@ -39,7 +32,7 @@ identical across shells, at about 115 MiB at rest and up to about 190 MiB under 
 
 All three bundles include about 158 MB of compiled `sidecar` and `nisi-cli` binaries.
 
-## Cold start
+### Cold start
 
 These are medians of 14 cold runs per shell, alternating between the shells, with deep-link mode
 opening fdarian/nisi#173. Each time is measured from the moment the CLI launches the app.
@@ -56,7 +49,7 @@ opening fdarian/nisi#173. Each time is measured from the moment the CLI launches
 - **WebKit had a single run.** It painted the diff at 2298 ms, which is not comparable with the
   medians above.
 
-## Snapshot memory (5 s after the diff paints)
+### Snapshot memory (5 s after the diff paints)
 
 |              | Electron | Electrobun CEF | Electrobun WebKit (1 run) |
 | ------------ | -------- | -------------- | ------------------------- |
@@ -67,7 +60,7 @@ opening fdarian/nisi#173. Each time is measured from the moment the CLI launches
 
 WebKit's lighter GPU and main processes were outweighed by its WebContent process.
 
-## Sustained memory (soak)
+### Sustained memory (soak)
 
 The soak (`measure-launch --soak`) samples memory every 2 s over about 12 minutes of scripted use,
 driven from inside the frontend:
@@ -110,11 +103,10 @@ The suspension also matters beyond measurement. A WebKit nisi would stop loading
 opened behind other windows. Measuring WebKit's running memory would need the window kept visible
 and in front for the whole run, which wasn't done.
 
-# Method and caveats
+## Method and caveats
 
 - **Tooling.** Measurements used `apps/desktop/scripts/measure-launch`, with `--cold --memory
-  --deeplink` and `--soak`; see [launch-timing.md](launch-timing.md). During the experiment it
-  also took `--shell electron|electrobun|electrobun-webkit`.
+  --deeplink` and `--soak`; see [launch-timing.md](./launch-timing.md).
 - **Process attribution.** Memory counted every process under the bundle's `Contents/`. For
   WebKit, it also counted the WebContent, Networking and GPU XPC services that macOS charges to
   the app (`responsibility_get_pid_responsible_for_pid`). That method also picks up small system
@@ -125,7 +117,7 @@ and in front for the whole run, which wasn't done.
 - **Electrobun stable builds self-extract** on their first launch, which takes 10–25 s.
   Measurements ran against the extracted app.
 
-# Switching costs found (beyond the numbers)
+## Switching costs found (beyond the numbers)
 
 - **The CEF profile ignores `NISI_DATA_DIR`.** It lives under
   `~/Library/Application Support/<identifier>/stable/CEF`, so dev and prod would share one
@@ -142,7 +134,7 @@ and in front for the whole run, which wasn't done.
   a `postBuild` hook to put the binaries in `Contents/MacOS`, because a `postWrap` copy is
   discarded.
 
-# What could reopen this
+## What could reopen this
 
 Electrobun's main process is Bun, the same runtime as the sidecar. Hosting the sidecar in-process
 would remove a process (about 115 MiB) and about 1.1 s of sidecar boot from cold start. It would

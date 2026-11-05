@@ -72,10 +72,6 @@ CLI yourself first — nisi doesn't install the agent's own credentials. The fir
 slow (roughly 13–28s) while nisi installs a pinned copy of it; every run after that is warm. See
 `apps/desktop/sidecar/harness/AGENTS.md`.
 
-## Deeper notes
-
-- [knowledge/](knowledge/index.md) — measurements, testing protocol, and open decisions that fit no single file.
-
 ## Gotchas
 
 - Add deps with `pnpm add <pkg>` (run from inside the package directory) — never hand-edit
@@ -96,9 +92,14 @@ slow (roughly 13–28s) while nisi installs a pinned copy of it; every run after
   `patch-commit`. Current patches:
   - `@ai-sdk/harness*` (four, across the adapters and `@ai-sdk/harness` itself — `@ai-sdk/harness-pi`
     carries no patch; upstream's own model resolver is provider-aware now) — see
-    [knowledge/compiled-binary-differences.md](knowledge/compiled-binary-differences.md).
+    [compiled-binary-differences](./.agents/notes/compiled-binary-differences.md).
   - `@pierre/diffs` — `CodeView` teardown, pending-scroll-target, and sticky-header fixes; see
-    [teardown](knowledge/codeview-teardown-leak-patch.md),
-    [scroll target](knowledge/codeview-stale-pending-scroll-target-patch.md), and
-    [sticky jitter](knowledge/deferred-frontend-perf-work.md).
+    [teardown](apps/desktop/.agents/notes/codeview-teardown-leak-patch.md),
+    [scroll target](apps/desktop/.agents/notes/codeview-stale-pending-scroll-target-patch.md), and
+    [sticky jitter](apps/desktop/.agents/notes/deferred-frontend-perf-work.md).
 - `apps/desktop` aliases `#/*` → `src/*` (not `@/*`); the `packages/*` use relative imports.
+
+## Notes
+
+- [What breaks only in the compiled binary](./.agents/notes/compiled-binary-differences.md) — the five ways the packaged sidecar differs from `bun run`, and what must be verified against the `.app`; read before touching native modules, asset paths, subprocess `PATH`, or signing
+- Further notes live beside the AGENTS.md of the folder they concern: `apps/desktop/.agents/notes/` (performance, verification, shell choice, `@pierre/diffs` patches), `apps/desktop/sidecar/harness/.agents/notes/`, `packages/review/.agents/notes/`.

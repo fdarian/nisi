@@ -12,7 +12,6 @@ const Stamp = Schema.Struct({
 export type BuildStamp = typeof Stamp.Type;
 const scope = [
 	".",
-	":(exclude)knowledge/**",
 	":(glob,exclude)**/*.md",
 	":(exclude)*.md",
 	":(exclude)apps/desktop/scripts/measure-launch/**",

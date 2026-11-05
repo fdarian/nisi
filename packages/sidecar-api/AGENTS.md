@@ -24,7 +24,7 @@ Git/review procedures sit alongside `health.check`.
 - `diagnostics.ts` — `diagnostics.snapshot`, the read-only in-memory-state view behind `nisi debug`; its
   `sessionId` is the wire id (`sessions.publicId` in SQLite), not the integer row id. The measurement-only
   `injectDeepLink`/`runWorkloadStep` families (gated by `NISI_MEASUREMENT_INSTANCE`) are covered in
-  `knowledge/launch-timing.md`.
+  [launch timing](../../apps/desktop/.agents/notes/launch-timing.md).
 - `contract.ts` — composes domain contracts into the router; owns the two
   `@orpc/experimental-effect/extensions/*` side-effect imports. These **must** run before any domain
   module calls `oc.input()`/`oc.output()` — every domain module is imported only from here, never

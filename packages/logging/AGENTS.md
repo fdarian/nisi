@@ -15,7 +15,7 @@ stderr, never a file — see `packages/cli/AGENTS.md`).
   a second flush after crossing the cap to actually happen, not the write that crossed it.
 
 - `src/launch-tracer.ts` — opt-in Effect Tracer shared by CLI and sidecar; record schemas live in
-  `@repo/sidecar-api` without pulling oRPC into logging. Measurement protocol: [launch timing](../../knowledge/launch-timing.md).
+  `@repo/sidecar-api` without pulling oRPC into logging. Measurement protocol: [launch timing](../../apps/desktop/.agents/notes/launch-timing.md).
 
 ## Gotchas
 

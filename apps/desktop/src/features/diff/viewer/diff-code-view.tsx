@@ -150,7 +150,7 @@ function forwardDeadSpaceSeparatorClick(event: MouseEvent): void {
  * `nodeRef`), not attached as a plain React `ref`, so a returned cleanup function wouldn't be
  * called automatically the way React 19's native ref-cleanup would — the previous node is tracked
  * and detached by hand instead, mirroring the teardown-leak lesson in
- * `knowledge/codeview-teardown-leak-patch.md`: nothing here should stay subscribed past the node
+ * `apps/desktop/.agents/notes/codeview-teardown-leak-patch.md`: nothing here should stay subscribed past the node
  * it was attached to.
  */
 function useSeparatorClickForwarding() {

@@ -1,21 +1,10 @@
----
-type: Playbook
-title: Verifying a frontend change
-description: How to prove a UI fix actually landed, and why a Shadow DOM assertion fails open.
-tags: [frontend, testing, verification, pierre]
-status: stable
-generated: { by: claude-code/claude-opus-5, at: 2026-07-30T04:19:29Z }
-sources:
-  - id: browser-harness
-    resource: ../apps/desktop/AGENTS.md
-    title: Browser dev harness (apps/desktop/AGENTS.md)
----
+How to prove a UI fix actually landed, and why a Shadow DOM assertion fails open.
 
-# Browser verification is available, and it is the default
+## Browser verification is available, and it is the default
 
 `getBackend()` has a dev-only `VITE_DEV_BACKEND_PORT` / `VITE_DEV_BACKEND_TOKEN` escape hatch, so a
 plain browser tab drives the real app against a live sidecar. The full recipe — including the
-scratch `NISI_DATA_DIR` rule — is in [apps/desktop/AGENTS.md](../apps/desktop/AGENTS.md).[^browser-harness]
+scratch `NISI_DATA_DIR` rule — is in [Browser dev harness](../../AGENTS.md#browser-dev-harness).
 
 Anything that renders in the renderer is therefore reachable from browser automation: sticky headers,
 row geometry, scroll behaviour, spinners, hit testing. Reach for it before concluding a UI change
@@ -24,7 +13,7 @@ can't be verified.
 The genuine exceptions are the native surfaces the Electron shell owns, not the renderer: titlebar drag,
 double-click-to-zoom, and the ⌘W "Close Tab" menu item. Those need the packaged window.
 
-# A Shadow DOM assertion fails open
+## A Shadow DOM assertion fails open
 
 `@pierre/diffs` and `@pierre/trees` render into Shadow DOM, so a hit test must pierce it
 (`elementFromPoint` then `composedPath()`) **and** name the element the library actually renders. A
@@ -41,11 +30,10 @@ only cheap way to tell the two apart.
 The same shape of error applies to any "absence" assertion here — no overlap, no jump, no
 misalignment. Absence is only evidence once you have shown the probe can detect presence.
 
-# Measuring heap retention
+## Measuring heap retention
 
 `performance.memory.usedJSHeapSize` read without forcing a GC first is noise — V8 collects lazily, so
-a reading taken right after closing tabs mixes live retention with garbage not yet swept. Two agents
-independently burned time rediscovering this before landing on a protocol that holds:
+a reading taken right after closing tabs mixes live retention with garbage not yet swept. The protocol that holds:
 - Launch a dedicated Chrome with `--remote-debugging-port` and `--js-flags=--expose-gc`, driven over
   CDP from Bun — not the app's own dev-harness tab, so nothing else shares the process.
 - Call `HeapProfiler.collectGarbage` **twice** before every reading. One pass is not reliable; V8 can
@@ -54,6 +42,4 @@ independently burned time rediscovering this before landing on a protocol that h
   under-reports what a few minutes' wait would show.
 
 This is the protocol behind the numbers in
-[the CodeView teardown leak patch](codeview-teardown-leak-patch.md).
-
-[^browser-harness]: Browser dev harness (apps/desktop/AGENTS.md)
+[the CodeView teardown leak patch](./codeview-teardown-leak-patch.md).

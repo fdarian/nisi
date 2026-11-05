@@ -47,6 +47,6 @@ never caches `checkBinAvailability` at all (unlike the model lists next to it), 
 - `bun run` prepends its own `node`-shim directory to a child's `PATH`, so a terminal-launched
   sidecar resolves `node` even under an otherwise bare `PATH` while the `bun build --compile`
   binary the `.app` ships does not — this package's entire failure mode is invisible in dev.
-  [knowledge/compiled-binary-differences.md](../../knowledge/compiled-binary-differences.md) covers
+  [compiled-binary-differences](../../.agents/notes/compiled-binary-differences.md) covers
   the rest of that class, including the bare-`PATH` recipe to verify a change against the compiled
   sidecar.

@@ -1,17 +1,11 @@
----
-type: Measurement
-title: CLI-to-paint launch timing
-description: How to measure CLI-to-landing-tab paint, read the milestones, and compare with the native dev baseline.
-tags: [cli, desktop, performance]
-stale_after: 2027-04-04
----
+How to measure CLI process start → visible landing-tab content with `apps/desktop/scripts/measure-launch`, and how to read the report.
 
 The launch trace measures **CLI process start → visible landing-tab content**, across the CLI,
 sidecar, and frontend. It is opt-in via `NISI_LAUNCH_TRACE=<traceId>`; the measurement script sets
 a fresh ID automatically. It does not force a tab: Files Changed ends at the first diff, or the
 file list for an empty diff; Overview ends at its content.
 
-# Running a measurement
+## Running a measurement
 
 Run from `apps/desktop` against a worktree with an open PR:
 
@@ -23,7 +17,7 @@ The script runs this checkout's compiled CLI and only targets this checkout's
 instances. It never measures or stops `/Applications/nisi.app`; inherited `NISI_DATA_DIR` and
 `NISI_APP_PATH` do not select a target.
 
-## Primary: a new PR into a running app
+### Primary: a new PR into a running app
 
 Use `--new-pr --warmup <other PR worktree>` for regression measurements of the common flow:
 the app is already running and the target PR has never been opened in it. Both worktrees must
@@ -33,7 +27,7 @@ its app/sidecar, and recreates `.data/measure-launch/new-pr/data/` on every run.
 or dev-sandbox data. A separate CLI trace opens the warm-up and must reach `trace.done` before
 the measured CLI open starts. Warm-up timings are not reported. The app remains running afterward.
 
-## Secondary: a running-instance quick check
+### Secondary: a running-instance quick check
 
 Without mode flags, use the script for a quick check against whatever is running. It discovers authenticated, healthy sidecars in
 `.data/sessions/*/data/` (native `bun dev` sandboxes) and `.data/measure-launch/data/` (the built
@@ -46,7 +40,7 @@ session IDs before the traced CLI call and warns when the resulting session was 
 list/diff paint offsets may reflect cached data, not a fresh-render measurement. The warning appears
 in the text report, or on stderr with `--json`; the session snapshot is retained in the raw records.
 
-## App startup: cold processes
+### App startup: cold processes
 
 Use `--cold` to measure startup of the app and sidecar, including CLI app launch:
 
@@ -74,7 +68,7 @@ the request, making the terminal paint mark ambiguous.
 - `--json` prints the collected records as a JSON array rather than the formatted report.
 - Raw records are JSONL at `<selected data dir>/logs/launch-traces/<traceId>.jsonl`.
 
-## Repeated runs (`--runs <n>`)
+### Repeated runs (`--runs <n>`)
 
 Valid with `--cold` (plain or `--deeplink`) and with `--soak`; rejected for warm and `--new-pr` modes. The measurement runs `n` times
 in sequence. Before each run the script stops the instance and wipes `.data/measure-launch/data/`, so every run starts from no
@@ -94,7 +88,7 @@ The text report prints, across the counted runs:
 `--json` prints `{ "runs": [...], "summary": {...} }`: `runs` holds each successful run's payload exactly as a single run prints it,
 `summary` holds the statistics, `failures`, and which run indexes were counted.
 
-## Memory (`--memory`)
+### Memory (`--memory`)
 
 Valid with any mode. After `trace.done` the script waits `--memory-settle <ms>` (default 5000), then samples every
 process whose executable is under `<bundle>/Contents/`: RSS from `ps`, physical footprint from
@@ -103,7 +97,7 @@ their `--type=` argument. The report groups main / renderer(s) / GPU / other hel
 with and without the sidecar. Footprint is the number to compare; RSS counts shared pages once per process.
 With `--json` and `--memory` the output is `{ "records": [...], "memory": {...} }` instead of a bare record array.
 
-## Sustained memory (`--soak`)
+### Sustained memory (`--soak`)
 
 A single `--memory` snapshot says little about the app under real use. `--soak` (requires `--cold` and `--deeplink`) samples memory every `--soak-interval <ms>` (default 2000) for the whole run, using the same sampler,
 process set and grouping as `--memory`, while a scripted workload runs:
@@ -129,11 +123,11 @@ start/peak/end) and, with `--json`, the whole series under `soak`. The series is
 `.data/measure-launch/soak/<traceId>.csv`, outside the cold data dir that `--runs` wipes. A sample whose process exited mid-read is
 skipped and counted. Idle tabs suspend after five minutes (`use-tab-suspension.ts`), so a long run can include that.
 
-## Build reuse
+### Build reuse
 
 Managed modes compare HEAD and a SHA-256 content hash against `nisi.app.build-stamp.json` beside
 the bundle (never inside the signed bundle). The hash includes `git diff HEAD --binary` and
-untracked, non-ignored file paths and contents, excluding `knowledge/`, Markdown files, and
+untracked, non-ignored file paths and contents, excluding Markdown files and
 `apps/desktop/scripts/measure-launch/`. Uncommitted documentation/script edits do not rebuild the
 app. A changed HEAD, changed hash, missing bundle/stamp, or `--rebuild` rebuilds with an explicit
 reason; matching inputs print a reuse message. The stamp records build time, and report headers
@@ -148,7 +142,7 @@ and covered by the app stamp. Unmanaged warm mode builds only the CLI with the s
 lock/config/patches, and the binary builder, excluding Markdown and tests, not desktop UI or the Electron shell.
 The report names the compiled binary and its commit/content hash. Deep-link reports say `CLI: n/a`.
 
-Managed instances opt into `NISI_MEASUREMENT_INSTANCE=1` (renamed from `NISI_MOCK_KEYCHAIN`),
+Managed instances opt into `NISI_MEASUREMENT_INSTANCE=1`,
 forwarded by the CLI through `open --env` and inherited by the sidecar the Electron main process spawns.
 The main process appends Chromium's `use-mock-keychain` switch (`electron/measurement.ts`) to avoid macOS keychain
 prompts. The dedicated opt-in accepts no arbitrary Chromium switches; unset production/dev behavior
@@ -156,13 +150,13 @@ is unchanged. Mock storage uses a public encryption constant, so keep it confine
 measurement data, never production credentials. Confirm prompt absence on the actual Mac;
 trace completion alone is not visual verification of that.
 
-## Deep-link entrypoint
+### Deep-link entrypoint
 
 ```sh
 bun scripts/measure-launch --new-pr --deeplink https://github.com/fdarian/nisi/pull/87 \
-  --warmup https://github.com/fdarian/nisi/pull/134 --cwd /Users/farreldarian/code/fdarian/nisi
+  --warmup https://github.com/fdarian/nisi/pull/134 --cwd <nisi clone>
 bun scripts/measure-launch --cold --deeplink https://github.com/fdarian/nisi/pull/87 \
-  --cwd /Users/farreldarian/code/fdarian/nisi
+  --cwd <nisi clone>
 ```
 
 Here `--cwd` is the repository's local clone, not the target PR checkout; `--warmup` is another
@@ -174,8 +168,7 @@ No `nisi://` URL is ever handed to the OS. The managed instance's authenticated,
 diagnostics RPC injects into the same frontend queue as OS-delivered `nisi://` URLs; links retain their trace ID
 and replay on event-stream reconnect until acknowledged. Everything from queue dequeue through
 `pullRequests.open`, mapping, worktree/session resolution and real paint is the production path.
-`NISI_MEASUREMENT_INSTANCE=1` gates both injection and the mock keychain; the old variable no
-longer enables either. Production and ordinary dev instances reject injection.
+`NISI_MEASUREMENT_INSTANCE=1` gates both injection and the mock keychain. Production and ordinary dev instances reject injection.
 
 Warm/new-PR offsets start at **frontend deep-link receipt**, excluding OS-to-app URL delivery,
 the main-process hop, and the injection RPC transport before receipt. Cold offsets start at
@@ -198,7 +191,7 @@ remain in the repository. After the first created run, later created runs may fe
 report warns about retained objects and flags an already-present local head ref. This is not an
 object-cold benchmark—do not label repeated creation as a fresh clone/network transfer measurement.
 
-# Reading the report
+## Reading the report
 
 All offsets are milliseconds from `cli.process-start`. Negative boot offsets mean the component
 was already running; they are not launch latency. Timeline deltas compare adjacent marks and
@@ -241,34 +234,9 @@ Verify by sampling `lsappinfo front` before, during and after, without driving t
 measurement instance must never become frontmost, including at startup and while real paint marks
 arrive for opens into the running instance. Hidden intervals remain part of the report.
 
-# Baseline — 2026-10-04
+## Method and its limits
 
-Single native-only run, taken on the Tauri/CEF shell, on launch-trace branch revision `5614d52`, **dev sandbox, warm app, PR #87**
-(`fdarian/nisi`, Version Packages). The browser frontend was closed; Vite's connected frontend was
-the native `nisi Helper`. This is a reference measurement, not a repeated-trial budget.
-
-| Milestone                        | CLI offset |
-| -------------------------------- | ---------- |
-| Native activation acknowledged   | 331.8ms    |
-| Pending panel                    | 509.7ms    |
-| Files Changed loading            | 2995.4ms   |
-| Files Changed list               | 3705.6ms   |
-| First diff / landing-tab content | 4173.7ms   |
-| Trace done                       | 4193.2ms   |
-
-About **4.2s to the first diff**. `sessions.open` took **2.6s**, dominated by parallel
-`gh pr view` (**1.5s**) and `gh repo view` (**1.1s**), followed by base-ref `git fetch` (**0.9s**).
-These are subprocess durations, not additive parallel work. After the Files Changed loading mark,
-the resolved list took another **0.7s**; from list to first diff took another **0.5s**.
-
-# Method and its limits
-
-- **Baseline scope.** The reference above measures a warm native dev app, not process startup or
-  an installed production build. `--cold` targets a checkout-local release bundle, not production.
 - **No main-process launch marks.** Activation acknowledgment stands in for window shown. Frontend
   paint marks are animation-frame/DOM proxies, not compositor presentation measurements.
-- **One unreproduced native diff-worker timeout.** A native run logged
-  `WorkerPoolManager: worker initialization timed out after 10000ms`. Native comparisons on
-  `main` (`dbc7930`) and the launch-trace branch against PR #87 did not reproduce it. Main's
-  temporary probes confirmed populated diffs after reload; the branch produced the complete trace
-  above. Neither a regression nor a pre-existing worker bug is established; no worker fix is implied.
+- **`--cold` targets a checkout-local release bundle**, never an installed production build.
+- Reference numbers for the Electron build: [electron-startup-memory-profile.md](./electron-startup-memory-profile.md).

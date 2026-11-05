@@ -85,6 +85,15 @@ with the sidecar), which is why live sessions are in-process only.
 
 ## Gotchas
 
+- **Name a cheap model when a verification run has to generate a walkthrough.** Generation runs a
+  real agent against a real repo for several turns (the coverage validator alone retries up to 4
+  times), so a run that only confirms a spinner appears or a bridge boots shouldn't bill a frontier
+  model. Use `deepseek v4 flash free` for `opencode` and `pi`, `haiku` for `claude-code`. This is
+  for testing only; it says nothing about the user-facing default. Adapters pick their own default
+  when none is given, so name the model in a subagent's handoff prompt and report which one a run
+  used. A cheap model raises the odds of hitting the coverage-retry ceiling on a large diff — read
+  that as "this model couldn't converge", not "the fix didn't work".
+
 - **Pi discovery and Pi execution must read the same agent directory.** `discoverPiModels` uses
   `ModelRuntime.create()`'s defaults (which resolve under Pi's own `getAgentDir()`), and
   `createHarnessAgentTarget` passes that same `getAgentDir()` to `createPi`. Omit it and
@@ -108,3 +117,7 @@ with the sidecar), which is why live sessions are in-process only.
   `Effect.runPromise` call instead — see `test/model-store.test.ts`'s "warm and stale" tests. In the
   real sidecar this never happens: `index.ts` provides `HarnessModelCache`'s layer around the whole
   `Effect.never`-ending process lifetime, not per request.
+
+## Notes
+
+- [Why HarnessAgent, not the CLIs' own SDKs](./.agents/notes/why-harness-agent-not-direct-sdks.md) — Codex's exec mode hides MCP tools, so driving the CLIs directly is the wrong approach; read before proposing to bypass `HarnessAgent`

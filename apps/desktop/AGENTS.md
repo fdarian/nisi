@@ -371,3 +371,14 @@ fixture PR lives at `src/features/pull-request/walkthrough/walkthrough.fixture.t
   release pinned to a different exact `ai` version than this repo's own pin, installing a second
   copy of `ai` in the module graph instead of deduping to one. Bump both together, deliberately,
   and check `pnpm-lock.yaml` for a duplicate `ai@` entry afterward.
+
+## Notes
+
+- [Verifying a frontend change](./.agents/notes/verifying-frontend-changes.md) — Shadow DOM makes a broken assertion look like a clean pass; run the control first. Also the CDP heap-retention protocol
+- [Launch timing](./.agents/notes/launch-timing.md) — how to run `scripts/measure-launch`, read its milestones, and its soak/memory modes
+- [Electron startup and memory profile](./.agents/notes/electron-startup-memory-profile.md) — cold-start critical path and sustained memory by process; the baseline to beat
+- [Electrobun evaluation](./.agents/notes/electrobun-evaluation.md) — why the shell stays on Electron (CEF and WebKit variants measured, Oct 2026)
+- [Files Changed performance budget](./.agents/notes/frontend-performance-budget.md) — numbers to hold at ~221 changed files and the leading indicators of regression
+- [Deferred frontend perf work](./.agents/notes/deferred-frontend-perf-work.md) — known wins not taken, and an unbisected sticky-header flicker
+- [CodeView teardown leak patch](./.agents/notes/codeview-teardown-leak-patch.md) — why `@pierre/diffs` is patched to sweep every item on teardown; residual leak still open
+- [CodeView stale pendingScrollTarget patch](./.agents/notes/codeview-stale-pending-scroll-target-patch.md) — why the scroll-anchor guard is cleared when its target is removed mid-flight

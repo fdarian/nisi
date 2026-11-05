@@ -8,7 +8,7 @@ import { createPi } from "@ai-sdk/harness-pi";
 // sidecar throws "OAuth auth derivation failed" for any pi provider using
 // OAuth (e.g. xai). This is the library's own escape hatch — a static import
 // so bun embeds the flow modules, plus the call below. See
-// `knowledge/compiled-binary-differences.md`.
+// `.agents/notes/compiled-binary-differences.md` (repo root).
 import { registerBunOAuthFlows } from "@earendil-works/pi-ai/bun-oauth";
 // Static import, unlike `model-discovery.ts`'s dynamic one: `createPi` above
 // already pulls `@earendil-works/pi-coding-agent` into the boot path, so

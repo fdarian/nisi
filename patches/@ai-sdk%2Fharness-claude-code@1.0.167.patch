@@ -1060,7 +1060,7 @@ index 37add1c..4f3d889 100644
 +// `/$bunfs/...` path inside a `bun build --compile` binary, so the read fails
 +// with `ENOENT: /$bunfs/root/bridge/package.json`. Static `with { type: "text" }`
 +// imports are inlined as string literals at compile time, so they survive
-+// being embedded in nisi's compiled sidecar. See knowledge/compiled-binary-differences.md.
++// being embedded in nisi's compiled sidecar. See .agents/notes/compiled-binary-differences.md.
 +import bridgePackageJsonText from "./bridge/package.json" with { type: "text" };
 +import bridgePnpmLockText from "./bridge/pnpm-lock.yaml" with { type: "text" };
 +import bridgePnpmWorkspaceText from "./bridge/pnpm-workspace.yaml" with { type: "text" };

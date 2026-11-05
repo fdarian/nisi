@@ -1,18 +1,11 @@
----
-type: Measurement
-title: Where Electron startup time and memory go
-description: Cold-start critical path and sustained memory by process for the Electron build, the baseline to beat when squeezing either.
-tags: [desktop, electron, performance, memory, startup]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-10-19T07:00:00Z }
-stale_after: 2027-04-19
----
+Cold-start critical path and sustained memory by process for the Electron build — the baseline to beat when squeezing either.
 
 Baseline numbers for the packaged Electron 44 build on Apple Silicon, from October 2026, measured
 with `measure-launch`. Re-measure with the same commands before and after an optimisation, since
 absolute numbers drift with the machine and GitHub latency. For how to run the tools, see
-[launch-timing.md](launch-timing.md).
+[launch-timing.md](./launch-timing.md).
 
-# Cold start critical path
+## Cold start critical path
 
 These are medians of 9 cold runs, each with a fresh data dir, so the sidecar also ran its
 migrations from scratch. They were taken in alternation with another shell; reproduce them with:
@@ -41,11 +34,11 @@ The renderer is ready at about 0.6 s. Leads, all unverified:
 - The ~560 ms before the event stream connects.
 
 None of these is engine-bound. A shell switch was measured and doesn't help; see
-[electrobun-evaluation.md](electrobun-evaluation.md).
+[electrobun-evaluation.md](./electrobun-evaluation.md).
 
-# Sustained memory
+## Sustained memory
 
-These are medians of 2 soak runs (`--soak`, see [launch-timing.md](launch-timing.md)):
+These are medians of 2 soak runs (`--soak`, see [launch-timing.md](./launch-timing.md)):
 fdarian/nisi#158 (211 files) opened and scrolled end to end, then #155, #138 and #134 opened and
 scrolled, then tabs closed. Footprint is in MiB with the sidecar excluded.
 
@@ -68,5 +61,5 @@ Two points to work from:
 - **Closing tabs gives little back.** After closing three tabs, the renderer still holds about
   570 MiB, against 142 MiB before any scrolling. Part of that is ordinary heap that hasn't been
   collected. Part may be the residual `@pierre/diffs` CodeView retention described in
-  [codeview-teardown-leak-patch.md](codeview-teardown-leak-patch.md). A soak that idles longer
+  [codeview-teardown-leak-patch.md](./codeview-teardown-leak-patch.md). A soak that idles longer
   after closing, or forces GC, would separate the two.
