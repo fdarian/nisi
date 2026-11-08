@@ -7,7 +7,7 @@ range — `<base>..<head>` or `<base>...<head>` — to diff two arbitrary refs, 
 be the current checkout; see `src/base-argument.ts`. All three take the same optional `[<path>]`
 positional `nisi` always has (`diff` reads it second, after `<base>`). `nisi completion zsh` prints a
 zsh completion script for the whole tree. `nisi guide path|check|validate|render` author the branch's guide (see `src/guide/` below). `nisi skills [list|get|path|stub]` prints the agent skills embedded in the binary (see `src/skills/` below). `nisi debug [--session <id>] [--json]` prints the running
-sidecar's `diagnostics.snapshot` (never launches the app, exits non-zero when no sidecar answers). See `apps/desktop/AGENTS.md`'s "The seam" section for
+sidecar's `diagnostics.snapshot` (never launches the app, exits non-zero when no sidecar answers). `nisi public-access status|on|off` drives the cloudflared tunnel behind Settings → Public Access (see `src/public-access.ts`). See `apps/desktop/AGENTS.md`'s "The seam" section for
 the handoff design this implements, and `packages/sidecar-api/src/sessions.ts`'s `OpenSessionTarget` for
 the wire shape this grammar maps to.
 - `src/index.ts` — the `Command` tree (Effect CLI, `effect/cli`): `nisi` with `pr`/`diff`/
@@ -63,6 +63,10 @@ the wire shape this grammar maps to.
   and `dataDirConfig` (`getDataDirConfig` from `@repo/db/paths`: `NISI_DATA_DIR`, else config.toml's `data_dir`) as `handoff.ts`, then render. `debug-report.ts` is pure; its
   `sessionAnomalies` is where "worth a second look" is defined. This is how an agent inspects the
   sidecar without ever holding the bearer token.
+- `src/public-access.ts` — `nisi public-access`: flips `Settings.publicAccessEnabled` through `settings.update` and
+  follows `events.subscribe` until `publicAccess.status` settles (`switchTo`'s doc comment explains the ordering). `on`
+  launches the app via `guide/sidecar.ts` and refuses while the `publicAccessFeatureEnabled` flag is off; `status`/`off`
+  never launch it. `on` prints only the link on stdout, a full-access capability (it carries the sidecar token).
 - `src/app-launch.ts` — resolves "the app" to launch cold (env override, `/Applications`, or a
   locally-built release bundle — nisi has no install channel yet) and `open -a`s it, which hands off
   to LaunchServices. Used only for a genuine cold start (`handoff.ts`'s `unreachable` case, no
@@ -78,6 +82,8 @@ the wire shape this grammar maps to.
 
 ## Gotchas
 
+- A new top-level subcommand must also go in `index.ts`'s fast-path list, or `nisi <name>` alone is
+  taken as the `path` positional and opens a session for a directory of that name.
 - `@effect/cli` is gone in effect 4 — the CLI toolkit is `effect/cli`
   (`Command`/`Flag`/`Argument`), run via `Command.run(cmd, { version })` +
   `Effect.provide(BunServices.layer)` + `BunRuntime.runMain`.
