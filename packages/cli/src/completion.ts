@@ -82,12 +82,18 @@ _nisi() {
 					;;
 			esac
 			;;
+		public-access)
+			case $CURRENT in
+				3) compadd -- status on off ;;
+				*) [[ \${words[3]} == status ]] && compadd -- --json ;;
+			esac
+			;;
 		completion)
 			(( CURRENT == 3 )) && compadd -- zsh
 			;;
 		*)
 			if (( CURRENT == 2 )); then
-				compadd -- pr diff debug guide skills completion
+				compadd -- pr diff debug guide skills public-access completion
 				_files -/
 			fi
 			;;

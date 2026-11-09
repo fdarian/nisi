@@ -5,6 +5,7 @@ import { parseBaseArgument } from "./base-argument.ts";
 import { zshCompletionScript } from "./completion.ts";
 import { runDebug } from "./debug.ts";
 import { guideCommand } from "./guide/commands.ts";
+import { publicAccessCommand } from "./public-access.ts";
 import { skillsCommand } from "./skills/commands.ts";
 
 export const runCommand = <E, R>(
@@ -88,6 +89,7 @@ export const runCommand = <E, R>(
 			debug,
 			guideCommand(fail),
 			skillsCommand(fail),
+			publicAccessCommand(fail),
 			completion,
 		]),
 	);
