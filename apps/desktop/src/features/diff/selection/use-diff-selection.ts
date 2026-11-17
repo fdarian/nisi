@@ -621,18 +621,24 @@ export function useDiffSelection<Metadata>({
 					const wasGutterDrag = gutterDragInProgressRef.current;
 					gutterDragInProgressRef.current = false;
 					if (wasGutterDrag) {
-						const selection = gutterSelectionRef.current;
-						if (selection === null) {
-							resetPointerAnchor();
-							return;
-						}
 						pendingReleasePointRef.current = pointerReleasePoint(event);
-						const rect = measureGutterAnchorRect(selection);
+						const selection = gutterSelectionRef.current;
+						const rect =
+							selection === null
+								? undefined
+								: measureGutterAnchorRect(selection);
 						if (rect !== undefined) {
 							settlePendingRelease(rect);
 						} else {
 							setIsReleasePending(true);
 						}
+						// A fresh gutter click has no selection yet here: pierre attaches
+						// its document pointerup listener at pointerdown, after this one,
+						// and only commits the click from it. Once that has run in this
+						// same dispatch, a still-null selection means none is coming.
+						setTimeout(() => {
+							if (gutterSelectionRef.current === null) resetPointerAnchor();
+						}, 0);
 						return;
 					}
 					if (isEventOriginOnGutterOrPopup(event)) return;
