@@ -621,12 +621,13 @@ export function useDiffSelection<Metadata>({
 					const wasGutterDrag = gutterDragInProgressRef.current;
 					gutterDragInProgressRef.current = false;
 					if (wasGutterDrag) {
-						pendingReleasePointRef.current = pointerReleasePoint(event);
 						const selection = gutterSelectionRef.current;
-						const rect =
-							selection === null
-								? undefined
-								: measureGutterAnchorRect(selection);
+						if (selection === null) {
+							resetPointerAnchor();
+							return;
+						}
+						pendingReleasePointRef.current = pointerReleasePoint(event);
+						const rect = measureGutterAnchorRect(selection);
 						if (rect !== undefined) {
 							settlePendingRelease(rect);
 						} else {
