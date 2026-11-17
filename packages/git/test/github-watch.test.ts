@@ -3,6 +3,7 @@ import {
 	Duration,
 	Effect,
 	Fiber,
+	Option,
 	PubSub,
 	Ref,
 	Result,
@@ -10,7 +11,11 @@ import {
 	SubscriptionRef,
 } from "effect";
 import { TestClock } from "effect/testing";
-import { GhNotAuthenticated, GhRateLimited } from "../src/errors.ts";
+import {
+	GhNotAuthenticated,
+	GhRateLimited,
+	GitHubUnreachable,
+} from "../src/errors.ts";
 import {
 	checksInterval,
 	kick,
@@ -235,6 +240,48 @@ describe("gh watch polling", () => {
 					expect(Result.isFailure(outcome)).toBe(true);
 					if (Result.isFailure(outcome))
 						expect(outcome.failure._tag).toBe("GhNotAuthenticated");
+				}),
+			).pipe(Effect.asVoid),
+		);
+	});
+	test("retries gh's offline error instead of failing the watch", async () => {
+		await run(
+			Effect.scoped(
+				Effect.gen(function* () {
+					const kicks = yield* PubSub.unbounded<string>();
+					const attempts = yield* Ref.make(0);
+					const map = yield* makeWatch(
+						{
+							changes: () =>
+								Stream.succeed({ watched: true, awaitingNewCi: false }),
+						},
+						kicks,
+						() =>
+							Ref.updateAndGet(attempts, (count) => count + 1).pipe(
+								Effect.flatMap((count) =>
+									count === 1
+										? Effect.fail(
+												new GitHubUnreachable({
+													repoRoot: "/repo",
+													reason: "error connecting to api.github.com",
+												}),
+											)
+										: Effect.succeed("online"),
+								),
+							),
+						() => Duration.seconds(10),
+					);
+					const result = yield* Stream.runHead(watchFromMap(map, pr)).pipe(
+						Effect.orDie,
+						Effect.forkScoped,
+					);
+					yield* settle;
+					yield* TestClock.adjust("1 millis");
+					expect(yield* Ref.get(attempts)).toBe(1);
+					yield* TestClock.adjust("999 millis");
+					expect(yield* Ref.get(attempts)).toBe(2);
+					const head = yield* Fiber.join(result);
+					expect(head).toEqual(Option.some("online"));
 				}),
 			).pipe(Effect.asVoid),
 		);

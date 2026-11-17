@@ -118,7 +118,7 @@ const isTransient = (error: {
 	((error._tag === "GitHubUnreachable" ||
 		error._tag === "PullRequestNotFound") &&
 		error.reason !== undefined &&
-		/connection refused|could not resolve host|no such host|dial tcp|timeout|TLS handshake|network is unreachable|connection reset|HTTP 50[0234]/i.test(
+		/connection refused|could not resolve host|no such host|dial tcp|timeout|TLS handshake|network is unreachable|connection reset|error connecting to|HTTP 50[0234]/i.test(
 			error.reason,
 		));
 
