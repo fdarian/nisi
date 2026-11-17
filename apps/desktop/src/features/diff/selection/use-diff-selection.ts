@@ -163,7 +163,10 @@ function resolveActiveTextSelection(
 	items: readonly { id: string; element: HTMLElement }[],
 ): { itemId: string; range: Range } | undefined {
 	const selection = document.getSelection();
-	if (!selection || selection.isCollapsed) {
+	// Not `isCollapsed`: a selection inside the diff's shadow roots reports it
+	// from its retargeted anchor/focus, so it is always true there. The composed
+	// range's `collapsed` below is the real check.
+	if (!selection || selection.rangeCount === 0) {
 		return undefined;
 	}
 	const shadowRoots = items.flatMap((item) =>
