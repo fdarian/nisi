@@ -1065,6 +1065,26 @@ export function retryDisconnectedLiveQuery(
 	);
 }
 
+/**
+ * The merge status stream fails with `SERVICE_UNAVAILABLE` when the sidecar
+ * can't reach GitHub (e.g. the machine went offline). That outlasts the
+ * outage unless the query keeps retrying, so unlike the other live queries
+ * it never gives up.
+ */
+export function retryMergeStatusQuery(
+	failureCount: number,
+	error: unknown,
+): boolean {
+	return (
+		retryDisconnectedLiveQuery(failureCount, error) ||
+		(error instanceof ORPCError && error.code === "SERVICE_UNAVAILABLE")
+	);
+}
+
+export function mergeStatusRetryDelay(failureCount: number): number {
+	return Math.min(1000 * 2 ** failureCount, 60_000);
+}
+
 export function usePullRequestMergeStatus(
 	orpc: SidecarQueryUtils,
 	params: PullRequestMergeStatusParams,
@@ -1074,7 +1094,8 @@ export function usePullRequestMergeStatus(
 		orpc.pullRequests.mergeStatus.liveOptions({
 			input: params,
 			enabled,
-			retry: retryDisconnectedLiveQuery,
+			retry: retryMergeStatusQuery,
+			retryDelay: mergeStatusRetryDelay,
 		}),
 	);
 }
