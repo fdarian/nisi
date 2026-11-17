@@ -1982,6 +1982,10 @@ export function attachRouter(
 									return errors.MERGE_STATUS_UNAVAILABLE({
 										message: cause.reason,
 									});
+								case "GitHubUnreachable":
+									return errors.SERVICE_UNAVAILABLE({
+										message: `Couldn't reach GitHub: ${cause.reason}`,
+									});
 								default:
 									return errors.SERVICE_UNAVAILABLE({ message: String(cause) });
 							}
