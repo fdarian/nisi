@@ -1701,6 +1701,7 @@ export function DiffPane({
 				onDismiss={diffSelection.clearSelection}
 				onForwardedWheel={releaseProgrammaticScrollSuppression}
 				orpc={orpc}
+				pointerOffset={diffSelection.pointerOffset}
 				reference={diffSelection.reference}
 				scrollContainer={codeViewRef.current
 					?.getInstance()

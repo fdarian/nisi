@@ -474,6 +474,7 @@ export function FileView({
 								}
 								onDismiss={diffSelection.clearSelection}
 								orpc={orpc}
+								pointerOffset={diffSelection.pointerOffset}
 								reference={diffSelection.reference}
 								scrollContainer={codeViewRef.current
 									?.getInstance()
