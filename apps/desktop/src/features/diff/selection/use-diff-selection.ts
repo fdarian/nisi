@@ -41,9 +41,13 @@ type UseDiffSelectionOptions<Metadata> = {
 	resolveItemDiff?: (itemId: string) => FileDiffMetadata | undefined;
 };
 
+/** Where the mouse button was released, relative to the top-left of the selection's `anchorRect`. */
+type PointerOffset = { x: number; y: number };
+
 type UseDiffSelectionResult = {
 	/** Feed straight to `<DiffCodeView selectedLines>`. */
 	selectedLines: CodeViewLineSelection | null;
+	/** True while a mouse selection gesture is under way, and for a gutter release until its anchor has been measured, so the toolbar never shows before it knows where the pointer ended up. */
 	isSelectionDragInProgress: boolean;
 	/** Feed straight to `<DiffCodeView onSelectedLinesChange>`. */
 	onSelectedLinesChange: (selection: CodeViewLineSelection | null) => void;
@@ -69,6 +73,13 @@ type UseDiffSelectionResult = {
 	 * Floating UI's own ancestor-scroll auto-tracking.
 	 */
 	refreshAnchorRect: () => void;
+	/**
+	 * Where the mouse was released, as an offset from `anchorRect`'s top-left
+	 * (clamped into the scroll container), or `null` for a selection that wasn't
+	 * made with the mouse. Relative rather than a client point so it follows
+	 * `anchorRect` as the pane scrolls.
+	 */
+	pointerOffset: PointerOffset | null;
 	/** Drops both selection sources and closes the floating button — call once the button's own action completes, or on Escape. */
 	clearSelection: () => void;
 };
@@ -152,7 +163,10 @@ function resolveActiveTextSelection(
 	items: readonly { id: string; element: HTMLElement }[],
 ): { itemId: string; range: Range } | undefined {
 	const selection = document.getSelection();
-	if (!selection || selection.isCollapsed) {
+	// Not `isCollapsed`: a selection inside the diff's shadow roots reports it
+	// from its retargeted anchor/focus, so it is always true there. The composed
+	// range's `collapsed` below is the real check.
+	if (!selection || selection.rangeCount === 0) {
 		return undefined;
 	}
 	const shadowRoots = items.flatMap((item) =>
@@ -212,12 +226,31 @@ export const diffSelectionPopupMarkerProps = {
  * alone entirely, not raced against.
  */
 function isEventOriginOnGutterOrPopup(event: Event): boolean {
-	if (isEventOriginOnGutter(event)) return true;
-	for (const node of event.composedPath()) {
-		if (!(node instanceof Element)) continue;
-		if (node.hasAttribute(DIFF_SELECTION_POPUP_ATTRIBUTE)) return true;
-	}
-	return false;
+	return isEventOriginOnGutter(event) || isEventOriginOnPopup(event);
+}
+
+function isEventOriginOnPopup(event: Event): boolean {
+	return event
+		.composedPath()
+		.some(
+			(node) =>
+				node instanceof Element &&
+				node.hasAttribute(DIFF_SELECTION_POPUP_ATTRIBUTE),
+		);
+}
+
+function clamp(value: number, min: number, max: number): number {
+	return Math.min(Math.max(value, min), max);
+}
+
+function sameRange(a: Range | null, b: Range): boolean {
+	return (
+		a !== null &&
+		a.startContainer === b.startContainer &&
+		a.startOffset === b.startOffset &&
+		a.endContainer === b.endContainer &&
+		a.endOffset === b.endOffset
+	);
 }
 
 /** Union of two `DOMRect`s — used to grow the gutter selection's anchor rect across every `[data-selected-line]` row `@pierre/diffs` paints for the range. */
@@ -257,6 +290,15 @@ export function useDiffSelection<Metadata>({
 	);
 	const [headRange, setHeadRange] = useState<HeadRange | undefined>();
 	const [anchorRect, setAnchorRect] = useState<DOMRect | null>(null);
+	const [pointerOffset, setPointerOffset] = useState<PointerOffset | null>(
+		null,
+	);
+	// A gutter release whose anchor rect isn't measurable yet (pierre paints
+	// `[data-selected-line]` a frame after its callback, and may call back
+	// before or after the pointerup), held until the next measurement turns it
+	// into `pointerOffset`.
+	const pendingReleasePointRef = useRef<{ x: number; y: number } | null>(null);
+	const [isReleasePending, setIsReleasePending] = useState(false);
 	// The text path's counterpart to `gutterSelectionRef` — the last `Range`
 	// `recomputeTextSelection` resolved a reference from, kept around so
 	// `refreshAnchorRect` can re-measure it fresh on a later scroll tick
@@ -322,7 +364,22 @@ export function useDiffSelection<Metadata>({
 		[codeViewRef],
 	);
 
+	const resetPointerAnchor = useCallback(() => {
+		pendingReleasePointRef.current = null;
+		setIsReleasePending(false);
+		setPointerOffset(null);
+	}, []);
+
+	const settlePendingRelease = useCallback((rect: DOMRect) => {
+		const point = pendingReleasePointRef.current;
+		if (point === null) return;
+		pendingReleasePointRef.current = null;
+		setIsReleasePending(false);
+		setPointerOffset({ x: point.x - rect.left, y: point.y - rect.top });
+	}, []);
+
 	const clearSelection = useCallback(() => {
+		resetPointerAnchor();
 		gutterSelectionRef.current = null;
 		setGutterSelection(null);
 		setReference(null);
@@ -335,7 +392,7 @@ export function useDiffSelection<Metadata>({
 		}
 		const activeSelection = document.getSelection();
 		activeSelection?.removeAllRanges();
-	}, []);
+	}, [resetPointerAnchor]);
 
 	/**
 	 * Re-measures `anchorRect` against whichever selection source is
@@ -350,6 +407,7 @@ export function useDiffSelection<Metadata>({
 			const immediateRect = measureGutterAnchorRect(selection);
 			if (immediateRect !== undefined) {
 				setAnchorRect(immediateRect);
+				settlePendingRelease(immediateRect);
 				return;
 			}
 			// Hide immediately rather than leave the button painting at a
@@ -370,6 +428,7 @@ export function useDiffSelection<Metadata>({
 				const rect = measureGutterAnchorRect(selection);
 				if (rect === undefined) return false;
 				setAnchorRect(rect);
+				settlePendingRelease(rect);
 				return true;
 			}, pendingGutterRectFrame);
 			return;
@@ -380,7 +439,7 @@ export function useDiffSelection<Metadata>({
 		}
 		const rect = activeTextRangeRef.current.getBoundingClientRect();
 		setAnchorRect(rect.width === 0 && rect.height === 0 ? null : rect);
-	}, [measureGutterAnchorRect]);
+	}, [measureGutterAnchorRect, settlePendingRelease]);
 
 	// The gutter (line-lane) path: `@pierre/diffs` already tracks drag state
 	// and hands back typed boundaries (`range.side`/`endSide`), so this needs
@@ -395,6 +454,7 @@ export function useDiffSelection<Metadata>({
 			gutterSelectionRef.current = selection;
 			setGutterSelection(selection);
 			if (selection === null) {
+				resetPointerAnchor();
 				setReference(null);
 				setHeadRange(undefined);
 				setAnchorRect(null);
@@ -408,6 +468,7 @@ export function useDiffSelection<Metadata>({
 
 			const path = resolveItemPath(selection.id);
 			if (path === undefined) {
+				resetPointerAnchor();
 				setReference(null);
 				setHeadRange(undefined);
 				setAnchorRect(null);
@@ -454,16 +515,25 @@ export function useDiffSelection<Metadata>({
 							: undefined,
 					);
 					setAnchorRect(rect);
+					settlePendingRelease(rect);
 					return true;
 				},
 				pendingGutterRectFrame,
 				60,
 				() => {
-					if (gutterSelectionRef.current === selection) setAnchorRect(null);
+					if (gutterSelectionRef.current !== selection) return;
+					setAnchorRect(null);
+					resetPointerAnchor();
 				},
 			);
 		},
-		[resolveItemPath, resolveItemDiff, measureGutterAnchorRect],
+		[
+			resolveItemPath,
+			resolveItemDiff,
+			measureGutterAnchorRect,
+			resetPointerAnchor,
+			settlePendingRelease,
+		],
 	);
 
 	// The text path: plain browser selection over code, which `@pierre/diffs`
@@ -481,7 +551,25 @@ export function useDiffSelection<Metadata>({
 		const handlePointerDown = (event: Event) => {
 			const startsOnGutter = isEventOriginOnGutter(event);
 			gutterDragInProgressRef.current = startsOnGutter;
-			setIsSelectionDragInProgress(isEventOriginOnDiffRow(event));
+			const startsOnDiffRow = isEventOriginOnDiffRow(event);
+			setIsSelectionDragInProgress(startsOnDiffRow);
+			if (startsOnDiffRow) resetPointerAnchor();
+		};
+		const pointerReleasePoint = (event: Event) => {
+			if (!(event instanceof PointerEvent)) {
+				throw new Error(`Expected a PointerEvent, got ${event.type}`);
+			}
+			// A drag can end past the scroll container's edge; clamp so the toolbar
+			// stays beside the selection instead of out of view.
+			const container = codeViewRef.current
+				?.getInstance()
+				?.getContainerElement();
+			if (!container) return { x: event.clientX, y: event.clientY };
+			const bounds = container.getBoundingClientRect();
+			return {
+				x: clamp(event.clientX, bounds.left, bounds.right),
+				y: clamp(event.clientY, bounds.top, bounds.bottom),
+			};
 		};
 		const endSelectionDrag = () => {
 			setIsSelectionDragInProgress(false);
@@ -535,7 +623,29 @@ export function useDiffSelection<Metadata>({
 				if (event.type === "pointerup") {
 					const wasGutterDrag = gutterDragInProgressRef.current;
 					gutterDragInProgressRef.current = false;
-					if (wasGutterDrag || isEventOriginOnGutterOrPopup(event)) return;
+					if (wasGutterDrag) {
+						pendingReleasePointRef.current = pointerReleasePoint(event);
+						const selection = gutterSelectionRef.current;
+						const rect =
+							selection === null
+								? undefined
+								: measureGutterAnchorRect(selection);
+						if (rect !== undefined) {
+							settlePendingRelease(rect);
+						} else {
+							setIsReleasePending(true);
+						}
+						// A fresh gutter click has no selection yet here: pierre attaches
+						// its document pointerup listener at pointerdown, after this one,
+						// and only commits the click from it. Once that has run in this
+						// same dispatch, a still-null selection means none is coming.
+						setTimeout(() => {
+							if (gutterSelectionRef.current === null) resetPointerAnchor();
+						}, 0);
+						return;
+					}
+					if (isEventOriginOnGutterOrPopup(event)) return;
+					resetPointerAnchor();
 					gutterSelectionRef.current = null;
 					setGutterSelection(null);
 					setReference(null);
@@ -545,6 +655,7 @@ export function useDiffSelection<Metadata>({
 					return;
 				}
 				if (gutterSelectionRef.current === null) {
+					resetPointerAnchor();
 					setReference(null);
 					setHeadRange(undefined);
 				}
@@ -563,6 +674,10 @@ export function useDiffSelection<Metadata>({
 				setGutterSelection(null);
 			}
 			const headRange = resolveHeadRange(start, end);
+			const selectionChanged = !sameRange(
+				activeTextRangeRef.current,
+				active.range,
+			);
 			activeTextRangeRef.current = active.range;
 			setReference({
 				kind: "lines",
@@ -578,7 +693,19 @@ export function useDiffSelection<Metadata>({
 					? selectionHeadRange(diff.hunks, reviewStart, reviewEnd)
 					: undefined,
 			);
-			setAnchorRect(active.range.getBoundingClientRect());
+			const rect = active.range.getBoundingClientRect();
+			setAnchorRect(rect);
+			if (event.type === "pointerup") {
+				// A click on the toolbar itself must not move it.
+				if (!isEventOriginOnPopup(event)) {
+					const point = pointerReleasePoint(event);
+					pendingReleasePointRef.current = null;
+					setIsReleasePending(false);
+					setPointerOffset({ x: point.x - rect.left, y: point.y - rect.top });
+				}
+			} else if (selectionChanged) {
+				resetPointerAnchor();
+			}
 		};
 		document.addEventListener("pointerdown", handlePointerDown);
 		document.addEventListener("selectionchange", recomputeTextSelection);
@@ -596,7 +723,15 @@ export function useDiffSelection<Metadata>({
 			window.removeEventListener("pointercancel", endSelectionDrag);
 			window.removeEventListener("blur", endSelectionDrag);
 		};
-	}, [codeViewRef, resolveItemPath, resolveItemDiff, appViewActive]);
+	}, [
+		codeViewRef,
+		resolveItemPath,
+		resolveItemDiff,
+		appViewActive,
+		measureGutterAnchorRect,
+		resetPointerAnchor,
+		settlePendingRelease,
+	]);
 
 	useEffect(
 		() => () => {
@@ -609,12 +744,13 @@ export function useDiffSelection<Metadata>({
 
 	return {
 		selectedLines: gutterSelection,
-		isSelectionDragInProgress,
+		isSelectionDragInProgress: isSelectionDragInProgress || isReleasePending,
 		onSelectedLinesChange: handleSelectedLinesChange,
 		reference,
 		headRange,
 		anchorRect,
 		refreshAnchorRect,
+		pointerOffset,
 		clearSelection,
 	};
 }

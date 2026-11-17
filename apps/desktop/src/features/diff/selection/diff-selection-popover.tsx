@@ -39,6 +39,9 @@ import { diffSelectionPopupMarkerProps } from "./use-diff-selection";
 import { useSelectionPopoverGlide } from "./use-selection-popover-glide";
 
 const COPIED_CONFIRMATION_MS = 1500;
+/** Clears the cursor so the toolbar doesn't open under the pointer that placed it. */
+const POINTER_SIDE_OFFSET = 10;
+const POINTER_BOUNDARY_TOLERANCE = 1;
 
 type DiffSelectionPopoverProps = {
 	/** Which PR tab's chat threads "Ask" attaches this reference to — see `useChatDockActions`. */
@@ -57,6 +60,12 @@ type DiffSelectionPopoverProps = {
 	 * two are separate.
 	 */
 	anchorRect: DOMRect | null;
+	/**
+	 * Where the mouse was released, relative to `anchorRect`'s top-left — the
+	 * toolbar anchors there instead of at the selection's edge. `null` for a
+	 * selection made without the mouse. See `use-diff-selection.ts`.
+	 */
+	pointerOffset: { x: number; y: number } | null;
 	scrollContainer: HTMLElement | undefined;
 	onForwardedWheel?: () => void;
 	/**
@@ -92,6 +101,7 @@ export function DiffSelectionPopover({
 	headRange,
 	onMarkReviewed,
 	anchorRect,
+	pointerOffset,
 	scrollContainer,
 	onForwardedWheel,
 	onDismiss,
@@ -150,18 +160,18 @@ export function DiffSelectionPopover({
 	// Base UI's hide middleware uses the portaled positioner's clipping ancestors,
 	// not collisionBoundary, so it cannot hide an anchor scrolled out of CodeView.
 	const boundaryRect = scrollContainer?.getBoundingClientRect();
-	const anchorVisible =
+	const selectionVisible =
 		anchorRect !== null &&
 		boundaryRect !== undefined &&
 		anchorRect.bottom > boundaryRect.top &&
 		anchorRect.top < boundaryRect.bottom &&
 		anchorRect.right > boundaryRect.left &&
 		anchorRect.left < boundaryRect.right;
-	// Anchor at the visible end of the selection. A long selection can span
-	// both edges of the scrollport, leaving neither side of its full rect
-	// available for Floating UI to place the toolbar.
+	// For a keyboard selection, anchor at the bottom-left of the visible part
+	// of the selection. A long selection can span both edges of the scrollport,
+	// leaving neither side of its full rect available for Floating UI.
 	const visibleAnchor =
-		anchorVisible && anchorRect && boundaryRect
+		selectionVisible && anchorRect && boundaryRect
 			? new DOMRect(
 					Math.max(anchorRect.left, boundaryRect.left),
 					Math.min(anchorRect.bottom, boundaryRect.bottom),
@@ -170,21 +180,40 @@ export function DiffSelectionPopover({
 					0,
 				)
 			: null;
-	const glide = useSelectionPopoverGlide(
-		open && anchorVisible && reference !== null,
-	);
+	// The release point is clamped into the scroll container when recorded, so
+	// the tolerance only absorbs float error from re-deriving it off a live rect.
+	const pointerAnchor =
+		pointerOffset !== null && anchorRect !== null
+			? new DOMRect(
+					anchorRect.left + pointerOffset.x,
+					anchorRect.top + pointerOffset.y,
+					0,
+					0,
+				)
+			: null;
+	const pointerAnchorVisible =
+		pointerAnchor !== null &&
+		boundaryRect !== undefined &&
+		pointerAnchor.x >= boundaryRect.left - POINTER_BOUNDARY_TOLERANCE &&
+		pointerAnchor.x <= boundaryRect.right + POINTER_BOUNDARY_TOLERANCE &&
+		pointerAnchor.y >= boundaryRect.top - POINTER_BOUNDARY_TOLERANCE &&
+		pointerAnchor.y <= boundaryRect.bottom + POINTER_BOUNDARY_TOLERANCE;
+	const anchorVisible =
+		pointerOffset === null ? selectionVisible : pointerAnchorVisible;
+	const shown = open && anchorVisible && !isSelectionDragInProgress;
+	const glide = useSelectionPopoverGlide(shown && reference !== null);
 
 	if (reference === null) return null;
 
 	// `anchorRect` re-measures live (see `use-diff-selection.ts`'s
 	// `measureGutterAnchorRect`/`refreshAnchorRect`), so this closure never
-	// captures a stale position — it just reads the visible portion on each
-	// call. The `new DOMRect()` fallback only exists to
+	// captures a stale position. The `new DOMRect()` fallback only exists to
 	// satisfy `getBoundingClientRect`'s non-nullable return type; it's never
-	// actually read, since `open` below already gates on `anchorRect` being
-	// non-null before Base UI would ask.
+	// actually read, since `open` below already gates on the anchor being
+	// visible before Base UI would ask.
 	const virtualAnchor = {
-		getBoundingClientRect: () => visibleAnchor ?? new DOMRect(),
+		getBoundingClientRect: () =>
+			(pointerOffset === null ? visibleAnchor : pointerAnchor) ?? new DOMRect(),
 	};
 
 	return (
@@ -192,7 +221,7 @@ export function DiffSelectionPopover({
 			onOpenChange={(_open, eventDetails) => {
 				if (eventDetails.reason === "escape-key") onDismiss();
 			}}
-			open={open && anchorVisible}
+			open={shown}
 		>
 			<PopoverPrimitive.Portal>
 				<PopoverPrimitive.Positioner
@@ -202,7 +231,7 @@ export function DiffSelectionPopover({
 					collisionBoundary={scrollContainer}
 					ref={glide.positionerRef}
 					side="bottom"
-					sideOffset={8}
+					sideOffset={pointerOffset === null ? 8 : POINTER_SIDE_OFFSET}
 				>
 					<motion.div
 						style={{
